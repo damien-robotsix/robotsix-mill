@@ -2,11 +2,9 @@
 
 Fetches yesterday's total spend from both OpenRouter (management API)
 and Langfuse (traces API), compares the two totals, and when the
-discrepancy exceeds $1.00 invokes the cost-reconciliation agent to
-analyse the gap and file a draft ticket.
-
-Seam: tests monkeypatch ``run_cost_reconciliation_agent`` from
-``robotsix_mill.agents.cost_reconciling``.
+discrepancy exceeds $1.00 files a draft ticket whose body is built
+deterministically from the raw numbers — no LLM call is made on any
+path.
 """
 
 from __future__ import annotations
@@ -146,10 +144,10 @@ def _file_discrepancy(
     lf_breakdown: str,
     session_id: str,
 ) -> CostReconciliationPassResult:
-    """Dedup → analyse → file a draft for an over-tolerance discrepancy.
+    """Dedup → file a deterministic draft for an over-tolerance discrepancy.
 
-    Shared by the account-level and per-key passes. (Follow-up: drop the LLM
-    analysis agent here and file a deterministic raw-numbers result instead.)
+    Shared by the account-level and per-key passes. The draft body is built
+    deterministically from the raw numbers — no LLM call is made on any path.
     """
     from .pass_runner import _verify_prior_proposals
 
@@ -162,24 +160,17 @@ def _file_discrepancy(
             drafts_created=[], summary=summary, session_id=session_id
         )
 
-    from .agents.cost_reconciling import run_cost_reconciliation_agent
-
-    agent_result = run_cost_reconciliation_agent(
-        settings=settings,
-        openrouter_total=or_total,
-        langfuse_total=lf_total,
-        delta=delta,
-        openrouter_breakdown=or_breakdown,
-        langfuse_breakdown=lf_breakdown,
-    )
-
     marker = f"<!-- cost_reconciliation-gap-id: {date_str} -->"
     title = f"Cost reconciliation: OpenRouter vs Langfuse — ${delta:.2f} delta on {date_str}"
+    header = (
+        "Automated cost-reconciliation check: OpenRouter vs Langfuse spend "
+        f"diverged by more than the $1.00 tolerance on {date_str}. Raw figures "
+        "below — no automated analysis is performed; investigate manually if "
+        "needed."
+    )
     body = "\n".join(
         [
-            agent_result.analysis,
-            "",
-            f"**Conclusion:** {agent_result.conclusion}",
+            header,
             "",
             "## Raw data",
             "",
@@ -211,7 +202,7 @@ def _file_discrepancy(
         return CostReconciliationPassResult(
             drafts_created=[{"id": ticket.id, "title": ticket.title}],
             summary=f"delta=${delta:.2f} — draft {ticket.id}",
-            updated_memory=getattr(agent_result, "updated_memory", ""),
+            updated_memory="",
             session_id=session_id,
         )
     except Exception:
@@ -219,7 +210,7 @@ def _file_discrepancy(
         return CostReconciliationPassResult(
             drafts_created=[],
             summary=f"delta=${delta:.2f} — draft creation failed",
-            updated_memory=getattr(agent_result, "updated_memory", ""),
+            updated_memory="",
             session_id=session_id,
         )
 
@@ -343,7 +334,8 @@ def run_cost_reconciliation_pass(
     1. Fetch OpenRouter yesterday total.
     2. Fetch Langfuse yesterday total.
     3. Compare.  If delta ≤ $1.00, log clean and return.
-    4. If delta > $1.00, invoke agent and create draft ticket.
+    4. If delta > $1.00, create a draft ticket whose body is built
+       deterministically from the raw numbers (no LLM call).
 
     Args:
         session_id: Langfuse session id from the poll loop (optional).

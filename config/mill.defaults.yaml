@@ -238,7 +238,6 @@ periodic:
 
   # -- cost-reconciliation — detects OpenRouter ↔ Langfuse cost drift -----
   cost_reconciliation:
-    model: *default_model
     enabled: true
     interval_seconds: 86400
     memory_path: null

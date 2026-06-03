@@ -955,11 +955,7 @@ class Settings(BaseSettings):
     # the worker loop.
     module_curator_interval_seconds: int = Field(default=86400)
 
-    # --- cost-reconciliation agent (OpenRouter ↔ Langfuse cost drift) ---
-    # Model for the cost-reconciliation agent. Defaults to the same
-    # capable model as other periodic agents. Override with
-    # MILL_COST_RECONCILIATION_MODEL.
-    cost_reconciliation_model: str = Field(default="deepseek/deepseek-v4-pro")
+    # --- cost-reconciliation pass (OpenRouter ↔ Langfuse cost drift) ---
     # Path to the cost-reconciliation agent's Markdown memory ledger.
     # Override to pin a specific path; unset (default) derives
     # <data_dir>/cost_reconciliation_memory.md.

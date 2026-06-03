@@ -344,7 +344,6 @@ modules:
       - src/robotsix_mill/agents/scope_triage.py
       - src/robotsix_mill/agents/epic_breakdown.py
       - src/robotsix_mill/agents/epic_status.py
-      - src/robotsix_mill/agents/cost_reconciling.py
       - src/robotsix_mill/agents/config_syncing.py
       - src/robotsix_mill/agents/retrospecting.py
       - src/robotsix_mill/agents/trace_inspector.py
@@ -378,7 +377,6 @@ modules:
       - tests/agents/test_epic_breakdown.py
       - tests/agents/test_freshness.py
       - tests/agents/test_prerequisite.py
-      - tests/agents/test_cost_reconciling.py
       - tests/agents/test_config_syncing.py
       - tests/agents/test_retrospect.py
       - tests/agents/test_trace_inspector.py
