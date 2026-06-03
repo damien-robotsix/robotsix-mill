@@ -65,9 +65,7 @@ def load_yaml_cascade(layers: Sequence[tuple[Path, bool]]) -> dict:
     for path, required in layers:
         if not path.exists():
             if required:
-                raise YamlConfigError(
-                    f"Required config file not found: {path}."
-                )
+                raise YamlConfigError(f"Required config file not found: {path}.")
             continue
         deep_merge(merged, read_yaml_file(path))
     return merged
