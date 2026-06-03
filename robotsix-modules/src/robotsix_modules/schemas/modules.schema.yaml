@@ -1,0 +1,66 @@
+# JSON Schema for docs/modules.yaml
+# Validates a canonical module taxonomy for robotsix projects.
+#
+# Usage (CLI):
+#   robotsix-modules validate docs/modules.yaml
+# Usage (pre-commit):
+#   robotsix-modules-validate docs/modules.yaml
+
+$schema: "https://json-schema.org/draft/2020-12/schema"
+$id: "https://robotsix.github.io/modules/schemas/modules.schema.yaml"
+title: "Module Taxonomy Schema"
+description: >-
+  Schema for docs/modules.yaml — the single source of truth for what
+  logical modules exist in robotsix-mill and where their files live.
+
+type: object
+properties:
+  modules:
+    type: array
+    description: "Ordered list of module entries."
+    items:
+      $ref: "#/$defs/module"
+required: [modules]
+additionalProperties: false
+
+$defs:
+  module:
+    type: object
+    properties:
+      id:
+        type: string
+        pattern: "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+        description: >-
+          Stable kebab-case identifier.  Must start with a lowercase
+          letter, contain only lowercase alphanumerics and hyphens,
+          and must not start/end with a hyphen or contain consecutive
+          hyphens.  Examples: "refine", "ci-fix", "test-gap".
+      description:
+        type: string
+        description: >-
+          One paragraph explaining what the module does and why it
+          exists.  Keep it concise — one to three sentences.
+      paths:
+        type: array
+        minItems: 1
+        items:
+          type: string
+        description: >-
+          Repo-relative glob patterns covering all source files, tests,
+          docs, agent definitions, config snippets, and skills that
+          belong to this module.  Patterns use standard glob syntax
+          (`*`, `**`, `?`).  Every file in the repo should be claimed
+          by exactly one module.
+      dependencies:
+        type: array
+        default: []
+        items:
+          type: string
+          pattern: "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+        description: >-
+          Other module `id` values that this module consumes (imports,
+          reads, or otherwise depends on).  Documentation-only for v1;
+          no enforcement is implemented.  Omit or use `[]` when a
+          module has no internal dependencies.
+    required: [id, description, paths]
+    additionalProperties: false
