@@ -36,6 +36,39 @@ def _split(*children: dict, file_map=None) -> RefineResult:
     )
 
 
+def _install_refine_spy(
+    monkeypatch,
+    spec="## Problem\nx\n## Acceptance criteria\n- [ ] works\n",
+):
+    """Install a ``run_refine_agent`` spy and return a dict whose
+    ``["called"]`` flips to ``True`` once the refine agent runs.
+
+    Lets the dedup-target-validation tests assert that refine proceeds
+    (rather than the dedup guard short-circuiting to DONE) without
+    re-declaring the full keyword signature in every test.
+    """
+    state = {"called": False}
+
+    def spy(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        extra_roots=None,
+        message_history=None,
+        board_id="",
+    ):
+        state["called"] = True
+        return _single(spec)
+
+    monkeypatch.setattr(refining, "run_refine_agent", spy)
+    return state
+
+
 @pytest.fixture(autouse=True)
 def _dedup_clean(monkeypatch):
     """All pre-existing tests expect the dedup guard to be a no-op
@@ -599,6 +632,127 @@ def test_dedup_novel_draft_proceeds_normally(ctx, service, monkeypatch):
 
     assert out.next_state is State.READY
     assert refine_called
+
+
+def test_dedup_circular_target_refused(ctx, service, monkeypatch):
+    """Reproduce the 3191/d0fc circular case: A was closed as a
+    duplicate of B; a later dedup run on B that proposes
+    ``already_done = A`` must be refused so the blocker stays tracked."""
+    refine_state = _install_refine_spy(monkeypatch)
+
+    t_b = service.create("Consume llmio CostLogSource read-port", _DEDUP_BODY)
+    t_a = service.create("Blocked: merged llmio CostLogSource read", _DEDUP_BODY)
+
+    # A was closed as a duplicate of B (DRAFT→DONE→CLOSED).
+    service.transition(t_a.id, State.DONE, note=f"duplicate of {t_b.id}: same blocker")
+    service.transition(t_a.id, State.CLOSED, note="closed")
+
+    def fake_dedup(
+        *, settings, draft_title, draft_body, repo_dir=None, candidates_json
+    ):
+        return {
+            "duplicate_of": None,
+            "already_done": t_a.id,
+            "reason": "already covered",
+        }
+
+    monkeypatch.setattr(dedup, "run_dedup_check", fake_dedup)
+
+    out = RefineStage().run(t_b, ctx)
+
+    # The circular close must NOT happen — refine proceeds instead.
+    assert out.next_state is State.READY
+    assert refine_state["called"]
+    assert "already_done" not in (out.note or "")
+    assert "already implemented in" not in (out.note or "")
+
+
+def test_dedup_closed_as_duplicate_of_third_ticket_refused(ctx, service, monkeypatch):
+    """A candidate closed as a duplicate of some *other* ticket (not
+    circular) is still a non-implementation closure → refine proceeds."""
+    refine_state = _install_refine_spy(monkeypatch)
+
+    t = service.create("Add widget", _DEDUP_BODY)
+    t_x = service.create("Unrelated tracker", _DEDUP_BODY)
+    cand = service.create("Add widget (older)", _DEDUP_BODY)
+
+    # cand was dedup-closed against a third ticket X (DONE→CLOSED).
+    service.transition(cand.id, State.DONE, note=f"duplicate of {t_x.id}: same")
+    service.transition(cand.id, State.CLOSED, note="closed")
+
+    def fake_dedup(
+        *, settings, draft_title, draft_body, repo_dir=None, candidates_json
+    ):
+        return {
+            "duplicate_of": cand.id,
+            "already_done": None,
+            "reason": "looks similar",
+        }
+
+    monkeypatch.setattr(dedup, "run_dedup_check", fake_dedup)
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert refine_state["called"]
+    assert "duplicate of" not in (out.note or "")
+
+
+def test_dedup_declined_candidate_refused(ctx, service, monkeypatch):
+    """A declined candidate (CLOSED, never DONE) is not a fix → refine
+    proceeds rather than closing the ticket against it."""
+    refine_state = _install_refine_spy(monkeypatch)
+
+    t = service.create("Add gadget", _DEDUP_BODY)
+    cand = service.create("Add gadget (declined)", _DEDUP_BODY)
+
+    # Declined as noise: DRAFT → CLOSED directly, never DONE.
+    service.transition(cand.id, State.CLOSED, note="declined as noise")
+
+    def fake_dedup(
+        *, settings, draft_title, draft_body, repo_dir=None, candidates_json
+    ):
+        return {
+            "duplicate_of": cand.id,
+            "already_done": None,
+            "reason": "looks similar",
+        }
+
+    monkeypatch.setattr(dedup, "run_dedup_check", fake_dedup)
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert refine_state["called"]
+
+
+def test_dedup_legit_implemented_candidate_accepted(ctx, service, monkeypatch):
+    """A candidate that reached DONE via a real implementation/merge
+    note (no non-implementation prefix) remains a valid dedup target."""
+    refine_state = _install_refine_spy(monkeypatch)
+
+    t = service.create("Add feature Z", _DEDUP_BODY)
+    cand = service.create("Add feature Z (shipped)", _DEDUP_BODY)
+
+    # Genuinely implemented and merged.
+    service.transition(cand.id, State.DONE, note="implemented and merged in PR #7")
+
+    def fake_dedup(
+        *, settings, draft_title, draft_body, repo_dir=None, candidates_json
+    ):
+        return {
+            "duplicate_of": None,
+            "already_done": cand.id,
+            "reason": "already shipped",
+        }
+
+    monkeypatch.setattr(dedup, "run_dedup_check", fake_dedup)
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.DONE
+    assert f"already implemented in {cand.id}" in out.note
+    assert not refine_state["called"]
 
 
 def test_dedup_skipped_for_empty_title_and_draft(ctx, service, monkeypatch):
