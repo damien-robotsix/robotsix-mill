@@ -1,0 +1,5 @@
+# Per-repo periodic workflow: presence enables agent_check for this repo.
+# Audits the mill's own agent definitions/prompts/wiring for drift and
+# files draft tickets. Name-only → inherits the built-in agent_check
+# definition (robotsix-mill: agent_definitions/periodic/agent_check.yaml).
+name: agent_check
