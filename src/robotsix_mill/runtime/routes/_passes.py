@@ -440,6 +440,48 @@ def survey_pass(
     return {"status": "started"}
 
 
+@router.post("/copy-paste", status_code=202)
+def copy_paste_pass(
+    repo_id: str | None = None,
+    request: Request = None,
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off a copy-paste pass in the BACKGROUND and return at once.
+
+    The copy-paste agent detects clone/duplication clusters across the
+    codebase, triages the worst offenders, and proposes consolidation
+    as draft tickets. New drafts appear on the board when it finishes.
+    """
+    from ...copy_paste_runner import run_copy_paste_pass
+    from ..tracing import make_session_id, start_ticket_root_span
+
+    repo_configs = _resolve_agent_run_repos(repo_id, request)
+
+    def _run() -> None:
+        for rc in repo_configs:
+            run_id = None
+            try:
+                run_id = registry.start("copy-paste", repo_id=rc.repo_id if rc else "")
+                session_id = make_session_id("copy-paste")
+                with start_ticket_root_span(session_id, "copy-paste", repo_config=rc):
+                    r = run_copy_paste_pass(session_id=session_id, repo_config=rc)
+                draft_ids = [d["id"] for d in r.drafts_created[:5]]
+                summary = (
+                    f"Created {len(r.drafts_created)} drafts: "
+                    f"{', '.join(draft_ids)}"
+                    f"{'…' if len(r.drafts_created) > 5 else ''}"
+                )
+                registry.finish_ok(run_id, summary)
+                log.info("copy-paste pass done: %d draft(s)", len(r.drafts_created))
+            except Exception as e:  # noqa: BLE001 — background; just log
+                log.exception("copy-paste pass failed")
+                if run_id:
+                    registry.finish_error(run_id, str(e))
+
+    threading.Thread(target=_run, name="copy-paste-pass", daemon=True).start()
+    return {"status": "started"}
+
+
 @router.post("/module-curator", status_code=202)
 def module_curator_pass(
     repo_id: str | None = None,
