@@ -787,11 +787,6 @@ class Settings(BaseSettings):
     # higher for snappier refreshes on large boards (mind the
     # Langfuse rate limit); drop to 1 to revert to fully-serial.
     cost_warmer_concurrency: int = Field(default=4)
-    # Legacy per-call pace setting (kept for backward compat with
-    # YAML overrides). The parallel sweep above ignores it — the
-    # semaphore is the only throttle. Drop it entirely after the
-    # next config bump.
-    cost_warmer_pace_ms: int = Field(default=200)
     # Independent on/off for the fast loop (see comment below).
     # Gated separately from the slow loop so an operator can disable
     # the per-active-ticket Langfuse polling without losing the
