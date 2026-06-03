@@ -385,6 +385,76 @@ doesn't hold.
 
 ---
 
+### `interval` (optional, periodic agents only)
+
+| Attribute | Value |
+|-----------|-------|
+| Type | `string` |
+| Required | no |
+| Default | `null` |
+| Valid forms | `"1w"`, `"1d"`, `"2h30m"`, `"1w2d3h40m10s"` |
+| Mutually exclusive with | `interval_seconds` |
+
+The preferred human-readable form for specifying periodic agent run
+intervals. Accepts descending-order duration syntax with units for
+weeks (`w`), days (`d`), hours (`h`), minutes (`m`), and seconds (`s`).
+Each unit appears at most once. Examples:
+
+- `interval: "1d"` — once per day
+- `interval: "1w"` — once per week
+- `interval: "2h30m"` — every 2.5 hours
+- `interval: "1w2d3h40m10s"` — once per 790810 seconds
+
+If both `interval` and `interval_seconds` are set, validation fails.
+When `interval` is set, it is parsed to seconds and stored internally,
+so downstream code always sees an integer number of seconds.
+
+---
+
+### `interval_seconds` (optional, periodic agents only)
+
+| Attribute | Value |
+|-----------|-------|
+| Type | `integer` |
+| Required | no |
+| Default | `null` |
+| Mutually exclusive with | `interval` |
+| Example | `3600`, `86400`, `604800` |
+
+The legacy form for specifying periodic agent run intervals as a raw
+number of seconds. Kept for backward compatibility — new YAML files
+should use `interval` (human-readable) instead.
+
+Examples:
+- `interval_seconds: 86400` — once per day (equivalent to `interval: "1d"`)
+- `interval_seconds: 604800` — once per week (equivalent to `interval: "1w"`)
+- `interval_seconds: 3600` — once per hour
+
+If both `interval` and `interval_seconds` are set, validation fails.
+When `interval_seconds` is absent, the agent inherits the corresponding
+`Settings` field (e.g. `audit_interval_seconds` from config).
+
+---
+
+### `enabled` (optional, periodic agents only)
+
+| Attribute | Value |
+|-----------|-------|
+| Type | `boolean` |
+| Required | no |
+| Default | `null` (inherits from Settings) |
+
+Whether this periodic agent is enabled for the repository. When `true`,
+the agent runs on its schedule. When `false`, the agent is disabled.
+When `null` (or absent), the agent inherits the corresponding `Settings`
+field (e.g. `audit_enabled` from config).
+
+Used in per-repo override files (`.robotsix-mill/periodic/<name>.yaml`)
+to enable or disable a periodic agent for a specific repository without
+modifying the shipped agent definition.
+
+---
+
 ## Complete example
 
 See `agent_definitions/refine.yaml` for a fully-worked example of the
