@@ -40,7 +40,6 @@ def settings(tmp_path, monkeypatch):
     s = Settings(
         data_dir=str(tmp_path),
         cost_warmer_interval_seconds=30,
-        cost_warmer_pace_ms=0,
     )
     # Single-repo deployments now register at least one repo; the
     # cost-warmer iterates ``get_repos_config().repos`` and has no

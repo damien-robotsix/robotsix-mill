@@ -1754,8 +1754,7 @@ class Worker:
         hasn't opened the ticket drawer.
 
         Throttling: ``cost_warmer_concurrency`` bounds in-flight
-        Langfuse calls (the semaphore replaces the older serial
-        ``cost_warmer_pace_ms``); ``cost_warmer_interval_seconds``
+        Langfuse calls via a semaphore; ``cost_warmer_interval_seconds``
         is the wall-time between cycles. With concurrency=4 and a
         ~250ms median Langfuse latency, ~200 open tickets sweep in
         ~12s, so the column refreshes well inside the 60s cache TTL
