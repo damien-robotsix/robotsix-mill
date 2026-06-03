@@ -1,200 +1,389 @@
-"""Tests for the tracing module — verify no-ops when env vars absent."""
+"""Tests for the tracing module.
 
+Mill delegates the OTLP→Langfuse provider/exporter/instrumentation and
+the session/project context to ``robotsix_llmio.core.tracing``; these
+tests verify the delegation (not the deleted internals) plus the
+mill-specific surface that stays: the export-failure registry, the
+``RepoConfig``-aware URL builder, ``make_session_id``, the
+``_tracing_enabled`` matrix, and the shutdown signal handlers.
+"""
+
+import contextlib
 import os
 from datetime import datetime as _real_datetime, timezone as _real_timezone
 
 import pytest
 
-from robotsix_mill.config import Secrets, _reset_secrets
+from robotsix_mill.config import RepoConfig, Secrets, _reset_secrets
 from robotsix_mill.runtime import tracing
 
 
 @pytest.fixture(autouse=True)
 def _clear_env():
-    """Ensure no tracing secrets leak in via the cached Secrets singleton."""
+    """Reset the module-level state so tests are independent."""
     _reset_secrets()
-    # Reset the module-level state so tests are independent.
-    tracing._provider_ready = None
-    tracing._provider = None
-    tracing._logger_provider = None
+    tracing._provider_ready = False
     tracing._registered_keys.clear()
     tracing._shutdown_requested = False
-    tracing._current_session.set(None)
-    tracing._current_pk.set(None)
+    tracing.clear_export_failures()
 
 
-def test_ensure_tracing_disabled():
-    """_ensure_tracing must set _provider_ready=False when env vars absent."""
-    assert tracing._provider_ready is None
+# --- small helpers for the delegation tests ----------------------------
+
+
+@contextlib.contextmanager
+def _record_cm(calls, kind, value):
+    """A recording context manager standing in for an llmio
+    ``langfuse_session`` / ``langfuse_project`` block."""
+    calls.append((kind, value))
+    yield
+
+
+class _FakeSpan:
+    def is_recording(self):
+        return True
+
+    def set_attribute(self, k, v):
+        pass
+
+
+class _FakeTracer:
+    @contextlib.contextmanager
+    def start_as_current_span(self, name, attributes=None):
+        yield _FakeSpan()
+
+
+def _llmio():
+    import robotsix_llmio.core.tracing as _t
+
+    return _t
+
+
+# --- no-op behaviour when tracing is disabled --------------------------
+
+
+def test_ensure_tracing_disabled_does_not_delegate(monkeypatch):
+    """_ensure_tracing with no creds must NOT call llmio and must leave
+    readiness False."""
+    called = []
+    monkeypatch.setattr(
+        _llmio(), "setup_langfuse_tracing", lambda **kw: called.append(kw) or True
+    )
     tracing._ensure_tracing()
+    assert called == []
     assert tracing._provider_ready is False
 
 
-def test_flush_tracing_noop():
-    """flush_tracing must not raise when tracing is off."""
+def test_ensure_tracing_skips_repo_without_creds(monkeypatch):
+    """A RepoConfig without langfuse creds is skipped silently."""
+    called = []
+    monkeypatch.setattr(
+        _llmio(), "setup_langfuse_tracing", lambda **kw: called.append(kw) or True
+    )
+    rc = RepoConfig(
+        repo_id="r",
+        board_id="b",
+        langfuse_project_name="p",
+        langfuse_public_key="",
+        langfuse_secret_key="",
+    )
+    tracing._ensure_tracing(rc)
+    assert called == []
+    assert tracing._provider_ready is False
+
+
+def test_flush_tracing_noop_when_not_ready(monkeypatch):
+    """flush_tracing is a no-op (no llmio call) when tracing is off."""
+    called = []
+    monkeypatch.setattr(
+        _llmio(), "flush_tracing", lambda timeout_millis=None: called.append("x")
+    )
     tracing._provider_ready = False
     tracing.flush_tracing()  # no-op, no error
+    assert called == []
 
 
-def test_flush_tracing_noop_before_ensure():
-    """flush_tracing must not raise even before _ensure_tracing is called."""
-    tracing._provider_ready = None
-    tracing.flush_tracing()  # no-op, no error
-
-
-def test_start_ticket_root_span_noop():
-    """start_ticket_root_span must yield without error when tracing is off."""
+def test_start_ticket_root_span_noop_when_disabled():
+    """start_ticket_root_span yields a no-op handle when tracing is off."""
     tracing._provider_ready = False
-    with tracing.start_ticket_root_span("test-ticket-id", "test"):
-        assert True  # body executed
-    # Should not have imported anything
+    with tracing.start_ticket_root_span("test-ticket-id", "test") as root:
+        assert root.trace_id is None
+        root.set_input("x")  # accepted, discarded
+        root.set_output("y")
 
 
-def test_trace_stage_noop():
+def test_trace_stage_noop_when_disabled():
     """trace_stage must yield without error when tracing is off."""
     tracing._provider_ready = False
     with tracing.trace_stage("refine"):
         assert True  # body executed
 
 
-def test_session_contextvar_only_set_when_tracing_ready():
-    """When tracing is off, start_ticket_root_span must NOT touch the
-    session context-var (the SpanProcessor that consumes it only exists
-    when tracing is configured; stamping otherwise would be dead/noise).
-    The var must also be cleanly reset after the block."""
-    tracing._provider_ready = False
-    assert tracing._current_session.get() is None
-    with tracing.start_ticket_root_span("sess-xyz", "test"):
-        assert tracing._current_session.get() is None  # untouched (off)
-    assert tracing._current_session.get() is None
+# --- _ensure_tracing delegation ----------------------------------------
 
 
-def test_session_stamp_processor_stamps_from_contextvar(monkeypatch):
-    """The SpanProcessor stamps session.id (+ langfuse alias) onto every
-    span from the in-scope context-var, so sub-agent traces inherit the
-    session even though they start their own pydantic-ai trace."""
-    pytest.importorskip("opentelemetry.sdk.trace")
-    # Build the processor the way _ensure_tracing does, in isolation.
-    from opentelemetry.sdk.trace import SpanProcessor
-
-    class _P(SpanProcessor):
-        def on_start(self, span, parent_context=None):
-            sid = tracing._current_session.get()
-            if sid:
-                span.set_attribute("session.id", sid)
-                span.set_attribute("langfuse.session.id", sid)
-
-    attrs: dict = {}
-
-    class _FakeSpan:
-        def set_attribute(self, k, v):
-            attrs[k] = v
-
-    p = _P()
-    p.on_start(_FakeSpan())  # no session in scope → nothing stamped
-    assert attrs == {}
-
-    token = tracing._current_session.set("ticket-42")
-    try:
-        p.on_start(_FakeSpan())
-    finally:
-        tracing._current_session.reset(token)
-    assert attrs == {
-        "session.id": "ticket-42",
-        "langfuse.session.id": "ticket-42",
-    }
+def test_ensure_tracing_delegates_to_llmio(monkeypatch):
+    """_ensure_tracing calls llmio.setup_langfuse_tracing with the
+    resolved per-repo creds, service_name='robotsix-mill', and an
+    on_export_result adapter."""
+    captured = {}
+    monkeypatch.setattr(
+        _llmio(),
+        "setup_langfuse_tracing",
+        lambda **kw: (captured.update(kw), True)[1],
+    )
+    rc = RepoConfig(
+        repo_id="r",
+        board_id="b",
+        langfuse_project_name="proj",
+        langfuse_public_key="pk-a",
+        langfuse_secret_key="sk-a",
+        langfuse_base_url="https://lf.example.com",
+    )
+    tracing._ensure_tracing(rc)
+    assert captured["public_key"] == "pk-a"
+    assert captured["secret_key"] == "sk-a"
+    assert captured["base_url"] == "https://lf.example.com"
+    assert captured["project_id"] == "proj"
+    assert captured["service_name"] == "robotsix-mill"
+    assert callable(captured["on_export_result"])
+    assert tracing._provider_ready is True
+    assert "pk-a" in tracing._registered_keys
 
 
-def test_sub_agent_spans_inherit_session_from_contextvar(monkeypatch):
-    """Every span — parent and child (simulating agent + sub-agent) —
-    receives session.id from the in-scope context-var when a
-    _SessionStampProcessor-equivalent is installed on the TracerProvider.
+def test_ensure_tracing_falls_back_to_global_secrets(monkeypatch):
+    """With no repo_config, creds come from the global Secrets singleton
+    and project_id is None."""
+    monkeypatch.setattr(
+        "robotsix_mill.config._secrets",
+        Secrets(
+            langfuse_public_key="pk-g",
+            langfuse_secret_key="sk-g",
+            langfuse_base_url="https://global.example.com",
+        ),
+    )
+    captured = {}
+    monkeypatch.setattr(
+        _llmio(),
+        "setup_langfuse_tracing",
+        lambda **kw: (captured.update(kw), True)[1],
+    )
+    tracing._ensure_tracing()
+    assert captured["public_key"] == "pk-g"
+    assert captured["secret_key"] == "sk-g"
+    assert captured["base_url"] == "https://global.example.com"
+    assert captured["project_id"] is None
+    assert captured["service_name"] == "robotsix-mill"
 
-    This is an integration-level test using the real OpenTelemetry SDK
-    span pipeline (TracerProvider → SpanProcessor.on_start → span),
-    verifying that pydantic-ai sub-agent traces — which go through the
-    same processor — will carry the session regardless of span nesting.
-    """
-    pytest.importorskip("opentelemetry.sdk.trace")
-    from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
-    from opentelemetry import trace as otel_trace
 
-    # ---- stamp processor (mirrors _SessionStampProcessor) ----------
-    captured: list[dict] = []
+def test_ensure_tracing_idempotent_per_key(monkeypatch):
+    """A second call for the same public key does not re-register."""
+    calls = []
+    monkeypatch.setattr(
+        _llmio(),
+        "setup_langfuse_tracing",
+        lambda **kw: (calls.append(kw["public_key"]), True)[1],
+    )
+    rc = RepoConfig(
+        repo_id="r",
+        board_id="b",
+        langfuse_project_name="proj",
+        langfuse_public_key="pk-a",
+        langfuse_secret_key="sk-a",
+    )
+    tracing._ensure_tracing(rc)
+    tracing._ensure_tracing(rc)
+    assert calls == ["pk-a"]
 
-    class _StampAndCapture(SpanProcessor):
-        def on_start(self, span, parent_context=None):
-            sid = tracing._current_session.get()
-            if sid:
-                span.set_attribute("session.id", sid)
-                span.set_attribute("langfuse.session.id", sid)
-            captured.append(
-                {
-                    "name": span.name,
-                    "attrs": dict(span.attributes or {}),
-                }
-            )
 
-        def on_end(self, span):
-            pass
+def test_ensure_tracing_multi_tenant_registers_each_key(monkeypatch):
+    """Two repos register distinctly so traces route per-repo — repo A's
+    traces are never attributed to repo B's project."""
+    calls = []
+    monkeypatch.setattr(
+        _llmio(),
+        "setup_langfuse_tracing",
+        lambda **kw: (calls.append(kw["public_key"]), True)[1],
+    )
+    repo_a = RepoConfig(
+        repo_id="a",
+        board_id="ba",
+        langfuse_project_name="proj-a",
+        langfuse_public_key="pk-a",
+        langfuse_secret_key="sk-a",
+    )
+    repo_b = RepoConfig(
+        repo_id="b",
+        board_id="bb",
+        langfuse_project_name="proj-b",
+        langfuse_public_key="pk-b",
+        langfuse_secret_key="sk-b",
+    )
+    tracing._ensure_tracing(repo_a)
+    tracing._ensure_tracing(repo_b)
+    assert calls == ["pk-a", "pk-b"]
+    assert tracing._registered_keys == {"pk-a", "pk-b"}
 
-        def shutdown(self):
-            pass
 
-        def force_flush(self, timeout_millis=30000):
-            return True
+# --- export-result adapter bridges llmio -> mill registry --------------
 
-    # ---- reset OTel's "already set" guard so we can install our own
-    # provider (a prior test or conftest fixture may have already
-    # installed a global provider via _ensure_tracing).
-    otel_trace._TRACER_PROVIDER = None
-    otel_trace._TRACER_PROVIDER_SET_ONCE._done = False
 
-    # ---- set up the pipeline ---------------------------------------
-    # Force-reset any previously installed global TracerProvider so the
-    # test's custom provider (with _StampAndCapture) actually takes effect.
-    existing = otel_trace.get_tracer_provider()
-    if hasattr(existing, "shutdown"):
-        existing.shutdown()
-    import opentelemetry.trace as _trace_mod
+def test_export_adapter_records_failure_and_clears_on_success(monkeypatch):
+    """The on_export_result adapter records a failure entry under the
+    project label on ok=False and clears it on ok=True."""
+    captured = {}
+    monkeypatch.setattr(
+        _llmio(),
+        "setup_langfuse_tracing",
+        lambda **kw: (captured.update(kw), True)[1],
+    )
+    rc = RepoConfig(
+        repo_id="r",
+        board_id="b",
+        langfuse_project_name="proj-a",
+        langfuse_public_key="pk-a",
+        langfuse_secret_key="sk-a",
+    )
+    tracing._ensure_tracing(rc)
+    hook = captured["on_export_result"]
 
-    _trace_mod._TRACER_PROVIDER_SET_ONCE._done = False
+    hook("pk-a", False, "boom")
+    failures = tracing.get_export_failures()
+    assert len(failures) == 1
+    assert failures[0]["project"] == "proj-a"
+    assert "boom" in failures[0]["error"]
 
-    provider = TracerProvider()
-    provider.add_span_processor(_StampAndCapture())
-    # Don't set globally — use provider directly to avoid OTel's
-    # _TRACER_PROVIDER_SET_ONCE guard.
-    tracer = provider.get_tracer("test-tracer")
+    hook("pk-a", True, None)
+    assert tracing.get_export_failures() == []
 
-    outer_token = tracing._current_session.set("ticket-sub-agent-test")
-    try:
-        token_inner = tracing._current_session.set("ticket-sub-agent-test")
-        try:
-            # Parent agent span
-            with tracer.start_as_current_span("parent-agent"):
-                # Sub-agent span nested inside parent (pydantic-ai
-                # sub-agents may open their own trace, but the stamp
-                # processor does not depend on parent context).
-                with tracer.start_as_current_span("sub-agent"):
-                    pass
-        finally:
-            tracing._current_session.reset(token_inner)
 
-        # Both spans must carry the session id.
-        assert len(captured) == 2, f"Expected 2 spans, got {len(captured)}: {captured}"
-        for i, span_data in enumerate(captured):
-            assert span_data["attrs"].get("session.id") == "ticket-sub-agent-test", (
-                f"Span {i} ({span_data['name']}) missing session.id: "
-                f"{span_data['attrs']}"
-            )
-            assert (
-                span_data["attrs"].get("langfuse.session.id") == "ticket-sub-agent-test"
-            ), (
-                f"Span {i} ({span_data['name']}) missing langfuse.session.id: "
-                f"{span_data['attrs']}"
-            )
-    finally:
-        tracing._current_session.reset(outer_token)
+def test_export_adapter_label_falls_back_to_public_key(monkeypatch):
+    """When the repo has no project name, the failure label is the
+    public key."""
+    captured = {}
+    monkeypatch.setattr(
+        _llmio(),
+        "setup_langfuse_tracing",
+        lambda **kw: (captured.update(kw), True)[1],
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.config._secrets",
+        Secrets(langfuse_public_key="pk-only", langfuse_secret_key="sk-only"),
+    )
+    tracing._ensure_tracing()
+    captured["on_export_result"]("pk-only", False, "nope")
+    failures = tracing.get_export_failures()
+    assert failures and failures[0]["project"] == "pk-only"
+
+
+# --- start_ticket_root_span / force_traces_to_mill delegation ----------
+
+
+def test_start_ticket_root_span_enters_llmio_contexts(monkeypatch):
+    """start_ticket_root_span enters llmio.langfuse_session(ticket_id)
+    and llmio.langfuse_project(pk) around the mill span."""
+    calls = []
+    monkeypatch.setattr(tracing, "_ensure_tracing", lambda repo_config=None: None)
+    tracing._provider_ready = True
+    monkeypatch.setattr(
+        _llmio(), "langfuse_session", lambda sid: _record_cm(calls, "session", sid)
+    )
+    monkeypatch.setattr(
+        _llmio(), "langfuse_project", lambda pk: _record_cm(calls, "project", pk)
+    )
+    import opentelemetry.trace as otel_trace
+
+    monkeypatch.setattr(otel_trace, "get_tracer", lambda name: _FakeTracer())
+
+    rc = RepoConfig(
+        repo_id="r",
+        board_id="b",
+        langfuse_project_name="proj",
+        langfuse_public_key="pk-a",
+        langfuse_secret_key="sk-a",
+    )
+    with tracing.start_ticket_root_span("ticket-1", "refine", repo_config=rc) as root:
+        assert root is not None
+    assert ("session", "ticket-1") in calls
+    assert ("project", "pk-a") in calls
+
+
+def test_start_ticket_root_span_pk_from_global_secrets(monkeypatch):
+    """When no repo_config pk is given, the project pk comes from the
+    global Secrets singleton."""
+    calls = []
+    monkeypatch.setattr(tracing, "_ensure_tracing", lambda repo_config=None: None)
+    tracing._provider_ready = True
+    monkeypatch.setattr(
+        "robotsix_mill.config._secrets",
+        Secrets(langfuse_public_key="pk-global", langfuse_secret_key="sk-global"),
+    )
+    monkeypatch.setattr(
+        _llmio(), "langfuse_session", lambda sid: _record_cm(calls, "session", sid)
+    )
+    monkeypatch.setattr(
+        _llmio(), "langfuse_project", lambda pk: _record_cm(calls, "project", pk)
+    )
+    import opentelemetry.trace as otel_trace
+
+    monkeypatch.setattr(otel_trace, "get_tracer", lambda name: _FakeTracer())
+
+    with tracing.start_ticket_root_span("ticket-9", "implement"):
+        pass
+    assert ("session", "ticket-9") in calls
+    assert ("project", "pk-global") in calls
+
+
+def test_force_traces_to_mill_enters_llmio_project(monkeypatch):
+    """force_traces_to_mill calls _ensure_tracing then enters
+    llmio.langfuse_project with the config's public key."""
+    calls = []
+    monkeypatch.setattr(
+        tracing,
+        "_ensure_tracing",
+        lambda repo_config=None: calls.append(("ensure", repo_config)),
+    )
+    monkeypatch.setattr(
+        _llmio(), "langfuse_project", lambda pk: _record_cm(calls, "project", pk)
+    )
+    with tracing.force_traces_to_mill(MILL_CONFIG):
+        pass
+    assert ("ensure", MILL_CONFIG) in calls
+    assert ("project", "pk-mill") in calls
+
+
+# --- current_session / flush_tracing delegation ------------------------
+
+
+def test_current_session_delegates_to_llmio(monkeypatch):
+    """current_session() returns llmio.current_session()'s value."""
+    monkeypatch.setattr(_llmio(), "current_session", lambda: "sess-xyz")
+    assert tracing.current_session() == "sess-xyz"
+
+
+def test_flush_tracing_delegates_with_timeout_millis(monkeypatch):
+    """flush_tracing(timeout=5000) forwards timeout_millis=5000 to
+    llmio.flush_tracing."""
+    tracing._provider_ready = True
+    captured = []
+    monkeypatch.setattr(
+        _llmio(),
+        "flush_tracing",
+        lambda timeout_millis=None: captured.append(timeout_millis),
+    )
+    tracing.flush_tracing(timeout=5000)
+    assert captured == [5000]
+
+
+def test_flush_tracing_default_timeout():
+    """flush_tracing() default timeout is 10_000 ms."""
+    import inspect
+
+    sig = inspect.signature(tracing.flush_tracing)
+    assert sig.parameters["timeout"].default == 10_000
+
+
+# --- _tracing_enabled matrix -------------------------------------------
 
 
 def test_tracing_enabled_no_env():
@@ -220,18 +409,26 @@ def test_tracing_enabled_missing_secret(monkeypatch):
     assert tracing._tracing_enabled() is False
 
 
+def test_tracing_enabled_per_repo(repo_config):
+    """_tracing_enabled honours per-repo creds over the global Secrets."""
+    assert tracing._tracing_enabled(repo_config) is True
+
+
+# --- no heavy imports at module level ----------------------------------
+
+
 def test_no_otel_imports_at_module_level():
     """Importing runtime.tracing must NOT pull opentelemetry / langfuse /
-    pydantic_ai.agent (they are lazy, inside functions). Checked in a
-    clean subprocess — asserting the session-global sys.modules would be
-    polluted by other tests that import pydantic_ai/otel."""
+    pydantic_ai.agent / robotsix_llmio (they are lazy, inside functions).
+    Checked in a clean subprocess — asserting the session-global
+    sys.modules would be polluted by other tests that import them."""
     import subprocess
     import sys
 
     code = (
         "import sys, robotsix_mill.runtime.tracing as _t; "
-        "bad=[m for m in ('opentelemetry','langfuse','pydantic_ai.agent')"
-        " if m in sys.modules]; "
+        "bad=[m for m in ('opentelemetry','langfuse','pydantic_ai.agent',"
+        "'robotsix_llmio') if m in sys.modules]; "
         "print(','.join(bad)); sys.exit(1 if bad else 0)"
     )
     env = {**os.environ, "PYTHONPATH": "src"}
@@ -241,24 +438,7 @@ def test_no_otel_imports_at_module_level():
     assert r.returncode == 0, f"eagerly imported: {r.stdout.strip()}"
 
 
-# --- current_session() public getter ---
-
-
-def test_current_session_returns_none_when_not_set():
-    """current_session() returns None when no session is in scope."""
-    assert tracing.current_session() is None
-
-
-def test_current_session_returns_contextvar_value():
-    """current_session() returns the _current_session context-var value."""
-    token = tracing._current_session.set("ticket-42")
-    try:
-        assert tracing.current_session() == "ticket-42"
-    finally:
-        tracing._current_session.reset(token)
-
-
-# --- make_session_id ---
+# --- make_session_id ---------------------------------------------------
 
 
 class _FakeDatetime:
@@ -299,7 +479,7 @@ def test_make_session_id_all_unique():
         assert sid.startswith("smoke-")
 
 
-# --- install_signal_handlers & flush_tracing timeout ---
+# --- install_signal_handlers & flush_tracing timeout -------------------
 
 
 def test_install_signal_handlers_registers_without_otel():
@@ -357,464 +537,16 @@ def test_double_sigterm_no_deadlock(monkeypatch):
     assert len(calls) == 1  # still only one flush
 
 
-def test_flush_tracing_timeout_passed_to_force_flush(monkeypatch):
-    """flush_tracing(timeout=5000) passes timeout_millis=5000 to
-    provider.force_flush."""
-    tracing._provider_ready = True
+# --- force_traces_to_mill config ---------------------------------------
 
-    import opentelemetry.trace  # ensure module is importable for patching
 
-    timeout_value: list = []
-
-    class FakeProvider:
-        def force_flush(self, timeout_millis: int | None = None) -> None:
-            timeout_value.append(timeout_millis)
-
-    monkeypatch.setattr(
-        opentelemetry.trace, "get_tracer_provider", lambda: FakeProvider()
-    )
-    tracing.flush_tracing(timeout=5000)
-    assert timeout_value == [5000]
-
-
-def test_flush_tracing_default_timeout():
-    """flush_tracing() default timeout is 10_000 ms."""
-    import inspect
-
-    sig = inspect.signature(tracing.flush_tracing)
-    assert sig.parameters["timeout"].default == 10_000
-
-
-def test_flush_tracing_timeout_passed_to_logger_force_flush(monkeypatch):
-    """flush_tracing(timeout=5000) passes timeout_millis=5000 to the
-    LoggerProvider's force_flush — mirrors the span-side test so the
-    event-mode log pipeline is flushed at shutdown alongside spans."""
-    tracing._provider_ready = True
-
-    import opentelemetry._logs  # ensure module is importable for patching
-
-    timeout_value: list = []
-
-    class FakeLoggerProvider:
-        def force_flush(self, timeout_millis: int | None = None) -> None:
-            timeout_value.append(timeout_millis)
-
-    monkeypatch.setattr(
-        opentelemetry._logs,
-        "get_logger_provider",
-        lambda: FakeLoggerProvider(),
-    )
-    tracing.flush_tracing(timeout=5000)
-    assert timeout_value == [5000]
-
-
-# --- event-mode LogRecord routing --------------------------------------
-
-
-def test_log_record_carries_session_and_public_key_attributes():
-    """A LogRecord emitted while ``_current_session`` and ``_current_pk``
-    are set must carry ``session.id``, ``langfuse.session.id``, and
-    ``langfuse.public_key`` in its attributes — populated by the
-    ``_SessionStampLogProcessor`` installed on the global LoggerProvider
-    so pydantic-ai's event-mode emissions are routed correctly."""
-    pytest.importorskip("opentelemetry.sdk._logs")
-    from opentelemetry._logs import SeverityNumber
-    from opentelemetry._logs._internal import LogRecord as _ApiLogRecord
-    from opentelemetry.sdk._logs import LoggerProvider, LogRecordProcessor
-
-    captured: list[dict] = []
-
-    class _StampAndCapture(LogRecordProcessor):
-        """Mirror of ``_SessionStampLogProcessor`` — stamps from the
-        contextvars and captures the resulting attributes so the test
-        can assert on them without standing up the real exporter."""
-
-        def on_emit(self, log_record):
-            rec = log_record.log_record
-            sid = tracing._current_session.get()
-            if sid:
-                rec.attributes["session.id"] = sid
-                rec.attributes["langfuse.session.id"] = sid
-            pk = tracing._current_pk.get()
-            if pk:
-                rec.attributes["langfuse.public_key"] = pk
-            captured.append(dict(rec.attributes or {}))
-
-        def shutdown(self):
-            pass
-
-        def force_flush(self, timeout_millis=30000):
-            return True
-
-    provider = LoggerProvider()
-    provider.add_log_record_processor(_StampAndCapture())
-    logger = provider.get_logger("test-tracer")
-
-    import time as _time
-
-    sess_token = tracing._current_session.set("ticket-log-routing-test")
-    pk_token = tracing._current_pk.set("pk-routing-test")
-    try:
-        logger.emit(
-            _ApiLogRecord(
-                timestamp=_time.time_ns(),
-                body="hello",
-                severity_number=SeverityNumber.INFO,
-                attributes={},
-            )
-        )
-    finally:
-        tracing._current_pk.reset(pk_token)
-        tracing._current_session.reset(sess_token)
-
-    assert len(captured) == 1
-    attrs = captured[0]
-    assert attrs.get("session.id") == "ticket-log-routing-test"
-    assert attrs.get("langfuse.session.id") == "ticket-log-routing-test"
-    assert attrs.get("langfuse.public_key") == "pk-routing-test"
-
-
-def test_log_record_filtered_when_public_key_mismatches():
-    """A LogRecord whose stamped ``langfuse.public_key`` does not match
-    a ``_FilteredBatchLogRecordProcessor``'s target must be dropped
-    before reaching the wrapped exporter — so repo-A's event-mode logs
-    never land in repo-B's Langfuse project. Mirrors the real
-    stamp+filter pipeline from ``_ensure_tracing`` with module-level
-    helper processors (see ``_PkStampLogProcessor`` /
-    ``_CaptureLogProcessor`` / ``_FilteredLogProcessor`` below)."""
-    pytest.importorskip("opentelemetry.sdk._logs")
-    from opentelemetry._logs import SeverityNumber
-    from opentelemetry._logs._internal import LogRecord as _ApiLogRecord
-    from opentelemetry.sdk._logs import LoggerProvider
-
-    captured_a: list[dict] = []
-    captured_b: list[dict] = []
-
-    provider = LoggerProvider()
-    # Order matters: stamp first so filters see the public_key when
-    # they decide whether to drop.
-    provider.add_log_record_processor(_PkStampLogProcessor())
-    provider.add_log_record_processor(
-        _FilteredLogProcessor(
-            _CaptureLogProcessor(captured_a), target_public_key="pk-a"
-        )
-    )
-    provider.add_log_record_processor(
-        _FilteredLogProcessor(
-            _CaptureLogProcessor(captured_b), target_public_key="pk-b"
-        )
-    )
-
-    logger = provider.get_logger("test-tracer")
-
-    import time as _time
-
-    pk_token = tracing._current_pk.set("pk-a")
-    try:
-        logger.emit(
-            _ApiLogRecord(
-                timestamp=_time.time_ns(),
-                body="hello",
-                severity_number=SeverityNumber.INFO,
-                attributes={},
-            )
-        )
-    finally:
-        tracing._current_pk.reset(pk_token)
-
-    assert len(captured_a) == 1, f"pk-a sink should receive 1 record, got {captured_a}"
-    assert captured_a[0].get("langfuse.public_key") == "pk-a"
-    assert captured_b == [], (
-        f"pk-b sink should receive 0 records when _current_pk='pk-a', got {captured_b}"
-    )
-
-
-# --- Helpers for test_log_record_filtered_when_public_key_mismatches.
-# Defined at module scope so the test body stays under C901's cyclomatic-
-# complexity threshold. They mirror, in test code, the real
-# _SessionStampLogProcessor and _FilteredBatchLogRecordProcessor defined
-# inside _ensure_tracing (which can't be imported directly).
-def _build_log_processor_helpers():  # noqa: C901
-    from opentelemetry.sdk._logs import LogRecordProcessor
-
-    class _PkStamp(LogRecordProcessor):
-        def on_emit(self, log_record):
-            pk = tracing._current_pk.get()
-            if pk:
-                log_record.log_record.attributes["langfuse.public_key"] = pk
-
-        def shutdown(self):
-            pass
-
-        def force_flush(self, timeout_millis=30000):
-            return True
-
-    class _Capture(LogRecordProcessor):
-        def __init__(self, sink):
-            self._sink = sink
-
-        def on_emit(self, log_record):
-            self._sink.append(dict(log_record.log_record.attributes or {}))
-
-        def shutdown(self):
-            pass
-
-        def force_flush(self, timeout_millis=30000):
-            return True
-
-    class _Filtered(LogRecordProcessor):
-        def __init__(self, inner, *, target_public_key):
-            self._inner = inner
-            self._target_pk = target_public_key
-
-        def on_emit(self, log_record):
-            attrs = log_record.log_record.attributes or {}
-            if attrs.get("langfuse.public_key") != self._target_pk:
-                return
-            self._inner.on_emit(log_record)
-
-        def shutdown(self):
-            pass
-
-        def force_flush(self, timeout_millis=30000):
-            return True
-
-    return _PkStamp, _Capture, _Filtered
-
-
-_PkStampLogProcessor, _CaptureLogProcessor, _FilteredLogProcessor = (
-    _build_log_processor_helpers()
-)
-
-
-# --- _ensure_tracing per-repo resilience tests -------------------------
-
-
-def test_ensure_tracing_recovers_after_no_global_creds(monkeypatch):
-    """A prior failed global check (_provider_ready=False, repo_config=None
-    with no global Secrets creds) must NOT block a subsequent per-repo
-    call with a valid RepoConfig."""
-    from robotsix_mill.config import RepoConfig
-
-    # Simulate a prior failed global check.
-    tracing._provider_ready = False
-
-    valid_config = RepoConfig(
-        repo_id="r",
-        board_id="b",
-        langfuse_project_name="p",
-        langfuse_public_key="pk-valid",
-        langfuse_secret_key="sk-valid",
-    )
-
-    # Should NOT short-circuit — the per-repo config has valid creds.
-    tracing._ensure_tracing(repo_config=valid_config)
-    # If we got here without the short-circuit returning, that's the pass.
-    # _provider_ready should now be True (the heavy init succeeded… or
-    # at minimum not stay False, since we imported OTel). The test's
-    # _clear_env fixture ensures no real OTel modules are loaded before
-    # us, so the heavy import block runs and sets _provider_ready to True.
-    assert tracing._provider_ready is True, (
-        "per-repo call with valid creds must proceed past the gate "
-        "even after a prior global disable"
-    )
-
-
-def test_ensure_tracing_no_global_creds_does_not_poison_per_repo(monkeypatch):
-    """_ensure_tracing() with no repo_config and no global Langfuse creds
-    must NOT permanently set _provider_ready=False in a way that blocks
-    subsequent per-repo calls."""
-    from robotsix_mill.config import RepoConfig
-
-    # First call: no repo_config, global Secrets has no creds.
-    tracing._ensure_tracing()
-
-    # The global-disable flag must be set (since we have no per-repo config).
-    assert tracing._provider_ready is False
-
-    # Now a per-repo call with valid creds must NOT be blocked.
-    valid_config = RepoConfig(
-        repo_id="r",
-        board_id="b",
-        langfuse_project_name="p",
-        langfuse_public_key="pk-valid",
-        langfuse_secret_key="sk-valid",
-    )
-    tracing._ensure_tracing(repo_config=valid_config)
-    assert tracing._provider_ready is True, (
-        "per-repo call with valid creds must proceed after a global "
-        "disable — the gate must not short-circuit when repo_config "
-        "is provided"
-    )
-
-
-def test_ensure_tracing_skips_repo_without_creds_without_poisoning(monkeypatch):
-    """_ensure_tracing(repo_config=no_creds_config) for a repo without
-    per-repo creds must skip silently WITHOUT setting _provider_ready
-    to False globally."""
-    from robotsix_mill.config import RepoConfig
-
-    no_creds_config = RepoConfig(
-        repo_id="r",
-        board_id="b",
-        langfuse_project_name="p",
-        langfuse_public_key="",
-        langfuse_secret_key="",
-    )
-
-    tracing._ensure_tracing(repo_config=no_creds_config)
-
-    # _provider_ready must still be None (not poisoned to False) because
-    # the caller had a repo_config — it just had no creds.
-    assert tracing._provider_ready is None, (
-        "per-repo call with no creds must NOT poison the global flag"
-    )
-
-    # A subsequent call with valid creds must proceed.
-    valid_config = RepoConfig(
-        repo_id="r",
-        board_id="b",
-        langfuse_project_name="p",
-        langfuse_public_key="pk-valid",
-        langfuse_secret_key="sk-valid",
-    )
-    tracing._ensure_tracing(repo_config=valid_config)
-    assert tracing._provider_ready is True
-
-
-# --- force_traces_to_mill -------------------------------------------------
-
-
-MILL_CONFIG = __import__("robotsix_mill.config", fromlist=["RepoConfig"]).RepoConfig(
+MILL_CONFIG = RepoConfig(
     repo_id="mill",
     board_id="mill-board",
     langfuse_project_name="robotsix-mill",
     langfuse_public_key="pk-mill",
     langfuse_secret_key="sk-mill",
 )
-
-OTHER_CONFIG = __import__("robotsix_mill.config", fromlist=["RepoConfig"]).RepoConfig(
-    repo_id="other",
-    board_id="other-board",
-    langfuse_project_name="other-project",
-    langfuse_public_key="pk-other",
-    langfuse_secret_key="sk-other",
-)
-
-
-def test_force_traces_to_mill_calls_ensure_tracing(monkeypatch):
-    """Entering force_traces_to_mill must call _ensure_tracing with the
-    passed repo_config."""
-    calls: list = []
-
-    def fake_ensure(repo_config=None):
-        calls.append(repo_config)
-
-    monkeypatch.setattr(tracing, "_ensure_tracing", fake_ensure)
-    with tracing.force_traces_to_mill(MILL_CONFIG):
-        pass
-    assert calls == [MILL_CONFIG]
-
-
-def test_force_traces_to_mill_sets_current_pk_inside_block():
-    """While inside the with block, _current_pk.get() must return the
-    mill config's langfuse_public_key."""
-    assert tracing._current_pk.get() is None  # precondition
-    with tracing.force_traces_to_mill(MILL_CONFIG):
-        assert tracing._current_pk.get() == "pk-mill"
-    assert tracing._current_pk.get() is None  # restored
-
-
-def test_force_traces_to_mill_restores_current_pk_on_normal_exit():
-    """After the with block exits normally, _current_pk must be restored
-    to its pre-entry value."""
-    token = tracing._current_pk.set("pk-before")
-    try:
-        with tracing.force_traces_to_mill(MILL_CONFIG):
-            assert tracing._current_pk.get() == "pk-mill"
-        assert tracing._current_pk.get() == "pk-before"
-    finally:
-        tracing._current_pk.reset(token)
-
-
-def test_force_traces_to_mill_restores_current_pk_on_exception():
-    """If an exception is raised inside the with block, _current_pk must
-    still be restored to its pre-entry value."""
-    token = tracing._current_pk.set("pk-before")
-    try:
-        with pytest.raises(RuntimeError, match="boom"):
-            with tracing.force_traces_to_mill(MILL_CONFIG):
-                assert tracing._current_pk.get() == "pk-mill"
-                raise RuntimeError("boom")
-        assert tracing._current_pk.get() == "pk-before"
-    finally:
-        tracing._current_pk.reset(token)
-
-
-def test_force_traces_to_mill_nesting_is_safe():
-    """Nesting force_traces_to_mill inside a per-repo context must
-    restore the outer _current_pk on exit."""
-    # Simulate an outer per-repo context (like start_ticket_root_span)
-    token = tracing._current_pk.set("pk-other")
-    try:
-        with tracing.force_traces_to_mill(MILL_CONFIG):
-            assert tracing._current_pk.get() == "pk-mill"
-        # After exiting force_traces_to_mill, outer value restored
-        assert tracing._current_pk.get() == "pk-other"
-    finally:
-        tracing._current_pk.reset(token)
-
-
-def test_force_traces_to_mill_spans_carry_mill_public_key():
-    """Integration test: spans created inside force_traces_to_mill() must
-    carry langfuse.public_key from the mill config, verified via a
-    minimal SpanProcessor on a real OTel TracerProvider."""
-    pytest.importorskip("opentelemetry.sdk.trace")
-    from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
-    from opentelemetry import trace as otel_trace
-
-    # Reset OTel's "already set" guard.
-    otel_trace._TRACER_PROVIDER = None
-    otel_trace._TRACER_PROVIDER_SET_ONCE._done = False
-
-    captured: list[dict] = []
-
-    class _StampAndCapture(SpanProcessor):
-        """Stamp langfuse.public_key from the contextvar AND capture the
-        resulting attributes — all in a single on_start so ordering
-        between separate processors doesn't matter."""
-
-        def on_start(self, span, parent_context=None):
-            pk = tracing._current_pk.get()
-            if pk:
-                span.set_attribute("langfuse.public_key", pk)
-            attrs = dict(span.attributes or {})
-            captured.append({"name": span.name, "attrs": attrs})
-
-        def on_end(self, span):
-            pass
-
-        def shutdown(self):
-            pass
-
-        def force_flush(self, timeout_millis=30000):
-            return True
-
-    provider = TracerProvider()
-    provider.add_span_processor(_StampAndCapture())
-    tracer = provider.get_tracer("test-tracer")
-
-    with tracing.force_traces_to_mill(MILL_CONFIG):
-        with tracer.start_as_current_span("meta-span"):
-            with tracer.start_as_current_span("child-span"):
-                pass
-
-    assert len(captured) >= 2, f"Expected at least 2 spans, got {len(captured)}"
-    for span_data in captured:
-        assert span_data["attrs"].get("langfuse.public_key") == "pk-mill", (
-            f"Span {span_data['name']} missing or wrong langfuse.public_key: "
-            f"{span_data['attrs']}"
-        )
 
 
 # ---------------------------------------------------------------------------
