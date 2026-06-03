@@ -289,7 +289,7 @@ class Settings(BaseSettings):
     # coordinator uses when it needs domain-specific advice.
     consult_request_limit: int = Field(default=15, ge=1)
     explore_request_limit: int = Field(default=100, ge=1)
-    explore_max_tokens: int = Field(default=600, ge=1)
+    explore_max_tokens: int = Field(default=2048, ge=1)
     # Per-call cap for the dedup check — one cheap call, so keep it tight.
     dedup_request_limit: int = Field(default=4, ge=1)
     doc_request_limit: int = Field(default=8)
