@@ -149,18 +149,9 @@ def _build_board_html(db_path: str) -> str:
         conn.close()
 
     # Build column HTML fragments.
-    columns_html_parts: list[str] = []
-    for status, records in columns:
-        title = status.capitalize()
-        count = len(records)
-        cards_html = "".join(_render_card(r) for r in records)
-        columns_html_parts.append(
-            f'<div class="column">'
-            f'<div class="column-header"><h2>{html.escape(title)}</h2>'
-            f'<span class="count">{count}</span></div>'
-            f'<div class="cards">{cards_html}</div>'
-            f'</div>'
-        )
+    columns_html_parts = [
+        _render_column(status, records) for status, records in columns
+    ]
 
     return (
         "<!DOCTYPE html>\n"
@@ -353,79 +344,13 @@ def _build_detail_html(
             '</div>'
         )
 
-    if embed:
-        return (
-            '<style>\n'
-            '.detail-field { margin-bottom: 0.75rem; }\n'
-            '.detail-label { font-weight: 700; font-size: 0.85rem; color: #666;'
-            ' margin-bottom: 0.15rem; }\n'
-            '.detail-value { font-size: 0.95rem; }\n'
-            '.detail-value pre { margin: 0; white-space: pre-wrap;'
-            ' font-family: inherit; }\n'
-            '.detail-value code { font-size: 0.85rem; background: #eee;'
-            ' padding: 0.1rem 0.3rem; border-radius: 3px; }\n'
-            '.detail-form { margin-top: 0.25rem; display: flex; gap: 0.25rem;'
-            ' align-items: center; }\n'
-            '.detail-form select { font-size: 0.8rem; padding: 0.15rem 0.3rem; }\n'
-            '.detail-form button { font-size: 0.8rem; padding: 0.15rem 0.6rem;'
-            ' cursor: pointer; }\n'
-            '.embed-detail { padding: 1rem;'
-            ' font-family: system-ui, -apple-system, sans-serif; }\n'
-            '</style>\n'
-            '<div class="embed-detail">\n'
-            '<div class="detail-field">'
-            '<div class="detail-label">Sender</div>'
-            f'<div class="detail-value"><strong>{html.escape(record.sender)}'
-            '</strong></div>'
-            '</div>\n'
-            '<div class="detail-field">'
-            '<div class="detail-label">Date</div>'
-            f'<div class="detail-value">{date_str}</div>'
-            '</div>\n'
-            '<div class="detail-field">'
-            '<div class="detail-label">Status</div>'
-            f'<div class="detail-value">{html.escape(record.status.capitalize())}'
-            f'{move_form}</div>'
-            '</div>\n'
-            '<div class="detail-field">'
-            '<div class="detail-label">To</div>'
-            f'<div class="detail-value">{to_html}</div>'
-            '</div>\n'
-            f'{cc_section}'
-            '<div class="detail-field">'
-            '<div class="detail-label">Body</div>'
-            f'<div class="detail-value">{body_html}</div>'
-            '</div>\n'
-            f'{body_html_note}'
-            '<div class="detail-field">'
-            '<div class="detail-label">Attachments</div>'
-            f'<div class="detail-value">{attach_html}</div>'
-            '</div>\n'
-            '<div class="detail-field">'
-            '<div class="detail-label">Message ID</div>'
-            f'<div class="detail-value"><code>{html.escape(record.message_id)}'
-            '</code></div>'
-            '</div>\n'
-            f'{imap_uid_section}'
-            '</div>\n'
-        )
-
-    return (
-        "<!DOCTYPE html>\n"
-        '<html lang="en">\n'
-        "<head>\n"
-        '<meta charset="utf-8">\n'
-        f"<title>Mail: {html.escape(title_subject)}</title>\n"
-        '<meta http-equiv="refresh" content="30">\n'
-        f"<style>{_CSS}</style>\n"
-        "</head>\n"
-        "<body>\n"
-        '<a class="back-link" href="/board">← Back to board</a>\n'
-        '<div class="detail-container">\n'
-        f'<h1>{html.escape(record.subject.strip() or "(no subject)")}</h1>\n'
+    # The inner detail fields (Sender through IMAP UID) are identical for
+    # the embedded fragment and the full standalone page.
+    fields_html = (
         '<div class="detail-field">'
         '<div class="detail-label">Sender</div>'
-        f'<div class="detail-value"><strong>{html.escape(record.sender)}</strong></div>'
+        f'<div class="detail-value"><strong>{html.escape(record.sender)}'
+        '</strong></div>'
         '</div>\n'
         '<div class="detail-field">'
         '<div class="detail-label">Date</div>'
@@ -452,12 +377,67 @@ def _build_detail_html(
         '</div>\n'
         '<div class="detail-field">'
         '<div class="detail-label">Message ID</div>'
-        f'<div class="detail-value"><code>{html.escape(record.message_id)}</code></div>'
+        f'<div class="detail-value"><code>{html.escape(record.message_id)}'
+        '</code></div>'
         '</div>\n'
         f'{imap_uid_section}'
+    )
+
+    if embed:
+        return (
+            '<style>\n'
+            '.detail-field { margin-bottom: 0.75rem; }\n'
+            '.detail-label { font-weight: 700; font-size: 0.85rem; color: #666;'
+            ' margin-bottom: 0.15rem; }\n'
+            '.detail-value { font-size: 0.95rem; }\n'
+            '.detail-value pre { margin: 0; white-space: pre-wrap;'
+            ' font-family: inherit; }\n'
+            '.detail-value code { font-size: 0.85rem; background: #eee;'
+            ' padding: 0.1rem 0.3rem; border-radius: 3px; }\n'
+            '.detail-form { margin-top: 0.25rem; display: flex; gap: 0.25rem;'
+            ' align-items: center; }\n'
+            '.detail-form select { font-size: 0.8rem; padding: 0.15rem 0.3rem; }\n'
+            '.detail-form button { font-size: 0.8rem; padding: 0.15rem 0.6rem;'
+            ' cursor: pointer; }\n'
+            '.embed-detail { padding: 1rem;'
+            ' font-family: system-ui, -apple-system, sans-serif; }\n'
+            '</style>\n'
+            '<div class="embed-detail">\n'
+            f'{fields_html}'
+            '</div>\n'
+        )
+
+    return (
+        "<!DOCTYPE html>\n"
+        '<html lang="en">\n'
+        "<head>\n"
+        '<meta charset="utf-8">\n'
+        f"<title>Mail: {html.escape(title_subject)}</title>\n"
+        '<meta http-equiv="refresh" content="30">\n'
+        f"<style>{_CSS}</style>\n"
+        "</head>\n"
+        "<body>\n"
+        '<a class="back-link" href="/board">← Back to board</a>\n'
+        '<div class="detail-container">\n'
+        f'<h1>{html.escape(record.subject.strip() or "(no subject)")}</h1>\n'
+        f'{fields_html}'
         '</div>\n'
         "</body>\n"
         "</html>"
+    )
+
+
+def _render_column(status: str, records: list[MailRecord]) -> str:
+    """Render a single board column (header + cards) as an HTML string."""
+    title = status.capitalize()
+    count = len(records)
+    cards_html = "".join(_render_card(r) for r in records)
+    return (
+        f'<div class="column">'
+        f'<div class="column-header"><h2>{html.escape(title)}</h2>'
+        f'<span class="count">{count}</span></div>'
+        f'<div class="cards">{cards_html}</div>'
+        f'</div>'
     )
 
 
