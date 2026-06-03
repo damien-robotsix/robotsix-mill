@@ -95,6 +95,30 @@ def test_interval_override_carried(tmp_path):
     assert r.interval_seconds == 3600
 
 
+def test_human_readable_interval_override_flows_through(tmp_path):
+    """A per-repo ``interval: 2d`` override is parsed to seconds AND
+    survives the exclude_unset merge → ResolvedPeriodicWorkflow gets it."""
+    p = _write(tmp_path, "audit", "name: audit\ninterval: 2d\n")
+    r = pl.resolve_periodic_workflow(p)
+    assert r is not None
+    assert r.interval_seconds == 172800
+    # The merged AgentDefinition also carries the backfilled seconds and
+    # not a conflicting raw ``interval``.
+    assert r.definition.interval_seconds == 172800
+
+
+def test_interval_and_interval_seconds_both_set_skipped(tmp_path):
+    """Both forms set → schema error → file logged-and-skipped (None)."""
+    p = _write(tmp_path, "audit", "name: audit\ninterval: 2d\ninterval_seconds: 10\n")
+    assert pl.resolve_periodic_workflow(p) is None
+
+
+def test_malformed_interval_skipped(tmp_path):
+    """A malformed ``interval`` string → logged-and-skipped (never raises)."""
+    p = _write(tmp_path, "audit", "name: audit\ninterval: 1x\n")
+    assert pl.resolve_periodic_workflow(p) is None
+
+
 # --- schedule_only / maintenance: no prompt ---------------------------------
 
 

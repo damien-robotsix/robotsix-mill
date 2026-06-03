@@ -9,7 +9,7 @@ description: >-
 
 category: periodic
 
-interval_seconds: 604800
+interval: 1w
 enabled: true
 
 model: default

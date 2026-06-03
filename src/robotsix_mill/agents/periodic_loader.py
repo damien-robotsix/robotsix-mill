@@ -35,6 +35,7 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
+from ..core.duration import parse_duration
 from .overlays import apply_overlay
 from .yaml_loader import AgentDefinition, _resolve_env_vars, load_agent_definition
 
@@ -138,8 +139,29 @@ class PeriodicWorkflowFile(BaseModel):
     skills: list[str] | None = None
     modules: bool | None = None
     inject_agent_md: bool | None = None
+    # ``interval`` is the human-readable form (``1w2d3h40m10s``);
+    # ``interval_seconds`` is the legacy integer-seconds form. Mutually
+    # exclusive — see ``_interval_xor``.
+    interval: str | None = None
     interval_seconds: int | None = None
     enabled: bool | None = None
+
+    @model_validator(mode="after")
+    def _interval_xor(self) -> "PeriodicWorkflowFile":
+        if self.interval is not None and self.interval_seconds is not None:
+            raise ValueError(
+                "set at most one of 'interval' (human-readable, e.g. '2d') "
+                "or 'interval_seconds' (legacy integer seconds), not both"
+            )
+        if self.interval is not None:
+            self.interval_seconds = parse_duration(self.interval)
+            # A field assigned only inside an after-validator is NOT in
+            # __pydantic_fields_set__, so ``model_dump(exclude_unset=True)``
+            # (used by _merge_over_builtin) would drop the backfilled value
+            # and the per-repo override would silently fail to apply. Mark
+            # it set so the merge actually carries it through.
+            self.__pydantic_fields_set__.add("interval_seconds")
+        return self
 
     @model_validator(mode="after")
     def _prompt_xor(self) -> "PeriodicWorkflowFile":
@@ -179,7 +201,13 @@ class ResolvedPeriodicWorkflow:
 
 # Fields that exist on PeriodicWorkflowFile but are handled specially / are
 # not AgentDefinition fields when merging.
-_NON_MERGE_FIELDS = frozenset({"name", "prompt_overlay", "system_prompt"})
+# ``interval`` is the human-readable input only; the after-validator
+# backfills ``interval_seconds`` (which IS merged), so the raw ``interval``
+# string must not be forwarded into AgentDefinition (it would collide with
+# the backfilled ``interval_seconds`` and trip the mutual-exclusion check).
+_NON_MERGE_FIELDS = frozenset(
+    {"name", "prompt_overlay", "system_prompt", "interval"}
+)
 
 
 def _builtin_definition(name: str) -> AgentDefinition:
@@ -198,6 +226,11 @@ def _merge_over_builtin(
 ) -> AgentDefinition:
     """Partial-merge the set fields of *pwf* over *builtin* + resolve prompt."""
     data: dict[str, Any] = builtin.model_dump()
+    # The builtin may have been authored with ``interval`` (human-readable);
+    # its validator already backfilled ``interval_seconds``. Drop the raw
+    # ``interval`` so the re-validated AgentDefinition sees only the canonical
+    # seconds and doesn't trip the interval/interval_seconds exclusion check.
+    data.pop("interval", None)
     provided = pwf.model_dump(exclude_unset=True)
     for key, value in provided.items():
         if key in _NON_MERGE_FIELDS:
@@ -222,6 +255,10 @@ def _bespoke_definition(pwf: PeriodicWorkflowFile) -> AgentDefinition:
         )
     data = pwf.model_dump(exclude_unset=True)
     data.pop("prompt_overlay", None)
+    # ``interval`` is human-readable input only; the validator already
+    # backfilled ``interval_seconds``. Drop it so it doesn't collide with
+    # interval_seconds and trip AgentDefinition's mutual-exclusion check.
+    data.pop("interval", None)
     model = data.get("model") or ""
     if isinstance(model, str):
         model = _resolve_env_vars(model)
