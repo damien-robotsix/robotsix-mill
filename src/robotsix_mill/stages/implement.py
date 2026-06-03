@@ -1063,9 +1063,22 @@ class ImplementStage(Stage):
                     reference_files=ref_files,
                     extra_roots=extra_roots,
                 )
+                # Surface the agent's OWN reason in the operator-visible
+                # block note — not a bare "no changes produced". Otherwise the
+                # ticket lands in BLOCKED with an opaque one-liner and the
+                # operator has to open artifacts/implement.md to learn why
+                # (the recurring "blocked with no explanation" complaint). The
+                # full narrative still lives in implement.md (_finalize above);
+                # this is the short, operator-facing form.
+                reason = " ".join(no_change_summary.split())
+                note = "no changes produced"
+                if reason:
+                    note = f"no changes produced — {reason[:300]}" + (
+                        "… (see implement.md)" if len(reason) > 300 else ""
+                    )
                 return _SinglePassResult(
                     next_action="return",
-                    outcome=Outcome(State.BLOCKED, "no changes produced"),
+                    outcome=Outcome(State.BLOCKED, note),
                 )
             # --- post-agent thread acknowledgment ---
             if ic.open_thread_ids and ic.feedback:
