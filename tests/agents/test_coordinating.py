@@ -327,9 +327,7 @@ class TestRunCoordinator:
         self._run(settings, tmp_path)
         assert self.captured["repo_dir"] == tmp_path
 
-    def test_board_id_forwarded_to_builder_for_report_issue(
-        self, settings, tmp_path
-    ):
+    def test_board_id_forwarded_to_builder_for_report_issue(self, settings, tmp_path):
         """run_coordinator MUST forward ``board_id`` to the builder so the
         report_issue tool can file a blocker/dependency ticket. Without it the
         tool is built with board_id="" and fails at call time ("board_id is
