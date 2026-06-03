@@ -297,7 +297,8 @@ sub-directory for modules that have their own test suite:
   - `test_core_retry.py` — transient / rate-limit classification,
     backoff progression, fallback handling.
   - `test_core_provider.py` — the `LLMProvider` contract.
-- `tests/test_openrouter.py` — OpenRouter transport unit tests.
+- `tests/openrouter/`:
+  - `test_openrouter.py` — OpenRouter transport unit tests.
 - `tests/test_tracing.py` — tracing unit tests.
 - `tests/test_tracing_live.py` — live tracing (opt-in).
 - `tests/openrouter_deepseek/`:

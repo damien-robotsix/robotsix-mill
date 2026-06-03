@@ -12,7 +12,7 @@ modules:
       OpenRouter transport layer — base model-family-agnostic provider.
     paths:
       - src/robotsix_llmio/openrouter/**
-      - tests/test_openrouter.py
+      - tests/openrouter/test_openrouter.py
   - id: robotsix_llmio-openrouter-deepseek
     description: >
       Derived DeepSeek layer that pins the generic OpenRouter transport
