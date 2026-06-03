@@ -99,6 +99,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Survey pass",
         "format": "memory_drafts",
     },
+    "copy-paste": {
+        "module": "copy_paste_runner",
+        "function": "run_copy_paste_pass",
+        "label": "Copy-paste pass",
+        "format": "memory_drafts",
+    },
     "module-curator": {
         "module": "module_curator_runner",
         "function": "run_module_curator_pass",
@@ -662,6 +668,16 @@ def main(argv: list[str] | None = None) -> int:
     # --- survey command ---
     p_survey = sub.add_parser("survey", help="run an OSS project discovery survey pass")
     p_survey.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
+    # --- copy-paste command ---
+    p_copy_paste = sub.add_parser(
+        "copy-paste", help="run a copy-paste / code-duplication detection pass"
+    )
+    p_copy_paste.add_argument(
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",
