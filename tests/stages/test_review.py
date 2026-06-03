@@ -595,10 +595,18 @@ def test_request_changes_in_scope_no_deps(ctx_factory, monkeypatch):
     assert all("Spawned" not in b for b in bodies)
 
 
-def test_request_changes_out_of_scope_spawns_dep_ticket(ctx_factory, monkeypatch):
-    """Out-of-scope ask materialises a fresh ticket on the same board
-    and the parent's depends_on is set so the worker's dep gate parks
-    it until the new ticket closes."""
+def _spawned_children(ctx, parent_id):
+    """Review-spawned follow-ups: tickets with source='review' (excluding
+    the parent), newest first."""
+    return [x for x in ctx.service.list() if x.source == "review" and x.id != parent_id]
+
+
+def test_request_changes_out_of_scope_spawns_followup_ticket(ctx_factory, monkeypatch):
+    """An out-of-scope ask (with no in-scope asks) materialises a fresh
+    ticket wired as a FOLLOW-UP — the CHILD depends on the parent (runs
+    after it merges), the parent is NOT parked, and since nothing in-scope
+    needs fixing the parent is approved (DOCUMENTING). This is the
+    direction fix for the 104b/413d deadlock."""
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     _write_file_map(ctx, t, ["feature.txt"])  # .gitignore is out-of-scope
@@ -618,23 +626,26 @@ def test_request_changes_out_of_scope_spawns_dep_ticket(ctx_factory, monkeypatch
     monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
 
     out = ReviewStage().run(t, ctx)
-    assert out.next_state is State.READY
+    # No in-scope changes → approve so the parent can merge + release the
+    # follow-up, instead of parking it.
+    assert out.next_state is State.DOCUMENTING
 
     after = ctx.service.get(t.id)
-    deps = json.loads(after.depends_on or "[]")
-    assert len(deps) == 1
-    child = ctx.service.get(deps[0])
-    assert child is not None
+    assert not after.depends_on  # parent is NOT parked on the follow-up
+
+    children = _spawned_children(ctx, t.id)
+    assert len(children) == 1
+    child = children[0]
     assert child.source == "review"
-    assert (
-        ".gitignore" in (child.body if hasattr(child, "body") else "")
-        or ".gitignore" in ctx.service.workspace(child).read_description()
-    )
+    # The follow-up depends on the PARENT (runs after it merges).
+    assert json.loads(child.depends_on or "[]") == [t.id]
+    assert ".gitignore" in ctx.service.workspace(child).read_description()
 
 
 def test_request_changes_mixed_scope_one_dep_one_in_scope(ctx_factory, monkeypatch):
-    """Mixed verdict: in-scope asks stay on the parent (READY +
-    comment), out-of-scope asks each spawn one dep ticket."""
+    """Mixed verdict: in-scope asks keep the parent in READY (re-implement),
+    the out-of-scope ask spawns ONE follow-up that depends on the parent —
+    and the parent is NOT parked on it."""
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     _write_file_map(ctx, t, ["feature.txt"])
@@ -658,11 +669,13 @@ def test_request_changes_mixed_scope_one_dep_one_in_scope(ctx_factory, monkeypat
     monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
 
     out = ReviewStage().run(t, ctx)
-    assert out.next_state is State.READY
+    assert out.next_state is State.READY  # in-scope ask → re-implement
 
     after = ctx.service.get(t.id)
-    deps = json.loads(after.depends_on or "[]")
-    assert len(deps) == 1  # only the out-of-scope ask spawned a dep
+    assert not after.depends_on  # parent NOT parked on the follow-up
+    children = _spawned_children(ctx, t.id)
+    assert len(children) == 1  # only the out-of-scope ask spawned a follow-up
+    assert json.loads(children[0].depends_on or "[]") == [t.id]
 
 
 def test_request_changes_no_file_map_all_in_scope(ctx_factory, monkeypatch):
@@ -724,8 +737,6 @@ def test_out_of_scope_ask_uses_explicit_title(ctx_factory, monkeypatch):
 
     ReviewStage().run(t, ctx)
 
-    after = ctx.service.get(t.id)
-    deps = json.loads(after.depends_on or "[]")
-    assert len(deps) == 1
-    child = ctx.service.get(deps[0])
-    assert child.title == "Add __pycache__ to .gitignore"
+    children = _spawned_children(ctx, t.id)
+    assert len(children) == 1
+    assert children[0].title == "Add __pycache__ to .gitignore"

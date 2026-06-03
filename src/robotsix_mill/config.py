@@ -289,13 +289,19 @@ class Settings(BaseSettings):
     # coordinator uses when it needs domain-specific advice.
     consult_request_limit: int = Field(default=15, ge=1)
     explore_request_limit: int = Field(default=100, ge=1)
-    explore_max_tokens: int = Field(default=600, ge=1)
+    explore_max_tokens: int = Field(default=2048, ge=1)
     # Per-call cap for the dedup check — one cheap call, so keep it tight.
     dedup_request_limit: int = Field(default=4, ge=1)
     doc_request_limit: int = Field(default=8)
     # Cheap classifier gate that runs *before* the full doc agent.
     doc_classifier_model: str = Field(default="deepseek/deepseek-v4-flash")
     doc_classifier_request_limit: int = Field(default=3)
+    # Caps the git diff fed to the cheap doc-classifier gate. Truncation
+    # is safe here: the classifier is conservatively biased toward
+    # user_facing=True, so a truncated diff at worst loses signal and
+    # routes to the full doc agent — the harmless direction. The full
+    # doc agent still receives the untruncated diff.
+    doc_classifier_diff_max_chars: int = Field(default=6000)
     # Maximum characters of the memory ledger to load per agent pass.
     # When the file exceeds this, the oldest entries are dropped (read-side
     # only — persist_memory is unchanged).  Applies to all memory ledgers
@@ -524,6 +530,15 @@ class Settings(BaseSettings):
     # ticket is short-circuited to DONE before the expensive refine
     # agent runs.  Default False (opt-in).
     freshness_gate_enabled: bool = Field(default=False)
+    # When True, a deterministic pre-implement gate verifies that
+    # external symbol/import prerequisites the spec declares in a
+    # ``## Prerequisites`` / ````prereq```` block are satisfiable in the
+    # cloned repo's environment.  When a declared prerequisite is not yet
+    # importable (e.g. an unmerged external port) the ticket is
+    # short-circuited to BLOCKED before the expensive implement agent
+    # runs — the work is still required once the upstream symbol lands.
+    # Default False (opt-in).
+    prerequisite_gate_enabled: bool = Field(default=False)
     # When True, the refine stage runs a post-refinement review pass that
     # strips verbose exploratory narrative from the spec, producing a
     # concise version while saving the verbose original as an artifact.

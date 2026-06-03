@@ -98,12 +98,13 @@ jobs:
 
       - name: Push Docker image
         id: push
-        run: |
-          for tag in $(echo "${{ steps.meta.outputs.tags }}"); do
-            docker push "$tag"
-          done
-          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "${{ steps.scan-ref.outputs.image }}" | cut -d'@' -f2)
-          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
 
       - uses: anchore/sbom-action@a930d0ac434e3182448fe678398ba5713717112a  # v0.21.0
         with:
@@ -200,12 +201,14 @@ jobs:
 
       - name: Push Docker image
         id: push
-        run: |
-          for tag in $(echo "${{ steps.meta.outputs.tags }}"); do
-            docker push "$tag"
-          done
-          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "${{ steps.scan-ref.outputs.image }}" | cut -d'@' -f2)
-          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7
+        with:
+          context: .
+          file: sandbox/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
 
       - uses: anchore/sbom-action@a930d0ac434e3182448fe678398ba5713717112a  # v0.21.0
         with:
@@ -307,12 +310,19 @@ jobs:
 
       - name: Push Docker image
         id: push
-        run: |
-          for tag in $(echo "${{ steps.meta.outputs.tags }}"); do
-            docker push "$tag"
-          done
-          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "${{ steps.scan-ref.outputs.image }}" | cut -d'@' -f2)
-          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7
+        with:
+          # context = sandbox/proxy so the Dockerfile's COPY tinyproxy.conf /
+          # COPY filter resolve; `file` is relative to the workspace root
+          # (like publish-sandbox's `file: sandbox/Dockerfile`), so it must be
+          # the full path — a bare `Dockerfile` resolved to the repo-root mill
+          # Dockerfile and failed the build.
+          context: sandbox/proxy
+          file: sandbox/proxy/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
 
       - uses: anchore/sbom-action@a930d0ac434e3182448fe678398ba5713717112a  # v0.21.0
         with:

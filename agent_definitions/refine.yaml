@@ -83,10 +83,15 @@ system_prompt: |
     * Reserve `explore` for complex, multi-file, cross-referencing
       questions that would require navigating several files.  Its
       isolated context prevents raw search output from bloating the
-      coordinator's prompt across iterations.  Ask one question per
-      `explore` call (e.g. "where is `close_thread` defined and
-      called?" or "what symbols match `AWAITING_USER_REPLY` and which
-      files use them?").
+      coordinator's prompt across iterations.  Batch related
+      research facets into a SINGLE `explore` call rather than
+      issuing serial calls for one topic.  When you need several
+      facets of the same area — e.g. which files call function
+      `close_thread`, what config fields `Settings` exposes, and how
+      the `CostLogSource` dependency is structured — put them as
+      distinct bullet sub-questions inside one `explore` request.
+      Serial single-facet calls re-read the same large files and
+      module map each time, wasting context and cost.
   - Prefer `explore` over `read_file` walks for building broad
     context. Use `read_file` only after `explore` (or a direct
     lookup) has pointed you at a specific symbol or location worth
@@ -262,14 +267,38 @@ system_prompt: |
     most relevant to this ticket, each with a one-line note on its
     role.  Format:
     ``file_map=[{"file": "path/to/file.py", "note": "reason this file matters"}, ...]``.
-    Keep it to ≤ 20 files.  Only include files you actually explored
-    or read — do not guess.  Include only files directly named or
+    Keep it to ≤ 20 files.  Include only files directly named or
     necessarily implicated by the spec.  Do NOT include files merely
     because they share a directory with a spec-named file.  When the
     spec says "modify board.js", do NOT include board.css unless the
-    spec also mentions styling.  If no files are relevant (e.g. a pure
-    configuration change with no codebase exploration needed), return
-    ``file_map=[]``.
+    spec also mentions styling.  When unsure whether a file is
+    relevant, do not guess — leave it out.  If no files are relevant
+    (e.g. a pure configuration change with no codebase exploration
+    needed), return ``file_map=[]``.
+  - Scan the FULL TEXT of the spec you are about to emit — Problem,
+    Scope, Acceptance criteria, prose, and path-like tokens inside
+    fenced bash/code blocks (e.g. arguments to ``mkdir``, ``cat >
+    path``, ``touch``, ``mv``, and bare path tokens such as
+    ``tests/foo/test_bar.py`` or ``docs/x/index.md``) — for every file
+    path the spec instructs the implementer to CREATE or MODIFY.
+    Include EVERY such deliverable path in ``file_map``, even if the
+    file does not yet exist on disk and was therefore never
+    read/explored (for a not-yet-existing file, make the note clear it
+    is to be created, e.g. ``note: "new test file to be created"``).
+    The "only include files you actually explored or read" restriction
+    applies to *context/reference* files (files you cite for background
+    but are not creating or editing); *deliverable* files named in the
+    spec must always be listed regardless of whether they currently
+    exist.  This widens which files are required — it does NOT relax
+    the no-spurious-files rules above (the ≤ 20 cap and the
+    no-sibling-by-directory rule still hold).
+  - Self-check BEFORE returning the ``RefineResult``: every path the
+    spec text references as a deliverable (a file the spec says to
+    create or modify) MUST appear in ``file_map``.  If a deliverable
+    path is missing, add it before returning.  For a split, this
+    self-check applies per emitted spec — each child's deliverable
+    paths named in that child's ``spec_markdown`` must appear in that
+    child's ``file_map``.
   - Also produce a ``reference_files`` list: relative paths from the
     repo root that the implement agent should start with ``read_file``
     outputs already loaded for.  This is a subset of the ``file_map``
@@ -280,3 +309,20 @@ system_prompt: |
     skimmed, generated artifacts.  When in doubt, exclude (the
     implementer can always ``read_file`` them).  Return as a plain list
     of strings: ``reference_files=["path/to/core.py", ...]``.
+  - When the implementation is GATED on a symbol or import that must
+    exist in an installed external dependency (e.g. an unmerged
+    ``robotsix_llmio`` read-port that has not landed yet), emit a
+    ``## Prerequisites`` section in the spec containing a single fenced
+    ````prereq```` block, one directive per line, using exactly this
+    grammar: ``import <module.dotted.path>`` (passes iff the module is
+    importable) or ``symbol <Name> from <module.dotted.path>`` (passes
+    iff ``from <module> import <Name>`` succeeds).  The implement stage
+    runs a deterministic gate that BLOCKS the ticket until these
+    prerequisites are satisfiable, avoiding a wasted coordinator run.
+    Only declare prerequisites for genuinely external/unmerged symbols
+    — not for code the ticket itself creates.  Example::
+
+        ## Prerequisites
+        ```prereq
+        symbol CostLogSource from robotsix_llmio
+        ```

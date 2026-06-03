@@ -65,6 +65,10 @@ job and wastes the caller's context. No speculation, no preamble.
 Return the minimum that orients the caller.
 
 SCOPE DISCIPLINE — always follow these limits:
+- CHECK KNOWN CONTEXT FIRST: if the user message contains a "Known
+  context" block, read it FIRST. If it already answers the question,
+  reply directly WITHOUT calling any tool. Never re-discover facts the
+  caller has already supplied.
 - TOOL NAMES ARE NOT SHELL COMMANDS: ``read_file``, ``run_command``, and
   ``list_dir`` are tool-call names — NOT shell commands. Invoke them
   only through the tool_call mechanism. Never pass any tool name (e.g.
@@ -110,6 +114,7 @@ async def run_explore(
     settings: Settings,
     repo_dir: Path,
     question: str,
+    known_context: str | None = None,
     extra_roots: list[Path] | None = None,
 ) -> str:
     """Run the read-only exploration sub-agent against ``repo_dir`` and
@@ -125,6 +130,24 @@ async def run_explore(
         return "explore unavailable: OPENROUTER_API_KEY is not set"
     if not repo_dir.exists():
         return "explore unavailable: workspace repo directory does not exist — the repository has not been cloned yet"
+
+    # Compose the effective user prompt: when the caller supplied known
+    # context, prepend a clearly-delimited block so the scout can
+    # short-circuit redundant exploration.  Otherwise pass the question
+    # verbatim (no behavior change).
+    if known_context:
+        prompt = (
+            "Known context already gathered by the caller (CHECK THIS "
+            "BEFORE calling any tool — if it already answers the question, "
+            "reply directly without exploring):\n"
+            "<known_context>\n"
+            f"{known_context}\n"
+            "</known_context>\n\n"
+            "Question:\n"
+            f"{question}"
+        )
+    else:
+        prompt = question
 
     # lazy: keep core import-light / the suite hermetic
     from pydantic_ai import Agent
@@ -187,12 +210,12 @@ async def run_explore(
                 model_settings=ModelSettings(max_tokens=settings.explore_max_tokens),
             )
             fallback_fn = lambda: fallback_agent.run(  # noqa: E731
-                question, usage_limits=limits
+                prompt, usage_limits=limits
             )
 
         try:
             result = await acall_with_retry(
-                lambda: agent.run(question, usage_limits=limits),
+                lambda: agent.run(prompt, usage_limits=limits),
                 settings=settings,
                 what="explore",
                 fallback_fn=fallback_fn,
@@ -216,7 +239,7 @@ async def run_explore(
             retry_limits = UsageLimits(request_limit=2)
             try:
                 retry_result = await retry_agent.run(
-                    question,
+                    prompt,
                     usage_limits=retry_limits,
                 )
             except UsageLimitExceeded:
@@ -258,19 +281,30 @@ def make_explore_tool(
     itself in ``ToolRegistry`` so agents can discover it.
     """
 
-    async def explore(question: str) -> str:
+    async def explore(question: str, known_context: str | None = None) -> str:
         """Ask a fresh, context-isolated sub-agent a complex, multi-step
         question about the repository — questions that would require
         navigating several files to answer. For simple, single-step
         lookups (one file path, one symbol name), use read_file or
         list_dir directly instead. Returns concise paths/symbols/
         line-ranges, never whole files. Batch related questions into a
-        single call where possible."""
+        single call where possible.
+
+        Optionally pass ``known_context``: COMPACT facts you have ALREADY
+        gathered (file paths you have read, symbol names, line ranges you
+        already know) so the scout can short-circuit redundant
+        exploration instead of re-discovering them. Keep it terse — paths
+        and symbols, not whole file dumps. Leave it unset when you have
+        nothing relevant to share."""
+        # Only forward known_context when the caller populated it, so the
+        # default call shape (and existing seam fakes) stays unchanged.
+        extra = {} if known_context is None else {"known_context": known_context}
         return await run_explore(
             settings=settings,
             repo_dir=repo_dir,
             question=question,
             extra_roots=extra_roots,
+            **extra,
         )
 
     from .tool_registry import ToolInfo, ToolRegistry
@@ -280,7 +314,7 @@ def make_explore_tool(
             name="explore",
             description="Ask a fresh, context-isolated sub-agent a complex, multi-step question about the repository.",
             category="exploration",
-            parameters={"question": "str"},
+            parameters={"question": "str", "known_context": "str | None"},
         )
     )
 

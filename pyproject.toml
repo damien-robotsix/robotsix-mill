@@ -33,7 +33,12 @@ tracing = [
     "opentelemetry-sdk",
     "opentelemetry-exporter-otlp-proto-http",
 ]
-dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "bandit[toml]>=1.8", "mypy>=1.15", "ruff>=0.11", "deptry>=0.25"]
+# ruff is PINNED (== not >=): CI runs `uv run ruff`, which otherwise resolves
+# the latest release while the sandbox image + local envs sit on an older one
+# — so `ruff format --check` flip-flops and turns CI red on formatting the
+# agent (and humans) already consider clean. Pin so CI, the sandbox, and local
+# format identically. Bump deliberately, reformatting the repo in the same commit.
+dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "bandit[toml]>=1.8", "mypy>=1.15", "ruff==0.15.15", "deptry>=0.25"]
 docs = ["mkdocs-material>=9"]
 
 [project.scripts]
