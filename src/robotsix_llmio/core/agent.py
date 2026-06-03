@@ -7,17 +7,6 @@ from typing import Any
 from .http import _close_async_client
 
 
-def _safe_close(agent: Any) -> None:
-    """Close an agent's HTTP client if it exposes a ``close`` method. Safe to
-    call on any object — silently no-ops otherwise."""
-    close_fn = getattr(agent, "close", None)
-    if close_fn is not None:
-        try:
-            close_fn()
-        except Exception:
-            pass
-
-
 class AgentHandle:
     """Wraps a pydantic-ai Agent with its httpx client so callers can
     deterministically close the client after use. Delegates attribute access
