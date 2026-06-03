@@ -270,6 +270,82 @@ def test_new_date_creates_draft_when_prior_exists_for_other_date(tmp_path, monke
 
 
 # ---------------------------------------------------------------------------
+# Per-key mode (per-project OpenRouter key → snapshot/diff reconcile)
+# ---------------------------------------------------------------------------
+
+
+def _repo_config_with_key(key="or-key"):
+    from robotsix_mill.config import RepoConfig
+
+    return RepoConfig(
+        repo_id="test-repo",
+        board_id="test-board",
+        langfuse_project_name="p",
+        langfuse_public_key="pk",
+        langfuse_secret_key="sk",
+        openrouter_api_key=key,
+    )
+
+
+def _patch_key_usage(monkeypatch, usages):
+    """Patch OpenRouterKeyCostSource to yield successive cumulative usages."""
+    from robotsix_llmio.openrouter.provider_cost import KeyUsage
+
+    it = iter(usages)
+
+    class _FakeKeySrc:
+        def __init__(self, *, api_key):
+            pass
+
+        def fetch_key_usage(self):
+            return KeyUsage(usage=next(it))
+
+    import robotsix_llmio.openrouter as orpkg
+
+    monkeypatch.setattr(orpkg, "OpenRouterKeyCostSource", _FakeKeySrc)
+
+
+def test_per_key_baseline_then_clean(tmp_path, monkeypatch):
+    settings = _make_settings(tmp_path)
+    monkeypatch.setattr(
+        "robotsix_mill.cost_reconciliation_runner.Settings", lambda: settings
+    )
+    _patch_key_usage(monkeypatch, [10.0, 12.0])  # +$2 between runs
+    monkeypatch.setattr(
+        "robotsix_mill.cost_reconciliation_runner._fetch_logged_cost",
+        lambda settings, window, repo_config: (1.8, "lf"),  # within $1 of $2
+    )
+    _patch_agent(monkeypatch)
+    rc = _repo_config_with_key()
+
+    r1 = run_cost_reconciliation_pass(repo_config=rc)
+    assert r1.drafts_created == [] and "baseline" in r1.summary
+
+    r2 = run_cost_reconciliation_pass(repo_config=rc)
+    assert r2.drafts_created == [] and "clean (per-key" in r2.summary
+
+
+def test_per_key_dirty_files_draft(tmp_path, monkeypatch):
+    settings = _make_settings(tmp_path)
+    monkeypatch.setattr(
+        "robotsix_mill.cost_reconciliation_runner.Settings", lambda: settings
+    )
+    _patch_key_usage(monkeypatch, [10.0, 18.0])  # +$8 provider spend
+    monkeypatch.setattr(
+        "robotsix_mill.cost_reconciliation_runner._fetch_logged_cost",
+        lambda settings, window, repo_config: (2.0, "lf"),  # logged only $2 → $6 gap
+    )
+    agent_calls = _patch_agent(monkeypatch)
+    rc = _repo_config_with_key()
+
+    run_cost_reconciliation_pass(repo_config=rc)  # baseline
+    result = run_cost_reconciliation_pass(repo_config=rc)  # delta=$6 > $1
+    assert len(result.drafts_created) == 1
+    assert len(agent_calls) == 1
+    assert "6.00" in result.summary or "draft" in result.summary
+
+
+# ---------------------------------------------------------------------------
 # window helper
 # ---------------------------------------------------------------------------
 

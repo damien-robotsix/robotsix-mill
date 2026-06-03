@@ -126,6 +126,202 @@ def _fetch_logged_cost(settings, window, repo_config):
     return logged.total_cost, _fmt_breakdown(agg)
 
 
+def _file_discrepancy(
+    settings,
+    service,
+    *,
+    date_str: str,
+    or_total: float,
+    lf_total: float,
+    delta: float,
+    or_breakdown: str,
+    lf_breakdown: str,
+    session_id: str,
+) -> CostReconciliationPassResult:
+    """Dedup → analyse → file a draft for an over-tolerance discrepancy.
+
+    Shared by the account-level and per-key passes. (Follow-up: drop the LLM
+    analysis agent here and file a deterministic raw-numbers result instead.)
+    """
+    from .pass_runner import _verify_prior_proposals
+
+    prior = _verify_prior_proposals(service, settings, SourceKind.COST_RECONCILIATION)
+    if date_str in prior:
+        ticket_id = prior[date_str].get("ticket_id", "?")
+        summary = f"already filed: {ticket_id} (date={date_str})"
+        log.info("cost_reconciliation: %s", summary)
+        return CostReconciliationPassResult(
+            drafts_created=[], summary=summary, session_id=session_id
+        )
+
+    from .agents.cost_reconciling import run_cost_reconciliation_agent
+
+    agent_result = run_cost_reconciliation_agent(
+        settings=settings,
+        openrouter_total=or_total,
+        langfuse_total=lf_total,
+        delta=delta,
+        openrouter_breakdown=or_breakdown,
+        langfuse_breakdown=lf_breakdown,
+    )
+
+    marker = f"<!-- cost_reconciliation-gap-id: {date_str} -->"
+    title = f"Cost reconciliation: OpenRouter vs Langfuse — ${delta:.2f} delta on {date_str}"
+    body = "\n".join(
+        [
+            agent_result.analysis,
+            "",
+            f"**Conclusion:** {agent_result.conclusion}",
+            "",
+            "## Raw data",
+            "",
+            f"- **OpenRouter total:** ${or_total:.4f}",
+            f"- **Langfuse total:** ${lf_total:.4f}",
+            f"- **Delta:** ${delta:.4f}",
+            f"- **Date:** {date_str}",
+            "",
+            "### OpenRouter breakdown",
+            "",
+            "```",
+            or_breakdown,
+            "```",
+            "",
+            "### Langfuse breakdown",
+            "",
+            "```",
+            lf_breakdown,
+            "```",
+            "",
+            marker,
+        ]
+    )
+    try:
+        ticket = service.create(
+            title=title, description=body, source=SourceKind.COST_RECONCILIATION
+        )
+        log.info("cost_reconciliation: created draft %s — %s", ticket.id, title)
+        return CostReconciliationPassResult(
+            drafts_created=[{"id": ticket.id, "title": ticket.title}],
+            summary=f"delta=${delta:.2f} — draft {ticket.id}",
+            updated_memory=getattr(agent_result, "updated_memory", ""),
+            session_id=session_id,
+        )
+    except Exception:
+        log.exception("cost_reconciliation: failed to create draft ticket")
+        return CostReconciliationPassResult(
+            drafts_created=[],
+            summary=f"delta=${delta:.2f} — draft creation failed",
+            updated_memory=getattr(agent_result, "updated_memory", ""),
+            session_id=session_id,
+        )
+
+
+def _key_snapshot_path(settings, board_id: str):
+    from pathlib import Path
+
+    return (
+        Path(settings.data_dir) / (board_id or "default") / "openrouter_key_usage.json"
+    )
+
+
+def _load_key_snapshot(path):
+    """Return ``(cumulative_usd, snapshot_at)`` or ``None`` (no prior snapshot)."""
+    import json
+
+    try:
+        d = json.loads(path.read_text(encoding="utf-8"))
+        return float(d["cumulative"]), datetime.fromisoformat(d["at"])
+    except OSError, ValueError, KeyError:
+        return None
+
+
+def _save_key_snapshot(path, cumulative: float, at: datetime) -> None:
+    import json
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"cumulative": cumulative, "at": at.isoformat()}),
+        encoding="utf-8",
+    )
+
+
+def _run_per_key_pass(
+    settings, service, repo_config: RepoConfig, session_id: str
+) -> CostReconciliationPassResult:
+    """Per-project reconcile: this repo's OpenRouter key usage (snapshot+diff)
+    vs its Langfuse-logged cost over ``[last-snapshot, now]``."""
+    from robotsix_llmio.core import CostWindow, LoggedCost, ProviderCost, reconcile
+    from robotsix_llmio.openrouter import OpenRouterKeyCostSource
+
+    now = datetime.now(timezone.utc)
+    snap_path = _key_snapshot_path(settings, repo_config.board_id)
+    try:
+        cur = OpenRouterKeyCostSource(
+            api_key=repo_config.openrouter_api_key
+        ).fetch_key_usage()
+    except Exception:
+        log.warning(
+            "cost_reconciliation[per-key %s]: usage fetch failed",
+            repo_config.repo_id,
+            exc_info=True,
+        )
+        return CostReconciliationPassResult(
+            drafts_created=[],
+            summary="per-key usage fetch failed",
+            session_id=session_id,
+        )
+
+    prev = _load_key_snapshot(snap_path)
+    _save_key_snapshot(snap_path, cur.usage, now)
+    if prev is None:
+        return CostReconciliationPassResult(
+            drafts_created=[],
+            summary=f"per-key baseline recorded (usage=${cur.usage:.2f})",
+            session_id=session_id,
+        )
+
+    prev_cum, prev_at = prev
+    or_total = max(0.0, cur.usage - prev_cum)
+    window = CostWindow(start=prev_at, end=now)
+    lf_total, lf_breakdown = _fetch_logged_cost(settings, window, repo_config)
+
+    disc = reconcile(
+        LoggedCost(total_cost=lf_total, record_count=0),
+        ProviderCost(total_cost=or_total),
+    )
+    date_str = now.date().isoformat()
+    log.info(
+        "cost_reconciliation[per-key %s]: OR=$%.4f LF=$%.4f delta=$%.4f window=%s..%s",
+        repo_config.repo_id,
+        or_total,
+        lf_total,
+        disc.delta,
+        prev_at.isoformat(),
+        now.isoformat(),
+    )
+    if disc.within_tolerance:
+        return CostReconciliationPassResult(
+            drafts_created=[],
+            summary=(
+                f"clean (per-key {repo_config.repo_id}): "
+                f"OR=${or_total:.2f} LF=${lf_total:.2f} delta=${disc.delta:.2f}"
+            ),
+            session_id=session_id,
+        )
+    return _file_discrepancy(
+        settings,
+        service,
+        date_str=date_str,
+        or_total=or_total,
+        lf_total=lf_total,
+        delta=disc.delta,
+        or_breakdown=f"(per-key {repo_config.repo_id}) usage delta over "
+        f"{prev_at.date().isoformat()}..{date_str}",
+        lf_breakdown=lf_breakdown,
+        session_id=session_id,
+    )
+
+
 def run_cost_reconciliation_pass(
     session_id: str = "",
     repo_config: RepoConfig | None = None,
@@ -148,6 +344,13 @@ def run_cost_reconciliation_pass(
         service = TicketService(settings, board_id=repo_config.board_id)
     else:
         service = TicketService(settings)
+
+    # Per-key mode: when this repo carries its own OpenRouter key, reconcile
+    # ITS key usage (cumulative snapshot + diff) against ITS Langfuse project,
+    # over the [last-snapshot, now] window — so the provider and logged sides
+    # cover the same period and provider spend is attributed per-project.
+    if repo_config is not None and repo_config.openrouter_api_key:
+        return _run_per_key_pass(settings, service, repo_config, session_id)
 
     window = _yesterday_window()
     date_str = window.start.date().isoformat()
@@ -194,98 +397,14 @@ def run_cost_reconciliation_pass(
             session_id=session_id,
         )
 
-    # --- Prior-proposal dedup -----------------------------------------
-    # Same date already filed? Skip — repeated $1+ deltas on the same
-    # day would otherwise produce a duplicate draft per run.
-    from .pass_runner import _verify_prior_proposals
-
-    prior = _verify_prior_proposals(
-        service,
+    return _file_discrepancy(
         settings,
-        SourceKind.COST_RECONCILIATION,
-    )
-    if date_str in prior:
-        ticket_id = prior[date_str].get("ticket_id", "?")
-        summary = f"already filed: {ticket_id} (date={date_str})"
-        log.info("cost_reconciliation: %s", summary)
-        return CostReconciliationPassResult(
-            drafts_created=[],
-            summary=summary,
-            updated_memory="",
-            session_id=session_id,
-        )
-
-    # --- Agent ---------------------------------------------------------
-    from .agents.cost_reconciling import run_cost_reconciliation_agent
-
-    agent_result = run_cost_reconciliation_agent(
-        settings=settings,
-        openrouter_total=or_total,
-        langfuse_total=lf_total,
+        service,
+        date_str=date_str,
+        or_total=or_total,
+        lf_total=lf_total,
         delta=delta,
-        openrouter_breakdown=or_breakdown,
-        langfuse_breakdown=lf_breakdown,
+        or_breakdown=or_breakdown,
+        lf_breakdown=lf_breakdown,
+        session_id=session_id,
     )
-
-    # --- Draft ticket --------------------------------------------------
-    gap_id = date_str
-    marker = f"<!-- cost_reconciliation-gap-id: {gap_id} -->"
-
-    title = (
-        f"Cost reconciliation: OpenRouter vs Langfuse — "
-        f"${delta:.2f} delta on {date_str}"
-    )
-
-    body_parts = [
-        agent_result.analysis,
-        "",
-        f"**Conclusion:** {agent_result.conclusion}",
-        "",
-        "## Raw data",
-        "",
-        f"- **OpenRouter total:** ${or_total:.4f}",
-        f"- **Langfuse total:** ${lf_total:.4f}",
-        f"- **Delta:** ${delta:.4f}",
-        f"- **Date:** {date_str}",
-        "",
-        "### OpenRouter breakdown",
-        "",
-        "```",
-        or_breakdown,
-        "```",
-        "",
-        "### Langfuse breakdown",
-        "",
-        "```",
-        lf_breakdown,
-        "```",
-        "",
-        marker,
-    ]
-    body = "\n".join(body_parts)
-
-    try:
-        ticket = service.create(
-            title=title,
-            description=body,
-            source=SourceKind.COST_RECONCILIATION,
-        )
-        log.info(
-            "cost_reconciliation: created draft %s — %s",
-            ticket.id,
-            title,
-        )
-        return CostReconciliationPassResult(
-            drafts_created=[{"id": ticket.id, "title": ticket.title}],
-            summary=f"delta=${delta:.2f} — draft {ticket.id}",
-            updated_memory=getattr(agent_result, "updated_memory", ""),
-            session_id=session_id,
-        )
-    except Exception:
-        log.exception("cost_reconciliation: failed to create draft ticket")
-        return CostReconciliationPassResult(
-            drafts_created=[],
-            summary=f"delta=${delta:.2f} — draft creation failed",
-            updated_memory=getattr(agent_result, "updated_memory", ""),
-            session_id=session_id,
-        )

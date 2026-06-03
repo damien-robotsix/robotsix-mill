@@ -1487,6 +1487,11 @@ class RepoConfig(BaseModel):
     langfuse_public_key: str
     langfuse_secret_key: str
     langfuse_base_url: str = "https://cloud.langfuse.com"
+    # Per-repo OpenRouter inference key. When set, cost-reconciliation runs in
+    # PER-KEY mode for this repo (snapshot this key's cumulative usage each pass
+    # + diff against the prior snapshot) so its provider spend reconciles
+    # against ITS Langfuse project. Unset → account-level activity reconcile.
+    openrouter_api_key: str | None = None
     forge_remote_url: str | None = None
     ci_monitor_enabled: bool = True
     ci_monitor_interval_seconds: int = 86400
@@ -1574,6 +1579,9 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             langfuse_public_key=langfuse.get("public_key", ""),
             langfuse_secret_key=langfuse.get("secret_key", ""),
             langfuse_base_url=langfuse.get("base_url", "https://cloud.langfuse.com"),
+            openrouter_api_key=repo_data.get("openrouter_api_key")
+            if isinstance(repo_data, dict)
+            else None,
             forge_remote_url=repo_data.get("forge_remote_url")
             if isinstance(repo_data, dict)
             else None,
