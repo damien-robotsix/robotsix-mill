@@ -231,6 +231,10 @@ class AgentPassResult:
     updated_memory: str
     drafts_created: list[dict]  # [{"id": ..., "title": ...}, ...]
     session_id: str = ""
+    # The agent's one-line account of what it examined + the basis for the
+    # number of drafts it filed. Surfaced as the run-registry summary so an
+    # operator can tell a legitimate 0-draft run from a no-op.
+    summary: str = ""
 
 
 def _test_file_exists_for_gap(repo_dir: Path, title: str) -> bool:
@@ -370,6 +374,10 @@ def run_agent_pass(
             updated_memory=memory_text,
             drafts_created=[],
             session_id=origin_session or "",
+            summary=(
+                "⚠ agent did not emit a parseable structured result — pass "
+                "degraded to a no-op (this is NOT a clean 0-draft run)"
+            ),
         )
 
     # 5. Persist the agent's updated memory verbatim.
@@ -443,4 +451,5 @@ def run_agent_pass(
         updated_memory=res.updated_memory or memory_text,
         drafts_created=created,
         session_id=origin_session or "",
+        summary=(getattr(res, "summary", "") or "").strip(),
     )

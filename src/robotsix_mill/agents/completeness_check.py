@@ -32,6 +32,15 @@ MAX_GAPS = 12
 
 class CompletenessCheckResult(BaseModel):
     updated_memory: str = ""
+    summary: str = Field(
+        default="",
+        description=(
+            "One sentence: what you examined and the basis for the number "
+            "of drafts filed (e.g. 'scanned 142 files; jscpd found 3 clone "
+            "pairs, 0 above the severity threshold'). ALWAYS fill this so "
+            "an operator can verify a 0-draft run is legitimate."
+        ),
+    )
     draft_titles: list[str] = Field(default_factory=list)
     draft_bodies: list[str] = Field(default_factory=list)
     gap_ids: list[str] = Field(default_factory=list)

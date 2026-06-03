@@ -184,6 +184,15 @@ def run_periodic_agent(
 
     prompt += section("memory", memory or "(empty — start a new ledger)")
     prompt += "\n\n" + prompt_tail
+    # Always require a one-line run summary so an operator can tell a
+    # legitimate 0-draft run (scanned, nothing met the bar) from a no-op.
+    prompt += (
+        "\n\nALWAYS populate the `summary` field of your structured output with "
+        "ONE sentence stating what you examined and the basis for the number of "
+        'drafts you filed (e.g. "reviewed 142 files; 3 clone pairs, 0 above the '
+        'severity threshold"). This is how an operator verifies a 0-draft run '
+        "was legitimate rather than a no-op — never leave it empty."
+    )
 
     # ------------------------------------------------------------------
     # Step 6 — run with retry
