@@ -119,15 +119,28 @@ files are:
   a USD value from a response and stamps `gen_ai.usage.cost` +
   `langfuse.observation.cost_details` onto the active OTel span, plus
   `flush_current_provider()` for retry-time exports.
-- `_otel.py` — internal span helpers (`_get_recording_span`,
-  `get_tracer`, `start_span`). Underscore-prefixed because they are not
-  public API.
+- `_otel.py` — the implementation home of the span helpers
+  (`get_recording_span`, `get_tracer`, `start_span`). The functions have
+  public names so they can be cleanly re-exported, but the **module
+  itself stays internal** (the leading underscore): the helpers are the
+  public surface, `_otel` is not. `cost.py` and `retry.py` import them
+  intra-package from `._otel` directly; everyone else uses `tracing.py`.
 - `tracing.py` — optional Langfuse OTLP wiring
   (`setup_langfuse_tracing`, `langfuse_session`, `langfuse_project`,
   `start_trace`, `TraceSpan`, `flush_tracing`,
   `install_signal_handlers`); single- and multi-tenant routing via a
   stamp processor that tags every span with the active public key and a
-  per-project filtered batch exporter.
+  per-project filtered batch exporter. Also re-exports the public span
+  helpers (`get_recording_span`, `get_tracer`, `start_span`) from
+  `_otel.py` as part of its public surface (also available from
+  `core.__init__`).
+
+  **Provider import rule:** sibling sub-packages (`openrouter`,
+  `claude_sdk`, …) MUST import tracing helpers only from `core.tracing`
+  or `core.__init__`, never from the private `core._otel`. The
+  underscore module may be refactored or merged into `core.tracing`
+  later; routing provider imports through the public surface keeps them
+  insulated from that internal churn.
 
 ## The PEP 562 `__getattr__` lazy-import convention
 

@@ -24,7 +24,7 @@ import time
 from typing import Callable, Iterator, TypeVar
 
 from . import constants
-from ._otel import _get_recording_span
+from ._otel import get_recording_span
 from .cost import flush_current_provider
 
 log = logging.getLogger("robotsix_llmio.retry")
@@ -101,7 +101,7 @@ def _record_rate_limit_span(
     fallback_activated: bool,
 ) -> None:
     """Record rate-limit metrics on the current OTel span; no-op without OTel."""
-    span = _get_recording_span()
+    span = get_recording_span()
     if span is None:
         return
     span.set_attribute("llmio.rate_limit.count", count)

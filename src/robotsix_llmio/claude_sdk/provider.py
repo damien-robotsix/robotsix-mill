@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ..core._otel import get_tracer, start_span
+from ..core.tracing import get_tracer, start_span
 from ..core.provider import LLMProvider, Tier
 from .transient import is_claude_sdk_transient
 

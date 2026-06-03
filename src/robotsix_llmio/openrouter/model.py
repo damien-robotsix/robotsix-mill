@@ -13,7 +13,7 @@ from typing import Any
 
 from pydantic_ai.models.openai import OpenAIChatModel
 
-from robotsix_llmio.core._otel import _get_recording_span
+from robotsix_llmio.core.tracing import get_recording_span
 
 
 def _resolve_model_settings(args: tuple, kwargs: dict) -> Any:
@@ -66,7 +66,7 @@ def record_openrouter_cost(response: Any) -> None:
     cost = _get_cost_from_response(response)
     if cost is None:
         return
-    span = _get_recording_span()
+    span = get_recording_span()
     if span is None:
         return
 

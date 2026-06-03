@@ -15,12 +15,15 @@ from .tracing import (
     TraceSpan,
     current_session,
     flush_tracing,
+    get_recording_span,
+    get_tracer,
     install_signal_handlers,
     langfuse_project,
     langfuse_session,
     langfuse_trace_url,
     make_session_id,
     setup_langfuse_tracing,
+    start_span,
     start_trace,
 )
 
@@ -44,4 +47,7 @@ __all__ = [
     "langfuse_trace_url",
     "install_signal_handlers",
     "flush_tracing",
+    "get_recording_span",
+    "get_tracer",
+    "start_span",
 ]

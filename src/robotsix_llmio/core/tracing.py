@@ -32,6 +32,7 @@ import os
 import uuid
 from typing import Any, Iterator
 
+from ._otel import get_recording_span as get_recording_span
 from ._otel import get_tracer, start_span
 
 _DEFAULT_BASE_URL = "https://cloud.langfuse.com"

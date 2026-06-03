@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from typing import Any, Callable
 
-from ._otel import _get_recording_span
+from ._otel import get_recording_span
 
 
 def record_cost(response: Any, get_cost: Callable[[Any], float | None]) -> None:
@@ -21,7 +21,7 @@ def record_cost(response: Any, get_cost: Callable[[Any], float | None]) -> None:
     cost = get_cost(response)
     if cost is None:
         return
-    span = _get_recording_span()
+    span = get_recording_span()
     if span is None:
         return
     span.set_attribute("gen_ai.usage.cost", cost)

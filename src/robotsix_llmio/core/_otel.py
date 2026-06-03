@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from opentelemetry.trace import Span
 
 
-def _get_recording_span() -> "Span | None":
+def get_recording_span() -> "Span | None":
     """Return the current OTel span if recording, else None. No-op without OTel."""
     try:
         from opentelemetry import trace as otel_trace  # type: ignore[import-untyped]
