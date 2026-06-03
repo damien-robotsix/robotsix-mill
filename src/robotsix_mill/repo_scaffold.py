@@ -207,6 +207,10 @@ def _scaffold_initial_commit(settings, repo_info: RepoInfo, params: dict) -> Non
         if language == "python":
             _write_python_skeleton(workspace_dir, name)
 
+        # Periodic agents: enablement is file presence, so the new repo
+        # opts into the default set by carrying these in its first commit.
+        _write_periodic_presence_files(workspace_dir)
+
         git_ops.commit_all(workspace_dir, "Initial scaffold")
 
         git_ops.push(
@@ -269,6 +273,26 @@ requires-python = ">=3.12"
     (tests_dir / "__init__.py").write_text("", encoding="utf-8")
 
 
+def _write_periodic_presence_files(repo_dir: Path) -> None:
+    """Write the default per-repo periodic presence files into the new repo.
+
+    Periodic agents are enabled by the presence of
+    ``.robotsix-mill/periodic/<name>.yaml`` in the repo (a name-only file
+    inherits the built-in's params). Scaffolding them here is what actually
+    turns audit + health on for a brand-new repo — the repos.yaml stanza no
+    longer carries periodic config.
+    """
+    periodic_dir = repo_dir / ".robotsix-mill" / "periodic"
+    periodic_dir.mkdir(parents=True, exist_ok=True)
+    for name in _DEFAULT_PERIODIC_NAMES:
+        (periodic_dir / f"{name}.yaml").write_text(
+            f"# Per-repo periodic workflow: presence enables it for this repo.\n"
+            f"# Name-only → inherits the built-in {name} params.\n"
+            f"name: {name}\n",
+            encoding="utf-8",
+        )
+
+
 def _sanitize_repo_id(name: str) -> str:
     """Derive a safe ``repo_id`` from a repo name: lowercase, hyphens
     for non-alphanumeric characters."""
@@ -299,24 +323,12 @@ def _repos_yaml_path() -> Path | None:
     return Path("config/repos.yaml")
 
 
-_ALL_PERIODIC_NAMES = (
-    "audit",
-    "trace_health",
-    "health",
-    "test_gap",
-    "agent_check",
-    "bc_check",
-    "completeness_check",
-    "copy_paste",
-    "survey",
-    "cost_reconciliation",
-    "config_sync",
-    "trace_review",
-    "langfuse_cleanup",
-    "cost_warmer",
-    "module_curator",
-    "bespoke",
-)
+# Periodic agents the scaffold enables on a brand-new repo, written as
+# name-only presence files into its initial commit (see
+# _write_periodic_presence_files). Enablement is per-repo file presence
+# (.robotsix-mill/periodic/<name>.yaml) — NOT a repos.yaml block, which
+# the loader no longer reads.
+_DEFAULT_PERIODIC_NAMES = ("audit", "health")
 
 
 def _append_repo_config(repo_info: RepoInfo, params: dict, settings) -> None:
@@ -367,12 +379,6 @@ def _append_repo_config(repo_info: RepoInfo, params: dict, settings) -> None:
 
     language = params.get("language", "python")
 
-    # Build periodic block: only audit + health enabled by default
-    periodic_block: dict[str, dict[str, bool]] = {}
-    for name in _ALL_PERIODIC_NAMES:
-        enabled = name in ("audit", "health")
-        periodic_block[name] = {"enabled": enabled}
-
     new_entry: dict = {
         "board_id": repo_id,
         "langfuse": {
@@ -383,7 +389,11 @@ def _append_repo_config(repo_info: RepoInfo, params: dict, settings) -> None:
         },
         "forge_remote_url": repo_info.clone_url,
         "language": language,
-        "periodic": periodic_block,
+        # Periodic agents are NOT configured here — enablement is per-repo
+        # file presence in the new repo's .robotsix-mill/periodic/ (written
+        # into the initial scaffold commit). A repos.yaml "periodic" block is
+        # dead (the loader ignores it).
+        "test_command": "pytest -q" if language == "python" else "",
     }
 
     data["repos"][repo_id] = new_entry
