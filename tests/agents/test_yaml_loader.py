@@ -622,6 +622,39 @@ def test_interval_seconds_round_trips(tmp_path):
     assert ad.enabled is False
 
 
+def test_interval_human_readable_backfills_interval_seconds(tmp_path):
+    """``interval: 1d`` parses and exposes ``interval_seconds == 86400``
+    so downstream readers (worker.py) are unchanged."""
+    p = _write_yaml(
+        tmp_path,
+        'name: demo\nmodel: deepseek/v\nsystem_prompt: "x"\ninterval: 1d\n',
+    )
+    ad = load_agent_definition(p)
+    assert ad.interval == "1d"
+    assert ad.interval_seconds == 86400
+
+
+def test_interval_and_interval_seconds_mutually_exclusive(tmp_path):
+    """Setting both ``interval`` and ``interval_seconds`` → ValidationError."""
+    p = _write_yaml(
+        tmp_path,
+        'name: demo\nmodel: deepseek/v\nsystem_prompt: "x"\n'
+        "interval: 1d\ninterval_seconds: 86400\n",
+    )
+    with pytest.raises(Exception):  # pydantic.ValidationError
+        load_agent_definition(p)
+
+
+def test_interval_malformed_raises_validation_error(tmp_path):
+    """A malformed ``interval`` string surfaces as a ValidationError."""
+    p = _write_yaml(
+        tmp_path,
+        'name: demo\nmodel: deepseek/v\nsystem_prompt: "x"\ninterval: 1x\n',
+    )
+    with pytest.raises(Exception):  # pydantic.ValidationError
+        load_agent_definition(p)
+
+
 def test_interval_seconds_defaults_to_none(tmp_path):
     """Omitted ``interval_seconds`` / ``enabled`` keep ``None`` so the
     worker falls back to the corresponding Settings field."""

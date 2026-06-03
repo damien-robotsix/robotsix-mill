@@ -6,7 +6,9 @@ references in the ``model`` field, validates the result against the
 
 This module is independent of the agent runtime (``build_agent``,
 ``Settings``, ``pydantic_ai``) — it only depends on ``pydantic``
-(already in the tree via ``pydantic-settings``), ``PyYAML``, and stdlib.
+(already in the tree via ``pydantic-settings``), ``PyYAML``, stdlib,
+and the stdlib-only ``core.duration`` helper for the human-readable
+``interval`` form.
 """
 
 from __future__ import annotations
@@ -15,7 +17,9 @@ import os
 import re
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
+
+from ..core.duration import parse_duration
 
 
 class AgentDefinition(BaseModel):
@@ -58,8 +62,26 @@ class AgentDefinition(BaseModel):
     # Periodic-only scheduling fields. None means "fall back to the
     # corresponding Settings field" — keeps existing YAMLs and the
     # global mill.defaults.yaml schedule section working unchanged.
+    #
+    # ``interval`` is the preferred human-readable form (``1w2d3h40m10s``);
+    # ``interval_seconds`` is the legacy integer-seconds form. They are
+    # mutually exclusive; when ``interval`` is set, the after-validator
+    # parses it and backfills ``interval_seconds`` so every downstream
+    # reader continues to see an int with no change.
+    interval: str | None = None
     interval_seconds: int | None = None
     enabled: bool | None = None
+
+    @model_validator(mode="after")
+    def _interval_xor(self) -> "AgentDefinition":
+        if self.interval is not None and self.interval_seconds is not None:
+            raise ValueError(
+                "set at most one of 'interval' (human-readable, e.g. '1d') "
+                "or 'interval_seconds' (legacy integer seconds), not both"
+            )
+        if self.interval is not None:
+            self.interval_seconds = parse_duration(self.interval)
+        return self
 
 
 # Only bare ``${VAR}`` — the existing YAML does not use defaults or nesting.

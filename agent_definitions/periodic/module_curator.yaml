@@ -9,7 +9,7 @@ description: >-
 
 category: periodic
 
-interval_seconds: 86400
+interval: 1d
 enabled: true
 
 model: cheap
