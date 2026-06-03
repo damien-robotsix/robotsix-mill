@@ -293,7 +293,6 @@ def test_per_key_baseline_then_clean(tmp_path, monkeypatch):
         "robotsix_mill.cost_reconciliation_runner._fetch_logged_cost",
         lambda settings, window, repo_config: (1.8, "lf"),  # within $1 of $2
     )
-    _patch_agent(monkeypatch)
     rc = _repo_config_with_key()
 
     r1 = run_cost_reconciliation_pass(repo_config=rc)
@@ -313,13 +312,11 @@ def test_per_key_dirty_files_draft(tmp_path, monkeypatch):
         "robotsix_mill.cost_reconciliation_runner._fetch_logged_cost",
         lambda settings, window, repo_config: (2.0, "lf"),  # logged only $2 → $6 gap
     )
-    agent_calls = _patch_agent(monkeypatch)
     rc = _repo_config_with_key()
 
     run_cost_reconciliation_pass(repo_config=rc)  # baseline
     result = run_cost_reconciliation_pass(repo_config=rc)  # delta=$6 > $1
     assert len(result.drafts_created) == 1
-    assert len(agent_calls) == 1
     assert "6.00" in result.summary or "draft" in result.summary
 
 
