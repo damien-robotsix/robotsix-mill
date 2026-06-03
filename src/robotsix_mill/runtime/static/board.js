@@ -1693,7 +1693,8 @@ async function refreshCandidateBadge(){
  if(!btn||!badge)return;
  const reset=()=>{badge.style.display="none";badge.textContent="";btn.style.borderColor="#3a2a4b";btn.style.boxShadow=""};
  const repo=getRepoId();
- if(!repo||repo==="all"||repo==="meta"){reset();return}
+ if(!repo||repo==="all"||repo==="meta"){btn.style.display="none";reset();return}
+ btn.style.display="";
  try{
   const cands=await jget("/candidates?repo_id="+encodeURIComponent(repo));
   if(!Array.isArray(cands))return;       // fetch failed → leave badge unchanged
