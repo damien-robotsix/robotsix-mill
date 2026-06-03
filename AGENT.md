@@ -175,6 +175,17 @@ schema validator to confirm the file is still valid. The curator may
 file "stale paths" and "Classify" tickets as reminders — these aren't
 errors, just prompts to clean up.
 
+### Deleting a tracked file
+
+When deleting a source or test file tracked in `docs/modules.yaml`,
+remove its path entry from `docs/modules.yaml` in the same commit as
+the deletion. Unlike `### Deprecating a module` (which removes an entire
+module entry), this covers deleting *individual files* while the module
+persists — drop only the affected `paths` glob/entry, not the whole
+module. Doing this in the deleting commit prevents the registry from
+referencing nonexistent files and saves the `module_curator` from
+filing a "stale paths" cleanup ticket after the fact.
+
 ## Forge adapter conventions
 
 - **Public-method / private-HTTP-seam split.** Every new abstract
