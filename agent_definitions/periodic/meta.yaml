@@ -28,7 +28,7 @@ close_thread: false
 ask_user: false
 output_type: MetaAgentResult
 retries: 4
-module: meta
+module: meta.agent
 skills: [board-read]
 modules: false
 

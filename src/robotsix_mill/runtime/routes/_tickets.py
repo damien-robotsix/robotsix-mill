@@ -129,7 +129,7 @@ def list_tickets(
     repos = request.app.state.repos
     if repo_id and repo_id != "all":
         # "meta" is the synthetic cross-repo meta-agent board (not a
-        # registered repo — see meta_runner.py / GET /repos).
+        # registered repo — see meta/runner.py / GET /repos).
         if repo_id == "meta":
             services = [_TicketService(settings, board_id="meta")]
         elif repo_id not in repos.repos:

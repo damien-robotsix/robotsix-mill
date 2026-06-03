@@ -790,7 +790,7 @@ class Worker:
     _DEFAULT_BOARD = ""
     # The synthetic cross-repo meta board is not a registered repo, but its
     # tickets ARE worked (refine builds a multi-repo workspace via triage —
-    # see meta_workspace.build_triaged_meta_workspace). Consume it like a board.
+    # see meta.workspace.build_triaged_meta_workspace). Consume it like a board.
     _META_BOARD = "meta"
 
     # Stage-rank by ticket state — used as a secondary sort key in the
@@ -1617,7 +1617,7 @@ class Worker:
         extraction and alignment opportunities, and files drafts to the
         meta board and per-repo boards respectively.
         """
-        from robotsix_mill.meta_runner import MetaPassResult, run_meta_pass
+        from robotsix_mill.meta.runner import MetaPassResult, run_meta_pass
 
         interval = max(60, self.ctx.settings.meta_interval_seconds)
         initial = self._initial_delay("meta", interval)

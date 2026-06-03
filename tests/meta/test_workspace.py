@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from robotsix_mill import meta_workspace
+from robotsix_mill.meta import workspace as meta_workspace
 from robotsix_mill.config import RepoConfig, ReposRegistry
 
 

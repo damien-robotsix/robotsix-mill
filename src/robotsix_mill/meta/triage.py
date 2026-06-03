@@ -2,7 +2,7 @@
 
 Given a cross-repo meta-board proposal, decides which registered
 repositories the work touches so the meta workspace is built by cloning
-only those repos (see :mod:`robotsix_mill.meta_workspace`).
+only those repos (see :mod:`robotsix_mill.meta.workspace`).
 """
 
 from __future__ import annotations
@@ -14,9 +14,9 @@ import yaml as _yaml
 from pydantic import BaseModel, Field
 
 from ..config import Settings, get_repos_config
-from .prompt_blocks import section
+from ..agents.prompt_blocks import section
 
-log = logging.getLogger("robotsix_mill.agents.meta_triage")
+log = logging.getLogger("robotsix_mill.meta.triage")
 
 _SYSPROMPT_PATH = (
     Path(__file__).parent.parent.parent.parent
@@ -58,9 +58,9 @@ def required_repos_for(*, settings: Settings, spec: str) -> list[str]:
     if not clonable:
         return []
 
-    from .base import _safe_close, build_agent_from_definition
-    from .retry import run_agent
-    from .yaml_loader import load_agent_definition
+    from ..agents.base import _safe_close, build_agent_from_definition
+    from ..agents.retry import run_agent
+    from ..agents.yaml_loader import load_agent_definition
 
     definition = load_agent_definition(
         Path(__file__).parent.parent.parent.parent

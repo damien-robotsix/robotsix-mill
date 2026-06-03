@@ -201,7 +201,7 @@ class RefineStage(Stage):
         # is the normal single-repo clone.
         extra_roots: list[Path] | None = None
         if ticket.board_id == "meta":
-            from ..meta_workspace import build_triaged_meta_workspace
+            from ..meta.workspace import build_triaged_meta_workspace
 
             repo_dir, extra_roots, outcome = build_triaged_meta_workspace(
                 ctx, ticket, ws, draft, author="refine"

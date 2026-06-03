@@ -124,8 +124,8 @@ def run_meta_agent(
     # Build tools: explore (with extra_roots) + read-only fs tools
     # (filtered to read_file / list_dir — no run_command).
     # ------------------------------------------------------------------
-    from .explore import make_explore_tool
-    from .fs_tools import build_fs_tools
+    from ..agents.explore import make_explore_tool
+    from ..agents.fs_tools import build_fs_tools
 
     ro = [
         t
@@ -146,7 +146,7 @@ def run_meta_agent(
     # ------------------------------------------------------------------
     from pydantic_ai import PromptedOutput
 
-    from .base import build_agent, _safe_close
+    from ..agents.base import build_agent, _safe_close
 
     agent = build_agent(
         settings,
@@ -166,7 +166,7 @@ def run_meta_agent(
     # ------------------------------------------------------------------
     # Construct the prompt
     # ------------------------------------------------------------------
-    from .prompt_blocks import section
+    from ..agents.prompt_blocks import section
 
     clone_lines = [
         f"- `{repo_id}` → `{clone_path}`" for repo_id, clone_path in repo_clones.items()
@@ -181,7 +181,7 @@ def run_meta_agent(
     # ------------------------------------------------------------------
     # Run with retry
     # ------------------------------------------------------------------
-    from .retry import run_agent
+    from ..agents.retry import run_agent
 
     try:
         result = run_agent(

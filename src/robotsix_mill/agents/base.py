@@ -129,7 +129,15 @@ def build_agent_from_definition(
                 f"Agent definition '{definition.name}' specifies "
                 f"output_type='{definition.output_type}' but module is None"
             )
-        module = importlib.import_module(f"robotsix_mill.agents.{definition.module}")
+        # A dotted ``module`` value is a full path under the package
+        # root (e.g. ``meta.agent`` → ``robotsix_mill.meta.agent``); a
+        # dotless value stays under ``agents`` for backward compat.
+        if "." in definition.module:
+            module = importlib.import_module(f"robotsix_mill.{definition.module}")
+        else:
+            module = importlib.import_module(
+                f"robotsix_mill.agents.{definition.module}"
+            )
         output_cls = getattr(module, definition.output_type)
         resolved_output_type: Any = PromptedOutput(output_cls)
     else:

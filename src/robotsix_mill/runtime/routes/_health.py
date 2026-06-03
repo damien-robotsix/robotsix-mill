@@ -72,7 +72,7 @@ def list_repos(
     ]
     # The cross-repo meta-agent files extraction proposals to a synthetic
     # "meta" board that is NOT a registered repo (no clone/forge — see
-    # meta_runner.py, board_id="meta"). Surface it in the selector so
+    # meta/runner.py, board_id="meta"). Surface it in the selector so
     # operators can review those drafts; it is deliberately kept out of
     # the ReposRegistry so the worker/clone/cost loops never touch it.
     result.append({"repo_id": "meta", "board_id": "meta"})

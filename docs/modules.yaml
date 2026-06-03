@@ -146,9 +146,10 @@ modules:
       ``runtime/worker.py`` and monkeypatched by string path from tests,
       so co-locating them with agents would fragment the orchestration
       layer without simplifying any caller.  The tight ``meta`` family
-      (``meta_runner.py`` + ``agents/meta*.py``) is the documented
-      exception where a runner is grouped with its agents under the
-      ``meta`` module.
+      is the documented exception where a runner is grouped with its
+      agents: they are consolidated into the ``src/robotsix_mill/meta/``
+      subpackage (``agent.py`` + ``triage.py`` + ``runner.py`` +
+      ``workspace.py``) under the ``meta`` module.
     paths:
       - src/robotsix_mill/pass_runner.py
       - src/robotsix_mill/agent_check_runner.py
@@ -400,14 +401,15 @@ modules:
       meta-agent, board routing, cross-repo memory ledger, mill-pinned
       tracing).
     paths:
-      - src/robotsix_mill/agents/meta.py
-      - src/robotsix_mill/agents/meta_triage.py
-      - src/robotsix_mill/meta_runner.py
-      - src/robotsix_mill/meta_workspace.py
-      - tests/meta/test_meta_agent_build.py
-      - tests/meta/test_meta_triage.py
-      - tests/meta/test_meta_runner.py
-      - tests/meta/test_meta_workspace.py
+      - src/robotsix_mill/meta/__init__.py
+      - src/robotsix_mill/meta/agent.py
+      - src/robotsix_mill/meta/triage.py
+      - src/robotsix_mill/meta/runner.py
+      - src/robotsix_mill/meta/workspace.py
+      - tests/meta/test_agent_build.py
+      - tests/meta/test_triage.py
+      - tests/meta/test_runner.py
+      - tests/meta/test_workspace.py
     dependencies: [config, core, agent-infra, agent-tools, forge, vcs, runners, runtime]
 
   # -------------------------------------------------------------------
