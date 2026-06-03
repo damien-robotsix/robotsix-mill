@@ -341,7 +341,10 @@ def test_per_key_baseline_then_clean(tmp_path, monkeypatch):
     _patch_key_usage(monkeypatch, [10.0, 12.0])  # +$2 between runs
     monkeypatch.setattr(
         "robotsix_mill.cost_reconciliation_runner._fetch_logged_cost",
-        lambda settings, window, repo_config, *, provider=None: (1.8, "lf"),  # within $1 of $2
+        lambda settings, window, repo_config, *, provider=None: (
+            1.8,
+            "lf",
+        ),  # within $1 of $2
     )
     _patch_agent(monkeypatch)
     rc = _repo_config_with_key()
@@ -361,7 +364,10 @@ def test_per_key_dirty_files_draft(tmp_path, monkeypatch):
     _patch_key_usage(monkeypatch, [10.0, 18.0])  # +$8 provider spend
     monkeypatch.setattr(
         "robotsix_mill.cost_reconciliation_runner._fetch_logged_cost",
-        lambda settings, window, repo_config, *, provider=None: (2.0, "lf"),  # logged only $2 → $6 gap
+        lambda settings, window, repo_config, *, provider=None: (
+            2.0,
+            "lf",
+        ),  # logged only $2 → $6 gap
     )
     agent_calls = _patch_agent(monkeypatch)
     rc = _repo_config_with_key()
