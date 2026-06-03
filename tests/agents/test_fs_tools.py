@@ -30,6 +30,13 @@ def _build(root, settings):
     return {t.__name__: t for t in tools}
 
 
+def _build_extra(root, settings, extra_roots):
+    """Like ``_build`` but threads ``extra_roots`` so the cross-repo
+    (meta multi-repo) sandbox branch is exercised."""
+    tools = build_fs_tools(root, settings, extra_roots=extra_roots)
+    return {t.__name__: t for t in tools}
+
+
 def _make_file(root, path, content):
     p = root / path
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -98,6 +105,49 @@ class TestSafe:
         root.mkdir()
         result = _safe(root, ".")
         assert result == root.resolve()
+
+    # -- extra_roots: cross-repo (meta multi-repo) sandbox --------------
+
+    def test_extra_root_single_allows_sibling(self, tmp_path):
+        """A '../extra/...' path resolving into the single extra root is
+        returned (not rejected)."""
+        root = tmp_path / "repos" / "primary"
+        extra = tmp_path / "repos" / "extra"
+        root.mkdir(parents=True)
+        extra.mkdir(parents=True)
+        result = _safe(root, "../extra/file.txt", extra_roots=[extra])
+        assert result == (extra / "file.txt").resolve()
+
+    def test_extra_root_multiple_allows_second(self, tmp_path):
+        """With several extra roots, a path under the 2nd entry is
+        allowed."""
+        root = tmp_path / "repos" / "primary"
+        extra1 = tmp_path / "repos" / "extra1"
+        extra2 = tmp_path / "repos" / "extra2"
+        for d in (root, extra1, extra2):
+            d.mkdir(parents=True)
+        result = _safe(root, "../extra2/file.txt", extra_roots=[extra1, extra2])
+        assert result == (extra2 / "file.txt").resolve()
+
+    def test_extra_root_still_rejects_outside_all(self, tmp_path):
+        """extra_roots widens the sandbox but does not disable it: a path
+        outside root AND every extra root still escapes."""
+        root = tmp_path / "repos" / "primary"
+        extra = tmp_path / "repos" / "extra"
+        root.mkdir(parents=True)
+        extra.mkdir(parents=True)
+        with pytest.raises(ValueError, match="escapes"):
+            _safe(root, "../../../etc/passwd", extra_roots=[extra])
+
+    def test_extra_root_inside_primary_still_allowed(self, tmp_path):
+        """A path inside the primary root is allowed even when
+        extra_roots is also set (no false negative)."""
+        root = tmp_path / "repos" / "primary"
+        extra = tmp_path / "repos" / "extra"
+        root.mkdir(parents=True)
+        extra.mkdir(parents=True)
+        result = _safe(root, "foo.txt", extra_roots=[extra])
+        assert result == (root / "foo.txt").resolve()
 
 
 # ===================================================================
@@ -178,6 +228,29 @@ class TestReadFile:
         result = tools["read_file"](path="any.txt")
         assert isinstance(result, str)
         assert "not been cloned yet" in result.lower()
+
+    def test_read_across_extra_root(self, tmp_path, settings):
+        """A file in an extra root is readable via a '../extra/...'
+        relative path when extra_roots is set."""
+        root = tmp_path / "repos" / "primary"
+        extra = tmp_path / "repos" / "extra"
+        root.mkdir(parents=True)
+        extra.mkdir(parents=True)
+        _make_file(extra, "sibling.txt", "from sibling\n")
+        tools = _build_extra(root, settings, [extra])
+        assert tools["read_file"](path="../extra/sibling.txt") == "from sibling\n"
+
+    def test_read_outside_all_roots_with_extra_set(self, tmp_path, settings):
+        """A path outside root AND all extra roots is still refused (error
+        string) even when extra_roots is set."""
+        root = tmp_path / "repos" / "primary"
+        extra = tmp_path / "repos" / "extra"
+        root.mkdir(parents=True)
+        extra.mkdir(parents=True)
+        tools = _build_extra(root, settings, [extra])
+        result = tools["read_file"](path="../../../etc/passwd")
+        assert isinstance(result, str)
+        assert "error" in result.lower()
 
 
 # ===================================================================
@@ -367,6 +440,31 @@ class TestWriteFile:
         assert isinstance(result, str)
         assert "not been cloned yet" in result.lower()
 
+    def test_write_across_extra_root(self, tmp_path, settings):
+        """A write via '../extra/...' lands in the extra root when
+        extra_roots is set."""
+        root = tmp_path / "repos" / "primary"
+        extra = tmp_path / "repos" / "extra"
+        root.mkdir(parents=True)
+        extra.mkdir(parents=True)
+        tools = _build_extra(root, settings, [extra])
+        result = tools["write_file"]("../extra/new.txt", "hello")
+        assert "wrote 5 bytes to ../extra/new.txt" in result
+        assert (extra / "new.txt").read_text() == "hello"
+
+    def test_write_outside_all_roots_with_extra_set(self, tmp_path, settings):
+        """A write outside root AND all extra roots is refused with no
+        filesystem side effect, even when extra_roots is set."""
+        root = tmp_path / "repos" / "primary"
+        extra = tmp_path / "repos" / "extra"
+        root.mkdir(parents=True)
+        extra.mkdir(parents=True)
+        tools = _build_extra(root, settings, [extra])
+        result = tools["write_file"]("../../../etc/hosts", "x")
+        assert isinstance(result, str)
+        assert "error" in result.lower()
+        assert not (tmp_path / "etc/hosts").exists()
+
     def test_write_file_python_syntax_error_refused(self, tmp_path, settings):
         """write_file must refuse a .py with a SyntaxError so the agent
         retries the edit instead of wasting a test cycle on broken code."""
@@ -477,6 +575,19 @@ class TestEditFile:
         result = tools["edit_file"]("any.txt", "a", "b")
         assert isinstance(result, str)
         assert "not been cloned yet" in result.lower()
+
+    def test_edit_across_extra_root(self, tmp_path, settings):
+        """A file in an extra root is editable via '../extra/...' when
+        extra_roots is set."""
+        root = tmp_path / "repos" / "primary"
+        extra = tmp_path / "repos" / "extra"
+        root.mkdir(parents=True)
+        extra.mkdir(parents=True)
+        _make_file(extra, "f.py", "x = 1\ny = 2\n")
+        tools = _build_extra(root, settings, [extra])
+        result = tools["edit_file"]("../extra/f.py", "y = 2", "y = 3")
+        assert "replaced 1 occurrence in ../extra/f.py" in result
+        assert (extra / "f.py").read_text() == "x = 1\ny = 3\n"
 
     def test_edit_file_python_syntax_error_refused(self, tmp_path, settings):
         """An edit that would leave the .py file with a SyntaxError must
