@@ -43,15 +43,15 @@ class SourceKind(StrEnum):
     MODULE_CURATOR = "module_curator"
     ROADMAP_SYNC = "roadmap_sync"
     META = "meta"
+    BOARD_CLEANUP = "board_cleanup"
 
 
 class ActionType(StrEnum):
     """Enumeration of actions a periodic agent can propose."""
 
-    CLOSE = "close"
-    TRANSITION = "transition"
-    COMMENT = "comment"
-    RELABEL = "relabel"
+    CLOSE_TICKET = "close_ticket"
+    CREATE_TICKET = "create_ticket"
+    # Extensible: add members here for future action types.
 
 
 class ProposedActionStatus(StrEnum):
@@ -61,7 +61,6 @@ class ProposedActionStatus(StrEnum):
     APPROVED = "approved"
     REJECTED = "rejected"
     EXECUTED = "executed"
-    FAILED = "failed"
 
 
 def _now() -> datetime:
@@ -169,27 +168,45 @@ class Comment(SQLModel, table=True):
 
 
 class ProposedAction(SQLModel, table=True):
-    """Pending mutation proposed by a periodic agent (health, audit, survey, etc.).
+    """Pending mutation proposed by a periodic agent (board-cleanup, etc.).
 
     Held PENDING until a human approves or rejects; only then does the
-    executor apply the mutation to its target ticket.
+    executor apply the mutation to its target ticket (close_ticket) or
+    create a new ticket (create_ticket).
     """
 
     id: int | None = Field(default=None, primary_key=True)
-    source: str  # Periodic agent label, e.g. "health", "audit", "trace-review"
-    target_ticket_id: str = Field(foreign_key="ticket.id", index=True)
     action_type: ActionType
-    payload: str | None = Field(default=None)  # JSON string; schema varies by action_type
-    rationale: str  # Free-text explanation from the agent
-    status: ProposedActionStatus = Field(default=ProposedActionStatus.PENDING)
-    created_at: datetime = Field(
-        default_factory=_now,
-        sa_column=Column(TZDateTime()),
+    target_ticket_id: str | None = Field(default=None, index=True)
+    # Payload for create_ticket actions (NULL for close_ticket):
+    proposed_title: str | None = None
+    proposed_body: str | None = None
+    # Why the agent proposed this action:
+    rationale: str
+    # Which agent/pass proposed it (SourceKind value):
+    source: str
+    status: ProposedActionStatus = Field(
+        default=ProposedActionStatus.PENDING, index=True
     )
-    decided_at: datetime | None = Field(
+    # Timestamps:
+    created_at: datetime = Field(
+        default_factory=_now, sa_column=Column(TZDateTime())
+    )
+    approved_at: datetime | None = Field(
         default=None, sa_column=Column(TZDateTime(), nullable=True)
     )
-    decided_by: str | None = Field(default=None)
+    rejected_at: datetime | None = Field(
+        default=None, sa_column=Column(TZDateTime(), nullable=True)
+    )
+    executed_at: datetime | None = Field(
+        default=None, sa_column=Column(TZDateTime(), nullable=True)
+    )
+    # Who approved/rejected (free-form string — user id, "operator", etc.):
+    approver_id: str | None = None
+    # If execution failed, the exception message:
+    error_message: str | None = None
+    # Per-board scoping (mirrors Ticket.board_id):
+    board_id: str = Field(default="", index=True)
 
 
 # --- API request/response shapes ---
