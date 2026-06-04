@@ -15,7 +15,13 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .config import Settings
-from .core.models import SourceKind, Ticket
+from .core import db
+from .core.models import (
+    ActionType,
+    ProposedAction,
+    SourceKind,
+    Ticket,
+)
 from .core.service import TicketService
 from .core.states import State
 from .core.workspace import Workspace
@@ -383,6 +389,35 @@ def run_agent_pass(
     # 5. Persist the agent's updated memory verbatim.
     if res.updated_memory:
         persist_memory(memory_file, res.updated_memory)
+
+    # 5b. Persist proposed actions from agent result (if any).
+    proposed_actions = getattr(res, "proposed_actions", [])
+    if proposed_actions:
+        proposed_count = 0
+        try:
+            with db.session(settings, service.board_id) as s:
+                for item in proposed_actions:
+                    action = ProposedAction(
+                        source=str(source_label),
+                        target_ticket_id=item["target_ticket_id"],
+                        action_type=ActionType(item["action_type"].lower()),
+                        payload=item.get("payload"),
+                        rationale=item.get("rationale", ""),
+                    )
+                    s.add(action)
+                    proposed_count += 1
+                s.commit()
+            log.info(
+                "%s: persisted %d proposed action(s)",
+                source_label,
+                proposed_count,
+            )
+        except Exception:
+            log.warning(
+                "%s: failed to persist proposed action(s) — continuing",
+                source_label,
+                exc_info=True,
+            )
 
     # 6. Create draft tickets for each proposal.
     gap_ids = getattr(res, "gap_ids", [])
