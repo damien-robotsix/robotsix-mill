@@ -1609,9 +1609,7 @@ class TicketService:
             if action_type == ActionType.CLOSE:
                 self._execute_close(target_id, rationale, source)
             elif action_type == ActionType.TRANSITION:
-                self._execute_transition(
-                    target_id, payload, rationale, source
-                )
+                self._execute_transition(target_id, payload, rationale, source)
             elif action_type == ActionType.COMMENT:
                 self._execute_comment(target_id, rationale, source)
             elif action_type == ActionType.RELABEL:
@@ -1624,7 +1622,9 @@ class TicketService:
             failure = str(exc)
 
         # --- persist outcome ---
-        status = ProposedActionStatus.FAILED if failure else ProposedActionStatus.EXECUTED
+        status = (
+            ProposedActionStatus.FAILED if failure else ProposedActionStatus.EXECUTED
+        )
         with db.session(self.settings, self.board_id) as s:
             action = s.get(ProposedAction, action_id)
             # Double-check: the row may have been changed since our
@@ -1643,9 +1643,7 @@ class TicketService:
 
     # -- dispatch helpers ------------------------------------------------
 
-    def _execute_close(
-        self, target_id: str, rationale: str, source: str
-    ) -> str:
+    def _execute_close(self, target_id: str, rationale: str, source: str) -> str:
         """Transition *target_id* to CLOSED with a proposed-action note."""
         self.transition(
             target_id,
@@ -1668,15 +1666,11 @@ class TicketService:
         self.transition(
             target_id,
             dst,
-            note=self._action_note(
-                f"transitioned to {dst.value}", source, rationale
-            ),
+            note=self._action_note(f"transitioned to {dst.value}", source, rationale),
         )
         return f"transitioned to {dst.value}"
 
-    def _execute_comment(
-        self, target_id: str, rationale: str, source: str
-    ) -> str:
+    def _execute_comment(self, target_id: str, rationale: str, source: str) -> str:
         """Post *rationale* as a comment on *target_id* and leave a
         history breadcrumb."""
         self.add_comment(target_id, body=rationale, author=source)

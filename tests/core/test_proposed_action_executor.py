@@ -149,9 +149,7 @@ def test_close_happy_path(service):
 
     assert _ticket_state(service, t.id) == State.CLOSED
     notes = _history_notes(service, t.id)
-    assert any(
-        "closed via proposed action" in n for n in notes
-    )
+    assert any("closed via proposed action" in n for n in notes)
 
 
 def test_close_on_non_done_fails(service):
@@ -210,9 +208,7 @@ def test_transition_happy_path(service):
 
     assert _ticket_state(service, t.id) == State.DELIVERABLE
     notes = _history_notes(service, t.id)
-    assert any(
-        "transitioned to deliverable via proposed action" in n for n in notes
-    )
+    assert any("transitioned to deliverable via proposed action" in n for n in notes)
 
 
 def test_transition_invalid_state_fails(service):
@@ -384,10 +380,7 @@ def test_idempotent_executed_is_noop(service):
     # The ticket was already CLOSED — no second event for CLOSE.
     # Verify that only one CLOSED event exists (from the executor + the
     # original DONE transition).
-    close_events = [
-        e for e in service.history(t.id)
-        if e.state == State.CLOSED
-    ]
+    close_events = [e for e in service.history(t.id) if e.state == State.CLOSED]
     assert len(close_events) == 1
 
 
@@ -421,8 +414,7 @@ def test_action_note_format():
         "closed", "health", "stale ticket with no activity for 90 days"
     )
     assert note == (
-        "[health] closed via proposed action: "
-        "stale ticket with no activity for 90 days"
+        "[health] closed via proposed action: stale ticket with no activity for 90 days"
     )
 
 
@@ -443,8 +435,7 @@ def test_action_note_in_ticket_event(service):
     events = service.history(t.id)
     close_event = events[-1]
     assert close_event.note == (
-        "[trace-review] closed via proposed action: "
-        "false positive resolved"
+        "[trace-review] closed via proposed action: false positive resolved"
     )
 
 
