@@ -169,6 +169,7 @@ reference are covered in [docs/configuration.md](docs/configuration.md).
 - [docs/notifications.md](docs/notifications.md) — ntfy.sh push notifications for human-attention states
 - [docs/ticket-provenance.md](docs/ticket-provenance.md) — How `source` tracks which actor created each ticket
 - [docs/workspace-cleanup.md](docs/workspace-cleanup.md) — Automatic clone pruning on ticket close
+- [docs/ci-policy.md](docs/ci-policy.md) — CI gate-or-remove policy & checklist for new checks
 
 ## Contributing
 
