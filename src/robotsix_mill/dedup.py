@@ -243,8 +243,10 @@ def find_child_overlaps(
                             f"`{sorted(shared)[0]}`"
                         )
                         break
-                    if norm_title and sib_title and (
-                        norm_title in sib_title or sib_title in norm_title
+                    if (
+                        norm_title
+                        and sib_title
+                        and (norm_title in sib_title or sib_title in norm_title)
                     ):
                         note = (
                             f"Possible duplicate of sibling #{j} "

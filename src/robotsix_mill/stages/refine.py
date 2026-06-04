@@ -1080,8 +1080,7 @@ class RefineStage(Stage):
                 ):
                     if dup_note:
                         log.warning(
-                            "epic %s: child '%s' flagged as possible "
-                            "duplicate — %s",
+                            "epic %s: child '%s' flagged as possible duplicate — %s",
                             ticket.id,
                             child_title,
                             dup_note,

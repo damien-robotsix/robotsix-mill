@@ -193,8 +193,7 @@ def generate_children(
                 ):
                     if dup_note:
                         log.warning(
-                            "epic %s: child '%s' flagged as possible "
-                            "duplicate — %s",
+                            "epic %s: child '%s' flagged as possible duplicate — %s",
                             ticket_id,
                             title,
                             dup_note,
