@@ -12,6 +12,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from ..config import Settings
+from ..pass_runner import ProposedActionItem
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 import yaml as _yaml
@@ -42,6 +43,7 @@ class AuditResult(BaseModel):
     draft_titles: list[str] = Field(default_factory=list)
     draft_bodies: list[str] = Field(default_factory=list)
     gap_ids: list[str] = Field(default_factory=list)
+    proposed_actions: list[ProposedActionItem] = Field(default_factory=list)
 
 
 def run_audit_agent(

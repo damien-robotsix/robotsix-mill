@@ -10,6 +10,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from ..config import Settings
+from ..pass_runner import ProposedActionItem
 
 # One subject per run → one proposal max. The previous limit of 5
 # encouraged the agent to sweep the codebase for five gaps in a
@@ -34,6 +35,7 @@ class SurveyResult(BaseModel):
     draft_titles: list[str] = Field(default_factory=list)
     draft_bodies: list[str] = Field(default_factory=list)
     gap_ids: list[str] = Field(default_factory=list)
+    proposed_actions: list[ProposedActionItem] = Field(default_factory=list)
 
 
 def run_survey_agent(

@@ -14,8 +14,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+from pydantic import BaseModel, Field
+
 from .config import Settings
-from .core.models import SourceKind, Ticket, ProposedActionStatus
+from .core.models import (
+    SourceKind,
+    Ticket,
+)
 from .core.service import TicketService
 from .core.states import State
 from .core.workspace import Workspace
@@ -32,6 +37,23 @@ log = logging.getLogger("robotsix_mill.pass_runner")
 # new SourceKinds are added (was a hardcoded alternation of 11 labels that
 # left bespoke + 3 others silently unmatched).
 _GAP_ID_RE = re.compile(r"<!--\s*(\S+)-gap-id:\s*(\S+)\s*-->")
+
+
+class ProposedActionItem(BaseModel):
+    """A single action proposal emitted by a periodic agent.
+
+    Mirrors the fields of the ``ProposedAction`` DB row that the agent
+    controls — ``source``, ``status``, and lifecycle timestamps are set
+    by the runner/service, not by the agent.
+    """
+    target_ticket_id: str = Field(description="Ticket ID the action applies to")
+    action_type: str = Field(description="One of: close, transition, comment, relabel")
+    payload: str | None = Field(
+        default=None,
+        description="JSON string whose schema varies by action_type "
+        "(e.g. target state for transition, comment body for comment)",
+    )
+    rationale: str = Field(description="Why the agent believes this action is warranted")
 
 
 def _verify_prior_proposals(
@@ -120,45 +142,51 @@ def _render_verified_table(verified: dict[str, dict]) -> str:
 def _verify_proposed_actions(
     service: TicketService,
     source_label: SourceKind,
-) -> list:
-    """Query the DB for PENDING proposed actions from *source_label*.
+) -> list[dict]:
+    """Return decided (non-PENDING) ProposedAction rows for *source_label*.
 
-    Returns the list of :class:`ProposedAction` rows (empty list on
-    any exception, following the defensive pattern of
-    ``_verify_prior_proposals``).
+    Each dict: {id, target_ticket_id, action_type, status, rationale,
+    decided_at, decided_by}.
     """
     try:
-        return service.list_proposed_actions(
-            source=str(source_label),
-            status=ProposedActionStatus.PENDING,
-            limit=200,
-        )
+        rows = service.list_proposed_actions(source=str(source_label))
     except Exception:
         log.debug(
             "_verify_proposed_actions: list_proposed_actions failed — "
-            "returning empty list"
+            "returning empty list (DB may not be initialised)"
         )
         return []
 
+    result: list[dict] = []
+    for pa in rows:
+        result.append({
+            "id": pa.id,
+            "target_ticket_id": pa.target_ticket_id,
+            "action_type": pa.action_type,
+            "status": pa.status,
+            "rationale": pa.rationale,
+            "decided_at": pa.decided_at.isoformat() if pa.decided_at else "",
+            "decided_by": pa.decided_by or "",
+        })
+    return result
 
-def _render_proposed_actions_table(actions: list) -> str:
-    """Render a Markdown table of pending proposed actions for agent context.
 
-    Returns ``""`` when *actions* is empty.
-    """
-    if not actions:
+def _render_proposed_actions_table(decided: list[dict]) -> str:
+    """Render a Markdown table of decided proposed actions for agent context."""
+    if not decided:
         return ""
     lines = [
-        "## Proposed actions — pending",
+        "## Prior proposed actions — decided",
         "",
-        "| id | target_ticket | action | rationale | created |",
-        "|----|---------------|--------|-----------|---------|",
+        "| id | target_ticket | action | status | decided_by | rationale |",
+        "|----|---------------|--------|--------|------------|-----------|",
     ]
-    for pa in actions:
-        created = pa.created_at.strftime("%Y-%m-%d") if pa.created_at else "—"
+    for pa in decided:
+        tid_short = pa["target_ticket_id"][:7]
+        rationale_short = pa["rationale"][:80].replace("|", "\\|")
         lines.append(
-            f"| {pa.id} | {pa.target_ticket_id} | {pa.action_type} "
-            f"| {pa.rationale[:80]} | {created} |"
+            f"| {pa['id']} | {tid_short} | {pa['action_type']} "
+            f"| {pa['status']} | {pa['decided_by']} | {rationale_short} |"
         )
     return "\n".join(lines)
 
@@ -182,32 +210,37 @@ _EPHEMERAL_MEMORY_SECTION_RE = re.compile(
 )
 
 _EPHEMERAL_PROPOSED_ACTIONS_SECTION_RE = re.compile(
-    r"(?m)^[ \t]*##\s*Proposed actions\b[^\n]*\n"  # heading line
-    r"(?:[ \t]*\n)*"  # optional blank lines
-    r"(?:[ \t]*\|[^\n]*\n?)+"  # one or more table rows (| … |)
+    r"(?m)^[ \t]*##\s*Prior proposed actions\b[^\n]*\n"
+    r"(?:[ \t]*\n)*"
+    r"(?:[ \t]*\|[^\n]*\n?)+"
 )
 
 
 def strip_ephemeral_sections(memory_text: str) -> str:
-    """Remove DB-derived ephemeral tables (``## Prior proposals`` and
-    ``## Proposed actions``) from a memory document before it is
-    persisted to the cross-run ledger.
+    """Remove the DB-derived ``## Prior proposals — verified state`` and
+    ``## Prior proposed actions — decided`` tables from a memory document
+    before it is persisted to the cross-run ledger.
 
-    Removes only the heading + the contiguous table rows — any
-    surrounding cross-ticket notes the agent wrote are preserved.
+    Removes only the heading + the contiguous table rows — any surrounding
+    cross-ticket notes the agent wrote are preserved.
     """
     # Fast path: leave text byte-for-byte unchanged when there is nothing to
     # strip (the vast majority of memory documents) — only normalise whitespace
     # when a section is actually removed.
     if not memory_text or (
         "## Prior proposals" not in memory_text
-        and "## Proposed actions" not in memory_text
+        and "## Prior proposed actions" not in memory_text
     ):
         return memory_text
-    cleaned = _EPHEMERAL_MEMORY_SECTION_RE.sub("", memory_text)
-    cleaned = _EPHEMERAL_PROPOSED_ACTIONS_SECTION_RE.sub("", cleaned)
+    cleaned: str | None = None
+    if "## Prior proposals" in memory_text:
+        cleaned = _EPHEMERAL_MEMORY_SECTION_RE.sub("", memory_text)
+    if "## Prior proposed actions" in (cleaned or memory_text):
+        cleaned = _EPHEMERAL_PROPOSED_ACTIONS_SECTION_RE.sub(
+            "", cleaned or memory_text
+        )
     # collapse the blank-line gap a removed section leaves behind
-    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned or memory_text).strip()
     return cleaned + "\n" if cleaned else ""
 
 
@@ -297,16 +330,6 @@ class AgentPassResult:
     proposed_actions: list[dict] = field(default_factory=list)
 
 
-@dataclass
-class ProposedActionItem:
-    """A single proposed action extracted from agent output."""
-
-    action_type: str  # one of "close", "transition", "comment", "relabel"
-    target_ticket_id: str
-    rationale: str
-    payload: str | None = None  # JSON string, schema varies by action_type
-
-
 def _test_file_exists_for_gap(repo_dir: Path, title: str) -> bool:
     """Return ``True`` if the expected test file(s) for a draft
     already exist on disk.
@@ -393,25 +416,23 @@ def run_agent_pass(
     # 1. Read current memory — empty string if missing/unreadable.
     memory_text = load_memory(memory_file, max_chars=settings.max_memory_chars)
 
-    # 2. Verify prior proposals; render an ephemeral verified-state table
+    # 2. Verify prior proposals; render ephemeral verified-state tables
     #    passed to the agent as a SEPARATE kwarg (not concatenated onto
-    #    memory_text). The table is recomputed from the DB every pass —
-    #    persisting it into the memory ledger would cause a self-
+    #    memory_text). The tables are recomputed from the DB every pass —
+    #    persisting them into the memory ledger would cause a self-
     #    perpetuating leak (the agent echoes memory back verbatim, the
     #    runner persists it, the next tick re-prepends a fresh table on
     #    top, …).
     verified = _verify_prior_proposals(service, settings, source_label)
     verified_block = _render_verified_table(verified) if verified else ""
 
-    # Build proposed-actions table for agent context.
-    pending_actions = _verify_proposed_actions(service, source_label)
-    actions_block = (
-        _render_proposed_actions_table(pending_actions) if pending_actions else ""
-    )
+    decided_actions = _verify_proposed_actions(service, source_label)
+    decided_block = _render_proposed_actions_table(decided_actions)
 
-    # Combine both ephemeral sections into one block.
-    parts = [b for b in [verified_block, actions_block] if b]
-    combined_verified = "\n\n".join(parts) if parts else ""
+    # Concatenate both ephemeral sections
+    combined_verified = "\n\n".join(
+        filter(None, [verified_block, decided_block])
+    )
 
     # 3. Build the recent-proposals block for prompt injection.
     recent = service.recent_proposals_for(source_label, limit=100)
@@ -465,40 +486,41 @@ def run_agent_pass(
     if res.updated_memory:
         persist_memory(memory_file, res.updated_memory)
 
-    # 5b. Extract and persist proposed actions from agent output.
-    import json as _json
-
-    proposed_actions_raw = getattr(res, "proposed_actions", None) or []
+    # 5b. Persist proposed actions (proposed-action subsystem).
+    proposed_actions = getattr(res, "proposed_actions", [])
     proposed_created: list[dict] = []
-    for pa in proposed_actions_raw:
+    for pa_item in proposed_actions:
         try:
-            if not isinstance(pa, dict):
-                continue
-            action_type = str(pa.get("action_type", "")).strip()
-            target = str(pa.get("target_ticket_id", "")).strip()
-            rationale = str(pa.get("rationale", "")).strip()
-            if not action_type or not target or not rationale:
-                continue
-            payload = pa.get("payload")
-            if payload is not None and not isinstance(payload, str):
-                payload = _json.dumps(payload)
-            created = service.create_proposed_action(
+            created_pa = service.create_proposed_action(
                 source=str(source_label),
-                target_ticket_id=target,
-                action_type=action_type,
-                rationale=rationale,
-                payload=payload,
+                target_ticket_id=pa_item.target_ticket_id,
+                action_type=pa_item.action_type,
+                rationale=pa_item.rationale,
+                payload=pa_item.payload,
             )
-            proposed_created.append(
-                {
-                    "id": created.id,
-                    "action_type": str(created.action_type),
-                    "target_ticket_id": created.target_ticket_id,
-                    "status": str(created.status),
-                }
-            )
+            if created_pa is not None:
+                proposed_created.append(
+                    {
+                        "id": created_pa.id,
+                        "action_type": str(created_pa.action_type),
+                        "target_ticket_id": created_pa.target_ticket_id,
+                        "status": str(created_pa.status),
+                    }
+                )
+                log.info(
+                    "%s proposed %s on %s (proposal id %s)",
+                    source_label,
+                    pa_item.action_type,
+                    pa_item.target_ticket_id,
+                    created_pa.id,
+                )
         except Exception:
-            log.exception("failed to persist proposed action from %s", source_label)
+            log.exception(
+                "%s: failed to persist proposed action (%s on %s)",
+                source_label,
+                pa_item.action_type,
+                pa_item.target_ticket_id,
+            )
 
     # 6. Create draft tickets for each proposal.
     gap_ids = getattr(res, "gap_ids", [])
