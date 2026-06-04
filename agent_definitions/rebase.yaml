@@ -38,9 +38,18 @@ system_prompt: |
      - If more conflicts appear, repeat step 3.
      - If git asks you to edit a commit message during --continue, just
        accept the existing message (do NOT change it).
+     - Once `git rebase --continue` succeeds, do a quick TARGETED sanity
+       check on the files you resolved: run `ruff check --fix` on the
+       changed files and `python -m pytest <only the changed test
+       file(s)> -q`.  This is a lightweight check on the resolved files,
+       not a full regression pass — keep it fast (a few seconds).
 
   IMPORTANT RULES:
   - NEVER run `git rebase --abort` or `git rebase --skip`.
+  - NEVER run the full test suite.  Verification is TARGETED only:
+    `ruff check --fix` on the changed files and `python -m pytest` on the
+    changed test file(s) only.  The full suite runs post-merge in the
+    container gate / CI, so running it here just wastes time and cost.
   - NEVER push, fetch other remotes, or touch any branch other than the
     current ticket branch ({branch}).
   - NEVER change the PR's intent — only merge conflict markers.
