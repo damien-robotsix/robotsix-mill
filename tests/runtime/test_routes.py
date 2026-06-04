@@ -1251,7 +1251,9 @@ def test_factory_thread_is_daemon():
         hold.wait(5)  # wait until we release
         return _FakeResult()
 
-    fake_mod = type("_FakeMod", (), {"run_block_pass": staticmethod(_blocking_runner)})()
+    fake_mod = type(
+        "_FakeMod", (), {"run_block_pass": staticmethod(_blocking_runner)}
+    )()
     sys.modules["robotsix_mill.test_block_runner"] = fake_mod
 
     handler = _make_background_pass(

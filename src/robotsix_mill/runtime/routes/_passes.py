@@ -125,9 +125,7 @@ def _make_background_pass(
 
                     if uses_tracing:
                         session_id = make_session_id(kind)
-                        with start_ticket_root_span(
-                            session_id, kind, repo_config=rc
-                        ):
+                        with start_ticket_root_span(session_id, kind, repo_config=rc):
                             r = fn(
                                 session_id=session_id,
                                 repo_config=rc,
@@ -294,8 +292,9 @@ cost_reconciliation_pass = _make_background_pass(
     runner_module="robotsix_mill.cost_reconciliation_runner",
     runner_func="run_cost_reconciliation_pass",
     docstring="""Kick off a cost-reconciliation drift detection pass in the BACKGROUND.""",
-    summary_builder=lambda r: (getattr(r, "summary", "") or "").strip()
-    or _default_summary(r),
+    summary_builder=lambda r: (
+        (getattr(r, "summary", "") or "").strip() or _default_summary(r)
+    ),
 )
 router.post("/cost-reconciliation", status_code=202)(cost_reconciliation_pass)
 
@@ -311,8 +310,7 @@ trace_review_pass = _make_background_pass(
     pauses, rejected generations, explore storms), runs a cheap
     flash-model inspector over the flagged subset, and files draft
     tickets with proposed solutions.""",
-    summary_builder=lambda r: r.summary
-    or f"created {len(r.drafts_created)} drafts",
+    summary_builder=lambda r: r.summary or f"created {len(r.drafts_created)} drafts",
 )
 router.post("/trace-review", status_code=202)(trace_review_pass)
 
