@@ -210,7 +210,7 @@ All enforced by [`.pre-commit-config.yaml`](.pre-commit-config.yaml):
 | Tool   | Version | Configuration |
 |--------|---------|---------------|
 | Ruff (lint + format) | v0.11.0 | `ruff --fix` + `ruff format` |
-| mypy | v1.15.0 | `--strict --ignore-missing-imports`; stubs for `pydantic-ai-slim`, `sqlmodel`, `fastapi` |
+| mypy | v1.15.0 | `--strict --ignore-missing-imports`; stubs for `pydantic-ai-slim`, `sqlmodel`, `fastapi` (CI: advisory/non-gating — see CI overview) |
 | Bandit | 1.8.3 | Config from `pyproject.toml`; targets `src/`, skips `B101` (assert) |
 | hadolint | v2.14.0 | `--failure-threshold warning`; config from `.hadolint.yaml` |
 | pre-commit-hooks | v5.0.0 | trailing-whitespace, end-of-file-fixer, check-yaml, check-json, check-toml, check-merge-conflict, detect-private-key, check-added-large-files (500 KB max) |
@@ -234,6 +234,19 @@ Install with `.venv/bin/pre-commit install`. Run manually:
 | [`docker-publish.yml`](.github/workflows/docker-publish.yml) | Push to `main` | hadolint lint → build Docker image → Trivy CRITICAL scan → push to Docker Hub with SBOM + SLSA attestation |
 | hadolint gate (in `docker-publish.yml`) | (within `docker-publish.yml` push) | `hadolint/hadolint-action@v3.3.0` with `failure-threshold: warning` |
 | [`security-audit.yml`](.github/workflows/security-audit.yml) | Push/PR to `main`, weekly cron | `pip-audit` on installed dependencies |
+| [`ci.yml`](.github/workflows/ci.yml) | Push/PR to `main` | deptry → module taxonomy → Ruff → mypy `--strict` (**advisory/non-gating**, see note) → Bandit → pytest (coverage ≥70%) |
+
+**Note on the mypy step in `ci.yml`:** mypy `--strict` runs on every
+PR/push and surfaces an error-count summary as a CI annotation, but it
+does **not** block CI. This is a deliberate, documented advisory policy:
+the codebase carries a pre-existing strict-mode backlog of ~700 errors
+across ~90 files that pre-dates the gate, so gating now would red-fail
+all CI. Keeping the check advisory preserves the static-type-checking
+signal (regressions stay visible in CI logs/annotations) — the same
+pattern this repo uses for the Bandit severity floor. Once the backlog
+is cleared in separate dedicated tickets (a future sub-epic), the
+`|| true`/`exit 0` advisory wrapper will be removed and mypy promoted to
+a hard gate.
 
 Dependabot (weekly) keeps pip and Docker dependencies current.
 
