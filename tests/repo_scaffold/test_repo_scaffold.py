@@ -710,3 +710,48 @@ def test_write_periodic_presence_files(tmp_path):
     assert audit.exists() and health.exists()
     assert yaml.safe_load(audit.read_text()) == {"name": "audit"}
     assert yaml.safe_load(health.read_text()) == {"name": "health"}
+
+
+# ---------------------------------------------------------------------------
+# _file_implementation_followup
+# ---------------------------------------------------------------------------
+
+
+def test_file_implementation_followup_creates_buildout_ticket(tmp_path, monkeypatch):
+    """After scaffolding an EMPTY repo, a build-out ticket is filed on the
+    new repo's own board so the normal pipeline populates it. The spec is
+    derived from the scaffold ticket's purpose (description minus marker)."""
+    from robotsix_mill.core import db
+    from robotsix_mill.core.models import SourceKind
+    from robotsix_mill.core.service import TicketService
+    from robotsix_mill.forge.base import RepoInfo
+    from robotsix_mill.repo_scaffold import _file_implementation_followup
+
+    monkeypatch.setenv("MILL_REPOS_FILE", "")
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="robotsix-modules")
+
+    repo_info = RepoInfo(
+        id=1,
+        name="robotsix-modules",
+        clone_url="https://github.com/x/robotsix-modules.git",
+        html_url="https://github.com/x/robotsix-modules",
+    )
+    scaffold_desc = (
+        "Extract the module-taxonomy schema into a standalone library.\n\n"
+        "<!-- meta-extraction-kind: new-repo\n  name: robotsix-modules\n-->"
+    )
+    fid = _file_implementation_followup(
+        settings, repo_info, {"description": ""}, scaffold_desc
+    )
+    assert fid is not None
+
+    svc = TicketService(settings, board_id="robotsix-modules")
+    t = svc.get(fid)
+    assert t is not None
+    assert t.source == SourceKind.AGENT
+    assert "robotsix-modules" in t.title
+    body = svc.workspace(t).read_description()
+    assert "module-taxonomy schema" in body
+    assert "meta-extraction-kind" not in body

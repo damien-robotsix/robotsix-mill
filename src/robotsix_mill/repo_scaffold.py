@@ -170,12 +170,76 @@ def run_repo_scaffold(settings, ticket, forge, ctx) -> Outcome:
         log.exception("config/repos.yaml append failed for %s", repo_info.name)
         return Outcome(State.ERRORED, note="config/repos.yaml append failed")
 
-    return Outcome(State.DONE)
+    # The scaffold only creates an EMPTY repo. File a build-out ticket on the
+    # new repo's own board so the normal pipeline (refine → epic-breakdown →
+    # implement) populates it with its actual purpose. Best-effort: a failure
+    # here doesn't undo the (succeeded) repo creation + registration.
+    followup_id = _file_implementation_followup(
+        settings, repo_info, params, description
+    )
+    note = (
+        f"created + registered {repo_info.name}; filed build-out ticket {followup_id}"
+        if followup_id
+        else f"created + registered {repo_info.name}"
+    )
+    return Outcome(State.DONE, note=note)
 
 
 # ---------------------------------------------------------------------------
 #  Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _file_implementation_followup(
+    settings, repo_info: RepoInfo, params: dict, scaffold_description: str
+) -> str | None:
+    """File a build-out ticket on the NEW repo's own board.
+
+    The scaffold creates an empty repo; this kicks off its actual
+    implementation through the normal pipeline (refine → epic-breakdown →
+    implement) on ``board_id = sanitize(repo_name)``. The spec is derived
+    from the scaffold ticket's purpose (its description minus the new-repo
+    marker). Best-effort — returns the new ticket id, or ``None`` on
+    failure (the caller does not fail the scaffold over this).
+    """
+    from .core.models import SourceKind
+    from .core.service import TicketService
+
+    name = repo_info.name
+    board_id = _sanitize_repo_id(name)
+    # Purpose = the scaffold ticket body with the marker stripped out.
+    purpose = _MARKER_RE.sub("", scaffold_description or "").strip()
+    if not purpose:
+        purpose = params.get("description", "") or f"Build out the {name} library."
+
+    body = (
+        f"The repository **{name}** was just scaffolded (empty: README, "
+        f"LICENSE, language skeleton) and registered in `config/repos.yaml`. "
+        f"It now needs its actual implementation.\n\n"
+        f"## Purpose\n\n{purpose}\n\n"
+        f"## Scope\n\n"
+        f"Build out {name} per the purpose above: move/author the code, add "
+        f"tests, and make it installable. If this is an extraction from "
+        f"robotsix-mill, port the relevant modules + their tests into this "
+        f"repo and keep the public API stable. Large enough to split → let "
+        f"epic-breakdown decompose it."
+    )
+    try:
+        svc = TicketService(settings, board_id=board_id)
+        ticket = svc.create(
+            title=f"Implement {name}: initial build-out",
+            description=body,
+            source=SourceKind.AGENT,
+        )
+        log.info(
+            "repo_scaffold: filed build-out ticket %s on board %s",
+            ticket.id,
+            board_id,
+        )
+        return ticket.id
+    except Exception:
+        log.exception("repo_scaffold: failed to file build-out ticket for %s", name)
+        return None
 
 
 def _scaffold_initial_commit(settings, repo_info: RepoInfo, params: dict) -> None:
