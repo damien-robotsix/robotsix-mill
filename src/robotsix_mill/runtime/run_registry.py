@@ -38,6 +38,8 @@ class RunEntry:
         "health",
         "langfuse-cleanup",
         "module_curator",
+        "proposed-action",
+        "proposed_action",
         "roadmap-sync",
         "survey",
         "test-gap",
