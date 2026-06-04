@@ -23,6 +23,7 @@ from robotsix_mill.repo_scaffold import (
     MARKER_KIND,
     _append_repo_config,
     _sanitize_repo_id,
+    _write_periodic_presence_files,
     parse_new_repo_params,
     run_repo_scaffold,
 )
@@ -253,28 +254,10 @@ class TestAppendRepoConfig:
         assert entry["langfuse"]["base_url"] == "https://langfuse.example.com"
         assert entry["forge_remote_url"] == "https://github.com/my-org/my-new-repo.git"
         assert entry["language"] == "python"
-
-        periodic = entry["periodic"]
-        assert periodic["audit"]["enabled"] is True
-        assert periodic["health"]["enabled"] is True
-        # All other periodic agents default-disabled
-        for name in (
-            "trace_health",
-            "test_gap",
-            "agent_check",
-            "bc_check",
-            "completeness_check",
-            "copy_paste",
-            "survey",
-            "cost_reconciliation",
-            "config_sync",
-            "trace_review",
-            "langfuse_cleanup",
-            "cost_warmer",
-            "module_curator",
-            "bespoke",
-        ):
-            assert periodic[name]["enabled"] is False, f"{name} should be disabled"
+        assert entry["test_command"] == "pytest -q"
+        # Periodic config is NOT written to repos.yaml (the loader ignores
+        # it); enablement is per-repo file presence in the new repo.
+        assert "periodic" not in entry
 
         _reset_repos_config()
 
@@ -708,3 +691,22 @@ class TestGuardClause:
 
 def test_marker_kind_constant():
     assert MARKER_KIND == "new-repo"
+
+
+# ---------------------------------------------------------------------------
+# _write_periodic_presence_files
+# ---------------------------------------------------------------------------
+
+
+def test_write_periodic_presence_files(tmp_path):
+    """The scaffold seeds the new repo with name-only periodic presence
+    files (audit + health) — this is what actually enables those agents,
+    since enablement is per-repo file presence, not a repos.yaml block."""
+    _write_periodic_presence_files(tmp_path)
+
+    periodic_dir = tmp_path / ".robotsix-mill" / "periodic"
+    audit = periodic_dir / "audit.yaml"
+    health = periodic_dir / "health.yaml"
+    assert audit.exists() and health.exists()
+    assert yaml.safe_load(audit.read_text()) == {"name": "audit"}
+    assert yaml.safe_load(health.read_text()) == {"name": "health"}
