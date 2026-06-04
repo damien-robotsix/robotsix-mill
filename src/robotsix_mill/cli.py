@@ -337,13 +337,53 @@ def _repos_list(args: argparse.Namespace, settings: Settings) -> int:
     return 0
 
 
-def _inquire(args: argparse.Namespace, settings: Settings) -> int:
-    body = ""
+def _read_body_from_args(args: argparse.Namespace) -> str:
+    """Read a description body from --description-file (file path or '-' for stdin)."""
     if args.description_file == "-":
-        body = sys.stdin.read()
-    elif args.description_file:
+        return sys.stdin.read()
+    if args.description_file:
         with open(args.description_file, encoding="utf-8") as f:
-            body = f.read()
+            return f.read()
+    return ""
+
+
+def _resolve_repo_id(
+    args: argparse.Namespace, returncode_on_failure: int = 2
+) -> str | None:
+    """Resolve repo_id from args, handling multi-repo config.
+
+    Returns repo_id on success or None on failure (caller should
+    ``return returncode_on_failure``).
+    """
+    if args.repo_id is not None:
+        return args.repo_id
+
+    from .config import get_repos_config
+    from .config_loader import ConfigError as _ConfigError
+
+    try:
+        repos = get_repos_config()
+    except _ConfigError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return None
+
+    if len(repos.repos) == 1:
+        return next(iter(repos.repos.keys()))
+    if not repos.repos:
+        print("Error: no repos defined in config/repos.yaml", file=sys.stderr)
+        return None
+
+    sorted_keys = sorted(repos.repos.keys())
+    print(
+        f"Error: --repo-id is required when multiple repos are configured. "
+        f"Available repos: {sorted_keys}",
+        file=sys.stderr,
+    )
+    return None
+
+
+def _inquire(args: argparse.Namespace, settings: Settings) -> int:
+    body = _read_body_from_args(args)
     with _client(settings) as c:
         r = c.post(
             "/tickets",
@@ -355,36 +395,10 @@ def _inquire(args: argparse.Namespace, settings: Settings) -> int:
 
 
 def _ticket_new(args: argparse.Namespace, settings: Settings) -> int:
-    body = ""
-    if args.description_file == "-":
-        body = sys.stdin.read()
-    elif args.description_file:
-        with open(args.description_file, encoding="utf-8") as f:
-            body = f.read()
-    # Resolve repo_id: required in multi-repo mode, optional in single-repo.
-    repo_id = args.repo_id
+    body = _read_body_from_args(args)
+    repo_id = _resolve_repo_id(args)
     if repo_id is None:
-        from .config import get_repos_config
-        from .config_loader import ConfigError as _ConfigError
-
-        try:
-            repos = get_repos_config()
-        except _ConfigError as exc:
-            print(f"Error: {exc}", file=sys.stderr)
-            return 2
-        if len(repos.repos) == 1:
-            repo_id = next(iter(repos.repos.keys()))
-        elif not repos.repos:
-            print("Error: no repos defined in config/repos.yaml", file=sys.stderr)
-            return 2
-        else:
-            sorted_keys = sorted(repos.repos.keys())
-            print(
-                f"Error: --repo-id is required when multiple repos are configured. "
-                f"Available repos: {sorted_keys}",
-                file=sys.stderr,
-            )
-            return 2
+        return 2
     with _client(settings) as c:
         r = c.post(
             "/tickets",
@@ -396,36 +410,10 @@ def _ticket_new(args: argparse.Namespace, settings: Settings) -> int:
 
 
 def _epic_new(args: argparse.Namespace, settings: Settings) -> int:
-    body = ""
-    if args.description_file == "-":
-        body = sys.stdin.read()
-    elif args.description_file:
-        with open(args.description_file, encoding="utf-8") as f:
-            body = f.read()
-    # Resolve repo_id: required in multi-repo mode, optional in single-repo.
-    repo_id = args.repo_id
+    body = _read_body_from_args(args)
+    repo_id = _resolve_repo_id(args)
     if repo_id is None:
-        from .config import get_repos_config
-        from .config_loader import ConfigError as _ConfigError
-
-        try:
-            repos = get_repos_config()
-        except _ConfigError as exc:
-            print(f"Error: {exc}", file=sys.stderr)
-            return 2
-        if len(repos.repos) == 1:
-            repo_id = next(iter(repos.repos.keys()))
-        elif not repos.repos:
-            print("Error: no repos defined in config/repos.yaml", file=sys.stderr)
-            return 2
-        else:
-            sorted_keys = sorted(repos.repos.keys())
-            print(
-                f"Error: --repo-id is required when multiple repos are configured. "
-                f"Available repos: {sorted_keys}",
-                file=sys.stderr,
-            )
-            return 2
+        return 2
     with _client(settings) as c:
         r = c.post(
             "/epics",
