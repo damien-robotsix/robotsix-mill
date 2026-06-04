@@ -313,9 +313,7 @@ def test_action_list_status_filter(settings):
     original = cli_mod.httpx.Client
     cli_mod.httpx.Client = FakeClient
     try:
-        rc = main(
-            ["action", "list", "--repo-id", "test-repo", "--status", "approved"]
-        )
+        rc = main(["action", "list", "--repo-id", "test-repo", "--status", "approved"])
         assert rc == 0
     finally:
         cli_mod.httpx.Client = original
