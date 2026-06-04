@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from typing import cast
 from unittest import mock
 
 import pytest
@@ -18,7 +19,7 @@ from robotsix_auto_mail.archive import (
     setup_archive,
 )
 from robotsix_auto_mail.db import get_watermark, init_db, set_watermark
-from robotsix_auto_mail.imap import MailboxInfo
+from robotsix_auto_mail.imap import ImapClient, MailboxInfo
 
 
 class _FakeImapClient:
@@ -156,7 +157,7 @@ def test_setup_archive_first_run_creates_and_persists() -> None:
             os.environ, {"LLM_API_KEY": "sk-test"}, clear=True
         ):
             with _patch_llm(["Receipts", "Work/2024"]):
-                result = setup_archive(conn, client)
+                result = setup_archive(conn, cast(ImapClient, client))
 
         expected = [
             ARCHIVE_ROOT,
@@ -181,7 +182,7 @@ def test_setup_archive_translates_delimiter() -> None:
             os.environ, {"LLM_API_KEY": "sk-test"}, clear=True
         ):
             with _patch_llm(["Work/2024"]):
-                result = setup_archive(conn, client)
+                result = setup_archive(conn, cast(ImapClient, client))
         assert result == [ARCHIVE_ROOT, f"{ARCHIVE_ROOT}.Work.2024"]
         assert client.created == result
     finally:
@@ -199,7 +200,7 @@ def test_setup_archive_skips_existing_folders() -> None:
             os.environ, {"LLM_API_KEY": "sk-test"}, clear=True
         ):
             with _patch_llm(["Receipts"]):
-                result = setup_archive(conn, client)
+                result = setup_archive(conn, cast(ImapClient, client))
         assert result == [ARCHIVE_ROOT, f"{ARCHIVE_ROOT}/Receipts"]
         # ARCHIVE_ROOT already existed → only the sub-folder is created.
         assert client.created == [f"{ARCHIVE_ROOT}/Receipts"]
@@ -247,7 +248,7 @@ def test_setup_archive_no_api_key_falls_back_to_root() -> None:
             with mock.patch(
                 "robotsix_auto_mail.archive.OpenRouterDeepseekProvider"
             ) as cls:
-                result = setup_archive(conn, client)
+                result = setup_archive(conn, cast(ImapClient, client))
         assert result == [ARCHIVE_ROOT]
         assert client.created == [ARCHIVE_ROOT]
         cls.assert_not_called()

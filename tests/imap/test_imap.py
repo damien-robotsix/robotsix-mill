@@ -313,10 +313,9 @@ def test_create_folder_success(cfg: MailConfig) -> None:
 
     with mock.patch("imaplib.IMAP4_SSL", return_value=mock_ssl):
         with ImapClient(cfg) as client:
-            result = client.create_folder("robotsix-mail-archive")
+            client.create_folder("robotsix-mail-archive")
 
     mock_ssl.create.assert_called_once_with("robotsix-mail-archive")
-    assert result is None
 
 
 def test_create_folder_not_connected(cfg: MailConfig) -> None:
@@ -352,9 +351,7 @@ def test_create_folder_already_exists_is_idempotent(cfg: MailConfig) -> None:
 
     with mock.patch("imaplib.IMAP4_SSL", return_value=mock_ssl):
         with ImapClient(cfg) as client:
-            result = client.create_folder("robotsix-mail-archive")
-
-    assert result is None
+            client.create_folder("robotsix-mail-archive")
 
 
 # ---------------------------------------------------------------------------
