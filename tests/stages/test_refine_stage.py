@@ -368,6 +368,121 @@ def test_dedup_check_exception_proceeds_to_refine(ctx_factory, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# 5a. dedup: already_done candidate with UNMERGED branch → proceed to refine
+# ---------------------------------------------------------------------------
+
+
+def test_dedup_unmerged_candidate_proceeds_to_refine(ctx_factory, monkeypatch):
+    """An ``already_done`` candidate that reached DONE via a real
+    implementation but whose branch never merged to main is NOT a
+    valid dedup target — refine must run rather than short-circuit to
+    DONE, otherwise the new ticket closes against stranded work."""
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
+    t = _ticket(ctx, body="Add dark mode toggle")
+
+    # Candidate driven to DONE via a real implementation (passes the
+    # four existing rejection checks) and carrying an implement branch.
+    cand = _ticket(ctx, title="Dark mode", body="Add a dark mode toggle")
+    ctx.service.set_branch(cand.id, "feature/dark-mode")
+    ctx.service.transition(cand.id, State.DONE, note="implemented dark mode")
+    cand = ctx.service.get(cand.id)
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_ok(spec_markdown="## Problem\nDo it"),
+        run_dedup_check=_mock_dedup(
+            duplicate_of=None, already_done=cand.id, reason="found"
+        ),
+        # Candidate's branch is unmerged.
+        _verify_branch_merged=lambda repo_dir, ticket: False,
+    )
+
+    refine_called = []
+    orig = refining.run_refine_agent
+
+    def _track(*a, **k):
+        refine_called.append(1)
+        return orig(*a, **k)
+
+    monkeypatch.setattr(refining, "run_refine_agent", _track)
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert len(refine_called) == 1
+
+
+# ---------------------------------------------------------------------------
+# 5b. dedup: already_done candidate with MERGED branch → DONE (no regression)
+# ---------------------------------------------------------------------------
+
+
+def test_dedup_merged_candidate_short_circuits_to_done(ctx_factory, monkeypatch):
+    """A valid dedup candidate whose implementation branch IS merged to
+    main still short-circuits the new ticket to DONE — no regression."""
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
+    t = _ticket(ctx, body="Add dark mode toggle")
+
+    cand = _ticket(ctx, title="Dark mode", body="Add a dark mode toggle")
+    ctx.service.set_branch(cand.id, "feature/dark-mode")
+    ctx.service.transition(cand.id, State.DONE, note="implemented dark mode")
+    cand = ctx.service.get(cand.id)
+
+    agent_called = []
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=lambda *a, **k: agent_called.append(1),
+        run_dedup_check=_mock_dedup(
+            duplicate_of=None, already_done=cand.id, reason="found"
+        ),
+        _verify_branch_merged=lambda repo_dir, ticket: True,
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.DONE
+    assert "already implemented" in out.note
+    assert len(agent_called) == 0
+
+
+# ---------------------------------------------------------------------------
+# 5c. dedup: already_done candidate with NO branch → DONE (merge check skipped)
+# ---------------------------------------------------------------------------
+
+
+def test_dedup_candidate_without_branch_short_circuits_to_done(ctx_factory, monkeypatch):
+    """A candidate that reached DONE via implementation but never had a
+    branch (e.g. closed by commit hash) must still short-circuit to
+    DONE — the merge check only applies when the candidate has a
+    branch, so a False ``_verify_branch_merged`` must NOT reject it."""
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
+    t = _ticket(ctx, body="Add dark mode toggle")
+
+    # Candidate driven to DONE but with NO branch set.
+    cand = _ticket(ctx, title="Dark mode", body="Add a dark mode toggle")
+    ctx.service.transition(cand.id, State.DONE, note="implemented dark mode")
+    cand = ctx.service.get(cand.id)
+
+    agent_called = []
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=lambda *a, **k: agent_called.append(1),
+        run_dedup_check=_mock_dedup(
+            duplicate_of=None, already_done=cand.id, reason="found"
+        ),
+        # Even with the merge check returning False, the absence of a
+        # branch must skip it entirely.
+        _verify_branch_merged=lambda repo_dir, ticket: False,
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.DONE
+    assert "already implemented" in out.note
+    assert len(agent_called) == 0
+
+
+# ---------------------------------------------------------------------------
 # 7. clone failure → draft-only refine succeeds
 # ---------------------------------------------------------------------------
 
