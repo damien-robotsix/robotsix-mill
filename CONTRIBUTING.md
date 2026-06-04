@@ -210,9 +210,9 @@ All enforced by [`.pre-commit-config.yaml`](.pre-commit-config.yaml):
 | Tool   | Version | Configuration |
 |--------|---------|---------------|
 | Ruff (lint + format) | v0.11.0 | `ruff --fix` + `ruff format` |
-| mypy | v1.15.0 | `--strict --ignore-missing-imports`; stubs for `pydantic-ai-slim`, `sqlmodel`, `fastapi` |
-| Bandit | 1.8.3 | Config from `pyproject.toml`; targets `src/`, skips `B101` (assert). CI gates on MEDIUM+ (`--severity-level medium`) — see `[tool.bandit]` in pyproject.toml for rationale. |
-| hadolint | v2.14.0 | `--failure-threshold warning`; config from `.hadolint.yaml` |
+| mypy | v1.15.0 | `--strict --ignore-missing-imports`; stubs for `pydantic-ai-slim`, `sqlmodel`, `fastapi` (CI: advisory/non-gating — see CI overview) |
+| Bandit | 1.8.3 | Config from `pyproject.toml`; targets `src/`, skips `B101` (assert) |
+| hadolint | v2.14.0 | `--failure-threshold warning` (advisory/non-gating); config from `.hadolint.yaml` |
 | pre-commit-hooks | v5.0.0 | trailing-whitespace, end-of-file-fixer, check-yaml, check-json, check-toml, check-merge-conflict, detect-private-key, check-added-large-files (500 KB max) |
 | detect-secrets | v1.5.0 | `--baseline .secrets.baseline`; blocks new secrets not in the allowlist |
 
@@ -235,6 +235,19 @@ Install with `.venv/bin/pre-commit install`. Run manually:
 | hadolint gate (in `docker-publish.yml`) | (within `docker-publish.yml` push) | `hadolint/hadolint-action@v3.3.0` with `failure-threshold: warning` |
 | [`security-audit.yml`](.github/workflows/security-audit.yml) | Push/PR to `main`, weekly cron | `pip-audit` on installed dependencies |
 | [`ci.yml`](.github/workflows/ci.yml) | Push/PR to `main` | deptry → module taxonomy → Ruff → mypy `--strict` (advisory) → Bandit MEDIUM+ (advisory; see `[tool.bandit]`) → pytest (70% cov) |
+
+**Note on the hadolint gate in `docker-publish.yml`:** hadolint runs with
+`failure-threshold: warning` on every push to `main`. Warnings are
+visible in CI annotations and logs but do **not** block the pipeline.
+This is a deliberate, documented advisory policy: the warning-level
+rules that fire are worth surfacing as review feedback, but the
+current Dockerfiles are functional and gating on warnings would add
+friction without proportional benefit — the same pattern this repo
+uses for the mypy advisory gate and the Bandit severity floor. The
+threshold is intentionally not `error`; once the Dockerfiles mature
+past the current known warnings the gate may be promoted to a hard
+gate (analogous to the mypy backlog cleanup plan). See
+[`.hadolint.yaml`](.hadolint.yaml) for per-rule rationale.
 
 **Note on the mypy step in `ci.yml`:** mypy `--strict` runs on every
 PR/push and surfaces an error-count summary as a CI annotation, but it

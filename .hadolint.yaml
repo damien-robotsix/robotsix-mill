@@ -1,3 +1,20 @@
+# hadolint policy: advisory/non-gating
+#
+# hadolint runs with `failure-threshold: warning` across CI
+# (docker-publish.yml), pre-commit, and this config file.  Warnings
+# surface in CI annotations and logs but never block the pipeline.
+#
+# Rationale: the warning-level rules that fire are worth surfacing as
+# review feedback, but the current Dockerfiles are functional and
+# gating on warnings would add friction without proportional benefit.
+# This is the same deliberate advisory pattern used for mypy in ci.yml
+# and Bandit's severity floor (documented in CONTRIBUTING.md).
+#
+# The threshold is intentionally not `error`.  Once the Dockerfiles
+# mature past the current known warnings, the gate may be promoted to
+# `error` in a future ticket — analogous to the mypy backlog cleanup
+# plan.
+
 ignored:
   - DL3059    # multiple consecutive RUN (relax initially)
   - DL3013    # `pip install ".[extras]"` is a LOCAL project install — no
