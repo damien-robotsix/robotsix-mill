@@ -46,7 +46,7 @@ Install pre-commit hooks (Ruff, mypy, Bandit):
 | `trace_health_runner.py` | trace-health check orchestration |
 | `agents/auditing.py` | audit agent (meta-audit for gaps) |
 | `forge/github.py` · `forge/auth.py` | GitHub PR/status + PAT/App-bot auth ✅ |
-| `langfuse_client.py` | read-side session summary + trace listing + session total cost (retrospect + trace-health + cost sync) |
+| `langfuse/client.py` | read-side session summary + trace listing + session total cost (retrospect + trace-health + cost sync) |
 | `agents/coding.py` · `fs_tools.py` · `retrospecting.py` | agents + sandboxed tools |
 | `vcs/git_ops.py` | clone / branch / commit / push helpers |
 

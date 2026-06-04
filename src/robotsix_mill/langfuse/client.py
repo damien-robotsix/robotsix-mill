@@ -16,9 +16,9 @@ import time
 from collections.abc import Callable
 from datetime import datetime, timedelta
 
-from .config import RepoConfig, Settings, get_secrets
+from ..config import RepoConfig, Settings, get_secrets
 
-log = logging.getLogger("robotsix_mill.langfuse_client")
+log = logging.getLogger("robotsix_mill.langfuse.client")
 
 # Short in-memory cache for read-time cost lookups. Per-ticket cost is
 # read straight from the Langfuse session on demand (the board polls

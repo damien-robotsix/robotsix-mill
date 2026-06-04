@@ -5,7 +5,7 @@ via the Langfuse public API, counts those missing a ``sessionId``, and
 files a single draft ticket when unsessioned traces are found (with
 dedup against existing open "trace-health" tickets).
 
-Seam: tests monkeypatch ``list_all_traces_since`` from langfuse_client.
+Seam: tests monkeypatch ``list_all_traces_since`` from langfuse.client.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from ..core.db import session
 from ..core.models import SourceKind, Ticket
 from ..core.service import TicketService
 from ..core.states import State
-from ..langfuse_client import list_all_traces_since
+from ..langfuse.client import list_all_traces_since
 from ..runtime.tracing import make_session_id
 
 log = logging.getLogger("robotsix_mill.trace_health")

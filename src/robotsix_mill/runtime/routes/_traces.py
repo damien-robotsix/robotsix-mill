@@ -111,7 +111,7 @@ def list_recent_traces(
     """Return recent Langfuse traces, filtered by cost and limited in
     count.  *limit* is clamped to 1–50; *min_cost* and *max_cost* are
     inclusive USD filters on ``totalCost``."""
-    from ...langfuse_client import list_recent_traces as _list_recent
+    from ...langfuse.client import list_recent_traces as _list_recent
 
     limit = max(1, min(limit, 50))
     traces = _list_recent(

@@ -467,7 +467,8 @@ modules:
       and trace-fetch helpers consumed by the runtime tracing layer, the
       retrospect stage, and several agents.
     paths:
-      - src/robotsix_mill/langfuse_client.py
+      - src/robotsix_mill/langfuse/__init__.py
+      - src/robotsix_mill/langfuse/client.py
       - tests/langfuse/test_langfuse_client.py
       - tests/langfuse/test_trace_health.py
     dependencies: [config]

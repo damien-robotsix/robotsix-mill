@@ -259,7 +259,7 @@ class TestMakeTraceInspectTool:
 
         # Inject synthetic trace detail via fetch_trace_detail
         monkeypatch.setattr(
-            "robotsix_mill.langfuse_client.fetch_trace_detail",
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
             lambda s, tid: {"id": tid, "name": "test-trace", "observations": []},
         )
         # Inject synthetic inspection result
@@ -306,7 +306,7 @@ class TestMakeTraceInspectTool:
         degradation message instead of raising."""
         settings = _settings_with_api_key()
         monkeypatch.setattr(
-            "robotsix_mill.langfuse_client.fetch_trace_detail",
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
             lambda s, tid: None,
         )
         tool = make_trace_inspect_tool(settings)
@@ -317,7 +317,7 @@ class TestMakeTraceInspectTool:
         """When no issues found, a short 'no issues' message is included."""
         settings = _settings_with_api_key()
         monkeypatch.setattr(
-            "robotsix_mill.langfuse_client.fetch_trace_detail",
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
             lambda s, tid: {"id": tid, "name": "clean", "observations": []},
         )
         monkeypatch.setattr(
@@ -333,7 +333,7 @@ class TestMakeTraceInspectTool:
         """When only tool_error findings are present, only that section appears."""
         settings = _settings_with_api_key()
         monkeypatch.setattr(
-            "robotsix_mill.langfuse_client.fetch_trace_detail",
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
             lambda s, tid: {"id": tid, "name": "partial", "observations": []},
         )
         from robotsix_mill.agents.trace_inspector import TraceFinding
@@ -369,12 +369,12 @@ class TestFetchTraceDetail:
     """Verify fetch_trace_detail is a public, callable function."""
 
     def test_public_and_callable(self):
-        from robotsix_mill.langfuse_client import fetch_trace_detail
+        from robotsix_mill.langfuse.client import fetch_trace_detail
 
         assert callable(fetch_trace_detail)
 
     def test_returns_none_when_unconfigured(self):
-        from robotsix_mill.langfuse_client import fetch_trace_detail
+        from robotsix_mill.langfuse.client import fetch_trace_detail
 
         settings = Settings(
             langfuse_base_url=None,

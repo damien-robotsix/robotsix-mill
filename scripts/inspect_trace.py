@@ -175,7 +175,7 @@ def _build_checks(
 
 def inspect(trace_id: str, *, json_out: bool = False) -> int:
     from robotsix_mill.config import Settings, get_secrets
-    from robotsix_mill.langfuse_client import (
+    from robotsix_mill.langfuse.client import (
         fetch_trace_observations,
         fetch_trace_detail,
     )

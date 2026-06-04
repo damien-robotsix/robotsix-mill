@@ -25,7 +25,7 @@ scan traces created at or after that watermark; the first run uses
 Seam: tests monkeypatch ``run_trace_inspector`` from
 ``robotsix_mill.agents.trace_inspector`` AND
 ``list_all_traces_since`` / ``fetch_trace_detail`` from
-``robotsix_mill.langfuse_client``.
+``robotsix_mill.langfuse.client``.
 """
 
 from __future__ import annotations
@@ -434,7 +434,7 @@ def run_trace_review_pass(
                 "trace-review: target-repo lookup failed; using source board",
             )
     service = TicketService(settings, board_id=target_board_id)
-    from ..langfuse_client import list_all_traces_since, fetch_trace_detail
+    from ..langfuse.client import list_all_traces_since, fetch_trace_detail
     from ..agents.trace_inspector import run_trace_inspector
 
     now = datetime.now(timezone.utc)

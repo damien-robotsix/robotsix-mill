@@ -28,7 +28,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from robotsix_mill.config import get_repos_config, load_settings
-from robotsix_mill.langfuse_client import _langfuse_api_get
+from robotsix_mill.langfuse.client import _langfuse_api_get
 
 
 def _fetch_traces(settings, hours: float, repo_config=None) -> list[dict[str, Any]]:

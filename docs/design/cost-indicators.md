@@ -99,7 +99,7 @@ Response shape:
 **Feasibility gate:** `GET /api/public/traces` supports
 `fromTimestamp`, `orderBy=timestamp.desc`, and pagination.  The backend
 already paginates this endpoint for `list_recent_traces()` in
-`langfuse_client.py`.  The trend endpoint follows the same pattern,
+`langfuse/client.py`.  The trend endpoint follows the same pattern,
 fetching all traces in the lookback window (bounded at ~500 for perf)
 and bucketing in Python.
 
@@ -172,7 +172,7 @@ cumulative_cost(ticket_id) =
 ```
 
 - `session_cost` is the existing Langfuse session-total lookup in
-  `langfuse_client.py` (with 60 s in-memory TTL).
+  `langfuse/client.py` (with 60 s in-memory TTL).
 - `_all_descendants` is the existing BFS walker in `core/service.py:438`.
 - The implementation (`cumulative_cost`) already exists at
   `core/service.py:410`.

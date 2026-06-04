@@ -18,7 +18,7 @@ def _build_langfuse_tools(settings: Settings):
     def fetch_session_cost(session_id: str) -> str:
         """Fetch the total USD cost for a Langfuse session by its ID.
         Returns the cost as a dollar string (e.g. "$1.2345")."""
-        from ..langfuse_client import session_cost
+        from ..langfuse.client import session_cost
 
         cost = session_cost(settings, session_id)
         return f"${cost:.4f}"
@@ -27,7 +27,7 @@ def _build_langfuse_tools(settings: Settings):
         """Fetch a structured summary of all traces in a Langfuse
         session: per-stage cost, latency, observation counts, plus any
         warnings/errors. Returns a Markdown text block."""
-        from ..langfuse_client import fetch_session_summary
+        from ..langfuse.client import fetch_session_summary
 
         summary = fetch_session_summary(settings, session_id)
         if summary is None:
@@ -37,7 +37,7 @@ def _build_langfuse_tools(settings: Settings):
     def list_traces(session_id: str) -> str:
         """List all trace IDs for a Langfuse session. Returns one trace
         per line with its name, timestamp, and cost."""
-        from ..langfuse_client import _langfuse_api_get
+        from ..langfuse.client import _langfuse_api_get
 
         data = _langfuse_api_get(
             settings,
@@ -61,7 +61,7 @@ def _build_langfuse_tools(settings: Settings):
     def fetch_trace_detail(trace_id: str) -> str:
         """Fetch the full detail of a single Langfuse trace by its ID.
         Returns a JSON-like summary of the trace's observations."""
-        from ..langfuse_client import fetch_trace_detail
+        from ..langfuse.client import fetch_trace_detail
 
         detail = fetch_trace_detail(settings, trace_id)
         if detail is None:
