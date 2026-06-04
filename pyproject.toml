@@ -17,6 +17,9 @@ dependencies = [
     # cost, retry/transient) extracted to a standalone library. See
     # agents/openrouter_cost.py + agents/retry.py (now thin shims).
     "robotsix-llmio[openrouter_deepseek,claude_sdk] @ git+https://github.com/damien-robotsix/robotsix-llmio@main",
+    # Module-taxonomy JSON Schema and validation CLI extracted to a standalone
+    # library.  Consumed only via pre-commit / CI; no Python import in mill.
+    "robotsix-modules @ git+https://github.com/damien-robotsix/robotsix-modules@v0.1.0",
     "pydantic-settings>=2",
     "pyyaml>=6",
     "sqlmodel>=0.0.22",
@@ -171,6 +174,7 @@ DEP002 = [
     "deptry",
     "mkdocs-material",
     "langfuse",
+    "robotsix-modules",
 ]
 # Packages imported directly but pulled in transitively through
 # pydantic-ai-slim / sqlmodel — the imports are intentional.

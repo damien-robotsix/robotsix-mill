@@ -44,14 +44,14 @@ repos:
     hooks:
       - id: detect-secrets
         args: [--baseline, .secrets.baseline]
-  - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.37.2
+  - repo: local
     hooks:
-      - id: check-jsonschema
+      - id: validate-module-taxonomy
         name: Validate module taxonomy
-        args: ["--schemafile", "docs/modules.schema.yaml"]
+        entry: robotsix-modules-validate
+        language: system
         files: ^docs/modules\.ya?ml$
-        types_or: [yaml, json]
+        types_or: [yaml]
   - repo: local
     hooks:
       - id: validate-module-paths
