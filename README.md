@@ -159,6 +159,7 @@ reference are covered in [docs/configuration.md](docs/configuration.md).
 - [docs/agent-yaml-schema.md](docs/agent-yaml-schema.md) — Field reference for `agent_definitions/*.yaml` files
 - [docs/expert-yaml-schema.md](docs/expert-yaml-schema.md) — Field reference for `expert_definitions/*.yaml` files
 - [docs/approval-gate.md](docs/approval-gate.md) — Human approval gate after refine
+- [docs/proposed-actions.md](docs/proposed-actions.md) — Operator review/approve/reject of agent-proposed ticket mutations
 - [docs/dedup-guard.md](docs/dedup-guard.md) — Pre-refine duplicate / already-done check
 - [docs/merge-stage.md](docs/merge-stage.md) — Gate-check, auto-rebase, and auto-fix for merge-ready PRs
 - [docs/audit-agent.md](docs/audit-agent.md) — Meta-audit agent for quality/security coverage gaps
