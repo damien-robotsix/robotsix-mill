@@ -62,6 +62,80 @@ NON_IMPLEMENTATION_CLOSE_PREFIXES = (
     FRESHNESS_STALE_PREFIX,
 )
 
+UNMERGED_BRANCH_PREFIX = "Implementation exists on branch"
+
+
+def _verify_branch_merged(repo_dir: Path | None, ticket: Ticket) -> bool:
+    """Check whether *ticket*'s branch is an ancestor of the base branch.
+
+    When a redrafted ticket has a branch from a prior implement run,
+    the refine agent may conclude ``no_change_needed`` because the
+    implementation already exists — but if the branch was never merged
+    to the base branch, closing as DONE strands the work on an orphaned
+    branch.
+
+    Returns ``True`` when the branch is confirmed merged to the base
+    branch, or when the check cannot be performed (best-effort: we
+    never block a ticket on a transient git error).
+
+    Returns ``False`` only when the branch is confirmed **unmerged**
+    — i.e. ``git merge-base --is-ancestor <branch> main`` exits 1.
+    """
+    if repo_dir is None or not ticket.branch:
+        # Nothing to verify — let the no-change-needed pass through.
+        return True
+
+    branch = ticket.branch
+    try:
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "fetch", "origin", branch],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError:
+        log.debug(
+            "%s: cannot fetch branch '%s' for merge check — "
+            "allowing no-change-needed (best-effort)",
+            ticket.id,
+            branch,
+        )
+        return True
+
+    # git merge-base --is-ancestor: exit 0 = is ancestor, 1 = not ancestor
+    result = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo_dir),
+            "merge-base",
+            "--is-ancestor",
+            f"origin/{branch}",
+            "main",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return True  # branch is merged
+    if result.returncode == 1:
+        log.info(
+            "%s: branch '%s' is NOT an ancestor of main — "
+            "implementation unmerged",
+            ticket.id,
+            branch,
+        )
+        return False  # branch is unmerged
+
+    # Any other exit code (git error) — best-effort, don't block.
+    log.debug(
+        "%s: merge-base check failed for branch '%s' — "
+        "allowing no-change-needed (best-effort)",
+        ticket.id,
+        branch,
+    )
+    return True
+
 
 def _resolve_next_state(
     ctx: StageContext,
@@ -930,6 +1004,19 @@ class RefineStage(Stage):
                     ticket.id,
                 )
             else:
+                # If this ticket was previously implemented (has a
+                # branch), verify the implementation is actually
+                # merged to the base branch before closing as DONE.
+                # Otherwise the work lives only on an orphaned
+                # branch and will be lost when the ticket closes.
+                if ticket.branch and not _verify_branch_merged(repo_dir, ticket):
+                    return Outcome(
+                        State.BLOCKED,
+                        f"{UNMERGED_BRANCH_PREFIX} '{ticket.branch}' "
+                        "but is not merged to main. "
+                        "Merge the PR or manually close.",
+                    )
+
                 # The rationale is the agent's conclusion — into
                 # history (note), not comments. Truncate to keep the
                 # event row scannable; the full rationale lives in
