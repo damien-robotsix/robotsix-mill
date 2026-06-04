@@ -1056,11 +1056,37 @@ class RefineStage(Stage):
                     epic_title=ticket.title,
                     epic_description=epic_body,
                 )
+                # Advisory pre-filing dedup: flag (never drop) children
+                # whose scope overlaps a recent ticket or an earlier
+                # sibling in this batch. Best-effort — a failure here must
+                # not block filing.
+                from ..dedup import annotate_child_body, find_child_overlaps
+
+                child_titles = list(breakdown.child_titles)
+                child_bodies = list(breakdown.child_bodies)
+                overlap_notes = find_child_overlaps(
+                    ctx.service,
+                    ticket.id,
+                    child_titles,
+                    child_bodies,
+                    s,
+                    datetime.now(timezone.utc),
+                )
                 created_ids: list[str] = []
-                for child_title, child_body in zip(
-                    breakdown.child_titles,
-                    breakdown.child_bodies,
+                for child_title, child_body, dup_note in zip(
+                    child_titles,
+                    child_bodies,
+                    overlap_notes,
                 ):
+                    if dup_note:
+                        log.warning(
+                            "epic %s: child '%s' flagged as possible "
+                            "duplicate — %s",
+                            ticket.id,
+                            child_title,
+                            dup_note,
+                        )
+                        child_body = annotate_child_body(child_body, dup_note)
                     child = ctx.service.create(
                         title=child_title,
                         description=child_body,

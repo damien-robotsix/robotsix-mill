@@ -676,6 +676,12 @@ class Settings(BaseSettings):
     # guard) but is independent because the two checks live at different
     # stages and may want different policies.
     trace_review_dedup_lookback_days: int = Field(default=7)
+    # Recency window (days) for the advisory pre-filing duplicate check in
+    # epic decomposition (``dedup.find_child_overlaps``).  A proposed child
+    # is flagged when a prior ticket created within this window matches its
+    # scope.  Mirrors ``trace_review_dedup_lookback_days`` but is independent
+    # so the epic-decomposition policy can diverge.
+    epic_dedup_lookback_days: int = Field(default=7)
     # Memory ledger for the trace inspector.
     # Unset (default) derives <data_dir>/trace_inspector_memory.md.
     trace_inspector_memory_path: Path | None = Field(default=None)

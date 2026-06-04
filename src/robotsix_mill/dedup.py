@@ -113,3 +113,148 @@ def find_prior_matching_ticket(
     except Exception:  # noqa: BLE001 — best-effort dedup
         log.exception("dedup: find_prior_matching_ticket failed")
         return None
+
+
+# Path-like tokens carry a file extension, optionally prefixed by one or
+# more directory segments — e.g. ``ci.yml``, ``CONTRIBUTING.md``,
+# ``tests/foo/test_bar.py``. Used to extract a child's ``target_files``
+# from its free-text body for the overlap checks below.
+_PATH_TOKEN_RE = re.compile(r"[\w.+-]+(?:/[\w.+-]+)*\.[A-Za-z][A-Za-z0-9]{0,6}\b")
+
+
+def _extract_paths(text: str) -> list[str]:
+    """Extract de-duplicated path-like tokens from *text*, preserving
+    first-seen order."""
+    out: list[str] = []
+    for tok in _PATH_TOKEN_RE.findall(text or ""):
+        if tok not in out:
+            out.append(tok)
+    return out
+
+
+def _describe_recent_signal(
+    ticket: Ticket,
+    paths: list[str],
+    settings: Settings,
+    fallback_board_id: str,
+) -> str:
+    """Best-effort description of which signal matched *ticket*: a shared
+    file path (preferred, matching ``find_prior_matching_ticket``'s order)
+    or the title overlap."""
+    try:
+        if paths:
+            body = Workspace(
+                settings.workspaces_dir_for(ticket.board_id or fallback_board_id),
+                ticket.id,
+            ).read_description()
+            for path in paths:
+                if path and path in body:
+                    return f"file path `{path}`"
+    except Exception:  # noqa: BLE001 — best-effort
+        log.exception("dedup: _describe_recent_signal failed for %s", ticket.id)
+    return "title overlap"
+
+
+def annotate_child_body(body: str, note: str) -> str:
+    """Prepend an advisory ``[!warning]`` blockquote naming the suspected
+    overlap to *body* so the child's own refine cycle sees the flag and can
+    close-as-duplicate cheaply. Surfaces the overlap without dropping the
+    child."""
+    block = (
+        f"> [!warning] {note}\n"
+        ">\n"
+        "> _Advisory flag from epic-decomposition pre-filing dedup; "
+        "verify and close as duplicate during refine if confirmed._\n\n"
+    )
+    return block + (body or "")
+
+
+def find_child_overlaps(
+    service: TicketService,
+    parent_epic_id: str,
+    child_titles: Sequence[str],
+    child_bodies: Sequence[str],
+    settings: Settings,
+    now: datetime,
+) -> list[str | None]:
+    """Advisory pre-filing dedup for epic-decomposition children.
+
+    Returns one entry per proposed child (parallel to *child_titles* /
+    *child_bodies*): an advisory note describing the suspected overlap,
+    or ``None`` when nothing overlaps. For each child, in order:
+
+    1. **Recent-ticket check** (the concurrent independent-ticket class):
+       extract path-like tokens from the child body as ``target_files``,
+       use the child title as ``fingerprint_text``, and call
+       :func:`find_prior_matching_ticket` across every source within
+       ``settings.epic_dedup_lookback_days``. The epic and its existing
+       children are excluded so they don't self-match.
+    2. **In-batch sibling check** (the same-batch overlap class): compare
+       the child against earlier siblings accepted in THIS batch by
+       shared extracted file path or normalized-title overlap.
+
+    Best-effort: any failure logs and yields all-``None`` so children are
+    still filed.
+    """
+    notes: list[str | None] = [None] * len(child_titles)
+    try:
+        board_id = service.board_id
+        exclude_ids: set[str] = {parent_epic_id}
+        try:
+            exclude_ids |= {c.id for c in service.list_children(parent_epic_id)}
+        except Exception:  # noqa: BLE001 — best-effort
+            log.exception("dedup: list_children failed for %s", parent_epic_id)
+
+        # (normalized title, extracted path set) for each accepted sibling.
+        accepted: list[tuple[str, set[str]]] = []
+        for i, (title, body) in enumerate(zip(child_titles, child_bodies)):
+            paths = _extract_paths(body)
+            note: str | None = None
+
+            # 1. Recent shipped/in-flight ticket.
+            prior = find_prior_matching_ticket(
+                service,
+                board_id,
+                paths,
+                title,
+                settings,
+                now,
+                sources=None,
+                lookback_days=settings.epic_dedup_lookback_days,
+                exclude_ids=exclude_ids,
+            )
+            if prior is not None:
+                signal = _describe_recent_signal(prior, paths, settings, board_id)
+                note = (
+                    f"Possible duplicate of {prior.id} ({prior.title!r}) — "
+                    f"matched on {signal}"
+                )
+
+            # 2. Earlier sibling in this batch.
+            if note is None:
+                norm_title = normalize(title)
+                path_set = set(paths)
+                for j, (sib_title, sib_paths) in enumerate(accepted):
+                    shared = path_set & sib_paths
+                    if shared:
+                        note = (
+                            f"Possible duplicate of sibling #{j} "
+                            f"in this batch — shared file path "
+                            f"`{sorted(shared)[0]}`"
+                        )
+                        break
+                    if norm_title and sib_title and (
+                        norm_title in sib_title or sib_title in norm_title
+                    ):
+                        note = (
+                            f"Possible duplicate of sibling #{j} "
+                            f"in this batch — overlapping title"
+                        )
+                        break
+
+            notes[i] = note
+            accepted.append((normalize(title), set(paths)))
+        return notes
+    except Exception:  # noqa: BLE001 — best-effort dedup
+        log.exception("dedup: find_child_overlaps failed")
+        return [None] * len(child_titles)
