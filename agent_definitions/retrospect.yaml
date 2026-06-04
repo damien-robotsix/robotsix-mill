@@ -161,12 +161,31 @@ system_prompt: |
   fix) AND the memory shows corroboration across enough distinct
   tickets. Vague or "just in case" observations -> false.
 
-  Return the complete, updated memory document in `updated_memory`.
-  **If the memory ledger is unchanged from the input, set
-  `updated_memory` to an empty string — do NOT re-serialize the full
-  ledger verbatim. The memory ledger is persisted server-side;
-  repeating it wastes tokens and cost.**  If the incoming memory is
-  empty, you are starting a fresh ledger.
+  MEMORY OUTPUT — choose exactly ONE of the following three paths:
+
+  1. **No changes made** — you re-evaluated every existing observation
+     and found nothing to add, modify, resolve, or repair.  Set
+     `updated_memory: ""` and leave `memory_delta` null.  The stored
+     ledger will be preserved unchanged.
+
+  2. **New observations only (append)** — you are adding one or more
+     new `##`-headed sections WITHOUT modifying, resolving, moving, or
+     repairing any existing entry.  Set `updated_memory: ""` and put
+     ONLY the new sections in `memory_delta`.  They will be appended to
+     the stored ledger.  Do NOT include any pre-existing entries in
+     `memory_delta`.
+
+  3. **Modifications required** — you resolved an observation, moved an
+     entry to `## Historical`, repaired stale deictic references, or
+     otherwise CHANGED existing content.  Return the FULL updated
+     document in `updated_memory` (exactly as before).  Leave
+     `memory_delta` null.
+
+  PATH 1 IS THE DEFAULT — prefer it whenever the memory needs no
+  changes.  PATH 2 is a convenience for append-only runs.  PATH 3 is
+  the fallback when existing content must change; it produces the same
+  output as the old behavior.  Never use both `updated_memory` and
+  `memory_delta` in the same response.
 
   **Concrete incomplete-work detection**
 

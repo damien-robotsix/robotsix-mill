@@ -32,6 +32,7 @@ class RetrospectResult(BaseModel):
     draft_title: str | None = None
     draft_body: str | None = None
     updated_memory: str = ""
+    memory_delta: str | None = None
     draft_gap_id: str | None = None
     follow_up_title: str | None = None
     follow_up_body: str | None = None
