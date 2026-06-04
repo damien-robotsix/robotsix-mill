@@ -248,4 +248,36 @@ is cleared in separate dedicated tickets (a future sub-epic), the
 `|| true`/`exit 0` advisory wrapper will be removed and mypy promoted to
 a hard gate.
 
+### Trivy vulnerability scanning
+
+The `docker-publish.yml` workflow runs two separate Trivy steps against
+the built Docker image:
+
+**Gate (blocking)** — Only **CRITICAL** CVEs with an available fix
+(`ignore-unfixed: true`) fail the pipeline. HIGH, MEDIUM, and LOW
+findings do **not** gate because they are high-volume and low-signal in
+container base images; gating on them would create a noisy, red-CI
+state that contributors cannot actionably resolve. Restricting the gate
+to CRITICAL + fixable targets the narrow, must-fix subset where a
+remediation is actually available.
+
+**Escape hatch** — [`.trivyignore`](.trivyignore) at the repo root
+accepts per-CVE suppressions with `# expires: YYYY-MM-DD` annotations.
+This is the mechanism for known false positives (e.g. a CRITICAL CVE in
+a transitive library that is never invoked in this deployment model).
+When the expiry date passes the suppression must be re-evaluated or
+removed — the gate resumes failing if the CVE is still detected.
+
+**Observability layer (non-blocking)** — A separate SARIF run emits
+findings for **all** severities (no exit-code) and uploads them to the
+GitHub Security tab via `codeql-action/upload-sarif`. This gives
+contributors full visibility into the vulnerability surface without
+blocking merges on non-actionable findings.
+
+**Why two separate steps?** The gate and SARIF runs are intentionally
+separate because the `trivy-action` entrypoint unsets `TRIVY_SEVERITY`
+when `format=sarif` (unless `limit-severities-for-sarif=true`).
+Combining them into one step would silently scan **all** severities and
+fail on HIGH/MEDIUM, defeating the CRITICAL-only gate.
+
 Dependabot (weekly) keeps pip and Docker dependencies current.
