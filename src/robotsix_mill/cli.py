@@ -8,6 +8,9 @@
     robotsix-mill ticket resume-blocked <id>
     robotsix-mill epic new --title T [--description-file F | -]
     robotsix-mill inquire --title T [--description-file F | -]
+    robotsix-mill action list --repo-id X [--status S]
+    robotsix-mill action approve <id> --repo-id X
+    robotsix-mill action reject <id> --repo-id X
     robotsix-mill audit                        # run an audit pass
     robotsix-mill trace-health                 # run a trace-health check
     robotsix-mill health                        # run a health pass
