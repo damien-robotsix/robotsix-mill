@@ -1388,7 +1388,7 @@ function toggleBody(btn) {
   }
 }
 function close_(){sel=null;runsOpen=false;costDashboardOpen=false;
- candidatesOpen=false;
+ candidatesOpen=false;proposalsOpen=false;
  document.getElementById("drawer").classList.remove("open")}
 // Cache the last runs payload (sans elapsed) so the 1s auto-refresh
 // only rebuilds the list DOM when something material changed (new run,
@@ -1679,6 +1679,7 @@ async function renderCostDashboard(){
  document.getElementById("cost-highlights").innerHTML=highlightsHtml;
 }
 let candidatesOpen=false;
+let proposalsOpen=false;
 // --- AGENT.md candidates ----------------------------------------------------
 // Surface AGENT_CANDIDATES.md entries (written by retrospect) as actionable
 // cards. Validate files an audited-repo draft ticket; reject just stamps the
@@ -1796,6 +1797,72 @@ async function rejectCandidate(cid){
  }catch(e){alert("Reject error: "+e)}
 }
 
+// --- Proposed actions -------------------------------------------------------
+// Surface pending ProposedAction records (written by periodic agents) as
+// actionable cards. Approve executes the mutation against the target ticket;
+// reject marks it rejected. Both re-render so the resolved card drops out of
+// the pending view. Per-board: needs a single selected repo.
+async function toggleProposals(){
+ if(proposalsOpen){close_();return}
+ if(sel||runsOpen||costDashboardOpen||candidatesOpen)close_();
+ proposalsOpen=true;
+ document.getElementById("drawer").classList.add("open");
+ await renderProposals();
+}
+
+async function renderProposals(){
+ const repo=getRepoId();
+ const drawer=document.getElementById("d");
+ if(!repo||repo==="all"){
+  drawer.innerHTML='<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>'+
+   '<h3>Proposed actions</h3>'+
+   '<div class="muted" style="padding:12px 0">Select a single repo to review proposed actions.</div>';
+  return;
+ }
+ let pas;
+ try{pas=await jget("/proposed-actions?repo_id="+encodeURIComponent(repo))}
+ catch(e){pas=null}
+ const shell='<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>'+
+  '<h3>Proposed actions · '+esc(repo)+'</h3>';
+ if(!Array.isArray(pas)){
+  drawer.innerHTML=shell+'<div class="muted" style="padding:12px 0;color:#f87171">failed to load proposed actions.</div>';
+  return;
+ }
+ const pending=pas.filter(function(pa){return pa.status==="pending"});
+ if(!pending.length){
+  drawer.innerHTML=shell+'<div class="muted" style="padding:12px 0">No pending proposed actions.</div>';
+  return;
+ }
+ let html='';
+ pending.forEach(function(pa){
+  html+='<div class="proposal-card">'+
+   '<div class="proposal-meta">'+esc(pa.source)+' · '+esc(pa.action_type)+' · '+esc(pa.created_at)+'</div>'+
+   '<div class="proposal-meta">Target ticket: <a href="#" onclick="open_(\''+esc(pa.target_ticket_id)+'\');return false">'+esc(pa.target_ticket_id)+'</a></div>'+
+   '<div style="font-size:12px;color:#e2e4eb;margin:6px 0">'+esc(pa.rationale)+'</div>'+
+   (pa.payload!=null?'<pre style="font-size:11px;background:#1a1d27;padding:6px 8px;border-radius:4px;overflow-x:auto">'+esc(pa.payload)+'</pre>':'')+
+   '<div style="display:flex;gap:6px;margin-top:6px">'+
+    '<button class="approve-btn" onclick="approveProposal('+pa.id+')">Approve</button>'+
+    '<button class="reject-btn" onclick="rejectProposal('+pa.id+')">Reject</button>'+
+   '</div>'+
+  '</div>';
+ });
+ drawer.innerHTML=shell+html;
+}
+
+async function approveProposal(id){
+ const repo=getRepoId();
+ const r=await jpost("/proposed-actions/"+id+"/approve?repo_id="+encodeURIComponent(repo));
+ if(!r.ok){alert("Approve failed: "+await r.text());return}
+ await renderProposals();
+}
+
+async function rejectProposal(id){
+ const repo=getRepoId();
+ const r=await jpost("/proposed-actions/"+id+"/reject?repo_id="+encodeURIComponent(repo));
+ if(!r.ok){alert("Reject failed: "+await r.text());return}
+ await renderProposals();
+}
+
 // Re-fetch detail sections WITHOUT resetting the drawer to skeleton.
 // The auto-refresh tick used to call open_(sel) every 1s which reset
 // the whole drawer to skeleton placeholders then progressively repainted
@@ -1894,7 +1961,7 @@ async function refreshDetail(id){
  }
  swap("ticket-merge", t.state==="human_mr_approval"&&mi?renderMergeInfo(mi):"");
 }
-refresh();setInterval(()=>{if(runsOpen)renderRuns();else if(sel)refreshDetail(sel)},1000);
+refresh();setInterval(()=>{if(runsOpen)renderRuns();else if(proposalsOpen)renderProposals();else if(sel)refreshDetail(sel)},1000);
 
 // Shared board rendering — used by both HTTP refresh() and the WebSocket
 // ticket_list handler so the column-building logic lives in one place.
