@@ -34,6 +34,9 @@ enterprise process. These are hard rules, learned the hard way.
 - **Never inline JS/CSS back into the `board_html.py` Python string.**
   A `\n` in a Python-embedded JS string becomes a real newline and
   silently breaks the entire board. Put JS in `board.js`.
+- The board exposes a **Proposals** panel (`📝 Proposals` in the
+  toolbar) for reviewing and approving/rejecting agent-proposed ticket
+  mutations — see [docs/proposed-actions.md](docs/proposed-actions.md).
 
 ## Git / CI
 
