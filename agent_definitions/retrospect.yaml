@@ -16,6 +16,7 @@ report_issue: false
 read_ticket: true
 output_type: RetrospectResult
 retries: 2
+max_tokens: 2048
 module: retrospecting
 skills: [board-read]
 
@@ -160,8 +161,12 @@ system_prompt: |
   fix) AND the memory shows corroboration across enough distinct
   tickets. Vague or "just in case" observations -> false.
 
-  Return the full, updated memory document in `updated_memory`.  If the
-  incoming memory is empty, you are starting a fresh ledger.
+  Return the complete, updated memory document in `updated_memory`.
+  **If the memory ledger is unchanged from the input, set
+  `updated_memory` to an empty string — do NOT re-serialize the full
+  ledger verbatim. The memory ledger is persisted server-side;
+  repeating it wastes tokens and cost.**  If the incoming memory is
+  empty, you are starting a fresh ledger.
 
   **Concrete incomplete-work detection**
 

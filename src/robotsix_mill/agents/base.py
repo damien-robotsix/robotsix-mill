@@ -154,6 +154,7 @@ def build_agent_from_definition(
         close_thread=definition.close_thread,
         ask_user=definition.ask_user,
         retries=definition.retries,
+        max_tokens=definition.max_tokens,
         output_type=resolved_output_type,
         skills=definition.skills,
         modules=definition.modules,
@@ -325,6 +326,7 @@ def _build_deepseek_handle(
     output_type: Any,
     name: str | None,
     retries: int,
+    max_tokens: int | None = None,
 ) -> AgentHandle:
     """Build the DeepSeek/OpenRouter ``AgentHandle`` for an agent.
 
@@ -338,6 +340,7 @@ def _build_deepseek_handle(
 
     from pydantic_ai import Agent
     from pydantic_ai.providers.openrouter import OpenRouterProvider
+    from pydantic_ai.settings import ModelSettings
 
     from .openrouter_cost import CostInstrumentedOpenRouterModel
 
@@ -356,6 +359,8 @@ def _build_deepseek_handle(
         tools=all_tools,
         retries=retries,
     )
+    if max_tokens is not None:
+        agent_kwargs["model_settings"] = ModelSettings(max_tokens=max_tokens)
     if name is not None:
         agent_kwargs["name"] = name
     agent = Agent(**agent_kwargs)
@@ -377,6 +382,7 @@ def build_agent(
     model_name: str | None = None,
     name: str | None = None,
     retries: int = 2,
+    max_tokens: int | None = None,
     skills: list[str] | None = None,
     modules: bool = False,
     board_id: str = "",
@@ -513,6 +519,7 @@ def build_agent(
                     output_type=output_type,
                     name=name,
                     retries=retries,
+                    max_tokens=max_tokens,
                 ),
             )
         return primary
@@ -526,4 +533,5 @@ def build_agent(
         output_type=output_type,
         name=name,
         retries=retries,
+        max_tokens=max_tokens,
     )

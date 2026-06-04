@@ -7,7 +7,8 @@ of issues observed across tickets. Each retrospect run:
 2. Passes it to the agent, which analyses the ticket in light of the
    memory, updates the ledger, and decides whether any tracked issue now
    has enough corroboration to file an improvement draft.
-3. Writes the agent's updated memory back verbatim.
+3. Writes the agent's updated memory back verbatim (skipped when the memory
+   is unchanged — the agent returns an empty `updated_memory`).
 
 Deduplication is the agent's responsibility: it records when it has
 already filed a draft for an issue and does not re-file.
