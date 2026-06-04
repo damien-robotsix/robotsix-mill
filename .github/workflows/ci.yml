@@ -41,3 +41,17 @@ jobs:
         run: bandit -r src/ -ll
       - name: Dependency vulnerability audit
         run: pip-audit
+
+  codeql:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: python
+          queries: security-and-quality
+      - uses: github/codeql-action/analyze@v4
