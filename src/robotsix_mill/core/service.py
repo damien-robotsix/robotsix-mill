@@ -1352,6 +1352,8 @@ class TicketService:
                 self._on_transition(ticket)
             return comment, ticket
 
+    # --- proposed actions ---
+
     def create_proposed_action(
         self,
         *,
@@ -1422,3 +1424,139 @@ class TicketService:
             if status is not None:
                 stmt = stmt.where(ProposedAction.status == status)
             return list(s.exec(stmt).all())
+
+    def get_proposed_action(self, action_id: int) -> ProposedAction | None:
+        """Single-row lookup by primary key; returns ``None`` on miss."""
+        with db.session(self.settings, self.board_id) as s:
+            return s.get(ProposedAction, action_id)
+
+    def approve_proposed_action(
+        self, action_id: int, decided_by: str = "human"
+    ) -> ProposedAction:
+        """Approve a pending action and execute it.
+
+        Transitions PENDING → APPROVED, stamps *decided_at* /
+        *decided_by*, commits, then calls ``_execute_proposed_action``
+        (which sets EXECUTED or FAILED).
+
+        Raises ``KeyError`` for an unknown *action_id* and
+        ``ValueError`` if the action is not PENDING (including
+        already-EXECUTED actions — safe to call, no double-execution).
+        """
+        with db.session(self.settings, self.board_id) as s:
+            action = s.get(ProposedAction, action_id)
+            if action is None:
+                raise KeyError(action_id)
+            if action.status != ProposedActionStatus.PENDING:
+                raise ValueError(
+                    f"ProposedAction {action_id}: cannot approve — "
+                    f"status is {action.status.value}, not PENDING"
+                )
+            action.status = ProposedActionStatus.APPROVED
+            action.decided_at = datetime.now(timezone.utc)
+            action.decided_by = decided_by
+            s.add(action)
+            s.commit()
+            s.refresh(action)
+
+        self._execute_proposed_action(action_id)
+
+        with db.session(self.settings, self.board_id) as s:
+            action = s.get(ProposedAction, action_id)
+            s.refresh(action)
+            return action
+
+    def reject_proposed_action(
+        self, action_id: int, decided_by: str = "human"
+    ) -> ProposedAction:
+        """Reject a pending action (no execution).
+
+        Transitions PENDING → REJECTED.  Same error semantics as
+        :meth:`approve_proposed_action` (``KeyError`` for unknown id,
+        ``ValueError`` if not PENDING).
+        """
+        with db.session(self.settings, self.board_id) as s:
+            action = s.get(ProposedAction, action_id)
+            if action is None:
+                raise KeyError(action_id)
+            if action.status != ProposedActionStatus.PENDING:
+                raise ValueError(
+                    f"ProposedAction {action_id}: cannot reject — "
+                    f"status is {action.status.value}, not PENDING"
+                )
+            action.status = ProposedActionStatus.REJECTED
+            action.decided_at = datetime.now(timezone.utc)
+            action.decided_by = decided_by
+            s.add(action)
+            s.commit()
+            s.refresh(action)
+            return action
+
+    def _execute_proposed_action(self, action_id: int) -> None:
+        """Perform the mutation described by *action_id*.
+
+        Idempotent: no-op if the action is already EXECUTED at read
+        time.  Reads the action, closes the session, performs the
+        mutation via existing ``TicketService`` methods (each opens
+        its own session), then updates status to EXECUTED or FAILED
+        in a fresh session.
+
+        Execution dispatch per :class:`ActionType`:
+
+        * ``CLOSE`` → ``self.transition(target_ticket_id, State.CLOSED)``
+        * ``TRANSITION`` → parse *payload* JSON, extract ``"state"``,
+          ``self.transition(target_ticket_id, State(...))``
+        * ``COMMENT`` → parse *payload* JSON, extract ``"body"``,
+          ``self.add_comment(target_ticket_id, body, author="periodic-agent")``
+        * ``RELABEL`` → parse *payload* JSON; if ``"title"`` present,
+          ``self.set_title(target_ticket_id, payload["title"])``
+
+        Any :class:`TransitionError` or other exception marks the
+        action FAILED — it does **not** propagate out.
+        """
+        with db.session(self.settings, self.board_id) as s:
+            action = s.get(ProposedAction, action_id)
+            if action is None:
+                log.warning(
+                    "_execute_proposed_action: action %d not found", action_id
+                )
+                return
+            if action.status == ProposedActionStatus.EXECUTED:
+                return  # idempotent — already done
+            target_ticket_id = action.target_ticket_id
+            action_type = action.action_type
+            payload_str = action.payload
+
+        new_status = ProposedActionStatus.EXECUTED
+        try:
+            if action_type == ActionType.CLOSE:
+                self.transition(target_ticket_id, State.CLOSED)
+            elif action_type == ActionType.TRANSITION:
+                payload = json.loads(payload_str) if payload_str else {}
+                target_state = State(payload["state"])
+                self.transition(target_ticket_id, target_state)
+            elif action_type == ActionType.COMMENT:
+                payload = json.loads(payload_str) if payload_str else {}
+                self.add_comment(
+                    target_ticket_id,
+                    payload["body"],
+                    author="periodic-agent",
+                )
+            elif action_type == ActionType.RELABEL:
+                payload = json.loads(payload_str) if payload_str else {}
+                if "title" in payload:
+                    self.set_title(target_ticket_id, payload["title"])
+        except Exception:
+            log.exception(
+                "_execute_proposed_action: action %d (%s) failed",
+                action_id,
+                action_type,
+            )
+            new_status = ProposedActionStatus.FAILED
+
+        with db.session(self.settings, self.board_id) as s:
+            action = s.get(ProposedAction, action_id)
+            if action is not None:
+                action.status = new_status
+                s.add(action)
+                s.commit()
