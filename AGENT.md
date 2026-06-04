@@ -27,6 +27,16 @@ enterprise process. These are hard rules, learned the hard way.
   `httpx`). A test that needs a real key or a real request is wrong.
 - Run the suite before you commit. Add/adjust tests with the change.
 
+## Testing conventions
+
+- **Test browser scripts** (e.g. `src/robotsix_mill/runtime/static/board.js`)
+  with a Node `vm`-based harness in `tests/runtime/` that uses ONLY Node
+  built-ins (`node:fs`, `node:vm`, `node:assert`, etc.) and is driven by a
+  pytest wrapper that shells out to `node` and `pytest.skip`s when node is
+  absent. Never introduce an npm-based JS test runner
+  (vitest/jest/jsdom/playwright) or a Node setup step in CI — the test
+  sandbox is network-isolated and CI runs only pytest.
+
 ## Board UI
 
 - The kanban CSS/JS live in `src/robotsix_mill/runtime/static/`
