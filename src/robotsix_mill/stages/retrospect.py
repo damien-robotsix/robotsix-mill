@@ -637,9 +637,7 @@ class RetrospectStage(Stage):
 
         # Read current memory — empty string if missing/unreadable.
         memory_text = ""
-        memory_file = s.memory_file_for(
-            "retrospect", ctx.repo_config.board_id if ctx.repo_config else ""
-        )
+        memory_file = s.memory_file_for("retrospect", ctx.memory_board_id(ticket))
         try:
             if memory_file.exists():
                 memory_text = memory_file.read_text(encoding="utf-8")

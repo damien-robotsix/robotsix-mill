@@ -16,7 +16,11 @@ report_issue: false
 read_ticket: true
 output_type: RetrospectResult
 retries: 2
-max_tokens: 2048
+# 2048 was too small: the structured RetrospectResult (findings + conclusion
+# + a memory-ledger update) routinely exceeded it → "Model token limit (2048)
+# exceeded before any response was generated", blocking the post-merge
+# retrospect. 8192 comfortably fits the structured output.
+max_tokens: 8192
 module: retrospecting
 skills: [board-read]
 
