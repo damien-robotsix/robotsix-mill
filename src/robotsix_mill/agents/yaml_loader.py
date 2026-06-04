@@ -59,6 +59,7 @@ class AgentDefinition(BaseModel):
     skills: list[str] = []
     modules: bool = False
     inject_agent_md: bool = True
+    max_tokens: int | None = None
     # Periodic-only scheduling fields. None means "fall back to the
     # corresponding Settings field" — keeps existing YAMLs and the
     # global mill.defaults.yaml schedule section working unchanged.
