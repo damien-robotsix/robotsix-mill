@@ -1466,8 +1466,9 @@ class TicketService:
         """Approve a pending action and execute it.
 
         Transitions PENDING → APPROVED, stamps *decided_at* /
-        *decided_by*, commits, then calls ``_execute_proposed_action``
-        (which sets EXECUTED or FAILED).
+        *decided_by*, commits, then calls ``execute_proposed_action``
+        (which sets EXECUTED or FAILED, captures ``failure_reason`` on
+        failure, and writes audit/history notes for the mutation).
 
         Raises ``KeyError`` for an unknown *action_id* and
         ``ValueError`` if the action is not PENDING (including
@@ -1489,7 +1490,7 @@ class TicketService:
             s.commit()
             s.refresh(action)
 
-        self._execute_proposed_action(action_id)
+        self.execute_proposed_action(action_id, decided_by)
 
         with db.session(self.settings, self.board_id) as s:
             action = s.get(ProposedAction, action_id)
@@ -1521,73 +1522,6 @@ class TicketService:
             s.commit()
             s.refresh(action)
             return action
-
-    def _execute_proposed_action(self, action_id: int) -> None:
-        """Perform the mutation described by *action_id*.
-
-        Idempotent: no-op if the action is already EXECUTED at read
-        time.  Reads the action, closes the session, performs the
-        mutation via existing ``TicketService`` methods (each opens
-        its own session), then updates status to EXECUTED or FAILED
-        in a fresh session.
-
-        Execution dispatch per :class:`ActionType`:
-
-        * ``CLOSE`` → ``self.transition(target_ticket_id, State.CLOSED)``
-        * ``TRANSITION`` → parse *payload* JSON, extract ``"state"``,
-          ``self.transition(target_ticket_id, State(...))``
-        * ``COMMENT`` → parse *payload* JSON, extract ``"body"``,
-          ``self.add_comment(target_ticket_id, body, author="periodic-agent")``
-        * ``RELABEL`` → parse *payload* JSON; if ``"title"`` present,
-          ``self.set_title(target_ticket_id, payload["title"])``
-
-        Any :class:`TransitionError` or other exception marks the
-        action FAILED — it does **not** propagate out.
-        """
-        with db.session(self.settings, self.board_id) as s:
-            action = s.get(ProposedAction, action_id)
-            if action is None:
-                log.warning("_execute_proposed_action: action %d not found", action_id)
-                return
-            if action.status == ProposedActionStatus.EXECUTED:
-                return  # idempotent — already done
-            target_ticket_id = action.target_ticket_id
-            action_type = action.action_type
-            payload_str = action.payload
-
-        new_status = ProposedActionStatus.EXECUTED
-        try:
-            if action_type == ActionType.CLOSE:
-                self.transition(target_ticket_id, State.CLOSED)
-            elif action_type == ActionType.TRANSITION:
-                payload = json.loads(payload_str) if payload_str else {}
-                target_state = State(payload["state"])
-                self.transition(target_ticket_id, target_state)
-            elif action_type == ActionType.COMMENT:
-                payload = json.loads(payload_str) if payload_str else {}
-                self.add_comment(
-                    target_ticket_id,
-                    payload["body"],
-                    author="periodic-agent",
-                )
-            elif action_type == ActionType.RELABEL:
-                payload = json.loads(payload_str) if payload_str else {}
-                if "title" in payload:
-                    self.set_title(target_ticket_id, payload["title"])
-        except Exception:
-            log.exception(
-                "_execute_proposed_action: action %d (%s) failed",
-                action_id,
-                action_type,
-            )
-            new_status = ProposedActionStatus.FAILED
-
-        with db.session(self.settings, self.board_id) as s:
-            action = s.get(ProposedAction, action_id)
-            if action is not None:
-                action.status = new_status
-                s.add(action)
-                s.commit()
 
     # --- proposed-action executor ----------------------------------------
 
