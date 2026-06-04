@@ -18,6 +18,7 @@ from . import _costs
 from . import _traces
 from . import _candidates
 from . import _agents
+from . import _proposed_actions
 
 router = APIRouter()
 
@@ -30,3 +31,4 @@ router.include_router(_costs.router)
 router.include_router(_traces.router)
 router.include_router(_candidates.router)
 router.include_router(_agents.router)
+router.include_router(_proposed_actions.router)

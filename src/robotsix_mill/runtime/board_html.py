@@ -69,6 +69,12 @@ background:#0d9488;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">
   💰 Cost
 </button>
+<button onclick="toggleProposedActions()" style="font-size:11px;padding:3px 10px;
+background:#d97706;color:#fff;border:none;border-radius:4px;cursor:pointer;
+margin-left:4px" title="Review proposed actions from periodic agents">
+  Proposals<span id="proposal-badge" style="display:none;margin-left:5px;padding:0 5px;
+  border-radius:8px;background:#dc2626;color:#fff;font-size:10px;font-weight:bold"></span>
+</button>
 </header>
 <div id="lf-status" style="display:none;background:#3a2418;border-bottom:1px solid #6b3320;color:#e8b08a;padding:6px 12px;font-size:12px"></div>
 <div id="board"></div>

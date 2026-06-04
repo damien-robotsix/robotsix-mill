@@ -395,6 +395,7 @@ async function refresh(){
  fetchGates();
  fetchLangfuseStatus();
  refreshCandidateBadge();
+ fetchProposedActions();
  const [ts, activeList]=await Promise.all([jget(url), jget(activeUrl)]);
  if(!ts)return;
  const active={};
@@ -1388,6 +1389,7 @@ function toggleBody(btn) {
   }
 }
 function close_(){sel=null;runsOpen=false;costDashboardOpen=false;
+ proposalsOpen=false;
  candidatesOpen=false;
  document.getElementById("drawer").classList.remove("open")}
 // Cache the last runs payload (sans elapsed) so the 1s auto-refresh
@@ -1679,6 +1681,7 @@ async function renderCostDashboard(){
  document.getElementById("cost-highlights").innerHTML=highlightsHtml;
 }
 let candidatesOpen=false;
+let proposalsOpen=false;
 // --- AGENT.md candidates ----------------------------------------------------
 // Surface AGENT_CANDIDATES.md entries (written by retrospect) as actionable
 // cards. Validate files an audited-repo draft ticket; reject just stamps the
@@ -1796,6 +1799,85 @@ async function rejectCandidate(cid){
  }catch(e){alert("Reject error: "+e)}
 }
 
+// --- Proposed Actions review panel ------------------------------------
+async function fetchProposedActions(){
+ const actions=await jget("/proposed-actions?status=pending");
+ const badge=document.getElementById("proposal-badge");
+ if(badge){
+  const count=actions?actions.length:0;
+  if(count>0){
+   badge.style.display="inline-block";
+   badge.textContent=count;
+  }else{
+   badge.style.display="none";
+  }
+ }
+ return actions||[];
+}
+
+function renderProposedActions(actions){
+ const d=document.getElementById("d");
+ if(!actions||!actions.length){
+  d.innerHTML='<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>'+
+   '<h3>Proposed Actions</h3><div class="muted" style="padding:12px 0">No pending proposals. Agents will file proposed actions here when they detect issues.</div>';
+  return;
+ }
+ const typeLabels={close:"Close ticket",transition:"Transition",comment:"Comment",relabel:"Relabel"};
+ let html='<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>'+
+  '<h3>Proposed Actions ('+actions.length+')</h3>';
+ actions.forEach(a=>{
+  const typeLabel=typeLabels[a.action_type]||a.action_type;
+  html+='<div class="proposal-item">'+
+   '<span class="pa-type">'+esc(typeLabel)+'</span>'+
+   ' <span class="pa-target" onclick="event.stopPropagation();open_(\''+esc(a.target_ticket_id)+'\')">'+esc(a.target_ticket_id)+'</span>'+
+   '<div class="pa-rationale">'+renderMD(a.rationale||"")+'</div>'+
+   '<div class="pa-meta">'+
+    '<span>'+esc(a.source||"")+'</span>'+
+    '<span>'+esc(a.created_at||"")+'</span>'+
+   '</div>'+
+   '<span class="pa-status pa-status-'+esc(a.status)+'">'+esc(a.status)+'</span>';
+  if(a.status==="pending"){
+   html+='<div class="pa-actions">'+
+    '<button class="approve-btn" onclick="event.stopPropagation();approveProposal(\''+a.id+'\')">Approve</button>'+
+    '<button class="reject-btn" onclick="event.stopPropagation();rejectProposal(\''+a.id+'\')">Reject</button>'+
+   '</div>';
+  }
+  html+='</div>';
+ });
+ d.innerHTML=html;
+}
+
+async function approveProposal(id){
+ const r=await jpost("/proposed-actions/"+id+"/approve");
+ if(!r.ok){const e=await r.text();alert("approve failed: "+e)}else{
+  const actions=await fetchProposedActions();
+  renderProposedActions(actions);
+ }
+}
+
+async function rejectProposal(id){
+ const reason=prompt("Why are you rejecting this proposed action?");
+ if(reason===null)return;
+ if(!reason.trim()){alert("A reason is required to reject a proposal");return}
+ const r=await jpost("/proposed-actions/"+id+"/reject",{reason:reason.trim()});
+ if(!r.ok){const e=await r.text();alert("reject failed: "+e)}else{
+  const actions=await fetchProposedActions();
+  renderProposedActions(actions);
+ }
+}
+
+async function toggleProposedActions(){
+ if(proposalsOpen){close_();return}
+ if(sel){close_()}
+ if(runsOpen){close_()}
+ if(costDashboardOpen){close_()}
+ if(candidatesOpen){close_()}
+ proposalsOpen=true;
+ document.getElementById("drawer").classList.add("open");
+ const actions=await fetchProposedActions();
+ renderProposedActions(actions);
+}
+
 // Re-fetch detail sections WITHOUT resetting the drawer to skeleton.
 // The auto-refresh tick used to call open_(sel) every 1s which reset
 // the whole drawer to skeleton placeholders then progressively repainted
@@ -1894,7 +1976,7 @@ async function refreshDetail(id){
  }
  swap("ticket-merge", t.state==="human_mr_approval"&&mi?renderMergeInfo(mi):"");
 }
-refresh();setInterval(()=>{if(runsOpen)renderRuns();else if(sel)refreshDetail(sel)},1000);
+refresh();setInterval(()=>{if(runsOpen)renderRuns();else if(costDashboardOpen){/* cost dashboard is static */}else if(proposalsOpen){fetchProposedActions().then(renderProposedActions)}else if(sel)refreshDetail(sel)},1000);
 
 // Shared board rendering — used by both HTTP refresh() and the WebSocket
 // ticket_list handler so the column-building logic lives in one place.
