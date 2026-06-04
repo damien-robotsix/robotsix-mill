@@ -225,8 +225,8 @@ modules:
       - tests/stages/test_retrospect_stage.py
       - tests/stages/test_short_circuit_verify.py
       - tests/stages/test_answer.py
-      - tests/test_spec_review.py
-      - tests/test_multi_repo.py
+      - tests/stages/test_spec_review.py
+      - tests/stages/test_multi_repo.py
       - src/robotsix_mill/stages/_implemented_repos.py
       - tests/stages/test_implemented_repos.py
     dependencies: [config, core, forge, vcs, agents, runners, langfuse, runtime]
