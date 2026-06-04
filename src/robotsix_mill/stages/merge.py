@@ -1058,8 +1058,7 @@ class MergeStage(Stage):
             # LLM agent in the ticket's Langfuse session.
             with tracing.start_ticket_root_span(ticket.id, "review_revision"):
                 review_revision_memory_path = s.memory_file_for(
-                    "review_revision",
-                    ctx.repo_config.board_id if ctx.repo_config else "",
+                    "review_revision", ctx.memory_board_id(ticket)
                 )
                 memory_text = load_memory(review_revision_memory_path)
                 result = run_review_revision_agent(
@@ -1244,7 +1243,10 @@ class MergeStage(Stage):
                     branch=target,
                 )
                 rebase_memory_path = s.memory_file_for(
-                    "rebase", repo_config.board_id if repo_config else ""
+                    "rebase",
+                    (repo_config.board_id if repo_config else "")
+                    or s.board_id
+                    or ticket.board_id,
                 )
                 memory_text = load_memory(rebase_memory_path)
                 result = run_rebase_agent(

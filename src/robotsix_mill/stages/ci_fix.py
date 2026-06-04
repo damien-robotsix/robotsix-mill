@@ -182,7 +182,7 @@ class CIFixStage(Stage):
             # to the ticket instead of an orphan root trace.
             with tracing.start_ticket_root_span(ticket.id, "ci_fix"):
                 ci_fix_memory_path = s.memory_file_for(
-                    "ci_fix", ctx.repo_config.board_id if ctx.repo_config else ""
+                    "ci_fix", ctx.memory_board_id(ticket)
                 )
                 memory_text = load_memory(ci_fix_memory_path)
                 result = run_ci_fix_agent(

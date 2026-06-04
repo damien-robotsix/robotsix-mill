@@ -2104,3 +2104,29 @@ def test_single_repo_retrospect_unchanged_when_no_pr_urls_json(
     assert pr_status_calls == []  # no forge calls for verification
     artifact = ctx.service.workspace(t).artifacts_dir / "retrospect.md"
     assert artifact.exists()
+
+
+# ---------------------------------------------------------------------------
+# StageContext.memory_board_id — meta tickets have no repo_config
+# ---------------------------------------------------------------------------
+
+
+def test_memory_board_id_meta_ticket_uses_service_board(settings):
+    """A meta-board ticket (repo_config=None) resolves to the bound service
+    board instead of crashing memory_file_for with an empty board_id —
+    regression for "memory_file_for: board_id is required" on 4450/e1cf."""
+    db.init_db(settings, board_id="meta")
+    svc = TicketService(settings, board_id="meta")
+    t = svc.create("meta thing")
+    ctx = StageContext(settings=settings, service=svc, repo_config=None)
+    assert ctx.memory_board_id(t) == "meta"
+    # And it actually resolves a memory path without raising.
+    assert settings.memory_file_for("retrospect", ctx.memory_board_id(t))
+
+
+def test_memory_board_id_prefers_repo_config(settings, repo_config):
+    """When a repo_config is present its board_id wins (unchanged behavior)."""
+    svc = TicketService(settings, board_id="test-board")
+    t = svc.create("repo thing")
+    ctx = StageContext(settings=settings, service=svc, repo_config=repo_config)
+    assert ctx.memory_board_id(t) == repo_config.board_id
