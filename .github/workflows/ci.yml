@@ -46,9 +46,6 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: system
 
-      - name: Run jscpd (report-only)
-        run: npx jscpd@4 --config .jscpd.json . || true
-
       - name: Ruff (lint + format check)
         env:
           UV_PROJECT_ENVIRONMENT: system
