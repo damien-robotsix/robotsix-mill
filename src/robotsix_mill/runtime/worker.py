@@ -411,44 +411,16 @@ def _run_epic_reeval(epic_id: str, settings) -> None:
     4. Transitions the epic (close), updates its description, or does
        nothing (keep_open) based on the agent's decision.
     """
-    from ..core.service import TicketService
     from ..agents.epic_status import run_epic_status_agent
     from ..runtime import tracing
 
-    # Discover the epic's board via fanout, then bind the service to
-    # it so subsequent transitions / writes go to the right per-repo DB.
-    discovery = TicketService(settings)
-    epic = discovery.get(epic_id)
-    if epic is None:
-        log.warning("epic %s vanished before re-evaluation", epic_id)
+    bound = _validate_epic_state(settings, epic_id)
+    if bound is None:
         return
-    svc = TicketService(settings, board_id=epic.board_id)
+    svc, epic = bound
     try:
-        epic = svc.get(epic_id)
-        if epic is None:
-            log.warning("epic %s vanished before re-evaluation", epic_id)
-            return
-        if epic.state is State.EPIC_CLOSED:
-            log.debug("epic %s: already EPIC_CLOSED — skipping re-evaluation", epic_id)
-            return
-
         epic_desc = svc.workspace(epic).read_description()
-        children = svc.list_children(epic_id)
-
-        child_summaries: list[dict] = []
-        for child in children:
-            child_desc = svc.workspace(child).read_description()
-            if len(child_desc) > 500:
-                child_desc = child_desc[:500] + "\n...(truncated)"
-            child_summaries.append(
-                {
-                    "id": child.id,
-                    "title": child.title,
-                    "state": child.state.value,
-                    "description": child_desc,
-                    "depends_on": TicketService._parse_depends_on(child),
-                }
-            )
+        child_summaries = _build_child_summaries(svc, epic_id)
 
         with tracing.start_ticket_root_span(epic_id, "epic-status"):
             result = run_epic_status_agent(
@@ -458,53 +430,120 @@ def _run_epic_reeval(epic_id: str, settings) -> None:
                 children=child_summaries,
             )
 
-        # Safety net for the close-vs-new-children coupling enforced in
-        # the prompt: if the agent says `close` but also proposes new
-        # follow-up work, treat it as `keep_open` so the new children
-        # get created and run before the epic is sealed. The next
-        # re-eval (after those children land) gets another chance.
-        has_new_children = bool(result.new_children)
-        if result.decision == "close" and has_new_children:
-            log.warning(
-                "epic %s: agent returned close + %d new_children — "
-                "downgrading to keep_open until follow-up work lands",
-                epic_id,
-                len(result.new_children),
-            )
-            result.decision = "keep_open"
-
-        if result.decision == "close":
-            svc.transition(
-                epic_id, State.EPIC_CLOSED, note="[auto-closed] " + (result.note or "")
-            )
-            log.info(
-                "epic %s: agent decided close — transitioned to EPIC_CLOSED", epic_id
-            )
-        elif result.decision == "keep_open":
-            log.debug("epic %s: agent decided keep_open — no change", epic_id)
-        elif result.decision == "update_description":
-            new_hash = svc.workspace(epic).write_description(result.note)
-            svc.set_content_hash(epic_id, new_hash)
-            log.info("epic %s: agent updated description", epic_id)
-        elif result.decision == "update_deps":
-            if result.dep_updates is not None:
-                log.info(
-                    "epic %s: agent requested dependency updates for %d children",
-                    epic_id,
-                    len(result.dep_updates),
-                )
-                for child_id, new_deps in result.dep_updates.items():
-                    if new_deps is None:
-                        new_deps = []
-                    svc.set_depends_on(child_id, new_deps)
-            if result.note:
-                new_hash = svc.workspace(epic).write_description(result.note)
-                svc.set_content_hash(epic_id, new_hash)
+        _handle_epic_decision(svc, epic_id, epic, result)
         # Apply child-ticket changes (new_children, child_rescopes, child_closures).
         _reconcile_child_changes(svc, epic_id, result)
-
     except Exception:
         log.exception("epic %s: re-evaluation failed", epic_id)
+
+
+def _validate_epic_state(settings, epic_id: str):
+    """Discover and bind the epic's board-scoped service for re-evaluation.
+
+    Returns the bound ``(svc, epic)`` tuple, or ``None`` (after logging
+    the same warning/debug messages) when the epic has vanished or is
+    already ``EPIC_CLOSED``.
+    """
+    from ..core.service import TicketService
+
+    # Discover the epic's board via fanout, then bind the service to
+    # it so subsequent transitions / writes go to the right per-repo DB.
+    discovery = TicketService(settings)
+    epic = discovery.get(epic_id)
+    if epic is None:
+        log.warning("epic %s vanished before re-evaluation", epic_id)
+        return None
+    svc = TicketService(settings, board_id=epic.board_id)
+    epic = svc.get(epic_id)
+    if epic is None:
+        log.warning("epic %s vanished before re-evaluation", epic_id)
+        return None
+    if epic.state is State.EPIC_CLOSED:
+        log.debug("epic %s: already EPIC_CLOSED — skipping re-evaluation", epic_id)
+        return None
+    return svc, epic
+
+
+def _build_child_summaries(svc, epic_id: str) -> list[dict]:
+    """Build the per-child summary dicts passed to the epic-status agent.
+
+    Each child's description is read and truncated to 500 chars (with a
+    ``"\\n...(truncated)"`` suffix); the summary carries ``id``,
+    ``title``, ``state``, ``description`` and ``depends_on``.
+    """
+    from ..core.service import TicketService
+
+    child_summaries: list[dict] = []
+    for child in svc.list_children(epic_id):
+        child_desc = svc.workspace(child).read_description()
+        if len(child_desc) > 500:
+            child_desc = child_desc[:500] + "\n...(truncated)"
+        child_summaries.append(
+            {
+                "id": child.id,
+                "title": child.title,
+                "state": child.state.value,
+                "description": child_desc,
+                "depends_on": TicketService._parse_depends_on(child),
+            }
+        )
+    return child_summaries
+
+
+def _apply_dep_updates(svc, epic_id: str, dep_updates) -> None:
+    """Apply the agent's per-child dependency replacements.
+
+    ``None`` entries are normalized to an empty list before writing.
+    """
+    log.info(
+        "epic %s: agent requested dependency updates for %d children",
+        epic_id,
+        len(dep_updates),
+    )
+    for child_id, new_deps in dep_updates.items():
+        if new_deps is None:
+            new_deps = []
+        svc.set_depends_on(child_id, new_deps)
+
+
+def _handle_epic_decision(svc, epic_id: str, epic, result) -> None:
+    """Apply the agent's epic-level decision to the bound epic.
+
+    Handles the close-vs-new-children downgrade safety net and the
+    close / keep_open / update_description / update_deps dispatch.
+    """
+    # Safety net for the close-vs-new-children coupling enforced in
+    # the prompt: if the agent says `close` but also proposes new
+    # follow-up work, treat it as `keep_open` so the new children
+    # get created and run before the epic is sealed. The next
+    # re-eval (after those children land) gets another chance.
+    has_new_children = bool(result.new_children)
+    if result.decision == "close" and has_new_children:
+        log.warning(
+            "epic %s: agent returned close + %d new_children — "
+            "downgrading to keep_open until follow-up work lands",
+            epic_id,
+            len(result.new_children),
+        )
+        result.decision = "keep_open"
+
+    if result.decision == "close":
+        svc.transition(
+            epic_id, State.EPIC_CLOSED, note="[auto-closed] " + (result.note or "")
+        )
+        log.info("epic %s: agent decided close — transitioned to EPIC_CLOSED", epic_id)
+    elif result.decision == "keep_open":
+        log.debug("epic %s: agent decided keep_open — no change", epic_id)
+    elif result.decision == "update_description":
+        new_hash = svc.workspace(epic).write_description(result.note)
+        svc.set_content_hash(epic_id, new_hash)
+        log.info("epic %s: agent updated description", epic_id)
+    elif result.decision == "update_deps":
+        if result.dep_updates is not None:
+            _apply_dep_updates(svc, epic_id, result.dep_updates)
+        if result.note:
+            new_hash = svc.workspace(epic).write_description(result.note)
+            svc.set_content_hash(epic_id, new_hash)
 
 
 def _fetch_draft_child(svc, child_id: str, operation: str, epic_id: str):

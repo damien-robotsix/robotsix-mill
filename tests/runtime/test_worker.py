@@ -1103,3 +1103,168 @@ def test_periodic_pass_uses_per_repo_registry(ctx, tmp_path):
         "audit", 86400, repo_id="robotsix-llmio", registry=w._registry_for(rc_llmio)
     )
     assert delay > 86000
+
+
+# --- epic re-evaluation helpers (extracted from _run_epic_reeval) ---
+
+
+class _FakeWorkspace:
+    """Stand-in for ``svc.workspace(obj)`` recording write calls."""
+
+    def __init__(self, desc, calls):
+        self._desc = desc
+        self._calls = calls
+
+    def read_description(self):
+        return self._desc
+
+    def write_description(self, note):
+        self._calls.append(("write_description", note))
+        return f"hash:{note}"
+
+
+class _FakeEpicService:
+    """Lightweight stand-in for ``TicketService`` used by the epic-reeval
+    helpers; records every mutating call in ``calls``."""
+
+    def __init__(self, children=None, descriptions=None):
+        self.children = children or []
+        # obj.id -> description string returned by workspace().read_description
+        self.descriptions = descriptions or {}
+        self.calls = []
+
+    def list_children(self, epic_id):
+        self.calls.append(("list_children", epic_id))
+        return self.children
+
+    def workspace(self, obj):
+        return _FakeWorkspace(self.descriptions.get(obj.id, ""), self.calls)
+
+    def transition(self, ticket_id, state, note=None):
+        self.calls.append(("transition", ticket_id, state, note))
+
+    def set_content_hash(self, ticket_id, content_hash):
+        self.calls.append(("set_content_hash", ticket_id, content_hash))
+
+    def set_depends_on(self, child_id, deps):
+        self.calls.append(("set_depends_on", child_id, deps))
+
+
+def test_build_child_summaries_truncates_and_shapes():
+    from types import SimpleNamespace
+    from robotsix_mill.runtime.worker import _build_child_summaries
+
+    children = [
+        SimpleNamespace(
+            id="C1",
+            title="Child one",
+            state=SimpleNamespace(value="ready"),
+            depends_on='["C0"]',
+        ),
+        SimpleNamespace(
+            id="C2",
+            title="Child two",
+            state=SimpleNamespace(value="draft"),
+            depends_on=None,
+        ),
+    ]
+    svc = _FakeEpicService(
+        children=children,
+        descriptions={"C1": "x" * 600, "C2": "short"},
+    )
+
+    summaries = _build_child_summaries(svc, "E1")
+
+    assert ("list_children", "E1") in svc.calls
+    assert [s["id"] for s in summaries] == ["C1", "C2"]
+    assert summaries[0]["title"] == "Child one"
+    assert summaries[0]["state"] == "ready"
+    assert summaries[0]["depends_on"] == ["C0"]
+    assert summaries[1]["depends_on"] == []
+    # Long description truncated to 500 chars + suffix; short one untouched.
+    assert summaries[0]["description"] == "x" * 500 + "\n...(truncated)"
+    assert summaries[1]["description"] == "short"
+
+
+def test_handle_epic_decision_close():
+    from types import SimpleNamespace
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+    from robotsix_mill.runtime.worker import _handle_epic_decision
+
+    svc = _FakeEpicService(descriptions={"E1": ""})
+    result = EpicStatusResult(decision="close", note="done")
+
+    _handle_epic_decision(svc, "E1", SimpleNamespace(id="E1"), result)
+
+    assert (
+        "transition",
+        "E1",
+        State.EPIC_CLOSED,
+        "[auto-closed] done",
+    ) in svc.calls
+
+
+def test_handle_epic_decision_keep_open_is_noop():
+    from types import SimpleNamespace
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+    from robotsix_mill.runtime.worker import _handle_epic_decision
+
+    svc = _FakeEpicService()
+    result = EpicStatusResult(decision="keep_open")
+
+    _handle_epic_decision(svc, "E1", SimpleNamespace(id="E1"), result)
+
+    assert svc.calls == []
+
+
+def test_handle_epic_decision_update_description():
+    from types import SimpleNamespace
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+    from robotsix_mill.runtime.worker import _handle_epic_decision
+
+    svc = _FakeEpicService(descriptions={"E1": "old"})
+    result = EpicStatusResult(decision="update_description", note="new body")
+
+    _handle_epic_decision(svc, "E1", SimpleNamespace(id="E1"), result)
+
+    assert ("write_description", "new body") in svc.calls
+    assert ("set_content_hash", "E1", "hash:new body") in svc.calls
+
+
+def test_handle_epic_decision_update_deps_with_dep_updates():
+    from types import SimpleNamespace
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+    from robotsix_mill.runtime.worker import _handle_epic_decision
+
+    svc = _FakeEpicService(descriptions={"E1": "old"})
+    result = EpicStatusResult(
+        decision="update_deps",
+        dep_updates={"C1": ["C0"], "C2": None},
+    )
+
+    _handle_epic_decision(svc, "E1", SimpleNamespace(id="E1"), result)
+
+    assert ("set_depends_on", "C1", ["C0"]) in svc.calls
+    # None entries normalize to an empty list.
+    assert ("set_depends_on", "C2", []) in svc.calls
+    # Empty note → no epic description rewrite.
+    assert not any(c[0] == "write_description" for c in svc.calls)
+
+
+def test_handle_epic_decision_close_with_new_children_downgrades():
+    from types import SimpleNamespace
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+    from robotsix_mill.runtime.worker import _handle_epic_decision
+
+    svc = _FakeEpicService()
+    result = EpicStatusResult(
+        decision="close",
+        note="done",
+        new_children=[{"title": "follow-up", "body": "more work"}],
+    )
+
+    _handle_epic_decision(svc, "E1", SimpleNamespace(id="E1"), result)
+
+    # close + new_children downgrades to keep_open → no transition occurs.
+    assert result.decision == "keep_open"
+    assert not any(c[0] == "transition" for c in svc.calls)
