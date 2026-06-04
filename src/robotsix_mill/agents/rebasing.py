@@ -81,8 +81,20 @@ def run_rebase_agent(
         + section("memory", memory or "(empty — start a new ledger)")
     )
 
+    # Invoke via run_agent (not a bare agent.run_sync) so the Claude→DeepSeek
+    # FallbackAgentHandle actually falls back: the fallback is driven by
+    # run_agent, never by FallbackAgentHandle.run_sync. A bare run_sync here
+    # meant a Claude outage (e.g. exhausted credit) hard-failed the rebase and
+    # blocked the ticket instead of falling back like every other stage.
+    from .retry import run_agent
+
     try:
-        result = agent.run_sync(user_prompt)
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(user_prompt),
+            settings=settings,
+            what="rebase",
+        )
     finally:
         _safe_close(agent)
 
