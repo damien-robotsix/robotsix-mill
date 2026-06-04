@@ -364,3 +364,53 @@ def test_no_pattern_saved_when_signature_empty(tmp_path, monkeypatch):
         ticket_id="my-ticket",
     )
     assert len(calls) == 0
+
+
+def test_ci_fix_falls_back_to_deepseek_when_primary_fails(tmp_path, monkeypatch):
+    """Regression: ci_fix must invoke via run_agent so a Claude outage
+    (primary raises) falls back to the DeepSeek handle instead of hard-failing
+    and blocking the ticket. Before the fix ci_fix called agent.run_sync()
+    bare — FallbackAgentHandle.run_sync only calls the primary, so the
+    fallback never fired and a credit-exhausted Claude blocked every ci_fix."""
+    from robotsix_mill.agents import base as agents_base
+    from robotsix_mill.agents.fallback import FallbackAgentHandle
+
+    class _Primary:
+        def run_sync(self, *a, **k):
+            raise RuntimeError("Claude Code returned an error result: success")
+
+        def close(self):
+            pass
+
+    class _Fallback:
+        def run_sync(self, *a, **k):
+            return type(
+                "R",
+                (),
+                {"output": CiFixResult(status="DONE", summary="fixed via deepseek")},
+            )()
+
+        def close(self):
+            pass
+
+    built = {"n": 0}
+
+    def _build_fallback():
+        built["n"] += 1
+        return _Fallback()
+
+    handle = FallbackAgentHandle(_Primary(), _build_fallback)
+    monkeypatch.setattr(
+        agents_base, "build_agent_from_definition", lambda *a, **k: handle
+    )
+
+    result = run_ci_fix_agent(
+        settings=_s(tmp_path),
+        repo_dir=tmp_path,
+        branch="mill/x",
+        failing_summary="ruff format would reformat models.py",
+        ticket_id="t-fallback",
+    )
+    assert result.status == "DONE"
+    assert result.summary == "fixed via deepseek"
+    assert built["n"] == 1  # the DeepSeek fallback was actually built + used

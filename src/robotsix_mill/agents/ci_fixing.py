@@ -115,8 +115,21 @@ def run_ci_fix_agent(
         + "Follow the system prompt exactly."
     )
 
+    # Invoke via run_agent (not a bare agent.run_sync) so the Claude→DeepSeek
+    # FallbackAgentHandle actually falls back: the fallback is driven by
+    # run_agent, never by FallbackAgentHandle.run_sync. A bare run_sync here
+    # meant a Claude outage (e.g. exhausted credit) hard-failed ci_fix and
+    # blocked the ticket after its attempts, instead of falling back like every
+    # other stage (refine/implement/review/document all use run_agent).
+    from .retry import run_agent
+
     try:
-        result = agent.run_sync(user_prompt)
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(user_prompt),
+            settings=settings,
+            what="ci_fix",
+        )
     finally:
         _safe_close(agent)
 
