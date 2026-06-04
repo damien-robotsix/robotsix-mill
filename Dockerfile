@@ -159,15 +159,9 @@ ARG INSTALL_EXTRAS=dev,tracing
 # but NOT its /usr/local/bin/uv launcher, so a fresh `pip install uv` sees uv
 # already satisfied and never recreates the binary → "uv: not found". pip is
 # present and the editable install over inherited deps is cheap. (See PR #491.)
-#
-# The `dev` extra depends on `robotsix-modules`, which is vendored in-repo and
-# resolved via `[tool.uv.sources]` — but pip does NOT read uv sources, so it
-# would try PyPI and fail ("Could not find a version that satisfies
-# robotsix-modules"), breaking the image build. Pre-install the vendored path
-# first so the unversioned requirement is already satisfied when the editable
-# install resolves the dev extra.
-RUN pip install --no-cache-dir --root-user-action=ignore ./robotsix-modules \
-    && pip install --no-cache-dir --root-user-action=ignore -e ".[dev,tracing]" \
+# The dev extra's `robotsix-modules` is a git dependency (like robotsix-llmio),
+# which pip resolves natively — git is available from the base stage.
+RUN pip install --no-cache-dir --root-user-action=ignore -e ".[dev,tracing]" \
     && chown -R mill:mill /app
 
 # Entrypoint runs as root, joins the host's docker.sock group, then

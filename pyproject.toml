@@ -38,13 +38,13 @@ tracing = [
 # — so `ruff format --check` flip-flops and turns CI red on formatting the
 # agent (and humans) already consider clean. Pin so CI, the sandbox, and local
 # format identically. Bump deliberately, reformatting the repo in the same commit.
-# Module-taxonomy JSON Schema and validation CLI extracted to a standalone
-# library. Consumed only via pre-commit / CI (the `robotsix-modules validate`
-# step + the validate-module-taxonomy hook); no Python import in mill. It is a
-# CI/dev-only tool, so it lives here rather than in runtime dependencies — that
-# keeps it out of the pip-based audit install and the runtime image. Resolved
-# from the vendored ./robotsix-modules copy via [tool.uv.sources] below.
-dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "bandit[toml]>=1.8", "mypy>=1.15", "ruff==0.15.15", "deptry>=0.25", "robotsix-modules"]
+# Module-taxonomy JSON Schema and validation CLI — a standalone library
+# (github.com/damien-robotsix/robotsix-modules) consumed via a git dependency,
+# exactly like robotsix-llmio. Used only via pre-commit / CI (the
+# `robotsix-modules validate` step + the validate-module-taxonomy hook); no
+# Python import in mill. CI/dev-only, so it stays in the dev extra (out of the
+# pip-based audit install and the runtime image).
+dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "bandit[toml]>=1.8", "mypy>=1.15", "ruff==0.15.15", "deptry>=0.25", "robotsix-modules @ git+https://github.com/damien-robotsix/robotsix-modules@main"]
 docs = ["mkdocs-material>=9"]
 
 [project.scripts]
@@ -53,16 +53,10 @@ robotsix-mill = "robotsix_mill.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/robotsix_mill"]
 
-# Allow the direct git reference for robotsix-llmio in project.dependencies.
+# Allow the direct git references for robotsix-llmio / robotsix-modules in
+# the dependency lists.
 [tool.hatch.metadata]
 allow-direct-references = true
-
-# robotsix-modules is published as a standalone library, but a copy is vendored
-# in-repo (./robotsix-modules, version 0.1.0 — the same as the v0.1.0 tag). uv
-# resolves the dev-group dependency from this local path so the taxonomy-
-# validation CI step works without cloning the (credentialed) source repo.
-[tool.uv.sources]
-robotsix-modules = { path = "robotsix-modules" }
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -175,9 +169,7 @@ max-complexity = 10
 
 [tool.deptry]
 known_first_party = ["robotsix_mill"]
-# Nested standalone packages each have their own pyproject.toml and validate
-# their own dependencies; exclude them so the root scan doesn't flag imports.
-extend_exclude = ["robotsix-modules", "robotsix-yaml-config"]
+extend_exclude = []
 
 [tool.deptry.per_rule_ignores]
 # CLI-only dev/lint/docs tools that are never imported at runtime.

@@ -1,5 +1,0 @@
-modules:
-  - id: example
-    description: A minimal valid module used as a test fixture.
-    paths:
-      - src/example/**
