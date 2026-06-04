@@ -48,8 +48,6 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from pydantic import BaseModel
-
 from ..config import Settings, get_secrets
 
 log = logging.getLogger(__name__)
@@ -317,10 +315,6 @@ def _make_tools(settings: Settings) -> list:  # noqa: C901 — factory intention
 # ---------------------------------------------------------------------------
 # Runner — the single mockable seam
 # ---------------------------------------------------------------------------
-
-
-class _WebKnowledgeResult(BaseModel):
-    answer: str
 
 
 async def run_web_knowledge(
