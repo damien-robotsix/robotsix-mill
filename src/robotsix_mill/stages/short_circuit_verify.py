@@ -84,6 +84,34 @@ def run_invoked_edit_tools(new_messages: bytes | str | None) -> list[str]:
     return found
 
 
+def _claimed_path_from_part(part: object) -> str | None:
+    """Return the edit-target basename of a tool-call *part*, else ``None``.
+
+    Encapsulates the per-part filtering and path extraction so
+    :func:`run_claimed_edited_paths` stays a flat scan. A part qualifies only
+    when it is an ``_EDIT_TOOL_NAMES`` tool-call carrying a non-empty string
+    path under ``args["path"]`` (mill fs tools) or ``args["file_path"]``
+    (Claude SDK editors). Anything else fails open to ``None``.
+    """
+    if not isinstance(part, dict):
+        return None
+    if part.get("part_kind") != "tool-call":
+        return None
+    if part.get("tool_name") not in _EDIT_TOOL_NAMES:
+        return None
+    args = part.get("args")
+    if not isinstance(args, dict):
+        return None
+    # mill fs tools key the target as ``path``; the Claude SDK editors key it
+    # as ``file_path``. Prefer ``path`` when present.
+    raw_path = args.get("path")
+    if not isinstance(raw_path, str) or not raw_path:
+        raw_path = args.get("file_path")
+    if not isinstance(raw_path, str) or not raw_path:
+        return None
+    return os.path.basename(raw_path) or None
+
+
 def run_claimed_edited_paths(new_messages: bytes | str | None) -> list[str]:
     """Return the de-duplicated basenames of files an edit tool-call targeted.
 
@@ -123,23 +151,7 @@ def run_claimed_edited_paths(new_messages: bytes | str | None) -> list[str]:
         if not isinstance(msg, dict):
             continue
         for part in msg.get("parts", []) or []:
-            if not isinstance(part, dict):
-                continue
-            if part.get("part_kind") != "tool-call":
-                continue
-            if part.get("tool_name") not in _EDIT_TOOL_NAMES:
-                continue
-            args = part.get("args")
-            if not isinstance(args, dict):
-                continue
-            # mill fs tools key the target as ``path``; the Claude SDK
-            # editors key it as ``file_path``. Prefer ``path`` when present.
-            raw_path = args.get("path")
-            if not isinstance(raw_path, str) or not raw_path:
-                raw_path = args.get("file_path")
-            if not isinstance(raw_path, str) or not raw_path:
-                continue
-            base = os.path.basename(raw_path)
+            base = _claimed_path_from_part(part)
             if base and base not in seen:
                 seen.add(base)
                 found.append(base)
