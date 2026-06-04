@@ -329,10 +329,10 @@ def run_coordinator(
                         "review-feedback",
                         "The code review flagged issues. Address these review "
                         "comments before proceeding.\n"
-                        "For each comment you fully address, call "
-                        "`close_thread(comment_id)` to mark it resolved. If you "
-                        "need to explain your approach or ask a clarifying "
-                        "question, call `reply_to_thread(thread_id, body)` first.\n"
+                        "For each comment, call `reply_to_thread(thread_id, body)` "
+                        "to explain how you addressed it (or to ask a clarifying "
+                        "question). Closing review threads is the reviewer's "
+                        "responsibility, not yours.\n"
                         f"{feedback}",
                     )
                     + "\n\n"

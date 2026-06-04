@@ -369,6 +369,10 @@ class TestRunCoordinator:
         review_pos = prompt.index("````review-feedback")
         spec_pos = prompt.index("````ticket-spec")
         assert review_pos < spec_pos
+        # The injected directive must match implement.yaml's static
+        # guidance: implement only replies; it has no close_thread tool.
+        assert "reply_to_thread" in prompt
+        assert "close_thread" not in prompt
 
     # -- epic_context ----------------------------------------------------
 
