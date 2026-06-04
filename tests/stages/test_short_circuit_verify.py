@@ -116,3 +116,162 @@ def test_no_contradiction_when_no_tool_calls():
     assert (
         scv.detect_edit_claim_contradiction(has_changes=False, new_messages=None) == []
     )
+
+
+# --- run_claimed_edited_paths / detect_missing_claimed_files ----------------
+
+
+def _path_msgs(*calls: tuple[str, str, str]) -> bytes:
+    """Build a ``new_messages_json()``-shaped payload of edit/read tool-calls.
+
+    Each *call* is ``(tool_name, path_key, path_value)`` where *path_key* is
+    ``"path"`` (mill fs tools) or ``"file_path"`` (Claude SDK editors). The
+    call becomes a ``tool-call`` part interleaved with a text + tool-return
+    part so the scanner has to skip non-tool-call parts.
+    """
+    parts: list[dict] = [{"part_kind": "text", "content": "thinking..."}]
+    for tool_name, path_key, path_value in calls:
+        parts.append(
+            {
+                "part_kind": "tool-call",
+                "tool_name": tool_name,
+                "args": {path_key: path_value},
+                "tool_call_id": f"call_{tool_name}",
+            }
+        )
+        parts.append(
+            {
+                "part_kind": "tool-return",
+                "tool_name": tool_name,
+                "content": "ok",
+            }
+        )
+    return json.dumps([{"parts": parts}]).encode()
+
+
+def test_claimed_paths_extracts_mill_and_sdk_basenames():
+    found = scv.run_claimed_edited_paths(
+        _path_msgs(
+            ("write_file", "path", "src/robotsix_mill/runtime/static/board.js"),
+            ("Edit", "file_path", "/abs/repo/src/app.py"),
+        )
+    )
+    assert sorted(found) == ["app.py", "board.js"]
+
+
+def test_claimed_paths_dedupes_basenames():
+    found = scv.run_claimed_edited_paths(
+        _path_msgs(
+            ("write_file", "path", "a/board.js"),
+            ("edit_file", "path", "b/board.js"),
+        )
+    )
+    assert found == ["board.js"]
+
+
+def test_claimed_paths_ignores_non_edit_tools():
+    found = scv.run_claimed_edited_paths(
+        _path_msgs(
+            ("run_command", "path", "scripts/run.sh"),
+            ("Bash", "path", "scripts/x.sh"),
+            ("read_file", "path", "src/app.py"),
+        )
+    )
+    assert found == []
+
+
+def test_claimed_paths_fails_open():
+    assert scv.run_claimed_edited_paths(None) == []
+    assert scv.run_claimed_edited_paths(b"") == []
+    assert scv.run_claimed_edited_paths("") == []
+    assert scv.run_claimed_edited_paths(b"{not json") == []
+    assert scv.run_claimed_edited_paths(b'"a string, not a list"') == []
+    # missing args / non-string path keys → skip the entry.
+    payload = json.dumps(
+        [
+            {
+                "parts": [
+                    {"part_kind": "tool-call", "tool_name": "write_file"},
+                    {
+                        "part_kind": "tool-call",
+                        "tool_name": "edit_file",
+                        "args": {"path": 3},
+                    },
+                ]
+            }
+        ]
+    ).encode()
+    assert scv.run_claimed_edited_paths(payload) == []
+
+
+def test_missing_when_claimed_and_named_but_absent():
+    # board.js was edited (tool-call) and named in the summary, but is NOT in
+    # the net diff → contradiction.
+    missing = scv.detect_missing_claimed_files(
+        changed_files=["src/app.py"],
+        new_messages=_path_msgs(("write_file", "path", "static/board.js")),
+        summary="Applied the openCandidates() guard fix in board.js.",
+    )
+    assert missing == ["board.js"]
+
+
+def test_no_missing_when_claimed_file_landed():
+    missing = scv.detect_missing_claimed_files(
+        changed_files=["src/robotsix_mill/runtime/static/board.js"],
+        new_messages=_path_msgs(("write_file", "path", "static/board.js")),
+        summary="Applied the openCandidates() guard fix in board.js.",
+    )
+    assert missing == []
+
+
+def test_no_missing_when_edited_but_not_named_in_summary():
+    # Edit-then-revert false-positive guard: the file was targeted by an edit
+    # tool-call but the summary does not name it as a landed fix, so it must
+    # not be flagged.
+    missing = scv.detect_missing_claimed_files(
+        changed_files=["src/app.py"],
+        new_messages=_path_msgs(("write_file", "path", "static/board.js")),
+        summary="Reworked app.py only.",
+    )
+    assert missing == []
+
+
+def test_no_missing_when_summary_falsy():
+    msgs = _path_msgs(("write_file", "path", "static/board.js"))
+    assert (
+        scv.detect_missing_claimed_files(
+            changed_files=["src/app.py"], new_messages=msgs, summary=None
+        )
+        == []
+    )
+    assert (
+        scv.detect_missing_claimed_files(
+            changed_files=["src/app.py"], new_messages=msgs, summary=""
+        )
+        == []
+    )
+
+
+def test_no_missing_when_only_read_or_command_tools():
+    missing = scv.detect_missing_claimed_files(
+        changed_files=["src/app.py"],
+        new_messages=_path_msgs(
+            ("read_file", "path", "static/board.js"),
+            ("run_command", "path", "scripts/run.sh"),
+        ),
+        summary="Inspected board.js and run.sh but made no edits.",
+    )
+    assert missing == []
+
+
+def test_missing_output_deduped_and_sorted():
+    missing = scv.detect_missing_claimed_files(
+        changed_files=["src/app.py"],
+        new_messages=_path_msgs(
+            ("write_file", "path", "x/zeta.py"),
+            ("edit_file", "path", "y/alpha.py"),
+            ("Edit", "file_path", "/abs/z/alpha.py"),
+        ),
+        summary="Edited zeta.py and alpha.py as required.",
+    )
+    assert missing == ["alpha.py", "zeta.py"]
