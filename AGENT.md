@@ -43,6 +43,12 @@ enterprise process. These are hard rules, learned the hard way.
   lower a Trivy severity, flip an `exit-code`, relax a lint threshold,
   or broaden an ignore. Fix the real cause, or add a *narrow,
   justified, commented* ignore entry.
+- **Every new CI check must gate or be removed.** A new check either
+  fails the build on findings, or is explicitly documented as an
+  accepted advisory policy (a comment in the config file/workflow
+  **and** a note in `CONTRIBUTING.md`'s "CI overview"). A check that
+  does neither must be removed — consult
+  [docs/ci-policy.md](docs/ci-policy.md) before adding any CI step.
 - Don't reintroduce a regression a test or this file already guards.
 
 ## Agent behavior
