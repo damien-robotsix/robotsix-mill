@@ -262,6 +262,9 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.llm_backend": "llm_backend",
     "core.claude_sdk_agents": "claude_sdk_agents",
     "core.enable_repo_creation": "enable_repo_creation",
+    # Cross-repo meta-agent pass (surveys all repos for extraction/alignment).
+    "core.meta_periodic": "meta_periodic",
+    "core.meta_interval_seconds": "meta_interval_seconds",
     # -- core.limits --
     "core.limits.coordinator_requests": "coordinator_request_limit",
     "core.limits.test_requests": "test_request_limit",
