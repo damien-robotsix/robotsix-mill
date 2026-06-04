@@ -220,8 +220,7 @@ def find_inflight_overlap(
             return None
         signal = _describe_recent_signal(prior, paths, settings, board_id)
         return (
-            f"Possible duplicate of {prior.id} ({prior.title!r}) — "
-            f"matched on {signal}"
+            f"Possible duplicate of {prior.id} ({prior.title!r}) — matched on {signal}"
         )
     except Exception:  # noqa: BLE001 — best-effort dedup
         log.exception("dedup: find_inflight_overlap failed")
