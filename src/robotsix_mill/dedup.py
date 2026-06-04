@@ -155,18 +155,76 @@ def _describe_recent_signal(
     return "title overlap"
 
 
-def annotate_child_body(body: str, note: str) -> str:
+def annotate_child_body(
+    body: str,
+    note: str,
+    *,
+    source_desc: str = "epic-decomposition pre-filing dedup",
+) -> str:
     """Prepend an advisory ``[!warning]`` blockquote naming the suspected
-    overlap to *body* so the child's own refine cycle sees the flag and can
+    overlap to *body* so a later refine cycle sees the flag and can
     close-as-duplicate cheaply. Surfaces the overlap without dropping the
-    child."""
+    work. *source_desc* names the producer of the flag (e.g.
+    ``"draft-intake pre-refine dedup"`` for independent drafts)."""
     block = (
         f"> [!warning] {note}\n"
         ">\n"
-        "> _Advisory flag from epic-decomposition pre-filing dedup; "
+        f"> _Advisory flag from {source_desc}; "
         "verify and close as duplicate during refine if confirmed._\n\n"
     )
     return block + (body or "")
+
+
+def find_inflight_overlap(
+    service: TicketService,
+    ticket_id: str,
+    title: str,
+    body: str,
+    settings: Settings,
+    now: datetime,
+) -> str | None:
+    """Advisory pre-refine dedup for an INDEPENDENT (non-epic) draft.
+
+    Reuses :func:`find_prior_matching_ticket` to spot a recent ticket
+    whose scope overlaps *title* / *body* within
+    ``settings.epic_dedup_lookback_days`` — crucially including
+    CONCURRENT in-flight ones (DRAFT/READY/REFINING/IMPLEMENT, not just
+    DONE), the structural gap the refine dedup guard cannot close
+    (it only short-circuits against a genuinely-DONE candidate). The
+    draft itself (*ticket_id*) is excluded so it does not self-match.
+
+    Path-like tokens are extracted from *body* as ``target_files`` and
+    *title* is the ``fingerprint_text``, exactly as
+    :func:`find_child_overlaps` does for epic children. Returns an
+    advisory note naming the matched ticket on a strong match, or
+    ``None`` when nothing overlaps.
+
+    Best-effort: any failure logs and returns ``None`` so refine still
+    proceeds.
+    """
+    try:
+        board_id = service.board_id
+        paths = _extract_paths(body)
+        prior = find_prior_matching_ticket(
+            service,
+            board_id,
+            paths,
+            title,
+            settings,
+            now,
+            sources=None,
+            lookback_days=settings.epic_dedup_lookback_days,
+            exclude_ids={ticket_id},
+        )
+        if prior is None:
+            return None
+        signal = _describe_recent_signal(prior, paths, settings, board_id)
+        return (
+            f"Possible duplicate of {prior.id} ({prior.title!r}) — matched on {signal}"
+        )
+    except Exception:  # noqa: BLE001 — best-effort dedup
+        log.exception("dedup: find_inflight_overlap failed")
+        return None
 
 
 def find_child_overlaps(

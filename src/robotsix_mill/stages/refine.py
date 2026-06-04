@@ -314,6 +314,13 @@ class RefineStage(Stage):
         if dup is not None:
             return dup
 
+        # Phase 3.5: advisory dedup against CONCURRENT in-flight tickets.
+        # The dedup guard above can only close against a genuinely-DONE
+        # candidate, so two drafts that converge while both in flight both
+        # survive it.  This best-effort pass flags (never closes) such an
+        # overlap so refine/the operator can decide.
+        draft = RefineStage._run_inflight_advisory(ctx, ticket, draft, ws, s)
+
         # Phase 4: refine agent + result handling
         return RefineStage._run_refine_agent(
             ctx, ticket, draft, repo_dir, epic_ctx, title, ws, s, extra_roots
@@ -604,6 +611,61 @@ class RefineStage(Stage):
                 exc_info=True,
             )
             return False
+
+    @staticmethod
+    def _run_inflight_advisory(
+        ctx: StageContext,
+        ticket: Ticket,
+        draft: str,
+        ws,
+        s,
+    ) -> str:
+        """Advisory pre-refine dedup against CONCURRENT in-flight tickets.
+
+        Best-effort: reuses ``dedup.find_inflight_overlap`` to spot a
+        recent matching ticket in ANY state (including
+        DRAFT/READY/REFINING/IMPLEMENT — the structural gap the dedup
+        guard cannot close).  On a strong match, logs a warning and
+        prepends a ``[!warning]`` advisory naming the concurrent ticket
+        to the draft — it never auto-closes, mirroring c853's
+        epic-decomposition pattern; refine/the operator decides.
+
+        Returns the (possibly annotated) draft to carry forward to the
+        refine agent.  Independent drafts only: epic children get their
+        concurrent-overlap flag at epic-decomposition pre-filing time, so
+        children/epics are skipped.  Trivial drafts (< 100 chars) skip the
+        check, matching the dedup guard's threshold.
+        """
+        if ticket.parent_id is not None or ticket.kind == "epic":
+            return draft
+        if len(draft) < 100:
+            return draft
+
+        from ..dedup import annotate_child_body, find_inflight_overlap
+
+        note = find_inflight_overlap(
+            ctx.service,
+            ticket.id,
+            ticket.title,
+            draft,
+            s,
+            datetime.now(timezone.utc),
+        )
+        if not note:
+            return draft
+
+        log.warning(
+            "%s: draft flagged as possible duplicate of a concurrent "
+            "in-flight ticket — %s",
+            ticket.id,
+            note,
+        )
+        annotated = annotate_child_body(
+            draft, note, source_desc="draft-intake pre-refine dedup"
+        )
+        new_hash = ws.write_description(annotated)
+        ctx.service.set_content_hash(ticket.id, new_hash)
+        return annotated
 
     @staticmethod
     def _run_freshness_gate(
