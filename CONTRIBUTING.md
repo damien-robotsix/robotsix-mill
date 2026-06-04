@@ -249,5 +249,3 @@ is cleared in separate dedicated tickets (a future sub-epic), the
 a hard gate.
 
 Dependabot (weekly) keeps pip and Docker dependencies current.
-
-Dependabot (weekly) keeps pip and Docker dependencies current.
