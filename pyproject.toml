@@ -38,7 +38,13 @@ tracing = [
 # — so `ruff format --check` flip-flops and turns CI red on formatting the
 # agent (and humans) already consider clean. Pin so CI, the sandbox, and local
 # format identically. Bump deliberately, reformatting the repo in the same commit.
-dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "bandit[toml]>=1.8", "mypy>=1.15", "ruff==0.15.15", "deptry>=0.25"]
+# Module-taxonomy JSON Schema and validation CLI extracted to a standalone
+# library. Consumed only via pre-commit / CI (the `robotsix-modules validate`
+# step + the validate-module-taxonomy hook); no Python import in mill. It is a
+# CI/dev-only tool, so it lives here rather than in runtime dependencies — that
+# keeps it out of the pip-based audit install and the runtime image. Resolved
+# from the vendored ./robotsix-modules copy via [tool.uv.sources] below.
+dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "bandit[toml]>=1.8", "mypy>=1.15", "ruff==0.15.15", "deptry>=0.25", "robotsix-modules"]
 docs = ["mkdocs-material>=9"]
 
 [project.scripts]
@@ -50,6 +56,13 @@ packages = ["src/robotsix_mill"]
 # Allow the direct git reference for robotsix-llmio in project.dependencies.
 [tool.hatch.metadata]
 allow-direct-references = true
+
+# robotsix-modules is published as a standalone library, but a copy is vendored
+# in-repo (./robotsix-modules, version 0.1.0 — the same as the v0.1.0 tag). uv
+# resolves the dev-group dependency from this local path so the taxonomy-
+# validation CI step works without cloning the (credentialed) source repo.
+[tool.uv.sources]
+robotsix-modules = { path = "robotsix-modules" }
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -177,6 +190,7 @@ DEP002 = [
     "deptry",
     "mkdocs-material",
     "langfuse",
+    "robotsix-modules",
 ]
 # Packages imported directly but pulled in transitively through
 # pydantic-ai-slim / sqlmodel — the imports are intentional.

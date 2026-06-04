@@ -1,11 +1,11 @@
 # Canonical Module Taxonomy for robotsix-mill
 #
 # This file is the single source of truth for "what modules exist and
-# where their files live."  It is validated against
-# docs/modules.schema.yaml in CI / pre-commit on every push.
+# where their files live."
 #
-# Schema: docs/modules.schema.yaml
-# Validation: pre-commit hook `check-jsonschema` + CI step
+# Schema: bundled with the robotsix-modules package (see
+# https://github.com/damien-robotsix/robotsix-modules).
+# Validation: pre-commit hook `validate-module-taxonomy` + CI step
 
 modules:
   # -------------------------------------------------------------------
