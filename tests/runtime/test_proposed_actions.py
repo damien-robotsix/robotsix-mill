@@ -6,7 +6,7 @@ idempotent executor behaviour for CLOSE and COMMENT action types.
 
 from __future__ import annotations
 
-import time
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -54,11 +54,6 @@ def _seed_action(settings, **fields) -> ProposedAction:
         return action
 
 
-def _sleep_ms(ms: int) -> None:
-    """Tiny sleep so created_at timestamps differ."""
-    time.sleep(ms / 1000.0)
-
-
 # -- GET /proposed-actions -----------------------------------------------
 
 
@@ -72,14 +67,18 @@ def test_list_empty(client):
 def test_list_all_sorted_by_created_at_desc(client, service, settings):
     """GET /proposed-actions returns all actions sorted newest-first."""
     t = service.create("Target ticket")
+    # Explicit created_at (not a wall-clock sleep) so the DESC ordering is
+    # deterministic — the old _sleep_ms(10) could let two rows share a
+    # timestamp under load, flaking the assertion and poisoning the gate.
+    base = datetime(2026, 1, 1, tzinfo=timezone.utc)
     a1 = _seed_action(
         settings,
         source="health",
         target_ticket_id=t.id,
         action_type=ActionType.CLOSE,
         rationale="first",
+        created_at=base,
     )
-    _sleep_ms(10)
     a2 = _seed_action(
         settings,
         source="survey",
@@ -87,6 +86,7 @@ def test_list_all_sorted_by_created_at_desc(client, service, settings):
         action_type=ActionType.COMMENT,
         payload='{"body":"hello"}',
         rationale="second",
+        created_at=base + timedelta(seconds=1),
     )
 
     r = client.get("/proposed-actions")
