@@ -161,6 +161,7 @@ reference are covered in [docs/configuration.md](docs/configuration.md).
 - [docs/approval-gate.md](docs/approval-gate.md) — Human approval gate after refine
 - [docs/proposed-actions.md](docs/proposed-actions.md) — Operator review/approve/reject of agent-proposed ticket mutations
 - [docs/dedup-guard.md](docs/dedup-guard.md) — Pre-refine duplicate / already-done check
+- [docs/epic-dedup.md](docs/epic-dedup.md) — Advisory pre-filing dedup for epic-decomposition children
 - [docs/merge-stage.md](docs/merge-stage.md) — Gate-check, auto-rebase, and auto-fix for merge-ready PRs
 - [docs/audit-agent.md](docs/audit-agent.md) — Meta-audit agent for quality/security coverage gaps
 - [docs/blocked-ticket-recovery.md](docs/blocked-ticket-recovery.md) — Recovering from BLOCKED tickets
