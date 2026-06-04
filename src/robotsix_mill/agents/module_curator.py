@@ -20,6 +20,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from ..config import Settings
+from ..pass_runner import ProposedActionItem
 from .prompt_blocks import section
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
@@ -42,6 +43,7 @@ class ModuleCuratorResult(BaseModel):
     draft_titles: list[str] = Field(default_factory=list)
     draft_bodies: list[str] = Field(default_factory=list)
     gap_ids: list[str] = Field(default_factory=list)
+    proposed_actions: list[ProposedActionItem] = Field(default_factory=list)
 
 
 def run_module_curator_agent(

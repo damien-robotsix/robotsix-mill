@@ -23,12 +23,12 @@ from . import db
 from ..config import Settings
 from .models import (
     ActionType,
+    Comment,
     ProposedAction,
     ProposedActionStatus,
     SourceKind,
     Ticket,
     TicketEvent,
-    Comment,
 )
 from .states import State, can_transition
 from .workspace import Workspace
@@ -287,6 +287,75 @@ class TicketService:
                 .order_by(Ticket.created_at.desc())
                 .limit(limit)
             )
+            return list(s.exec(stmt).all())
+
+    # --- proposed actions ---
+
+    def create_proposed_action(
+        self,
+        source: str,
+        target_ticket_id: str,
+        action_type: str,
+        rationale: str,
+        payload: str | None = None,
+    ) -> ProposedAction | None:
+        """Create a ``ProposedAction`` row with status ``PENDING``.
+
+        Validates *action_type* against :class:`ActionType`.  On
+        invalid action_type or FK violation (non-existent target
+        ticket), logs a warning and returns ``None`` — never raises
+        for a single bad proposal, so one failure doesn't crash the
+        whole pass.
+        """
+        try:
+            ActionType(action_type)
+        except ValueError:
+            log.warning(
+                "create_proposed_action: invalid action_type %r — skipping",
+                action_type,
+            )
+            return None
+
+        try:
+            with db.session(self.settings, self.board_id) as s:
+                pa = ProposedAction(
+                    source=source,
+                    target_ticket_id=target_ticket_id,
+                    action_type=ActionType(action_type),
+                    payload=payload,
+                    rationale=rationale,
+                    status=ProposedActionStatus.PENDING,
+                )
+                s.add(pa)
+                s.commit()
+                s.refresh(pa)
+                return pa
+        except Exception:
+            log.warning(
+                "create_proposed_action: failed to persist proposal "
+                "(%s on %s) — target ticket may not exist",
+                action_type,
+                target_ticket_id,
+                exc_info=True,
+            )
+            return None
+
+    def list_proposed_actions(
+        self,
+        source: str,
+        exclude_status: ProposedActionStatus | None = ProposedActionStatus.PENDING,
+    ) -> list[ProposedAction]:
+        """Return ``ProposedAction`` rows for *source*, newest first.
+
+        By default excludes ``PENDING`` rows so callers get only
+        decided proposals.  Pass ``exclude_status=None`` to include
+        all.
+        """
+        with db.session(self.settings, self.board_id) as s:
+            stmt = select(ProposedAction).where(ProposedAction.source == source)
+            if exclude_status is not None:
+                stmt = stmt.where(ProposedAction.status != exclude_status)
+            stmt = stmt.order_by(ProposedAction.created_at.desc())
             return list(s.exec(stmt).all())
 
     # --- writes ---
@@ -1351,79 +1420,6 @@ class TicketService:
             if self._on_transition is not None:
                 self._on_transition(ticket)
             return comment, ticket
-
-    # --- proposed actions ---
-
-    def create_proposed_action(
-        self,
-        *,
-        source: str,
-        target_ticket_id: str,
-        action_type: str,
-        rationale: str,
-        payload: str | None = None,
-    ) -> ProposedAction:
-        """Persist a PENDING :class:`ProposedAction` row.
-
-        Validates *action_type* is a valid :class:`ActionType` value
-        (raises :class:`ValueError` otherwise).  Logs and does NOT
-        raise on DB failures, following the pattern of draft-ticket
-        creation.
-        """
-        try:
-            ActionType(action_type)
-        except ValueError:
-            raise ValueError(
-                f"invalid action_type: {action_type!r} — must be one of "
-                f"{[a.value for a in ActionType]}"
-            ) from None
-
-        try:
-            with db.session(self.settings, self.board_id) as s:
-                proposed = ProposedAction(
-                    source=source,
-                    target_ticket_id=target_ticket_id,
-                    action_type=ActionType(action_type),
-                    rationale=rationale,
-                    payload=payload,
-                    status=ProposedActionStatus.PENDING,
-                )
-                s.add(proposed)
-                s.commit()
-                s.refresh(proposed)
-                return proposed
-        except Exception:
-            log.exception(
-                "failed to persist proposed action: source=%s target=%s action=%s",
-                source,
-                target_ticket_id,
-                action_type,
-            )
-            raise
-
-    def list_proposed_actions(
-        self,
-        *,
-        source: str | None = None,
-        status: ProposedActionStatus | None = None,
-        limit: int = 100,
-    ) -> list[ProposedAction]:
-        """Return proposed actions, optionally filtered, newest first.
-
-        Follows the same ``db.session(…)`` pattern as
-        :meth:`recent_proposals_for`.
-        """
-        with db.session(self.settings, self.board_id) as s:
-            stmt = (
-                select(ProposedAction)
-                .order_by(ProposedAction.created_at.desc())
-                .limit(limit)
-            )
-            if source is not None:
-                stmt = stmt.where(ProposedAction.source == source)
-            if status is not None:
-                stmt = stmt.where(ProposedAction.status == status)
-            return list(s.exec(stmt).all())
 
     def get_proposed_action(self, action_id: int) -> ProposedAction | None:
         """Single-row lookup by primary key; returns ``None`` on miss."""

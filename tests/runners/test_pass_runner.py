@@ -13,6 +13,8 @@ from robotsix_mill.pass_runner import (
     _render_verified_table,
     _test_file_exists_for_gap,
     strip_ephemeral_sections,
+    ProposedActionItem,
+    _verify_proposed_actions,
 )
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
@@ -1770,163 +1772,6 @@ def test_strip_preserves_prose_after_table():
     assert "Real cross-ticket pattern" in out and "thing to monitor" in out
 
 
-# ------------------------------------------------------------------ proposed_actions tests
-
-
-def test_proposed_actions_persisted(tmp_path):
-    """When the agent returns proposed_actions, they are persisted as
-    ProposedAction rows with status PENDING."""
-    settings = _make_settings(tmp_path)
-    db.reset_engine()
-    db.init_db(settings, board_id="test-board")
-    service = TicketService(settings, board_id="test-board")
-
-    memory_file = tmp_path / "memory.md"
-    memory_file.write_text("mem", encoding="utf-8")
-
-    def agent_fn(*, settings, memory, recent_proposals="", verified_proposals=""):
-        return _FakeAgentResult(
-            updated_memory="mem",
-            draft_titles=[],
-            draft_bodies=[],
-            proposed_actions=[
-                {
-                    "target_ticket_id": "test-ticket-1",
-                    "action_type": "close",
-                    "payload": '{"reason": "stale"}',
-                    "rationale": "Ticket has been stale for 90 days.",
-                },
-                {
-                    "target_ticket_id": "test-ticket-2",
-                    "action_type": "comment",
-                    "payload": None,
-                    "rationale": "Add a note about the fix.",
-                },
-            ],
-        )
-
-    run_agent_pass(
-        agent_fn,
-        memory_file=memory_file,
-        source_label=SourceKind.HEALTH,
-        service=service,
-        settings=settings,
-    )
-
-    with db.session(settings, "test-board") as s:
-        actions = s.query(ProposedAction).all()
-        assert len(actions) == 2
-
-        a0 = actions[0]
-        assert a0.source == "health"
-        assert a0.target_ticket_id == "test-ticket-1"
-        assert a0.action_type == ActionType.CLOSE
-        assert a0.payload == '{"reason": "stale"}'
-        assert a0.rationale == "Ticket has been stale for 90 days."
-        assert a0.status == ProposedActionStatus.PENDING
-
-        a1 = actions[1]
-        assert a1.source == "health"
-        assert a1.target_ticket_id == "test-ticket-2"
-        assert a1.action_type == ActionType.COMMENT
-        assert a1.payload is None
-        assert a1.rationale == "Add a note about the fix."
-        assert a1.status == ProposedActionStatus.PENDING
-
-    db.reset_engine()
-
-
-def test_proposed_actions_field_absent_backward_compat(tmp_path):
-    """When the agent does NOT return proposed_actions, the pass completes
-    normally with no ProposedAction rows created."""
-    settings = _make_settings(tmp_path)
-    db.reset_engine()
-    db.init_db(settings, board_id="test-board")
-    service = TicketService(settings, board_id="test-board")
-
-    memory_file = tmp_path / "memory.md"
-    memory_file.write_text("mem", encoding="utf-8")
-
-    # _FakeAgentResult without proposed_actions — field is absent
-    agent_fn = _make_agent(
-        updated_memory="mem",
-        draft_titles=["A draft"],
-        draft_bodies=["Body"],
-    )
-
-    result = run_agent_pass(
-        agent_fn,
-        memory_file=memory_file,
-        source_label=SourceKind.AUDIT,
-        service=service,
-        settings=settings,
-    )
-
-    # Draft was created normally
-    assert len(result.drafts_created) == 1
-
-    # No ProposedAction rows
-    with db.session(settings, "test-board") as s:
-        actions = s.query(ProposedAction).all()
-        assert actions == []
-
-    db.reset_engine()
-
-
-def test_proposed_actions_persistence_failure_logged(tmp_path, caplog):
-    """A persistence failure (e.g. DB constraint violation) is caught,
-    logged at WARNING, and the pass continues to draft creation."""
-    import logging
-
-    settings = _make_settings(tmp_path)
-    db.reset_engine()
-    db.init_db(settings, board_id="test-board")
-    service = TicketService(settings, board_id="test-board")
-
-    memory_file = tmp_path / "memory.md"
-    memory_file.write_text("mem", encoding="utf-8")
-
-    def agent_fn(*, settings, memory, recent_proposals="", verified_proposals=""):
-        return _FakeAgentResult(
-            updated_memory="mem",
-            draft_titles=["Still created"],
-            draft_bodies=["Body still created"],
-            proposed_actions=[
-                {
-                    "target_ticket_id": "bad-ticket",
-                    "action_type": "INVALID_TYPE",  # will fail on ActionType() lookup
-                    "payload": None,
-                    "rationale": "Should fail.",
-                },
-            ],
-        )
-
-    caplog.set_level(logging.WARNING)
-    result = run_agent_pass(
-        agent_fn,
-        memory_file=memory_file,
-        source_label=SourceKind.AUDIT,
-        service=service,
-        settings=settings,
-    )
-
-    # Draft creation still happened
-    assert len(result.drafts_created) == 1
-    tickets = service.list()
-    assert len(tickets) == 1
-    assert tickets[0].title == "Still created"
-
-    # Warning was logged about the persistence failure
-    assert "failed to persist proposed action" in caplog.text
-
-    # No ProposedAction rows persisted
-    with db.session(settings, "test-board") as s:
-        actions = s.query(ProposedAction).all()
-        assert actions == []
-
-    db.reset_engine()
-
-
 def test_agent_summary_threads_to_pass_result(tmp_path):
     """The agent's `summary` flows to AgentPassResult.summary, so the run
     registry can show what a 0-draft run actually examined."""
@@ -1957,68 +1802,419 @@ def test_agent_summary_threads_to_pass_result(tmp_path):
     db.reset_engine()
 
 
-# ------------------------------------------------------------------ proposed actions tests
+# ==================================================================
+# ProposedAction subsystem tests (child 3 — emission)
+# ==================================================================
 
 
-def test_proposed_actions_extracted_and_persisted(tmp_path):
-    """Agent returns proposed_actions — they are persisted and surfaced
-    in the result."""
+# --- ProposedActionItem model ---
+
+
+def test_proposed_action_item_fields():
+    """ProposedActionItem has exactly four fields with correct types/defaults."""
+    pa = ProposedActionItem(
+        target_ticket_id="T-123",
+        action_type="close",
+        rationale="stale — no activity in 60 days",
+    )
+    assert pa.target_ticket_id == "T-123"
+    assert pa.action_type == "close"
+    assert pa.payload is None
+    assert pa.rationale == "stale — no activity in 60 days"
+
+    # With payload
+    pa2 = ProposedActionItem(
+        target_ticket_id="T-456",
+        action_type="transition",
+        payload='{"state": "closed"}',
+        rationale="duplicate",
+    )
+    assert pa2.payload == '{"state": "closed"}'
+
+
+def test_proposed_action_item_default_factory():
+    """proposed_actions defaults to empty list on agent result classes."""
+    from robotsix_mill.agents.health import HealthResult
+
+    hr = HealthResult(updated_memory="m", summary="s")
+    assert hr.proposed_actions == []
+
+
+# --- TicketService.create_proposed_action ---
+
+
+def test_create_proposed_action_pending_row(tmp_path):
+    """create_proposed_action creates a PENDING ProposedAction row."""
     settings = _make_settings(tmp_path)
     db.reset_engine()
     db.init_db(settings, board_id="test-board")
     service = TicketService(settings, board_id="test-board")
 
-    memory_file = tmp_path / "memory.md"
-    memory_file.write_text("mem", encoding="utf-8")
+    # Need a target ticket for FK constraint
+    ticket = service.create("Test ticket", "body", source=SourceKind.USER)
 
-    agent_fn = _make_agent(
-        updated_memory="mem",
-        draft_titles=[],
-        draft_bodies=[],
-        proposed_actions=[
-            {
-                "action_type": "close",
-                "target_ticket_id": "T-1",
-                "rationale": "stale ticket, no activity in 30 days",
-            }
-        ],
+    pa = service.create_proposed_action(
+        source="health",
+        target_ticket_id=ticket.id,
+        action_type="close",
+        rationale="stale ticket",
+    )
+    assert pa is not None
+    assert pa.source == "health"
+    assert pa.target_ticket_id == ticket.id
+    assert pa.action_type == ActionType.CLOSE
+    assert pa.rationale == "stale ticket"
+    assert pa.status == ProposedActionStatus.PENDING
+    assert pa.payload is None
+    assert pa.id is not None
+
+    db.reset_engine()
+
+
+def test_create_proposed_action_with_payload(tmp_path):
+    """create_proposed_action stores payload as-is."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    ticket = service.create("T", "b", source=SourceKind.USER)
+    pa = service.create_proposed_action(
+        source="audit",
+        target_ticket_id=ticket.id,
+        action_type="transition",
+        rationale="move to CLOSED",
+        payload='{"state": "closed"}',
+    )
+    assert pa is not None
+    assert pa.payload == '{"state": "closed"}'
+
+    db.reset_engine()
+
+
+def test_create_proposed_action_invalid_action_type(tmp_path, caplog):
+    """Invalid action_type returns None and logs a warning."""
+    import logging
+
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    ticket = service.create("T", "b", source=SourceKind.USER)
+    caplog.set_level(logging.WARNING)
+    pa = service.create_proposed_action(
+        source="health",
+        target_ticket_id=ticket.id,
+        action_type="nonexistent",
+        rationale="should fail",
+    )
+    assert pa is None
+    assert "invalid action_type" in caplog.text
+
+    db.reset_engine()
+
+
+def test_create_proposed_action_nonexistent_target(tmp_path, caplog):
+    """Non-existent target_ticket_id still creates the row (SQLite FK
+    constraints are not enforced by default). The proposal will be
+    caught at execution time — re-validation is the design."""
+    import logging
+
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    caplog.set_level(logging.WARNING)
+    pa = service.create_proposed_action(
+        source="health",
+        target_ticket_id="BOGUS-ID-NEVER-EXISTS",
+        action_type="close",
+        rationale="should be created — FK not enforced",
+    )
+    # Row IS created because SQLite FK enforcement is off by default.
+    assert pa is not None
+    assert pa.status == ProposedActionStatus.PENDING
+    # Re-validation will catch this at execution time.
+
+    db.reset_engine()
+
+
+# --- TicketService.list_proposed_actions ---
+
+
+def test_list_proposed_actions_excludes_pending_by_default(tmp_path):
+    """list_proposed_actions excludes PENDING rows by default."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    ticket = service.create("T", "b", source=SourceKind.USER)
+    # Create pending row
+    service.create_proposed_action(
+        source="health",
+        target_ticket_id=ticket.id,
+        action_type="close",
+        rationale="pending proposal",
     )
 
-    result = run_agent_pass(
-        agent_fn,
-        memory_file=memory_file,
-        source_label=SourceKind.AUDIT,
-        service=service,
-        settings=settings,
-    )
+    # Default: exclude PENDING → empty
+    rows = service.list_proposed_actions(source="health")
+    assert rows == []
 
-    assert len(result.proposed_actions) == 1
-    assert result.proposed_actions[0]["action_type"] == "close"
-    assert result.proposed_actions[0]["target_ticket_id"] == "T-1"
-    assert result.proposed_actions[0]["status"] == "pending"
+    # With exclude_status=None → include PENDING
+    rows_all = service.list_proposed_actions(source="health", exclude_status=None)
+    assert len(rows_all) == 1
+    assert rows_all[0].status == ProposedActionStatus.PENDING
+
+    db.reset_engine()
+
+
+def test_list_proposed_actions_returns_decided_newest_first(tmp_path):
+    """list_proposed_actions returns decided rows, newest first."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    ticket = service.create("T1", "b", source=SourceKind.USER)
+    # Create one REJECTED and one APPROVED
+    pa1 = service.create_proposed_action(
+        source="audit",
+        target_ticket_id=ticket.id,
+        action_type="close",
+        rationale="first",
+    )
+    # Manually update statuses via raw session
+    with db.session(settings, "test-board") as s:
+        p1 = s.get(ProposedAction, pa1.id)
+        p1.status = ProposedActionStatus.REJECTED
+        p1.decided_at = __import__("datetime").datetime.now(
+            __import__("datetime").timezone.utc
+        )
+        p1.decided_by = "alice"
+        s.commit()
+
+    ticket2 = service.create("T2", "b2", source=SourceKind.USER)
+    pa2 = service.create_proposed_action(
+        source="audit",
+        target_ticket_id=ticket2.id,
+        action_type="transition",
+        rationale="second",
+    )
+    with db.session(settings, "test-board") as s:
+        p2 = s.get(ProposedAction, pa2.id)
+        p2.status = ProposedActionStatus.APPROVED
+        p2.decided_at = __import__("datetime").datetime.now(
+            __import__("datetime").timezone.utc
+        )
+        p2.decided_by = "bob"
+        s.commit()
 
     rows = service.list_proposed_actions(source="audit")
-    assert len(rows) == 1
-    assert str(rows[0].action_type) == "close"
+    assert len(rows) == 2
+    # Newest first (pa2 created after pa1)
+    assert rows[0].id == pa2.id
+    assert rows[1].id == pa1.id
 
     db.reset_engine()
 
 
-def test_proposed_actions_agent_without_field_is_noop(tmp_path):
-    """Agent WITHOUT proposed_actions attribute — result is empty, no DB rows."""
+def test_list_proposed_actions_filters_by_source(tmp_path):
+    """list_proposed_actions only returns rows for the given source."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    ticket = service.create("T", "b", source=SourceKind.USER)
+    pa_h = service.create_proposed_action(
+        source="health",
+        target_ticket_id=ticket.id,
+        action_type="close",
+        rationale="from health",
+    )
+    pa_a = service.create_proposed_action(
+        source="audit",
+        target_ticket_id=ticket.id,
+        action_type="comment",
+        rationale="from audit",
+    )
+
+    # Decide both
+    with db.session(settings, "test-board") as s:
+        for pid in (pa_h.id, pa_a.id):
+            p = s.get(ProposedAction, pid)
+            p.status = ProposedActionStatus.REJECTED
+            p.decided_at = __import__("datetime").datetime.now(
+                __import__("datetime").timezone.utc
+            )
+            p.decided_by = "alice"
+        s.commit()
+
+    health_rows = service.list_proposed_actions(source="health")
+    assert len(health_rows) == 1
+    assert health_rows[0].source == "health"
+
+    audit_rows = service.list_proposed_actions(source="audit")
+    assert len(audit_rows) == 1
+    assert audit_rows[0].source == "audit"
+
+    db.reset_engine()
+
+
+# --- run_agent_pass persists proposals (step 5b) ---
+
+
+def test_run_agent_pass_persists_proposed_actions(tmp_path):
+    """When the agent result has proposed_actions, each is written as a
+    PENDING ProposedAction row."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    # Create target tickets
+    t1 = service.create("Target 1", "body1", source=SourceKind.USER)
+    t2 = service.create("Target 2", "body2", source=SourceKind.USER)
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    class ResultWithProposals:
+        updated_memory = "mem"
+        draft_titles = []
+        draft_bodies = []
+        proposed_actions = [
+            ProposedActionItem(
+                target_ticket_id=t1.id,
+                action_type="close",
+                rationale="stale",
+            ),
+            ProposedActionItem(
+                target_ticket_id=t2.id,
+                action_type="transition",
+                payload='{"state": "closed"}',
+                rationale="duplicate",
+            ),
+        ]
+
+    def agent_fn(*, settings, memory, recent_proposals="", verified_proposals=""):
+        return ResultWithProposals()
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.AUDIT,
+        service=service,
+        settings=settings,
+    )
+
+    # No drafts created
+    assert result.drafts_created == []
+
+    # Both proposals persisted
+    rows = service.list_proposed_actions(source="audit", exclude_status=None)
+    assert len(rows) == 2
+    assert rows[0].status == ProposedActionStatus.PENDING
+    assert rows[1].status == ProposedActionStatus.PENDING
+
+    # Check content
+    closes = [r for r in rows if r.action_type == ActionType.CLOSE]
+    transitions = [r for r in rows if r.action_type == ActionType.TRANSITION]
+    assert len(closes) == 1
+    assert closes[0].target_ticket_id == t1.id
+    assert closes[0].rationale == "stale"
+    assert len(transitions) == 1
+    assert transitions[0].target_ticket_id == t2.id
+    assert transitions[0].payload == '{"state": "closed"}'
+
+    db.reset_engine()
+
+
+def test_run_agent_pass_proposed_actions_one_failure_does_not_block_others(
+    tmp_path, caplog
+):
+    """One proposal failing (e.g. invalid action_type) doesn't block others
+    or draft creation. Proposals with non-existent targets succeed at
+    emission time (SQLite FK not enforced) — they'll be caught at
+    execution time."""
+    import logging
+
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    t1 = service.create("Existing", "body", source=SourceKind.USER)
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    class ResultWithProposals:
+        updated_memory = "mem"
+        draft_titles = ["Draft from pass"]
+        draft_bodies = ["Draft body"]
+        proposed_actions = [
+            ProposedActionItem(
+                target_ticket_id=t1.id,
+                action_type="close",
+                rationale="good proposal",
+            ),
+            ProposedActionItem(
+                target_ticket_id="BOGUS-NONEXISTENT",
+                action_type="invalid-action-type",  # this one fails validation
+                payload='{"body": "hello"}',
+                rationale="bad proposal — invalid action_type",
+            ),
+        ]
+
+    def agent_fn(*, settings, memory, recent_proposals="", verified_proposals=""):
+        return ResultWithProposals()
+
+    caplog.set_level(logging.WARNING)
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.AUDIT,
+        service=service,
+        settings=settings,
+    )
+
+    # Draft still created
+    assert len(result.drafts_created) == 1
+
+    # Only the good proposal persisted (the invalid one was skipped by
+    # create_proposed_action's validation)
+    rows = service.list_proposed_actions(source="audit", exclude_status=None)
+    assert len(rows) == 1
+    assert rows[0].target_ticket_id == t1.id
+    assert rows[0].action_type == ActionType.CLOSE
+
+    # Warning logged about the invalid one
+    assert "invalid action_type" in caplog.text
+
+    db.reset_engine()
+
+
+def test_run_agent_pass_no_proposed_actions_field_backward_compat(tmp_path):
+    """Agent result without proposed_actions attribute works fine
+    (getattr fallback)."""
     settings = _make_settings(tmp_path)
     db.reset_engine()
     db.init_db(settings, board_id="test-board")
     service = TicketService(settings, board_id="test-board")
 
     memory_file = tmp_path / "memory.md"
-    memory_file.write_text("mem", encoding="utf-8")
+    memory_file.write_text("old", encoding="utf-8")
 
+    # _FakeAgentResult doesn't have proposed_actions
     agent_fn = _make_agent(
-        updated_memory="mem",
-        draft_titles=[],
-        draft_bodies=[],
-        # proposed_actions NOT passed — defaults to None, so attribute is NOT set
+        updated_memory="new",
+        draft_titles=["T1"],
+        draft_bodies=["B1"],
     )
 
     result = run_agent_pass(
@@ -2029,14 +2225,16 @@ def test_proposed_actions_agent_without_field_is_noop(tmp_path):
         settings=settings,
     )
 
-    assert result.proposed_actions == []
-    assert service.list_proposed_actions() == []
+    assert len(result.drafts_created) == 1
+    # No proposals — good
+    rows = service.list_proposed_actions(source="audit", exclude_status=None)
+    assert rows == []
 
     db.reset_engine()
 
 
-def test_proposed_actions_invalid_item_skipped(tmp_path):
-    """One valid, one invalid (missing target_ticket_id) — only valid persisted."""
+def test_run_agent_pass_empty_proposed_actions_list_no_rows(tmp_path):
+    """Agent returns proposed_actions=[] — zero ProposedAction rows created."""
     settings = _make_settings(tmp_path)
     db.reset_engine()
     db.init_db(settings, board_id="test-board")
@@ -2045,25 +2243,16 @@ def test_proposed_actions_invalid_item_skipped(tmp_path):
     memory_file = tmp_path / "memory.md"
     memory_file.write_text("mem", encoding="utf-8")
 
-    agent_fn = _make_agent(
-        updated_memory="mem",
-        draft_titles=[],
-        draft_bodies=[],
-        proposed_actions=[
-            {
-                "action_type": "close",
-                "target_ticket_id": "T-1",
-                "rationale": "valid",
-            },
-            {
-                "action_type": "comment",
-                # missing target_ticket_id — should be skipped
-                "rationale": "invalid",
-            },
-        ],
-    )
+    class EmptyResult:
+        updated_memory = "mem"
+        draft_titles = []
+        draft_bodies = []
+        proposed_actions = []
 
-    result = run_agent_pass(
+    def agent_fn(*, settings, memory, recent_proposals="", verified_proposals=""):
+        return EmptyResult()
+
+    run_agent_pass(
         agent_fn,
         memory_file=memory_file,
         source_label=SourceKind.AUDIT,
@@ -2071,16 +2260,73 @@ def test_proposed_actions_invalid_item_skipped(tmp_path):
         settings=settings,
     )
 
-    assert len(result.proposed_actions) == 1
-    assert result.proposed_actions[0]["action_type"] == "close"
-    rows = service.list_proposed_actions()
-    assert len(rows) == 1
+    rows = service.list_proposed_actions(source="audit", exclude_status=None)
+    assert rows == []
 
     db.reset_engine()
 
 
-def test_proposed_actions_persistence_failure_swallowed(tmp_path, monkeypatch):
-    """create_proposed_action raises RuntimeError — pass completes with empty result."""
+# --- _verify_proposed_actions ---
+
+
+def test_verify_proposed_actions_returns_decided_only(tmp_path):
+    """_verify_proposed_actions only returns decided (non-PENDING) rows."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    ticket = service.create("T", "b", source=SourceKind.USER)
+
+    # PENDING — should NOT appear
+    service.create_proposed_action(
+        source="health",
+        target_ticket_id=ticket.id,
+        action_type="close",
+        rationale="pending",
+    )
+    # APPROVED — should appear
+    pa_approved = service.create_proposed_action(
+        source="health",
+        target_ticket_id=ticket.id,
+        action_type="transition",
+        rationale="approved one",
+    )
+    with db.session(settings, "test-board") as s:
+        p = s.get(ProposedAction, pa_approved.id)
+        p.status = ProposedActionStatus.APPROVED
+        p.decided_at = __import__("datetime").datetime.now(
+            __import__("datetime").timezone.utc
+        )
+        p.decided_by = "alice"
+        s.commit()
+
+    decided = _verify_proposed_actions(service, SourceKind.HEALTH)
+    assert len(decided) == 1
+    assert decided[0]["action_type"] == "transition"
+    assert decided[0]["status"] == "approved"
+    assert decided[0]["rationale"] == "approved one"
+    assert decided[0]["decided_by"] == "alice"
+    assert decided[0]["decided_at"] != ""
+
+    db.reset_engine()
+
+
+def test_verify_proposed_actions_empty_when_none(tmp_path):
+    """_verify_proposed_actions returns empty list when no decided rows."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    decided = _verify_proposed_actions(service, SourceKind.HEALTH)
+    assert decided == []
+
+    db.reset_engine()
+
+
+def test_verify_proposed_actions_service_error_returns_empty(tmp_path, monkeypatch):
+    """_verify_proposed_actions returns empty list on service error."""
     settings = _make_settings(tmp_path)
     db.reset_engine()
     db.init_db(settings, board_id="test-board")
@@ -2088,149 +2334,124 @@ def test_proposed_actions_persistence_failure_swallowed(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         service,
-        "create_proposed_action",
-        lambda **kw: (_ for _ in ()).throw(RuntimeError("db down")),
+        "list_proposed_actions",
+        lambda **kw: (_ for _ in ()).throw(RuntimeError("DB down")),
     )
 
-    memory_file = tmp_path / "memory.md"
-    memory_file.write_text("mem", encoding="utf-8")
-
-    agent_fn = _make_agent(
-        updated_memory="mem",
-        draft_titles=[],
-        draft_bodies=[],
-        proposed_actions=[
-            {
-                "action_type": "close",
-                "target_ticket_id": "T-1",
-                "rationale": "stale",
-            }
-        ],
-    )
-
-    result = run_agent_pass(
-        agent_fn,
-        memory_file=memory_file,
-        source_label=SourceKind.AUDIT,
-        service=service,
-        settings=settings,
-    )
-
-    assert result.proposed_actions == []
-    assert service.list_proposed_actions() == []
+    decided = _verify_proposed_actions(service, SourceKind.AUDIT)
+    assert decided == []
 
     db.reset_engine()
 
 
-def test_render_proposed_actions_table(tmp_path):
-    """_render_proposed_actions_table renders a valid Markdown table."""
-    settings = _make_settings(tmp_path)
-    db.reset_engine()
-    db.init_db(settings, board_id="test-board")
-    service = TicketService(settings, board_id="test-board")
-
-    service.create_proposed_action(
-        source="audit",
-        target_ticket_id="T-42",
-        action_type="close",
-        rationale="stale ticket",
-    )
-    rows = service.list_proposed_actions(source="audit")
-    assert len(rows) == 1
-
-    table = _render_proposed_actions_table(rows)
-    assert "## Proposed actions — pending" in table
-    assert "T-42" in table
-    assert "stale ticket" in table
-
-    db.reset_engine()
+# --- _render_proposed_actions_table ---
 
 
 def test_render_proposed_actions_table_empty():
-    """_render_proposed_actions_table([]) returns ''."""
+    """Empty list returns empty string."""
     assert _render_proposed_actions_table([]) == ""
 
 
-def test_strip_ephemeral_sections_removes_proposed_actions_table():
-    """strip_ephemeral_sections removes the ## Proposed actions — pending table."""
-    mem = (
-        "## Observations\n\nSome prose.\n\n"
-        "## Proposed actions — pending\n\n"
-        "| id | target_ticket | action | rationale | created |\n"
-        "|----|---------------|--------|-----------|---------|\n"
-        "| 1  | T-1           | close  | stale     | 2025-01 |\n\n"
-        "## More notes\n\nKeep this.\n"
+def test_render_proposed_actions_table_renders_rows():
+    """Renders a Markdown table with the expected columns."""
+    decided = [
+        {
+            "id": 1,
+            "target_ticket_id": "20260530Tc57b-abc",
+            "action_type": "close",
+            "status": "approved",
+            "rationale": "stale — no activity in 60 days",
+            "decided_at": "2025-06-03T12:00:00",
+            "decided_by": "alice",
+        },
+        {
+            "id": 2,
+            "target_ticket_id": "20260531Td68c-def",
+            "action_type": "transition",
+            "status": "rejected",
+            "rationale": "still active — recent comment from user",
+            "decided_at": "2025-06-03T13:00:00",
+            "decided_by": "bob",
+        },
+    ]
+    result = _render_proposed_actions_table(decided)
+    assert "## Prior proposed actions — decided" in result
+    assert "| id | target_ticket | action | status | decided_by | rationale |" in result
+    assert (
+        "| 1 | 2026053 | close | approved | alice | stale — no activity in 60 days |"
+        in result
     )
-    out = strip_ephemeral_sections(mem)
-    assert "Proposed actions" not in out
-    assert "T-1" not in out
-    assert "## Observations" in out
-    assert "## More notes" in out
-    assert "Keep this." in out
-
-
-def test_strip_ephemeral_sections_handles_both_proposed_actions_tables():
-    """Memory with both ephemeral tables — both stripped, prose preserved."""
-    mem = (
-        "## Ledger\n\nCross-ticket patterns.\n\n"
-        "## Prior proposals — verified state\n\n"
-        "| gap_id | ticket_id | state | resolution |\n"
-        "|--------|-----------|-------|------------|\n"
-        "| foo    | T-1       | CLOSED | merged    |\n\n"
-        "## Proposed actions — pending\n\n"
-        "| id | target_ticket | action | rationale | created |\n"
-        "|----|---------------|--------|-----------|---------|\n"
-        "| 1  | T-2           | close  | stale     | 2025-01 |\n\n"
-        "## Afterward\n\nFinal notes.\n"
+    assert (
+        "| 2 | 2026053 | transition | rejected | bob | still active — recent comment from user |"
+        in result
     )
-    out = strip_ephemeral_sections(mem)
-    assert "Prior proposals" not in out
-    assert "Proposed actions" not in out
-    assert "T-1" not in out
-    assert "T-2" not in out
-    assert "## Ledger" in out
-    assert "Cross-ticket patterns" in out
-    assert "## Afterward" in out
-    assert "Final notes." in out
 
 
-def test_combined_verified_with_proposed_actions_passed_to_agent(tmp_path):
-    """Agent receives combined ephemeral block with both sections."""
+def test_render_proposed_actions_table_escapes_pipe_in_rationale():
+    """Pipe characters in rationale are backslash-escaped."""
+    decided = [
+        {
+            "id": 1,
+            "target_ticket_id": "abc1234-xyz",
+            "action_type": "comment",
+            "status": "approved",
+            "rationale": "needs more info | see also T-456",
+            "decided_at": "",
+            "decided_by": "",
+        }
+    ]
+    result = _render_proposed_actions_table(decided)
+    assert "needs more info \\| see also T-456" in result
+
+
+# --- combined_verified in agent prompt ---
+
+
+def test_combined_verified_passed_to_agent(tmp_path):
+    """Both verified blocks are concatenated and passed to the agent."""
     settings = _make_settings(tmp_path)
     db.reset_engine()
     db.init_db(settings, board_id="test-board")
     service = TicketService(settings, board_id="test-board")
 
-    # Create a prior-proposal ticket with gap-id marker.
+    # Create a ticket with gap-id marker for _verify_prior_proposals
     t = service.create(
-        "Gap A",
-        "body\n\n<!-- audit-gap-id: gap_alpha -->",
+        "Gap ticket",
+        "body\n\n<!-- audit-gap-id: some_gap -->",
         source=SourceKind.AUDIT,
     )
 
-    # Create a pending proposed action.
-    service.create_proposed_action(
+    # Create a decided ProposedAction for _verify_proposed_actions
+    pa = service.create_proposed_action(
         source="audit",
         target_ticket_id=t.id,
         action_type="close",
-        rationale="stale gap ticket",
+        rationale="stale gap already handled",
     )
+    with db.session(settings, "test-board") as s:
+        p = s.get(ProposedAction, pa.id)
+        p.status = ProposedActionStatus.REJECTED
+        p.decided_at = __import__("datetime").datetime.now(
+            __import__("datetime").timezone.utc
+        )
+        p.decided_by = "alice"
+        s.commit()
 
     memory_file = tmp_path / "memory.md"
     memory_file.write_text("mem", encoding="utf-8")
 
     captured_verified = []
 
-    def capture_agent(*, settings, memory, recent_proposals="", verified_proposals=""):
+    def agent_fn(*, settings, memory, recent_proposals="", verified_proposals=""):
         captured_verified.append(verified_proposals)
         return _FakeAgentResult(
-            updated_memory=memory,
+            updated_memory="mem",
             draft_titles=[],
             draft_bodies=[],
         )
 
     run_agent_pass(
-        capture_agent,
+        agent_fn,
         memory_file=memory_file,
         source_label=SourceKind.AUDIT,
         service=service,
@@ -2239,6 +2460,186 @@ def test_combined_verified_with_proposed_actions_passed_to_agent(tmp_path):
 
     combined = captured_verified[0]
     assert "## Prior proposals — verified state" in combined
-    assert "## Proposed actions — pending" in combined
+    assert "## Prior proposed actions — decided" in combined
+    # The prior-proposals table comes before the proposed-actions table
+    assert combined.index("## Prior proposals — verified state") < combined.index(
+        "## Prior proposed actions — decided"
+    )
+
+    db.reset_engine()
+
+
+def test_combined_verified_only_prior_proposals_when_no_decided_actions(tmp_path):
+    """When there are no decided proposed actions, only the
+    prior-proposals table is passed (no empty proposed-actions table)."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    # Only create a gap-id ticket, no ProposedAction rows
+    service.create(
+        "Gap ticket",
+        "body\n\n<!-- audit-gap-id: some_gap -->",
+        source=SourceKind.AUDIT,
+    )
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    captured_verified = []
+
+    def agent_fn(*, settings, memory, recent_proposals="", verified_proposals=""):
+        captured_verified.append(verified_proposals)
+        return _FakeAgentResult(
+            updated_memory="mem",
+            draft_titles=[],
+            draft_bodies=[],
+        )
+
+    run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.AUDIT,
+        service=service,
+        settings=settings,
+    )
+
+    combined = captured_verified[0]
+    assert "## Prior proposals — verified state" in combined
+    assert "## Prior proposed actions — decided" not in combined
+
+    db.reset_engine()
+
+
+# --- strip_ephemeral_sections (new proposed-actions table) ---
+
+
+def test_strip_removes_prior_proposed_actions_table():
+    """The ## Prior proposed actions — decided table is stripped from memory."""
+    mem = (
+        "## Cross-cutting patterns\n\nKeep this.\n\n"
+        "## Prior proposed actions — decided\n\n"
+        "| id | target_ticket | action | status | decided_by | rationale |\n"
+        "|----|---------------|--------|--------|------------|-----------|\n"
+        "| 1 | abc1234 | close | approved | alice | stale |\n\n"
+        "## More patterns\n\nKeep this too.\n"
+    )
+    out = strip_ephemeral_sections(mem)
+    assert "Prior proposed actions" not in out
+    assert "abc1234" not in out
+    assert "## Cross-cutting patterns" in out
+    assert "## More patterns" in out
+
+
+def test_strip_removes_both_tables():
+    """Both ## Prior proposals and ## Prior proposed actions are stripped."""
+    mem = (
+        "## Intro\n\nKeep.\n\n"
+        "## Prior proposals — verified state\n\n"
+        "| gap_id | ticket_id | state | resolution |\n"
+        "|--------|-----------|-------|------------|\n"
+        "| foo | T-1 | CLOSED | merged |\n\n"
+        "## Prior proposed actions — decided\n\n"
+        "| id | target_ticket | action | status | decided_by | rationale |\n"
+        "|----|---------------|--------|--------|------------|-----------|\n"
+        "| 1 | abc1234 | close | approved | alice | stale |\n\n"
+        "## Outro\n\nKeep.\n"
+    )
+    out = strip_ephemeral_sections(mem)
+    assert "Prior proposals" not in out
+    assert "Prior proposed actions" not in out
+    assert "T-1" not in out
+    assert "abc1234" not in out
+    assert "## Intro" in out
+    assert "## Outro" in out
+
+
+def test_strip_prior_proposed_actions_at_end_of_memory():
+    """Table at the end of memory is removed."""
+    mem = "## Patterns\n\nfoo\n\n## Prior proposed actions — decided\n\n| a | b | c | d | e | f |\n"
+    out = strip_ephemeral_sections(mem)
+    assert "Prior proposed actions" not in out
+    assert "## Patterns" in out
+
+
+def test_strip_prior_proposed_actions_preserves_prose_after_table():
+    """Prose after the proposed-actions table survives."""
+    mem = (
+        "## Prior proposed actions — decided\n\n"
+        "| id | target_ticket | action | status | decided_by | rationale |\n"
+        "|----|---------------|--------|--------|------------|-----------|\n"
+        "| 1 | x | close | rejected | alice | nope |\n\n"
+        "Real cross-ticket pattern worth keeping.\n"
+    )
+    out = strip_ephemeral_sections(mem)
+    assert "Prior proposed actions" not in out
+    assert "Real cross-ticket pattern" in out
+
+
+def test_strip_noop_without_either_table():
+    """No change when neither table is present."""
+    assert strip_ephemeral_sections("## Patterns\nfoo\n").strip() == (
+        "## Patterns\nfoo"
+    )
+    assert strip_ephemeral_sections("") == ""
+
+
+# --- run_agent_pass verified_proposals backward compat ---
+
+
+def test_verified_proposals_still_works_with_module_curator_style(tmp_path):
+    """The module_curator agent receives combined_verified via
+    verified_proposals kwarg — same interface as before."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    # Create context: gap-id ticket + decided proposed action
+    t = service.create(
+        "Gap",
+        "body\n\n<!-- module_curator-gap-id: mc_gap -->",
+        source=SourceKind.MODULE_CURATOR,
+    )
+    pa = service.create_proposed_action(
+        source="module_curator",
+        target_ticket_id=t.id,
+        action_type="comment",
+        rationale="noted",
+    )
+    with db.session(settings, "test-board") as s:
+        p = s.get(ProposedAction, pa.id)
+        p.status = ProposedActionStatus.EXECUTED
+        p.decided_at = __import__("datetime").datetime.now(
+            __import__("datetime").timezone.utc
+        )
+        p.decided_by = "alice"
+        s.commit()
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    captured = []
+
+    def agent_fn(*, settings, memory, recent_proposals="", verified_proposals=""):
+        captured.append(verified_proposals)
+        return _FakeAgentResult(
+            updated_memory="mem",
+            draft_titles=[],
+            draft_bodies=[],
+        )
+
+    run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.MODULE_CURATOR,
+        service=service,
+        settings=settings,
+    )
+
+    vp = captured[0]
+    assert "## Prior proposals — verified state" in vp
+    assert "## Prior proposed actions — decided" in vp
 
     db.reset_engine()
