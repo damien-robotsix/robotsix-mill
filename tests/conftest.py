@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 
 from robotsix_auto_mail.config import MailConfig
-from robotsix_auto_mail.db import init_db
+from robotsix_auto_mail.db import MailRecord, init_db
 
 
 @pytest.fixture(autouse=True)
@@ -71,3 +71,44 @@ def conn() -> Generator[sqlite3.Connection, None, None]:
 def tmp_db_path(tmp_path: Path) -> str:
     """A file-backed database path inside pytest's tmp_path."""
     return str(tmp_path / "test.db")
+
+
+# ---------------------------------------------------------------------------
+# Shared test helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_record(**overrides: str | int | None) -> MailRecord:
+    """Build a ``MailRecord`` with defaults suitable for testing."""
+    kwargs: dict[str, str | int | None] = {
+        "message_id": "<test@example.com>",
+        "sender": "sender@example.com",
+        "subject": "Test Subject",
+        "date": "2025-06-01T12:00:00Z",
+    }
+    kwargs.update(overrides)
+
+    def _opt_str(key: str, default: str = "") -> str:
+        val = kwargs.get(key, default)
+        assert isinstance(val, str)
+        return val
+
+    def _opt_int_none(key: str) -> int | None:
+        val = kwargs.get(key)
+        if val is None:
+            return None
+        assert isinstance(val, int)
+        return val
+
+    return MailRecord(
+        message_id=str(kwargs["message_id"]),
+        sender=str(kwargs["sender"]),
+        subject=str(kwargs["subject"]),
+        date=str(kwargs["date"]),
+        status=str(kwargs.get("status", "inbox")),
+        imap_uid=_opt_int_none("imap_uid"),
+        recipients_json=_opt_str("recipients_json", '{"to": [], "cc": []}'),
+        body_plain=_opt_str("body_plain", ""),
+        body_html=_opt_str("body_html", ""),
+        attachments_json=_opt_str("attachments_json", "[]"),
+    )

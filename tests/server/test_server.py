@@ -11,7 +11,8 @@ from urllib.request import urlopen
 if TYPE_CHECKING:
     from http.server import HTTPServer
 
-from robotsix_auto_mail.db import MailRecord, init_db
+from robotsix_auto_mail.db import init_db
+from tests.conftest import _make_record
 from robotsix_auto_mail.format import _format_date
 from robotsix_auto_mail.server import (
     _build_board_html,
@@ -48,7 +49,7 @@ def test_format_date_none_returns_none() -> None:
 
 
 def test_render_card_basic() -> None:
-    record = MailRecord(
+    record = _make_record(
         message_id="abc",
         sender="alice@example.com",
         subject="Hello",
@@ -73,7 +74,7 @@ def test_render_card_basic() -> None:
 
 
 def test_render_card_empty_subject() -> None:
-    record = MailRecord(
+    record = _make_record(
         message_id="abc",
         sender="x",
         subject="   ",
@@ -85,7 +86,7 @@ def test_render_card_empty_subject() -> None:
 
 
 def test_render_card_empty_body_plain() -> None:
-    record = MailRecord(
+    record = _make_record(
         message_id="abc",
         sender="x",
         subject="s",
@@ -98,7 +99,7 @@ def test_render_card_empty_body_plain() -> None:
 
 
 def test_render_card_whitespace_body_plain() -> None:
-    record = MailRecord(
+    record = _make_record(
         message_id="abc",
         sender="x",
         subject="s",
@@ -110,7 +111,7 @@ def test_render_card_whitespace_body_plain() -> None:
 
 
 def test_render_card_body_truncation() -> None:
-    record = MailRecord(
+    record = _make_record(
         message_id="abc",
         sender="x",
         subject="s",
@@ -124,7 +125,7 @@ def test_render_card_body_truncation() -> None:
 
 def test_render_card_body_exactly_limit() -> None:
     body = "B" * 150
-    record = MailRecord(
+    record = _make_record(
         message_id="abc",
         sender="x",
         subject="s",
@@ -138,7 +139,7 @@ def test_render_card_body_exactly_limit() -> None:
 
 
 def test_render_card_html_escapes_sender() -> None:
-    record = MailRecord(
+    record = _make_record(
         message_id="abc",
         sender="<script>alert('xss')</script>",
         subject="s",
@@ -153,7 +154,7 @@ def test_render_card_html_escapes_sender() -> None:
 
 
 def test_render_card_html_escapes_subject() -> None:
-    record = MailRecord(
+    record = _make_record(
         message_id="abc",
         sender="x",
         subject='<b onmouseover="alert(1)">click</b>',
@@ -166,7 +167,7 @@ def test_render_card_html_escapes_subject() -> None:
 
 
 def test_render_card_html_escapes_body() -> None:
-    record = MailRecord(
+    record = _make_record(
         message_id="abc",
         sender="x",
         subject="s",
@@ -180,7 +181,7 @@ def test_render_card_html_escapes_body() -> None:
 
 def test_render_card_selected_status() -> None:
     """The current status should have the 'selected' attribute."""
-    record = MailRecord(
+    record = _make_record(
         message_id="test-id",
         sender="x",
         subject="s",
@@ -195,7 +196,7 @@ def test_render_card_selected_status() -> None:
 
 def test_render_card_message_id_with_angle_brackets() -> None:
     """Message IDs containing <, > should be HTML-escaped in the hidden input."""
-    record = MailRecord(
+    record = _make_record(
         message_id="<abc123@example.com>",
         sender="x",
         subject="s",
@@ -910,7 +911,7 @@ def test_email_status_simple_message_id() -> None:
 
 def test_render_card_has_detail_link() -> None:
     """_render_card output contains a link to /email/{message_id}."""
-    record = MailRecord(
+    record = _make_record(
         message_id="<abc@example.com>",
         sender="alice@example.com",
         subject="Hello World",
@@ -930,7 +931,7 @@ def test_render_card_has_detail_link() -> None:
 
 def test_render_card_link_preserves_move_form() -> None:
     """The Move <form> is still present when the subject is a link."""
-    record = MailRecord(
+    record = _make_record(
         message_id="<test@example.com>",
         sender="x@x.com",
         subject="Test",
@@ -1531,7 +1532,7 @@ def test_build_board_html_has_script_block() -> None:
 
 def test_render_card_has_data_message_id() -> None:
     """_render_card includes data-message-id with URL-encoded message_id."""
-    record = MailRecord(
+    record = _make_record(
         message_id="<test@example.com>",
         sender="x@x.com",
         subject="s",
@@ -1549,7 +1550,7 @@ def test_render_card_has_data_message_id() -> None:
 def test_render_card_data_message_id_present_with_subject_link() -> None:
     """data-message-id coexists with the existing subject <a> link for
     non-JS fallback."""
-    record = MailRecord(
+    record = _make_record(
         message_id="abc123",
         sender="x@x.com",
         subject="Hello",
