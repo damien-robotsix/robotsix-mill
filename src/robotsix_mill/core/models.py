@@ -179,7 +179,9 @@ class ProposedAction(SQLModel, table=True):
     source: str  # Periodic agent label, e.g. "health", "audit", "trace-review"
     target_ticket_id: str = Field(foreign_key="ticket.id", index=True)
     action_type: ActionType
-    payload: str | None = Field(default=None)  # JSON string; schema varies by action_type
+    payload: str | None = Field(
+        default=None
+    )  # JSON string; schema varies by action_type
     rationale: str  # Free-text explanation from the agent
     status: ProposedActionStatus = Field(default=ProposedActionStatus.PENDING)
     created_at: datetime = Field(
