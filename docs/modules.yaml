@@ -130,6 +130,8 @@ modules:
       - tests/runtime/test_lifespan.py
       - tests/runtime/test_stage_retry.py
       - tests/runtime/test_proposed_actions.py
+      - tests/runtime/test_board_proposals_js.py
+      - tests/runtime/board_proposals_harness.mjs
       - src/robotsix_mill/agent_candidates.py
       - tests/runtime/test_agent_candidates.py
     dependencies: [config, core, forge, stages]
