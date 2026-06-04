@@ -15,6 +15,7 @@ existing 1479-line ``tests/runtime/test_api.py``:
 
 from __future__ import annotations
 
+import contextlib
 import threading
 
 import pytest
@@ -974,3 +975,305 @@ def test_ws_board_connects_and_sends_initial_list(client):
         msg = ws.receive_json()
         assert msg["type"] == "ticket_list"
         assert isinstance(msg["tickets"], list)
+
+
+# -- _make_background_pass unit tests -----------------------------------
+
+
+class _FakeRegistry:
+    """Minimal fake RunRegistry for testing _make_background_pass."""
+
+    def __init__(self):
+        self.starts: list[tuple] = []
+        self.oks: list[tuple] = []
+        self.errors: list[tuple] = []
+        self._next_id = 1
+
+    def start(self, kind: str, repo_id: str = "") -> int:
+        rid = self._next_id
+        self._next_id += 1
+        self.starts.append((kind, repo_id, rid))
+        return rid
+
+    def finish_ok(self, run_id: int, summary: str) -> None:
+        self.oks.append((run_id, summary))
+
+    def finish_error(self, run_id: int, error: str) -> None:
+        self.errors.append((run_id, error))
+
+
+class _FakeRepos:
+    """Single-repo fake so _resolve_agent_run_repos returns [None]."""
+
+    def __init__(self):
+        self.repos = {}
+
+
+class _FakeAppState:
+    def __init__(self, repos: _FakeRepos):
+        self.repos = repos
+
+
+class _FakeRequest:
+    def __init__(self, repos: _FakeRepos):
+        self.app = type("_App", (), {"state": _FakeAppState(repos)})()
+
+
+def _wait_for_thread(thread: threading.Thread, timeout: float = 5.0) -> None:
+    thread.join(timeout=timeout)
+    assert not thread.is_alive(), "background thread did not finish"
+
+
+def test_factory_default_tracing_handler(monkeypatch):
+    """A factory handler with default settings launches a daemon thread
+    that calls the runner with session_id and records ok/error."""
+    import sys
+    from robotsix_mill.runtime.routes._passes import _make_background_pass
+
+    # -- inject a fake runner module ----------------------------------------
+    class _FakeResult:
+        drafts_created: list = [{"id": "D-1"}, {"id": "D-2"}]
+
+    def _fake_runner(session_id: str = "", repo_config=None):
+        return _FakeResult()
+
+    fake_mod = type("_FakeMod", (), {"run_test_pass": staticmethod(_fake_runner)})()
+    sys.modules["robotsix_mill.test_factory_runner"] = fake_mod
+
+    # -- stub the tracing helpers so we don't need Langfuse -----------------
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.tracing.make_session_id",
+        lambda kind: f"session-{kind}",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.tracing.start_ticket_root_span",
+        lambda session_id, stage, repo_config=None: contextlib.nullcontext(),
+    )
+
+    handler = _make_background_pass(
+        kind="test-factory",
+        runner_module="robotsix_mill.test_factory_runner",
+        runner_func="run_test_pass",
+        docstring="Test handler.",
+    )
+
+    registry = _FakeRegistry()
+    repos = _FakeRepos()
+    request = _FakeRequest(repos)
+
+    # Call the handler — it spawns the thread and returns immediately.
+    resp = handler(repo_id=None, request=request, registry=registry)
+    assert resp == {"status": "started"}
+
+    # Wait for the daemon thread.
+    for t in threading.enumerate():
+        if t.name == "test-factory-pass" and t.daemon:
+            _wait_for_thread(t)
+            break
+    else:
+        raise AssertionError("daemon thread 'test-factory-pass' not found")
+
+    # Registry assertions.
+    assert len(registry.starts) == 1
+    kind, repo_id, run_id = registry.starts[0]
+    assert kind == "test-factory"
+    assert repo_id == ""  # rc.repo_id is "" when rc is None
+
+    assert len(registry.oks) == 1
+    assert registry.oks[0][0] == run_id
+    assert registry.oks[0][1] == "Created 2 drafts: D-1, D-2"
+    assert len(registry.errors) == 0
+
+
+def test_factory_no_tracing_handler():
+    """uses_tracing=False skips session_id and tracing helpers."""
+    import sys
+    from robotsix_mill.runtime.routes._passes import _make_background_pass
+
+    class _FakeResult:
+        drafts_created: list = [{"id": "D-99"}]
+
+    def _fake_runner(repo_config=None):
+        return _FakeResult()
+
+    fake_mod = type("_FakeMod", (), {"run_notrace_pass": staticmethod(_fake_runner)})()
+    sys.modules["robotsix_mill.test_notrace_runner"] = fake_mod
+
+    handler = _make_background_pass(
+        kind="notrace",
+        runner_module="robotsix_mill.test_notrace_runner",
+        runner_func="run_notrace_pass",
+        docstring="No tracing.",
+        uses_tracing=False,
+    )
+
+    registry = _FakeRegistry()
+    repos = _FakeRepos()
+    resp = handler(repo_id=None, request=_FakeRequest(repos), registry=registry)
+    assert resp == {"status": "started"}
+
+    for t in threading.enumerate():
+        if t.name == "notrace-pass" and t.daemon:
+            _wait_for_thread(t)
+            break
+    else:
+        raise AssertionError("daemon thread 'notrace-pass' not found")
+
+    assert len(registry.starts) == 1
+    assert registry.starts[0][0] == "notrace"
+    assert len(registry.oks) == 1
+    assert registry.oks[0][1] == "Created 1 drafts: D-99"
+
+
+def test_factory_custom_summary_builder():
+    """Custom summary_builder replaces _default_summary."""
+    import sys
+    from robotsix_mill.runtime.routes._passes import _make_background_pass
+
+    class _FakeResult:
+        summary = "all clear"
+        drafts_created: list = []
+
+    def _fake_runner(repo_config=None):
+        return _FakeResult()
+
+    fake_mod = type("_FakeMod", (), {"run_custom_pass": staticmethod(_fake_runner)})()
+    sys.modules["robotsix_mill.test_custom_runner"] = fake_mod
+
+    handler = _make_background_pass(
+        kind="custom",
+        runner_module="robotsix_mill.test_custom_runner",
+        runner_func="run_custom_pass",
+        docstring="Custom summary.",
+        uses_tracing=False,
+        summary_builder=lambda r: r.summary or "fallback",
+    )
+
+    registry = _FakeRegistry()
+    repos = _FakeRepos()
+    resp = handler(repo_id=None, request=_FakeRequest(repos), registry=registry)
+    assert resp == {"status": "started"}
+
+    for t in threading.enumerate():
+        if t.name == "custom-pass" and t.daemon:
+            _wait_for_thread(t)
+            break
+
+    assert len(registry.oks) == 1
+    assert registry.oks[0][1] == "all clear"
+
+
+def test_factory_extra_runner_kwargs():
+    """extra_runner_kwargs forwards extra kwargs to the runner."""
+    import sys
+    from robotsix_mill.runtime.routes._passes import _make_background_pass
+
+    received_kwargs: dict = {}
+
+    class _FakeResult:
+        drafts_created: list = []
+
+    def _fake_runner(repo_config=None, **kwargs):
+        received_kwargs.update(kwargs)
+        return _FakeResult()
+
+    fake_mod = type("_FakeMod", (), {"run_extra_pass": staticmethod(_fake_runner)})()
+    sys.modules["robotsix_mill.test_extra_runner"] = fake_mod
+
+    handler = _make_background_pass(
+        kind="extra",
+        runner_module="robotsix_mill.test_extra_runner",
+        runner_func="run_extra_pass",
+        docstring="Extra kwargs.",
+        uses_tracing=False,
+        extra_runner_kwargs=lambda req: {"alpha": 1, "beta": "two"},
+    )
+
+    registry = _FakeRegistry()
+    repos = _FakeRepos()
+    resp = handler(repo_id=None, request=_FakeRequest(repos), registry=registry)
+    assert resp == {"status": "started"}
+
+    for t in threading.enumerate():
+        if t.name == "extra-pass" and t.daemon:
+            _wait_for_thread(t)
+            break
+
+    assert received_kwargs == {"alpha": 1, "beta": "two"}
+
+
+def test_factory_error_path():
+    """When the runner raises, registry.finish_error is called."""
+    import sys
+    from robotsix_mill.runtime.routes._passes import _make_background_pass
+
+    def _failing_runner(repo_config=None):
+        raise RuntimeError("simulated crash")
+
+    fake_mod = type("_FakeMod", (), {"run_fail_pass": staticmethod(_failing_runner)})()
+    sys.modules["robotsix_mill.test_fail_runner"] = fake_mod
+
+    handler = _make_background_pass(
+        kind="fail",
+        runner_module="robotsix_mill.test_fail_runner",
+        runner_func="run_fail_pass",
+        docstring="Always fails.",
+        uses_tracing=False,
+    )
+
+    registry = _FakeRegistry()
+    repos = _FakeRepos()
+    resp = handler(repo_id=None, request=_FakeRequest(repos), registry=registry)
+    assert resp == {"status": "started"}
+
+    for t in threading.enumerate():
+        if t.name == "fail-pass" and t.daemon:
+            _wait_for_thread(t)
+            break
+
+    assert len(registry.starts) >= 1
+    assert len(registry.errors) >= 1
+    assert "simulated crash" in registry.errors[0][1]
+
+
+def test_factory_thread_is_daemon():
+    """Generated handler MUST spawn a daemon thread so the process can
+    exit without waiting for it."""
+    import sys
+    from robotsix_mill.runtime.routes._passes import _make_background_pass
+
+    hold = threading.Event()
+
+    class _FakeResult:
+        drafts_created: list = []
+
+    def _blocking_runner(repo_config=None):
+        hold.wait(5)  # wait until we release
+        return _FakeResult()
+
+    fake_mod = type("_FakeMod", (), {"run_block_pass": staticmethod(_blocking_runner)})()
+    sys.modules["robotsix_mill.test_block_runner"] = fake_mod
+
+    handler = _make_background_pass(
+        kind="block",
+        runner_module="robotsix_mill.test_block_runner",
+        runner_func="run_block_pass",
+        docstring="Blocks.",
+        uses_tracing=False,
+    )
+
+    registry = _FakeRegistry()
+    repos = _FakeRepos()
+    handler(repo_id=None, request=_FakeRequest(repos), registry=registry)
+
+    found = None
+    for t in threading.enumerate():
+        if t.name == "block-pass":
+            found = t
+            break
+
+    assert found is not None, "background thread was not spawned"
+    assert found.daemon is True, "background thread must be daemon=True"
+
+    hold.set()  # release the thread
+    _wait_for_thread(found)
