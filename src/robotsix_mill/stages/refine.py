@@ -120,8 +120,7 @@ def _verify_branch_merged(repo_dir: Path | None, ticket: Ticket) -> bool:
         return True  # branch is merged
     if result.returncode == 1:
         log.info(
-            "%s: branch '%s' is NOT an ancestor of main — "
-            "implementation unmerged",
+            "%s: branch '%s' is NOT an ancestor of main — implementation unmerged",
             ticket.id,
             branch,
         )
