@@ -48,6 +48,7 @@ jobs:
         with:
           name: sbom
           path: sbom.json
+          if-no-files-found: error
 
   codeql:
     runs-on: ubuntu-latest
