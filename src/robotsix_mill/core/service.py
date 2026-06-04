@@ -1517,9 +1517,7 @@ class TicketService:
         with db.session(self.settings, self.board_id) as s:
             action = s.get(ProposedAction, action_id)
             if action is None:
-                log.warning(
-                    "_execute_proposed_action: action %d not found", action_id
-                )
+                log.warning("_execute_proposed_action: action %d not found", action_id)
                 return
             if action.status == ProposedActionStatus.EXECUTED:
                 return  # idempotent — already done

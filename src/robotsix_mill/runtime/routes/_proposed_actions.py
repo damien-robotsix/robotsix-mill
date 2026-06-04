@@ -56,13 +56,9 @@ def list_proposed_actions(
     actions: list[ProposedAction] = []
     for s in services:
         try:
-            actions.extend(
-                s.list_proposed_actions(status=status)
-            )
+            actions.extend(s.list_proposed_actions(status=status))
         except Exception:
-            log.exception(
-                "list_proposed_actions: failed to query board %r", s.board_id
-            )
+            log.exception("list_proposed_actions: failed to query board %r", s.board_id)
 
     # Re-sort merged list by created_at DESC.
     actions.sort(key=lambda a: a.created_at, reverse=True)
