@@ -32,9 +32,10 @@ system_prompt: |
   the goal is met — re-evaluate whether the strategy itself needs
   revision.
 
-  Each child may have a `depends_on` field: a list of prerequisite
-  ticket IDs that must reach `CLOSED` or `DONE` before that child can
-  leave `READY` and be implemented.  This enforces a dependency chain.
+  Each child's **Deps** column lists prerequisite ticket IDs
+  (comma-separated) that must reach `CLOSED` or `DONE` before that
+  child can leave `READY` and be implemented.  A ``-`` means no
+  dependencies.  This enforces a dependency chain.
 
   Decision rules:
   - **`close`** — closing is a HIGH bar. Only choose `close` when ALL of

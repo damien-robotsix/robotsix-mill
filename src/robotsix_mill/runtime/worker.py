@@ -438,8 +438,8 @@ def _run_epic_reeval(epic_id: str, settings) -> None:
         child_summaries: list[dict] = []
         for child in children:
             child_desc = svc.workspace(child).read_description()
-            if len(child_desc) > 2000:
-                child_desc = child_desc[:2000] + "\n...(truncated)"
+            if len(child_desc) > 500:
+                child_desc = child_desc[:500] + "\n...(truncated)"
             child_summaries.append(
                 {
                     "id": child.id,
