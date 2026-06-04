@@ -373,7 +373,8 @@ def test_completeness_check_cli_command(capsys, tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(
-        "robotsix_mill.runners.completeness_check_runner.run_completeness_check_pass", mock_run
+        "robotsix_mill.runners.completeness_check_runner.run_completeness_check_pass",
+        mock_run,
     )
 
     result = main(["completeness-check"])
@@ -394,7 +395,8 @@ def test_completeness_check_cli_json_output(capsys, tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(
-        "robotsix_mill.runners.completeness_check_runner.run_completeness_check_pass", mock_run
+        "robotsix_mill.runners.completeness_check_runner.run_completeness_check_pass",
+        mock_run,
     )
 
     result = main(["completeness-check", "--json"])
@@ -419,7 +421,8 @@ def test_completeness_check_cli_no_drafts(capsys, tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(
-        "robotsix_mill.runners.completeness_check_runner.run_completeness_check_pass", mock_run
+        "robotsix_mill.runners.completeness_check_runner.run_completeness_check_pass",
+        mock_run,
     )
 
     result = main(["completeness-check"])
@@ -436,7 +439,8 @@ def test_completeness_check_cli_failure(capsys, monkeypatch):
         raise RuntimeError("agent exploded")
 
     monkeypatch.setattr(
-        "robotsix_mill.runners.completeness_check_runner.run_completeness_check_pass", mock_run
+        "robotsix_mill.runners.completeness_check_runner.run_completeness_check_pass",
+        mock_run,
     )
 
     result = main(["completeness-check"])

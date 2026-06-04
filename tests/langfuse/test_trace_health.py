@@ -114,7 +114,9 @@ def _mixed_traces(sessioned, unsessioned):
 
 def _patch_settings(monkeypatch, settings):
     """Make run_trace_health_check use *settings* instead of its own."""
-    monkeypatch.setattr("robotsix_mill.runners.trace_health_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.trace_health_runner.Settings", lambda: settings
+    )
 
 
 def _patch_list_all_traces(monkeypatch, traces):

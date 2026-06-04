@@ -478,6 +478,8 @@ def test_copy_paste_cli_command(monkeypatch):
     def mock_run(session_id=None):
         return CopyPastePassResult(updated_memory="mem", drafts_created=[])
 
-    monkeypatch.setattr("robotsix_mill.runners.copy_paste_runner.run_copy_paste_pass", mock_run)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.copy_paste_runner.run_copy_paste_pass", mock_run
+    )
 
     assert main(["copy-paste"]) == 0

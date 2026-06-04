@@ -2239,7 +2239,10 @@ class Worker:
         """
         if wf.kind == "llm_agent":
             from ..config import Settings
-            from ..runners.periodic_runner import PERIODIC_PASS_CONFIGS, run_periodic_pass
+            from ..runners.periodic_runner import (
+                PERIODIC_PASS_CONFIGS,
+                run_periodic_pass,
+            )
 
             cfg = PERIODIC_PASS_CONFIGS.get(wf.name)
             if cfg is None:
@@ -2351,7 +2354,9 @@ class Worker:
             for repo_config in repo_configs:
                 label = repo_config.repo_id if repo_config else "default"
                 try:
-                    from ..runners.langfuse_cleanup_runner import run_langfuse_cleanup_pass
+                    from ..runners.langfuse_cleanup_runner import (
+                        run_langfuse_cleanup_pass,
+                    )
 
                     result = await asyncio.to_thread(
                         run_langfuse_cleanup_pass,

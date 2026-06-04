@@ -64,7 +64,9 @@ def test_clone_token_returns_token_on_success(monkeypatch):
     def fake_github_token(settings, repo_config=None):
         return "ghp_fake_token"
 
-    monkeypatch.setattr("robotsix_mill.runners.periodic_runner.github_token", fake_github_token)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.github_token", fake_github_token
+    )
 
     result = _clone_token(Settings(), _test_repo_config())
     assert result == "ghp_fake_token"
@@ -76,7 +78,9 @@ def test_clone_token_returns_none_on_runtime_error(monkeypatch):
     def fake_github_token(settings, repo_config=None):
         raise RuntimeError("no token")
 
-    monkeypatch.setattr("robotsix_mill.runners.periodic_runner.github_token", fake_github_token)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.github_token", fake_github_token
+    )
 
     result = _clone_token(Settings(), _test_repo_config())
     assert result is None
@@ -214,7 +218,9 @@ def test_run_periodic_pass_uses_clone_token_fn_when_configured(tmp_path, monkeyp
         github_token_calls.append(True)
         return "ghp_tok"
 
-    monkeypatch.setattr("robotsix_mill.runners.periodic_runner.github_token", fake_github_token)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.github_token", fake_github_token
+    )
     monkeypatch.setattr(
         "robotsix_mill.runners.periodic_runner.run_agent_pass",
         lambda **kw: _fake_agent_pass_result(),
@@ -256,7 +262,9 @@ def test_run_periodic_pass_uses_forge_token_when_clone_token_fn_none(
         get_secrets_calls.append(True)
         return Secrets(forge_token="ftok")
 
-    monkeypatch.setattr("robotsix_mill.runners.periodic_runner.get_secrets", fake_get_secrets)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.get_secrets", fake_get_secrets
+    )
     monkeypatch.setattr(
         "robotsix_mill.runners.periodic_runner.run_agent_pass",
         lambda **kw: _fake_agent_pass_result(),
