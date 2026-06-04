@@ -44,13 +44,21 @@ jobs:
           # by the supplier — the algorithm strength is determined by
           # the *key* the caller supplies, not by pyjwt itself. No fix
           # version is published (the "Fix Versions" column is empty
-          # in pip-audit's output). pyjwt enters our tree only as a
-          # transitive dep (langfuse → pyjwt for OTel auth signing);
-          # mill does not call its signing API directly. Re-evaluate
-          # if a fix version is ever published.
+          # in pip-audit's output). pyjwt is a direct dependency
+          # (pyjwt[crypto]>=2 in pyproject.toml) and also transitive
+          # via langfuse (tracing extra). mill calls jwt.encode()
+          # directly with RS256 in forge/auth.py to mint GitHub App
+          # bearer tokens. This is safe because the caller supplies
+          # its own RSA private key (a GitHub App key ≥2048 bits);
+          # the advisory's concern (weak keys) is mitigated — key
+          # strength is the caller's responsibility, and our caller
+          # supplies strong keys. Re-evaluate if a fix version is
+          # ever published.
           #
           # MAL-2026-4750 (fastapi 0.136.3): undocument "fastar" dep
           # injected into fastapi[standard] extras on PyPI.  mill
           # depends on "fastapi>=0.115" (no extras), so fastapi[standard]
           # is never installed & the malicious dep is never pulled.
+          # Advisory has since been withdrawn from the OSV database
+          # (2026); retained for documentation.
           GHA_PIP_AUDIT_INTERNAL_BE_CAREFUL_ALLOW_FAILURE: false
