@@ -1,286 +1,140 @@
-"""Proposed-action routes — list, approve, reject.
-
-Proposed actions are pending mutations (close, transition, comment,
-relabel) written by periodic agents and held until a human approves or
-rejects them. These endpoints expose that workflow to the board UI.
-"""
+"""Proposed-action review routes — list, get, approve, reject."""
 
 from __future__ import annotations
 
-import json
 import logging
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
-from sqlmodel import select
 
-from ...config import Settings
-from ...core import db
-from ...core.models import (
-    ActionType,
-    ProposedAction,
-    ProposedActionStatus,
-    Ticket,
-)
-from ...core.service import TicketService
-from ...core.states import State
-from ..deps import get_settings
+from ...core.models import ProposedAction, ProposedActionStatus
+from ..deps import get_service, get_settings
 
 log = logging.getLogger(__name__)
 
-# Per-module router, aggregated by routes/__init__.py via include_router.
 router = APIRouter()
 
 
-class ProposedActionRead(BaseModel):
-    """JSON shape returned to the board UI."""
-
-    id: int
-    source: str
-    target_ticket_id: str
-    action_type: str
-    payload: str | None
-    rationale: str
-    status: str
-    created_at: str
-    decided_at: str | None
-    decided_by: str | None
-
-
-def _to_read(pa: ProposedAction) -> ProposedActionRead:
-    return ProposedActionRead(
-        id=pa.id,
-        source=pa.source,
-        target_ticket_id=pa.target_ticket_id,
-        action_type=pa.action_type.value,
-        payload=pa.payload,
-        rationale=pa.rationale,
-        status=pa.status.value,
-        created_at=pa.created_at.isoformat(),
-        decided_at=pa.decided_at.isoformat() if pa.decided_at else None,
-        decided_by=pa.decided_by,
-    )
-
-
-def _resolve_board(repo_id: str, request: Request):
-    """Resolve *repo_id* to its ``RepoConfig`` or raise 400."""
-    repos = request.app.state.repos
-    if not repo_id or repo_id not in repos.repos:
-        sorted_keys = sorted(repos.repos.keys())
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown repo: '{repo_id}'. Known repos: {sorted_keys}",
-        )
-    return repos.repos[repo_id]
-
-
-@router.get(
-    "/proposed-actions",
-    response_model=list[ProposedActionRead],
-)
+@router.get("/proposed-actions", response_model=list[ProposedAction])
 def list_proposed_actions(
-    repo_id: str,
-    request: Request,
-    status: str = "pending",
+    status: ProposedActionStatus | None = None,
+    repo_id: str | None = None,
+    request: Request = None,
+    svc=Depends(get_service),
     settings=Depends(get_settings),
-) -> list[ProposedActionRead]:
-    """List proposed actions for a repo.
+) -> list[ProposedAction]:
+    """List all proposed actions, ordered by ``created_at`` DESC.
 
-    By default returns only pending entries. Pass ``status=all`` or a
-    specific ``ProposedActionStatus`` value (e.g. ``approved``,
-    ``rejected``, ``executed``, ``failed``) to filter differently.
+    Optional query params: ``?status=pending``, ``?repo_id=X``.
+
+    Multi-repo: when *repo_id* is omitted or ``"all"``, iterates all
+    registered boards and aggregates results sorted by ``created_at``
+    DESC.
     """
-    rc = _resolve_board(repo_id, request)
-    board_id = rc.board_id
+    from ...core.service import TicketService as _TicketService
 
-    with db.session(settings, board_id) as s:
-        stmt = (
-            select(ProposedAction)
-            .join(Ticket, ProposedAction.target_ticket_id == Ticket.id)
-            .where(Ticket.board_id == board_id)
-        )
-        if status != "all":
-            stmt = stmt.where(ProposedAction.status == status)
-        stmt = stmt.order_by(ProposedAction.created_at.desc())
-        rows = s.exec(stmt).all()
-
-    return [_to_read(r) for r in rows]
-
-
-def _execute_proposed_action(
-    pa: ProposedAction,
-    svc: TicketService,
-    settings: Settings,
-    board_id: str,
-) -> None:
-    """Apply *pa* to its target ticket.
-
-    Raises ``ValueError`` for invalid payloads; raises
-    ``KeyError`` / ``TransitionError`` from ``TicketService``
-    for missing tickets / invalid transitions.
-    """
-    action_type = pa.action_type
-    payload = pa.payload or "{}"
-
-    if action_type == ActionType.CLOSE:
-        svc.transition(
-            pa.target_ticket_id,
-            State.CLOSED,
-            note="closed by proposed-action executor",
-        )
-
-    elif action_type == ActionType.TRANSITION:
-        try:
-            payload_dict = json.loads(payload)
-        except json.JSONDecodeError:
-            raise ValueError(f"TRANSITION payload is not valid JSON: {payload!r}")
-        to_state = payload_dict.get("to_state")
-        if not to_state or to_state not in State._value2member_map_:
-            raise ValueError(
-                f"TRANSITION payload missing or invalid 'to_state': {payload!r}"
+    repos = request.app.state.repos
+    if repo_id and repo_id != "all":
+        if repo_id == "meta":
+            services = [_TicketService(settings, board_id="meta")]
+        elif repo_id not in repos.repos:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown repo: '{repo_id}'. Known repos: "
+                f"{sorted(repos.repos.keys())}",
             )
-        svc.transition(
-            pa.target_ticket_id,
-            State(to_state),
-            note="transitioned by proposed-action executor",
-        )
-
-    elif action_type == ActionType.COMMENT:
-        body = pa.payload or ""
-        svc.add_comment(
-            pa.target_ticket_id,
-            body=body,
-            author="proposed-action",
-        )
-
-    elif action_type == ActionType.RELABEL:
-        try:
-            payload_dict = json.loads(payload)
-        except json.JSONDecodeError:
-            raise ValueError(f"RELABEL payload is not valid JSON: {payload!r}")
-        if "priority" not in payload_dict or not isinstance(
-            payload_dict["priority"], bool
-        ):
-            raise ValueError(
-                f"RELABEL payload missing or invalid 'priority' (bool): {payload!r}"
-            )
-        with db.session(settings, board_id) as s:
-            ticket = s.get(Ticket, pa.target_ticket_id)
-            if ticket is None:
-                raise KeyError(pa.target_ticket_id)
-            ticket.priority = payload_dict["priority"]
-            s.add(ticket)
-            s.commit()
-
+        else:
+            services = [
+                _TicketService(settings, board_id=repos.repos[repo_id].board_id)
+            ]
     else:
-        raise ValueError(f"Unknown action_type: {action_type}")
+        services = [
+            _TicketService(settings, board_id=rc.board_id)
+            for rc in repos.repos.values()
+        ]
+        services.append(_TicketService(settings, board_id="meta"))
+
+    actions: list[ProposedAction] = []
+    for s in services:
+        try:
+            actions.extend(s.list_proposed_actions(status=status))
+        except Exception:
+            log.exception("list_proposed_actions: failed to query board %r", s.board_id)
+
+    # Re-sort merged list by created_at DESC.
+    actions.sort(key=lambda a: a.created_at, reverse=True)
+    return actions
+
+
+@router.get("/proposed-actions/{action_id}", response_model=ProposedAction)
+def get_proposed_action(
+    action_id: int,
+    repo_id: str | None = None,
+    request: Request = None,
+    svc=Depends(get_service),
+    settings=Depends(get_settings),
+) -> ProposedAction:
+    """Return a single proposed action by id; 404 on miss.
+
+    For multi-repo disambiguation, accepts optional ``?repo_id=X``.
+    When omitted, tries the lead board first, then fans out to all
+    registered boards.
+    """
+    from ...core.service import TicketService as _TicketService
+
+    action = svc.get_proposed_action(action_id)
+    if action is not None:
+        return action
+
+    # Fan out to other boards.
+    repos = request.app.state.repos
+    for rc in repos.repos.values():
+        if rc.board_id == svc.board_id:
+            continue
+        s = _TicketService(settings, board_id=rc.board_id)
+        action = s.get_proposed_action(action_id)
+        if action is not None:
+            return action
+
+    # Try the meta board.
+    s = _TicketService(settings, board_id="meta")
+    action = s.get_proposed_action(action_id)
+    if action is not None:
+        return action
+
+    raise HTTPException(404, f"proposed action {action_id} not found")
 
 
 @router.post(
-    "/proposed-actions/{pa_id}/approve",
-    response_model=ProposedActionRead,
+    "/proposed-actions/{action_id}/approve",
+    response_model=ProposedAction,
 )
 def approve_proposed_action(
-    pa_id: int,
-    repo_id: str,
-    request: Request,
-    settings=Depends(get_settings),
-) -> ProposedActionRead:
-    """Approve and execute a pending proposed action.
-
-    Transitions the record to APPROVED, executes the action, then
-    marks it EXECUTED on success (FAILED on error).
-    """
-    rc = _resolve_board(repo_id, request)
-    board_id = rc.board_id
-
-    with db.session(settings, board_id) as s:
-        pa = s.get(ProposedAction, pa_id)
-        if pa is None:
-            raise HTTPException(404, "proposed action not found")
-        if pa.status != ProposedActionStatus.PENDING:
-            raise HTTPException(
-                409,
-                f"proposed action already {pa.status.value}"
-                + (f" by {pa.decided_by}" if pa.decided_by else ""),
-            )
-
-        # Transition to APPROVED before executing.
-        now = datetime.now(timezone.utc)
-        pa.status = ProposedActionStatus.APPROVED
-        pa.decided_at = now
-        pa.decided_by = "human"
-        s.add(pa)
-        s.commit()
-        s.refresh(pa)
-
-    # Execute outside the first session to give the executor its own
-    # clean session context.
-    svc = TicketService(settings, board_id=board_id)
+    action_id: int,
+    svc=Depends(get_service),
+) -> ProposedAction:
+    """Approve a pending action (transitions to APPROVED then
+    executes).  404 on unknown id, 400 if not PENDING."""
     try:
-        _execute_proposed_action(pa, svc, settings, board_id)
-    except Exception as exc:
-        log.exception(
-            "Proposed action %d (%s) execution failed: %s",
-            pa_id,
-            pa.action_type.value,
-            exc,
-        )
-        with db.session(settings, board_id) as s:
-            pa = s.get(ProposedAction, pa_id)
-            if pa is not None:
-                pa.status = ProposedActionStatus.FAILED
-                s.add(pa)
-                s.commit()
-                s.refresh(pa)
-        raise HTTPException(
-            500,
-            f"execution failed: {exc}",
-        )
-
-    # Mark EXECUTED.
-    with db.session(settings, board_id) as s:
-        pa = s.get(ProposedAction, pa_id)
-        pa.status = ProposedActionStatus.EXECUTED
-        s.add(pa)
-        s.commit()
-        s.refresh(pa)
-
-    return _to_read(pa)
+        return svc.approve_proposed_action(action_id)
+    except KeyError:
+        raise HTTPException(404, f"proposed action {action_id} not found") from None
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
 
 
 @router.post(
-    "/proposed-actions/{pa_id}/reject",
-    response_model=ProposedActionRead,
+    "/proposed-actions/{action_id}/reject",
+    response_model=ProposedAction,
 )
 def reject_proposed_action(
-    pa_id: int,
-    repo_id: str,
-    request: Request,
-    settings=Depends(get_settings),
-) -> ProposedActionRead:
-    """Reject a pending proposed action without executing it."""
-    rc = _resolve_board(repo_id, request)
-    board_id = rc.board_id
-
-    with db.session(settings, board_id) as s:
-        pa = s.get(ProposedAction, pa_id)
-        if pa is None:
-            raise HTTPException(404, "proposed action not found")
-        if pa.status != ProposedActionStatus.PENDING:
-            raise HTTPException(
-                409,
-                f"proposed action already {pa.status.value}"
-                + (f" by {pa.decided_by}" if pa.decided_by else ""),
-            )
-
-        now = datetime.now(timezone.utc)
-        pa.status = ProposedActionStatus.REJECTED
-        pa.decided_at = now
-        pa.decided_by = "human"
-        s.add(pa)
-        s.commit()
-        s.refresh(pa)
-
-    return _to_read(pa)
+    action_id: int,
+    svc=Depends(get_service),
+) -> ProposedAction:
+    """Reject a pending action (transitions to REJECTED, no
+    execution).  404 on unknown id, 400 if not PENDING."""
+    try:
+        return svc.reject_proposed_action(action_id)
+    except KeyError:
+        raise HTTPException(404, f"proposed action {action_id} not found") from None
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
