@@ -24,7 +24,7 @@ read_ticket: true
 output_type: CopyPasteResult
 retries: 4
 module: copy_pasting
-skills: [board-read]
+skills: [board-read, board-propose]
 
 system_prompt: |
   You are a copy-paste detection agent for an autonomous software

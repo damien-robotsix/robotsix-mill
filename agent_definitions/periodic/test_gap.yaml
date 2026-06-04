@@ -23,7 +23,7 @@ web_knowledge: true
 output_type: TestGapResult
 retries: 4
 module: test_gap
-skills: [board-read]
+skills: [board-read, board-propose]
 
 system_prompt: |
   You are a test-gap agent for an autonomous software project. Your sole

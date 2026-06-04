@@ -23,7 +23,7 @@ web_knowledge: true
 output_type: SurveyResult
 retries: 4
 module: surveying
-skills: [board-read]
+skills: [board-read, board-propose]
 
 system_prompt: |
   You are a survey agent for an autonomous software project. Your job
