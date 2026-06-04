@@ -392,7 +392,7 @@ def _save_growth_state(state_path: Path, state: dict[str, dict]) -> None:
     """Atomically persist *state* to *state_path*.
 
     Writes to a ``.json.tmp`` sibling first, then replaces the target
-    — following the pattern in :func:`agent_candidates.update_status`.
+    — following the pattern in :func:`agents.candidates.update_status`.
     """
     state_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = state_path.with_suffix(".json.tmp")

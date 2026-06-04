@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from robotsix_mill.agent_candidates import (
+from robotsix_mill.agents.candidates import (
     Candidate,
     candidates_path,
     load_candidates,
