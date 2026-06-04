@@ -192,6 +192,7 @@ class ProposedAction(SQLModel, table=True):
         default=None, sa_column=Column(TZDateTime(), nullable=True)
     )
     decided_by: str | None = Field(default=None)
+    failure_reason: str | None = Field(default=None)
 
 
 # --- API request/response shapes ---
