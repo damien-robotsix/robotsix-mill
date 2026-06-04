@@ -97,8 +97,7 @@ def test_fingerprint_title_match_without_file_path(settings):
     _seed(
         settings,
         title=(
-            "trace-review: tool_error — claude code returned an "
-            "error result success"
+            "trace-review: tool_error — claude code returned an error result success"
         ),
         body="unrelated body that does not name any code locus",
     )
