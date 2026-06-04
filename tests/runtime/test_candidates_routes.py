@@ -2,7 +2,7 @@
 
 Covers GET /candidates, POST /candidates/{id}/validate, and POST
 /candidates/{id}/reject — the parser unit tests live in
-tests/test_agent_candidates.py.
+tests/agents/test_candidates.py.
 """
 
 from __future__ import annotations

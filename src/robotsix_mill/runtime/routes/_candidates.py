@@ -14,7 +14,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from ...agent_candidates import (
+from ...agents.candidates import (
     Candidate,
     candidates_path,
     load_candidates,

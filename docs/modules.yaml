@@ -132,8 +132,6 @@ modules:
       - tests/runtime/test_proposed_actions.py
       - tests/runtime/test_board_proposals_js.py
       - tests/runtime/board_proposals_harness.mjs
-      - src/robotsix_mill/agent_candidates.py
-      - tests/runtime/test_agent_candidates.py
     dependencies: [config, core, forge, stages]
 
   # -------------------------------------------------------------------
@@ -365,7 +363,9 @@ modules:
       - src/robotsix_mill/agents/freshness.py
       - src/robotsix_mill/agents/prerequisite.py
       - src/robotsix_mill/agents/periodic_loader.py
+      - src/robotsix_mill/agents/candidates.py
       - tests/agents/test_coordinating.py
+      - tests/agents/test_candidates.py
       - tests/agents/test_module_curator.py
       - tests/agents/test_periodic_loader.py
       - tests/agents/test_documenting.py
