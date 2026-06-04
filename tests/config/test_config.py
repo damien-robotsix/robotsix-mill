@@ -1449,6 +1449,17 @@ class TestFlattenYamlConfig:
         result = flatten_yaml_config(yaml_config)
         assert result["doc_classifier_diff_max_chars"] == 1234
 
+    def test_flatten_enable_repo_creation(self):
+        """``core.enable_repo_creation`` flattens to the
+        ``enable_repo_creation`` Settings alias (gates the new-repo
+        scaffold path; without the mapping the YAML key is silently
+        ignored and repo creation stays off)."""
+        from robotsix_mill.config_loader import flatten_yaml_config
+
+        yaml_config = {"core": {"enable_repo_creation": True}}
+        result = flatten_yaml_config(yaml_config)
+        assert result["enable_repo_creation"] is True
+
     def test_flatten_unknown_paths_ignored(self):
         """YAML paths without a mapping are silently ignored."""
         from robotsix_mill.config_loader import flatten_yaml_config
