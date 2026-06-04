@@ -41,6 +41,7 @@ Install pre-commit hooks (Ruff, mypy, Bandit):
 | `runtime/tracing.py` | Langfuse tracing + OpenRouter cost ✅ |
 | `sandbox.py` | isolated command execution (always containerized) |
 | `stages/` refine·implement·deliver·merge·retrospect | ✅ all real |
+| `dedup.py` | shared ticket-dedup primitives (refine + trace-review + epic-decomposition) |
 | `audit_runner.py` | audit pass orchestration |
 | `trace_health_runner.py` | trace-health check orchestration |
 | `agents/auditing.py` | audit agent (meta-audit for gaps) |
@@ -66,6 +67,15 @@ The full architecture is covered in [README.md](README.md). For Docker
 setup and GitHub App delivery identity, see
 [docs/docker-architecture.md](docs/docker-architecture.md) and
 [docs/github-app.md](docs/github-app.md).
+
+### Epic-decomposition pre-filing dedup
+
+When an epic is decomposed into children, an advisory pre-filing dedup
+check (in `dedup.py`) flags a would-be child that duplicates either a
+recently shipped/in-flight ticket or an earlier sibling in the same
+batch. Overlaps are logged and annotated onto the child's body, but the
+child is **never dropped** — the check is advisory only. See
+[docs/epic-dedup.md](docs/epic-dedup.md) for the authoritative reference.
 
 ## How the agent pattern works
 
