@@ -496,7 +496,7 @@ class RefineStage(Stage):
                 )
             log.info(
                 "%s: dedup verdict named duplicate_of=%s but it is not a "
-                "valid dedup target (terminal/declined/circular) — "
+                "valid dedup target (terminal/declined/circular/unmerged) — "
                 "proceeding with refine",
                 ticket.id,
                 dup_id,
@@ -510,7 +510,7 @@ class RefineStage(Stage):
                 )
             log.info(
                 "%s: dedup verdict named already_done=%s but it is not a "
-                "valid dedup target (terminal/declined/circular) — "
+                "valid dedup target (terminal/declined/circular/unmerged) — "
                 "proceeding with refine",
                 ticket.id,
                 done_id,

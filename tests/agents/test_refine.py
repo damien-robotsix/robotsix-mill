@@ -755,6 +755,82 @@ def test_dedup_legit_implemented_candidate_accepted(ctx, service, monkeypatch):
     assert not refine_state["called"]
 
 
+def test_dedup_unmerged_candidate_branch_refused(ctx, service, monkeypatch):
+    """A candidate that reached DONE via a real implementation note but
+    whose own branch never merged to main must NOT close the current
+    ticket as a duplicate — refine proceeds so the stranded work is
+    re-applied."""
+    from robotsix_mill.stages import refine as refine_module
+
+    refine_state = _install_refine_spy(monkeypatch)
+
+    t = service.create("Re-apply stranded work", _DEDUP_BODY)
+    cand = service.create("Original (stranded)", _DEDUP_BODY)
+
+    # Genuinely implemented (passes all four pre-merge validity checks)
+    # and carries a branch — but that branch never merged.
+    service.set_branch(cand.id, "feat/stranded")
+    service.transition(cand.id, State.DONE, note="implemented in PR #7")
+
+    # Report the candidate's branch as unmerged, decoupling the test
+    # from a real git repo.
+    monkeypatch.setattr(
+        refine_module, "_verify_branch_merged", lambda repo_dir, t: False
+    )
+
+    def fake_dedup(
+        *, settings, draft_title, draft_body, repo_dir=None, candidates_json
+    ):
+        return {
+            "duplicate_of": None,
+            "already_done": cand.id,
+            "reason": "already shipped",
+        }
+
+    monkeypatch.setattr(dedup, "run_dedup_check", fake_dedup)
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert refine_state["called"]
+    assert "already implemented in" not in (out.note or "")
+
+
+def test_dedup_merged_candidate_branch_accepted(ctx, service, monkeypatch):
+    """Positive control: a DONE candidate whose branch IS merged stays a
+    valid dedup target — the current ticket is still closed DONE."""
+    from robotsix_mill.stages import refine as refine_module
+
+    refine_state = _install_refine_spy(monkeypatch)
+
+    t = service.create("Add feature Z", _DEDUP_BODY)
+    cand = service.create("Add feature Z (shipped)", _DEDUP_BODY)
+
+    service.set_branch(cand.id, "feat/z")
+    service.transition(cand.id, State.DONE, note="implemented in PR #7")
+
+    monkeypatch.setattr(
+        refine_module, "_verify_branch_merged", lambda repo_dir, t: True
+    )
+
+    def fake_dedup(
+        *, settings, draft_title, draft_body, repo_dir=None, candidates_json
+    ):
+        return {
+            "duplicate_of": None,
+            "already_done": cand.id,
+            "reason": "already shipped",
+        }
+
+    monkeypatch.setattr(dedup, "run_dedup_check", fake_dedup)
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.DONE
+    assert f"already implemented in {cand.id}" in out.note
+    assert not refine_state["called"]
+
+
 def test_dedup_skipped_for_empty_title_and_draft(ctx, service, monkeypatch):
     """When both title and draft are empty, blocks BEFORE dedup check."""
     dedup_called = False
