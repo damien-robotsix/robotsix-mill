@@ -1698,6 +1698,56 @@ def test_promote_to_epic_breakdown_failure_leaves_epic_intact(ctx_factory, monke
 
 
 # ---------------------------------------------------------------------------
+# 31b. promote_to_epic: pre-filing dedup flags an overlapping child but
+#      still creates BOTH (never silently dropped).
+# ---------------------------------------------------------------------------
+
+
+def test_promote_to_epic_flags_overlapping_child_but_creates_both(
+    ctx_factory, monkeypatch
+):
+    """The refine inline epic-breakdown path runs the advisory dedup
+    check before filing: two children whose scopes overlap (shared
+    CONTRIBUTING.md path) are BOTH created, with the later one carrying
+    the ``[!warning]`` advisory block."""
+    from robotsix_mill.agents import epic_breakdown as _ebreak
+
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
+    t = _ticket(ctx, title="Audit Trivy SARIF handling", body="One-shot repo migration")
+
+    class _FakeBreakdown:
+        def __init__(self):
+            self.child_titles = ["First Trivy child", "Second Trivy child"]
+            self.child_bodies = [
+                "Work documented in CONTRIBUTING.md for the first child",
+                "Work documented in CONTRIBUTING.md for the second child",
+            ]
+            self.epic_body = None
+
+    monkeypatch.setattr(
+        _ebreak, "run_epic_breakdown_agent", lambda **kw: _FakeBreakdown()
+    )
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_ok(
+            promote_to_epic=True,
+            epic_body="## Strategic epic body",
+            spec_markdown=None,
+        ),
+    )
+
+    out = RefineStage().run(t, ctx)
+    assert out.next_state is State.EPIC_OPEN
+
+    children = [tk for tk in ctx.service.list() if tk.parent_id == t.id]
+    assert len(children) == 2, "both children must be created, none dropped"
+    bodies = [ctx.service.workspace(c).read_description() for c in children]
+    flagged = [b for b in bodies if "[!warning]" in b]
+    assert len(flagged) == 1
+    assert "CONTRIBUTING.md" in flagged[0]
+
+
+# ---------------------------------------------------------------------------
 # 32. no_change_needed: refine closes ticket directly to DONE with rationale comment
 # ---------------------------------------------------------------------------
 

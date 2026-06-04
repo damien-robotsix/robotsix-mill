@@ -8,6 +8,7 @@ and multi-source vs single-source candidate querying.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -18,7 +19,10 @@ from robotsix_mill.core.db import session as db_session
 from robotsix_mill.core.models import SourceKind, Ticket
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
+from robotsix_mill.core.workspace import Workspace
 from robotsix_mill.dedup import (
+    _describe_recent_signal,
+    _extract_paths,
     annotate_child_body,
     find_child_overlaps,
     find_prior_matching_ticket,
@@ -405,3 +409,266 @@ def test_reprocess_flags_but_still_creates_children(settings, monkeypatch):
     flagged = [b for b in bodies if "[!warning]" in b]
     assert len(flagged) == 1
     assert "CONTRIBUTING.md" in flagged[0]
+
+
+# ---------------------------------------------------------------------------
+# A. find_prior_matching_ticket — uncovered branches
+# ---------------------------------------------------------------------------
+
+
+def test_find_prior_returns_none_and_logs_on_exception(settings, monkeypatch, caplog):
+    """Candidate retrieval blowing up is best-effort: the matcher
+    returns None and logs the failure rather than raising into the
+    caller (lines 113-115)."""
+    svc = _svc(settings)
+
+    def _boom(*a, **k):
+        raise RuntimeError("db unavailable")
+
+    monkeypatch.setattr(svc, "recent_tickets", _boom)
+
+    with caplog.at_level(logging.ERROR, logger="robotsix_mill.dedup"):
+        result = find_prior_matching_ticket(
+            svc, _BOARD, [_TARGET_PATH], "any symptom", settings, _now()
+        )
+
+    assert result is None
+    assert any(
+        "find_prior_matching_ticket failed" in r.getMessage() for r in caplog.records
+    )
+
+
+def test_find_prior_skips_candidate_with_null_created_at(settings):
+    """A candidate whose ``created_at`` is None is skipped — it can't be
+    placed in the recency window (lines 76-77)."""
+    svc, ticket = _seed(
+        settings,
+        title="some unrelated title",
+        body=f"prior body mentioning {_TARGET_PATH}",
+    )
+    svc.transition(ticket.id, State.DONE, note="merged")
+    _backdate(settings, ticket.id, None)
+
+    match = find_prior_matching_ticket(
+        _svc(settings),
+        _BOARD,
+        [_TARGET_PATH],
+        "a symptom that does not appear in any title",
+        settings,
+        _now(),
+    )
+    assert match is None
+
+
+def test_find_prior_normalizes_naive_created_at(settings, monkeypatch):
+    """A tz-naive ``created_at`` within the lookback window is normalized
+    to UTC-aware before the comparison, so the candidate still matches
+    (line 80).
+
+    The DB's ``TZDateTime`` column rejects naive writes, so the naive
+    value is injected on an in-memory candidate returned by a stubbed
+    ``recent_tickets`` — matched by title fingerprint (no body read)."""
+    svc, ticket = _seed(
+        settings,
+        title="trace review tool error wrapper bug",
+        body="prior body that names no code locus",
+    )
+    live = svc.get(ticket.id)
+    live.created_at = datetime.now() - timedelta(days=1)  # noqa: DTZ005 — naive
+    assert live.created_at.tzinfo is None
+    monkeypatch.setattr(svc, "recent_tickets", lambda **k: [live])
+
+    match = find_prior_matching_ticket(
+        svc,
+        _BOARD,
+        [],
+        "wrapper bug",
+        settings,
+        _now(),
+    )
+    assert match is not None
+    assert match.id == ticket.id
+
+
+# ---------------------------------------------------------------------------
+# B. _extract_paths
+# ---------------------------------------------------------------------------
+
+
+def test_extract_paths_multi_segment_token():
+    assert _extract_paths("see tests/foo/test_bar.py for the repro") == [
+        "tests/foo/test_bar.py"
+    ]
+
+
+def test_extract_paths_bare_filename_with_extension():
+    assert _extract_paths("edit ci.yml and CONTRIBUTING.md please") == [
+        "ci.yml",
+        "CONTRIBUTING.md",
+    ]
+
+
+def test_extract_paths_dedups_first_seen_order():
+    text = "touch src/a/b.py then src/a/b.py again and finally docs/c.md"
+    assert _extract_paths(text) == ["src/a/b.py", "docs/c.md"]
+
+
+def test_extract_paths_ignores_tokens_without_extension():
+    assert _extract_paths("run npx jscpd against the duplicate code") == []
+
+
+def test_extract_paths_empty_input_returns_empty():
+    assert _extract_paths("") == []
+    assert _extract_paths(None) == []
+
+
+# ---------------------------------------------------------------------------
+# C. find_child_overlaps / _describe_recent_signal — uncovered branches
+# ---------------------------------------------------------------------------
+
+
+def test_child_overlaps_empty_lists_returns_empty(settings):
+    """No proposed children → no notes (the missing/empty child-lists
+    case)."""
+    assert find_child_overlaps(_svc(settings), "EPIC-1", [], [], settings, _now()) == []
+
+
+def test_child_overlaps_flags_in_batch_sibling_by_title(settings):
+    """Two siblings with no shared extracted path but overlapping
+    normalized titles flag the later one by title (lines 251-255)."""
+    notes = find_child_overlaps(
+        _svc(settings),
+        "EPIC-1",
+        ["Add retry logic", "Add retry logic to the queue consumer"],
+        ["first child body with no path token", "second child body with no path token"],
+        settings,
+        _now(),
+    )
+    assert notes[0] is None
+    assert notes[1] is not None
+    assert "overlapping title" in notes[1]
+    assert "sibling #0" in notes[1]
+
+
+def test_child_overlaps_list_children_failure_non_fatal(settings, monkeypatch, caplog):
+    """A failure enumerating existing children is logged but does not
+    crash the overlap check (lines 205-206)."""
+    svc = _svc(settings)
+
+    def _boom(*a, **k):
+        raise RuntimeError("children query failed")
+
+    monkeypatch.setattr(svc, "list_children", _boom)
+
+    with caplog.at_level(logging.ERROR, logger="robotsix_mill.dedup"):
+        notes = find_child_overlaps(
+            svc,
+            "EPIC-1",
+            ["child one", "child two"],
+            ["body one", "body two"],
+            settings,
+            _now(),
+        )
+
+    assert len(notes) == 2
+    assert any("list_children failed" in r.getMessage() for r in caplog.records)
+
+
+def test_child_overlaps_outer_exception_returns_all_none(settings, monkeypatch, caplog):
+    """An unexpected failure inside the per-child loop yields an all-None
+    result of the correct length so children are still filed (lines
+    260-262)."""
+    import robotsix_mill.dedup as dedup_mod
+
+    def _boom(*a, **k):
+        raise RuntimeError("matcher exploded")
+
+    monkeypatch.setattr(dedup_mod, "find_prior_matching_ticket", _boom)
+
+    with caplog.at_level(logging.ERROR, logger="robotsix_mill.dedup"):
+        notes = find_child_overlaps(
+            _svc(settings),
+            "EPIC-1",
+            ["a", "b", "c"],
+            ["x", "y", "z"],
+            settings,
+            _now(),
+        )
+
+    assert notes == [None, None, None]
+    assert any("find_child_overlaps failed" in r.getMessage() for r in caplog.records)
+
+
+def test_child_overlaps_recent_match_described_as_title_overlap(settings):
+    """A recent ticket matched via title (no shared path) is described as
+    a 'title overlap' by ``_describe_recent_signal`` (the paths-empty
+    fallback)."""
+    svc, prior = _seed(
+        settings,
+        title="trace review tool error wrapper bug fix",
+        body="prior body that names no code locus at all",
+    )
+    svc.transition(prior.id, State.DONE, note="merged")
+
+    notes = find_child_overlaps(
+        _svc(settings),
+        "EPIC-1",
+        ["trace review tool error wrapper bug fix"],
+        ["child body without any file path token"],
+        settings,
+        _now(),
+    )
+    assert notes[0] is not None
+    assert "title overlap" in notes[0]
+    assert prior.id in notes[0]
+
+
+def test_describe_recent_signal_except_falls_back_to_title_overlap(
+    settings, monkeypatch, caplog
+):
+    """When the description lookup inside ``_describe_recent_signal``
+    raises, the note still falls back to 'title overlap' and the failure
+    is logged (lines 153-155)."""
+    svc, prior = _seed(
+        settings,
+        title="trivy sarif upload audit decision",
+        body="prior body with no matching path token here",
+    )
+    svc.transition(prior.id, State.DONE, note="merged")
+
+    orig_read = Workspace.read_description
+    calls = {"n": 0}
+
+    def _flaky_read(self):
+        calls["n"] += 1
+        # The first read happens inside find_prior_matching_ticket's
+        # path check; the second is _describe_recent_signal's lookup,
+        # which we force to raise.
+        if calls["n"] >= 2:
+            raise RuntimeError("workspace read failed")
+        return orig_read(self)
+
+    monkeypatch.setattr(Workspace, "read_description", _flaky_read)
+
+    with caplog.at_level(logging.ERROR, logger="robotsix_mill.dedup"):
+        notes = find_child_overlaps(
+            _svc(settings),
+            "EPIC-1",
+            ["trivy sarif upload audit decision"],
+            ["this child names config/foo.yml as its only path"],
+            settings,
+            _now(),
+        )
+
+    assert notes[0] is not None
+    assert "title overlap" in notes[0]
+    assert any(
+        "_describe_recent_signal failed" in r.getMessage() for r in caplog.records
+    )
+
+
+def test_describe_recent_signal_direct_title_fallback(settings):
+    """Direct unit cover: with empty paths, the signal is 'title
+    overlap' regardless of body content."""
+    svc, prior = _seed(settings, title="some prior", body="some body")
+    assert _describe_recent_signal(prior, [], settings, _BOARD) == "title overlap"

@@ -1106,6 +1106,53 @@ def test_generate_children_creates_children(client, service, monkeypatch):
     assert child_titles == {"Child A", "Child B"}
 
 
+def test_generate_children_flags_overlapping_child(client, service, monkeypatch):
+    """The /generate-children route runs the advisory pre-filing dedup
+    check: two overlapping children (shared CONTRIBUTING.md path) are
+    BOTH created, and exactly the later one carries the ``[!warning]``
+    advisory block — never silently dropped."""
+    import threading
+
+    from robotsix_mill.agents.epic_breakdown import EpicBreakdownResult
+    from robotsix_mill.core.service import TicketService
+
+    epic = service.create("Audit Trivy SARIF", kind="epic")
+
+    children_created = threading.Event()
+    child_count = [0]
+    orig_create = TicketService.create
+
+    def tracking_create(self, title, *args, **kwargs):
+        result = orig_create(self, title, *args, **kwargs)
+        child_count[0] += 1
+        if child_count[0] >= 2:
+            children_created.set()
+        return result
+
+    monkeypatch.setattr(TicketService, "create", tracking_create)
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_breakdown.run_epic_breakdown_agent",
+        lambda **kw: EpicBreakdownResult(
+            child_titles=["First Trivy child", "Second Trivy child"],
+            child_bodies=[
+                "Work documented in CONTRIBUTING.md for the first child",
+                "Work documented in CONTRIBUTING.md for the second child",
+            ],
+        ),
+    )
+
+    r = client.post(f"/tickets/{epic.id}/generate-children")
+    assert r.status_code == 202
+    assert children_created.wait(5), "children were not created in time"
+
+    children = service.list_children(epic.id)
+    assert len(children) == 2, "both children must be created, none dropped"
+    bodies = [service.workspace(c).read_description() for c in children]
+    flagged = [b for b in bodies if "[!warning]" in b]
+    assert len(flagged) == 1
+    assert "CONTRIBUTING.md" in flagged[0]
+
+
 def test_generate_children_applies_epic_body(client, service, monkeypatch):
     """POST /tickets/{id}/generate-children writes the agent's epic_body
     back to the epic's description.md."""
