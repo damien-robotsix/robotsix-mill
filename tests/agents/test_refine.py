@@ -2271,8 +2271,9 @@ def test_sendback_enables_reply_and_close_thread_tools(monkeypatch, tmp_path):
 
     run_kwargs: list[dict] = []
 
-    def fake_build_agent(settings, system_prompt, tools, web_knowledge,
-                         model_name, **kwargs):
+    def fake_build_agent(
+        settings, system_prompt, tools, web_knowledge, model_name, **kwargs
+    ):
         run_kwargs.append(kwargs)
 
         class FakeAgent:
