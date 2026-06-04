@@ -41,7 +41,7 @@ jobs:
         run: bandit -r src/ -ll
       - name: Dependency vulnerability audit
         run: |
-          pip-audit --format cyclonedx-json --output sbom.json
+          pip-audit --format cyclonedx-json --output sbom.json || true
           pip-audit  # for human-readable report
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v4
