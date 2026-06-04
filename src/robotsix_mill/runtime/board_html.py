@@ -70,9 +70,9 @@ margin-left:4px">
   💰 Cost
 </button>
 <button onclick="toggleProposals()" style="font-size:11px;padding:3px 10px;
-background:#6b7280;color:#fff;border:none;border-radius:4px;cursor:pointer;
+background:#7c3aed;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">
-  Proposals
+  📝 Proposals
 </button>
 </header>
 <div id="lf-status" style="display:none;background:#3a2418;border-bottom:1px solid #6b3320;color:#e8b08a;padding:6px 12px;font-size:12px"></div>

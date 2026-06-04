@@ -1825,39 +1825,38 @@ async function toggleProposals(){
 }
 
 async function renderProposals(){
- const repo=getRepoId();
  const drawer=document.getElementById("d");
- if(!repo||repo==="all"){
-  drawer.innerHTML='<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>'+
-   '<h3>Proposed actions</h3>'+
-   '<div class="muted" style="padding:12px 0">Select a single repo to review proposed actions.</div>';
-  return;
- }
+ const repo=getRepoId();
  let pas;
- try{pas=await jget("/proposed-actions?repo_id="+encodeURIComponent(repo))}
+ try{pas=await jget("/proposed-actions?status=pending&repo_id="+encodeURIComponent(repo))}
  catch(e){pas=null}
  const shell='<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>'+
-  '<h3>Proposed actions · '+esc(repo)+'</h3>';
+  '<h3>Proposed actions</h3>';
  if(!Array.isArray(pas)){
   drawer.innerHTML=shell+'<div class="muted" style="padding:12px 0;color:#f87171">failed to load proposed actions.</div>';
   return;
  }
- const pending=pas.filter(function(pa){return pa.status==="pending"});
- if(!pending.length){
-  drawer.innerHTML=shell+'<div class="muted" style="padding:12px 0">No pending proposed actions.</div>';
+ if(!pas.length){
+  drawer.innerHTML=shell+'<div class="muted">No pending proposed actions.</div>';
   return;
  }
  let html='';
- pending.forEach(function(pa){
+ pas.forEach(function(pa){
+  const at=String(pa.action_type||"").toLowerCase();
+  const st=String(pa.status||"").toLowerCase();
   html+='<div class="proposal-card">'+
-   '<div class="proposal-meta">'+esc(pa.source)+' · '+esc(pa.action_type)+' · '+esc(pa.created_at)+'</div>'+
-   '<div class="proposal-meta">Target ticket: <a href="#" onclick="open_('+jsq(pa.target_ticket_id)+');return false">'+esc(pa.target_ticket_id)+'</a></div>'+
-   '<div style="font-size:12px;color:#e2e4eb;margin:6px 0">'+esc(pa.rationale)+'</div>'+
-   (pa.payload!=null?'<pre style="font-size:11px;background:#1a1d27;padding:6px 8px;border-radius:4px;overflow-x:auto">'+esc(pa.payload)+'</pre>':'')+
-   '<div style="display:flex;gap:6px;margin-top:6px">'+
-    '<button class="approve-btn" onclick="approveProposal('+jsq(pa.id)+')">Approve</button>'+
-    '<button class="reject-btn" onclick="rejectProposal('+jsq(pa.id)+')">Reject</button>'+
+   '<div>'+
+    '<span class="pa-source src-'+esc(srcClass(pa.source))+'">'+esc(pa.source)+'</span>'+
+    '<span class="pa-action pa-action-'+esc(at)+'">'+esc(pa.action_type)+'</span>'+
+    '<span class="pa-target" onclick="open_('+jsq(pa.target_ticket_id)+')">'+esc(pa.target_ticket_id)+'</span>'+
    '</div>'+
+   '<div class="pa-rationale">'+esc(pa.rationale)+'</div>'+
+   '<div class="pa-meta">'+esc(pa.created_at)+' · <span class="pa-status-'+esc(st)+'">'+esc(pa.status)+'</span></div>'+
+   (st==="pending"?
+    '<div class="pa-buttons">'+
+     '<button class="approve-btn" onclick="approveProposal('+jsq(pa.id)+')">Approve</button>'+
+     '<button class="reject-btn" onclick="rejectProposal('+jsq(pa.id)+')">Reject</button>'+
+    '</div>':'')+
   '</div>';
  });
  drawer.innerHTML=shell+html;

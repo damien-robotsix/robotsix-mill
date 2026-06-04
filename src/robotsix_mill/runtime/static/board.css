@@ -324,3 +324,24 @@ text-transform:uppercase;letter-spacing:.04em}
 .lf-dismiss{margin-left:8px;background:#1a1a1a;color:#e8b08a;border:1px solid #6b3320;border-radius:3px;padding:2px 8px;cursor:pointer;font-size:11px}
 .lf-dismiss:hover{background:#2a1a14}
 #lf-status code{background:#1a0e08;color:#f3a55a;padding:1px 4px;border-radius:3px}
+/* proposed-action cards in the Proposals drawer */
+.proposal-card .pa-source{display:inline-block;font-size:10px;padding:1px 6px;
+  border-radius:3px;margin-right:6px;text-transform:uppercase;letter-spacing:.04em}
+.proposal-card .pa-action{display:inline-block;font-size:10px;padding:1px 6px;
+  border-radius:3px;margin-right:6px;font-weight:600}
+.proposal-card .pa-target{font-family:monospace;font-size:11px;color:#8bb4f8;
+  cursor:pointer;text-decoration:underline}
+.proposal-card .pa-target:hover{color:#60a5fa}
+.proposal-card .pa-rationale{font-size:12px;color:#cfd3db;margin:6px 0;
+  line-height:1.4}
+.proposal-card .pa-meta{font-size:10px;color:#7d828c;margin-top:4px}
+.proposal-card .pa-buttons{display:flex;gap:6px;margin-top:8px}
+.pa-action-close{background:#3b1f1f;color:#f87171}
+.pa-action-transition{background:#1d3a5c;color:#60a5fa}
+.pa-action-comment{background:#1a3b2f;color:#34d399}
+.pa-action-relabel{background:#2e1065;color:#c084fc}
+.pa-status-pending{color:#f59e0b}
+.pa-status-approved{color:#34d399}
+.pa-status-rejected{color:#f87171}
+.pa-status-executed{color:#60a5fa}
+.pa-status-failed{color:#ef4444}
