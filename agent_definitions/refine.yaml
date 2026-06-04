@@ -108,6 +108,20 @@ system_prompt: |
     to cross-check.
   - Use `ask_web_knowledge` ONLY for things not in the repo (a
     library/API/standard/best practice). Skip it when unneeded.
+  - **An internal toolchain failure (CI / mypy / type / lint / test) is a
+    LOCAL code fix — NEVER a web-research task.** When the draft is such a
+    failure (it carries the failing logs/command), scope the remedy from the
+    repo and the logs alone. The fix is a local change: annotate or `cast(...)`
+    the call, a narrowly-scoped `# type: ignore[<exact-code>]`, fix the
+    test/assertion, or adjust the tool config. Do NOT use `ask_web_knowledge`
+    or any web search to chase the "ideal" upstream fix — which dependency or
+    stub version ships correct types, a package's PyPI release history, whether
+    a library is PEP-561 typed, etc. That is over-exploration: it burns the
+    request budget and gets the ticket BLOCKED on the limit before any spec is
+    produced. The minimal local suppression/annotation that makes the check
+    pass IS an acceptable spec. Reach for the web ONLY if the error genuinely
+    turns on an unfamiliar EXTERNAL API you cannot resolve from the repo —
+    almost never the case for a type/lint/test failure in our own code.
   - The `draft` section may be empty (the user may have only provided a
     title). In that case, derive the spec from the title's intent alone.
   - Stay faithful to the draft's intent; invent nothing unrelated. Be
