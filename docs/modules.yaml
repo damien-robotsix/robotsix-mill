@@ -88,6 +88,15 @@ modules:
       - src/robotsix_auto_mail/detect.py
       - tests/detect/test_detect.py
 
+  - id: archive
+    description: >-
+      Self-managed archive folder structure: first-run LLM layout
+      proposal rooted at robotsix-mail-archive, remembered via the
+      watermark table.
+    paths:
+      - src/robotsix_auto_mail/archive.py
+      - tests/archive/test_archive.py
+
   - id: fetch
     description: >-
       Watermark-aware IMAP fetch logic.
