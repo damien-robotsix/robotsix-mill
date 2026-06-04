@@ -1080,6 +1080,87 @@ class ImplementStage(Stage):
                     next_action="return",
                     outcome=Outcome(State.BLOCKED, note),
                 )
+            # --- per-claimed-file edit-claim verification ---
+            # We reach here only on a non-empty-diff proceed (the two
+            # no-change branches above returned when
+            # ``_any_repo_has_changes`` was False). The sibling
+            # ``detect_edit_claim_contradiction`` guard only fires on a
+            # WHOLLY empty diff; it does NOT catch the case where the bulk
+            # of the work is real but a few specifically-named sub-fixes
+            # lag the summary/thread-reply (edits reverted, written outside
+            # the clone, or simply never made). When that slips through,
+            # the agent posts a comment asserting edits the diff lacks and
+            # review re-flags the persisting issue, burning extra
+            # review→implement rounds. Catch it HERE — before the comment
+            # is posted (acknowledge_unanswered_threads) and before the
+            # handoff to review — anchored deterministically on the
+            # edit-tool-call path args cross-referenced against the net
+            # diff (no NL/symbol parsing).
+            changed = git_ops.changed_files(repo_dir, settings.forge_target_branch)
+            if extra_roots:
+                for repo_path in extra_roots:
+                    # Mirror _any_repo_has_changes: the primary repo is
+                    # already covered above; skip the duplicate entry.
+                    if repo_path == repo_dir:
+                        continue
+                    changed = list(
+                        set(changed)
+                        | set(
+                            git_ops.changed_files(
+                                repo_path, settings.forge_target_branch
+                            )
+                        )
+                    )
+            missing = short_circuit_verify.detect_missing_claimed_files(
+                changed_files=changed,
+                new_messages=new_msgs,
+                summary=summary,
+            )
+            if missing:
+                file_list = ", ".join(missing)
+                diag = (
+                    "[Diagnostic] Your summary / thread-reply claims edits to "
+                    f"the following file(s) — {file_list} — but they are ABSENT "
+                    "from the net diff vs "
+                    f"origin/{settings.forge_target_branch}. An edit-tool-call "
+                    "targeted each of them and your summary names them as fixed, "
+                    "yet the working tree does not contain those changes (edits "
+                    "reverted, written outside the clone, or never applied). "
+                    "Before completing, actually apply those edits so they land "
+                    "in the diff — OR correct your summary so it does not claim "
+                    "edits you did not make. Do not hand un-landed claims to "
+                    "review."
+                )
+                if attempt < max_iters:
+                    # Iterations remain → re-prompt via the established retry
+                    # path; it loops back into _run_single_implement_pass.
+                    new_ic.feedback = diag
+                    return _SinglePassResult(
+                        next_action="retry",
+                        feedback=diag,
+                        ic=new_ic,
+                    )
+                # Iterations exhausted → do NOT hand un-landed claims to
+                # review. BLOCK for inspection, mirroring the empty-diff
+                # contradiction guard's shape.
+                ImplementStage._finalize(
+                    ctx,
+                    ticket,
+                    repo_dir,
+                    branch,
+                    diag,
+                    ok=False,
+                    reference_files=ref_files,
+                    extra_roots=extra_roots,
+                )
+                return _SinglePassResult(
+                    next_action="return",
+                    outcome=Outcome(
+                        State.BLOCKED,
+                        "edit-claim contradiction (claimed files absent from diff)",
+                    ),
+                )
+
             # --- post-agent thread acknowledgment ---
             if ic.open_thread_ids and ic.feedback:
                 acknowledge_unanswered_threads(ctx, ticket, ic.open_thread_ids)
