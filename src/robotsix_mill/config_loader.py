@@ -261,6 +261,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     # -- core: LLM backend toggle (DeepSeek ↔ Claude SDK) --
     "core.llm_backend": "llm_backend",
     "core.claude_sdk_agents": "claude_sdk_agents",
+    "core.enable_repo_creation": "enable_repo_creation",
     # -- core.limits --
     "core.limits.coordinator_requests": "coordinator_request_limit",
     "core.limits.test_requests": "test_request_limit",
