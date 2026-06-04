@@ -65,6 +65,48 @@ def test_looks_like_mill_internal_requires_two_hits():
     )
 
 
+def test_looks_like_mill_internal_single_strong_path_signal_reroutes():
+    """A single ``src/robotsix_mill/`` path is conclusive evidence the
+    draft is mill-internal — it reroutes even with only one hit. This
+    is the evidenced ``module_curator`` misroute that previously fell
+    below the ≥2-hit threshold and was filed on the audited board."""
+    assert (
+        looks_like_mill_internal(
+            "Reorganize module notify: move notify.py to src/robotsix_mill/notify/",
+            "References `src/robotsix_mill/notify.py`, which should move "
+            "into a notify/ package.",
+        )
+        is True
+    )
+
+
+def test_looks_like_mill_internal_single_agent_definitions_signal_reroutes():
+    """A draft whose only mill signal is a single ``agent_definitions/``
+    path reroutes — strong terms short-circuit the ≥2-hit rule."""
+    assert (
+        looks_like_mill_internal(
+            "Tweak refine agent prompt",
+            "The prompt template lives at "
+            "`agent_definitions/refine.yaml` and needs a clarifying line.",
+        )
+        is True
+    )
+
+
+def test_looks_like_mill_internal_single_weak_term_still_requires_two_hits():
+    """A single WEAK term (``runtime/``) over an otherwise
+    audited-repo-specific draft is NOT enough — the ≥2-hit guard is
+    preserved for non-strong terms."""
+    assert (
+        looks_like_mill_internal(
+            "Fix runtime asset path in auto-mail",
+            "The bug is in `src/robotsix_auto_mail/runtime/assets.py` "
+            "under the runtime/ subtree.",
+        )
+        is False
+    )
+
+
 # ------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------

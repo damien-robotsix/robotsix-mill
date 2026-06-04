@@ -85,10 +85,42 @@ MILL_SIGNAL_TERMS: frozenset[str] = frozenset(
 )
 
 
+# A subset of ``MILL_SIGNAL_TERMS`` that is, on its own, conclusive
+# evidence the draft is about mill's own source tree. These paths are
+# unique to the mill repo and never legitimately name an audited
+# repo's own code, so a SINGLE hit suffices to reroute (no ≥2-hit
+# guard). The weaker generic terms (``stages/``, ``agents/``,
+# ``runtime/``, ...) can plausibly appear in audited-repo drafts and
+# keep the ≥2-hit requirement.
+MILL_STRONG_SIGNAL_TERMS: frozenset[str] = frozenset(
+    {
+        "src/robotsix_mill/",
+        "agent_definitions/",
+    }
+)
+
+
 def looks_like_mill_internal(title: str | None, body: str | None) -> bool:
     """Heuristic: True when the draft's title+body name enough mill-
     internal symbols / files that routing to the audited repo would
     leave the fix on a codebase that can't implement it.
+
+    Two ways to trigger the override:
+
+    - **Strong short-circuit:** a single hit on any term in
+      :data:`MILL_STRONG_SIGNAL_TERMS` (a path under
+      ``src/robotsix_mill/`` or ``agent_definitions/``) suffices.
+      Such a path is unique to the mill tree and never legitimately
+      names an audited repo's own code. This catches the
+      ``module_curator`` misroute where a draft titled
+      ``Reorganize module notify: move notify.py to
+      src/robotsix_mill/notify/`` (referencing
+      ``src/robotsix_mill/notify.py``) carried only ONE signal term
+      and so fell below the ≥2-hit threshold.
+    - **Weak ≥2-hit rule:** otherwise, two or more distinct
+      :data:`MILL_SIGNAL_TERMS` hits are required, suppressing false
+      positives from weak generic terms (``stages/``, ``agents/``,
+      ``runtime/``, ...) that can appear in audited-repo drafts.
 
     Catches the retrospect-agent misclassification observed on c57b
     (scope-triage loop bug filed on robotsix-auto-mail because the
@@ -96,6 +128,8 @@ def looks_like_mill_internal(title: str | None, body: str | None) -> bool:
     lived under ``src/robotsix_mill/``).
     """
     hay = f"{title or ''}\n{body or ''}".lower()
+    if any(term.lower() in hay for term in MILL_STRONG_SIGNAL_TERMS):
+        return True
     hits = sum(1 for term in MILL_SIGNAL_TERMS if term.lower() in hay)
     return hits >= 2
 
