@@ -349,7 +349,7 @@ def make_trace_inspect_tool(settings: Settings):
         of tool errors, agent limitations, and optimisation
         opportunities found in the full observation tree. Use this for
         EACH trace in the session when doing deep analysis."""
-        from .. import langfuse_client
+        from ..langfuse import client as langfuse_client
 
         detail = langfuse_client.fetch_trace_detail(settings, trace_id)
         if detail is None:

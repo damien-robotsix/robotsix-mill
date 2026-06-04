@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import re
 
-from .. import langfuse_client
+from ..langfuse import client as langfuse_client
 from ..agents import retrospecting
 from ..agents.retrospecting import RetrospectResult
 from ..config import Settings, get_repo_config

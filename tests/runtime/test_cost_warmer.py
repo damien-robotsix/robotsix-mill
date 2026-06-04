@@ -1,7 +1,7 @@
 """Tests for the worker's background cost-warmer loop.
 
 The warmer walks every non-archived ticket and calls
-``langfuse_client.session_cost`` so the board's cache-only
+``langfuse.client.session_cost`` so the board's cache-only
 ``session_cost_cached`` reads come back populated. Tests exercise one
 cycle of the loop (driven manually with ``asyncio`` so we don't have to
 wait the configured interval) with the Langfuse seam monkeypatched —
@@ -109,7 +109,7 @@ def test_cost_warmer_refreshes_every_non_archived_ticket(
 
     visited: list[str] = []
     monkeypatch.setattr(
-        "robotsix_mill.langfuse_client.session_cost",
+        "robotsix_mill.langfuse.client.session_cost",
         lambda settings, ticket_id, repo_config=None: visited.append(ticket_id) or 0.42,
     )
 
@@ -142,7 +142,7 @@ def test_cost_warmer_skips_old_terminal_tickets(
 
     visited: list[str] = []
     monkeypatch.setattr(
-        "robotsix_mill.langfuse_client.session_cost",
+        "robotsix_mill.langfuse.client.session_cost",
         lambda settings, ticket_id, repo_config=None: visited.append(ticket_id) or 0.0,
     )
 
@@ -173,7 +173,7 @@ def test_cost_warmer_survives_per_ticket_failure(
         return 0.10
 
     monkeypatch.setattr(
-        "robotsix_mill.langfuse_client.session_cost",
+        "robotsix_mill.langfuse.client.session_cost",
         flaky,
     )
 
@@ -198,7 +198,7 @@ def test_cost_warmer_survives_listing_failure(
     )
     seen: list = []
     monkeypatch.setattr(
-        "robotsix_mill.langfuse_client.session_cost",
+        "robotsix_mill.langfuse.client.session_cost",
         lambda *a, **k: seen.append(1) or 0.0,
     )
     asyncio.run(_run_one_cycle(worker, monkeypatch))
@@ -244,7 +244,7 @@ def test_cost_warmer_skips_repo_without_presence_file(
 
     visited: list[str] = []
     monkeypatch.setattr(
-        "robotsix_mill.langfuse_client.session_cost",
+        "robotsix_mill.langfuse.client.session_cost",
         lambda settings, ticket_id, repo_config=None: visited.append(ticket_id) or 0.0,
     )
 

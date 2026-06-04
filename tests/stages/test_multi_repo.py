@@ -139,7 +139,7 @@ def test_cost_by_agent_repo_a(multi_repo_client, monkeypatch):
         )
         return {"data": []}
 
-    monkeypatch.setattr("robotsix_mill.langfuse_client._langfuse_api_get", fake_get)
+    monkeypatch.setattr("robotsix_mill.langfuse.client._langfuse_api_get", fake_get)
 
     r = multi_repo_client.get("/costs/by-agent?repo_id=repo-a")
     assert r.status_code == 200
@@ -160,7 +160,7 @@ def test_cost_by_agent_repo_b(multi_repo_client, monkeypatch):
         )
         return {"data": []}
 
-    monkeypatch.setattr("robotsix_mill.langfuse_client._langfuse_api_get", fake_get)
+    monkeypatch.setattr("robotsix_mill.langfuse.client._langfuse_api_get", fake_get)
 
     r = multi_repo_client.get("/costs/by-agent?repo_id=repo-b")
     assert r.status_code == 200
@@ -180,7 +180,7 @@ def test_cost_by_agent_all(multi_repo_client, monkeypatch):
         )
         return {"data": []}
 
-    monkeypatch.setattr("robotsix_mill.langfuse_client._langfuse_api_get", fake_get)
+    monkeypatch.setattr("robotsix_mill.langfuse.client._langfuse_api_get", fake_get)
 
     r = multi_repo_client.get("/costs/by-agent?repo_id=all")
     assert r.status_code == 200
@@ -202,7 +202,7 @@ def test_cost_trend_repo_routing(multi_repo_client, monkeypatch):
         )
         return {"data": []}
 
-    monkeypatch.setattr("robotsix_mill.langfuse_client._langfuse_api_get", fake_get)
+    monkeypatch.setattr("robotsix_mill.langfuse.client._langfuse_api_get", fake_get)
 
     r = multi_repo_client.get("/costs/trend?repo_id=repo-a")
     assert r.status_code == 200
@@ -222,7 +222,7 @@ def test_cost_trend_all(multi_repo_client, monkeypatch):
         )
         return {"data": []}
 
-    monkeypatch.setattr("robotsix_mill.langfuse_client._langfuse_api_get", fake_get)
+    monkeypatch.setattr("robotsix_mill.langfuse.client._langfuse_api_get", fake_get)
 
     r = multi_repo_client.get("/costs/trend?repo_id=all")
     assert r.status_code == 200

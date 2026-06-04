@@ -1,4 +1,4 @@
-"""Unit tests for langfuse_client functions not covered elsewhere:
+"""Unit tests for langfuse.client functions not covered elsewhere:
 _langfuse_api_get, session_cost_cached, and session_total_cost edge cases.
 """
 
@@ -9,7 +9,7 @@ import httpx
 import pytest
 
 from robotsix_mill.config import Settings, Secrets, _reset_secrets
-from robotsix_mill.langfuse_client import (
+from robotsix_mill.langfuse.client import (
     _cost_cache,
     _langfuse_api_get,
     session_cost_cached,
@@ -252,7 +252,7 @@ def test_session_cost_cached_never_hits_network(monkeypatch):
         raise AssertionError("session_total_cost must not be called")
 
     monkeypatch.setattr(
-        "robotsix_mill.langfuse_client.session_total_cost",
+        "robotsix_mill.langfuse.client.session_total_cost",
         _fail,
     )
 
@@ -281,7 +281,7 @@ def _fake_api_response(traces):
 def test_session_total_cost_handles_missing_totalcost_key(settings, monkeypatch):
     """Traces without a 'totalCost' key → _num(None) → 0.0."""
     monkeypatch.setattr(
-        "robotsix_mill.langfuse_client._langfuse_api_get",
+        "robotsix_mill.langfuse.client._langfuse_api_get",
         _fake_api_response(
             [
                 {"id": "t1", "name": "ok", "totalCost": 0.10},
@@ -296,7 +296,7 @@ def test_session_total_cost_handles_missing_totalcost_key(settings, monkeypatch)
 def test_session_total_cost_handles_non_numeric_totalcost(settings, monkeypatch):
     """totalCost is a non-numeric string → _num catches ValueError → 0.0."""
     monkeypatch.setattr(
-        "robotsix_mill.langfuse_client._langfuse_api_get",
+        "robotsix_mill.langfuse.client._langfuse_api_get",
         _fake_api_response(
             [
                 {"id": "t1", "totalCost": "not-a-number"},
@@ -311,7 +311,7 @@ def test_session_total_cost_handles_non_numeric_totalcost(settings, monkeypatch)
 def test_session_total_cost_handles_totalcost_typeerror(settings, monkeypatch):
     """totalCost is a list → float(list) raises TypeError → caught → 0.0."""
     monkeypatch.setattr(
-        "robotsix_mill.langfuse_client._langfuse_api_get",
+        "robotsix_mill.langfuse.client._langfuse_api_get",
         _fake_api_response(
             [
                 {"id": "t1", "totalCost": [1, 2, 3]},
@@ -331,7 +331,7 @@ def test_session_total_cost_handles_totalcost_typeerror(settings, monkeypatch):
 def test_aggregate_cost_trend_disabled(settings):
     """Returns [] when tracing_enabled is False."""
     assert settings.tracing_enabled is False
-    from robotsix_mill.langfuse_client import aggregate_cost_trend
+    from robotsix_mill.langfuse.client import aggregate_cost_trend
 
     result = aggregate_cost_trend(settings, lookback_hours=24)
     assert result == []
@@ -339,7 +339,7 @@ def test_aggregate_cost_trend_disabled(settings):
 
 def test_aggregate_cost_trend_api_error(settings, monkeypatch):
     """Returns [] when the Langfuse API returns an error."""
-    from robotsix_mill.langfuse_client import aggregate_cost_trend
+    from robotsix_mill.langfuse.client import aggregate_cost_trend
 
     # Need tracing enabled
     s = _langfuse_settings()
@@ -367,7 +367,7 @@ def test_aggregate_cost_trend_sums_correctly(monkeypatch):
     """Traces in the same bucket should have their costs summed,
     and trace_count incremented. We verify the function buckets
     traces correctly without hitting real Langfuse."""
-    from robotsix_mill.langfuse_client import aggregate_cost_trend
+    from robotsix_mill.langfuse.client import aggregate_cost_trend
 
     s = _langfuse_settings()
 
@@ -418,7 +418,7 @@ def test_aggregate_cost_trend_sums_correctly(monkeypatch):
 
 def test_aggregate_cost_trend_produces_contiguous_buckets(monkeypatch):
     """Every hour in the lookback window gets a bucket, even empty ones."""
-    from robotsix_mill.langfuse_client import aggregate_cost_trend
+    from robotsix_mill.langfuse.client import aggregate_cost_trend
 
     s = _langfuse_settings()
 
@@ -452,7 +452,7 @@ def test_aggregate_cost_trend_produces_contiguous_buckets(monkeypatch):
 
 def test_aggregate_cost_trend_buckets_daily(monkeypatch):
     """lookback_hours > 24 → daily buckets at midnight boundaries."""
-    from robotsix_mill.langfuse_client import aggregate_cost_trend
+    from robotsix_mill.langfuse.client import aggregate_cost_trend
     from datetime import datetime, timedelta
 
     s = _langfuse_settings()
@@ -540,7 +540,7 @@ def test_aggregate_cost_by_name_multi_page(monkeypatch):
     'implement' at $0.02. Verify all 600 are counted (the old
     EXAMINE_CAP=500 would silently drop 100 traces)."""
     from datetime import datetime, timedelta
-    from robotsix_mill.langfuse_client import aggregate_cost_by_name
+    from robotsix_mill.langfuse.client import aggregate_cost_by_name
 
     s = _langfuse_settings()
     now = datetime.utcnow()
@@ -604,7 +604,7 @@ def test_aggregate_cost_trend_multi_page(monkeypatch):
     """600 traces across 6 pages in a 3-hour window. Verify all 600 are
     accounted for in the bucket totals."""
     from datetime import datetime, timedelta
-    from robotsix_mill.langfuse_client import aggregate_cost_trend
+    from robotsix_mill.langfuse.client import aggregate_cost_trend
 
     s = _langfuse_settings()
     now = datetime.utcnow()

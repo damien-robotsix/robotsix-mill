@@ -14,7 +14,7 @@ from robotsix_mill.agents.openrouter_cost import (
     _inject_usage_include,
     record_openrouter_cost,
 )
-from robotsix_mill.langfuse_client import session_total_cost
+from robotsix_mill.langfuse.client import session_total_cost
 
 
 # --- _inject_usage_include (pure dict logic, no deps) -------------------
@@ -273,7 +273,7 @@ def test_session_total_cost_returns_float_from_mocked_api(settings, monkeypatch)
     def fake_get(_s, _path, params=None, repo_config=None):
         return fake_data
 
-    monkeypatch.setattr("robotsix_mill.langfuse_client._langfuse_api_get", fake_get)
+    monkeypatch.setattr("robotsix_mill.langfuse.client._langfuse_api_get", fake_get)
 
     cost = session_total_cost(settings, "test-session")
     assert cost == pytest.approx(0.0123 + 0.0045 + 0.0078)
@@ -283,7 +283,7 @@ def test_session_total_cost_returns_none_when_api_fails(settings, monkeypatch):
     """When _langfuse_api_get returns None (unreachable / error),
     session_total_cost returns None gracefully."""
     monkeypatch.setattr(
-        "robotsix_mill.langfuse_client._langfuse_api_get",
+        "robotsix_mill.langfuse.client._langfuse_api_get",
         lambda s, path, params=None, repo_config=None: None,
     )
     assert session_total_cost(settings, "test-session") is None
@@ -292,7 +292,7 @@ def test_session_total_cost_returns_none_when_api_fails(settings, monkeypatch):
 def test_session_total_cost_handles_empty_traces(settings, monkeypatch):
     """Zero traces → cost is 0.0 (not None)."""
     monkeypatch.setattr(
-        "robotsix_mill.langfuse_client._langfuse_api_get",
+        "robotsix_mill.langfuse.client._langfuse_api_get",
         lambda s, path, params=None, repo_config=None: {"data": []},
     )
     assert session_total_cost(settings, "test-session") == 0.0
@@ -303,7 +303,7 @@ def test_session_total_cost_handles_empty_traces(settings, monkeypatch):
 
 def test_session_cost_returns_zero_when_unconfigured(settings):
     """No Langfuse → 0.0 (never None — callers don't special-case)."""
-    from robotsix_mill.langfuse_client import session_cost, _cost_cache
+    from robotsix_mill.langfuse.client import session_cost, _cost_cache
 
     _cost_cache.clear()
     assert session_cost(settings, "sid-a") == 0.0
@@ -311,7 +311,7 @@ def test_session_cost_returns_zero_when_unconfigured(settings):
 
 def test_session_cost_caches_within_ttl(settings, monkeypatch):
     """Second call within TTL does NOT re-hit Langfuse."""
-    from robotsix_mill import langfuse_client as lc
+    from robotsix_mill.langfuse import client as lc
 
     lc._cost_cache.clear()
     calls = []
@@ -327,7 +327,7 @@ def test_session_cost_caches_within_ttl(settings, monkeypatch):
 
 def test_session_cost_refreshes_after_ttl(settings, monkeypatch):
     """Past the TTL the value is re-fetched."""
-    from robotsix_mill import langfuse_client as lc
+    from robotsix_mill.langfuse import client as lc
 
     lc._cost_cache.clear()
     seq = iter([0.10, 0.99])
@@ -344,7 +344,7 @@ def test_session_cost_refreshes_after_ttl(settings, monkeypatch):
 def test_session_cost_serves_stale_on_transient_failure(settings, monkeypatch):
     """If Langfuse fails (None) but we have a cached value, serve it
     rather than flipping the board to $0."""
-    from robotsix_mill import langfuse_client as lc
+    from robotsix_mill.langfuse import client as lc
 
     lc._cost_cache.clear()
     state = {"v": 0.42}
@@ -363,17 +363,17 @@ def test_session_cost_serves_stale_on_transient_failure(settings, monkeypatch):
 
 
 def test_fetch_session_summary_returns_none_when_tracing_disabled(settings):
-    from robotsix_mill.langfuse_client import fetch_session_summary
+    from robotsix_mill.langfuse.client import fetch_session_summary
 
     assert not settings.tracing_enabled
     assert fetch_session_summary(settings, "any-session-id") is None
 
 
 def test_fetch_session_summary_empty_traces(settings, monkeypatch):
-    from robotsix_mill.langfuse_client import fetch_session_summary
+    from robotsix_mill.langfuse.client import fetch_session_summary
 
     monkeypatch.setattr(
-        "robotsix_mill.langfuse_client._langfuse_api_get",
+        "robotsix_mill.langfuse.client._langfuse_api_get",
         lambda s, path, params=None, repo_config=None: {"data": []},
     )
     result = fetch_session_summary(settings, "sid")
@@ -382,7 +382,7 @@ def test_fetch_session_summary_empty_traces(settings, monkeypatch):
 
 def test_fetch_session_summary_groups_by_stage(settings, monkeypatch):
     """3 traces across 2 stages → ``## By stage`` with correct subtotals."""
-    from robotsix_mill.langfuse_client import fetch_session_summary
+    from robotsix_mill.langfuse.client import fetch_session_summary
 
     trace_list = {
         "data": [
@@ -416,7 +416,7 @@ def test_fetch_session_summary_groups_by_stage(settings, monkeypatch):
             return {"observations": []}
         return trace_list
 
-    monkeypatch.setattr("robotsix_mill.langfuse_client._langfuse_api_get", fake_get)
+    monkeypatch.setattr("robotsix_mill.langfuse.client._langfuse_api_get", fake_get)
 
     result = fetch_session_summary(settings, "sid")
     assert result is not None
@@ -430,7 +430,7 @@ def test_fetch_session_summary_groups_by_stage(settings, monkeypatch):
 
 def test_fetch_session_summary_warnings_errors(settings, monkeypatch):
     """Trace detail has ERROR-level observations → ``## Warnings/Errors``."""
-    from robotsix_mill.langfuse_client import fetch_session_summary
+    from robotsix_mill.langfuse.client import fetch_session_summary
 
     trace_list = {
         "data": [
@@ -468,7 +468,7 @@ def test_fetch_session_summary_warnings_errors(settings, monkeypatch):
                 return detail_map[tid]
         return trace_list
 
-    monkeypatch.setattr("robotsix_mill.langfuse_client._langfuse_api_get", fake_get)
+    monkeypatch.setattr("robotsix_mill.langfuse.client._langfuse_api_get", fake_get)
 
     result = fetch_session_summary(settings, "sid")
     assert result is not None
@@ -481,7 +481,7 @@ def test_fetch_session_summary_warnings_errors(settings, monkeypatch):
 def test_fetch_session_summary_per_trace_fetch_fails_gracefully(settings, monkeypatch):
     """When fetch_trace_detail returns None, the trace still appears in
     ``## By stage`` but contributes no warnings/errors."""
-    from robotsix_mill.langfuse_client import fetch_session_summary
+    from robotsix_mill.langfuse.client import fetch_session_summary
 
     trace_list = {
         "data": [
@@ -510,7 +510,7 @@ def test_fetch_session_summary_per_trace_fetch_fails_gracefully(settings, monkey
             return None  # simulates HTTP failure
         return trace_list
 
-    monkeypatch.setattr("robotsix_mill.langfuse_client._langfuse_api_get", fake_get)
+    monkeypatch.setattr("robotsix_mill.langfuse.client._langfuse_api_get", fake_get)
 
     result = fetch_session_summary(settings, "sid")
     assert result is not None
@@ -526,7 +526,7 @@ def test_fetch_session_summary_per_trace_fetch_fails_gracefully(settings, monkey
 
 def test_fetch_session_summary_warnings_capped_at_20(settings, monkeypatch):
     """More than 20 warnings/errors → truncated with a note."""
-    from robotsix_mill.langfuse_client import fetch_session_summary
+    from robotsix_mill.langfuse.client import fetch_session_summary
 
     # One trace with 25 ERROR observations
     many_obs = [{"level": "ERROR", "statusMessage": f"err {i}"} for i in range(25)]
@@ -548,7 +548,7 @@ def test_fetch_session_summary_warnings_capped_at_20(settings, monkeypatch):
             return {"observations": many_obs}
         return trace_list
 
-    monkeypatch.setattr("robotsix_mill.langfuse_client._langfuse_api_get", fake_get)
+    monkeypatch.setattr("robotsix_mill.langfuse.client._langfuse_api_get", fake_get)
 
     result = fetch_session_summary(settings, "sid")
     assert result is not None

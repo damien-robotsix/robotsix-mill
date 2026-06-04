@@ -430,7 +430,7 @@ class TestRunTraceReviewPass:
 
     def test_no_traces_returns_empty_result(self, settings, monkeypatch):
         monkeypatch.setattr(
-            "robotsix_mill.langfuse_client.list_all_traces_since",
+            "robotsix_mill.langfuse.client.list_all_traces_since",
             lambda *a, **kw: [],
         )
         result = run_trace_review_pass(
@@ -447,11 +447,11 @@ class TestRunTraceReviewPass:
     ):
         """Phase-1 catches everything; the LLM seam is never called."""
         monkeypatch.setattr(
-            "robotsix_mill.langfuse_client.list_all_traces_since",
+            "robotsix_mill.langfuse.client.list_all_traces_since",
             lambda *a, **kw: [_trace(totalCost=0.01)],
         )
         monkeypatch.setattr(
-            "robotsix_mill.langfuse_client.fetch_trace_detail",
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
             lambda *a, **kw: {"observations": []},
         )
         inspector_calls: list = []
@@ -475,11 +475,11 @@ class TestRunTraceReviewPass:
         # the batch-relative baseline machinery — a single tool error in
         # a 1-trace batch is enough to flag.
         monkeypatch.setattr(
-            "robotsix_mill.langfuse_client.list_all_traces_since",
+            "robotsix_mill.langfuse.client.list_all_traces_since",
             lambda *a, **kw: [_trace(totalCost=0.10)],
         )
         monkeypatch.setattr(
-            "robotsix_mill.langfuse_client.fetch_trace_detail",
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
             lambda *a, **kw: {
                 "observations": [
                     _obs("run_command", output="error: command failed"),
@@ -529,11 +529,11 @@ class TestRunTraceReviewPass:
             source=SourceKind.TRACE_REVIEW,
         )
         monkeypatch.setattr(
-            "robotsix_mill.langfuse_client.list_all_traces_since",
+            "robotsix_mill.langfuse.client.list_all_traces_since",
             lambda *a, **kw: [_trace(totalCost=0.10)],
         )
         monkeypatch.setattr(
-            "robotsix_mill.langfuse_client.fetch_trace_detail",
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
             lambda *a, **kw: {
                 "observations": [
                     _obs("run_command", output="error: command failed"),
@@ -562,7 +562,7 @@ class TestRunTraceReviewPass:
 
     def test_watermark_advances_on_each_run(self, settings, monkeypatch):
         monkeypatch.setattr(
-            "robotsix_mill.langfuse_client.list_all_traces_since",
+            "robotsix_mill.langfuse.client.list_all_traces_since",
             lambda *a, **kw: [],
         )
         before = _load_watermark(settings, "test-board")
@@ -584,11 +584,11 @@ class TestRunTraceReviewPass:
             _trace(id="t5", totalCost=1.00)
         ]  # 10× median = outlier
         monkeypatch.setattr(
-            "robotsix_mill.langfuse_client.list_all_traces_since",
+            "robotsix_mill.langfuse.client.list_all_traces_since",
             lambda *a, **kw: traces,
         )
         monkeypatch.setattr(
-            "robotsix_mill.langfuse_client.fetch_trace_detail",
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
             lambda *a, **kw: {"observations": []},
         )
         inspector_calls: list = []
@@ -625,11 +625,11 @@ class TestRunTraceReviewPass:
         monkeypatch,
     ):
         monkeypatch.setattr(
-            "robotsix_mill.langfuse_client.list_all_traces_since",
+            "robotsix_mill.langfuse.client.list_all_traces_since",
             lambda *a, **kw: [_trace(totalCost=0.10)],
         )
         monkeypatch.setattr(
-            "robotsix_mill.langfuse_client.fetch_trace_detail",
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
             lambda *a, **kw: {
                 "observations": [
                     _obs("run_command", output="error: command failed"),
@@ -709,11 +709,11 @@ class TestTargetRepoRouting:
         source_rc = get_repos_config().repos["source-repo"]
 
         monkeypatch.setattr(
-            "robotsix_mill.langfuse_client.list_all_traces_since",
+            "robotsix_mill.langfuse.client.list_all_traces_since",
             lambda *a, **kw: [_trace(id="t1", totalCost=0.10)],
         )
         monkeypatch.setattr(
-            "robotsix_mill.langfuse_client.fetch_trace_detail",
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
             lambda *a, **kw: {
                 "observations": [
                     _obs("run_command", output="error: failed"),
@@ -762,11 +762,11 @@ class TestPreFilingDedup:
         """Wire up langfuse + inspector seams so a single flagged trace
         produces the given finding."""
         monkeypatch.setattr(
-            "robotsix_mill.langfuse_client.list_all_traces_since",
+            "robotsix_mill.langfuse.client.list_all_traces_since",
             lambda *a, **kw: [_trace(totalCost=0.10)],
         )
         monkeypatch.setattr(
-            "robotsix_mill.langfuse_client.fetch_trace_detail",
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
             lambda *a, **kw: {
                 "observations": [
                     _obs("run_command", output="error: command failed"),

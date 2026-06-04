@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import RepoConfig, get_repos_config
-from ..langfuse_client import session_cost
+from ..langfuse.client import session_cost
 from ..stages import StageContext, get_stage
 from ..core.states import STAGE_FOR_STATE, State
 from ..core.models import SourceKind
@@ -1801,7 +1801,7 @@ class Worker:
         from ..core.models import Ticket
         from ..core.service import TicketService
         from ..core.states import State
-        from ..langfuse_client import session_cost
+        from ..langfuse.client import session_cost
 
         settings = self.ctx.settings
         interval = max(10, settings.cost_warmer_interval_seconds)
@@ -1889,7 +1889,7 @@ class Worker:
         """
         from ..core.service import TicketService
         from ..core.states import STAGE_FOR_STATE
-        from ..langfuse_client import session_cost
+        from ..langfuse.client import session_cost
 
         settings = self.ctx.settings
         interval = max(2, settings.cost_warmer_fast_interval_seconds)

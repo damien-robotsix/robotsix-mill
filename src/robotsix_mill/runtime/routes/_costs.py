@@ -64,7 +64,7 @@ def cost_trend(
     When omitted in single-repo mode, the sole repo is used.
     When omitted in multi-repo mode, returns 400.
     """
-    from ...langfuse_client import aggregate_cost_trend
+    from ...langfuse.client import aggregate_cost_trend
 
     lookback_hours = max(1.0, min(lookback_hours, 168.0))
     if max_tickets is not None:
@@ -114,7 +114,7 @@ def cost_by_agent(
     across all repos.  Omitted in single-repo mode defaults to the sole
     repo; omitted in multi-repo returns 400.
     """
-    from ...langfuse_client import aggregate_cost_by_name
+    from ...langfuse.client import aggregate_cost_by_name
 
     lookback_hours = max(1.0, min(lookback_hours, 168.0))
     if max_tickets is not None:
@@ -167,7 +167,7 @@ def most_expensive_ticket_endpoint(
     ``?repo_id=X`` scopes to a single repo; ``?repo_id=all`` aggregates
     across all repos (picks the single most expensive across all).
     """
-    from ...langfuse_client import most_expensive_ticket
+    from ...langfuse.client import most_expensive_ticket
 
     lookback_hours = max(1.0, min(lookback_hours, 168.0))
     if max_tickets is not None:
@@ -227,7 +227,7 @@ def most_expensive_trace_endpoint(
     ``?repo_id=X`` scopes to a single repo; ``?repo_id=all`` aggregates
     across all repos (picks the single most expensive across all).
     """
-    from ...langfuse_client import most_expensive_trace
+    from ...langfuse.client import most_expensive_trace
 
     lookback_hours = max(1.0, min(lookback_hours, 168.0))
     if max_tickets is not None:
@@ -274,7 +274,7 @@ def cost_breakdown(
     if ticket is None:
         raise HTTPException(404, "ticket not found")
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
-    from ...langfuse_client import session_traces
+    from ...langfuse.client import session_traces
 
     rows = session_traces(settings, ticket_id, repo_config=repo_config)
     if rows is None:

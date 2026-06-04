@@ -1,4 +1,4 @@
-"""Tests for langfuse_client.list_recent_traces.
+"""Tests for langfuse.client.list_recent_traces.
 
 The function had two bugs the board's deep-review feature surfaced:
 
@@ -55,7 +55,7 @@ def test_no_cost_filter_single_fetch(tmp_path, monkeypatch, secrets_set):
         calls.append((path, dict(params or {})))
         return {"data": [_trace(f"t{i}", 0.01) for i in range(50)]}
 
-    from robotsix_mill import langfuse_client
+    from robotsix_mill.langfuse import client as langfuse_client
 
     monkeypatch.setattr(langfuse_client, "_langfuse_api_get", fake_get)
 
@@ -83,7 +83,7 @@ def test_cost_filter_does_not_break_at_limit_21(tmp_path, monkeypatch, secrets_s
         # Return a full page of cost=0.01 traces (matches min_cost=0).
         return {"data": [_trace(f"t{p['page'] * 100 + i}", 0.01) for i in range(100)]}
 
-    from robotsix_mill import langfuse_client
+    from robotsix_mill.langfuse import client as langfuse_client
 
     monkeypatch.setattr(langfuse_client, "_langfuse_api_get", fake_get)
 
@@ -117,7 +117,7 @@ def test_cost_filter_paginates_for_sparse_matches(tmp_path, monkeypatch, secrets
             return {"data": [_trace(f"b{i}", 0.05) for i in range(100)]}
         return {"data": []}  # exhausted
 
-    from robotsix_mill import langfuse_client
+    from robotsix_mill.langfuse import client as langfuse_client
 
     monkeypatch.setattr(langfuse_client, "_langfuse_api_get", fake_get)
 
@@ -145,7 +145,7 @@ def test_examine_cap_bounds_pagination(tmp_path, monkeypatch, secrets_set):
         # Every page is full of low-cost traces — nothing matches.
         return {"data": [_trace(f"p{p['page']}-{i}", 0.0) for i in range(100)]}
 
-    from robotsix_mill import langfuse_client
+    from robotsix_mill.langfuse import client as langfuse_client
 
     monkeypatch.setattr(langfuse_client, "_langfuse_api_get", fake_get)
 
@@ -176,7 +176,7 @@ def test_unnamed_traces_filtered_out_no_cost_filter(tmp_path, monkeypatch, secre
             ]
         }
 
-    from robotsix_mill import langfuse_client
+    from robotsix_mill.langfuse import client as langfuse_client
 
     monkeypatch.setattr(langfuse_client, "_langfuse_api_get", fake_get)
 
@@ -201,7 +201,7 @@ def test_unnamed_traces_filtered_out_with_cost_filter(
             }
         return {"data": []}  # exhausted
 
-    from robotsix_mill import langfuse_client
+    from robotsix_mill.langfuse import client as langfuse_client
 
     monkeypatch.setattr(langfuse_client, "_langfuse_api_get", fake_get)
 
@@ -225,7 +225,7 @@ def test_cost_filter_handles_empty_page(tmp_path, monkeypatch, secrets_set):
             return {"data": [_trace(f"x{i}", 0.05) for i in range(3)]}
         return {"data": []}  # exhausted
 
-    from robotsix_mill import langfuse_client
+    from robotsix_mill.langfuse import client as langfuse_client
 
     monkeypatch.setattr(langfuse_client, "_langfuse_api_get", fake_get)
 

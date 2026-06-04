@@ -129,7 +129,7 @@ def with_cost(
     When *repo_config* is provided, its Langfuse credentials are used
     for the cost lookup (per-repo isolation).
     """
-    from ..langfuse_client import session_cost, session_cost_cached
+    from ..langfuse.client import session_cost, session_cost_cached
 
     if blocking:
         ticket.cost_usd = session_cost(settings, ticket.id, repo_config=repo_config)

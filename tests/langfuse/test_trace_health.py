@@ -16,7 +16,7 @@ from robotsix_mill.runners.trace_health_runner import (
     run_trace_health_check,
     TraceHealthResult,
 )
-from robotsix_mill.langfuse_client import list_all_traces_since
+from robotsix_mill.langfuse.client import list_all_traces_since
 
 
 def _test_repo_config():

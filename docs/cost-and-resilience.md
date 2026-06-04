@@ -11,7 +11,7 @@ from **Langfuse session totals** — not from in-process accumulation.
 Every traced model call carries `session.id = <ticket id>` (set in
 `runtime/tracing.py`). Langfuse attributes cost per session correctly
 regardless of concurrency. Cost is read **on-demand** from the Langfuse
-public API via `session_cost()` in `langfuse_client.py` — there is no
+public API via `session_cost()` in `langfuse/client.py` — there is no
 persistent store and no background sync loop. Results are cached for
 **60 seconds** (`_COST_TTL_SECONDS`) to avoid hammering Langfuse on
 board renders.
@@ -89,7 +89,7 @@ used; in multi-repo mode the parameter is required.
 
 ### Langfuse functions
 
-Four aggregation functions in `langfuse_client.py` back the cost
+Four aggregation functions in `langfuse/client.py` back the cost
 endpoints, each accepting both `lookback_hours` and an optional
 `max_tickets`:
 
