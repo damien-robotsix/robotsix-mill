@@ -252,7 +252,6 @@ def _render_module_map(module_list: list[dict]) -> str:
 def compose_prompt(
     settings: Settings,
     system_prompt: str,
-    tool_names: set[str] | None = None,  # legacy, ignored
     skills: list[str] | None = None,
     modules: bool = False,
 ) -> str:
@@ -263,11 +262,8 @@ def compose_prompt(
     forwards each tool's signature + docstring to the model as a
     structured ``tools`` array on every API call, so a prose copy in
     the system prompt is pure duplication — same surface, twice the
-    tokens, on every coordinator iteration. The ``tool_names`` arg is
-    kept for backward compatibility with the YAML loader call site
-    but no longer affects the output.
+    tokens, on every coordinator iteration.
     """
-    del tool_names  # legacy parameter — no longer used
     prompt = system_prompt
 
     if skills:
