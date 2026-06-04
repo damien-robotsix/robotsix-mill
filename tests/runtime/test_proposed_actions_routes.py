@@ -17,7 +17,6 @@ from robotsix_mill.core.models import (
     ActionType,
     ProposedAction,
     ProposedActionStatus,
-    Ticket,
 )
 from robotsix_mill.core.states import State
 from robotsix_mill.runtime.api import create_app
@@ -141,9 +140,7 @@ def test_list_proposed_actions_status_filter(
     assert r_all.status_code == 200
     assert len(r_all.json()) == 2
 
-    r_approved = client.get(
-        "/proposed-actions?repo_id=test-repo&status=approved"
-    )
+    r_approved = client.get("/proposed-actions?repo_id=test-repo&status=approved")
     assert r_approved.status_code == 200
     approved = r_approved.json()
     assert len(approved) == 1
@@ -301,9 +298,7 @@ def test_approve_relabel_invalid_payload(client, settings, ticket):
 def test_reject_pending(client, pa_pending_close, service):
     ticket_id = pa_pending_close.target_ticket_id
 
-    r = client.post(
-        f"/proposed-actions/{pa_pending_close.id}/reject?repo_id=test-repo"
-    )
+    r = client.post(f"/proposed-actions/{pa_pending_close.id}/reject?repo_id=test-repo")
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["status"] == "rejected"
@@ -331,9 +326,7 @@ def test_reject_missing_404(client):
 
 def test_approve_already_decided_409(client, pa_pending_close):
     # First approve.
-    client.post(
-        f"/proposed-actions/{pa_pending_close.id}/approve?repo_id=test-repo"
-    )
+    client.post(f"/proposed-actions/{pa_pending_close.id}/approve?repo_id=test-repo")
     # Second approve.
     r = client.post(
         f"/proposed-actions/{pa_pending_close.id}/approve?repo_id=test-repo"
@@ -343,13 +336,9 @@ def test_approve_already_decided_409(client, pa_pending_close):
 
 def test_reject_already_decided_409(client, pa_pending_close):
     # First reject.
-    client.post(
-        f"/proposed-actions/{pa_pending_close.id}/reject?repo_id=test-repo"
-    )
+    client.post(f"/proposed-actions/{pa_pending_close.id}/reject?repo_id=test-repo")
     # Second reject.
-    r = client.post(
-        f"/proposed-actions/{pa_pending_close.id}/reject?repo_id=test-repo"
-    )
+    r = client.post(f"/proposed-actions/{pa_pending_close.id}/reject?repo_id=test-repo")
     assert r.status_code == 409
 
 

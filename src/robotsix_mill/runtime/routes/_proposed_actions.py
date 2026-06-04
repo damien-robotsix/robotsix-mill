@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlmodel import select
 
+from ...config import Settings
 from ...core import db
 from ...core.models import (
     ActionType,
@@ -110,7 +111,7 @@ def list_proposed_actions(
 def _execute_proposed_action(
     pa: ProposedAction,
     svc: TicketService,
-    settings: db.Settings,
+    settings: Settings,
     board_id: str,
 ) -> None:
     """Apply *pa* to its target ticket.
@@ -133,9 +134,7 @@ def _execute_proposed_action(
         try:
             payload_dict = json.loads(payload)
         except json.JSONDecodeError:
-            raise ValueError(
-                f"TRANSITION payload is not valid JSON: {payload!r}"
-            )
+            raise ValueError(f"TRANSITION payload is not valid JSON: {payload!r}")
         to_state = payload_dict.get("to_state")
         if not to_state or to_state not in State._value2member_map_:
             raise ValueError(
@@ -159,9 +158,7 @@ def _execute_proposed_action(
         try:
             payload_dict = json.loads(payload)
         except json.JSONDecodeError:
-            raise ValueError(
-                f"RELABEL payload is not valid JSON: {payload!r}"
-            )
+            raise ValueError(f"RELABEL payload is not valid JSON: {payload!r}")
         if "priority" not in payload_dict or not isinstance(
             payload_dict["priority"], bool
         ):
