@@ -753,8 +753,31 @@ def _run_epic_reprocess(epic_id: str, comment_body: str, settings) -> None:
             )
             return
 
+        # Advisory pre-filing dedup: flag (never drop) children whose
+        # scope overlaps a recent ticket or an earlier sibling in this
+        # batch. Runs after the existing-children title filter above.
+        # Best-effort — a failure must not block filing.
+        from ..dedup import annotate_child_body, find_child_overlaps
+
+        overlap_notes = find_child_overlaps(
+            svc,
+            epic_id,
+            new_titles,
+            new_bodies,
+            settings,
+            datetime.now(timezone.utc),
+        )
+
         created_ids: list[str] = []
-        for title, body in zip(new_titles, new_bodies):
+        for title, body, dup_note in zip(new_titles, new_bodies, overlap_notes):
+            if dup_note:
+                log.warning(
+                    "epic %s: child '%s' flagged as possible duplicate — %s",
+                    epic_id,
+                    title,
+                    dup_note,
+                )
+                body = annotate_child_body(body, dup_note)
             child = svc.create(
                 title=title,
                 description=body,

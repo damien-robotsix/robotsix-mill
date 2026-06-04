@@ -18,7 +18,12 @@ from robotsix_mill.core.db import session as db_session
 from robotsix_mill.core.models import SourceKind, Ticket
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
-from robotsix_mill.dedup import find_prior_matching_ticket, normalize
+from robotsix_mill.dedup import (
+    annotate_child_body,
+    find_child_overlaps,
+    find_prior_matching_ticket,
+    normalize,
+)
 
 _BOARD = "test-board"
 _TARGET_PATH = "src/robotsix_mill/foo.py"
@@ -266,3 +271,137 @@ def test_multi_source_vs_single_source_querying(settings):
         )
         is None
     )
+
+
+# ---------------------------------------------------------------------------
+# find_child_overlaps (epic-decomposition pre-filing dedup)
+# ---------------------------------------------------------------------------
+
+
+def test_child_overlaps_flags_recent_shipped_ticket(settings):
+    """A proposed child whose body names a file already addressed by a
+    recent shipped ticket is flagged (the 1b28/4c84 class)."""
+    svc, prior = _seed(
+        settings,
+        title="gate-or-remove jscpd in CI",
+        body="changes .github/workflows/ci.yml to drop the jscpd step",
+    )
+    svc.transition(prior.id, State.DONE, note="merged")
+
+    notes = find_child_overlaps(
+        _svc(settings),
+        "EPIC-1",
+        ["jscpd: gate or remove the duplicate-detection step"],
+        ["Gate-or-remove `npx jscpd@4 ... || true` in .github/workflows/ci.yml"],
+        settings,
+        _now(),
+    )
+    assert len(notes) == 1
+    assert notes[0] is not None
+    assert prior.id in notes[0]
+    assert "ci.yml" in notes[0]
+
+
+def test_child_overlaps_flags_in_batch_sibling(settings):
+    """The later of two siblings sharing an extracted file path is
+    flagged (the c8b9/6971 class)."""
+    notes = find_child_overlaps(
+        _svc(settings),
+        "EPIC-1",
+        [
+            "Trivy gate severity — document SARIF decision",
+            "Trivy SARIF upload — observability vs gating",
+        ],
+        [
+            "Decide gate severity; note the SARIF call in CONTRIBUTING.md",
+            "Audit the Trivy SARIF upload, documented in CONTRIBUTING.md",
+        ],
+        settings,
+        _now(),
+    )
+    assert notes[0] is None
+    assert notes[1] is not None
+    assert "sibling #0" in notes[1]
+    assert "CONTRIBUTING.md" in notes[1]
+
+
+def test_child_overlaps_unflagged_when_distinct(settings):
+    """Non-overlapping children (distinct paths, distinct titles) are
+    not flagged."""
+    notes = find_child_overlaps(
+        _svc(settings),
+        "EPIC-1",
+        ["Add retry to the queue consumer", "Refactor the config loader"],
+        [
+            "Touch src/robotsix_mill/runtime/worker.py only",
+            "Touch src/robotsix_mill/config.py only",
+        ],
+        settings,
+        _now(),
+    )
+    assert notes == [None, None]
+
+
+def test_child_overlaps_excludes_epic_and_existing_children(settings):
+    """The epic and its already-existing children must not self-match the
+    recent-ticket check."""
+    svc = _svc(settings)
+    epic = svc.create(title="The epic", description="", kind="epic")
+    existing = svc.create(
+        title="existing child",
+        description="edits .github/workflows/ci.yml already",
+        parent_id=epic.id,
+    )
+    # A new proposed child referencing the same path as the EXISTING child
+    # must not be flagged by the recent-ticket check (existing children
+    # are excluded) — and there is no earlier sibling in this batch.
+    notes = find_child_overlaps(
+        svc,
+        epic.id,
+        ["brand new scope"],
+        ["also touches .github/workflows/ci.yml"],
+        settings,
+        _now(),
+    )
+    assert notes == [None]
+    assert existing.id  # referenced to keep linter quiet
+
+
+def test_annotate_child_body_prepends_warning():
+    out = annotate_child_body("original body text", "Possible duplicate of T-9")
+    assert out.startswith("> [!warning] Possible duplicate of T-9")
+    assert "original body text" in out
+
+
+def test_reprocess_flags_but_still_creates_children(settings, monkeypatch):
+    """Call-site integration: the worker re-process path flags an
+    in-batch duplicate child but still creates BOTH children, with the
+    advisory note present on the flagged one (never silently dropped)."""
+    from robotsix_mill.agents.epic_breakdown import EpicBreakdownResult
+    from robotsix_mill.runtime.worker import _run_epic_reprocess
+
+    svc = _svc(settings)
+    epic = svc.create(title="parent epic", description="", kind="epic")
+
+    fake = EpicBreakdownResult(
+        child_titles=["First Trivy child", "Second Trivy child"],
+        child_bodies=[
+            "Work documented in CONTRIBUTING.md for the first child",
+            "Work documented in CONTRIBUTING.md for the second child",
+        ],
+        epic_body=None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_breakdown.run_epic_breakdown_agent",
+        lambda **kwargs: fake,
+    )
+
+    _run_epic_reprocess(epic.id, "please regenerate", settings)
+
+    children = svc.list_children(epic.id)
+    assert len(children) == 2, "both children must be created, none dropped"
+    bodies = [svc.workspace(c).read_description() for c in children]
+    # Exactly one child (the later sibling) carries the advisory note.
+    flagged = [b for b in bodies if "[!warning]" in b]
+    assert len(flagged) == 1
+    assert "CONTRIBUTING.md" in flagged[0]

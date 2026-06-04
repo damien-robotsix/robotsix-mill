@@ -168,8 +168,37 @@ def generate_children(
                     epic_title=ticket.title,
                     epic_description=description,
                 )
+                # Advisory pre-filing dedup: flag (never drop) children
+                # whose scope overlaps a recent ticket or an earlier
+                # sibling in this batch. Best-effort — a failure must not
+                # block filing.
+                from datetime import datetime, timezone
+
+                from ...dedup import annotate_child_body, find_child_overlaps
+
+                child_titles = list(result.child_titles)
+                child_bodies = list(result.child_bodies)
+                overlap_notes = find_child_overlaps(
+                    epic_svc,
+                    ticket_id,
+                    child_titles,
+                    child_bodies,
+                    settings,
+                    datetime.now(timezone.utc),
+                )
+
                 created_ids: list[str] = []
-                for title, body in zip(result.child_titles, result.child_bodies):
+                for title, body, dup_note in zip(
+                    child_titles, child_bodies, overlap_notes
+                ):
+                    if dup_note:
+                        log.warning(
+                            "epic %s: child '%s' flagged as possible duplicate — %s",
+                            ticket_id,
+                            title,
+                            dup_note,
+                        )
+                        body = annotate_child_body(body, dup_note)
                     child = epic_svc.create(
                         title=title,
                         description=body,
