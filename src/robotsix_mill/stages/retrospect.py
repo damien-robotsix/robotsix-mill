@@ -700,9 +700,9 @@ class RetrospectStage(Stage):
         # verified-state table if the agent copied it back in (it is injected
         # fresh each run from the DB and must never accrete in the ledger).
         if res.updated_memory:
-            from ..pass_runner import strip_ephemeral_proposal_sections
+            from ..pass_runner import strip_ephemeral_sections
 
-            persisted_memory = strip_ephemeral_proposal_sections(res.updated_memory)
+            persisted_memory = strip_ephemeral_sections(res.updated_memory)
             try:
                 memory_file.parent.mkdir(parents=True, exist_ok=True)
                 memory_file.write_text(persisted_memory, encoding="utf-8")

@@ -38,6 +38,7 @@ class AuditPassResult:
     updated_memory: str
     drafts_created: list[dict]
     session_id: str = ""
+    proposed_actions: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -47,6 +48,7 @@ class AgentCheckPassResult:
     updated_memory: str
     drafts_created: list[dict]
     session_id: str = ""
+    proposed_actions: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -56,6 +58,7 @@ class BcCheckPassResult:
     updated_memory: str
     drafts_created: list[dict]
     session_id: str = ""
+    proposed_actions: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -65,6 +68,7 @@ class SurveyPassResult:
     updated_memory: str
     drafts_created: list[dict]
     session_id: str = ""
+    proposed_actions: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -74,6 +78,7 @@ class CompletenessCheckPassResult:
     updated_memory: str
     drafts_created: list[dict]
     session_id: str = ""
+    proposed_actions: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -83,6 +88,7 @@ class CopyPastePassResult:
     updated_memory: str
     drafts_created: list[dict]
     session_id: str = ""
+    proposed_actions: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -92,6 +98,7 @@ class ConfigSyncPassResult:
     updated_memory: str
     drafts_created: list[dict]
     session_id: str = ""
+    proposed_actions: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -101,6 +108,7 @@ class HealthPassResult:
     updated_memory: str
     drafts_created: list[dict]
     session_id: str = ""
+    proposed_actions: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -110,6 +118,7 @@ class ModuleCuratorPassResult:
     updated_memory: str
     drafts_created: list[dict]
     session_id: str = ""
+    proposed_actions: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -119,6 +128,7 @@ class TestGapPassResult:
     updated_memory: str
     drafts_created: list[dict]
     session_id: str = ""
+    proposed_actions: list[dict] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -337,6 +347,7 @@ def run_periodic_pass(
         updated_memory=result.updated_memory,
         drafts_created=result.drafts_created,
         session_id=session_id,
+        proposed_actions=result.proposed_actions,
     )
 
 
