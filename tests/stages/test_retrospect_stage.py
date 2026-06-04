@@ -699,6 +699,178 @@ def test_updated_memory_written_to_file(ctx_factory, monkeypatch):
     assert memory_file.read_text() == memory_content
 
 
+def _memory_seams(monkeypatch):
+    """Install the common seams for the memory-delta persistence tests
+    (everything except run_retrospect_agent, which each test supplies)."""
+    from robotsix_mill import langfuse_client
+    from robotsix_mill import pass_runner
+
+    monkeypatch.setattr(
+        langfuse_client,
+        "fetch_session_summary",
+        lambda settings, session_id: "summary",
+    )
+    monkeypatch.setattr(
+        langfuse_client,
+        "_langfuse_api_get",
+        lambda settings, path, params=None, repo_config=None: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
+    )
+    monkeypatch.setattr(
+        pass_runner,
+        "_verify_prior_proposals",
+        lambda service, settings, source_label: {},
+    )
+
+
+def test_no_change_run_skips_write(ctx_factory, monkeypatch):
+    """Case 1: updated_memory="" and memory_delta=None → the memory file
+    is neither created nor modified; the ticket still CLOSES."""
+    ctx = ctx_factory()
+    _memory_seams(monkeypatch)
+
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(updated_memory="", memory_delta=None),
+    )
+
+    t = _ticket(ctx)
+    out = RetrospectStage().run(t, ctx)
+
+    assert out.next_state is State.CLOSED
+    memory_file = ctx.settings.memory_file_for(
+        "retrospect",
+        ctx.repo_config.board_id if ctx.repo_config else "",
+    )
+    assert not memory_file.exists()
+
+
+def test_no_change_run_leaves_existing_file_untouched(ctx_factory, monkeypatch):
+    """Case 1: when a memory file already exists and the agent makes no
+    change, the stored ledger is preserved byte-for-byte."""
+    ctx = ctx_factory()
+    _memory_seams(monkeypatch)
+
+    memory_file = ctx.settings.memory_file_for(
+        "retrospect",
+        ctx.repo_config.board_id if ctx.repo_config else "",
+    )
+    memory_file.parent.mkdir(parents=True, exist_ok=True)
+    original = "## Existing Pattern\n\nEvidence: observed in TKT-001\n"
+    memory_file.write_text(original, encoding="utf-8")
+
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(updated_memory="", memory_delta=None),
+    )
+
+    t = _ticket(ctx)
+    out = RetrospectStage().run(t, ctx)
+
+    assert out.next_state is State.CLOSED
+    assert memory_file.read_text() == original
+
+
+def test_append_only_run_merges_delta(ctx_factory, monkeypatch):
+    """Case 2: updated_memory="" + memory_delta merges the delta onto the
+    existing ledger, existing first then new, separated by a blank line."""
+    ctx = ctx_factory()
+    _memory_seams(monkeypatch)
+
+    memory_file = ctx.settings.memory_file_for(
+        "retrospect",
+        ctx.repo_config.board_id if ctx.repo_config else "",
+    )
+    memory_file.parent.mkdir(parents=True, exist_ok=True)
+    memory_file.write_text(
+        "## Existing Pattern\n\nEvidence: observed in TKT-001\n", encoding="utf-8"
+    )
+
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(
+            updated_memory="",
+            memory_delta="## New Pattern\n\nObserved in TKT-XXX.",
+        ),
+    )
+
+    t = _ticket(ctx)
+    out = RetrospectStage().run(t, ctx)
+
+    assert out.next_state is State.CLOSED
+    content = memory_file.read_text()
+    assert "## Existing Pattern" in content
+    assert "## New Pattern" in content
+    # Existing content comes first, then the appended delta.
+    assert content.index("## Existing Pattern") < content.index("## New Pattern")
+    assert "Evidence: observed in TKT-001\n\n## New Pattern" in content
+
+
+def test_first_run_delta_creates_file(ctx_factory, monkeypatch):
+    """Case 2 (first run): no memory file exists and only memory_delta is
+    returned → the delta becomes the initial ledger content."""
+    ctx = ctx_factory()
+    _memory_seams(monkeypatch)
+
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(
+            updated_memory="",
+            memory_delta="## New Pattern\n\nObserved in TKT-XXX.",
+        ),
+    )
+
+    t = _ticket(ctx)
+    out = RetrospectStage().run(t, ctx)
+
+    assert out.next_state is State.CLOSED
+    memory_file = ctx.settings.memory_file_for(
+        "retrospect",
+        ctx.repo_config.board_id if ctx.repo_config else "",
+    )
+    assert memory_file.exists()
+    assert memory_file.read_text() == "## New Pattern\n\nObserved in TKT-XXX."
+
+
+def test_both_fields_updated_memory_wins(ctx_factory, monkeypatch):
+    """Defensive: if the agent violates the prompt and returns BOTH a
+    non-empty updated_memory AND a memory_delta, the full-rewrite path
+    wins and the delta is ignored."""
+    ctx = ctx_factory()
+    _memory_seams(monkeypatch)
+
+    memory_file = ctx.settings.memory_file_for(
+        "retrospect",
+        ctx.repo_config.board_id if ctx.repo_config else "",
+    )
+    memory_file.parent.mkdir(parents=True, exist_ok=True)
+    memory_file.write_text("## Old\n\nstale\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(
+            updated_memory="## Full Rewrite\n\nThe complete ledger.",
+            memory_delta="## Should Be Ignored\n\nnope",
+        ),
+    )
+
+    t = _ticket(ctx)
+    out = RetrospectStage().run(t, ctx)
+
+    assert out.next_state is State.CLOSED
+    content = memory_file.read_text()
+    assert content == "## Full Rewrite\n\nThe complete ledger."
+    assert "Should Be Ignored" not in content
+
+
 # ------------------------------------------------------------------
 # 13. Memory count consistency — drift is non-blocking
 # ------------------------------------------------------------------

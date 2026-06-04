@@ -690,22 +690,46 @@ class RetrospectStage(Stage):
             reraise_if_transient(e)
             return Outcome(State.BLOCKED, f"retrospect failed — resumable: {e}")
 
+        # Resolve the memory document to persist across the three output
+        # paths (full rewrite / append-only delta / no change), stripping
+        # the ephemeral verified-state table if the agent copied it back in
+        # (it is injected fresh each run from the DB and must never accrete
+        # in the ledger).
+        from ..pass_runner import strip_ephemeral_sections
+
+        if res.updated_memory:
+            # Case 3: full rewrite (existing behavior — agent modified the ledger).
+            persisted = strip_ephemeral_sections(res.updated_memory)
+        elif res.memory_delta:
+            # Case 2: append new observations to the stored ledger.
+            existing = ""
+            try:
+                if memory_file.exists():
+                    existing = memory_file.read_text(encoding="utf-8")
+            except OSError:
+                log.warning(
+                    "%s: could not re-read memory file for delta merge", ticket.id
+                )
+            # Ensure clean separation: blank line between existing content and delta.
+            if existing.rstrip():
+                merged = existing.rstrip() + "\n\n" + res.memory_delta
+            else:
+                merged = res.memory_delta
+            persisted = strip_ephemeral_sections(merged)
+        else:
+            # Case 1: no changes — nothing to write.
+            persisted = ""
+
         # Advisory consistency check: warn on count drift between
         # Assessment claims and evidence lists (non-blocking).
-        drift_warnings = _check_memory_count_consistency(res.updated_memory)
+        drift_warnings = _check_memory_count_consistency(persisted)
         for w in drift_warnings:
             log.warning("%s: %s", ticket.id, w)
 
-        # Persist the agent's updated memory, stripping the ephemeral
-        # verified-state table if the agent copied it back in (it is injected
-        # fresh each run from the DB and must never accrete in the ledger).
-        if res.updated_memory:
-            from ..pass_runner import strip_ephemeral_sections
-
-            persisted_memory = strip_ephemeral_sections(res.updated_memory)
+        if persisted:
             try:
                 memory_file.parent.mkdir(parents=True, exist_ok=True)
-                memory_file.write_text(persisted_memory, encoding="utf-8")
+                memory_file.write_text(persisted, encoding="utf-8")
             except OSError:
                 log.warning(
                     "%s: could not write memory file %s", ticket.id, memory_file
