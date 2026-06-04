@@ -56,7 +56,9 @@ def list_proposed_actions(
     actions: list[ProposedAction] = []
     for s in services:
         try:
-            actions.extend(s.list_proposed_actions(status=status))
+            # exclude_status=None: filter purely by ``status`` (the service
+            # default would otherwise drop PENDING rows the route must show).
+            actions.extend(s.list_proposed_actions(status=status, exclude_status=None))
         except Exception:
             log.exception("list_proposed_actions: failed to query board %r", s.board_id)
 

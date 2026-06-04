@@ -342,17 +342,29 @@ class TicketService:
 
     def list_proposed_actions(
         self,
-        source: str,
+        source: str | None = None,
+        *,
+        status: ProposedActionStatus | None = None,
         exclude_status: ProposedActionStatus | None = ProposedActionStatus.PENDING,
     ) -> list[ProposedAction]:
-        """Return ``ProposedAction`` rows for *source*, newest first.
+        """Return ``ProposedAction`` rows on this board, newest first.
 
-        By default excludes ``PENDING`` rows so callers get only
-        decided proposals.  Pass ``exclude_status=None`` to include
-        all.
+        Three optional, orthogonal filters:
+
+        * ``source`` — restrict to one producing agent label.
+        * ``status`` — keep ONLY rows in this status.
+        * ``exclude_status`` — drop rows in this status; **defaults to
+          ``PENDING``** so the pass-runner verification path
+          (``list_proposed_actions(source=...)``) gets decided rows only.
+          The GET ``/proposed-actions?status=`` route passes
+          ``exclude_status=None`` to filter purely by ``status``.
         """
         with db.session(self.settings, self.board_id) as s:
-            stmt = select(ProposedAction).where(ProposedAction.source == source)
+            stmt = select(ProposedAction)
+            if source is not None:
+                stmt = stmt.where(ProposedAction.source == source)
+            if status is not None:
+                stmt = stmt.where(ProposedAction.status == status)
             if exclude_status is not None:
                 stmt = stmt.where(ProposedAction.status != exclude_status)
             stmt = stmt.order_by(ProposedAction.created_at.desc())
