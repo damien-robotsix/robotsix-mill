@@ -23,6 +23,12 @@ def get_service(request: Request) -> TicketService:
     return request.app.state.service
 
 
+def get_proposed_action_service(request: Request) -> "ProposedActionService":
+    """Return the ``ProposedActionService`` stored on app state during
+    lifespan startup."""
+    return request.app.state.proposed_action_service
+
+
 def get_worker(request: Request) -> Worker:
     """Return the ``Worker`` stored on app state during lifespan startup."""
     return request.app.state.worker

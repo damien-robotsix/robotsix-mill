@@ -321,3 +321,22 @@ text-transform:uppercase;letter-spacing:.04em}
 .lf-dismiss{margin-left:8px;background:#1a1a1a;color:#e8b08a;border:1px solid #6b3320;border-radius:3px;padding:2px 8px;cursor:pointer;font-size:11px}
 .lf-dismiss:hover{background:#2a1a14}
 #lf-status code{background:#1a0e08;color:#f3a55a;padding:1px 4px;border-radius:3px}
+
+/* proposed-action review cards */
+.proposal-item{border:1px solid #2c313d;border-radius:6px;padding:10px 12px;
+  margin-bottom:8px;background:#1a1e27}
+.proposal-item .pa-type{font-weight:bold;color:#f59e0b;font-size:12px}
+.proposal-item .pa-target{color:#60a5fa;cursor:pointer;font-family:monospace;font-size:11px}
+.proposal-item .pa-target:hover{text-decoration:underline}
+.proposal-item .pa-rationale{color:#aab0bd;font-size:12px;margin-top:4px;
+  white-space:pre-wrap;line-height:1.5}
+.proposal-item .pa-meta{color:#7d828c;font-size:10px;margin-top:4px;
+  display:flex;gap:8px;align-items:baseline}
+.proposal-item .pa-actions{margin-top:8px;display:flex;gap:6px}
+.proposal-item .pa-status{display:inline-block;font-size:10px;padding:1px 6px;
+  border-radius:4px;text-transform:uppercase;letter-spacing:.04em}
+.pa-status-pending{background:#3b2f1a;color:#f59e0b}
+.pa-status-approved{background:#1a3b2f;color:#34d399}
+.pa-status-rejected{background:#3a1f1f;color:#f87171}
+.pa-status-executed{background:#1a3b5c;color:#60a5fa}
+.pa-status-failed{background:#3a1a1a;color:#ef4444}
