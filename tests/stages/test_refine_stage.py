@@ -450,7 +450,9 @@ def test_dedup_merged_candidate_short_circuits_to_done(ctx_factory, monkeypatch)
 # ---------------------------------------------------------------------------
 
 
-def test_dedup_candidate_without_branch_short_circuits_to_done(ctx_factory, monkeypatch):
+def test_dedup_candidate_without_branch_short_circuits_to_done(
+    ctx_factory, monkeypatch
+):
     """A candidate that reached DONE via implementation but never had a
     branch (e.g. closed by commit hash) must still short-circuit to
     DONE — the merge check only applies when the candidate has a
