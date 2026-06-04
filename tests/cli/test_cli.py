@@ -323,6 +323,35 @@ def test_action_list_status_filter(settings):
     assert seen == {"repo_id": "test-repo", "status": "approved"}
 
 
+def test_action_list_failure(settings, capsys):
+    """CLI `action list` exits 1 and prints to stderr on API failure."""
+    import robotsix_mill.cli as cli_mod
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def get(self, url, **kwargs):
+            return _ActionFakeResponse(404, {"detail": "unknown repo"})
+
+    original = cli_mod.httpx.Client
+    cli_mod.httpx.Client = FakeClient
+    try:
+        rc = main(["action", "list", "--repo-id", "bad-repo"])
+        assert rc == 1
+    finally:
+        cli_mod.httpx.Client = original
+
+    err = capsys.readouterr().err
+    assert "list failed: unknown repo" in err
+
+
 def test_action_approve_success(settings):
     """CLI `action approve <id>` exits 0 on success."""
     import robotsix_mill.cli as cli_mod

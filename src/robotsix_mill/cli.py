@@ -486,7 +486,13 @@ def _action_list(args: argparse.Namespace, settings: Settings) -> int:
             "/proposed-actions",
             params={"repo_id": args.repo_id, "status": args.status},
         )
-        r.raise_for_status()
+        if not r.is_success:
+            try:
+                detail = r.json().get("detail", r.text)
+            except Exception:
+                detail = r.text
+            print(f"list failed: {detail}", file=sys.stderr)
+            return 1
         for a in r.json():
             rationale = (a.get("rationale") or "")[:80]
             print(
