@@ -1237,6 +1237,10 @@ async function togglePriority(id,want){
 }
 async function open_(id){
  sel=id;
+ // Clear every drawer-panel flag — ticket detail and the Runs/Cost/
+ // Candidates/Proposals panels are mutually exclusive. Without this
+ // the 1s interval re-renders a panel over the ticket detail.
+ runsOpen=false;costDashboardOpen=false;candidatesOpen=false;proposalsOpen=false;
  // 1. Open drawer immediately — the 150ms slide-in starts at once
  document.getElementById("drawer").classList.add("open");
  // 2. Show skeleton placeholder while data loads
@@ -1710,7 +1714,7 @@ async function refreshCandidateBadge(){
 
 async function openCandidates(){
  if(candidatesOpen){close_();return}
- if(sel||runsOpen||costDashboardOpen)close_();
+ if(sel||runsOpen||costDashboardOpen||proposalsOpen)close_();
  candidatesOpen=true;
  document.getElementById("drawer").classList.add("open");
  await renderCandidatesList();
