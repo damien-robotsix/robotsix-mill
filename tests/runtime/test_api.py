@@ -613,7 +613,7 @@ def test_audit_endpoint_is_fire_and_forget(client, monkeypatch):
     must return 202 immediately and run the audit in the background."""
     import threading
 
-    from robotsix_mill import audit_runner
+    from robotsix_mill.runners import audit_runner
 
     ran = threading.Event()
     release = threading.Event()
@@ -641,7 +641,7 @@ def test_agent_check_endpoint_is_fire_and_forget(client, monkeypatch):
     contract as /audit, /health-check, /trace-health."""
     import threading
 
-    from robotsix_mill import agent_check_runner
+    from robotsix_mill.runners import agent_check_runner
 
     ran = threading.Event()
     release = threading.Event()

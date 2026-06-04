@@ -98,7 +98,7 @@ async def run_consult_expert(
         )
 
     # 2. Load expert memory ledger.
-    from ..pass_runner import load_memory
+    from ..runners.pass_runner import load_memory
 
     memory_path = settings.memory_file_for(f"expert_{domain}", board_id)
     try:
@@ -181,7 +181,7 @@ async def run_consult_expert(
 
     if output.updated_memory and output.updated_memory.strip():
         try:
-            from ..pass_runner import persist_memory
+            from ..runners.pass_runner import persist_memory
 
             persist_memory(memory_path, output.updated_memory)
         except Exception:  # noqa: BLE001 — memory persistence is best-effort

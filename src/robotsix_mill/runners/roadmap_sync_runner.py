@@ -32,12 +32,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .config import RepoConfig, Settings
-from .core.models import SourceKind, Ticket
-from .core.service import TicketService
-from .forge import get_forge
-from .forge.auth import _resolve_remote_url, github_token
-from .vcs import git_ops
+from ..config import RepoConfig, Settings
+from ..core.models import SourceKind, Ticket
+from ..core.service import TicketService
+from ..forge import get_forge
+from ..forge.auth import _resolve_remote_url, github_token
+from ..vcs import git_ops
 
 log = logging.getLogger("robotsix_mill.roadmap_sync")
 

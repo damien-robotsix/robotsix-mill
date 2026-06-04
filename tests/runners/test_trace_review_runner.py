@@ -18,7 +18,7 @@ from robotsix_mill.agents.trace_inspector import (
 from robotsix_mill.config import Settings, _reset_secrets
 from robotsix_mill.core.models import SourceKind
 from robotsix_mill.core.service import TicketService
-from robotsix_mill.trace_review_runner import (
+from robotsix_mill.runners.trace_review_runner import (
     _Baselines,
     _classify_trace,
     _compute_baselines,
@@ -56,7 +56,7 @@ def settings(tmp_path, monkeypatch):
     # level reference so it picks up the test's data_dir instead of the
     # YAML-defaulted one.
     monkeypatch.setattr(
-        "robotsix_mill.trace_review_runner.Settings",
+        "robotsix_mill.runners.trace_review_runner.Settings",
         lambda: s,
     )
     return s
@@ -703,7 +703,7 @@ class TestTargetRepoRouting:
         # The runner reconstructs Settings() internally — patch it so
         # the test's data_dir + target_repo_id propagate.
         monkeypatch.setattr(
-            "robotsix_mill.trace_review_runner.Settings",
+            "robotsix_mill.runners.trace_review_runner.Settings",
             lambda: s,
         )
         source_rc = get_repos_config().repos["source-repo"]

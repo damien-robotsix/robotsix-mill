@@ -16,7 +16,7 @@ import base64
 import logging
 from dataclasses import dataclass
 
-from .config import RepoConfig, Settings, get_secrets
+from ..config import RepoConfig, Settings, get_secrets
 
 log = logging.getLogger(__name__)
 

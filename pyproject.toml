@@ -107,11 +107,11 @@ max-complexity = 10
 # Cross-module re-exports of periodic_runner helpers. Each *_runner
 # stub re-exports ``_clone_token`` etc. so the worker can import them
 # from the stub; the names look "unused" to ruff but are public API.
-"src/robotsix_mill/agent_check_runner.py" = ["F401"]
-"src/robotsix_mill/audit_runner.py" = ["F401"]
-"src/robotsix_mill/bc_check_runner.py" = ["F401"]
-"src/robotsix_mill/module_curator_runner.py" = ["F401"]
-"src/robotsix_mill/survey_runner.py" = ["F401"]
+"src/robotsix_mill/runners/agent_check_runner.py" = ["F401"]
+"src/robotsix_mill/runners/audit_runner.py" = ["F401"]
+"src/robotsix_mill/runners/bc_check_runner.py" = ["F401"]
+"src/robotsix_mill/runners/module_curator_runner.py" = ["F401"]
+"src/robotsix_mill/runners/survey_runner.py" = ["F401"]
 # F821 in these files: string-typed annotations referencing types
 # that are intentionally imported lazily inside the function body
 # (httpx, AgentDefinition, AgentHandle, RepoConfig, Path) — the
@@ -134,7 +134,7 @@ max-complexity = 10
 "src/robotsix_mill/agents/trace_inspector.py" = ["C901"]
 "src/robotsix_mill/cli.py" = ["C901"]
 "src/robotsix_mill/dedup.py" = ["C901"]
-"src/robotsix_mill/cost_reconciliation_runner.py" = ["C901"]
+"src/robotsix_mill/runners/cost_reconciliation_runner.py" = ["C901"]
 "src/robotsix_mill/langfuse_client.py" = ["C901", "DTZ003", "E731"]
 "src/robotsix_mill/runtime/routes.py" = ["F821", "C901"]
 "src/robotsix_mill/runtime/routes/_tickets.py" = ["C901"]
@@ -150,16 +150,16 @@ max-complexity = 10
 "src/robotsix_mill/forge/github.py" = ["C901"]
 "src/robotsix_mill/forge/gitlab.py" = ["C901"]
 "src/robotsix_mill/core/service.py" = ["F821", "C901"]
-"src/robotsix_mill/pass_runner.py" = ["C901"]
+"src/robotsix_mill/runners/pass_runner.py" = ["C901"]
 "src/robotsix_mill/agents/coding.py" = ["C901"]
 "src/robotsix_mill/agents/bespoke.py" = ["C901"]
-"src/robotsix_mill/timeout_escalation_runner.py" = ["C901"]
+"src/robotsix_mill/runners/timeout_escalation_runner.py" = ["C901"]
 "src/robotsix_mill/agents/scope_triage.py" = ["C901"]
 "src/robotsix_mill/agents/dedup.py" = ["C901"]
 "src/robotsix_mill/agents/web_research.py" = ["C901"]
-"src/robotsix_mill/trace_review_runner.py" = ["C901"]
-"src/robotsix_mill/trace_health_runner.py" = ["C901"]
-"src/robotsix_mill/verify_runner.py" = ["C901"]
+"src/robotsix_mill/runners/trace_review_runner.py" = ["C901"]
+"src/robotsix_mill/runners/trace_health_runner.py" = ["C901"]
+"src/robotsix_mill/runners/verify_runner.py" = ["C901"]
 "src/robotsix_mill/runtime/tracing.py" = ["C901"]
 "src/robotsix_mill/stages/merge.py" = ["C901"]
 "src/robotsix_mill/stages/pause.py" = ["C901"]

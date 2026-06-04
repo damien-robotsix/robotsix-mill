@@ -36,10 +36,10 @@ from pathlib import Path
 
 from sqlmodel import select
 
-from .config import RepoConfig, Settings
-from .core import db
-from .core.models import SourceKind, Ticket
-from .core.service import TicketService
+from ..config import RepoConfig, Settings
+from ..core import db
+from ..core.models import SourceKind, Ticket
+from ..core.service import TicketService
 
 log = logging.getLogger("robotsix_mill.data_dir_audit")
 

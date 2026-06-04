@@ -79,7 +79,7 @@ def _make_background_pass(
         and (when tracing is enabled) the Langfuse session / span stage.
     runner_module:
         Absolute dotted module path of the runner (e.g.
-        ``"robotsix_mill.audit_runner"``).  Imported lazily inside the
+        ``"robotsix_mill.runners.audit_runner"``).  Imported lazily inside the
         background thread so that ``monkeypatch.setattr`` in tests can
         intercept it.
     runner_func:
@@ -160,7 +160,7 @@ def _make_background_pass(
 
 audit_pass = _make_background_pass(
     kind="audit",
-    runner_module="robotsix_mill.audit_runner",
+    runner_module="robotsix_mill.runners.audit_runner",
     runner_func="run_audit_pass",
     docstring="""Kick off an audit pass in the BACKGROUND and return at once.
 
@@ -173,7 +173,7 @@ router.post("/audit", status_code=202)(audit_pass)
 
 bc_check_pass = _make_background_pass(
     kind="bc-check",
-    runner_module="robotsix_mill.bc_check_runner",
+    runner_module="robotsix_mill.runners.bc_check_runner",
     runner_func="run_bc_check_pass",
     docstring="""Kick off a bc-check pass in the BACKGROUND and return at once.
 
@@ -187,7 +187,7 @@ router.post("/bc-check", status_code=202)(bc_check_pass)
 
 completeness_check_pass = _make_background_pass(
     kind="completeness-check",
-    runner_module="robotsix_mill.completeness_check_runner",
+    runner_module="robotsix_mill.runners.completeness_check_runner",
     runner_func="run_completeness_check_pass",
     docstring="""Kick off a completeness-check pass in the BACKGROUND and return at once.""",
 )
@@ -196,7 +196,7 @@ router.post("/completeness-check", status_code=202)(completeness_check_pass)
 
 agent_check_pass = _make_background_pass(
     kind="agent_check",
-    runner_module="robotsix_mill.agent_check_runner",
+    runner_module="robotsix_mill.runners.agent_check_runner",
     runner_func="run_agent_check_pass",
     docstring="""Kick off an agent-check pass in the BACKGROUND and return at
     once. The agent inspects every agent's prompt, tools, and
@@ -209,7 +209,7 @@ router.post("/agent-check", status_code=202)(agent_check_pass)
 
 health_check_pass = _make_background_pass(
     kind="health",
-    runner_module="robotsix_mill.health_runner",
+    runner_module="robotsix_mill.runners.health_runner",
     runner_func="run_health_pass",
     docstring="""Kick off a codebase-health pass in the BACKGROUND and return at
     once.
@@ -229,7 +229,7 @@ router.post("/health-check", status_code=202)(health_check_pass)
 
 test_gap_pass = _make_background_pass(
     kind="test-gap",
-    runner_module="robotsix_mill.test_gap_runner",
+    runner_module="robotsix_mill.runners.test_gap_runner",
     runner_func="run_test_gap_pass",
     docstring="""Kick off a test-gap inspection pass in the BACKGROUND.""",
 )
@@ -238,7 +238,7 @@ router.post("/test-gap", status_code=202)(test_gap_pass)
 
 survey_pass = _make_background_pass(
     kind="survey",
-    runner_module="robotsix_mill.survey_runner",
+    runner_module="robotsix_mill.runners.survey_runner",
     runner_func="run_survey_pass",
     docstring="""Kick off a survey pass in the BACKGROUND and return at once.
 
@@ -251,7 +251,7 @@ router.post("/survey", status_code=202)(survey_pass)
 
 copy_paste_pass = _make_background_pass(
     kind="copy-paste",
-    runner_module="robotsix_mill.copy_paste_runner",
+    runner_module="robotsix_mill.runners.copy_paste_runner",
     runner_func="run_copy_paste_pass",
     docstring="""Kick off a copy-paste pass in the BACKGROUND and return at once.
 
@@ -264,7 +264,7 @@ router.post("/copy-paste", status_code=202)(copy_paste_pass)
 
 module_curator_pass = _make_background_pass(
     kind="module_curator",
-    runner_module="robotsix_mill.module_curator_runner",
+    runner_module="robotsix_mill.runners.module_curator_runner",
     runner_func="run_module_curator_pass",
     docstring="""Kick off a module-curator pass in the BACKGROUND and return at once.
 
@@ -278,7 +278,7 @@ router.post("/module-curator", status_code=202)(module_curator_pass)
 
 config_sync_pass = _make_background_pass(
     kind="config-sync",
-    runner_module="robotsix_mill.config_sync_runner",
+    runner_module="robotsix_mill.runners.config_sync_runner",
     runner_func="run_config_sync_pass",
     docstring="""Kick off a config-sync drift detection pass in the BACKGROUND.""",
 )
@@ -289,7 +289,7 @@ router.post("/config-sync", status_code=202)(config_sync_pass)
 
 cost_reconciliation_pass = _make_background_pass(
     kind="cost-reconciliation",
-    runner_module="robotsix_mill.cost_reconciliation_runner",
+    runner_module="robotsix_mill.runners.cost_reconciliation_runner",
     runner_func="run_cost_reconciliation_pass",
     docstring="""Kick off a cost-reconciliation drift detection pass in the BACKGROUND.""",
     summary_builder=lambda r: (
@@ -301,7 +301,7 @@ router.post("/cost-reconciliation", status_code=202)(cost_reconciliation_pass)
 
 trace_review_pass = _make_background_pass(
     kind="trace-review",
-    runner_module="robotsix_mill.trace_review_runner",
+    runner_module="robotsix_mill.runners.trace_review_runner",
     runner_func="run_trace_review_pass",
     docstring="""Kick off a trace-review pass in the BACKGROUND.
 
@@ -317,7 +317,7 @@ router.post("/trace-review", status_code=202)(trace_review_pass)
 
 roadmap_sync_pass = _make_background_pass(
     kind="roadmap-sync",
-    runner_module="robotsix_mill.roadmap_sync_runner",
+    runner_module="robotsix_mill.runners.roadmap_sync_runner",
     runner_func="run_roadmap_sync_pass",
     docstring="""Kick off a roadmap-sync pass in the BACKGROUND.
 
@@ -348,7 +348,7 @@ def trace_health_check(
     detects unsessioned traces, and files a draft ticket if needed.
     No LLM — deterministic and fast.
     """
-    from ...trace_health_runner import run_trace_health_check
+    from ...runners.trace_health_runner import run_trace_health_check
 
     repo_configs = _resolve_agent_run_repos(repo_id, request)
 
@@ -398,7 +398,7 @@ def langfuse_cleanup_pass(
     once.  The cleanup deletes the oldest traces until the project is
     at most ``max_traces`` rows.  Pure HTTP, no LLM.
     """
-    from ...langfuse_cleanup_runner import run_langfuse_cleanup_pass
+    from ...runners.langfuse_cleanup_runner import run_langfuse_cleanup_pass
 
     repo_configs = _resolve_agent_run_repos(repo_id, request)
     settings = request.app.state.settings

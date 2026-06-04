@@ -1,22 +1,23 @@
-"""Config-sync runner — backward-compat stub. See periodic_runner."""
+"""BC-check runner — backward-compat stub. See periodic_runner."""
 
 from __future__ import annotations
 
-from .config import RepoConfig, Settings  # noqa: F401 — Settings kept for monkeypatch seam
+from ..config import RepoConfig, Settings  # noqa: F401 — Settings kept for monkeypatch seam
 from .periodic_runner import (
-    ConfigSyncPassResult,
+    BcCheckPassResult,
     PERIODIC_PASS_CONFIGS,
+    _clone_token,
     run_periodic_pass,
 )
 
 
-def run_config_sync_pass(
+def run_bc_check_pass(
     session_id: str, repo_config: RepoConfig | None = None
-) -> ConfigSyncPassResult:
+) -> BcCheckPassResult:
     settings = Settings()
     return run_periodic_pass(
         session_id,
         repo_config,
-        config=PERIODIC_PASS_CONFIGS["config_sync"],
+        config=PERIODIC_PASS_CONFIGS["bc_check"],
         settings=settings,
     )

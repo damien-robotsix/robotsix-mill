@@ -766,7 +766,7 @@ def test_retrospect_verified_state_not_persisted_to_memory_file(tmp_path, monkey
 def test_verify_prior_proposals_no_crash_on_markerless_retrospect_draft(tmp_path):
     """A retrospect-sourced ticket without a gap-id marker does not appear
     in the mapping and does not raise an error."""
-    from robotsix_mill.pass_runner import _verify_prior_proposals
+    from robotsix_mill.runners.pass_runner import _verify_prior_proposals
 
     db.reset_engine()
     s = Settings(data_dir=str(tmp_path / "data"))

@@ -19,7 +19,7 @@ from ..core.models import Ticket
 from ..core.states import State
 from ..forge import get_forge
 from ..forge.auth import github_token
-from ..pass_runner import load_memory, persist_memory
+from ..runners.pass_runner import load_memory, persist_memory
 from ..runtime import tracing
 from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext

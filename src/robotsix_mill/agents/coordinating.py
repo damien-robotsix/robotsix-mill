@@ -636,7 +636,7 @@ def run_coordinator_with_experts(
     when no expert routes the work.
     """
     from .expert_manager import ExpertManager
-    from ..pass_runner import load_memory, persist_memory
+    from ..runners.pass_runner import load_memory, persist_memory
     from .retry import run_agent
 
     def _fallback(reason: str) -> ImplementResult:

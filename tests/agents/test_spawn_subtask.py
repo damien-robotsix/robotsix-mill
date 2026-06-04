@@ -75,7 +75,7 @@ class TestRunSpawnSubtask:
                 repo_dir=repo_dir,
                 name="move-runners",
                 prompt="Move every *_runner.py into runners/.",
-                files_in_scope=["src/robotsix_mill/audit_runner.py"],
+                files_in_scope=["src/robotsix_mill/runners/audit_runner.py"],
             )
         )
 

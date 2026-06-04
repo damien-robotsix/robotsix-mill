@@ -647,7 +647,7 @@ class RetrospectStage(Stage):
             log.warning("%s: could not read memory file %s", ticket.id, memory_file)
 
         # Verify prior proposals and prepend verified-state table.
-        from ..pass_runner import (
+        from ..runners.pass_runner import (
             _verify_prior_proposals,
             _render_verified_table,
             _format_recent_proposals,
@@ -695,7 +695,7 @@ class RetrospectStage(Stage):
         # the ephemeral verified-state table if the agent copied it back in
         # (it is injected fresh each run from the DB and must never accrete
         # in the ledger).
-        from ..pass_runner import strip_ephemeral_sections
+        from ..runners.pass_runner import strip_ephemeral_sections
 
         if res.updated_memory:
             # Case 3: full rewrite (existing behavior — agent modified the ledger).

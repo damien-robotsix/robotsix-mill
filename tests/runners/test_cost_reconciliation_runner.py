@@ -10,7 +10,7 @@ dedup / skip).
 
 from datetime import timezone
 
-from robotsix_mill.cost_reconciliation_runner import (
+from robotsix_mill.runners.cost_reconciliation_runner import (
     _fetch_logged_cost,
     _fetch_provider_cost,
     _yesterday_window,
@@ -53,7 +53,7 @@ def _yesterday_date_str() -> str:
 
 def test_fetch_provider_cost_no_key_returns_none(settings, monkeypatch):
     monkeypatch.setattr(
-        "robotsix_mill.cost_reconciliation_runner.get_secrets",
+        "robotsix_mill.runners.cost_reconciliation_runner.get_secrets",
         lambda: type("S", (), {"openrouter_management_key": None})(),
     )
     assert _fetch_provider_cost(settings, _yesterday_window()) is None
@@ -63,7 +63,7 @@ def test_fetch_provider_cost_delegates_to_llmio(settings, monkeypatch):
     from robotsix_llmio.core.provider_cost import ProviderCost
 
     monkeypatch.setattr(
-        "robotsix_mill.cost_reconciliation_runner.get_secrets",
+        "robotsix_mill.runners.cost_reconciliation_runner.get_secrets",
         lambda: type("S", (), {"openrouter_management_key": "mgmt"})(),
     )
 
@@ -86,7 +86,7 @@ def test_fetch_provider_cost_delegates_to_llmio(settings, monkeypatch):
 
 def test_fetch_logged_cost_no_creds(settings, monkeypatch):
     monkeypatch.setattr(
-        "robotsix_mill.cost_reconciliation_runner.get_secrets",
+        "robotsix_mill.runners.cost_reconciliation_runner.get_secrets",
         lambda: type(
             "S",
             (),
@@ -166,14 +166,14 @@ def test_fetch_logged_cost_provider_filter_delegates(settings, monkeypatch):
 
 def _patch_pass(monkeypatch, settings, *, or_total, lf_total, or_bd="or", lf_bd="lf"):
     monkeypatch.setattr(
-        "robotsix_mill.cost_reconciliation_runner.Settings", lambda: settings
+        "robotsix_mill.runners.cost_reconciliation_runner.Settings", lambda: settings
     )
     monkeypatch.setattr(
-        "robotsix_mill.cost_reconciliation_runner._fetch_provider_cost",
+        "robotsix_mill.runners.cost_reconciliation_runner._fetch_provider_cost",
         lambda settings, window: (or_total, or_bd),
     )
     monkeypatch.setattr(
-        "robotsix_mill.cost_reconciliation_runner._fetch_logged_cost",
+        "robotsix_mill.runners.cost_reconciliation_runner._fetch_logged_cost",
         lambda settings, window, repo_config: (lf_total, lf_bd),
     )
 
@@ -210,10 +210,10 @@ def test_dirty_pass_creates_draft(tmp_path, monkeypatch):
 def test_missing_management_key_skips_gracefully(tmp_path, monkeypatch):
     settings = _make_settings(tmp_path)
     monkeypatch.setattr(
-        "robotsix_mill.cost_reconciliation_runner.Settings", lambda: settings
+        "robotsix_mill.runners.cost_reconciliation_runner.Settings", lambda: settings
     )
     monkeypatch.setattr(
-        "robotsix_mill.cost_reconciliation_runner._fetch_provider_cost",
+        "robotsix_mill.runners.cost_reconciliation_runner._fetch_provider_cost",
         lambda settings, window: None,
     )
     result = run_cost_reconciliation_pass(repo_config=_test_repo_config())
@@ -314,11 +314,11 @@ def _patch_key_usage(monkeypatch, usages):
 def test_per_key_baseline_then_clean(tmp_path, monkeypatch):
     settings = _make_settings(tmp_path)
     monkeypatch.setattr(
-        "robotsix_mill.cost_reconciliation_runner.Settings", lambda: settings
+        "robotsix_mill.runners.cost_reconciliation_runner.Settings", lambda: settings
     )
     _patch_key_usage(monkeypatch, [10.0, 12.0])  # +$2 between runs
     monkeypatch.setattr(
-        "robotsix_mill.cost_reconciliation_runner._fetch_logged_cost",
+        "robotsix_mill.runners.cost_reconciliation_runner._fetch_logged_cost",
         lambda settings, window, repo_config, *, provider=None: (
             1.8,
             "lf",
@@ -336,11 +336,11 @@ def test_per_key_baseline_then_clean(tmp_path, monkeypatch):
 def test_per_key_dirty_files_draft(tmp_path, monkeypatch):
     settings = _make_settings(tmp_path)
     monkeypatch.setattr(
-        "robotsix_mill.cost_reconciliation_runner.Settings", lambda: settings
+        "robotsix_mill.runners.cost_reconciliation_runner.Settings", lambda: settings
     )
     _patch_key_usage(monkeypatch, [10.0, 18.0])  # +$8 provider spend
     monkeypatch.setattr(
-        "robotsix_mill.cost_reconciliation_runner._fetch_logged_cost",
+        "robotsix_mill.runners.cost_reconciliation_runner._fetch_logged_cost",
         lambda settings, window, repo_config, *, provider=None: (
             2.0,
             "lf",

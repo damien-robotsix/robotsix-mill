@@ -326,7 +326,7 @@ def test_meta_board_visible_and_listable(multi_repo_client, settings):
 
 def test_audit_repo_isolation(settings, monkeypatch, tmp_path):
     """Audit pass for repo A writes sentinel only under repo A's dir."""
-    from robotsix_mill import audit_runner
+    from robotsix_mill.runners import audit_runner
     from robotsix_mill.core import db as _db
 
     _db.reset_engine()
@@ -387,7 +387,7 @@ def test_audit_repo_isolation(settings, monkeypatch, tmp_path):
 
 def test_bc_check_repo_isolation(settings, monkeypatch, tmp_path):
     """BC check pass for repo A writes sentinel only under repo A's dir."""
-    from robotsix_mill import bc_check_runner
+    from robotsix_mill.runners import bc_check_runner
     from robotsix_mill.core import db as _db
 
     _db.reset_engine()

@@ -39,13 +39,13 @@ from pathlib import Path
 
 from sqlmodel import select
 
-from .config import RepoConfig, Settings
-from .core.db import session as db_session
-from .core.models import SourceKind, Ticket
-from .core.service import TicketService
-from .core.states import State
-from .dedup import find_prior_matching_ticket, normalize
-from .runtime.lifespan import _process_started_at
+from ..config import RepoConfig, Settings
+from ..core.db import session as db_session
+from ..core.models import SourceKind, Ticket
+from ..core.service import TicketService
+from ..core.states import State
+from ..dedup import find_prior_matching_ticket, normalize
+from ..runtime.lifespan import _process_started_at
 
 # Backward-compatible private alias — the dedup primitives now live in
 # ``robotsix_mill.dedup``; ``_normalize`` is retained for existing
@@ -416,7 +416,7 @@ def run_trace_review_pass(
     target_board_id = source_board_id
     if settings.trace_review_target_repo_id:
         try:
-            from .config import get_repos_config
+            from ..config import get_repos_config
 
             registry = get_repos_config().repos
             target_rc = registry.get(settings.trace_review_target_repo_id)
@@ -434,8 +434,8 @@ def run_trace_review_pass(
                 "trace-review: target-repo lookup failed; using source board",
             )
     service = TicketService(settings, board_id=target_board_id)
-    from .langfuse_client import list_all_traces_since, fetch_trace_detail
-    from .agents.trace_inspector import run_trace_inspector
+    from ..langfuse_client import list_all_traces_since, fetch_trace_detail
+    from ..agents.trace_inspector import run_trace_inspector
 
     now = datetime.now(timezone.utc)
     # Watermark is per SOURCE board — each repo's Langfuse traces have

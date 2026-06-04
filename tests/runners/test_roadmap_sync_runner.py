@@ -14,7 +14,7 @@ import pytest
 from robotsix_mill.config import Settings, _reset_secrets
 from robotsix_mill.core.models import State, SourceKind
 from robotsix_mill.core.service import TicketService
-from robotsix_mill.roadmap_sync_runner import (
+from robotsix_mill.runners.roadmap_sync_runner import (
     EpicSection,
     insert_markers,
     parse_roadmap,

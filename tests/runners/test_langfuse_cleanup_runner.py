@@ -13,7 +13,7 @@ import httpx
 
 from robotsix_mill.config import RepoConfig, Settings, _reset_secrets, Secrets
 from robotsix_mill import config as _cfg
-from robotsix_mill.langfuse_cleanup_runner import (
+from robotsix_mill.runners.langfuse_cleanup_runner import (
     CleanupResult,
     run_langfuse_cleanup_pass,
 )

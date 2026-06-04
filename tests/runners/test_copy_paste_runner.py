@@ -1,4 +1,4 @@
-"""Tests for the thin :mod:`robotsix_mill.copy_paste_runner` stub.
+"""Tests for the thin :mod:`robotsix_mill.runners.copy_paste_runner` stub.
 
 The module is a ~10-line backward-compat shim that constructs a fresh
 ``Settings()`` and delegates to ``run_periodic_pass`` with the
@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import pytest
 
-from robotsix_mill import copy_paste_runner
+from robotsix_mill.runners import copy_paste_runner
 from robotsix_mill.config import RepoConfig
-from robotsix_mill.periodic_runner import (
+from robotsix_mill.runners.periodic_runner import (
     CopyPastePassResult,
     PERIODIC_PASS_CONFIGS,
 )

@@ -18,10 +18,10 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
-from .agents import bespoke as _bespoke_agent
-from .agents.bespoke_loader import BespokeAgentDefinition
-from .config import RepoConfig, Settings
-from .core.service import TicketService
+from ..agents import bespoke as _bespoke_agent
+from ..agents.bespoke_loader import BespokeAgentDefinition
+from ..config import RepoConfig, Settings
+from ..core.service import TicketService
 from .pass_runner import run_agent_pass
 
 log = logging.getLogger("robotsix_mill.bespoke")
