@@ -127,6 +127,34 @@ class TransitionError(RuntimeError):
 
 
 class TicketService:
+    """Manage the ticket lifecycle over per-repo SQLite databases.
+
+    Central service for creating tickets, moving them through the state
+    machine (raising :class:`TransitionError` on illegal transitions),
+    persisting them to per-repo SQLite DBs, and keeping each ticket's
+    :class:`Workspace` in sync. It is constructed from :class:`Settings`
+    (which supplies the database path and the workspace root) and a
+    *board_id* identifying the repository this instance is bound to;
+    workspaces live under ``<data_dir>/<board_id>/workspaces/<ticket_id>/``,
+    routed via :meth:`workspace`.
+
+    Key method groups:
+
+    * **Reads** — :meth:`get` (ID lookup with cross-repo fanout when
+      ``board_id`` is empty), :meth:`list`, :meth:`history`,
+      :meth:`list_children`, :meth:`list_comments`.
+    * **Lifecycle / writes** — :meth:`create`, :meth:`transition`,
+      :meth:`delete`, :meth:`add_comment`, :meth:`add_history_note`,
+      :meth:`redraft`, :meth:`request_changes`, :meth:`mark_done`,
+      :meth:`close_thread`, :meth:`reopen_thread`.
+    * **Relationships / metadata** — :meth:`set_parent`,
+      :meth:`set_unblocks`, :meth:`set_depends_on`,
+      :meth:`promote_to_epic`, :meth:`set_priority`, :meth:`set_title`.
+    * **Proposed actions** — :meth:`create_proposed_action`,
+      :meth:`approve_proposed_action`, :meth:`reject_proposed_action`,
+      :meth:`execute_proposed_action`.
+    """
+
     _ARCHIVABLE_STATES: set[State] = {State.CLOSED, State.ANSWERED, State.EPIC_CLOSED}
 
     def __init__(self, settings: Settings, board_id: str = "") -> None:
