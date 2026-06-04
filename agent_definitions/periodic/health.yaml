@@ -30,7 +30,7 @@ web_knowledge: false
 output_type: HealthResult
 retries: 4
 module: health
-skills: [board-read]
+skills: [board-read, board-propose]
 
 system_prompt: |
   You are a codebase-health agent for an autonomous software project.
