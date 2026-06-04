@@ -1841,8 +1841,8 @@ async function renderProposals(){
    '<div style="font-size:12px;color:#e2e4eb;margin:6px 0">'+esc(pa.rationale)+'</div>'+
    (pa.payload!=null?'<pre style="font-size:11px;background:#1a1d27;padding:6px 8px;border-radius:4px;overflow-x:auto">'+esc(pa.payload)+'</pre>':'')+
    '<div style="display:flex;gap:6px;margin-top:6px">'+
-    '<button class="approve-btn" onclick="approveProposal('+pa.id+')">Approve</button>'+
-    '<button class="reject-btn" onclick="rejectProposal('+pa.id+')">Reject</button>'+
+    '<button class="approve-btn" onclick="approveProposal(\''+esc(pa.id)+'\')">Approve</button>'+
+    '<button class="reject-btn" onclick="rejectProposal(\''+esc(pa.id)+'\')">Reject</button>'+
    '</div>'+
   '</div>';
  });
@@ -1851,14 +1851,14 @@ async function renderProposals(){
 
 async function approveProposal(id){
  const repo=getRepoId();
- const r=await jpost("/proposed-actions/"+id+"/approve?repo_id="+encodeURIComponent(repo));
+ const r=await jpost("/proposed-actions/"+encodeURIComponent(id)+"/approve?repo_id="+encodeURIComponent(repo));
  if(!r.ok){alert("Approve failed: "+await r.text());return}
  await renderProposals();
 }
 
 async function rejectProposal(id){
  const repo=getRepoId();
- const r=await jpost("/proposed-actions/"+id+"/reject?repo_id="+encodeURIComponent(repo));
+ const r=await jpost("/proposed-actions/"+encodeURIComponent(id)+"/reject?repo_id="+encodeURIComponent(repo));
  if(!r.ok){alert("Reject failed: "+await r.text());return}
  await renderProposals();
 }
