@@ -222,6 +222,11 @@ def _apply_default_mocks(monkeypatch, **overrides):
     monkeypatch.setattr(git_ops, "clone", overrides.get("clone", lambda *a, **k: None))
     monkeypatch.setattr(
         refine_module,
+        "_verify_branch_merged",
+        overrides.get("_verify_branch_merged", lambda repo_dir, ticket: True),
+    )
+    monkeypatch.setattr(
+        refine_module,
         "load_memory",
         overrides.get("load_memory", lambda memory_file, max_chars=None: ""),
     )
@@ -1667,6 +1672,108 @@ def test_no_change_needed_empty_rationale_falls_back_to_spec(
     assert out.next_state is not State.DONE
     # No rationale comment was filed.
     assert ctx.service.list_comments(t.id) == []
+
+
+# ---------------------------------------------------------------------------
+# 34. no_change_needed on redrafted ticket with unmerged branch → BLOCKED
+# ---------------------------------------------------------------------------
+
+
+def test_no_change_needed_unmerged_branch_blocks(
+    ctx_factory,
+    monkeypatch,
+):
+    """When a redrafted ticket (has a branch from a prior implement
+    run) receives a no_change_needed verdict, but the branch is NOT
+    merged to main, the ticket must route to BLOCKED — not DONE —
+    so the implementation is not stranded on an orphaned branch."""
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
+    t = _ticket(ctx)
+    # Simulate a prior implement run that set a branch.
+    ctx.service.set_branch(t.id, "feature/redrafted-work")
+    t = ctx.service.get(t.id)  # re-fetch so t.branch reflects the update
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_ok(
+            no_change_needed=True,
+            no_change_rationale="Already implemented on the branch.",
+            spec_markdown=None,
+        ),
+        # Simulate the branch being unmerged.
+        _verify_branch_merged=lambda repo_dir, ticket: False,
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert "not merged to main" in (out.note or "")
+    assert "feature/redrafted-work" in (out.note or "")
+
+
+# ---------------------------------------------------------------------------
+# 35. no_change_needed on redrafted ticket with merged branch → DONE (no regression)
+# ---------------------------------------------------------------------------
+
+
+def test_no_change_needed_merged_branch_proceeds(
+    ctx_factory,
+    monkeypatch,
+):
+    """A redrafted ticket whose branch IS merged to main must still
+    close as DONE via the no_change_needed path — no regression for
+    the normal merged case."""
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
+    t = _ticket(ctx)
+    ctx.service.set_branch(t.id, "feature/merged-work")
+    t = ctx.service.get(t.id)  # re-fetch so t.branch reflects the update
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_ok(
+            no_change_needed=True,
+            no_change_rationale="Already implemented and merged.",
+            spec_markdown=None,
+        ),
+        # Simulate the branch being confirmed merged.
+        _verify_branch_merged=lambda repo_dir, ticket: True,
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.DONE
+    assert "no change needed" in (out.note or "")
+
+
+# ---------------------------------------------------------------------------
+# 36. no_change_needed without a branch (first refine) → DONE (unaffected)
+# ---------------------------------------------------------------------------
+
+
+def test_no_change_needed_no_branch_proceeds(
+    ctx_factory,
+    monkeypatch,
+):
+    """A ticket that has never been implemented (no branch set) must
+    close normally via no_change_needed — the merge check is skipped
+    entirely for first-time refines."""
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
+    t = _ticket(ctx)
+    # No branch set — this is a first-time refine.
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_ok(
+            no_change_needed=True,
+            no_change_rationale="Informational ticket, no code change needed.",
+            spec_markdown=None,
+        ),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.DONE
+    assert "no change needed" in (out.note or "")
 
 
 # ---------------------------------------------------------------------------
