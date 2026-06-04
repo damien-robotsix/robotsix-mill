@@ -63,6 +63,10 @@ WORKDIR /build
 # source tree into the production image).
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
+# Vendored dependency resolved via [tool.uv.sources] (path = robotsix-yaml-config).
+# uv reads that table for `uv pip install`, but the directory must be present
+# in the build context to build it.
+COPY robotsix-yaml-config/ ./robotsix-yaml-config/
 # DO NOT switch this to `uv sync` / `UV_PROJECT_ENVIRONMENT=system`. That
 # env var is a venv PATH, not a mode: uv builds a venv at /build/system and
 # puts the `robotsix-mill` console script at /build/system/bin, so the base
@@ -159,7 +163,8 @@ ARG INSTALL_EXTRAS=dev,tracing
 # but NOT its /usr/local/bin/uv launcher, so a fresh `pip install uv` sees uv
 # already satisfied and never recreates the binary → "uv: not found". pip is
 # present and the editable install over inherited deps is cheap. (See PR #491.)
-RUN pip install --no-cache-dir --root-user-action=ignore -e ".[dev,tracing]" \
+RUN pip install --no-cache-dir --root-user-action=ignore \
+        -e ./robotsix-yaml-config -e ".[dev,tracing]" \
     && chown -R mill:mill /app
 
 # Entrypoint runs as root, joins the host's docker.sock group, then

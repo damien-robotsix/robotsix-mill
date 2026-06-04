@@ -27,7 +27,10 @@ jobs:
         run: python -m venv .venv
 
       - name: Install project + tracing extras
-        run: .venv/bin/pip install ".[tracing]"
+        # robotsix-yaml-config is vendored in-repo (see [tool.uv.sources] in
+        # pyproject.toml). pip does not read that table, so install the local
+        # copy explicitly to satisfy the runtime dependency.
+        run: .venv/bin/pip install ./robotsix-yaml-config ".[tracing]"
 
       - name: Install pip-audit
         run: .venv/bin/pip install "pip-audit>=2.5.6"

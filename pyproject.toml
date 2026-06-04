@@ -17,7 +17,7 @@ dependencies = [
     # cost, retry/transient) extracted to a standalone library. See
     # agents/openrouter_cost.py + agents/retry.py (now thin shims).
     "robotsix-llmio[openrouter_deepseek,claude_sdk] @ git+https://github.com/damien-robotsix/robotsix-llmio@main",
-    "robotsix-yaml-config @ git+https://github.com/damien-robotsix/robotsix-yaml-config@main",
+    "robotsix-yaml-config",
     "pydantic-settings>=2",
     "pyyaml>=6",
     "sqlmodel>=0.0.22",
@@ -51,6 +51,15 @@ packages = ["src/robotsix_mill"]
 # Allow the direct git reference for robotsix-llmio in project.dependencies.
 [tool.hatch.metadata]
 allow-direct-references = true
+
+# robotsix-yaml-config is vendored in-repo (the config cascade primitives the
+# loader consumes) rather than published or fetched from a public git remote —
+# its GitHub repo is not clonable from CI. Point uv at the local copy so
+# `uv lock` / `uv sync` / `uv pip install` resolve it from the tree. pip-based
+# flows (the security-audit job, the Dockerfile dev stage) pass the path
+# explicitly since pip does not read [tool.uv.sources].
+[tool.uv.sources]
+robotsix-yaml-config = { path = "robotsix-yaml-config" }
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
