@@ -62,6 +62,12 @@ show_missing = true
 [tool.bandit]
 # Run with: pre-commit run bandit --all-files
 # (uses `-c pyproject.toml` via the pre-commit hook args)
+#
+# Severity floor: MEDIUM+.  CI runs with `--severity-level medium`,
+# mirroring the Bandit ≤1.8 default.  Bandit ≥1.9 widened the default
+# to LOW, surfacing pre-existing LOW findings that are tracked but
+# intentionally non-blocking.  Lowering to LOW+ is a future decision
+# requiring a triage pass of the existing LOW backlog.
 targets = ["src/"]
 exclude_dirs = ["tests/"]
 skips = ["B101"]
