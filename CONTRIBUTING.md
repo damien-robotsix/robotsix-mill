@@ -229,6 +229,13 @@ Install with `.venv/bin/pre-commit install`. Run manually:
 
 ## CI overview
 
+The governing policy for every CI check is
+[docs/ci-policy.md](docs/ci-policy.md) — the **gate-or-remove**
+principle (every check must gate, be documented as accepted advisory,
+or be removed) plus a reviewer checklist for new checks. The per-check
+notes below remain the authoritative rationale for each individual
+check.
+
 | Workflow | Trigger | What it does |
 |----------|---------|--------------|
 | [`docker-publish.yml`](.github/workflows/docker-publish.yml) | Push to `main` | hadolint lint → build Docker image → Trivy CRITICAL scan → push to Docker Hub with SBOM + SLSA attestation |
