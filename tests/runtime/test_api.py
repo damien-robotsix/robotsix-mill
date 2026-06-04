@@ -459,6 +459,28 @@ def test_board_script_is_well_formed():
     assert "</button>`:" in js  # correctly-closed literal
 
 
+def test_board_js_escapes_js_string_handlers(client):
+    """Inline onclick handlers that embed a dynamic id must route it
+    through the JS-string-context escaper jsq() — not esc() inside a
+    single-quoted JS literal, and not a bare template-literal '${...}'.
+    esc() escapes only [&<>], so a value containing a "'" would break (or
+    inject into) the generated handler; jsq() emits a properly-quoted,
+    HTML-attribute-safe JS string literal."""
+    js = client.get("/static/board.js").text
+    # The escaper is defined.
+    assert "const jsq=" in js, "board.js must define a jsq() JS-string escaper"
+    # Proposals / candidate / survey / child-ticket handlers use jsq().
+    assert "approveProposal('+jsq(" in js
+    assert "rejectProposal('+jsq(" in js
+    assert "rejectCandidate('+jsq(" in js
+    assert "open_('+jsq(" in js  # survey / proposals link handlers
+    assert "open_(${jsq(" in js  # child-ticket template-literal links
+    # The unsafe pre-fix patterns must be gone: no id interpolated into a
+    # single-quoted JS literal via esc(), and no bare-template open_('${id}').
+    assert "esc(pa.id)" not in js
+    assert "open_('${" not in js
+
+
 def test_board_js_includes_origin_session_rendering(client):
     """The board JS includes origin_session and origin_session_url
     rendering logic for the ticket detail drawer."""

@@ -23,6 +23,16 @@ const ACTIVE_LABEL={
   retrospect: "retrospecting…"
 };
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+// JS-string-literal escaper for values interpolated into inline event
+// handlers (onclick etc.). esc() escapes HTML text/attribute content but
+// NOT the quotes that delimit JS string literals, so a value containing a
+// quote would break (or inject into) the generated handler. jsq() returns a
+// complete, quoted JS string literal — drop it straight between the call
+// parens, e.g. onclick="approveProposal("+jsq(pa.id)+")". JSON.stringify
+// produces a properly-escaped, double-quoted JS literal; we then HTML-escape
+// it (esc) and encode the wrapping/inner double quotes as &quot; so it is
+// also safe inside a double-quoted HTML attribute.
+const jsq=s=>esc(JSON.stringify(String(s==null?"":s))).replace(/"/g,"&quot;");
 const renderMD = s => { if (!s) return ""; return marked.parse(s); };
 const SOURCE_CLASS={retrospect:"retrospect",audit:"audit",config_sync:"config-sync","trace-health":"trace-health",health:"health",test_gap:"test-gap",agent:"agent",survey:"survey",ci:"ci",agent_check:"agent-check",bc_check:"bc-check",cost_reconciliation:"cost-reconciliation",completeness_check:"completeness-check","trace-review":"trace-review",roadmap_sync:"roadmap-sync"};const srcClass=s=>SOURCE_CLASS[s]||"user";
 // History row → artifact that the stage producing this state wrote.
@@ -557,10 +567,10 @@ function renderThreads(cs){
    <div class="ev"><b class="muted">${t.created_at}</b> · <b>${esc(t.author)}</b>${t.author==="scope-triage"?' <span class="triage-badge">🤖 triage</span>':''}${isClosed?' <span class="closed-badge">🔒 Closed</span>':''}<br>${renderMD(t.body)}</div>
    ${replyHtml}
    <div class="thread-actions">
-    <button class="add-comment-btn" onclick="replyToThread('${t.id}','${t.ticket_id}')">↩ Reply</button>
+    <button class="add-comment-btn" onclick="replyToThread(${jsq(t.id)},${jsq(t.ticket_id)})">↩ Reply</button>
     ${isClosed
-     ?`<button class="add-comment-btn" onclick="reopenThread('${t.id}','${t.ticket_id}')">🔓 Reopen</button>`
-     :`<button class="add-comment-btn" onclick="closeThread('${t.id}','${t.ticket_id}')">🔒 Close</button>`}
+     ?`<button class="add-comment-btn" onclick="reopenThread(${jsq(t.id)},${jsq(t.ticket_id)})">🔓 Reopen</button>`
+     :`<button class="add-comment-btn" onclick="closeThread(${jsq(t.id)},${jsq(t.ticket_id)})">🔒 Close</button>`}
    </div>
   </div>`;
  }
@@ -1223,12 +1233,12 @@ function _actionButtonsHtml(t){
  const prioLabel=t.priority?"⚡ Priority on":"⚡ Set priority";
  const prioClass=t.priority?"prio-btn prio-btn-on":"prio-btn";
  return (t.state==="human_issue_approval"?
-   `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`+
-   `<button class="reject-btn" title="Send back to draft with a comment" onclick="event.stopPropagation();requestChanges('${t.id}')">Request Changes</button>`:"")+
+   `<button class="approve-btn" onclick="event.stopPropagation();approve(${jsq(t.id)})">Approve</button>`+
+   `<button class="reject-btn" title="Send back to draft with a comment" onclick="event.stopPropagation();requestChanges(${jsq(t.id)})">Request Changes</button>`:"")+
   (redraftable?
-   `<button class="redraft-btn" title="Send back to draft" onclick="event.stopPropagation();redraft('${t.id}')">Redraft</button>`:"")+
-  `<button class="${prioClass}" title="Pulled from the queue ahead of non-priority tickets" onclick="event.stopPropagation();togglePriority('${t.id}',${t.priority?"false":"true"})">${prioLabel}</button>`+
-  `<button class="del-btn" title="Delete ticket" style="position:static;opacity:1;margin-left:4px;margin-top:5px;display:inline-block" onclick="event.stopPropagation();del_('${t.id}')">✕</button>`;
+   `<button class="redraft-btn" title="Send back to draft" onclick="event.stopPropagation();redraft(${jsq(t.id)})">Redraft</button>`:"")+
+  `<button class="${prioClass}" title="Pulled from the queue ahead of non-priority tickets" onclick="event.stopPropagation();togglePriority(${jsq(t.id)},${t.priority?"false":"true"})">${prioLabel}</button>`+
+  `<button class="del-btn" title="Delete ticket" style="position:static;opacity:1;margin-left:4px;margin-top:5px;display:inline-block" onclick="event.stopPropagation();del_(${jsq(t.id)})">✕</button>`;
 }
 async function togglePriority(id,want){
  const r=await jpost("/tickets/"+id+"/priority",{priority:want==="true"||want===true});
@@ -1274,14 +1284,14 @@ async function open_(id){
    (_ms&&_ms.can_merge===false?
     `<button class="merge-btn" disabled title="${esc(_ms.reason||'')}">Merge</button>`+
     `<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ ${esc(_ms.reason||'not mergeable')}</p>`:
-    `<button class="merge-btn" onclick="event.stopPropagation();mergePR('${tData.id}')">Merge</button>`
+    `<button class="merge-btn" onclick="event.stopPropagation();mergePR(${jsq(tData.id)})">Merge</button>`
    )+
    (_mr&&_mr.reason?`<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ auto-merge not eligible: ${esc(_mr.reason)}</p>`:"");
  }
  function flushChildren(){
   if(_ch===undefined)return;const el=document.getElementById("ticket-children");if(!el)return;
   el.innerHTML=(_ch&&_ch.length?`<h3>Children (${_ch.length})</h3><div class="children-list">`+
-   _ch.map(c=>`<div class="child-ticket" onclick="open_('${c.id}')"><span class="child-state s-${c.state}">${c.state}</span> <span class="child-title">${esc(c.title)}</span> <span class="child-id muted">${c.id}</span></div>`).join("")+
+   _ch.map(c=>`<div class="child-ticket" onclick="open_(${jsq(c.id)})"><span class="child-state s-${c.state}">${c.state}</span> <span class="child-title">${esc(c.title)}</span> <span class="child-id muted">${c.id}</span></div>`).join("")+
    `</div>`:"");
  }
  function flushHistory(){
@@ -1303,7 +1313,7 @@ async function open_(id){
  }
  function flushComments(){
   if(_cs===undefined)return;const el=document.getElementById("ticket-comments");if(!el)return;
-  el.innerHTML=`<h3>Comments <button class="add-comment-btn" onclick="addComment('${id}')">+ Add</button></h3>`+
+  el.innerHTML=`<h3>Comments <button class="add-comment-btn" onclick="addComment(${jsq(id)})">+ Add</button></h3>`+
    ((_cs&&_cs.length)?renderThreads(_cs):`<div class="muted" style="font-size:11px">No comments yet.</div>`);
  }
  function flushMerge(){
@@ -1348,12 +1358,12 @@ async function open_(id){
        const color=terminal[st]?"#10b981":blocked[st]?"#ef4444":awaiting[st]?"#a855f7":"#f59e0b";
        const title=d.title?esc(d.title):"(unknown)";
        const shortId=esc(d.id.slice(0,8)+"…"+d.id.slice(-4));
-       return `<li style="margin:2px 0"><span style="color:${color}">${icon}</span> <span style="color:${color};font-family:monospace;font-size:11px;text-transform:uppercase">${esc(st)}</span> · <a href="#" onclick="event.preventDefault();open_('${d.id}')" title="${esc(d.id)}">${title}</a> <span style="color:#888;font-family:monospace;font-size:11px">${shortId}</span></li>`;
+       return `<li style="margin:2px 0"><span style="color:${color}">${icon}</span> <span style="color:${color};font-family:monospace;font-size:11px;text-transform:uppercase">${esc(st)}</span> · <a href="#" onclick="event.preventDefault();open_(${jsq(d.id)})" title="${esc(d.id)}">${title}</a> <span style="color:#888;font-family:monospace;font-size:11px">${shortId}</span></li>`;
      }).join("")+
      `</ul></div>`:"")+
    (t.unmet_deps&&t.unmet_deps.length?`<p style="color:#f59e0b;font-weight:bold">⏳ waiting on ${t.unmet_deps.length} unfinished dep${t.unmet_deps.length>1?"s":""}</p>`:"")+
    (t.parent_id?`<p><b>Part of epic:</b> <span class="epic-ref">📋 ${esc(t.parent_title||t.parent_id)}</span></p>`:"")+
-   (t.kind==="epic"?`<p><button class="add-comment-btn" style="background:#9333ea;color:#fff" onclick="generateChildren('${t.id}')">Generate Tickets</button> <button class="add-comment-btn" style="background:#2563eb;color:#fff" onclick="newChildTicket('${t.id}')">Add Ticket</button></p>`:"")+
+   (t.kind==="epic"?`<p><button class="add-comment-btn" style="background:#9333ea;color:#fff" onclick="generateChildren(${jsq(t.id)})">Generate Tickets</button> <button class="add-comment-btn" style="background:#2563eb;color:#fff" onclick="newChildTicket(${jsq(t.id)})">Add Ticket</button></p>`:"")+
    `<div id="ticket-action-buttons">${_actionButtonsHtml(t)}</div>`+
    `</div>`+
    `</div>`+
@@ -1650,7 +1660,7 @@ async function renderCostDashboard(){
  if(topTicket){
   highlightsHtml+=
    '<div class="cost-bar-track">'+
-    '<a href="#" onclick="open_(\''+esc(topTicket.ticket_id)+'\');return false">'+esc(topTicket.title)+'</a>'+
+    '<a href="#" onclick="open_('+jsq(topTicket.ticket_id)+');return false">'+esc(topTicket.title)+'</a>'+
     '<span class="cost-bar-count">'+esc(topTicket.ticket_id)+'</span>'+
    '</div>'+
    '<div class="cost-bar-amount">$'+topTicket.cost_usd.toFixed(4)+'</div>';
@@ -1758,9 +1768,9 @@ async function renderCandidatesList(){
    '<div style="font-size:11px;color:#9ca3af;margin-bottom:8px"><strong>Rationale:</strong> '+esc(c.rationale)+'</div>'+
    '<div style="font-size:10px;color:#6b7280;margin-bottom:8px">From ticket <code>'+esc(c.source_ticket)+'</code></div>'+
    '<div style="display:flex;gap:6px">'+
-    '<button onclick="validateCandidate(\''+esc(c.candidate_id)+'\')" style="font-size:11px;padding:4px 12px;background:#059669;color:#fff;border:none;border-radius:4px;cursor:pointer">'+
+    '<button onclick="validateCandidate('+jsq(c.candidate_id)+')" style="font-size:11px;padding:4px 12px;background:#059669;color:#fff;border:none;border-radius:4px;cursor:pointer">'+
     '✓ Validate &amp; file ticket</button>'+
-    '<button onclick="rejectCandidate(\''+esc(c.candidate_id)+'\')" style="font-size:11px;padding:4px 12px;background:#374151;color:#cfd3db;border:none;border-radius:4px;cursor:pointer">'+
+    '<button onclick="rejectCandidate('+jsq(c.candidate_id)+')" style="font-size:11px;padding:4px 12px;background:#374151;color:#cfd3db;border:none;border-radius:4px;cursor:pointer">'+
     '✕ Reject</button>'+
    '</div>'+
   '</div>';
@@ -1841,12 +1851,12 @@ async function renderProposals(){
  pending.forEach(function(pa){
   html+='<div class="proposal-card">'+
    '<div class="proposal-meta">'+esc(pa.source)+' · '+esc(pa.action_type)+' · '+esc(pa.created_at)+'</div>'+
-   '<div class="proposal-meta">Target ticket: <a href="#" onclick="open_(\''+esc(pa.target_ticket_id)+'\');return false">'+esc(pa.target_ticket_id)+'</a></div>'+
+   '<div class="proposal-meta">Target ticket: <a href="#" onclick="open_('+jsq(pa.target_ticket_id)+');return false">'+esc(pa.target_ticket_id)+'</a></div>'+
    '<div style="font-size:12px;color:#e2e4eb;margin:6px 0">'+esc(pa.rationale)+'</div>'+
    (pa.payload!=null?'<pre style="font-size:11px;background:#1a1d27;padding:6px 8px;border-radius:4px;overflow-x:auto">'+esc(pa.payload)+'</pre>':'')+
    '<div style="display:flex;gap:6px;margin-top:6px">'+
-    '<button class="approve-btn" onclick="approveProposal(\''+esc(pa.id)+'\')">Approve</button>'+
-    '<button class="reject-btn" onclick="rejectProposal(\''+esc(pa.id)+'\')">Reject</button>'+
+    '<button class="approve-btn" onclick="approveProposal('+jsq(pa.id)+')">Approve</button>'+
+    '<button class="reject-btn" onclick="rejectProposal('+jsq(pa.id)+')">Reject</button>'+
    '</div>'+
   '</div>';
  });
@@ -1903,7 +1913,7 @@ async function refreshDetail(id){
  swap("ticket-action-buttons", _actionButtonsHtml(t));
  // Children
  swap("ticket-children", ch&&ch.length?`<h3>Children (${ch.length})</h3><div class="children-list">`+
-  ch.map(c=>`<div class="child-ticket" onclick="open_('${c.id}')"><span class="child-state s-${c.state}">${c.state}</span> <span class="child-title">${esc(c.title)}</span> <span class="child-id muted">${c.id}</span></div>`).join("")+`</div>`:"");
+  ch.map(c=>`<div class="child-ticket" onclick="open_(${jsq(c.id)})"><span class="child-state s-${c.state}">${c.state}</span> <span class="child-title">${esc(c.title)}</span> <span class="child-id muted">${c.id}</span></div>`).join("")+`</div>`:"");
  // History — render via the shared collapsible helper. Preserve
  // expansion state across the 1s poll: any row the user had open
  // before stays open + still shows its loaded artifact.
@@ -1947,7 +1957,7 @@ async function refreshDetail(id){
  // Retrospect
  swap("ticket-retrospect", rt&&rt.retrospect?`<h3>retrospect.md</h3><div class="md-body">${renderMD(rt.retrospect)}</div>`:"");
  // Comments
- swap("ticket-comments", `<h3>Comments <button class="add-comment-btn" onclick="addComment('${id}')">+ Add</button></h3>`+
+ swap("ticket-comments", `<h3>Comments <button class="add-comment-btn" onclick="addComment(${jsq(id)})">+ Add</button></h3>`+
   ((cs&&cs.length)?renderThreads(cs):`<div class="muted" style="font-size:11px">No comments yet.</div>`));
  // Merge button area + merge details
  const ba=document.getElementById("ticket-merge-btn-area");
@@ -1956,7 +1966,7 @@ async function refreshDetail(id){
    (ms&&ms.can_merge===false?
     `<button class="merge-btn" disabled title="${esc(ms.reason||'')}">Merge</button>`+
     `<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ ${esc(ms.reason||'not mergeable')}</p>`:
-    `<button class="merge-btn" onclick="event.stopPropagation();mergePR('${t.id}')">Merge</button>`
+    `<button class="merge-btn" onclick="event.stopPropagation();mergePR(${jsq(t.id)})">Merge</button>`
    )+
    (mr&&mr.reason?`<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ auto-merge not eligible: ${esc(mr.reason)}</p>`:"")
   ):"";
