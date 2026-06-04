@@ -480,6 +480,60 @@ def _ticket_resume_blocked(args: argparse.Namespace, settings: Settings) -> int:
             return 1
 
 
+def _action_list(args: argparse.Namespace, settings: Settings) -> int:
+    with _client(settings) as c:
+        r = c.get(
+            "/proposed-actions",
+            params={"repo_id": args.repo_id, "status": args.status},
+        )
+        r.raise_for_status()
+        for a in r.json():
+            rationale = (a.get("rationale") or "")[:80]
+            print(
+                f"{a['id']}\t{a['source']}\t{a['action_type']}\t"
+                f"{a['target_ticket_id']}\t{rationale}"
+            )
+    return 0
+
+
+def _action_approve(args: argparse.Namespace, settings: Settings) -> int:
+    with _client(settings) as c:
+        r = c.post(
+            f"/proposed-actions/{args.id}/approve",
+            params={"repo_id": args.repo_id},
+        )
+        if r.is_success:
+            data = r.json()
+            print(f"action {data['id']} approved — now {data['status']}")
+            return 0
+        else:
+            try:
+                detail = r.json().get("detail", r.text)
+            except Exception:
+                detail = r.text
+            print(f"approve failed: {detail}", file=sys.stderr)
+            return 1
+
+
+def _action_reject(args: argparse.Namespace, settings: Settings) -> int:
+    with _client(settings) as c:
+        r = c.post(
+            f"/proposed-actions/{args.id}/reject",
+            params={"repo_id": args.repo_id},
+        )
+        if r.is_success:
+            data = r.json()
+            print(f"action {data['id']} rejected — now {data['status']}")
+            return 0
+        else:
+            try:
+                detail = r.json().get("detail", r.text)
+            except Exception:
+                detail = r.text
+            print(f"reject failed: {detail}", file=sys.stderr)
+            return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     """Entry point for the robotsix-mill CLI.
 
@@ -707,6 +761,24 @@ def main(argv: list[str] | None = None) -> int:
         "registered; optional when only one)",
     )
 
+    # --- action command ---
+    p_action = sub.add_parser("action", help="proposed action operations")
+    asub = p_action.add_subparsers(dest="acmd", required=True)
+
+    p_action_list = asub.add_parser("list", help="list pending proposed actions")
+    p_action_list.add_argument("--repo-id", required=True)
+    p_action_list.add_argument("--status", default="pending")
+
+    p_action_approve = asub.add_parser(
+        "approve", help="approve and execute a proposed action"
+    )
+    p_action_approve.add_argument("id", type=int)
+    p_action_approve.add_argument("--repo-id", required=True)
+
+    p_action_reject = asub.add_parser("reject", help="reject a proposed action")
+    p_action_reject.add_argument("id", type=int)
+    p_action_reject.add_argument("--repo-id", required=True)
+
     args = parser.parse_args(argv)
     settings = Settings()
 
@@ -720,6 +792,13 @@ def main(argv: list[str] | None = None) -> int:
         return _inquire(args, settings)
     if args.cmd == "epic" and args.ecmd == "new":
         return _epic_new(args, settings)
+    if args.cmd == "action":
+        if args.acmd == "list":
+            return _action_list(args, settings)
+        if args.acmd == "approve":
+            return _action_approve(args, settings)
+        if args.acmd == "reject":
+            return _action_reject(args, settings)
     if args.cmd == "ticket":
         if args.tcmd == "new":
             return _ticket_new(args, settings)
