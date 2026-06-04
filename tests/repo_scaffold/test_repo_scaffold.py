@@ -755,3 +755,39 @@ def test_file_implementation_followup_creates_buildout_ticket(tmp_path, monkeypa
     body = svc.workspace(t).read_description()
     assert "module-taxonomy schema" in body
     assert "meta-extraction-kind" not in body
+
+
+# ---------------------------------------------------------------------------
+# build_new_repo_marker (the producer-side format owner)
+# ---------------------------------------------------------------------------
+
+
+def test_build_new_repo_marker_roundtrips():
+    """build_new_repo_marker → parse_new_repo_params is an exact round-trip,
+    including values that need YAML quoting (e.g. a colon in description)."""
+    from robotsix_mill.repo_scaffold import build_new_repo_marker
+
+    marker = build_new_repo_marker(
+        "robotsix-modules",
+        owner="damien-robotsix",
+        private=False,
+        description="Taxonomy validation: shared schema",
+        language="python",
+    )
+    parsed = parse_new_repo_params("Spec body.\n\n" + marker)
+    assert parsed == {
+        "name": "robotsix-modules",
+        "owner": "damien-robotsix",
+        "private": False,
+        "description": "Taxonomy validation: shared schema",
+        "language": "python",
+    }
+
+
+def test_build_new_repo_marker_defaults_roundtrip():
+    from robotsix_mill.repo_scaffold import build_new_repo_marker
+
+    parsed = parse_new_repo_params(build_new_repo_marker("robotsix-foo"))
+    assert parsed["name"] == "robotsix-foo"
+    assert parsed["private"] is False
+    assert parsed["language"] == "python"

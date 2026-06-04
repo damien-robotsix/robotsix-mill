@@ -527,6 +527,95 @@ def _coerce_refine_output(output: object) -> "RefineResult":
     return RefineResult(spec_markdown=str(output).strip() or None)
 
 
+def _meta_refine_tools(board_id: str, sink: dict) -> list:
+    """Extra refine tools available only on the meta board (currently the
+    ``request_new_repo`` new-repo scaffold tool). Empty elsewhere."""
+    if board_id == "meta":
+        return [make_request_new_repo_tool(sink)]
+    return []
+
+
+def _apply_new_repo_request(output: "RefineResult", sink: dict) -> None:
+    """Stamp the canonical new-repo scaffold marker onto *output* when the
+    refine agent called ``request_new_repo`` (recorded in *sink*).
+
+    A new-repo scaffold is single-scoped — the build-out is a separate
+    auto-filed ticket — so this also forces a single spec (no split /
+    children / promote). No-op when no request was recorded.
+    """
+    nr = sink.get("new_repo")
+    if not nr:
+        return
+    from ..repo_scaffold import build_new_repo_marker
+
+    marker = build_new_repo_marker(
+        nr["name"],
+        owner=nr["owner"],
+        private=nr["private"],
+        description=nr["description"],
+        language=nr["language"],
+    )
+    base = output.spec_markdown or f"Create the standalone repository **{nr['name']}**."
+    if "meta-extraction-kind: new-repo" not in base:
+        base = f"{base}\n\n{marker}"
+    output.spec_markdown = base
+    output.split = False
+    output.children = None
+    output.promote_to_epic = False
+
+
+def make_request_new_repo_tool(sink: dict):
+    """Build the ``request_new_repo`` refine tool, recording into *sink*.
+
+    The tool lets the (meta) refine agent declare that an extraction draft
+    targets a BRAND-NEW standalone repository. It only records the request;
+    the refine stage reads *sink* after the run and stamps the canonical
+    ``new-repo`` scaffold marker onto the refined spec (format generated
+    deterministically by :func:`build_new_repo_marker`, not by the model).
+    The implement stage then routes to ``run_repo_scaffold`` → create the
+    repo on the forge, initial commit, register in ``config/repos.yaml``,
+    and file a build-out ticket on the new repo's own board.
+    """
+
+    def request_new_repo(
+        name: str,
+        owner: str = "",
+        private: bool = False,
+        language: str = "python",
+        description: str = "",
+    ) -> str:
+        """Declare that this draft CREATES a new standalone repository
+        named *name*.
+
+        Use ONLY when the extraction target is a brand-new repo that does
+        not exist yet (e.g. "extract the taxonomy schema into a standalone
+        library"). Do NOT use it when the work targets an existing repo.
+
+        The mill will create the repo on the forge, scaffold an initial
+        commit, register it in ``config/repos.yaml``, and file a build-out
+        ticket on the new repo's board to populate it. You do not need to
+        format any marker — just call this, then write the spec describing
+        what the new repo should contain.
+
+        ``owner`` defaults to the forge default; ``private`` defaults to
+        False; ``language`` defaults to ``"python"``.
+        """
+        sink["new_repo"] = {
+            "name": name.strip(),
+            "owner": owner.strip(),
+            "private": bool(private),
+            "language": (language or "python").strip().lower(),
+            "description": description.strip(),
+        }
+        return (
+            f"Recorded new-repo request for {name!r}. The scaffold marker "
+            "will be added to the refined spec automatically — just write "
+            "the spec describing what the new repo should contain."
+        )
+
+    return request_new_repo
+
+
 def run_refine_agent(
     *,
     settings: Settings,
@@ -601,6 +690,12 @@ def run_refine_agent(
         ]
         tools = [make_explore_tool(settings, repo_dir, extra_roots=extra_roots), *ro]
 
+    # Meta refine can declare an extraction targets a brand-new repo. The
+    # tool records the request; the marker is stamped onto the spec below
+    # (deterministic format, not model-authored). No repo_dir needed.
+    new_repo_sink: dict = {}
+    tools += _meta_refine_tools(board_id, new_repo_sink)
+
     overrides = {}
     if reviewer_comments:
         overrides["system_prompt"] = REVIEWER_SENDBACK_PROMPT
@@ -668,6 +763,8 @@ def run_refine_agent(
             result = continuation_result
 
         output: RefineResult = _coerce_refine_output(result.output)
+        _apply_new_repo_request(output, new_repo_sink)
+
         try:
             output.conversation_state = result.all_messages_json()
         except AttributeError:

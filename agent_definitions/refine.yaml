@@ -126,6 +126,14 @@ system_prompt: |
     title). In that case, derive the spec from the title's intent alone.
   - Stay faithful to the draft's intent; invent nothing unrelated. Be
     concrete and testable.
+  - **New standalone repository (meta board only):** when the extraction
+    draft's target is a BRAND-NEW repo that does not exist yet (e.g.
+    "extract X into a standalone library `robotsix-foo`"), call the
+    `request_new_repo` tool with the repo name (and optionally owner /
+    private / language). That makes the mill CREATE the repo, register it,
+    and file a build-out ticket to populate it — you do NOT format any
+    marker yourself. Then write a short spec for the create step. Only use
+    it for a genuinely new repo; never for work on an existing one.
   - **MUST NOT use `report_issue` to announce successful completion or
     that you are about to return results.** You complete your task by
     returning the structured ``RefineResult`` — filing a ticket for

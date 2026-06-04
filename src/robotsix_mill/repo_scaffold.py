@@ -94,6 +94,34 @@ def parse_new_repo_params(description: str) -> dict | None:
     }
 
 
+def build_new_repo_marker(
+    name: str,
+    *,
+    owner: str = "",
+    private: bool = False,
+    description: str = "",
+    language: str = "python",
+) -> str:
+    """Build the canonical ``new-repo`` extraction marker block.
+
+    The single source of truth for the marker FORMAT (the counterpart to
+    :func:`parse_new_repo_params`, which reads it back). Producers — e.g.
+    the refine ``request_new_repo`` tool — call this so the marker is
+    always valid YAML regardless of how the agent phrased its request.
+    Round-trips: ``parse_new_repo_params(build_new_repo_marker(x)) == x``.
+    """
+    data = {
+        "name": name,
+        "owner": owner,
+        "private": bool(private),
+        "description": description,
+        "language": language,
+    }
+    payload = yaml.safe_dump(data, default_flow_style=False, sort_keys=False).strip()
+    indented = "\n".join(f"  {line}" for line in payload.splitlines())
+    return f"<!-- meta-extraction-kind: new-repo\n{indented}\n-->"
+
+
 def run_repo_scaffold(settings, ticket, forge, ctx) -> Outcome:
     """Execute the repo-scaffold workflow for a ``new-repo`` extraction ticket.
 
