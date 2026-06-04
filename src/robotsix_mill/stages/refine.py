@@ -489,7 +489,7 @@ class RefineStage(Stage):
         # consistent with every other terminal-ish ticket.
         dup_id = verdict.get("duplicate_of")
         if dup_id:
-            if RefineStage._is_valid_dedup_target(ctx, ticket, dup_id):
+            if RefineStage._is_valid_dedup_target(ctx, ticket, dup_id, repo_dir):
                 return Outcome(
                     State.DONE,
                     f"{DEDUP_DUPLICATE_PREFIX}{dup_id}: {verdict.get('reason', 'no reason')}",
@@ -503,7 +503,7 @@ class RefineStage(Stage):
             )
         done_id = verdict.get("already_done")
         if done_id:
-            if RefineStage._is_valid_dedup_target(ctx, ticket, done_id):
+            if RefineStage._is_valid_dedup_target(ctx, ticket, done_id, repo_dir):
                 return Outcome(
                     State.DONE,
                     f"{DEDUP_ALREADY_DONE_PREFIX}{done_id}: {verdict.get('reason', 'no reason')}",
@@ -522,6 +522,7 @@ class RefineStage(Stage):
         ctx: StageContext,
         ticket: Ticket,
         candidate_id: str,
+        repo_dir: Path | None,
     ) -> bool:
         """Return whether *candidate_id* is an acceptable dedup target
         for *ticket*.
@@ -540,7 +541,9 @@ class RefineStage(Stage):
           (declined-as-noise / split parent);
         - a candidate that reached ``DONE`` via a non-implementation
           closure (dedup-closed or freshness-closed — never actually
-          implemented).
+          implemented);
+        - a candidate whose implementation branch was never merged to
+          the base branch (stranded implementation).
         """
         try:
             cand = ctx.service.get(candidate_id)
@@ -576,6 +579,19 @@ class RefineStage(Stage):
                     NON_IMPLEMENTATION_CLOSE_PREFIXES
                 ):
                     return False
+
+            # The candidate reached DONE via a real implementation, but if
+            # that implementation lives only on an unmerged branch the work
+            # never reached main — "already implemented in X" is invalid.
+            if cand.branch and not _verify_branch_merged(repo_dir, cand):
+                log.info(
+                    "%s: dedup candidate %s has branch '%s' not merged to "
+                    "main — not a valid dedup target",
+                    ticket.id,
+                    candidate_id,
+                    cand.branch,
+                )
+                return False
 
             return True
         except Exception:
