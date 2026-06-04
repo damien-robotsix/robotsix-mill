@@ -13,7 +13,7 @@ import json
 import logging
 import re
 import shutil
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from datetime import datetime, timezone
 from secrets import token_hex
 
@@ -287,6 +287,28 @@ class TicketService:
                 .order_by(Ticket.created_at.desc())
                 .limit(limit)
             )
+            return list(s.exec(stmt).all())
+
+    def recent_tickets(
+        self,
+        limit: int = 100,
+        *,
+        sources: Sequence[SourceKind] | None = None,
+        board_id: str | None = None,
+    ) -> list[Ticket]:
+        """Return up to *limit* tickets, most recent first.
+
+        Source-agnostic counterpart to :meth:`recent_proposals_for`:
+        ``sources=None`` returns recent tickets across ALL sources,
+        while a sequence unions the listed source kinds. *board_id*
+        overrides the service's own board when given.
+        """
+        board = board_id if board_id is not None else self.board_id
+        with db.session(self.settings, board) as s:
+            stmt = select(Ticket)
+            if sources is not None:
+                stmt = stmt.where(Ticket.source.in_(list(sources)))
+            stmt = stmt.order_by(Ticket.created_at.desc()).limit(limit)
             return list(s.exec(stmt).all())
 
     # --- proposed actions ---
