@@ -225,6 +225,252 @@ def test_copy_paste_registered_in_runners():
     assert entry["format"] == "memory_drafts"
 
 
+# --- proposed action CLI tests ---
+
+
+class _ActionFakeResponse:
+    def __init__(self, status_code, json_data, text=""):
+        self.status_code = status_code
+        self._json = json_data
+        self.text = text
+
+    def json(self):
+        return self._json
+
+    @property
+    def is_success(self):
+        return 200 <= self.status_code < 300
+
+    def raise_for_status(self):
+        import httpx
+
+        if not self.is_success:
+            raise httpx.HTTPStatusError("", request=None, response=self)
+
+
+def test_action_list(settings, capsys):
+    """CLI `action list` prints one row per pending proposed action."""
+    import robotsix_mill.cli as cli_mod
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def get(self, url, **kwargs):
+            assert url == "/proposed-actions"
+            assert kwargs["params"] == {"repo_id": "test-repo", "status": "pending"}
+            return _ActionFakeResponse(
+                200,
+                [
+                    {
+                        "id": 1,
+                        "source": "health",
+                        "action_type": "close",
+                        "target_ticket_id": "tkt-1",
+                        "rationale": "stale",
+                    }
+                ],
+            )
+
+    original = cli_mod.httpx.Client
+    cli_mod.httpx.Client = FakeClient
+    try:
+        rc = main(["action", "list", "--repo-id", "test-repo"])
+        assert rc == 0
+    finally:
+        cli_mod.httpx.Client = original
+
+    out = capsys.readouterr().out
+    assert "1\thealth\tclose\ttkt-1\tstale" in out
+
+
+def test_action_list_status_filter(settings):
+    """CLI `action list --status approved` forwards the status filter."""
+    import robotsix_mill.cli as cli_mod
+
+    seen = {}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def get(self, url, **kwargs):
+            seen.update(kwargs["params"])
+            return _ActionFakeResponse(200, [])
+
+    original = cli_mod.httpx.Client
+    cli_mod.httpx.Client = FakeClient
+    try:
+        rc = main(["action", "list", "--repo-id", "test-repo", "--status", "approved"])
+        assert rc == 0
+    finally:
+        cli_mod.httpx.Client = original
+
+    assert seen == {"repo_id": "test-repo", "status": "approved"}
+
+
+def test_action_list_failure(settings, capsys):
+    """CLI `action list` exits 1 and prints to stderr on API failure."""
+    import robotsix_mill.cli as cli_mod
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def get(self, url, **kwargs):
+            return _ActionFakeResponse(404, {"detail": "unknown repo"})
+
+    original = cli_mod.httpx.Client
+    cli_mod.httpx.Client = FakeClient
+    try:
+        rc = main(["action", "list", "--repo-id", "bad-repo"])
+        assert rc == 1
+    finally:
+        cli_mod.httpx.Client = original
+
+    err = capsys.readouterr().err
+    assert "list failed: unknown repo" in err
+
+
+def test_action_approve_success(settings):
+    """CLI `action approve <id>` exits 0 on success."""
+    import robotsix_mill.cli as cli_mod
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def post(self, url, **kwargs):
+            assert url == "/proposed-actions/42/approve"
+            assert kwargs["params"] == {"repo_id": "test-repo"}
+            return _ActionFakeResponse(200, {"id": 42, "status": "executed"})
+
+    original = cli_mod.httpx.Client
+    cli_mod.httpx.Client = FakeClient
+    try:
+        rc = main(["action", "approve", "42", "--repo-id", "test-repo"])
+        assert rc == 0
+    finally:
+        cli_mod.httpx.Client = original
+
+
+def test_action_approve_failure(settings):
+    """CLI `action approve <id>` exits 1 when the action is not pending."""
+    import robotsix_mill.cli as cli_mod
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def post(self, url, **kwargs):
+            return _ActionFakeResponse(400, {"detail": "not PENDING"})
+
+    original = cli_mod.httpx.Client
+    cli_mod.httpx.Client = FakeClient
+    try:
+        rc = main(["action", "approve", "42", "--repo-id", "test-repo"])
+        assert rc == 1
+    finally:
+        cli_mod.httpx.Client = original
+
+
+def test_action_reject_success(settings):
+    """CLI `action reject <id>` exits 0 on success."""
+    import robotsix_mill.cli as cli_mod
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def post(self, url, **kwargs):
+            assert url == "/proposed-actions/42/reject"
+            assert kwargs["params"] == {"repo_id": "test-repo"}
+            return _ActionFakeResponse(200, {"id": 42, "status": "rejected"})
+
+    original = cli_mod.httpx.Client
+    cli_mod.httpx.Client = FakeClient
+    try:
+        rc = main(["action", "reject", "42", "--repo-id", "test-repo"])
+        assert rc == 0
+    finally:
+        cli_mod.httpx.Client = original
+
+
+def test_action_reject_failure(settings):
+    """CLI `action reject <id>` exits 1 when the action is missing (404)."""
+    import robotsix_mill.cli as cli_mod
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def post(self, url, **kwargs):
+            return _ActionFakeResponse(404, {"detail": "not found"})
+
+    original = cli_mod.httpx.Client
+    cli_mod.httpx.Client = FakeClient
+    try:
+        rc = main(["action", "reject", "99", "--repo-id", "test-repo"])
+        assert rc == 1
+    finally:
+        cli_mod.httpx.Client = original
+
+
+def test_action_repo_id_required():
+    """`--repo-id` is required for action subcommands."""
+    import pytest
+
+    for sub in (
+        ["action", "list"],
+        ["action", "approve", "1"],
+        ["action", "reject", "1"],
+    ):
+        with pytest.raises(SystemExit):
+            main(sub)
+
+
 def test_copy_paste_cli_command(monkeypatch):
     """`main(["copy-paste"])` dispatches into the runner and exits 0."""
     from robotsix_mill.periodic_runner import CopyPastePassResult
