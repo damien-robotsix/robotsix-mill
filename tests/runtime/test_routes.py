@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import contextlib
 import threading
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -1024,6 +1025,25 @@ def _wait_for_thread(thread: threading.Thread, timeout: float = 5.0) -> None:
     assert not thread.is_alive(), "background thread did not finish"
 
 
+def _wait_for_pass(registry: "_FakeRegistry", timeout: float = 5.0) -> None:
+    """Block until the background pass records a terminal result (ok or
+    error) in *registry*.
+
+    Deterministic replacement for "find the daemon thread by name and
+    join it": the runner here is a fast fake, so the thread often
+    finishes — and leaves ``threading.enumerate()`` — before the test
+    inspects it, which made the name-lookup flaky (it raised
+    "daemon thread X not found" or read the registry before the thread
+    had recorded). Waiting on the observable side-effect has no race.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if registry.oks or registry.errors:
+            return
+        time.sleep(0.005)
+    raise AssertionError("background pass did not record a result in time")
+
+
 def test_factory_default_tracing_handler(monkeypatch):
     """A factory handler with default settings launches a daemon thread
     that calls the runner with session_id and records ok/error."""
@@ -1065,13 +1085,8 @@ def test_factory_default_tracing_handler(monkeypatch):
     resp = handler(repo_id=None, request=request, registry=registry)
     assert resp == {"status": "started"}
 
-    # Wait for the daemon thread.
-    for t in threading.enumerate():
-        if t.name == "test-factory-pass" and t.daemon:
-            _wait_for_thread(t)
-            break
-    else:
-        raise AssertionError("daemon thread 'test-factory-pass' not found")
+    # Wait for the background pass to record its result (race-free).
+    _wait_for_pass(registry)
 
     # Registry assertions.
     assert len(registry.starts) == 1
@@ -1112,12 +1127,7 @@ def test_factory_no_tracing_handler():
     resp = handler(repo_id=None, request=_FakeRequest(repos), registry=registry)
     assert resp == {"status": "started"}
 
-    for t in threading.enumerate():
-        if t.name == "notrace-pass" and t.daemon:
-            _wait_for_thread(t)
-            break
-    else:
-        raise AssertionError("daemon thread 'notrace-pass' not found")
+    _wait_for_pass(registry)
 
     assert len(registry.starts) == 1
     assert registry.starts[0][0] == "notrace"
@@ -1154,10 +1164,7 @@ def test_factory_custom_summary_builder():
     resp = handler(repo_id=None, request=_FakeRequest(repos), registry=registry)
     assert resp == {"status": "started"}
 
-    for t in threading.enumerate():
-        if t.name == "custom-pass" and t.daemon:
-            _wait_for_thread(t)
-            break
+    _wait_for_pass(registry)
 
     assert len(registry.oks) == 1
     assert registry.oks[0][1] == "all clear"
@@ -1194,10 +1201,7 @@ def test_factory_extra_runner_kwargs():
     resp = handler(repo_id=None, request=_FakeRequest(repos), registry=registry)
     assert resp == {"status": "started"}
 
-    for t in threading.enumerate():
-        if t.name == "extra-pass" and t.daemon:
-            _wait_for_thread(t)
-            break
+    _wait_for_pass(registry)
 
     assert received_kwargs == {"alpha": 1, "beta": "two"}
 
@@ -1226,10 +1230,7 @@ def test_factory_error_path():
     resp = handler(repo_id=None, request=_FakeRequest(repos), registry=registry)
     assert resp == {"status": "started"}
 
-    for t in threading.enumerate():
-        if t.name == "fail-pass" and t.daemon:
-            _wait_for_thread(t)
-            break
+    _wait_for_pass(registry)
 
     assert len(registry.starts) >= 1
     assert len(registry.errors) >= 1
