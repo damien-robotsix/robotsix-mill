@@ -21,6 +21,8 @@ dev = [
     "deptry",
     "hatchling",
     "types-PyYAML",
+    "types-jinja2",
+    "types-urllib3",
     "robotsix-llmio[openrouter-deepseek]",
 ]
 llm = [
