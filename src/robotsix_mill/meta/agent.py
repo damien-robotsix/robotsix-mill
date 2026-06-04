@@ -16,7 +16,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from ..config import Settings
-from ..pass_runner import ProposedActionItem
+from ..runners.pass_runner import ProposedActionItem
 
 # ---------------------------------------------------------------------------
 # Load the static system prompt from the YAML definition

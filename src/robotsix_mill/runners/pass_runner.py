@@ -16,15 +16,15 @@ from typing import Any, Callable
 
 from pydantic import BaseModel, Field
 
-from .config import Settings
-from .core.models import (
+from ..config import Settings
+from ..core.models import (
     SourceKind,
     Ticket,
 )
-from .core.service import TicketService
-from .core.states import State
-from .core.workspace import Workspace
-from .draft_target import looks_like_mill_internal, resolve_mill_service
+from ..core.service import TicketService
+from ..core.states import State
+from ..core.workspace import Workspace
+from ..draft_target import looks_like_mill_internal, resolve_mill_service
 
 log = logging.getLogger("robotsix_mill.pass_runner")
 

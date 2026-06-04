@@ -1,23 +1,22 @@
-"""BC-check runner — backward-compat stub. See periodic_runner."""
+"""Copy-paste runner — backward-compat stub. See periodic_runner."""
 
 from __future__ import annotations
 
-from .config import RepoConfig, Settings  # noqa: F401 — Settings kept for monkeypatch seam
+from ..config import RepoConfig, Settings  # noqa: F401 — Settings kept for monkeypatch seam
 from .periodic_runner import (
-    BcCheckPassResult,
+    CopyPastePassResult,
     PERIODIC_PASS_CONFIGS,
-    _clone_token,
     run_periodic_pass,
 )
 
 
-def run_bc_check_pass(
+def run_copy_paste_pass(
     session_id: str, repo_config: RepoConfig | None = None
-) -> BcCheckPassResult:
+) -> CopyPastePassResult:
     settings = Settings()
     return run_periodic_pass(
         session_id,
         repo_config,
-        config=PERIODIC_PASS_CONFIGS["bc_check"],
+        config=PERIODIC_PASS_CONFIGS["copy_paste"],
         settings=settings,
     )

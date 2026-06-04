@@ -60,7 +60,7 @@ def _add_ask_user_thread(
 
 def test_older_than_threshold_escalates(settings, service, monkeypatch):
     """AC5.1: Ticket older than threshold → escalated to BLOCKED."""
-    from robotsix_mill.timeout_escalation_runner import run_timeout_escalation
+    from robotsix_mill.runners.timeout_escalation_runner import run_timeout_escalation
 
     notifications = []
 
@@ -68,7 +68,7 @@ def test_older_than_threshold_escalates(settings, service, monkeypatch):
         notifications.append((ticket.id, dst, note))
 
     monkeypatch.setattr(
-        "robotsix_mill.timeout_escalation_runner.send_notification",
+        "robotsix_mill.runners.timeout_escalation_runner.send_notification",
         fake_notify,
     )
 
@@ -104,7 +104,7 @@ def test_older_than_threshold_escalates(settings, service, monkeypatch):
 
 def test_newer_than_threshold_untouched(settings, service, monkeypatch):
     """AC5.2: Ticket newer than threshold → untouched."""
-    from robotsix_mill.timeout_escalation_runner import run_timeout_escalation
+    from robotsix_mill.runners.timeout_escalation_runner import run_timeout_escalation
 
     notifications = []
 
@@ -112,7 +112,7 @@ def test_newer_than_threshold_untouched(settings, service, monkeypatch):
         notifications.append((ticket.id, dst, note))
 
     monkeypatch.setattr(
-        "robotsix_mill.timeout_escalation_runner.send_notification",
+        "robotsix_mill.runners.timeout_escalation_runner.send_notification",
         fake_notify,
     )
 
@@ -131,7 +131,7 @@ def test_newer_than_threshold_untouched(settings, service, monkeypatch):
 
 def test_operator_reply_unclosed_thread_skipped(settings, service, monkeypatch):
     """AC5.3: Ticket with operator reply (unclosed thread) → skipped."""
-    from robotsix_mill.timeout_escalation_runner import run_timeout_escalation
+    from robotsix_mill.runners.timeout_escalation_runner import run_timeout_escalation
 
     notifications = []
 
@@ -139,7 +139,7 @@ def test_operator_reply_unclosed_thread_skipped(settings, service, monkeypatch):
         notifications.append((ticket.id, dst, note))
 
     monkeypatch.setattr(
-        "robotsix_mill.timeout_escalation_runner.send_notification",
+        "robotsix_mill.runners.timeout_escalation_runner.send_notification",
         fake_notify,
     )
 
@@ -162,7 +162,7 @@ def test_operator_reply_unclosed_thread_skipped(settings, service, monkeypatch):
 
 def test_threshold_zero_noops(settings, service, monkeypatch):
     """AC5.4: Threshold ≤ 0 → pass no-ops."""
-    from robotsix_mill.timeout_escalation_runner import run_timeout_escalation
+    from robotsix_mill.runners.timeout_escalation_runner import run_timeout_escalation
 
     notifications = []
 
@@ -170,7 +170,7 @@ def test_threshold_zero_noops(settings, service, monkeypatch):
         notifications.append((ticket.id, dst, note))
 
     monkeypatch.setattr(
-        "robotsix_mill.timeout_escalation_runner.send_notification",
+        "robotsix_mill.runners.timeout_escalation_runner.send_notification",
         fake_notify,
     )
 
@@ -189,7 +189,7 @@ def test_threshold_zero_noops(settings, service, monkeypatch):
 
 def test_already_blocked_skipped_with_warning(settings, service, caplog, monkeypatch):
     """AC5.5: Already BLOCKED ticket → skipped with warning, no error propagates."""
-    from robotsix_mill.timeout_escalation_runner import run_timeout_escalation
+    from robotsix_mill.runners.timeout_escalation_runner import run_timeout_escalation
     from robotsix_mill.core.service import TicketService
 
     notifications = []
@@ -198,7 +198,7 @@ def test_already_blocked_skipped_with_warning(settings, service, caplog, monkeyp
         notifications.append((ticket.id, dst, note))
 
     monkeypatch.setattr(
-        "robotsix_mill.timeout_escalation_runner.send_notification",
+        "robotsix_mill.runners.timeout_escalation_runner.send_notification",
         fake_notify,
     )
 
@@ -232,7 +232,7 @@ def test_already_blocked_skipped_with_warning(settings, service, caplog, monkeyp
 
 def test_no_ask_thread_still_escalates(settings, service, monkeypatch):
     """Ticket without any [ASK_USER] comment thread should still be escalated."""
-    from robotsix_mill.timeout_escalation_runner import run_timeout_escalation
+    from robotsix_mill.runners.timeout_escalation_runner import run_timeout_escalation
 
     notifications = []
 
@@ -240,7 +240,7 @@ def test_no_ask_thread_still_escalates(settings, service, monkeypatch):
         notifications.append((ticket.id, dst, note))
 
     monkeypatch.setattr(
-        "robotsix_mill.timeout_escalation_runner.send_notification",
+        "robotsix_mill.runners.timeout_escalation_runner.send_notification",
         fake_notify,
     )
 

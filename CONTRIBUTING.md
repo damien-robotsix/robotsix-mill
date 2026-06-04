@@ -166,11 +166,11 @@ implementations (they are the simplest end-to-end examples):
      `load_agent_definition()`, builds the agent via
      `build_agent_from_definition()`, and returns the structured result.
 
-3. **Runner module** — `<name>_runner.py` at the package root
+3. **Runner module** — `runners/<name>_runner.py` in the runners subpackage
    - Read the memory ledger → run the agent → write back → emit draft
      tickets via `TicketService`.
-   - See [`audit_runner.py`](src/robotsix_mill/audit_runner.py) and
-     [`health_runner.py`](src/robotsix_mill/health_runner.py).
+   - See [`audit_runner.py`](src/robotsix_mill/runners/audit_runner.py) and
+     [`health_runner.py`](src/robotsix_mill/runners/health_runner.py).
 
 4. **Wiring** — three touchpoints:
    - **CLI**: add a subcommand in [`cli.py`](src/robotsix_mill/cli.py)

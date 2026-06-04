@@ -8,9 +8,9 @@ from dataclasses import dataclass, field
 
 from sqlmodel import select
 
-from .config import Settings
-from .core import db
-from .core.models import TicketEvent
+from ..config import Settings
+from ..core import db
+from ..core.models import TicketEvent
 
 
 @dataclass
@@ -55,7 +55,7 @@ def run_verify_pass(
     # registered transiently and have since been removed but still
     # carry historical TicketEvent rows worth verifying).
     try:
-        from .config import get_repos_config
+        from ..config import get_repos_config
 
         repos = get_repos_config().repos
         boards = {rc.board_id for rc in repos.values()}

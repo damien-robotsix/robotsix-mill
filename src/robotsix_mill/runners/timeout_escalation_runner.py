@@ -13,14 +13,14 @@ from typing import TYPE_CHECKING
 
 from sqlmodel import select
 
-from .core.db import session
-from .core.models import Ticket
-from .core.service import TicketService
-from .core.states import State
-from .notify import send_notification
+from ..core.db import session
+from ..core.models import Ticket
+from ..core.service import TicketService
+from ..core.states import State
+from ..notify import send_notification
 
 if TYPE_CHECKING:
-    from .config import Settings
+    from ..config import Settings
 
 log = logging.getLogger("robotsix_mill.timeout_escalation")
 
@@ -32,7 +32,7 @@ def _boards_to_scan(settings: Settings) -> list[str]:
     ``data_dir`` that contains a ``mill.db`` (catches per-repo DBs
     even when repos.yaml is absent).
     """
-    from .config import get_repos_config
+    from ..config import get_repos_config
 
     boards: list[str] = []
     # Registered repos from repos.yaml.

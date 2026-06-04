@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from robotsix_mill.periodic_runner import (
+from robotsix_mill.runners.periodic_runner import (
     PERIODIC_PASS_CONFIGS,
     _clone_token,
     _forge_token,
@@ -64,7 +64,9 @@ def test_clone_token_returns_token_on_success(monkeypatch):
     def fake_github_token(settings, repo_config=None):
         return "ghp_fake_token"
 
-    monkeypatch.setattr("robotsix_mill.periodic_runner.github_token", fake_github_token)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.github_token", fake_github_token
+    )
 
     result = _clone_token(Settings(), _test_repo_config())
     assert result == "ghp_fake_token"
@@ -76,7 +78,9 @@ def test_clone_token_returns_none_on_runtime_error(monkeypatch):
     def fake_github_token(settings, repo_config=None):
         raise RuntimeError("no token")
 
-    monkeypatch.setattr("robotsix_mill.periodic_runner.github_token", fake_github_token)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.github_token", fake_github_token
+    )
 
     result = _clone_token(Settings(), _test_repo_config())
     assert result is None
@@ -89,7 +93,7 @@ def test_forge_token_returns_secret(monkeypatch):
     """_forge_token returns forge_token from secrets."""
     fake_secrets = Secrets(forge_token="forge-tok-123")
     monkeypatch.setattr(
-        "robotsix_mill.periodic_runner.get_secrets", lambda: fake_secrets
+        "robotsix_mill.runners.periodic_runner.get_secrets", lambda: fake_secrets
     )
 
     result = _forge_token(Settings(), _test_repo_config())
@@ -145,7 +149,7 @@ def test_run_periodic_pass_clone_failure_sets_repo_dir_none(tmp_path, monkeypatc
         return _fake_agent_pass_result()
 
     monkeypatch.setattr(
-        "robotsix_mill.periodic_runner.run_agent_pass", fake_run_agent_pass
+        "robotsix_mill.runners.periodic_runner.run_agent_pass", fake_run_agent_pass
     )
 
     result = run_periodic_pass(
@@ -175,7 +179,7 @@ def test_run_periodic_pass_clone_failure_logs_warning(tmp_path, monkeypatch, cap
 
     monkeypatch.setattr(git_ops, "clone", fake_clone)
     monkeypatch.setattr(
-        "robotsix_mill.periodic_runner.run_agent_pass",
+        "robotsix_mill.runners.periodic_runner.run_agent_pass",
         lambda **kw: _fake_agent_pass_result(),
     )
 
@@ -214,9 +218,11 @@ def test_run_periodic_pass_uses_clone_token_fn_when_configured(tmp_path, monkeyp
         github_token_calls.append(True)
         return "ghp_tok"
 
-    monkeypatch.setattr("robotsix_mill.periodic_runner.github_token", fake_github_token)
     monkeypatch.setattr(
-        "robotsix_mill.periodic_runner.run_agent_pass",
+        "robotsix_mill.runners.periodic_runner.github_token", fake_github_token
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.run_agent_pass",
         lambda **kw: _fake_agent_pass_result(),
     )
 
@@ -256,9 +262,11 @@ def test_run_periodic_pass_uses_forge_token_when_clone_token_fn_none(
         get_secrets_calls.append(True)
         return Secrets(forge_token="ftok")
 
-    monkeypatch.setattr("robotsix_mill.periodic_runner.get_secrets", fake_get_secrets)
     monkeypatch.setattr(
-        "robotsix_mill.periodic_runner.run_agent_pass",
+        "robotsix_mill.runners.periodic_runner.get_secrets", fake_get_secrets
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.run_agent_pass",
         lambda **kw: _fake_agent_pass_result(),
     )
 
@@ -283,7 +291,7 @@ def test_run_periodic_pass_resolves_extra_kwargs_fn(tmp_path, monkeypatch):
         return _fake_agent_pass_result()
 
     monkeypatch.setattr(
-        "robotsix_mill.periodic_runner.run_agent_pass", fake_run_agent_pass
+        "robotsix_mill.runners.periodic_runner.run_agent_pass", fake_run_agent_pass
     )
 
     run_periodic_pass(
@@ -311,7 +319,7 @@ def test_run_periodic_pass_resolves_max_drafts_fn(tmp_path, monkeypatch):
         return _fake_agent_pass_result()
 
     monkeypatch.setattr(
-        "robotsix_mill.periodic_runner.run_agent_pass", fake_run_agent_pass
+        "robotsix_mill.runners.periodic_runner.run_agent_pass", fake_run_agent_pass
     )
 
     run_periodic_pass(
@@ -327,12 +335,12 @@ def test_run_periodic_pass_resolves_max_drafts_fn(tmp_path, monkeypatch):
 def test_run_periodic_pass_returns_result_dataclass(tmp_path, monkeypatch):
     """run_periodic_pass returns the correct result dataclass with
     expected fields populated."""
-    from robotsix_mill.periodic_runner import AuditPassResult
+    from robotsix_mill.runners.periodic_runner import AuditPassResult
 
     settings = _make_settings(tmp_path)
 
     monkeypatch.setattr(
-        "robotsix_mill.periodic_runner.run_agent_pass",
+        "robotsix_mill.runners.periodic_runner.run_agent_pass",
         lambda **kw: _fake_agent_pass_result(
             updated_memory="test-mem",
             drafts_created=[{"id": "1", "title": "t"}],
@@ -371,7 +379,7 @@ def test_run_periodic_pass_imports_agent_module_lazily(tmp_path, monkeypatch):
 
     monkeypatch.setattr(importlib_mod, "import_module", fake_import_module)
     monkeypatch.setattr(
-        "robotsix_mill.periodic_runner.run_agent_pass",
+        "robotsix_mill.runners.periodic_runner.run_agent_pass",
         lambda **kw: _fake_agent_pass_result(),
     )
 
@@ -408,7 +416,7 @@ def test_run_periodic_pass_no_forge_remote_skips_clone(tmp_path, monkeypatch):
         return _fake_agent_pass_result()
 
     monkeypatch.setattr(
-        "robotsix_mill.periodic_runner.run_agent_pass", fake_run_agent_pass
+        "robotsix_mill.runners.periodic_runner.run_agent_pass", fake_run_agent_pass
     )
 
     run_periodic_pass(

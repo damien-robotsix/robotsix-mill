@@ -158,27 +158,28 @@ modules:
       subpackage (``agent.py`` + ``triage.py`` + ``runner.py`` +
       ``workspace.py``) under the ``meta`` module.
     paths:
-      - src/robotsix_mill/pass_runner.py
-      - src/robotsix_mill/agent_check_runner.py
-      - src/robotsix_mill/audit_runner.py
-      - src/robotsix_mill/bc_check_runner.py
-      - src/robotsix_mill/completeness_check_runner.py
-      - src/robotsix_mill/cost_reconciliation_runner.py
-      - src/robotsix_mill/config_sync_runner.py
-      - src/robotsix_mill/health_runner.py
-      - src/robotsix_mill/roadmap_sync_runner.py
-      - src/robotsix_mill/survey_runner.py
-      - src/robotsix_mill/test_gap_runner.py
-      - src/robotsix_mill/timeout_escalation_runner.py
-      - src/robotsix_mill/trace_health_runner.py
-      - src/robotsix_mill/trace_review_runner.py
-      - src/robotsix_mill/langfuse_cleanup_runner.py
-      - src/robotsix_mill/bespoke_runner.py
-      - src/robotsix_mill/copy_paste_runner.py
-      - src/robotsix_mill/data_dir_audit_runner.py
-      - src/robotsix_mill/module_curator_runner.py
-      - src/robotsix_mill/periodic_runner.py
-      - src/robotsix_mill/verify_runner.py
+      - src/robotsix_mill/runners/__init__.py
+      - src/robotsix_mill/runners/pass_runner.py
+      - src/robotsix_mill/runners/agent_check_runner.py
+      - src/robotsix_mill/runners/audit_runner.py
+      - src/robotsix_mill/runners/bc_check_runner.py
+      - src/robotsix_mill/runners/completeness_check_runner.py
+      - src/robotsix_mill/runners/cost_reconciliation_runner.py
+      - src/robotsix_mill/runners/config_sync_runner.py
+      - src/robotsix_mill/runners/health_runner.py
+      - src/robotsix_mill/runners/roadmap_sync_runner.py
+      - src/robotsix_mill/runners/survey_runner.py
+      - src/robotsix_mill/runners/test_gap_runner.py
+      - src/robotsix_mill/runners/timeout_escalation_runner.py
+      - src/robotsix_mill/runners/trace_health_runner.py
+      - src/robotsix_mill/runners/trace_review_runner.py
+      - src/robotsix_mill/runners/langfuse_cleanup_runner.py
+      - src/robotsix_mill/runners/bespoke_runner.py
+      - src/robotsix_mill/runners/copy_paste_runner.py
+      - src/robotsix_mill/runners/data_dir_audit_runner.py
+      - src/robotsix_mill/runners/module_curator_runner.py
+      - src/robotsix_mill/runners/periodic_runner.py
+      - src/robotsix_mill/runners/verify_runner.py
       - src/robotsix_mill/draft_target.py
       - tests/runners/test_pass_runner.py
       - tests/runners/test_periodic_runner.py

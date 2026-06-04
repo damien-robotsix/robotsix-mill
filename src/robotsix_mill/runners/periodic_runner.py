@@ -17,10 +17,10 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable
 
-from .config import RepoConfig, get_secrets
-from .core.models import SourceKind
-from .core.service import TicketService
-from .forge.auth import github_token
+from ..config import RepoConfig, get_secrets
+from ..core.models import SourceKind
+from ..core.service import TicketService
+from ..forge.auth import github_token
 from .pass_runner import run_agent_pass
 
 log = logging.getLogger("robotsix_mill.periodic_runner")
@@ -278,7 +278,7 @@ def run_periodic_pass(
     agent_module = importlib.import_module(
         f".agents.{config.agent_module_attr}", package="robotsix_mill"
     )
-    from .vcs import git_ops
+    from ..vcs import git_ops
 
     # Resolve clone token strategy.
     token_fn = (
@@ -358,7 +358,7 @@ def run_periodic_pass(
 
 def _completeness_max_gaps() -> int:
     """Return ``MAX_GAPS`` from the completeness_check agent module."""
-    from .agents import completeness_check
+    from ..agents import completeness_check
 
     return completeness_check.MAX_GAPS
 

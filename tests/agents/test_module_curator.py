@@ -1,11 +1,11 @@
 """Tests for the module-curator agent and runner."""
 
 from robotsix_mill.agents import module_curator as mc_agent
-from robotsix_mill.module_curator_runner import (
+from robotsix_mill.runners.module_curator_runner import (
     run_module_curator_pass,
     ModuleCuratorPassResult,
 )
-from robotsix_mill.pass_runner import _GAP_ID_RE
+from robotsix_mill.runners.pass_runner import _GAP_ID_RE
 
 
 # --- Agent tests ---
@@ -157,7 +157,7 @@ def test_gap_id_re_rejects_malformed():
 def test_module_curator_cli_command(capsys, monkeypatch):
     """Test that CLI module-curator command works."""
     from robotsix_mill.cli import main
-    from robotsix_mill.module_curator_runner import ModuleCuratorPassResult
+    from robotsix_mill.runners.module_curator_runner import ModuleCuratorPassResult
 
     def mock_run(session_id=None):
         return ModuleCuratorPassResult(
@@ -166,7 +166,7 @@ def test_module_curator_cli_command(capsys, monkeypatch):
         )
 
     monkeypatch.setattr(
-        "robotsix_mill.module_curator_runner.run_module_curator_pass", mock_run
+        "robotsix_mill.runners.module_curator_runner.run_module_curator_pass", mock_run
     )
 
     result = main(["module-curator"])
@@ -181,7 +181,7 @@ def test_module_curator_cli_json_output(capsys, monkeypatch):
     import json
 
     from robotsix_mill.cli import main
-    from robotsix_mill.module_curator_runner import ModuleCuratorPassResult
+    from robotsix_mill.runners.module_curator_runner import ModuleCuratorPassResult
 
     def mock_run(session_id=None):
         return ModuleCuratorPassResult(
@@ -190,7 +190,7 @@ def test_module_curator_cli_json_output(capsys, monkeypatch):
         )
 
     monkeypatch.setattr(
-        "robotsix_mill.module_curator_runner.run_module_curator_pass", mock_run
+        "robotsix_mill.runners.module_curator_runner.run_module_curator_pass", mock_run
     )
 
     result = main(["module-curator", "--json"])
@@ -207,7 +207,7 @@ def test_module_curator_cli_json_output(capsys, monkeypatch):
 def test_module_curator_cli_no_drafts(capsys, monkeypatch):
     """CLI module-curator command when no drafts created."""
     from robotsix_mill.cli import main
-    from robotsix_mill.module_curator_runner import ModuleCuratorPassResult
+    from robotsix_mill.runners.module_curator_runner import ModuleCuratorPassResult
 
     def mock_run(session_id=None):
         return ModuleCuratorPassResult(
@@ -216,7 +216,7 @@ def test_module_curator_cli_no_drafts(capsys, monkeypatch):
         )
 
     monkeypatch.setattr(
-        "robotsix_mill.module_curator_runner.run_module_curator_pass", mock_run
+        "robotsix_mill.runners.module_curator_runner.run_module_curator_pass", mock_run
     )
 
     result = main(["module-curator"])
@@ -233,7 +233,7 @@ def test_module_curator_cli_failure(capsys, monkeypatch):
         raise RuntimeError("module-curator exploded")
 
     monkeypatch.setattr(
-        "robotsix_mill.module_curator_runner.run_module_curator_pass", mock_run
+        "robotsix_mill.runners.module_curator_runner.run_module_curator_pass", mock_run
     )
 
     result = main(["module-curator"])

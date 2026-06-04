@@ -6,7 +6,7 @@ from __future__ import annotations
 from robotsix_mill.core import db
 from robotsix_mill.core.models import TicketEvent
 from robotsix_mill.core.states import State
-from robotsix_mill.verify_runner import (
+from robotsix_mill.runners.verify_runner import (
     VerifyResult,
     _compute_hash,
     run_verify_pass,
@@ -58,7 +58,7 @@ def test_verify_no_events(monkeypatch, tmp_path):
 
     # Monkeypatch Settings() inside the runner to return our settings.
     monkeypatch.setattr(
-        "robotsix_mill.verify_runner.Settings",
+        "robotsix_mill.runners.verify_runner.Settings",
         lambda: s,
     )
 
@@ -84,7 +84,7 @@ def test_verify_clean_chain(monkeypatch, tmp_path):
     svc.transition(t.id, State.READY, note="refined")
     svc.transition(t.id, State.DELIVERABLE, note="spec done")
 
-    monkeypatch.setattr("robotsix_mill.verify_runner.Settings", lambda: s)
+    monkeypatch.setattr("robotsix_mill.runners.verify_runner.Settings", lambda: s)
 
     result = run_verify_pass("session-clean")
     assert result.total_events == 3
@@ -118,7 +118,7 @@ def test_verify_corrupted_hash(monkeypatch, tmp_path):
         sess.add(ev)
         sess.commit()
 
-    monkeypatch.setattr("robotsix_mill.verify_runner.Settings", lambda: s)
+    monkeypatch.setattr("robotsix_mill.runners.verify_runner.Settings", lambda: s)
 
     result = run_verify_pass("session-tampered")
     assert result.total_events >= 2
@@ -160,7 +160,7 @@ def test_verify_corrupted_prev_hash(monkeypatch, tmp_path):
         sess.add(ev)
         sess.commit()
 
-    monkeypatch.setattr("robotsix_mill.verify_runner.Settings", lambda: s)
+    monkeypatch.setattr("robotsix_mill.runners.verify_runner.Settings", lambda: s)
 
     result = run_verify_pass("session-prev-tampered")
     assert len(result.breaks) >= 1
@@ -191,7 +191,7 @@ def test_verify_skips_empty_hash_events(monkeypatch, tmp_path):
         )
         sess.commit()
 
-    monkeypatch.setattr("robotsix_mill.verify_runner.Settings", lambda: s)
+    monkeypatch.setattr("robotsix_mill.runners.verify_runner.Settings", lambda: s)
 
     result = run_verify_pass("session-legacy")
     assert result.total_events == 1
@@ -215,7 +215,7 @@ def test_verify_single_ticket_filter(monkeypatch, tmp_path):
     svc.transition(t1.id, State.READY)
     t2 = svc.create("ticket two")
 
-    monkeypatch.setattr("robotsix_mill.verify_runner.Settings", lambda: s)
+    monkeypatch.setattr("robotsix_mill.runners.verify_runner.Settings", lambda: s)
 
     result_all = run_verify_pass("session-all")
     assert result_all.total_events == 3  # 2 from t1 + 1 from t2

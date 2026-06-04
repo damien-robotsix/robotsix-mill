@@ -527,11 +527,11 @@ class TestRunDocAgent:
         )
         # Memory — no existing ledger by default.
         monkeypatch.setattr(
-            "robotsix_mill.pass_runner.load_memory",
+            "robotsix_mill.runners.pass_runner.load_memory",
             lambda path, max_chars=None: "",
         )
         monkeypatch.setattr(
-            "robotsix_mill.pass_runner.persist_memory",
+            "robotsix_mill.runners.pass_runner.persist_memory",
             lambda path, text: None,
         )
         monkeypatch.setattr(
@@ -576,7 +576,7 @@ class TestRunDocAgent:
             lambda settings, repo_dir, extra_roots=None: _dummy_fs_tool("explore"),
         )
         monkeypatch.setattr(
-            "robotsix_mill.pass_runner.load_memory",
+            "robotsix_mill.runners.pass_runner.load_memory",
             lambda path, max_chars=None: "",
         )
 
@@ -627,7 +627,7 @@ class TestRunDocAgent:
             lambda settings, repo_dir, extra_roots=None: _dummy_fs_tool("explore"),
         )
         monkeypatch.setattr(
-            "robotsix_mill.pass_runner.load_memory",
+            "robotsix_mill.runners.pass_runner.load_memory",
             lambda path, max_chars=None: "",
         )
 
@@ -671,7 +671,7 @@ class TestRunDocAgent:
             lambda settings, repo_dir, extra_roots=None: _dummy_fs_tool("explore"),
         )
         monkeypatch.setattr(
-            "robotsix_mill.pass_runner.load_memory",
+            "robotsix_mill.runners.pass_runner.load_memory",
             lambda path, max_chars=None: existing,
         )
 
@@ -794,7 +794,7 @@ class TestRunDocAgent:
             lambda settings, repo_dir, extra_roots=None: _dummy_fs_tool("explore"),
         )
         monkeypatch.setattr(
-            "robotsix_mill.pass_runner.load_memory",
+            "robotsix_mill.runners.pass_runner.load_memory",
             lambda path, max_chars=None: "",
         )
 
@@ -838,7 +838,7 @@ class TestRunDocAgent:
             lambda settings, repo_dir, extra_roots=None: _dummy_fs_tool("explore"),
         )
         monkeypatch.setattr(
-            "robotsix_mill.pass_runner.load_memory",
+            "robotsix_mill.runners.pass_runner.load_memory",
             lambda path, max_chars=None: "",
         )
 
@@ -882,7 +882,7 @@ class TestRunDocAgent:
             lambda settings, repo_dir, extra_roots=None: _dummy_fs_tool("explore"),
         )
         monkeypatch.setattr(
-            "robotsix_mill.pass_runner.load_memory",
+            "robotsix_mill.runners.pass_runner.load_memory",
             lambda path, max_chars=None: "",
         )
 
@@ -990,11 +990,11 @@ class TestRunDocAgent:
 
         self._patch_dependencies(monkeypatch, fake_agent)
         monkeypatch.setattr(
-            "robotsix_mill.pass_runner.load_memory",
+            "robotsix_mill.runners.pass_runner.load_memory",
             lambda path, max_chars=None: load_paths.append(path) or "",
         )
         monkeypatch.setattr(
-            "robotsix_mill.pass_runner.persist_memory",
+            "robotsix_mill.runners.pass_runner.persist_memory",
             lambda path, text: persist_paths.append(path),
         )
 
@@ -1035,7 +1035,7 @@ class TestRunDocAgent:
         # Patch persist_memory AFTER _patch_dependencies so it isn't
         # overwritten by the common no-op.
         monkeypatch.setattr(
-            "robotsix_mill.pass_runner.persist_memory",
+            "robotsix_mill.runners.pass_runner.persist_memory",
             lambda path, text: mem_calls.append((path, text)),
         )
 
@@ -1072,7 +1072,7 @@ class TestRunDocAgent:
         # recording lambda is not overwritten by the common no-op.
         mem_calls: list = []
         monkeypatch.setattr(
-            "robotsix_mill.pass_runner.persist_memory",
+            "robotsix_mill.runners.pass_runner.persist_memory",
             lambda path, text: mem_calls.append((path, text)),
         )
 

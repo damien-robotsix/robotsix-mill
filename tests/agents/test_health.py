@@ -7,7 +7,7 @@ import pytest
 from pathlib import Path
 
 from robotsix_mill.agents import health as health_agent
-from robotsix_mill.health_runner import run_health_pass, HealthPassResult
+from robotsix_mill.runners.health_runner import run_health_pass, HealthPassResult
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
@@ -153,7 +153,9 @@ def test_run_health_pass_empty_memory(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
-    monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.health_runner.Settings", lambda: settings
+    )
 
     run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert captured_memory == [""]
@@ -178,7 +180,9 @@ def test_run_health_pass_reads_existing_memory(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
-    monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.health_runner.Settings", lambda: settings
+    )
 
     run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert captured_memory == ["# Existing memory\n## Proposed\n- gap1\n"]
@@ -198,7 +202,9 @@ def test_run_health_pass_writes_memory_verbatim(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
-    monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.health_runner.Settings", lambda: settings
+    )
 
     run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
     memory_file = settings.data_dir / "test-repo" / "health_memory.md"
@@ -223,7 +229,9 @@ def test_run_health_pass_creates_draft_tickets(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
-    monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.health_runner.Settings", lambda: settings
+    )
 
     result = run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert len(result.drafts_created) == 2
@@ -249,7 +257,9 @@ def test_run_health_pass_no_drafts_when_empty(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
-    monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.health_runner.Settings", lambda: settings
+    )
 
     result = run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert len(result.drafts_created) == 0
@@ -274,7 +284,9 @@ def test_run_health_pass_missing_memory_file(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
-    monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.health_runner.Settings", lambda: settings
+    )
 
     run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert captured_memory == [""]
@@ -299,7 +311,9 @@ def test_run_health_pass_unreadable_memory(tmp_path, monkeypatch):
     # make memory_file_for("health", …) return a path whose
     # read_text() raises OSError so load_memory's OSError-handling
     # branch is exercised.
-    monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.health_runner.Settings", lambda: settings
+    )
     from unittest.mock import MagicMock
 
     unreadable = MagicMock()
@@ -329,7 +343,9 @@ def test_health_pass_result_structure(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
-    monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.health_runner.Settings", lambda: settings
+    )
 
     result = run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert isinstance(result, HealthPassResult)
@@ -353,7 +369,9 @@ def test_run_health_pass_skips_empty_title_or_body(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
-    monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.health_runner.Settings", lambda: settings
+    )
 
     result = run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert len(result.drafts_created) == 1  # only first has both title + body
@@ -412,7 +430,7 @@ def test_health_cli_command(capsys, tmp_path, monkeypatch):
             drafts_created=[{"id": "123", "title": "Fix gap"}],
         )
 
-    monkeypatch.setattr("robotsix_mill.health_runner.run_health_pass", mock_run)
+    monkeypatch.setattr("robotsix_mill.runners.health_runner.run_health_pass", mock_run)
 
     result = main(["health"])
     assert result == 0
@@ -431,7 +449,7 @@ def test_health_cli_json_output(capsys, tmp_path, monkeypatch):
             drafts_created=[{"id": "123", "title": "Fix gap"}],
         )
 
-    monkeypatch.setattr("robotsix_mill.health_runner.run_health_pass", mock_run)
+    monkeypatch.setattr("robotsix_mill.runners.health_runner.run_health_pass", mock_run)
 
     result = main(["health", "--json"])
     assert result == 0
@@ -452,7 +470,7 @@ def test_health_cli_no_drafts(capsys, tmp_path, monkeypatch):
             drafts_created=[],
         )
 
-    monkeypatch.setattr("robotsix_mill.health_runner.run_health_pass", mock_run)
+    monkeypatch.setattr("robotsix_mill.runners.health_runner.run_health_pass", mock_run)
 
     result = main(["health"])
     assert result == 0
@@ -467,7 +485,7 @@ def test_health_cli_failure(capsys, monkeypatch):
     def mock_run(session_id=None):
         raise RuntimeError("agent exploded")
 
-    monkeypatch.setattr("robotsix_mill.health_runner.run_health_pass", mock_run)
+    monkeypatch.setattr("robotsix_mill.runners.health_runner.run_health_pass", mock_run)
 
     result = main(["health"])
     assert result == 1
@@ -493,7 +511,9 @@ def test_run_health_pass_opens_langfuse_session(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
-    monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.health_runner.Settings", lambda: settings
+    )
 
     res = run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
 
@@ -510,7 +530,9 @@ def test_health_session_ids_are_unique_per_run(tmp_path, monkeypatch):
             updated_memory="m", draft_titles=[], draft_bodies=[], gap_ids=[]
         ),
     )
-    monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.health_runner.Settings", lambda: settings
+    )
     a = run_health_pass(
         session_id="test-sid", repo_config=_test_repo_config()
     ).session_id
@@ -544,7 +566,9 @@ def test_run_health_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
 
     monkeypatch.setattr(git_ops, "clone", fake_clone)
     monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
-    monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.health_runner.Settings", lambda: settings
+    )
 
     run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
     repo = settings.data_dir / "health_workspace" / "repo"
@@ -568,7 +592,9 @@ def test_run_health_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
             )
         ),
     )
-    monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.health_runner.Settings", lambda: settings
+    )
     run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert got["repo_dir"] is None
 
@@ -639,7 +665,7 @@ def test_post_health_check_returns_202(tmp_path, monkeypatch, repos_registry):
             drafts_created=[],
         )
 
-    monkeypatch.setattr("robotsix_mill.health_runner.run_health_pass", slow_run)
+    monkeypatch.setattr("robotsix_mill.runners.health_runner.run_health_pass", slow_run)
 
     from robotsix_mill.runtime.api import create_app
 
@@ -679,7 +705,7 @@ def test_post_health_check_runs_in_background(tmp_path, monkeypatch, repos_regis
             drafts_created=[{"id": "test-id", "title": "Health draft"}],
         )
 
-    monkeypatch.setattr("robotsix_mill.health_runner.run_health_pass", mock_run)
+    monkeypatch.setattr("robotsix_mill.runners.health_runner.run_health_pass", mock_run)
 
     from robotsix_mill.runtime.api import create_app
 
@@ -707,7 +733,7 @@ def test_post_health_check_runs_in_background(tmp_path, monkeypatch, repos_regis
 def test_health_draft_blocked_when_test_dir_exists(tmp_path, monkeypatch):
     """A health-agent draft claiming a missing test directory is
     blocked when the directory already contains test_*.py files."""
-    from robotsix_mill.pass_runner import run_agent_pass
+    from robotsix_mill.runners.pass_runner import run_agent_pass
     from robotsix_mill.core.models import SourceKind
 
     settings = _make_settings(tmp_path)

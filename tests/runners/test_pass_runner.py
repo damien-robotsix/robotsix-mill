@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from robotsix_mill.pass_runner import (
+from robotsix_mill.runners.pass_runner import (
     run_agent_pass,
     _verify_prior_proposals,
     _render_proposed_actions_table,

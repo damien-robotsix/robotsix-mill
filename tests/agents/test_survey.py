@@ -6,8 +6,8 @@ from pathlib import Path
 import yaml
 
 from robotsix_mill.agents import surveying as survey_agent
-from robotsix_mill.survey_runner import run_survey_pass
-from robotsix_mill.periodic_runner import SurveyPassResult
+from robotsix_mill.runners.survey_runner import run_survey_pass
+from robotsix_mill.runners.periodic_runner import SurveyPassResult
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
@@ -105,7 +105,9 @@ def test_run_survey_pass_empty_memory(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
-    monkeypatch.setattr("robotsix_mill.survey_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.survey_runner.Settings", lambda: settings
+    )
 
     run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert captured_memory == [""]
@@ -132,7 +134,9 @@ def test_run_survey_pass_reads_existing_memory(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
-    monkeypatch.setattr("robotsix_mill.survey_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.survey_runner.Settings", lambda: settings
+    )
 
     run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert captured_memory == ["# Existing memory\n## Rotation Log\n- entry\n"]
@@ -152,7 +156,9 @@ def test_run_survey_pass_writes_memory_verbatim(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
-    monkeypatch.setattr("robotsix_mill.survey_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.survey_runner.Settings", lambda: settings
+    )
 
     run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
     memory_file = settings.data_dir / "test-repo" / "survey_memory.md"
@@ -177,7 +183,9 @@ def test_run_survey_pass_creates_draft_tickets(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
-    monkeypatch.setattr("robotsix_mill.survey_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.survey_runner.Settings", lambda: settings
+    )
 
     result = run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert len(result.drafts_created) == 2
@@ -203,7 +211,9 @@ def test_run_survey_pass_no_drafts_when_empty(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
-    monkeypatch.setattr("robotsix_mill.survey_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.survey_runner.Settings", lambda: settings
+    )
 
     result = run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert len(result.drafts_created) == 0
@@ -228,7 +238,9 @@ def test_run_survey_pass_missing_memory_file(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
-    monkeypatch.setattr("robotsix_mill.survey_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.survey_runner.Settings", lambda: settings
+    )
 
     run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert captured_memory == [""]
@@ -247,7 +259,9 @@ def test_survey_pass_result_structure(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
-    monkeypatch.setattr("robotsix_mill.survey_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.survey_runner.Settings", lambda: settings
+    )
 
     result = run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert isinstance(result, SurveyPassResult)
@@ -271,7 +285,9 @@ def test_run_survey_pass_opens_langfuse_session(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
-    monkeypatch.setattr("robotsix_mill.survey_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.survey_runner.Settings", lambda: settings
+    )
 
     res = run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
 
@@ -289,7 +305,9 @@ def test_survey_session_ids_are_unique_per_run(tmp_path, monkeypatch):
             updated_memory="m", draft_titles=[], draft_bodies=[], gap_ids=[]
         ),
     )
-    monkeypatch.setattr("robotsix_mill.survey_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.survey_runner.Settings", lambda: settings
+    )
     a = run_survey_pass(
         session_id="test-sid", repo_config=_test_repo_config()
     ).session_id
@@ -323,7 +341,9 @@ def test_run_survey_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
 
     monkeypatch.setattr(git_ops, "clone", fake_clone)
     monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
-    monkeypatch.setattr("robotsix_mill.survey_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.survey_runner.Settings", lambda: settings
+    )
 
     run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
     repo = settings.data_dir / "survey_workspace" / "repo"
@@ -348,7 +368,9 @@ def test_run_survey_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
             )
         ),
     )
-    monkeypatch.setattr("robotsix_mill.survey_runner.Settings", lambda: settings)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.survey_runner.Settings", lambda: settings
+    )
     run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert got["repo_dir"] is None
 
@@ -400,7 +422,7 @@ def test_survey_cli_command(capsys, tmp_path, monkeypatch):
             drafts_created=[{"id": "123", "title": "Adopt pattern X"}],
         )
 
-    monkeypatch.setattr("robotsix_mill.survey_runner.run_survey_pass", mock_run)
+    monkeypatch.setattr("robotsix_mill.runners.survey_runner.run_survey_pass", mock_run)
 
     result = main(["survey"])
     assert result == 0
@@ -419,7 +441,7 @@ def test_survey_cli_json_output(capsys, tmp_path, monkeypatch):
             drafts_created=[{"id": "123", "title": "Adopt pattern X"}],
         )
 
-    monkeypatch.setattr("robotsix_mill.survey_runner.run_survey_pass", mock_run)
+    monkeypatch.setattr("robotsix_mill.runners.survey_runner.run_survey_pass", mock_run)
 
     result = main(["survey", "--json"])
     assert result == 0
@@ -440,7 +462,7 @@ def test_survey_cli_no_drafts(capsys, tmp_path, monkeypatch):
             drafts_created=[],
         )
 
-    monkeypatch.setattr("robotsix_mill.survey_runner.run_survey_pass", mock_run)
+    monkeypatch.setattr("robotsix_mill.runners.survey_runner.run_survey_pass", mock_run)
 
     result = main(["survey"])
     assert result == 0
@@ -455,7 +477,7 @@ def test_survey_cli_failure(capsys, monkeypatch):
     def mock_run(session_id=None):
         raise RuntimeError("agent exploded")
 
-    monkeypatch.setattr("robotsix_mill.survey_runner.run_survey_pass", mock_run)
+    monkeypatch.setattr("robotsix_mill.runners.survey_runner.run_survey_pass", mock_run)
 
     result = main(["survey"])
     assert result == 1

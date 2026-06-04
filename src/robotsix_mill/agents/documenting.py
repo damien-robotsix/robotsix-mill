@@ -160,7 +160,7 @@ def run_doc_agent(
     from .explore import make_explore_tool
     from .fs_tools import build_fs_tools
     from .retry import run_agent
-    from ..pass_runner import load_memory, persist_memory
+    from ..runners.pass_runner import load_memory, persist_memory
 
     definition = load_agent_definition(
         Path(__file__).parent.parent.parent.parent

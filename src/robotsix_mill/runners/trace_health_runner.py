@@ -16,13 +16,13 @@ from datetime import datetime, timedelta, timezone
 
 from sqlmodel import select
 
-from .config import RepoConfig, Settings
-from .core.db import session
-from .core.models import SourceKind, Ticket
-from .core.service import TicketService
-from .core.states import State
-from .langfuse_client import list_all_traces_since
-from .runtime.tracing import make_session_id
+from ..config import RepoConfig, Settings
+from ..core.db import session
+from ..core.models import SourceKind, Ticket
+from ..core.service import TicketService
+from ..core.states import State
+from ..langfuse_client import list_all_traces_since
+from ..runtime.tracing import make_session_id
 
 log = logging.getLogger("robotsix_mill.trace_health")
 

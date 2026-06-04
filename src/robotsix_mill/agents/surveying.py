@@ -10,7 +10,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from ..config import Settings
-from ..pass_runner import ProposedActionItem
+from ..runners.pass_runner import ProposedActionItem
 
 # One subject per run → one proposal max. The previous limit of 5
 # encouraged the agent to sweep the codebase for five gaps in a

@@ -32,7 +32,7 @@ from ..core.datetime_utils import _as_utc
 from ..core.models import Ticket
 from ..core.states import State
 from ..forge.auth import _resolve_remote_url, github_token
-from ..pass_runner import load_memory, persist_memory
+from ..runners.pass_runner import load_memory, persist_memory
 from ..vcs import git_ops
 from .pause import (
     check_for_pause,

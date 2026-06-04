@@ -1730,7 +1730,7 @@ class Worker:
                         "Starting periodic trace-health check for repo %s",
                         repo_label,
                     )
-                    from ..trace_health_runner import run_trace_health_check
+                    from ..runners.trace_health_runner import run_trace_health_check
 
                     run_id = None
                     if self.run_registry:
@@ -1965,7 +1965,7 @@ class Worker:
         """
         from ..agents.bespoke_loader import load_bespoke_definitions
         from ..agents.periodic_loader import discover_periodic_workflows
-        from ..audit_runner import _clone_token
+        from ..runners.audit_runner import _clone_token
         from ..vcs import git_ops
 
         settings = self.ctx.settings
@@ -2153,7 +2153,7 @@ class Worker:
         supervisor's clone. Failures in one pass log + continue; the
         loop only exits via cancellation.
         """
-        from .. import bespoke_runner
+        from ..runners import bespoke_runner
         from .. import tracing
 
         interval = max(60, definition.interval_seconds)
@@ -2220,13 +2220,13 @@ class Worker:
     # module-level ``run_<name>_pass(session_id, repo_config)`` stub is used
     # directly — no definition override is applicable.
     _SCHEDULE_ONLY_RUNNERS: dict[str, str] = {
-        "trace_review": "robotsix_mill.trace_review_runner:run_trace_review_pass",
-        "config_sync": "robotsix_mill.config_sync_runner:run_config_sync_pass",
+        "trace_review": "robotsix_mill.runners.trace_review_runner:run_trace_review_pass",
+        "config_sync": "robotsix_mill.runners.config_sync_runner:run_config_sync_pass",
         "cost_reconciliation": (
-            "robotsix_mill.cost_reconciliation_runner:run_cost_reconciliation_pass"
+            "robotsix_mill.runners.cost_reconciliation_runner:run_cost_reconciliation_pass"
         ),
         "data_dir_audit": (
-            "robotsix_mill.data_dir_audit_runner:run_data_dir_audit_pass"
+            "robotsix_mill.runners.data_dir_audit_runner:run_data_dir_audit_pass"
         ),
     }
 
@@ -2239,7 +2239,10 @@ class Worker:
         """
         if wf.kind == "llm_agent":
             from ..config import Settings
-            from ..periodic_runner import PERIODIC_PASS_CONFIGS, run_periodic_pass
+            from ..runners.periodic_runner import (
+                PERIODIC_PASS_CONFIGS,
+                run_periodic_pass,
+            )
 
             cfg = PERIODIC_PASS_CONFIGS.get(wf.name)
             if cfg is None:
@@ -2351,7 +2354,9 @@ class Worker:
             for repo_config in repo_configs:
                 label = repo_config.repo_id if repo_config else "default"
                 try:
-                    from ..langfuse_cleanup_runner import run_langfuse_cleanup_pass
+                    from ..runners.langfuse_cleanup_runner import (
+                        run_langfuse_cleanup_pass,
+                    )
 
                     result = await asyncio.to_thread(
                         run_langfuse_cleanup_pass,
@@ -2385,7 +2390,7 @@ class Worker:
         await asyncio.sleep(initial)
         while True:
             try:
-                from ..timeout_escalation_runner import run_timeout_escalation
+                from ..runners.timeout_escalation_runner import run_timeout_escalation
 
                 result = await asyncio.to_thread(
                     run_timeout_escalation,

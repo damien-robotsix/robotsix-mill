@@ -13,7 +13,7 @@ from __future__ import annotations
 from robotsix_mill.agents import bespoke as _bespoke
 from robotsix_mill.agents.bespoke import BespokeResult
 from robotsix_mill.agents.bespoke_loader import BespokeAgentDefinition
-from robotsix_mill.bespoke_runner import (
+from robotsix_mill.runners.bespoke_runner import (
     BespokePassResult,
     _memory_file_for,
     run_bespoke_pass,
@@ -97,7 +97,7 @@ class TestRunBespokePass:
         cross-eat each other's prior proposals."""
         s = _settings(tmp_path)
         monkeypatch.setattr(
-            "robotsix_mill.bespoke_runner.Settings",
+            "robotsix_mill.runners.bespoke_runner.Settings",
             lambda: s,
         )
 
@@ -144,7 +144,7 @@ class TestRunBespokePass:
         agent A is not surfaced as a prior proposal to agent B."""
         s = _settings(tmp_path)
         monkeypatch.setattr(
-            "robotsix_mill.bespoke_runner.Settings",
+            "robotsix_mill.runners.bespoke_runner.Settings",
             lambda: s,
         )
 
@@ -202,7 +202,7 @@ class TestRunBespokePass:
         leaves the bespoke agent running with no clone / no prompt."""
         s = _settings(tmp_path)
         monkeypatch.setattr(
-            "robotsix_mill.bespoke_runner.Settings",
+            "robotsix_mill.runners.bespoke_runner.Settings",
             lambda: s,
         )
         clone = tmp_path / "fake-clone"
