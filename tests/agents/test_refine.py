@@ -2261,6 +2261,48 @@ def test_first_refinement_uses_full_prompt(monkeypatch, tmp_path):
     assert seen_system_prompt[0] == SYSTEM_PROMPT
 
 
+def test_sendback_enables_reply_and_close_thread_tools(monkeypatch, tmp_path):
+    """When reviewer_comments is truthy, reply_to_thread=True and
+    close_thread=True are passed to build_agent (overriding the YAML
+    definition's false defaults). When reviewer_comments is None,
+    both flags remain False (the normal refine path should not get
+    these tools)."""
+    from robotsix_mill.agents import base as base_mod
+
+    run_kwargs: list[dict] = []
+
+    def fake_build_agent(settings, system_prompt, tools, web_knowledge,
+                         model_name, **kwargs):
+        run_kwargs.append(kwargs)
+
+        class FakeAgent:
+            def run_sync(self, msg, message_history=None, board_id=""):
+                return type("R", (), {"output": _single("## Problem\nok\n")})()
+
+        return FakeAgent()
+
+    monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
+
+    s = Settings(data_dir=str(tmp_path))
+
+    # Case 1: with reviewer_comments → both flags True.
+    refining.run_refine_agent(
+        settings=s,
+        title="Test",
+        draft="draft",
+        reviewer_comments="fix this",
+    )
+    assert run_kwargs[0].get("reply_to_thread") is True
+    assert run_kwargs[0].get("close_thread") is True
+
+    run_kwargs.clear()
+
+    # Case 2: without reviewer_comments → both flags False.
+    refining.run_refine_agent(settings=s, title="Test", draft="draft")
+    assert run_kwargs[0].get("reply_to_thread") is False
+    assert run_kwargs[0].get("close_thread") is False
+
+
 def test_sendback_prompt_includes_reviewer_feedback_reference():
     """The sendback prompt must instruct the agent to incorporate
     the reviewer_feedback block."""

@@ -604,6 +604,8 @@ def run_refine_agent(
     overrides = {}
     if reviewer_comments:
         overrides["system_prompt"] = REVIEWER_SENDBACK_PROMPT
+        overrides["reply_to_thread"] = True
+        overrides["close_thread"] = True
     if not definition.model:
         overrides["model_name"] = settings.refine_model
 
