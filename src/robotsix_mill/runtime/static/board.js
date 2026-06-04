@@ -1827,6 +1827,14 @@ async function toggleProposals(){
 async function renderProposals(){
  const drawer=document.getElementById("d");
  const repo=getRepoId();
+ // Per-board guard: the proposals panel shows actions for the
+ // currently selected repo only (no all-repos aggregation in the UI).
+ if(!repo||repo==="all"){
+  drawer.innerHTML='<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>'+
+   '<h3>Proposed actions</h3>'+
+   '<div class="muted" style="padding:12px 0">Select a single repo (top-left selector) — proposed actions are per-board.</div>';
+  return;
+ }
  let pas;
  try{pas=await jget("/proposed-actions?status=pending&repo_id="+encodeURIComponent(repo))}
  catch(e){pas=null}
