@@ -5,19 +5,29 @@ from pathlib import Path
 from robotsix_mill.pass_runner import (
     run_agent_pass,
     _verify_prior_proposals,
+    _verify_proposed_actions,
+    _render_proposed_actions_table,
     _GAP_ID_RE,
     load_memory,
     persist_memory,
     _format_recent_proposals,
     _render_verified_table,
     _test_file_exists_for_gap,
+    strip_ephemeral_sections,
+    _EPHEMERAL_PROPOSED_ACTIONS_SECTION_RE,
 )
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.core.workspace import Workspace
-from robotsix_mill.core.models import SourceKind, TicketEvent
+from robotsix_mill.core.models import (
+    SourceKind,
+    TicketEvent,
+    ActionType,
+    ProposedAction,
+    ProposedActionStatus,
+)
 
 
 class _FakeAgentResult:
@@ -25,7 +35,13 @@ class _FakeAgentResult:
     run_agent_pass accesses: .updated_memory, .draft_titles, .draft_bodies."""
 
     def __init__(
-        self, updated_memory, draft_titles, draft_bodies, gap_ids=None, summary=""
+        self,
+        updated_memory,
+        draft_titles,
+        draft_bodies,
+        gap_ids=None,
+        summary="",
+        proposed_actions=None,
     ):
         self.updated_memory = updated_memory
         self.draft_titles = draft_titles
@@ -33,6 +49,8 @@ class _FakeAgentResult:
         self.summary = summary
         if gap_ids is not None:
             self.gap_ids = gap_ids
+        if proposed_actions is not None:
+            self.proposed_actions = proposed_actions
 
 
 def _make_settings(tmp_path, **overrides):
@@ -44,7 +62,12 @@ def _make_settings(tmp_path, **overrides):
 # ------------------------------------------------------------------ helpers
 
 
-def _make_agent(updated_memory="new memory", draft_titles=None, draft_bodies=None):
+def _make_agent(
+    updated_memory="new memory",
+    draft_titles=None,
+    draft_bodies=None,
+    proposed_actions=None,
+):
     """Return a callable that returns a _FakeAgentResult with the given data."""
     if draft_titles is None:
         draft_titles = []
@@ -56,6 +79,7 @@ def _make_agent(updated_memory="new memory", draft_titles=None, draft_bodies=Non
             updated_memory=updated_memory,
             draft_titles=draft_titles,
             draft_bodies=draft_bodies,
+            proposed_actions=proposed_actions,
         )
 
     return agent_fn
@@ -1699,11 +1723,10 @@ def test_mill_routing_falls_back_when_target_unset(tmp_path, caplog):
     db.reset_engine()
 
 
-# --- strip_ephemeral_proposal_sections (memory ledger hygiene) --------------
+# --- strip_ephemeral_sections (memory ledger hygiene) --------------
 
 
 def test_strip_removes_prior_proposals_table():
-    from robotsix_mill.pass_runner import strip_ephemeral_proposal_sections
 
     mem = (
         "## Project layout\n\nStages live in stages/.\n\n"
@@ -1713,41 +1736,38 @@ def test_strip_removes_prior_proposals_table():
         "| foo | 20260530Tc57b | CLOSED | merged |\n\n"
         "## Testing conventions\n\nUse pytest.\n"
     )
-    out = strip_ephemeral_proposal_sections(mem)
+    out = strip_ephemeral_sections(mem)
     assert "Prior proposals" not in out
     assert "20260530Tc57b" not in out
     assert "## Project layout" in out and "## Testing conventions" in out
 
 
 def test_strip_table_at_end_of_memory():
-    from robotsix_mill.pass_runner import strip_ephemeral_proposal_sections
 
     mem = "## Patterns\n\nfoo\n\n## Prior proposals — verified state\n\n| a | b |\n"
-    out = strip_ephemeral_proposal_sections(mem)
+    out = strip_ephemeral_sections(mem)
     assert "Prior proposals" not in out and "## Patterns" in out
 
 
 def test_strip_noop_without_table():
-    from robotsix_mill.pass_runner import strip_ephemeral_proposal_sections
 
-    assert strip_ephemeral_proposal_sections("## Patterns\nfoo\n").strip() == (
+    assert strip_ephemeral_sections("## Patterns\nfoo\n").strip() == (
         "## Patterns\nfoo"
     )
-    assert strip_ephemeral_proposal_sections("") == ""
+    assert strip_ephemeral_sections("") == ""
 
 
 def test_strip_preserves_prose_after_table():
     """Only the heading + table rows are removed — trailing cross-ticket notes
     (no bounding ## heading) must survive (regression: a whole ledger got
     wiped to empty when prose followed the table)."""
-    from robotsix_mill.pass_runner import strip_ephemeral_proposal_sections
 
     mem = (
         "## Prior proposals — verified state\n\n"
         "| gap_id | state |\n|--------|-------|\n| foo | CLOSED |\n\n"
         "Real cross-ticket pattern worth keeping.\nA thing to monitor.\n"
     )
-    out = strip_ephemeral_proposal_sections(mem)
+    out = strip_ephemeral_sections(mem)
     assert "Prior proposals" not in out and "foo | CLOSED" not in out
     assert "Real cross-ticket pattern" in out and "thing to monitor" in out
 
@@ -1779,4 +1799,291 @@ def test_agent_summary_threads_to_pass_result(tmp_path):
     )
     assert result.summary == "scanned 142 files; 3 clone pairs, 0 above threshold"
     assert result.drafts_created == []
+    db.reset_engine()
+
+
+# ------------------------------------------------------------------ proposed actions tests
+
+
+def test_proposed_actions_extracted_and_persisted(tmp_path):
+    """Agent returns proposed_actions — they are persisted and surfaced
+    in the result."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=[],
+        draft_bodies=[],
+        proposed_actions=[
+            {
+                "action_type": "close",
+                "target_ticket_id": "T-1",
+                "rationale": "stale ticket, no activity in 30 days",
+            }
+        ],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.AUDIT,
+        service=service,
+        settings=settings,
+    )
+
+    assert len(result.proposed_actions) == 1
+    assert result.proposed_actions[0]["action_type"] == "close"
+    assert result.proposed_actions[0]["target_ticket_id"] == "T-1"
+    assert result.proposed_actions[0]["status"] == "pending"
+
+    rows = service.list_proposed_actions(source="audit")
+    assert len(rows) == 1
+    assert str(rows[0].action_type) == "close"
+
+    db.reset_engine()
+
+
+def test_proposed_actions_agent_without_field_is_noop(tmp_path):
+    """Agent WITHOUT proposed_actions attribute — result is empty, no DB rows."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=[],
+        draft_bodies=[],
+        # proposed_actions NOT passed — defaults to None, so attribute is NOT set
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.AUDIT,
+        service=service,
+        settings=settings,
+    )
+
+    assert result.proposed_actions == []
+    assert service.list_proposed_actions() == []
+
+    db.reset_engine()
+
+
+def test_proposed_actions_invalid_item_skipped(tmp_path):
+    """One valid, one invalid (missing target_ticket_id) — only valid persisted."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=[],
+        draft_bodies=[],
+        proposed_actions=[
+            {
+                "action_type": "close",
+                "target_ticket_id": "T-1",
+                "rationale": "valid",
+            },
+            {
+                "action_type": "comment",
+                # missing target_ticket_id — should be skipped
+                "rationale": "invalid",
+            },
+        ],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.AUDIT,
+        service=service,
+        settings=settings,
+    )
+
+    assert len(result.proposed_actions) == 1
+    assert result.proposed_actions[0]["action_type"] == "close"
+    rows = service.list_proposed_actions()
+    assert len(rows) == 1
+
+    db.reset_engine()
+
+
+def test_proposed_actions_persistence_failure_swallowed(tmp_path, monkeypatch):
+    """create_proposed_action raises RuntimeError — pass completes with empty result."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    monkeypatch.setattr(
+        service,
+        "create_proposed_action",
+        lambda **kw: (_ for _ in ()).throw(RuntimeError("db down")),
+    )
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=[],
+        draft_bodies=[],
+        proposed_actions=[
+            {
+                "action_type": "close",
+                "target_ticket_id": "T-1",
+                "rationale": "stale",
+            }
+        ],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.AUDIT,
+        service=service,
+        settings=settings,
+    )
+
+    assert result.proposed_actions == []
+    assert service.list_proposed_actions() == []
+
+    db.reset_engine()
+
+
+def test_render_proposed_actions_table(tmp_path):
+    """_render_proposed_actions_table renders a valid Markdown table."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    created = service.create_proposed_action(
+        source="audit",
+        target_ticket_id="T-42",
+        action_type="close",
+        rationale="stale ticket",
+    )
+    rows = service.list_proposed_actions(source="audit")
+    assert len(rows) == 1
+
+    table = _render_proposed_actions_table(rows)
+    assert "## Proposed actions — pending" in table
+    assert "T-42" in table
+    assert "stale ticket" in table
+
+    db.reset_engine()
+
+
+def test_render_proposed_actions_table_empty():
+    """_render_proposed_actions_table([]) returns ''."""
+    assert _render_proposed_actions_table([]) == ""
+
+
+def test_strip_ephemeral_sections_removes_proposed_actions_table():
+    """strip_ephemeral_sections removes the ## Proposed actions — pending table."""
+    mem = (
+        "## Observations\n\nSome prose.\n\n"
+        "## Proposed actions — pending\n\n"
+        "| id | target_ticket | action | rationale | created |\n"
+        "|----|---------------|--------|-----------|---------|\n"
+        "| 1  | T-1           | close  | stale     | 2025-01 |\n\n"
+        "## More notes\n\nKeep this.\n"
+    )
+    out = strip_ephemeral_sections(mem)
+    assert "Proposed actions" not in out
+    assert "T-1" not in out
+    assert "## Observations" in out
+    assert "## More notes" in out
+    assert "Keep this." in out
+
+
+def test_strip_ephemeral_sections_handles_both_proposed_actions_tables():
+    """Memory with both ephemeral tables — both stripped, prose preserved."""
+    mem = (
+        "## Ledger\n\nCross-ticket patterns.\n\n"
+        "## Prior proposals — verified state\n\n"
+        "| gap_id | ticket_id | state | resolution |\n"
+        "|--------|-----------|-------|------------|\n"
+        "| foo    | T-1       | CLOSED | merged    |\n\n"
+        "## Proposed actions — pending\n\n"
+        "| id | target_ticket | action | rationale | created |\n"
+        "|----|---------------|--------|-----------|---------|\n"
+        "| 1  | T-2           | close  | stale     | 2025-01 |\n\n"
+        "## Afterward\n\nFinal notes.\n"
+    )
+    out = strip_ephemeral_sections(mem)
+    assert "Prior proposals" not in out
+    assert "Proposed actions" not in out
+    assert "T-1" not in out
+    assert "T-2" not in out
+    assert "## Ledger" in out
+    assert "Cross-ticket patterns" in out
+    assert "## Afterward" in out
+    assert "Final notes." in out
+
+
+def test_combined_verified_with_proposed_actions_passed_to_agent(tmp_path):
+    """Agent receives combined ephemeral block with both sections."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    # Create a prior-proposal ticket with gap-id marker.
+    t = service.create(
+        "Gap A",
+        "body\n\n<!-- audit-gap-id: gap_alpha -->",
+        source=SourceKind.AUDIT,
+    )
+
+    # Create a pending proposed action.
+    service.create_proposed_action(
+        source="audit",
+        target_ticket_id=t.id,
+        action_type="close",
+        rationale="stale gap ticket",
+    )
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    captured_verified = []
+
+    def capture_agent(*, settings, memory, recent_proposals="", verified_proposals=""):
+        captured_verified.append(verified_proposals)
+        return _FakeAgentResult(
+            updated_memory=memory,
+            draft_titles=[],
+            draft_bodies=[],
+        )
+
+    run_agent_pass(
+        capture_agent,
+        memory_file=memory_file,
+        source_label=SourceKind.AUDIT,
+        service=service,
+        settings=settings,
+    )
+
+    combined = captured_verified[0]
+    assert "## Prior proposals — verified state" in combined
+    assert "## Proposed actions — pending" in combined
+
     db.reset_engine()
