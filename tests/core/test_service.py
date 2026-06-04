@@ -429,6 +429,39 @@ def test_unmet_dependencies_some_unmet(service):
     assert unmet == [dep_b.id]
 
 
+def test_unmet_dependencies_cross_board(settings, service):
+    """A dependency on ANOTHER board is gated correctly: ``get()`` fans
+    out across every per-repo DB (ticket IDs are globally unique), so
+    ``unmet_dependencies`` resolves a foreign-board dep and clears it
+    only when that dep reaches a terminal state on its OWN board.
+
+    This backs the scaffold → build-out → migrate flow: a meta-board
+    migrate ticket can depend on the build-out ticket filed on the new
+    repo's own board, and the gate releases when the build-out is done.
+    """
+    from robotsix_mill.core import db as _db
+    from robotsix_mill.core.service import TicketService as _TS
+
+    _db.init_db(settings, board_id="other-board")
+    other = _TS(settings, board_id="other-board")
+    dep = other.create("dep on other board")
+
+    t = service.create("Depender", depends_on=f'["{dep.id}"]')
+    # dep is DRAFT on the other board → unmet across the board boundary.
+    assert service.unmet_dependencies(t) == [dep.id]
+
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+        State.DONE,
+    ):
+        other.transition(dep.id, st)
+    # Now terminal on its own board → the cross-board gate releases.
+    assert service.unmet_dependencies(t) == []
+
+
 def test_unmet_dependencies_missing_dep_satisfied(service, caplog):
     """A nonexistent dep ID is treated as satisfied with a debug log."""
     t = service.create("Depender", depends_on='["nonexistent-id"]')
