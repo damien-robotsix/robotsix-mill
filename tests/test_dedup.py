@@ -25,6 +25,7 @@ from robotsix_mill.dedup import (
     _extract_paths,
     annotate_child_body,
     find_child_overlaps,
+    find_inflight_overlap,
     find_prior_matching_ticket,
     normalize,
 )
@@ -375,6 +376,84 @@ def test_annotate_child_body_prepends_warning():
     out = annotate_child_body("original body text", "Possible duplicate of T-9")
     assert out.startswith("> [!warning] Possible duplicate of T-9")
     assert "original body text" in out
+
+
+def test_annotate_child_body_custom_source_desc():
+    out = annotate_child_body(
+        "body", "Possible duplicate of T-9", source_desc="draft-intake pre-refine dedup"
+    )
+    assert "draft-intake pre-refine dedup" in out
+    assert "epic-decomposition" not in out
+
+
+# ---------------------------------------------------------------------------
+# find_inflight_overlap (draft-intake pre-refine dedup)
+# ---------------------------------------------------------------------------
+
+
+def test_inflight_overlap_flags_concurrent_ready_ticket(settings):
+    """A fresh draft whose body names a file already targeted by a
+    CONCURRENT in-flight (READY, never DONE) ticket is flagged — the
+    structural gap the refine dedup guard cannot close."""
+    svc, prior = _seed(
+        settings,
+        title="rework the login form",
+        body=f"changes {_TARGET_PATH} to validate input",
+    )
+    # In-flight, NOT terminal: the dedup guard would reject this.
+    svc.transition(prior.id, State.READY, note="refined")
+
+    note = find_inflight_overlap(
+        _svc(settings),
+        "NEW-DRAFT",
+        "fix the login form validation",
+        f"also edits {_TARGET_PATH} for validation",
+        settings,
+        _now(),
+    )
+    assert note is not None
+    assert prior.id in note
+    assert _TARGET_PATH in note
+
+
+def test_inflight_overlap_unflagged_when_distinct(settings):
+    """A draft with no path/title overlap against any recent ticket is
+    not flagged."""
+    svc, prior = _seed(
+        settings,
+        title="rework the login form",
+        body=f"changes {_TARGET_PATH} to validate input",
+    )
+    svc.transition(prior.id, State.READY, note="refined")
+
+    note = find_inflight_overlap(
+        _svc(settings),
+        "NEW-DRAFT",
+        "add a totally unrelated metrics dashboard",
+        "touches src/robotsix_mill/runtime/metrics.py only",
+        settings,
+        _now(),
+    )
+    assert note is None
+
+
+def test_inflight_overlap_excludes_self(settings):
+    """A draft must not self-match: passing its own id as *ticket_id*
+    excludes it from the candidate pool."""
+    svc, draft = _seed(
+        settings,
+        title="rework the login form",
+        body=f"changes {_TARGET_PATH} to validate input",
+    )
+    note = find_inflight_overlap(
+        _svc(settings),
+        draft.id,
+        draft.title,
+        f"changes {_TARGET_PATH} to validate input",
+        settings,
+        _now(),
+    )
+    assert note is None
 
 
 def test_reprocess_flags_but_still_creates_children(settings, monkeypatch):

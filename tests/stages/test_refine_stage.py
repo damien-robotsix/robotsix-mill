@@ -485,6 +485,87 @@ def test_dedup_candidate_without_branch_short_circuits_to_done(
 
 
 # ---------------------------------------------------------------------------
+# 6d. advisory dedup against a CONCURRENT in-flight (non-DONE) ticket
+# ---------------------------------------------------------------------------
+
+
+def test_inflight_advisory_flags_concurrent_ready_draft(ctx_factory, monkeypatch):
+    """A fresh draft overlapping a CONCURRENT in-flight ticket (READY,
+    never DONE) is annotated with a ``[!warning]`` advisory naming that
+    ticket and still proceeds to refine — never auto-closed.  The dedup
+    guard alone cannot catch this (it only closes against DONE)."""
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
+
+    prior = ctx.service.create(
+        "rework login validation",
+        "changes src/robotsix_mill/auth.py to validate the login form",
+    )
+    ctx.service.transition(prior.id, State.READY, note="refined")
+
+    t = _ticket(
+        ctx,
+        title="fix login form validation",
+        body=(
+            "Fix the login form. This also edits "
+            "src/robotsix_mill/auth.py to validate input, padded well past "
+            "the 100-char trivial-draft threshold so the advisory runs."
+        ),
+    )
+
+    captured = {}
+
+    def _capture(*, settings, title, draft, **kw):
+        del settings, title, kw
+        captured["draft"] = draft
+        return RefineResult(spec_markdown="## Problem\nFix it")
+
+    _apply_default_mocks(monkeypatch, run_refine_agent=_capture)
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert "[!warning]" in captured["draft"]
+    assert prior.id in captured["draft"]
+    assert "src/robotsix_mill/auth.py" in captured["draft"]
+
+
+def test_inflight_advisory_untouched_when_distinct(ctx_factory, monkeypatch):
+    """A draft with no path/title overlap against any recent ticket is
+    passed to refine unchanged — no advisory note."""
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
+
+    prior = ctx.service.create(
+        "rework login validation",
+        "changes src/robotsix_mill/auth.py to validate the login form",
+    )
+    ctx.service.transition(prior.id, State.READY, note="refined")
+
+    t = _ticket(
+        ctx,
+        title="add metrics dashboard",
+        body=(
+            "Add a metrics dashboard. Touches "
+            "src/robotsix_mill/runtime/metrics.py only, padded well past "
+            "the 100-char trivial-draft threshold so the advisory runs."
+        ),
+    )
+
+    captured = {}
+
+    def _capture(*, settings, title, draft, **kw):
+        del settings, title, kw
+        captured["draft"] = draft
+        return RefineResult(spec_markdown="## Problem\nFix it")
+
+    _apply_default_mocks(monkeypatch, run_refine_agent=_capture)
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert "[!warning]" not in captured["draft"]
+
+
+# ---------------------------------------------------------------------------
 # 7. clone failure → draft-only refine succeeds
 # ---------------------------------------------------------------------------
 
