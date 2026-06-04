@@ -26,11 +26,10 @@ fields an operator sees in the panel:
 - `decided_at` — when a human approved/rejected it (`None` while
   pending).
 - `decided_by` — who decided (defaults to `"human"`).
-- `failure_reason` — column reserved for an execution error message.
-  **Note:** the operator-facing approve endpoint does not currently
-  populate it — when an approved action fails it lands in `FAILED` with
-  `failure_reason=None`, and the underlying error is written to the
-  worker log instead (see *Common scenarios* below).
+- `failure_reason` — the execution error message. When an approved
+  action fails it lands in `FAILED` with `failure_reason` set to the
+  underlying error (surfaced in the Proposals panel / `mill action
+  list`).
 
 ### `ActionType` — what each does on execution
 
@@ -39,7 +38,10 @@ fields an operator sees in the panel:
   `payload["state"]`.
 - `comment` (`COMMENT`) — adds `payload["body"]` as a comment on the
   ticket.
-- `relabel` (`RELABEL`) — sets the ticket title from `payload["title"]`.
+- `relabel` (`RELABEL`) — placeholder for retitling/labelling. Label
+  infrastructure is not yet built, so on the operator approve path a
+  RELABEL deterministically lands in `FAILED` with
+  `failure_reason="label infrastructure not yet available"`.
 
 ### `ProposedActionStatus` — lifecycle
 
@@ -51,10 +53,8 @@ PENDING ──approve──> APPROVED ──execute──> EXECUTED
 
 A proposal starts `PENDING`. Approving stamps it `APPROVED` and then
 **immediately executes** it, ending in `EXECUTED` on success or `FAILED`
-if the mutation could not be applied. (The approve endpoint does not
-record a `failure_reason` on the row — the error goes to the worker
-log; see *Common scenarios*.) Rejecting moves it to `REJECTED` and runs
-nothing.
+if the mutation could not be applied (with `failure_reason` set to the
+underlying error). Rejecting moves it to `REJECTED` and runs nothing.
 
 ## The Proposals panel (board UI)
 
@@ -81,8 +81,8 @@ on the next tick.
 Approving a proposal (`POST /proposed-actions/{id}/approve`) transitions
 it `PENDING → APPROVED`, stamps `decided_at` / `decided_by`, and then
 runs the action against the target ticket, ending in `EXECUTED` (or
-`FAILED`; the failure detail goes to the worker log, not the row's
-`failure_reason`). Rejecting (`POST /proposed-actions/{id}/reject`)
+`FAILED`, in which case the row's `failure_reason` carries the
+underlying error message). Rejecting (`POST /proposed-actions/{id}/reject`)
 transitions `PENDING → REJECTED` and executes nothing.
 
 ### Idempotency / re-decision guard
@@ -116,10 +116,9 @@ id yields `404`, and approving/rejecting a non-`PENDING` action yields
 ## Common scenarios / troubleshooting
 
 - **A proposal is stuck in `FAILED`.** Execution hit an error (e.g. the
-  target ticket's state machine refused the transition). The
-  approve endpoint does not stamp the row's `failure_reason`, so check
-  the worker log for the `_execute_proposed_action: action … failed`
-  entry to see the underlying exception.
+  target ticket's state machine refused the transition). The row's
+  `failure_reason` holds the underlying error message — read it in the
+  Proposals panel or via `mill action list`.
 - **The panel is empty.** It only shows `pending` proposals for the
   *current* repo. Switch to the right repo in the top-left selector, and
   remember that already-decided proposals don't appear here.

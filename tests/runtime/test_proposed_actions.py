@@ -301,8 +301,15 @@ def test_approve_executes_comment(client, service, settings):
     data = r.json()
     assert data["status"] == "executed"
 
-    # Verify comment was added.
+    # Verify comment was added — the consolidated executor posts the
+    # action's rationale as the body, authored by the action source,
+    # and writes a history breadcrumb note.
     comments = service.list_comments(t.id)
     assert len(comments) == 1
-    assert comments[0].body == "auto-comment from periodic agent"
-    assert comments[0].author == "periodic-agent"
+    assert comments[0].body == "add note"
+    assert comments[0].author == "survey"
+
+    history = service.history(t.id)
+    assert any(
+        ev.note and "comment added via proposed action" in ev.note for ev in history
+    )
