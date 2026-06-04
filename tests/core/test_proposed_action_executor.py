@@ -2,8 +2,6 @@
 dispatch that applies approved ``ProposedAction`` rows to their target
 tickets."""
 
-import json
-
 import pytest
 
 from robotsix_mill.core.models import (
@@ -11,7 +9,6 @@ from robotsix_mill.core.models import (
     ActionType,
     ProposedActionStatus,
 )
-from robotsix_mill.core.service import TransitionError
 from robotsix_mill.core.states import State
 
 

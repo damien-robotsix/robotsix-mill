@@ -1604,19 +1604,18 @@ class TicketService:
             source = action.source
 
         # --- dispatch ---
-        note: str | None = None
         failure: str | None = None
         try:
             if action_type == ActionType.CLOSE:
-                note = self._execute_close(target_id, rationale, source)
+                self._execute_close(target_id, rationale, source)
             elif action_type == ActionType.TRANSITION:
-                note = self._execute_transition(
+                self._execute_transition(
                     target_id, payload, rationale, source
                 )
             elif action_type == ActionType.COMMENT:
-                note = self._execute_comment(target_id, rationale, source)
+                self._execute_comment(target_id, rationale, source)
             elif action_type == ActionType.RELABEL:
-                note = self._execute_relabel(target_id, payload, rationale, source)
+                self._execute_relabel(target_id, payload, rationale, source)
             else:
                 raise ValueError(f"unknown action type: {action_type!r}")
         except (KeyError, TransitionError, ValueError, json.JSONDecodeError) as exc:
