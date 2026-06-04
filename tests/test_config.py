@@ -601,6 +601,51 @@ class TestYamlLoading:
         with pytest.raises(ConfigError, match="Required config file not found"):
             load_yaml_config()
 
+    def test_load_yaml_config_delegates_to_load_yaml_cascade(
+        self, tmp_path, monkeypatch
+    ):
+        """``load_yaml_config()`` delegates to the shared
+        ``load_yaml_cascade`` with the expected layer list."""
+        from unittest.mock import patch
+
+        from robotsix_mill.config_loader import load_yaml_config
+
+        # Set up a real defaults file so the pre-check passes.
+        local_dir = tmp_path / "config"
+        local_dir.mkdir()
+        defaults = local_dir / "mill.defaults.yaml"
+        defaults.write_text("core:\n  limits:\n    max_fix_iterations: 8\n")
+        local = local_dir / "mill.local.yaml"
+        local.write_text("core:\n  limits:\n    max_fix_iterations: 99\n")
+
+        import robotsix_mill.config_loader as cl
+
+        monkeypatch.setattr(cl, "_DEFAULTS_FILE", defaults)
+        monkeypatch.setattr(cl, "_LOCAL_FILE", local)
+        monkeypatch.setenv("MILL_CONFIG_FILE", str(local_dir / "mill.production.yaml"))
+
+        with patch(
+            "robotsix_mill.config_loader.load_yaml_cascade"
+        ) as mock_cascade:
+            mock_cascade.return_value = {"merged": True}
+            result = load_yaml_config()
+
+        # Verify the mock was called with the expected layers.
+        mock_cascade.assert_called_once()
+        layers = mock_cascade.call_args[0][0]
+        assert len(layers) >= 2
+        # Layer 0: defaults, required
+        assert layers[0][0] == defaults
+        assert layers[0][1] is True
+        # Layer 1: local, optional
+        assert layers[1][0] == local
+        assert layers[1][1] is False
+        # Layer 2: production (from MILL_CONFIG_FILE), optional
+        assert len(layers) == 3
+        assert layers[2][1] is False
+        # Result is whatever the mock returned.
+        assert result == {"merged": True}
+
     def test_load_secrets_yaml_returns_populated_dict(self, tmp_path):
         """``load_secrets_yaml()`` returns a populated dict when a valid
         secrets file exists."""

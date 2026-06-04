@@ -17,6 +17,7 @@ dependencies = [
     # cost, retry/transient) extracted to a standalone library. See
     # agents/openrouter_cost.py + agents/retry.py (now thin shims).
     "robotsix-llmio[openrouter_deepseek,claude_sdk] @ git+https://github.com/damien-robotsix/robotsix-llmio@main",
+    "robotsix-yaml-config @ git+https://github.com/damien-robotsix/robotsix-yaml-config@main",
     "pydantic-settings>=2",
     "pyyaml>=6",
     "sqlmodel>=0.0.22",
