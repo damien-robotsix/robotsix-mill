@@ -1449,6 +1449,17 @@ class TestFlattenYamlConfig:
         result = flatten_yaml_config(yaml_config)
         assert result["doc_classifier_diff_max_chars"] == 1234
 
+    def test_flatten_meta_periodic(self):
+        """``core.meta_periodic`` / ``core.meta_interval_seconds`` flatten to
+        their Settings aliases (enables the daily cross-repo meta pass)."""
+        from robotsix_mill.config_loader import flatten_yaml_config
+
+        out = flatten_yaml_config(
+            {"core": {"meta_periodic": True, "meta_interval_seconds": 86400}}
+        )
+        assert out["meta_periodic"] is True
+        assert out["meta_interval_seconds"] == 86400
+
     def test_flatten_enable_repo_creation(self):
         """``core.enable_repo_creation`` flattens to the
         ``enable_repo_creation`` Settings alias (gates the new-repo
