@@ -352,10 +352,7 @@ class TicketService:
         all.
         """
         with db.session(self.settings, self.board_id) as s:
-            stmt = (
-                select(ProposedAction)
-                .where(ProposedAction.source == source)
-            )
+            stmt = select(ProposedAction).where(ProposedAction.source == source)
             if exclude_status is not None:
                 stmt = stmt.where(ProposedAction.status != exclude_status)
             stmt = stmt.order_by(ProposedAction.created_at.desc())

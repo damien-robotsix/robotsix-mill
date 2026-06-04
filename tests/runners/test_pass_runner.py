@@ -1807,7 +1807,6 @@ def test_agent_summary_threads_to_pass_result(tmp_path):
 # ==================================================================
 
 
-
 # --- ProposedActionItem model ---
 
 
@@ -1836,6 +1835,7 @@ def test_proposed_action_item_fields():
 def test_proposed_action_item_default_factory():
     """proposed_actions defaults to empty list on agent result classes."""
     from robotsix_mill.agents.health import HealthResult
+
     hr = HealthResult(updated_memory="m", summary="s")
     assert hr.proposed_actions == []
 
@@ -1965,9 +1965,7 @@ def test_list_proposed_actions_excludes_pending_by_default(tmp_path):
     assert rows == []
 
     # With exclude_status=None → include PENDING
-    rows_all = service.list_proposed_actions(
-        source="health", exclude_status=None
-    )
+    rows_all = service.list_proposed_actions(source="health", exclude_status=None)
     assert len(rows_all) == 1
     assert rows_all[0].status == ProposedActionStatus.PENDING
 
@@ -1993,7 +1991,9 @@ def test_list_proposed_actions_returns_decided_newest_first(tmp_path):
     with db.session(settings, "test-board") as s:
         p1 = s.get(ProposedAction, pa1.id)
         p1.status = ProposedActionStatus.REJECTED
-        p1.decided_at = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+        p1.decided_at = __import__("datetime").datetime.now(
+            __import__("datetime").timezone.utc
+        )
         p1.decided_by = "alice"
         s.commit()
 
@@ -2007,7 +2007,9 @@ def test_list_proposed_actions_returns_decided_newest_first(tmp_path):
     with db.session(settings, "test-board") as s:
         p2 = s.get(ProposedAction, pa2.id)
         p2.status = ProposedActionStatus.APPROVED
-        p2.decided_at = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+        p2.decided_at = __import__("datetime").datetime.now(
+            __import__("datetime").timezone.utc
+        )
         p2.decided_by = "bob"
         s.commit()
 
@@ -2046,7 +2048,9 @@ def test_list_proposed_actions_filters_by_source(tmp_path):
         for pid in (pa_h.id, pa_a.id):
             p = s.get(ProposedAction, pid)
             p.status = ProposedActionStatus.REJECTED
-            p.decided_at = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+            p.decided_at = __import__("datetime").datetime.now(
+                __import__("datetime").timezone.utc
+            )
             p.decided_by = "alice"
         s.commit()
 
@@ -2130,7 +2134,9 @@ def test_run_agent_pass_persists_proposed_actions(tmp_path):
     db.reset_engine()
 
 
-def test_run_agent_pass_proposed_actions_one_failure_does_not_block_others(tmp_path, caplog):
+def test_run_agent_pass_proposed_actions_one_failure_does_not_block_others(
+    tmp_path, caplog
+):
     """One proposal failing (e.g. invalid action_type) doesn't block others
     or draft creation. Proposals with non-existent targets succeed at
     emission time (SQLite FK not enforced) — they'll be caught at
@@ -2289,7 +2295,9 @@ def test_verify_proposed_actions_returns_decided_only(tmp_path):
     with db.session(settings, "test-board") as s:
         p = s.get(ProposedAction, pa_approved.id)
         p.status = ProposedActionStatus.APPROVED
-        p.decided_at = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+        p.decided_at = __import__("datetime").datetime.now(
+            __import__("datetime").timezone.utc
+        )
         p.decided_by = "alice"
         s.commit()
 
@@ -2369,8 +2377,14 @@ def test_render_proposed_actions_table_renders_rows():
     result = _render_proposed_actions_table(decided)
     assert "## Prior proposed actions — decided" in result
     assert "| id | target_ticket | action | status | decided_by | rationale |" in result
-    assert "| 1 | 2026053 | close | approved | alice | stale — no activity in 60 days |" in result
-    assert "| 2 | 2026053 | transition | rejected | bob | still active — recent comment from user |" in result
+    assert (
+        "| 1 | 2026053 | close | approved | alice | stale — no activity in 60 days |"
+        in result
+    )
+    assert (
+        "| 2 | 2026053 | transition | rejected | bob | still active — recent comment from user |"
+        in result
+    )
 
 
 def test_render_proposed_actions_table_escapes_pipe_in_rationale():
@@ -2417,7 +2431,9 @@ def test_combined_verified_passed_to_agent(tmp_path):
     with db.session(settings, "test-board") as s:
         p = s.get(ProposedAction, pa.id)
         p.status = ProposedActionStatus.REJECTED
-        p.decided_at = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+        p.decided_at = __import__("datetime").datetime.now(
+            __import__("datetime").timezone.utc
+        )
         p.decided_by = "alice"
         s.commit()
 
@@ -2582,7 +2598,8 @@ def test_verified_proposals_still_works_with_module_curator_style(tmp_path):
 
     # Create context: gap-id ticket + decided proposed action
     t = service.create(
-        "Gap", "body\n\n<!-- module_curator-gap-id: mc_gap -->",
+        "Gap",
+        "body\n\n<!-- module_curator-gap-id: mc_gap -->",
         source=SourceKind.MODULE_CURATOR,
     )
     pa = service.create_proposed_action(
@@ -2594,7 +2611,9 @@ def test_verified_proposals_still_works_with_module_curator_style(tmp_path):
     with db.session(settings, "test-board") as s:
         p = s.get(ProposedAction, pa.id)
         p.status = ProposedActionStatus.EXECUTED
-        p.decided_at = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+        p.decided_at = __import__("datetime").datetime.now(
+            __import__("datetime").timezone.utc
+        )
         p.decided_by = "alice"
         s.commit()
 

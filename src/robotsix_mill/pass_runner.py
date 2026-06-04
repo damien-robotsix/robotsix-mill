@@ -46,6 +46,7 @@ class ProposedActionItem(BaseModel):
     controls — ``source``, ``status``, and lifecycle timestamps are set
     by the runner/service, not by the agent.
     """
+
     target_ticket_id: str = Field(description="Ticket ID the action applies to")
     action_type: str = Field(description="One of: close, transition, comment, relabel")
     payload: str | None = Field(
@@ -53,7 +54,9 @@ class ProposedActionItem(BaseModel):
         description="JSON string whose schema varies by action_type "
         "(e.g. target state for transition, comment body for comment)",
     )
-    rationale: str = Field(description="Why the agent believes this action is warranted")
+    rationale: str = Field(
+        description="Why the agent believes this action is warranted"
+    )
 
 
 def _verify_prior_proposals(
@@ -159,15 +162,17 @@ def _verify_proposed_actions(
 
     result: list[dict] = []
     for pa in rows:
-        result.append({
-            "id": pa.id,
-            "target_ticket_id": pa.target_ticket_id,
-            "action_type": pa.action_type,
-            "status": pa.status,
-            "rationale": pa.rationale,
-            "decided_at": pa.decided_at.isoformat() if pa.decided_at else "",
-            "decided_by": pa.decided_by or "",
-        })
+        result.append(
+            {
+                "id": pa.id,
+                "target_ticket_id": pa.target_ticket_id,
+                "action_type": pa.action_type,
+                "status": pa.status,
+                "rationale": pa.rationale,
+                "decided_at": pa.decided_at.isoformat() if pa.decided_at else "",
+                "decided_by": pa.decided_by or "",
+            }
+        )
     return result
 
 
@@ -236,9 +241,7 @@ def strip_ephemeral_sections(memory_text: str) -> str:
     if "## Prior proposals" in memory_text:
         cleaned = _EPHEMERAL_MEMORY_SECTION_RE.sub("", memory_text)
     if "## Prior proposed actions" in (cleaned or memory_text):
-        cleaned = _EPHEMERAL_PROPOSED_ACTIONS_SECTION_RE.sub(
-            "", cleaned or memory_text
-        )
+        cleaned = _EPHEMERAL_PROPOSED_ACTIONS_SECTION_RE.sub("", cleaned or memory_text)
     # collapse the blank-line gap a removed section leaves behind
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned or memory_text).strip()
     return cleaned + "\n" if cleaned else ""
@@ -430,9 +433,7 @@ def run_agent_pass(
     decided_block = _render_proposed_actions_table(decided_actions)
 
     # Concatenate both ephemeral sections
-    combined_verified = "\n\n".join(
-        filter(None, [verified_block, decided_block])
-    )
+    combined_verified = "\n\n".join(filter(None, [verified_block, decided_block]))
 
     # 3. Build the recent-proposals block for prompt injection.
     recent = service.recent_proposals_for(source_label, limit=100)
