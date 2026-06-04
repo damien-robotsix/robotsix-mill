@@ -5,7 +5,6 @@ from pathlib import Path
 from robotsix_mill.pass_runner import (
     run_agent_pass,
     _verify_prior_proposals,
-    _verify_proposed_actions,
     _render_proposed_actions_table,
     _GAP_ID_RE,
     load_memory,
@@ -14,7 +13,6 @@ from robotsix_mill.pass_runner import (
     _render_verified_table,
     _test_file_exists_for_gap,
     strip_ephemeral_sections,
-    _EPHEMERAL_PROPOSED_ACTIONS_SECTION_RE,
 )
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
@@ -2131,7 +2129,7 @@ def test_render_proposed_actions_table(tmp_path):
     db.init_db(settings, board_id="test-board")
     service = TicketService(settings, board_id="test-board")
 
-    created = service.create_proposed_action(
+    service.create_proposed_action(
         source="audit",
         target_ticket_id="T-42",
         action_type="close",

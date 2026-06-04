@@ -199,10 +199,9 @@ def strip_ephemeral_sections(memory_text: str) -> str:
     # Fast path: leave text byte-for-byte unchanged when there is nothing to
     # strip (the vast majority of memory documents) — only normalise whitespace
     # when a section is actually removed.
-    if (
-        not memory_text
-        or ("## Prior proposals" not in memory_text
-            and "## Proposed actions" not in memory_text)
+    if not memory_text or (
+        "## Prior proposals" not in memory_text
+        and "## Proposed actions" not in memory_text
     ):
         return memory_text
     cleaned = _EPHEMERAL_MEMORY_SECTION_RE.sub("", memory_text)
@@ -406,7 +405,9 @@ def run_agent_pass(
 
     # Build proposed-actions table for agent context.
     pending_actions = _verify_proposed_actions(service, source_label)
-    actions_block = _render_proposed_actions_table(pending_actions) if pending_actions else ""
+    actions_block = (
+        _render_proposed_actions_table(pending_actions) if pending_actions else ""
+    )
 
     # Combine both ephemeral sections into one block.
     parts = [b for b in [verified_block, actions_block] if b]
@@ -497,9 +498,7 @@ def run_agent_pass(
                 }
             )
         except Exception:
-            log.exception(
-                "failed to persist proposed action from %s", source_label
-            )
+            log.exception("failed to persist proposed action from %s", source_label)
 
     # 6. Create draft tickets for each proposal.
     gap_ids = getattr(res, "gap_ids", [])
