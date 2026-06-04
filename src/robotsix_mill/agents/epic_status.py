@@ -26,6 +26,45 @@ class EpicStatusResult(BaseModel):
     child_closures: list[str] | None = Field(default=None)
 
 
+def _build_children_table(children: list[dict]) -> str:
+    """Build a compact Markdown table of child tickets.
+
+    Columns: ID, Title, State, Deps, Summary.  The Summary column
+    is the first ~300 chars of the child's description with newlines
+    collapsed to spaces and pipe characters escaped.  Deps are shown
+    as a comma-separated list or ``-`` if none.
+    """
+    if not children:
+        return "(none)"
+
+    header = "| ID | Title | State | Deps | Summary |"
+    sep = "|---|---|---|---|---|"
+    rows: list[str] = [header, sep]
+
+    for child in children:
+        cid = _escape_pipe(child.get("id", ""))
+        title = _escape_pipe(child.get("title", ""))
+        state = _escape_pipe(child.get("state", ""))
+
+        deps_list = child.get("depends_on") or []
+        deps = ", ".join(deps_list) if deps_list else "-"
+
+        desc: str = child.get("description", "")
+        # Collapse newlines to a single space and escape pipe chars.
+        desc = desc.replace("\n", " ").replace("|", "\\|")
+        if len(desc) > 300:
+            desc = desc[:300] + "..."
+
+        rows.append(f"| {cid} | {title} | {state} | {deps} | {desc} |")
+
+    return "\n".join(rows)
+
+
+def _escape_pipe(value: str) -> str:
+    """Escape literal pipe characters so they don't break the table."""
+    return value.replace("|", "\\|")
+
+
 def run_epic_status_agent(
     *,
     settings: Settings,
@@ -64,15 +103,13 @@ def run_epic_status_agent(
         tools=[],
         model_name=definition.model or settings.audit_model,
     )
-    import json
-
-    children_json = json.dumps(children, indent=2, default=str)
+    children_table = _build_children_table(children)
     prompt = (
         section("epic-title", epic_title)
         + "\n\n"
         + section("epic-description", epic_description)
         + "\n\n"
-        + section("children", children_json)
+        + section("children", children_table)
         + "\n\n"
         + "Evaluate the epic's status and return your decision."
     )
