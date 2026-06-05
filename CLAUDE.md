@@ -79,3 +79,10 @@ call is wrapped in a best-effort `try`/`except` that logs the failure (via
 (LLM, network, or IMAP) never aborts ingestion. Because `setup_archive`
 only persists its watermark on success, a failed run naturally retries on
 the next ingestion.
+
+## Documentation conventions
+
+When you add or change a user-facing CLI subcommand in
+`src/robotsix_auto_mail/cli.py`, document it in `docs/connecting.md` in the
+same PR, following the `config-sync` command section pattern (purpose,
+optional-extra requirements, flags, example invocation, and output).
