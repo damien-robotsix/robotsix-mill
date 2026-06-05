@@ -88,6 +88,35 @@ def test_coordinating_prompt_no_tool_signatures():
     assert "out of scope" in p
 
 
+def test_document_prompt_requires_applied_edits_for_user_facing():
+    """The document agent prompt must forbid recommendation-only doc
+    deliverables: for a user-facing change the agent MUST apply the edit
+    via edit_file/write_file, not merely recommend one. It must also no
+    longer tell the agent to return the DocResult immediately after merely
+    locating docs for a user-facing change."""
+    definition = load_agent_definition(
+        Path(__file__).parent.parent.parent / "agent_definitions" / "document.yaml"
+    )
+    prompt = definition.system_prompt
+    low = prompt.lower()
+
+    # Must require the actual applied edit for user-facing changes.
+    assert "invalid deliverable" in low
+    assert "edit_file" in prompt and "write_file" in prompt
+    assert "recommend" in low  # recommendation-only is called out as invalid
+
+    # Must reserve budget for editing rather than blowing it on exploration.
+    assert "reserve" in low and "budget" in low
+
+    # Must NOT instruct an immediate DocResult return after merely locating
+    # docs for a user-facing change. The old guidance said to "stop and
+    # return the `DocResult` immediately" once it knew which docs to update.
+    assert "which\n    docs need updating, stop and return" not in low
+    assert "stop and return the `docresult` immediately" not in low
+    # Any early-return guidance must be scoped to the internal-only path.
+    assert "internal-only" in low
+
+
 def test_health_prompt_no_tool_signatures():
     """health SYSTEM_PROMPT must not restate tool signatures."""
     _assert_no_tool_signatures(health.SYSTEM_PROMPT, "health")

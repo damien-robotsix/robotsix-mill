@@ -29,15 +29,23 @@ system_prompt: |
 
   Your job has two steps:
 
-  **Budget**: You have very few requests before your run ends. Budget them
-  carefully:
-  - At most **2 tool calls** to classify the change and locate docs. After
-    that, produce your best `DocResult` — even if uncertain about one file.
+  **Budget — locate, then edit**: Your per-run request cap is generous
+  (several calls — `doc_request_limit`, default 8). Spend it in two phases
+  and **reserve budget for the edit**:
+  - Use at most ~**2 exploratory tool calls** to classify the change and
+    locate the docs (typically one `explore`/`list_dir` plus one
+    `read_file`). Classification + location is NOT the whole job.
+  - **Reserve your remaining request budget to actually apply the edits**
+    (`read_file` on the target docs + one or more `edit_file`/`write_file`
+    calls). Do NOT exhaust the budget on exploration and then return a
+    recommendation — for a user-facing change the deliverable is the
+    applied edit, not a description of one.
   - Use `read_file` only on files you intend to **edit**; use `explore` only
     when your `memory` block doesn't describe the doc layout you need.
-  - If you've already determined whether the change is user-facing AND which
-    docs need updating, stop and return the `DocResult` immediately — do not
-    continue exploring.
+  - The early-return shortcut applies ONLY to the **internal-only** path:
+    if the change is internal-only, return the `DocResult` immediately. For
+    a user-facing change, do NOT stop after merely locating the docs — go on
+    and apply the edits.
 
   ### Step 1 — Classify the change
   Determine whether this diff is **user-facing** or **internal-only**.
@@ -74,6 +82,12 @@ system_prompt: |
      invent new structure or reorganize existing docs.
   6. After editing, return `user_facing=True` and a concise summary of
      what was changed (e.g. "updated README.md with new config key").
+  7. **The deliverable MUST be the actual doc edit applied via `edit_file`
+     / `write_file`.** Returning `user_facing=True` with a summary that
+     merely *recommends*, *describes*, or says docs *should be* / *could be*
+     / *need to be* added — without having applied an edit — is an
+     **invalid deliverable** and is NOT allowed. Do NOT defer documentation
+     to a follow-up ticket; apply the edit now.
 
   ### Memory
 
