@@ -72,6 +72,45 @@ class MetaAgentResult(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Available periodic-workflow catalogue (injected into the prompt)
+# ---------------------------------------------------------------------------
+
+# Periodic kinds a repo can opt into via a presence file (excludes the
+# cross-repo/global-only ones like meta / timeout_escalation / trace_health).
+_PER_REPO_PERIODIC_KINDS = frozenset({"llm_agent", "schedule_only", "maintenance"})
+
+
+def _available_periodic_catalog() -> str:
+    """Markdown list of every per-repo periodic workflow + its one-line
+    purpose, for the meta prompt's ``<available-periodic-workflows>`` block.
+
+    Names come from the periodic_loader kind map (single source of truth);
+    descriptions are read from each ``agent_definitions/periodic/<name>.yaml``
+    when present, else a generic fallback for the prompt-less schedule/
+    maintenance tasks.
+    """
+    from ..agents.periodic_loader import _BUILTIN_KINDS
+
+    defs_dir = (
+        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "periodic"
+    )
+    lines: list[str] = []
+    for name, kind in _BUILTIN_KINDS.items():
+        if kind not in _PER_REPO_PERIODIC_KINDS:
+            continue
+        desc = ""
+        f = defs_dir / f"{name}.yaml"
+        if f.is_file():
+            try:
+                raw = _yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+                desc = str(raw.get("description") or "").strip().split("\n")[0].strip()
+            except Exception:  # noqa: BLE001 — best-effort catalogue
+                desc = ""
+        lines.append(f"- `{name}`: {desc or '(periodic schedule/maintenance task)'}")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -161,7 +200,10 @@ def run_meta_agent(
         reply_to_thread=False,
         close_thread=False,
         ask_user=False,
-        model_name=settings.audit_model,
+        # No per-agent model decision: cross-repo synthesis runs on the
+        # normal/default model (llmio resolves the tier per backend), not the
+        # cheap flash tier the audit_model override used to force.
+        model_name=None,
         name="meta",
     )
 
@@ -178,6 +220,9 @@ def run_meta_agent(
     prompt = recent_proposals
     prompt += section("memory", memory or "(empty — start a new ledger)")
     prompt += section("repo-clones", clone_listing)
+    # Hand the agent the full periodic-workflow catalogue so it can check each
+    # repo for missing-but-valuable workflows without rediscovering the list.
+    prompt += section("available-periodic-workflows", _available_periodic_catalog())
     prompt += "\n\nPerform the cross-repo analysis and return your result."
 
     # ------------------------------------------------------------------
