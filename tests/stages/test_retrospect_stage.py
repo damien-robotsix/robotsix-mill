@@ -9,7 +9,7 @@ pure-function unit tests on the helper utilities.
 import pytest
 
 from robotsix_mill.agents import retrospecting
-from robotsix_mill.agents.retrospecting import RetrospectResult
+from robotsix_mill.agents.retrospecting import MemoryEdit, RetrospectResult
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
@@ -18,6 +18,7 @@ from robotsix_mill.draft_target import looks_like_mill_internal
 from robotsix_mill.stages.retrospect import (
     RetrospectStage,
     _WORD_TO_NUM,
+    _apply_memory_edits,
     _check_memory_count_consistency,
     _extract_ticket_ids,
     _parse_numeric_count,
@@ -901,6 +902,203 @@ def test_both_fields_updated_memory_wins(ctx_factory, monkeypatch):
         lambda **kwargs: _result(
             updated_memory="## Full Rewrite\n\nThe complete ledger.",
             memory_delta="## Should Be Ignored\n\nnope",
+        ),
+    )
+
+    t = _ticket(ctx)
+    out = RetrospectStage().run(t, ctx)
+
+    assert out.next_state is State.CLOSED
+    content = memory_file.read_text()
+    assert content == "## Full Rewrite\n\nThe complete ledger."
+    assert "Should Be Ignored" not in content
+
+
+# ------------------------------------------------------------------
+# 12b. Targeted memory edits (memory_edits / PATH 2b)
+# ------------------------------------------------------------------
+
+
+def test_apply_memory_edits_pure_helper_ops():
+    """Unit-test the pure helper across append/replace/remove + failures."""
+    # append onto existing
+    out, fails = _apply_memory_edits(
+        "## A\n\nbody", [MemoryEdit(op="append", text="## B\n\nnew")]
+    )
+    assert out == "## A\n\nbody\n\n## B\n\nnew"
+    assert fails == []
+    # append onto empty
+    out, fails = _apply_memory_edits("", [MemoryEdit(op="append", text="## B")])
+    assert out == "## B"
+    assert fails == []
+    # replace found
+    out, fails = _apply_memory_edits(
+        "## A\n\nold", [MemoryEdit(op="replace", find="old", text="new")]
+    )
+    assert out == "## A\n\nnew"
+    assert fails == []
+    # replace not found → failure, unchanged
+    out, fails = _apply_memory_edits(
+        "## A\n\nold", [MemoryEdit(op="replace", find="zzz", text="new")]
+    )
+    assert out == "## A\n\nold"
+    assert len(fails) == 1
+    # remove with newline collapse
+    out, fails = _apply_memory_edits(
+        "## A\n\nbody\n\n## B\n\nmore",
+        [MemoryEdit(op="remove", find="## B\n\nmore")],
+    )
+    assert "## B" not in out
+    assert "\n\n\n" not in out
+    assert fails == []
+
+
+def test_memory_edits_replace_op_rewrites_entry(ctx_factory, monkeypatch):
+    """PATH 2b replace: an entry is rewritten in place; old text gone."""
+    ctx = ctx_factory()
+    _memory_seams(monkeypatch)
+
+    memory_file = ctx.settings.memory_file_for(
+        "retrospect",
+        ctx.repo_config.board_id if ctx.repo_config else "",
+    )
+    memory_file.parent.mkdir(parents=True, exist_ok=True)
+    old_entry = "## Flaky tests\n\nObserved in 2026-01-01 run; still active.\n"
+    memory_file.write_text(old_entry, encoding="utf-8")
+
+    new_entry = "## Flaky tests [resolved 2026-06-05]\n\nFixed by retry logic.\n"
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(
+            memory_edits=[MemoryEdit(op="replace", find=old_entry, text=new_entry)],
+        ),
+    )
+
+    t = _ticket(ctx)
+    out = RetrospectStage().run(t, ctx)
+
+    assert out.next_state is State.CLOSED
+    content = memory_file.read_text()
+    assert "[resolved 2026-06-05]" in content
+    assert "still active" not in content
+
+
+def test_memory_edits_remove_op_drops_entry(ctx_factory, monkeypatch):
+    """PATH 2b remove: one of two entries is removed; the other survives
+    and the spacing stays clean."""
+    ctx = ctx_factory()
+    _memory_seams(monkeypatch)
+
+    memory_file = ctx.settings.memory_file_for(
+        "retrospect",
+        ctx.repo_config.board_id if ctx.repo_config else "",
+    )
+    memory_file.parent.mkdir(parents=True, exist_ok=True)
+    entry_a = "## Keep me\n\nStill relevant.\n"
+    entry_b = "## Drop me\n\nNo longer relevant.\n"
+    memory_file.write_text(entry_a + "\n" + entry_b, encoding="utf-8")
+
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(
+            memory_edits=[MemoryEdit(op="remove", find=entry_b)],
+        ),
+    )
+
+    t = _ticket(ctx)
+    out = RetrospectStage().run(t, ctx)
+
+    assert out.next_state is State.CLOSED
+    content = memory_file.read_text()
+    assert "## Keep me" in content
+    assert "## Drop me" not in content
+    assert "\n\n\n" not in content
+
+
+def test_memory_edits_append_op_adds_section(ctx_factory, monkeypatch):
+    """PATH 2b append: new section is appended after existing content,
+    existing-first, separated by a blank line."""
+    ctx = ctx_factory()
+    _memory_seams(monkeypatch)
+
+    memory_file = ctx.settings.memory_file_for(
+        "retrospect",
+        ctx.repo_config.board_id if ctx.repo_config else "",
+    )
+    memory_file.parent.mkdir(parents=True, exist_ok=True)
+    memory_file.write_text(
+        "## Existing Pattern\n\nEvidence: observed in TKT-001\n", encoding="utf-8"
+    )
+
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(
+            memory_edits=[
+                MemoryEdit(op="append", text="## New Pattern\n\nObserved in TKT-XXX.")
+            ],
+        ),
+    )
+
+    t = _ticket(ctx)
+    out = RetrospectStage().run(t, ctx)
+
+    assert out.next_state is State.CLOSED
+    content = memory_file.read_text()
+    assert content.index("## Existing Pattern") < content.index("## New Pattern")
+    assert "Evidence: observed in TKT-001\n\n## New Pattern" in content
+
+
+def test_memory_edits_find_not_found_leaves_ledger_unchanged(ctx_factory, monkeypatch):
+    """PATH 2b: a replace whose `find` is absent logs a warning, leaves
+    the ledger unchanged, and the stage still closes the ticket."""
+    ctx = ctx_factory()
+    _memory_seams(monkeypatch)
+
+    memory_file = ctx.settings.memory_file_for(
+        "retrospect",
+        ctx.repo_config.board_id if ctx.repo_config else "",
+    )
+    memory_file.parent.mkdir(parents=True, exist_ok=True)
+    original = "## Existing Pattern\n\nEvidence: observed in TKT-001\n"
+    memory_file.write_text(original, encoding="utf-8")
+
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(
+            memory_edits=[MemoryEdit(op="replace", find="not in the ledger", text="x")],
+        ),
+    )
+
+    t = _ticket(ctx)
+    out = RetrospectStage().run(t, ctx)
+
+    assert out.next_state is State.CLOSED
+    assert memory_file.read_text() == original
+
+
+def test_memory_edits_loses_to_updated_memory(ctx_factory, monkeypatch):
+    """Precedence: when BOTH updated_memory and memory_edits are present,
+    the full-rewrite path wins and the edits are ignored."""
+    ctx = ctx_factory()
+    _memory_seams(monkeypatch)
+
+    memory_file = ctx.settings.memory_file_for(
+        "retrospect",
+        ctx.repo_config.board_id if ctx.repo_config else "",
+    )
+    memory_file.parent.mkdir(parents=True, exist_ok=True)
+    memory_file.write_text("## Old\n\nstale\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(
+            updated_memory="## Full Rewrite\n\nThe complete ledger.",
+            memory_edits=[MemoryEdit(op="append", text="## Should Be Ignored")],
         ),
     )
 

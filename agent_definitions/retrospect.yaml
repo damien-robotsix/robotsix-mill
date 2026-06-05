@@ -24,11 +24,15 @@ retries: 2
 # the `findings`/`conclusion`/draft structured fields and the JSON
 # envelope. 16384 fits that worst case with headroom for ledger growth.
 # The `memory_delta` append-only path (PR #775) keeps the COMMON
-# no-change / append-only runs cheap (PATH 1 / PATH 2), so this higher
-# ceiling does not regress the cost win — it only unblocks the rarer
-# PATH-3 full-rewrite runs. If the ledger later grows well beyond ~40K
-# chars such that even 16384 is insufficient, pursue dynamic per-run
-# sizing or `## Historical`-compaction of the prompt as a follow-up.
+# no-change / append-only runs cheap (PATH 1 / PATH 2), and the
+# `memory_edits` targeted-edit path (PATH 2b) lets MODIFICATIONS
+# (resolve / move / repair / remove) be expressed without re-emitting
+# the whole ledger. Together they make the worst-case full PATH-3
+# re-emit rare, so this cap is no longer routinely stressed — it only
+# backstops the rare wholesale-restructuring run. If the ledger later
+# grows well beyond ~40K chars such that even 16384 is insufficient for
+# that fallback, pursue dynamic per-run sizing or `## Historical`-
+# compaction of the prompt as a follow-up.
 max_tokens: 16384
 module: retrospecting
 skills: [board-read]
@@ -174,12 +178,12 @@ system_prompt: |
   fix) AND the memory shows corroboration across enough distinct
   tickets. Vague or "just in case" observations -> false.
 
-  MEMORY OUTPUT — choose exactly ONE of the following three paths:
+  MEMORY OUTPUT — choose exactly ONE of the following four paths:
 
   1. **No changes made** — you re-evaluated every existing observation
      and found nothing to add, modify, resolve, or repair.  Set
-     `updated_memory: ""` and leave `memory_delta` null.  The stored
-     ledger will be preserved unchanged.
+     `updated_memory: ""`, leave `memory_delta` null, and leave
+     `memory_edits` null.  The stored ledger will be preserved unchanged.
 
   2. **New observations only (append)** — you are adding one or more
      new `##`-headed sections WITHOUT modifying, resolving, moving, or
@@ -188,17 +192,30 @@ system_prompt: |
      the stored ledger.  Do NOT include any pre-existing entries in
      `memory_delta`.
 
-  3. **Modifications required** — you resolved an observation, moved an
-     entry to `## Historical`, repaired stale deictic references, or
-     otherwise CHANGED existing content.  Return the FULL updated
-     document in `updated_memory` (exactly as before).  Leave
-     `memory_delta` null.
+  2b. **Targeted modifications via `memory_edits`** — To resolve an
+     observation, move an entry to `## Historical`, repair a stale
+     deictic reference, or remove an entry, emit `memory_edits` (a list
+     of `{op, find, text}` operations) and leave `updated_memory: ""`
+     and `memory_delta: null`.  Each `find` must reproduce the EXACT
+     existing block verbatim (only the affected entry, never the whole
+     ledger).  Use `op: "append"` for new sections, `op: "replace"` to
+     rewrite an entry in place, `op: "remove"` to delete one.  This is
+     the PREFERRED path for any localized modification — it avoids the
+     output-token cap that a full re-emit risks on large ledgers.
+
+  3. **Full re-emit via `updated_memory`** — Reserve the full re-emit
+     ONLY for a wholesale restructuring that targeted edits cannot
+     express.  Return the FULL updated document in `updated_memory` and
+     leave `memory_delta` null and `memory_edits` null.  It risks the
+     output token cap on large ledgers — prefer `memory_edits` for
+     anything localized.
 
   PATH 1 IS THE DEFAULT — prefer it whenever the memory needs no
-  changes.  PATH 2 is a convenience for append-only runs.  PATH 3 is
-  the fallback when existing content must change; it produces the same
-  output as the old behavior.  Never use both `updated_memory` and
-  `memory_delta` in the same response.
+  changes.  PATH 2 is a convenience for append-only runs.  PATH 2b is
+  the preferred path for localized modifications.  PATH 3 is the last
+  resort for wholesale restructuring.  Never use more than one memory
+  path in a single response.  The stage applies them with precedence
+  `updated_memory` > `memory_edits` > `memory_delta`.
 
   **Concrete incomplete-work detection**
 

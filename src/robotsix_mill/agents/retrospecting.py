@@ -25,6 +25,16 @@ log = logging.getLogger(__name__)
 # only reasons about the pre-computed session summary now.
 
 
+class MemoryEdit(BaseModel):
+    op: Literal["append", "replace", "remove"]
+    # For "replace"/"remove": the EXACT existing block of ledger text to
+    # locate (must match verbatim, including the "## " heading line).
+    find: str = ""
+    # New content. For "append": the section(s) to add. For "replace":
+    # the replacement text. Ignored for "remove".
+    text: str = ""
+
+
 class RetrospectResult(BaseModel):
     findings: str
     conclusion: str
@@ -33,6 +43,13 @@ class RetrospectResult(BaseModel):
     draft_body: str | None = None
     updated_memory: str = ""
     memory_delta: str | None = None
+    # Exactly one memory path is used per response. ``memory_edits`` is
+    # the PREFERRED path for MODIFICATIONS (resolve / move / repair /
+    # remove an existing entry): it expresses a targeted change without
+    # re-emitting the whole ledger, replacing the old requirement to use
+    # the full ``updated_memory`` re-emit (PATH 3) for edits. Stage
+    # precedence: ``updated_memory`` > ``memory_edits`` > ``memory_delta``.
+    memory_edits: list[MemoryEdit] | None = None
     draft_gap_id: str | None = None
     follow_up_title: str | None = None
     follow_up_body: str | None = None
