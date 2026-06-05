@@ -189,6 +189,7 @@ modules:
     paths:
       - .github/dependabot.yml
       - .github/workflows/ci.yml
+      - .github/workflows/codeql.yml
       - .github/workflows/lockfile.yml
       - .pre-commit-config.yaml
       - .secrets.baseline
