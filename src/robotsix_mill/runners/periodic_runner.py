@@ -247,11 +247,6 @@ def run_periodic_pass(
         ``updated_memory``, ``drafts_created``, and ``session_id``.
     """
 
-    # Resolve memory file path: two-step pattern — global fallback first,
-    # then override with per-repo path when repo_config is set.
-    memory_file = settings.memory_file_for(
-        config.label, repo_config.board_id if repo_config else ""
-    )
     clone_dir: Path | None = None
     forge_remote_url = settings.forge_remote_url
 
