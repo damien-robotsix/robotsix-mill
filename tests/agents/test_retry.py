@@ -74,8 +74,7 @@ def test_is_transient_claude_sdk_degenerate_success():
     type is erased, so it must be matched by message signature — directly and
     through the cause chain — and treated as transient so it gets retried."""
     assert (
-        is_transient(Exception("Claude Code returned an error result: success"))
-        is True
+        is_transient(Exception("Claude Code returned an error result: success")) is True
     )
     inner = Exception("Claude Code returned an error result: success")
     wrapped = RuntimeError("agent run failed")
@@ -83,9 +82,7 @@ def test_is_transient_claude_sdk_degenerate_success():
     assert is_transient(wrapped) is True
 
     ctx_wrapped = RuntimeError("agent run failed")
-    ctx_wrapped.__context__ = Exception(
-        "Claude Code returned an error result: success"
-    )
+    ctx_wrapped.__context__ = Exception("Claude Code returned an error result: success")
     assert is_transient(ctx_wrapped) is True
 
 
