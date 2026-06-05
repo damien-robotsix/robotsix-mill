@@ -214,10 +214,12 @@ system_prompt: |
        was merged under a named commit/PR, you MUST first VERIFY the
        merge with ``run_command`` before choosing this mode:
        ``git cat-file -t <sha>`` (the cited commit must be a valid
-       object) AND ``git merge-base --is-ancestor <sha> HEAD`` (it must
-       be an ancestor of the current branch), and confirm the claimed
+       object) AND ``git merge-base --is-ancestor <sha> origin/main``
+       (it must be an ancestor of the source-of-truth branch — a commit
+       reachable only from the current feature branch (HEAD) is NOT
+       deployed and must not pass this check), and confirm the claimed
        deliverable file(s) actually exist on disk. If the commit is not
-       a valid object, is NOT an ancestor of ``main``, or the
+       a valid object, is NOT an ancestor of ``origin/main``, or the
        deliverable files are absent, do NOT use this mode — treat the
        gap as still-open and fall back to mode 1 (a normal spec) so the
        work routes to implement. OR
