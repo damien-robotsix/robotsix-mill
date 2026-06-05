@@ -10,7 +10,13 @@ from __future__ import annotations
 
 import logging
 
-from robotsix_mill.repo_settings import load_repo_test_command
+from types import SimpleNamespace
+
+from robotsix_mill.repo_settings import (
+    load_repo_languages,
+    load_repo_test_command,
+    resolve_language_instructions,
+)
 
 
 def _write_config(repo_dir, text: str):
@@ -68,3 +74,75 @@ def test_malformed_yaml_warns_and_returns_none(tmp_path, caplog):
         # Must not raise.
         assert load_repo_test_command(tmp_path) is None
     assert any("read/parse error" in r.message for r in caplog.records)
+
+
+# --- languages -------------------------------------------------------------
+
+
+def test_load_repo_languages_list(tmp_path):
+    _write_config(tmp_path, "languages:\n  - python\n  - rust\n")
+    assert load_repo_languages(tmp_path) == ["python", "rust"]
+
+
+def test_load_repo_languages_singular_string(tmp_path):
+    _write_config(tmp_path, "language: go\n")
+    assert load_repo_languages(tmp_path) == ["go"]
+
+
+def test_load_repo_languages_list_wins_over_singular(tmp_path):
+    _write_config(tmp_path, "language: go\nlanguages: [python]\n")
+    assert load_repo_languages(tmp_path) == ["python"]
+
+
+def test_load_repo_languages_absent_or_malformed(tmp_path):
+    _write_config(tmp_path, "test_command: pytest\n")
+    assert load_repo_languages(tmp_path) == []
+    _write_config(tmp_path, "languages: 123\n")
+    assert load_repo_languages(tmp_path) == []
+    assert load_repo_languages(None) == []
+
+
+def _settings_with_builtin(tmp_path):
+    builtin = tmp_path / "builtin_lang"
+    builtin.mkdir()
+    (builtin / "python.md").write_text("PY BUILTIN", encoding="utf-8")
+    (builtin / "rust.md").write_text("RUST BUILTIN", encoding="utf-8")
+    return SimpleNamespace(language_instructions_dir=builtin)
+
+
+def test_resolve_languages_from_repo_file_multi(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _write_config(repo, "languages: [python, rust]\n")
+    s = _settings_with_builtin(tmp_path)
+    out = resolve_language_instructions(s, repo, None)
+    assert "PY BUILTIN" in out and "RUST BUILTIN" in out
+
+
+def test_resolve_falls_back_to_repo_config_language(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()  # no .robotsix-mill/config.yaml languages
+    s = _settings_with_builtin(tmp_path)
+    rc = SimpleNamespace(language="rust")
+    out = resolve_language_instructions(s, repo, rc)
+    assert out.strip() == "RUST BUILTIN"
+
+
+def test_resolve_repo_override_wins_over_builtin(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _write_config(repo, "languages: [python]\n")
+    override_dir = repo / ".robotsix-mill" / "language_instructions"
+    override_dir.mkdir(parents=True)
+    (override_dir / "python.md").write_text("REPO OVERRIDE", encoding="utf-8")
+    s = _settings_with_builtin(tmp_path)
+    out = resolve_language_instructions(s, repo, None)
+    assert out.strip() == "REPO OVERRIDE"
+    assert "PY BUILTIN" not in out
+
+
+def test_resolve_none_when_no_language(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    s = _settings_with_builtin(tmp_path)
+    assert resolve_language_instructions(s, repo, None) == ""

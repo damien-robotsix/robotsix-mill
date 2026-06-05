@@ -616,6 +616,32 @@ def make_request_new_repo_tool(sink: dict):
     return request_new_repo
 
 
+def _build_refine_overrides(
+    definition,
+    settings: Settings,
+    reviewer_comments: str | None,
+    language_instructions: str,
+) -> dict:
+    """Assemble the ``build_agent_from_definition`` overrides for refine:
+    the reviewer-sendback prompt + thread flags when handling feedback, the
+    refine model when the definition doesn't pin one, and the per-language
+    ``## Language conventions`` block appended to whichever base prompt
+    applies."""
+    overrides: dict = {}
+    if reviewer_comments:
+        overrides["system_prompt"] = REVIEWER_SENDBACK_PROMPT
+        overrides["reply_to_thread"] = True
+        overrides["close_thread"] = True
+    if not definition.model:
+        overrides["model_name"] = settings.refine_model
+    if language_instructions:
+        base_prompt = overrides.get("system_prompt", definition.system_prompt)
+        overrides["system_prompt"] = (
+            base_prompt + "\n\n## Language conventions\n\n" + language_instructions
+        )
+    return overrides
+
+
 def run_refine_agent(
     *,
     settings: Settings,
@@ -628,6 +654,7 @@ def run_refine_agent(
     extra_roots: list[Path] | None = None,
     message_history: list | None = None,
     board_id: str = "",
+    language_instructions: str = "",
 ) -> RefineResult:
     """Return a structured ``RefineResult``. When ``repo_dir`` is given
     the agent grounds the spec in that local clone via explore/
@@ -698,13 +725,9 @@ def run_refine_agent(
     new_repo_sink: dict = {}
     tools += _meta_refine_tools(board_id, new_repo_sink)
 
-    overrides = {}
-    if reviewer_comments:
-        overrides["system_prompt"] = REVIEWER_SENDBACK_PROMPT
-        overrides["reply_to_thread"] = True
-        overrides["close_thread"] = True
-    if not definition.model:
-        overrides["model_name"] = settings.refine_model
+    overrides = _build_refine_overrides(
+        definition, settings, reviewer_comments, language_instructions
+    )
 
     agent = build_agent_from_definition(
         settings,
