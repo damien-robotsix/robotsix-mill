@@ -1421,6 +1421,9 @@ def _empty_reuse_client(*, commits_status, commits_json=None):
             return _make_response(422, {}, "name already exists on this account")
 
         def get(self, url, headers=None, params=None, **kwargs):
+            if url.endswith("/user"):
+                # empty-owner resolution → authenticated login 'o'
+                return _make_response(200, {"login": "o"}, "")
             if url.endswith("/repos/o/b/commits"):
                 return _make_response(commits_status, commits_json or [], "")
             if url.endswith("/repos/o/b"):
@@ -1453,6 +1456,16 @@ def test_create_repo_existing_nonempty_repo_raises(tmp_path, monkeypatch):
     forge = _forge(tmp_path, enable_repo_creation=True)
     with pytest.raises(RuntimeError, match="not empty"):
         forge.create_repo(name="b", owner="o", private=False, description="d")
+
+
+def test_create_repo_reuses_empty_repo_with_blank_owner(tmp_path, monkeypatch):
+    """owner='' (meta agent leaves it blank) → create falls back to
+    /user/repos; reuse resolves the authenticated login via /user so the
+    empty-repo lookup still succeeds instead of falsely blocking."""
+    monkeypatch.setattr(real_httpx, "Client", _empty_reuse_client(commits_status=409))
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    info = forge.create_repo(name="b", owner="", private=False, description="d")
+    assert info.id == 7
 
 
 def test_clamp_repo_description():
