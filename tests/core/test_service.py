@@ -351,6 +351,16 @@ def test_redraft_clean_slate_reset(service, settings):
     service.add_comment(t.id, "second comment", author="bob")
     service.set_branch(t.id, "feature/redraft-me")
 
+    # Simulate accumulated cost from the prior attempt.
+    from robotsix_mill.core import db as _db
+    from robotsix_mill.core.models import Ticket as _Ticket
+
+    with _db.session(service.settings, service.board_id) as s:
+        row = s.get(_Ticket, t.id)
+        row.cost_usd = 4.2
+        s.add(row)
+        s.commit()
+
     # Simulate a per-ticket repo clone on disk.
     ws = service.workspace(service.get(t.id))
     ws.repo_dir.mkdir(parents=True, exist_ok=True)
@@ -370,6 +380,8 @@ def test_redraft_clean_slate_reset(service, settings):
     assert hist[0].prev_hash is None
 
     assert service.get(t.id).branch is None
+    # Clean slate resets the accumulated cost ledger.
+    assert service.get(t.id).cost_usd == 0.0
 
     # Local clone pruned; workspace dir + description.md remain.
     assert not ws.repo_dir.exists()

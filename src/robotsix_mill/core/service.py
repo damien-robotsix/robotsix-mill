@@ -1395,7 +1395,8 @@ class TicketService:
         fresh ``description.md``; deletes the comment thread; drops all
         prior ``TicketEvent`` rows so the new DRAFT event is the genesis
         of a fresh hash chain; prunes the per-ticket repo clone (which
-        holds the local implement branch) and clears ``ticket.branch``.
+        holds the local implement branch); clears ``ticket.branch``; and
+        resets the accumulated ``ticket.cost_usd`` to ``0.0``.
 
         Note: only the *local* clone/branch and the ``ticket.branch`` DB
         pointer are cleared. The pushed remote branch and any open PR on
@@ -1472,6 +1473,10 @@ class TicketService:
             prune_clone(ws)
             shutil.rmtree(ws.dir / "artifacts", ignore_errors=True)
             ticket.branch = None
+            # Clean slate also means a fresh cost ledger — the
+            # accumulated cost of the prior (discarded) attempt must not
+            # carry over into the redrafted ticket.
+            ticket.cost_usd = 0.0
 
             note = f"redrafted: {body}" if body else "redrafted"
             ticket.state = State.DRAFT
