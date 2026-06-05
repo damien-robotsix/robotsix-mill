@@ -24,7 +24,6 @@ from robotsix_mill.runners.trace_review_runner import (
     _compute_baselines,
     _load_watermark,
     _median,
-    _normalize,
     _save_watermark,
     run_trace_review_pass,
 )
@@ -409,15 +408,6 @@ class TestWatermark:
         _save_watermark(settings, "board-b", b)
         assert _load_watermark(settings, "board-a") == a
         assert _load_watermark(settings, "board-b") == b
-
-
-# ---------------------------------------------------------------------------
-# Dedup helpers
-# ---------------------------------------------------------------------------
-
-
-def test_normalize_strips_punctuation_and_case():
-    assert _normalize("Trace-Review: Tool Errors!") == ("trace review tool errors")
 
 
 # ---------------------------------------------------------------------------
