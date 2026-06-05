@@ -1054,6 +1054,21 @@ class Settings(BaseSettings):
     # Minimum enforced at 60 s in the worker loop.
     meta_interval_seconds: int = Field(default=86400)
 
+    # --- cost-analyst (global, cross-repo cost-reduction agent) ---
+    # When True, a global daily pass studies the fleet's aggregate cost-by-
+    # stage distribution + the most-significant trace/ticket specimens and
+    # files high-confidence cost-reduction drafts to the mill board. Off by
+    # default; flip to True to enable.
+    cost_analyst_periodic: bool = Field(default=False)
+    # Seconds between automatic cost-analyst passes. Default 86400 (1 day).
+    cost_analyst_interval_seconds: int = Field(default=86400)
+    # Lookback window (hours) for the cost digest and trend comparison.
+    cost_analyst_window_hours: int = Field(default=168)
+    # How many top-spend stages to deep-dive in the digest.
+    cost_analyst_top_stages: int = Field(default=6)
+    # Board the cost-analyst files its drafts to (the levers live in mill).
+    cost_analyst_target_repo_id: str = Field(default="robotsix-mill")
+
     # --- action-agent memory paths ---
     # Path to the implement agent's Markdown memory ledger. Override to
     # pin a specific path; unset (default) derives <data_dir>/implement_memory.md.

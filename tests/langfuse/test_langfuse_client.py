@@ -637,3 +637,66 @@ def test_aggregate_cost_trend_multi_page(monkeypatch):
     total_count = sum(b["trace_count"] for b in result)
     assert total_cost == pytest.approx(0.60)  # 600 × $0.001
     assert total_count == 600
+
+
+# ---------------------------------------------------------------------------
+# ticket_with_most_steps / trace_with_most_errors
+# ---------------------------------------------------------------------------
+
+
+def test_ticket_with_most_steps(monkeypatch):
+    from robotsix_mill.langfuse import client as lf
+
+    s = _langfuse_settings(LANGFUSE_PUBLIC_KEY="pk", LANGFUSE_SECRET_KEY="sk")
+    traces = [
+        {"name": "implement", "totalCost": 1.0, "sessionId": "A"},
+        {"name": "ci_fix", "totalCost": 0.5, "sessionId": "A"},
+        {"name": "ci_fix", "totalCost": 0.5, "sessionId": "A"},  # A = 3 steps
+        {"name": "implement", "totalCost": 9.0, "sessionId": "B"},  # B = 1 step
+    ]
+    monkeypatch.setattr(lf, "_fetch_traces_time_window", lambda *a, **k: list(traces))
+    res = lf.ticket_with_most_steps(s)
+    assert res is not None
+    assert res["session_id"] == "A"  # most steps, not most cost
+    assert res["step_count"] == 3
+
+
+def test_trace_with_most_errors(monkeypatch):
+    from robotsix_mill.langfuse import client as lf
+
+    s = _langfuse_settings(LANGFUSE_PUBLIC_KEY="pk", LANGFUSE_SECRET_KEY="sk")
+    traces = [
+        {"id": "t1", "name": "ci_fix", "totalCost": 2.0, "sessionId": "A"},
+        {"id": "t2", "name": "implement", "totalCost": 5.0, "sessionId": "B"},
+    ]
+    obs_by_trace = {
+        "t1": [{"level": "ERROR"}, {"level": "ERROR"}, {"output": "Error: x"}],
+        "t2": [{"level": "DEFAULT", "output": "ok"}],
+    }
+    monkeypatch.setattr(lf, "_fetch_traces_time_window", lambda *a, **k: list(traces))
+    monkeypatch.setattr(
+        lf,
+        "fetch_trace_observations",
+        lambda settings, tid, repo_config=None: obs_by_trace.get(tid),
+    )
+    res = lf.trace_with_most_errors(s)
+    assert res is not None
+    assert res["id"] == "t1"
+    assert res["error_count"] == 3
+
+
+def test_trace_with_most_errors_none_when_clean(monkeypatch):
+    from robotsix_mill.langfuse import client as lf
+
+    s = _langfuse_settings(LANGFUSE_PUBLIC_KEY="pk", LANGFUSE_SECRET_KEY="sk")
+    monkeypatch.setattr(
+        lf,
+        "_fetch_traces_time_window",
+        lambda *a, **k: [{"id": "t1", "name": "x", "totalCost": 1.0}],
+    )
+    monkeypatch.setattr(
+        lf,
+        "fetch_trace_observations",
+        lambda *a, **k: [{"level": "DEFAULT", "output": "fine"}],
+    )
+    assert lf.trace_with_most_errors(s) is None
