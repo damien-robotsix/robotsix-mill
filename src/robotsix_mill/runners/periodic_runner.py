@@ -504,7 +504,7 @@ def _render_board_snapshot(tickets) -> str:
 
 def run_board_cleanup_pass(
     session_id: str,
-    repo_config: RepoConfig | None,
+    repo_config: RepoConfig,
     *,
     settings,
     definition_override: Any = None,
