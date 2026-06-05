@@ -7,7 +7,9 @@ an appropriate layout (based on the mailbox's existing folders) rooted at
 ``watermark`` table so subsequent runs reuse it without re-asking the LLM or
 recreating folders.
 
-The ``pydantic_ai`` import is lazy to keep module-load time low, mirroring
+The ``pydantic_ai`` and ``openrouter_deepseek`` provider imports are lazy
+to keep module-load time low and to avoid requiring the optional provider
+extra for the deterministic import path, mirroring
 :mod:`robotsix_auto_mail.detect`.
 """
 
@@ -19,7 +21,6 @@ import sqlite3
 
 import pydantic
 from robotsix_llmio.core import Tier
-from robotsix_llmio.openrouter_deepseek import OpenRouterDeepseekProvider
 
 from robotsix_auto_mail.db import get_watermark, set_watermark
 from robotsix_auto_mail.imap import ImapClient
@@ -118,8 +119,10 @@ def determine_archive_structure(
             "variable or add an `llm.api_key` entry to your config file"
         )
 
-    # -- lazy import so the rest of the CLI works without pydantic_ai --
+    # -- lazy import so the rest of the CLI works without the
+    #    openrouter_deepseek extra --
     from pydantic_ai import PromptedOutput
+    from robotsix_llmio.openrouter_deepseek import OpenRouterDeepseekProvider
 
     # -- build agent --
     llm_provider = OpenRouterDeepseekProvider(api_key=resolved_key)

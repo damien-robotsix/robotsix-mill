@@ -52,7 +52,7 @@ def _patch_llm(folders: list[str]) -> mock._patch[mock.MagicMock]:
     mock_provider.call_with_retry.side_effect = lambda fn, what: fn()
 
     return mock.patch(
-        "robotsix_auto_mail.archive.OpenRouterDeepseekProvider",
+        "robotsix_llmio.openrouter_deepseek.OpenRouterDeepseekProvider",
         return_value=mock_provider,
     )
 
@@ -85,6 +85,22 @@ def test_archive_error_is_exception() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Lazy provider import — deterministic path must not bind the extra
+# ---------------------------------------------------------------------------
+
+
+def test_provider_not_bound_at_module_level() -> None:
+    """Importing the module must not require the openrouter_deepseek extra.
+
+    The provider is imported lazily inside ``determine_archive_structure``,
+    so it must not be a module-level attribute of ``archive``.
+    """
+    import robotsix_auto_mail.archive as archive_mod
+
+    assert not hasattr(archive_mod, "OpenRouterDeepseekProvider")
+
+
+# ---------------------------------------------------------------------------
 # determine_archive_structure
 # ---------------------------------------------------------------------------
 
@@ -101,7 +117,7 @@ def test_determine_archive_structure_uses_cheap_tier() -> None:
     """build_agent is called with Tier.CHEAP by default."""
     with mock.patch.dict(os.environ, {"LLM_API_KEY": "sk-test"}, clear=True):
         with mock.patch(
-            "robotsix_auto_mail.archive.OpenRouterDeepseekProvider"
+            "robotsix_llmio.openrouter_deepseek.OpenRouterDeepseekProvider"
         ) as cls:
             mock_run_result = mock.MagicMock()
             mock_run_result.output = ArchiveStructure(folders=[])
@@ -134,7 +150,7 @@ def test_determine_archive_structure_llm_error_wrapped() -> None:
         mock_provider.build_agent.return_value = mock_handle
         mock_provider.call_with_retry.side_effect = RuntimeError("timeout")
         with mock.patch(
-            "robotsix_auto_mail.archive.OpenRouterDeepseekProvider",
+            "robotsix_llmio.openrouter_deepseek.OpenRouterDeepseekProvider",
             return_value=mock_provider,
         ):
             with pytest.raises(ArchiveError) as exc:
@@ -248,7 +264,7 @@ def test_setup_archive_custom_root_passed_to_llm() -> None:
             os.environ, {"LLM_API_KEY": "sk-test"}, clear=True
         ):
             with mock.patch(
-                "robotsix_auto_mail.archive.OpenRouterDeepseekProvider"
+                "robotsix_llmio.openrouter_deepseek.OpenRouterDeepseekProvider"
             ) as cls:
                 mock_run_result = mock.MagicMock()
                 mock_run_result.output = ArchiveStructure(folders=[])
@@ -287,7 +303,7 @@ def test_setup_archive_subsequent_run_short_circuits() -> None:
         )
         client = mock.MagicMock()
         with mock.patch(
-            "robotsix_auto_mail.archive.OpenRouterDeepseekProvider"
+            "robotsix_llmio.openrouter_deepseek.OpenRouterDeepseekProvider"
         ) as cls:
             result = setup_archive(conn, client)
         assert result == persisted
@@ -310,7 +326,7 @@ def test_setup_archive_no_api_key_falls_back_to_root() -> None:
         client = _FakeImapClient([_folder("INBOX")])
         with mock.patch.dict(os.environ, {}, clear=True):
             with mock.patch(
-                "robotsix_auto_mail.archive.OpenRouterDeepseekProvider"
+                "robotsix_llmio.openrouter_deepseek.OpenRouterDeepseekProvider"
             ) as cls:
                 result = setup_archive(conn, cast(ImapClient, client))
         assert result == [ARCHIVE_ROOT]
