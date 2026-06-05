@@ -209,8 +209,20 @@ system_prompt: |
        findings and the ONLY acceptance criterion is "post a comment
        explaining why no change is needed" / "document the false
        positive" / similar information-only deliverable, OR
-     * A parallel ticket already shipped the fix (identify it by id
-       in the rationale), OR
+     * A parallel ticket already shipped the fix — identify it by id
+       in the rationale. BUT when you close on the basis that the work
+       was merged under a named commit/PR, you MUST first VERIFY the
+       merge with ``run_command`` before choosing this mode:
+       ``git cat-file -t <sha>`` (the cited commit must be a valid
+       object) AND ``git merge-base --is-ancestor <sha> origin/main``
+       (it must be an ancestor of the source-of-truth branch — a commit
+       reachable only from the current feature branch (HEAD) is NOT
+       deployed and must not pass this check), and confirm the claimed
+       deliverable file(s) actually exist on disk. If the commit is not
+       a valid object, is NOT an ancestor of ``origin/main``, or the
+       deliverable files are absent, do NOT use this mode — treat the
+       gap as still-open and fall back to mode 1 (a normal spec) so the
+       work routes to implement. OR
      * The reported problem does not actually exist (a detector
        false-positive whose evidence the spec itself disproves).
      Do NOT use this mode just because the spec is short — only when
