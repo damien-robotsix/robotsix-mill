@@ -601,6 +601,22 @@ def test_extract_paths_empty_input_returns_empty():
     assert _extract_paths(None) == []
 
 
+def test_extract_paths_rejects_dotted_prose_fragments():
+    # Single-segment dotted prose like ``e.g`` / ``i.e`` must not be
+    # mistaken for file paths — these produced spurious duplicate
+    # advisories linking unrelated tickets.
+    assert _extract_paths("caught at refine (e.g. the i.e. case)") == []
+
+
+def test_extract_paths_keeps_real_paths_alongside_prose():
+    text = "fix runtime/worker.py and ci.yml, see CONTRIBUTING.md (e.g. this)"
+    assert _extract_paths(text) == [
+        "runtime/worker.py",
+        "ci.yml",
+        "CONTRIBUTING.md",
+    ]
+
+
 # ---------------------------------------------------------------------------
 # C. find_child_overlaps / _describe_recent_signal — uncovered branches
 # ---------------------------------------------------------------------------
