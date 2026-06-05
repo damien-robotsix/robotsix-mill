@@ -125,6 +125,23 @@ def _parse_pr_detail(pr: dict) -> dict:
     }
 
 
+# GitHub's hard cap on a repository description (POST /user|orgs/.../repos).
+_MAX_REPO_DESCRIPTION = 350
+
+
+def _clamp_repo_description(description: str) -> str:
+    """Clamp *description* to GitHub's 350-char repo-description limit.
+
+    A longer value yields a 422 ``description cannot be more than 350
+    characters``. When truncating, end with an ellipsis so the cut is
+    visible; collapse newlines (GitHub stores descriptions single-line).
+    """
+    text = " ".join((description or "").split())
+    if len(text) <= _MAX_REPO_DESCRIPTION:
+        return text
+    return text[: _MAX_REPO_DESCRIPTION - 1].rstrip() + "…"
+
+
 def _parse_repo_info(r: dict) -> RepoInfo:
     """Extract ``RepoInfo`` from a GitHub ``POST /repos`` response dict."""
     return RepoInfo(
@@ -256,7 +273,9 @@ class GitHubForge(Forge):
         payload = {
             "name": name,
             "private": private,
-            "description": description,
+            # GitHub rejects repo descriptions over 350 chars with a 422;
+            # the meta-agent's draft body easily exceeds that, so clamp.
+            "description": _clamp_repo_description(description),
             "auto_init": False,
         }
 
