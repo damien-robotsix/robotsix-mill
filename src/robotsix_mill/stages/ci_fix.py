@@ -28,6 +28,7 @@ log = logging.getLogger("robotsix_mill.stages.ci_fix")
 
 _CI_FIX_COUNTER = "ci_fix_attempts.txt"
 _CI_NO_CHANGE_COUNTER = "ci_no_change_cycles.txt"
+_CI_FIX_CYCLE_COUNTER = "ci_fix_cycles.txt"
 
 
 def _read_counter(path) -> int:
@@ -128,7 +129,13 @@ class CIFixStage(Stage):
         conclusion = status.get("conclusion")
 
         if conclusion == "success":
-            # CI turned green while we were waiting.
+            # CI turned green while we were waiting.  This is the only
+            # authoritative "CI is actually fixed" signal — reset the hard
+            # cycle ceiling here (and only here).
+            cycle_counter_path = (
+                ctx.service.workspace(ticket).artifacts_dir / _CI_FIX_CYCLE_COUNTER
+            )
+            _write_counter(cycle_counter_path, 0)
             return Outcome(State.IMPLEMENT_COMPLETE)
 
         if conclusion in ("pending", None):
@@ -163,6 +170,34 @@ class CIFixStage(Stage):
             log.warning("%s: failed to fetch job logs", ticket.id)
 
         failing_summary = _build_failing_summary(failing, log_text)
+
+        # Hard per-ticket cycle ceiling: count every cycle that actually runs
+        # the agent on still-failing CI, regardless of self-reported status or
+        # whether commits were produced.  Reset only when CI is observed green
+        # (the conclusion == "success" branch above).  This bounds a runaway
+        # loop that keeps committing useless churn while remote CI stays red —
+        # a loop that resets both the attempt and no-change counters every
+        # cycle and would otherwise never escalate.
+        cycle_counter_path = (
+            ctx.service.workspace(ticket).artifacts_dir / _CI_FIX_CYCLE_COUNTER
+        )
+        cycles = _read_counter(cycle_counter_path)
+        if s.ci_fix_max_cycles > 0 and cycles >= s.ci_fix_max_cycles:
+            # Stop before spending another full agent run.
+            _write_counter(cycle_counter_path, 0)
+            log.warning(
+                "%s: ci-fix hit hard ceiling of %d cycle(s) without turning "
+                "CI green — escalating to BLOCKED without running the agent",
+                ticket.id,
+                s.ci_fix_max_cycles,
+            )
+            return Outcome(
+                State.BLOCKED,
+                f"ci fix exhausted hard ceiling of {s.ci_fix_max_cycles} "
+                f"cycle(s) without turning CI green — manual intervention "
+                f"required. Resume-blocked to retry from human_mr_approval.",
+            )
+        _write_counter(cycle_counter_path, cycles + 1)
 
         counter_path = ctx.service.workspace(ticket).artifacts_dir / _CI_FIX_COUNTER
         attempt = _read_counter(counter_path) + 1
