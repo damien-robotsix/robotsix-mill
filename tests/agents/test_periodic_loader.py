@@ -21,7 +21,7 @@ def _write(repo: Path, name: str, body: str) -> Path:
 def test_kind_for_classification():
     assert pl.kind_for("audit") == "llm_agent"
     assert pl.kind_for("trace_review") == "schedule_only"
-    assert pl.kind_for("cost_warmer") == "maintenance"
+    assert pl.kind_for("langfuse_cleanup") == "maintenance"
     assert pl.kind_for("meta") == "global_only"
     assert pl.kind_for("my-custom-thing") == "bespoke"
 
@@ -130,7 +130,7 @@ def test_schedule_only_has_no_definition(tmp_path):
 
 
 def test_maintenance_has_no_definition(tmp_path):
-    p = _write(tmp_path, "cost_warmer", "name: cost_warmer\n")
+    p = _write(tmp_path, "langfuse_cleanup", "name: langfuse_cleanup\n")
     r = pl.resolve_periodic_workflow(p)
     assert r.kind == "maintenance" and r.definition is None
 
@@ -196,14 +196,14 @@ def test_discover_absent_dir(tmp_path):
 
 def test_discover_classifies_and_collects(tmp_path):
     _write(tmp_path, "audit", "name: audit\n")
-    _write(tmp_path, "cost_warmer", "name: cost_warmer\n")
+    _write(tmp_path, "langfuse_cleanup", "name: langfuse_cleanup\n")
     _write(tmp_path, "my-thing", "name: my-thing\nsystem_prompt: x\n")
     _write(tmp_path, "meta", "name: meta\nsystem_prompt: x\n")  # ignored
     _write(tmp_path, "broken", "name: broken\n")  # bespoke w/o prompt → skipped
     out = {w.name: w.kind for w in pl.discover_periodic_workflows(tmp_path)}
     assert out == {
         "audit": "llm_agent",
-        "cost_warmer": "maintenance",
+        "langfuse_cleanup": "maintenance",
         "my-thing": "bespoke",
     }
 

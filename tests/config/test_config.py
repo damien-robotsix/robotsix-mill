@@ -1514,7 +1514,7 @@ class TestPeriodicPresenceModel:
             langfuse_public_key="pk-test",
             langfuse_secret_key="sk-test",
         )
-        for name in ("audit", "health", "module_curator", "cost_warmer"):
+        for name in ("audit", "health", "module_curator", "langfuse_cleanup"):
             assert not hasattr(rc, f"{name}_periodic")
 
     def test_periodic_flags_helpers_removed(self):

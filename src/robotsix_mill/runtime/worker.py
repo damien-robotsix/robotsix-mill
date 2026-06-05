@@ -918,8 +918,6 @@ class Worker:
         self._audit_task: asyncio.Task | None = None
         self._trace_health_task: asyncio.Task | None = None
         self._trace_review_task: asyncio.Task | None = None
-        self._cost_warmer_task: asyncio.Task | None = None
-        self._cost_warmer_fast_task: asyncio.Task | None = None
         # Periodic-pass runs currently executing in worker threads.
         # The to_thread wrapper registers them on entry and removes
         # on exit; ``stop()`` awaits this set (with a grace timeout)
@@ -1814,171 +1812,6 @@ class Worker:
                         self.run_registry.finish_error(run_id, str(e))
             await asyncio.sleep(interval)
 
-    async def _cost_warmer_loop(self) -> None:
-        """Background cost-warmer.
-
-        Walks every non-closed ticket on each repo and calls
-        ``session_cost`` to refresh its cached Langfuse value. The
-        board's /tickets list endpoint reads from the SAME process-
-        local cache via ``session_cost_cached`` (cache-only, never
-        blocks), so once the warmer has visited a ticket its cost
-        column on the board is populated even when the operator
-        hasn't opened the ticket drawer.
-
-        Throttling: ``cost_warmer_concurrency`` bounds in-flight
-        Langfuse calls via a semaphore; ``cost_warmer_interval_seconds``
-        is the wall-time between cycles. With concurrency=4 and a
-        ~250ms median Langfuse latency, ~200 open tickets sweep in
-        ~12s, so the column refreshes well inside the 60s cache TTL
-        and idle tickets never show a $0 dip.
-
-        Closed tickets are skipped entirely — their cost is final
-        and the board hides them by default. Each cycle handles
-        per-repo failure independently so a Langfuse outage on one
-        repo doesn't stall the others.
-        """
-        from ..core.models import Ticket
-        from ..core.service import TicketService
-        from ..core.states import State
-        from ..langfuse.client import session_cost
-
-        settings = self.ctx.settings
-        interval = max(10, settings.cost_warmer_interval_seconds)
-        concurrency = max(1, settings.cost_warmer_concurrency)
-        terminal = {State.CLOSED, State.EPIC_CLOSED}
-
-        await asyncio.sleep(self._initial_delay("cost-warmer", interval))
-        while True:
-            cycle_start = time.monotonic()
-            repos = get_repos_config()
-            repo_configs = [
-                rc
-                for rc in repos.repos.values()
-                if self._maintenance_enabled_for(rc, "cost_warmer")
-            ]
-            sem = asyncio.Semaphore(concurrency)
-
-            async def _warm_one(ticket: Ticket, repo_config) -> int:
-                async with sem:
-                    try:
-                        await asyncio.to_thread(
-                            session_cost,
-                            settings,
-                            ticket.id,
-                            repo_config=repo_config,
-                        )
-                        return 1
-                    except Exception:  # noqa: BLE001
-                        log.debug(
-                            "cost-warmer: lookup failed for %s",
-                            ticket.id,
-                            exc_info=True,
-                        )
-                        return 0
-
-            tasks: list[asyncio.Future] = []
-            for repo_config in repo_configs:
-                try:
-                    svc = TicketService(settings, board_id=repo_config.board_id)
-                    tickets: list[Ticket] = svc.list()
-                except Exception:  # noqa: BLE001 — survive per-repo errors
-                    log.exception(
-                        "cost-warmer: listing tickets failed for %s",
-                        repo_config.repo_id,
-                    )
-                    continue
-
-                for ticket in tickets:
-                    # Closed tickets never accrue new cost — skip them
-                    # entirely. Their cached value (if any) persists,
-                    # and the detail-drawer click still does a blocking
-                    # fetch for authoritativeness if the operator
-                    # opens one.
-                    if ticket.state in terminal:
-                        continue
-                    tasks.append(_warm_one(ticket, repo_config))
-
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            warmed_count = sum(r for r in results if isinstance(r, int))
-
-            cycle_secs = time.monotonic() - cycle_start
-            log.debug(
-                "cost-warmer cycle: %d tickets warmed in %.1fs",
-                warmed_count,
-                cycle_secs,
-            )
-            # Sleep the remainder of the interval if we finished early.
-            await asyncio.sleep(max(0.0, interval - cycle_secs))
-
-    async def _cost_warmer_fast_loop(self) -> None:
-        """Fast cost-warmer: walks only active-state tickets.
-
-        The slow warmer is comprehensive but takes ~90s+ to cycle on a
-        busy board. For tickets that are currently being processed
-        (refine, implement, review, …) the operator notices the
-        $-amount lagging long before that — the spending climbs while
-        the column shows yesterday's value. This loop hits Langfuse for
-        every active-state ticket every few seconds with ``force=True``
-        so the TTL gate doesn't deflect the call. Throttled by
-        interval, not by pace, since active tickets are typically <10
-        at a time.
-
-        Active states are read from ``STAGE_FOR_STATE`` so the loop
-        automatically tracks any new pipeline stages added.
-        """
-        from ..core.service import TicketService
-        from ..core.states import STAGE_FOR_STATE
-        from ..langfuse.client import session_cost
-
-        settings = self.ctx.settings
-        interval = max(2, settings.cost_warmer_fast_interval_seconds)
-        active_states = set(STAGE_FOR_STATE.keys())
-
-        await asyncio.sleep(self._initial_delay("cost-warmer-fast", interval))
-        while True:
-            cycle_start = time.monotonic()
-            repos = get_repos_config()
-            warmed = 0
-            for repo_config in repos.repos.values():
-                # cost_warmer_fast shares the cost_warmer presence file.
-                if not self._has_periodic_presence(repo_config, "cost_warmer"):
-                    continue
-                try:
-                    svc = TicketService(settings, board_id=repo_config.board_id)
-                    tickets = svc.list()
-                except Exception:  # noqa: BLE001
-                    log.exception(
-                        "cost-warmer-fast: listing tickets failed for %s",
-                        repo_config.repo_id,
-                    )
-                    continue
-                for ticket in tickets:
-                    if ticket.state not in active_states:
-                        continue
-                    try:
-                        await asyncio.to_thread(
-                            session_cost,
-                            settings,
-                            ticket.id,
-                            repo_config=repo_config,
-                            force=True,
-                        )
-                        warmed += 1
-                    except Exception:  # noqa: BLE001
-                        log.debug(
-                            "cost-warmer-fast: lookup failed for %s",
-                            ticket.id,
-                            exc_info=True,
-                        )
-
-            cycle_secs = time.monotonic() - cycle_start
-            log.debug(
-                "cost-warmer-fast cycle: %d active tickets warmed in %.1fs",
-                warmed,
-                cycle_secs,
-            )
-            await asyncio.sleep(max(0.0, interval - cycle_secs))
-
     async def _periodic_supervisor(self, repo_config: RepoConfig) -> None:
         """Per-repo periodic-workflow supervisor loop.
 
@@ -2345,8 +2178,8 @@ class Worker:
             await asyncio.sleep(interval)
 
     def _maintenance_enabled_for(self, repo_config, name: str) -> bool:
-        """Whether a non-LLM maintenance loop (cost_warmer / langfuse_cleanup)
-        runs for *repo_config*: enabled iff the repo ships a
+        """Whether a non-LLM maintenance loop (langfuse_cleanup) runs for
+        *repo_config*: enabled iff the repo ships a
         ``.robotsix-mill/periodic/<name>.yaml`` presence file. (The legacy
         ``RepoConfig.<name>_periodic`` flags were removed — presence is the
         single source of truth.)
@@ -2682,23 +2515,9 @@ class Worker:
             log_msg="Periodic trace-health enabled: interval %ds",
             log_args=(self.ctx.settings.trace_health_interval_seconds,),
         )
-        self._start_poll_loop_pass(
-            "cost-warmer",
-            self._cost_warmer_loop,
-            "_cost_warmer_task",
-            log_msg="Cost warmer enabled: cycle %ds, concurrency=%d",
-            log_args=(
-                self.ctx.settings.cost_warmer_interval_seconds,
-                self.ctx.settings.cost_warmer_concurrency,
-            ),
-        )
-        self._start_poll_loop_pass(
-            "cost-warmer-fast",
-            self._cost_warmer_fast_loop,
-            "_cost_warmer_fast_task",
-            log_msg="Cost warmer (fast, active tickets) enabled: interval %ds",
-            log_args=(self.ctx.settings.cost_warmer_fast_interval_seconds,),
-        )
+        # Cost-cache warming is no longer a backend daemon — it's driven by
+        # the board's /tickets poll (runtime/cost_warm.py). See PR removing
+        # _cost_warmer_loop.
         self._start_poll_loop_pass(
             "langfuse-cleanup",
             self._langfuse_cleanup_poll_loop,
@@ -2784,8 +2603,6 @@ class Worker:
             "_audit_task",
             "_trace_health_task",
             "_trace_review_task",
-            "_cost_warmer_task",
-            "_cost_warmer_fast_task",
             "_health_task",
             "_ci_monitor_task",
             "_agent_check_task",

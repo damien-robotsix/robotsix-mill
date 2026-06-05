@@ -45,7 +45,7 @@ repos:
     # override. A name matching no built-in defines a brand-new agent (needs
     # system_prompt). Known names: audit, health, module_curator, trace_review,
     # bc_check, completeness_check, copy_paste, survey, test_gap, agent_check,
-    # config_sync, cost_reconciliation, cost_warmer, langfuse_cleanup.
+    # config_sync, cost_reconciliation, langfuse_cleanup.
 
   # Meta board — synthetic board for cross-repo proposals.
   # Uncomment and copy into config/repos.yaml to enable the meta-agent.
