@@ -19,22 +19,24 @@ BOARD_HTML = """<!doctype html><html><head><meta charset="utf-8">
 <span class="muted">auto-refresh 1s</span>
 <div class="agents-dropdown">
   <button class="agents-trigger" onclick="toggleAgentsMenu(event)">🤖 Agents ▾</button>
+  <!-- Dot colors are set from AGENT_COLORS in board.js (applyAgentColors),
+       the single source of truth — do NOT re-add inline --agent-color here. -->
   <div class="agents-menu" id="agents-menu" onclick="event.stopPropagation()">
-    <button onclick="runAudit()" data-agent="audit" style="--agent-color:#059669">Audit</button>
-    <button onclick="runHealth()" data-agent="health" style="--agent-color:#0d9488">Health Check</button>
-    <button onclick="runTestGap()" data-agent="test_gap" style="--agent-color:#7c3aed">Test Gaps</button>
-    <button onclick="runTraceHealth()" data-agent="trace_health" style="--agent-color:#0ea5e9">Trace Health</button>
-    <button onclick="runLangfuseCleanup()" data-agent="langfuse_cleanup" style="--agent-color:#14b8a6">Langfuse Cleanup</button>
-    <button onclick="runAgentCheck()" data-agent="agent_check" style="--agent-color:#db2777">Agent Check</button>
-    <button onclick="runSurvey()" data-agent="survey" style="--agent-color:#f59e0b">Survey</button>
-    <button onclick="runBcCheck()" data-agent="bc_check" style="--agent-color:#84cc16">BC Check</button>
-    <button onclick="runCompletenessCheck()" data-agent="completeness_check" style="--agent-color:#84cc16">Completeness</button>
-    <button onclick="runCostReconciliation()" data-agent="cost_reconciliation" style="--agent-color:#6366f1">Cost Recon</button>
-    <button onclick="runConfigSync()" data-agent="config_sync" style="--agent-color:#6366f1">Config Sync</button>
-    <button onclick="runRoadmapSync()" data-agent="roadmap_sync" style="--agent-color:#9333ea">Roadmap Sync</button>
-    <button onclick="runTraceReview()" data-agent="trace_review" style="--agent-color:#0ea5e9">Trace Review</button>
-    <button onclick="runModuleCurator()" data-agent="module_curator" style="--agent-color:#f97316">Module Curator</button>
-    <button onclick="runMeta()" data-agent="meta" class="meta-only" style="--agent-color:#a855f7">Meta</button>
+    <button onclick="runAudit()" data-agent="audit">Audit</button>
+    <button onclick="runHealth()" data-agent="health">Health Check</button>
+    <button onclick="runTestGap()" data-agent="test_gap">Test Gaps</button>
+    <button onclick="runTraceHealth()" data-agent="trace_health">Trace Health</button>
+    <button onclick="runLangfuseCleanup()" data-agent="langfuse_cleanup">Langfuse Cleanup</button>
+    <button onclick="runAgentCheck()" data-agent="agent_check">Agent Check</button>
+    <button onclick="runSurvey()" data-agent="survey">Survey</button>
+    <button onclick="runBcCheck()" data-agent="bc_check">BC Check</button>
+    <button onclick="runCompletenessCheck()" data-agent="completeness_check">Completeness</button>
+    <button onclick="runCostReconciliation()" data-agent="cost_reconciliation">Cost Recon</button>
+    <button onclick="runConfigSync()" data-agent="config_sync">Config Sync</button>
+    <button onclick="runRoadmapSync()" data-agent="roadmap_sync">Roadmap Sync</button>
+    <button onclick="runTraceReview()" data-agent="trace_review">Trace Review</button>
+    <button onclick="runModuleCurator()" data-agent="module_curator">Module Curator</button>
+    <button onclick="runMeta()" data-agent="meta" class="meta-only">Meta</button>
   </div>
 </div>
 <button id="agentmd-btn" onclick="openCandidates()" style="font-size:11px;padding:3px 10px;

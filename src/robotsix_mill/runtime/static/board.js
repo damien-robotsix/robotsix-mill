@@ -22,6 +22,37 @@ const ACTIVE_LABEL={
   ci_fix: "fixing CI…",
   retrospect: "retrospecting…"
 };
+// Single source of truth for agent→badge colors. Keyed by the
+// underscore-normalized agent name; both the Runs view (via
+// agentColor) and the Agents menu dots derive their color from here,
+// so the two views never drift. Seeded from the Agents menu palette.
+const AGENT_COLORS={
+ audit:'#059669',
+ health:'#0d9488',
+ test_gap:'#7c3aed',
+ trace_health:'#0ea5e9',
+ langfuse_cleanup:'#14b8a6',
+ agent_check:'#db2777',
+ survey:'#f59e0b',
+ bc_check:'#84cc16',
+ completeness_check:'#84cc16',
+ cost_reconciliation:'#6366f1',
+ config_sync:'#6366f1',
+ roadmap_sync:'#9333ea',
+ trace_review:'#0ea5e9',
+ module_curator:'#f97316',
+ meta:'#a855f7',
+};
+// Resolve an agent color from any kind spelling. Normalizes hyphens to
+// underscores (the runtime RunEntry.kind mixes both) and falls back to
+// grey for unknown kinds (periodic-workflow YAML stems, copy_paste, …).
+function agentColor(kind){const k=String(kind||'').replace(/-/g,'_');return AGENT_COLORS[k]||'#6b7280';}
+// Apply AGENT_COLORS to each Agents-menu button's --agent-color var.
+// Safe to call repeatedly; a button whose key is missing from the map
+// keeps the CSS grey fallback (var(--agent-color, #6b7280)).
+function applyAgentColors(){
+ document.querySelectorAll('.agents-menu button[data-agent]').forEach(b=>b.style.setProperty('--agent-color',agentColor(b.dataset.agent)));
+}
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 // JS-string-literal escaper for values interpolated into inline event
 // handlers (onclick etc.). esc() escapes HTML text/attribute content but
@@ -1410,7 +1441,7 @@ function close_(){sel=null;runsOpen=false;costDashboardOpen=false;
 // every tick so the user doesn't see the panel flash.
 let _runsLastSig=null;
 function _runRowHtml(r,elapsed){
- const kc=r.kind==='audit'?'#059669':r.kind==='trace-health'?'#0ea5e9':r.kind==='health'?'#0d9488':r.kind==='agent_check'?'#db2777':r.kind==='survey'?'#f59e0b':'#6b7280';
+ const kc=agentColor(r.kind);
  const sc=r.status==='running'?'#eab308':r.status==='ok'?'#22c55e':'#ef4444';
  const st=r.status==='running'?'running…':r.status;
  // Repo badge: only meaningful when the user is viewing All repos
@@ -1982,6 +2013,7 @@ async function refreshDetail(id){
  }
  swap("ticket-merge", t.state==="human_mr_approval"&&mi?renderMergeInfo(mi):"");
 }
+applyAgentColors();
 refresh();setInterval(()=>{if(runsOpen)renderRuns();else if(proposalsOpen)renderProposals();else if(sel)refreshDetail(sel)},1000);
 
 // Shared board rendering — used by both HTTP refresh() and the WebSocket
