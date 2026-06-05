@@ -47,11 +47,6 @@ from ..core.states import State
 from ..dedup import find_prior_matching_ticket, normalize
 from ..runtime.lifespan import _process_started_at
 
-# Backward-compatible private alias — the dedup primitives now live in
-# ``robotsix_mill.dedup``; ``_normalize`` is retained for existing
-# imports (e.g. tests) without re-implementing the logic here.
-_normalize = normalize
-
 log = logging.getLogger("robotsix_mill.trace_review")
 
 
