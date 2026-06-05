@@ -43,6 +43,7 @@ class SourceKind(StrEnum):
     MODULE_CURATOR = "module_curator"
     ROADMAP_SYNC = "roadmap_sync"
     META = "meta"
+    BOARD_CLEANUP = "board_cleanup"
 
 
 class ActionType(StrEnum):
