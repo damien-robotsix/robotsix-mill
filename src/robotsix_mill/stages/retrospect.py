@@ -16,7 +16,7 @@ import re
 
 from ..langfuse import client as langfuse_client
 from ..agents import retrospecting
-from ..agents.retrospecting import RetrospectResult
+from ..agents.retrospecting import MemoryEdit, RetrospectResult
 from ..config import Settings, get_repo_config
 from ..config_loader import ConfigError
 from ..core.models import SourceKind, Ticket
@@ -217,6 +217,43 @@ def _check_memory_count_consistency(memory_text: str) -> list[str]:
             )
 
     return warnings
+
+
+def _apply_memory_edits(
+    existing: str, edits: list[MemoryEdit]
+) -> tuple[str, list[str]]:
+    """Apply targeted ``memory_edits`` to *existing* ledger text.
+
+    Processes edits in list order against a running string seeded with
+    *existing*. Matching is exact verbatim substring (first occurrence);
+    no fuzzy matching, regex, or normalization. Never raises — returns
+    ``(new_text, failures)`` where *failures* is a list of human-readable
+    strings, one per edit that could not be applied.
+    """
+    running = existing
+    failures: list[str] = []
+    for i, edit in enumerate(edits):
+        if edit.op == "append":
+            if running.rstrip():
+                running = running.rstrip() + "\n\n" + edit.text
+            else:
+                running = edit.text
+        elif edit.op == "replace":
+            if not edit.find or edit.find not in running:
+                failures.append(f"edit {i} (replace): find text not found or empty")
+                continue
+            running = running.replace(edit.find, edit.text, 1)
+        elif edit.op == "remove":
+            if not edit.find or edit.find not in running:
+                failures.append(f"edit {i} (remove): find text not found or empty")
+                continue
+            running = running.replace(edit.find, "", 1)
+            # Collapse triple-or-more newlines left by the removal so
+            # blank-line spacing stays clean.
+            running = re.sub(r"\n{3,}", "\n\n", running)
+        else:  # pragma: no cover — Literal type forbids other values
+            failures.append(f"edit {i}: unknown op {edit.op!r}")
+    return running, failures
 
 
 # No-op detection (markers + logic) lives in core.text_noop — a single
@@ -763,6 +800,20 @@ class RetrospectStage(Stage):
         if res.updated_memory:
             # Case 3: full rewrite (existing behavior — agent modified the ledger).
             persisted = strip_ephemeral_sections(res.updated_memory)
+        elif res.memory_edits:
+            # Case 2b: targeted edits against the re-read ledger — the
+            # preferred path for modifications (resolve / move / repair /
+            # remove) without re-emitting the whole document.
+            existing = ""
+            try:
+                if memory_file.exists():
+                    existing = memory_file.read_text(encoding="utf-8")
+            except OSError:
+                log.warning("%s: could not re-read memory file for edits", ticket.id)
+            new_text, failures = _apply_memory_edits(existing, res.memory_edits)
+            for f in failures:
+                log.warning("%s: memory edit failed: %s", ticket.id, f)
+            persisted = strip_ephemeral_sections(new_text)
         elif res.memory_delta:
             # Case 2: append new observations to the stored ledger.
             existing = ""
