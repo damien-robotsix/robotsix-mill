@@ -2806,6 +2806,54 @@ def test_baseline_check_blocks_on_failure(ctx_factory, tmp_path, monkeypatch):
     assert "BLOCKED" in content
 
 
+def test_baseline_checks_out_remote_base_sha_not_local_branch(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """Regression: the baseline must check out the EXACT origin/<branch>
+    commit (base_sha), not the clone's possibly-stale local branch ref.
+
+    The old `checkout(repo, "main")` ran whatever the local main pointed at
+    — often stale — while labelling the result with the fresh remote SHA, so
+    a fix that already landed on main was reported as still-failing and
+    poisoned the gate. Assert the baseline checks out a 40-hex SHA.
+    """
+    from robotsix_mill.vcs import git_ops
+
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+    )
+
+    calls: list[str] = []
+    real_checkout = git_ops.checkout
+
+    def _spy(repo, name):
+        calls.append(name)
+        real_checkout(repo, name)
+
+    monkeypatch.setattr(git_ops, "checkout", _spy)
+    # Fail the baseline so the run stops right after it (no real branch ops).
+    monkeypatch.setattr(
+        "robotsix_mill.stages.implement.run_test_agent",
+        lambda **kw: (False, "pre-existing"),
+    )
+    monkeypatch.setattr(
+        coding,
+        "run_implement_agent",
+        lambda *a, **kw: ("done", [], "", None, None, False, ""),
+    )
+
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    # A full SHA was checked out for the baseline — not the bare branch name.
+    assert any(
+        len(c) == 40 and all(ch in "0123456789abcdef" for ch in c) for c in calls
+    ), calls
+
+
 def test_baseline_check_proceeds_on_pass(ctx_factory, tmp_path, monkeypatch):
     """AC2: passing baseline → loop proceeds normally."""
     remote = make_bare_repo(tmp_path)
