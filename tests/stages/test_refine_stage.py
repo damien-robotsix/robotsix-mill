@@ -498,7 +498,9 @@ def test_inflight_advisory_flags_concurrent_ready_draft(ctx_factory, monkeypatch
 
     prior = ctx.service.create(
         "rework login validation",
-        "changes src/robotsix_mill/auth.py to validate the login form",
+        # The candidate declares the shared path under ``## Scope`` so a
+        # lone shared path still flags under the strict-scope rule.
+        "## Scope\n\nchanges src/robotsix_mill/auth.py to validate the login form",
     )
     ctx.service.transition(prior.id, State.READY, note="refined")
 
