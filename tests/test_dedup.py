@@ -23,6 +23,7 @@ from robotsix_mill.core.workspace import Workspace
 from robotsix_mill.dedup import (
     _describe_recent_signal,
     _extract_paths,
+    _scope_paths,
     annotate_child_body,
     find_child_overlaps,
     find_inflight_overlap,
@@ -289,7 +290,9 @@ def test_child_overlaps_flags_recent_shipped_ticket(settings):
     svc, prior = _seed(
         settings,
         title="gate-or-remove jscpd in CI",
-        body="changes .github/workflows/ci.yml to drop the jscpd step",
+        # The shared path is in the candidate's declared scope, so a lone
+        # shared path still corroborates under the strict-scope rule.
+        body="## Scope\n\nchanges .github/workflows/ci.yml to drop the jscpd step",
     )
     svc.transition(prior.id, State.DONE, note="merged")
 
@@ -398,7 +401,9 @@ def test_inflight_overlap_flags_concurrent_ready_ticket(settings):
     svc, prior = _seed(
         settings,
         title="rework the login form",
-        body=f"changes {_TARGET_PATH} to validate input",
+        # The candidate declares the shared path under ``## Scope`` so a
+        # lone shared path still flags under the strict-scope rule.
+        body=f"## Scope\n\nchanges {_TARGET_PATH} to validate input",
     )
     # In-flight, NOT terminal: the dedup guard would reject this.
     svc.transition(prior.id, State.READY, note="refined")
@@ -454,6 +459,100 @@ def test_inflight_overlap_excludes_self(settings):
         _now(),
     )
     assert note is None
+
+
+def test_inflight_overlap_unflagged_on_prose_only_multi_segment_path(settings):
+    """Occurrence 1 (multi-segment prose path): a draft and a recent
+    candidate both merely MENTION ``runtime/worker.py`` in prose — neither
+    declares it as modified — with non-overlapping titles must NOT flag."""
+    svc, prior = _seed(
+        settings,
+        title="ruff config: pin the import-sort rule",
+        body="The runner lives in runtime/worker.py, but this only edits ruff config.",
+    )
+    svc.transition(prior.id, State.READY, note="refined")
+
+    note = find_inflight_overlap(
+        _svc(settings),
+        "NEW-DRAFT",
+        "system-design doc for the scheduler",
+        "Background: runtime/worker.py drives the loop; this adds ARCHITECTURE.md.",
+        settings,
+        _now(),
+    )
+    assert note is None
+
+
+def test_inflight_overlap_unflagged_on_prose_only_bare_filename(settings):
+    """Occurrence 2 (bare filename prose path): a draft listing ``config.py``
+    under an Out-of-scope heading (NOT modified) and a recent candidate that
+    only mentions ``config.py`` in prose, with non-overlapping titles, must
+    NOT flag."""
+    svc, prior = _seed(
+        settings,
+        title="board cleanup memory path override",
+        body="Overrides the runner memory path; names config.py in passing only.",
+    )
+    svc.transition(prior.id, State.READY, note="refined")
+
+    note = find_inflight_overlap(
+        _svc(settings),
+        "NEW-DRAFT",
+        "gitlab forge adapter stub",
+        "## Out of scope / constraints\n\nThis draft does NOT modify config.py.",
+        settings,
+        _now(),
+    )
+    assert note is None
+
+
+def test_inflight_overlap_flags_two_shared_prose_paths(settings):
+    """Corroboration rule: ≥2 distinct shared paths still flag even when
+    they appear only in prose (the strict-scope rule stays permissive at
+    two or more matches)."""
+    svc, prior = _seed(
+        settings,
+        title="rework the login form",
+        body=f"prose mentioning {_TARGET_PATH} and runtime/worker.py",
+    )
+    svc.transition(prior.id, State.READY, note="refined")
+
+    note = find_inflight_overlap(
+        _svc(settings),
+        "NEW-DRAFT",
+        "an entirely unrelated summary line",
+        f"also names {_TARGET_PATH} and runtime/worker.py in prose",
+        settings,
+        _now(),
+    )
+    assert note is not None
+    assert prior.id in note
+
+
+def test_scope_paths_extracts_only_declared_sections():
+    """``_scope_paths`` returns paths under ``## Scope`` / ``## Acceptance``
+    sections and ``file_map`` blocks, and excludes prose-only and
+    Out-of-scope paths."""
+    body = (
+        "## Problem\n\nWe touch runtime/worker.py in passing.\n\n"
+        "## Scope\n\nEdit src/robotsix_mill/config.py here.\n\n"
+        "## Acceptance criteria\n\n- tests/test_x.py passes\n\n"
+        "## Out of scope / constraints\n\nDo NOT touch docs/foo.md.\n"
+    )
+    paths = _scope_paths(body)
+    assert "src/robotsix_mill/config.py" in paths
+    assert "tests/test_x.py" in paths
+    assert "runtime/worker.py" not in paths  # prose / Problem section
+    assert "docs/foo.md" not in paths  # Out-of-scope section
+
+
+def test_scope_paths_includes_fenced_file_map_block():
+    """A fenced ```file_map``` block counts as a declared-modification
+    section; prose paths outside it do not."""
+    body = "## Problem\n\nprose names a.py here\n\n```file_map\nsrc/b.py\n```\n"
+    paths = _scope_paths(body)
+    assert "src/b.py" in paths
+    assert "a.py" not in paths
 
 
 def test_reprocess_flags_but_still_creates_children(settings, monkeypatch):
@@ -727,7 +826,10 @@ def test_describe_recent_signal_except_falls_back_to_title_overlap(
     svc, prior = _seed(
         settings,
         title="trivy sarif upload audit decision",
-        body="prior body with no matching path token here",
+        # The candidate declares the shared path under ``## Scope`` so the
+        # strict-scope single-path branch fires; the path-signal lookup in
+        # ``_describe_recent_signal`` is what we force to raise below.
+        body="## Scope\n\nprior body modifying config/foo.yml here",
     )
     svc.transition(prior.id, State.DONE, note="merged")
 

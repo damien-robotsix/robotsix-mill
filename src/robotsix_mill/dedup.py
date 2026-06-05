@@ -43,6 +43,7 @@ def find_prior_matching_ticket(
     sources: Sequence[SourceKind] | None = None,
     lookback_days: int = 7,
     exclude_ids: Collection[str] = (),
+    require_scope_for_single_path: bool = False,
 ) -> Ticket | None:
     """Look up recent tickets on *board_id* and return the first one
     that matches the given fix signal.
@@ -62,6 +63,15 @@ def find_prior_matching_ticket(
     Candidates in ERRORED state, and CLOSED candidates that were never
     DONE (declined drafts), are EXCLUDED — neither is a fix, so a new
     occurrence deserves a fresh draft.
+
+    When *require_scope_for_single_path* is ``True``, a lone shared path
+    only flags when the candidate *declares* it as modified (it appears
+    in the candidate's ``## Scope`` / ``## Acceptance`` / ``file_map``
+    block, per :func:`_scope_paths`); a path mentioned only in prose (or
+    under an ``## Out of scope`` heading) no longer drives the match.
+    Two or more distinct shared paths always corroborate regardless of
+    the flag. Defaults to ``False`` (the permissive prose-mention rule)
+    so the trace-review and AGENT.md-proposal callers are unaffected.
 
     Returns ``None`` when no match is found.
     """
@@ -102,9 +112,19 @@ def find_prior_matching_ticket(
                     settings.workspaces_dir_for(ticket.board_id or board_id),
                     ticket.id,
                 ).read_description()
-                for path in target_files:
-                    if path and path in body:
+                matched = [p for p in target_files if p and p in body]
+                if len(matched) >= 2:
+                    # ≥2 distinct shared paths is strong corroboration —
+                    # flag regardless of the strict-scope flag.
+                    return ticket
+                if len(matched) == 1:
+                    if not require_scope_for_single_path:
                         return ticket
+                    if matched[0] in _scope_paths(body):
+                        # The candidate declares this path as modified.
+                        return ticket
+                    # else: lone prose-only path — fall through to the
+                    # fingerprint check rather than flagging on prose.
 
             # Fingerprint check (normalized title).
             if fingerprint and fingerprint in normalize(ticket.title):
@@ -142,6 +162,64 @@ def _extract_paths(text: str) -> list[str]:
     return out
 
 
+def _scope_paths(text: str) -> set[str]:
+    """Return the path-like tokens (per :data:`_PATH_TOKEN_RE`, via
+    :func:`_extract_paths`) that appear within a ticket body's
+    *declared-modification* sections only.
+
+    Captured blocks:
+    - Markdown heading sections (``#`` / ``##`` / ``###``, case-insensitive)
+      whose title — after stripping leading ``#`` and surrounding
+      whitespace — *starts with* ``scope`` or ``acceptance`` (covers
+      ``## Scope``, ``## Acceptance``, ``## Acceptance criteria``), up to
+      the next heading or end-of-text.
+    - A ``file_map`` block: a heading whose title starts with ``file map``
+      / ``file_map``, or a fenced ```` ```file_map ```` block.
+
+    Sections whose heading starts with ``out of scope`` are explicitly
+    EXCLUDED, so a path declared *not* modified never counts. Paths in
+    free prose / problem-statement paragraphs are likewise excluded.
+
+    Total/defensive: any parsing failure logs and returns an empty set
+    rather than raising into the caller."""
+    try:
+        captured: list[str] = []
+        capturing = False
+        in_fenced_file_map = False
+        for line in (text or "").splitlines():
+            stripped = line.strip()
+            if stripped.startswith("```"):
+                fence_lang = stripped[3:].strip().casefold()
+                if in_fenced_file_map:
+                    in_fenced_file_map = False
+                elif fence_lang == "file_map":
+                    in_fenced_file_map = True
+                continue
+            if in_fenced_file_map:
+                captured.append(line)
+                continue
+            if stripped.startswith("#"):
+                title = stripped.lstrip("#").strip().casefold()
+                if title.startswith("out of scope"):
+                    capturing = False
+                elif (
+                    title.startswith("scope")
+                    or title.startswith("acceptance")
+                    or title.startswith("file map")
+                    or title.startswith("file_map")
+                ):
+                    capturing = True
+                else:
+                    capturing = False
+                continue
+            if capturing:
+                captured.append(line)
+        return set(_extract_paths("\n".join(captured)))
+    except Exception:  # noqa: BLE001 — best-effort
+        log.exception("dedup: _scope_paths failed")
+        return set()
+
+
 def _describe_recent_signal(
     ticket: Ticket,
     paths: list[str],
@@ -150,16 +228,24 @@ def _describe_recent_signal(
 ) -> str:
     """Best-effort description of which signal matched *ticket*: a shared
     file path (preferred, matching ``find_prior_matching_ticket``'s order)
-    or the title overlap."""
+    or the title overlap.
+
+    Stays consistent with the strict single-path rule: a lone shared path
+    is only reported as a ``file path`` when the candidate *declares* it
+    (it is in :func:`_scope_paths`); ≥2 shared paths always count as a
+    ``file path`` match. Otherwise the advisory reports ``title overlap``
+    so it never claims a path signal that did not drive the match."""
     try:
         if paths:
             body = Workspace(
                 settings.workspaces_dir_for(ticket.board_id or fallback_board_id),
                 ticket.id,
             ).read_description()
-            for path in paths:
-                if path and path in body:
-                    return f"file path `{path}`"
+            matched = [p for p in paths if p and p in body]
+            if len(matched) >= 2:
+                return f"file path `{matched[0]}`"
+            if len(matched) == 1 and matched[0] in _scope_paths(body):
+                return f"file path `{matched[0]}`"
     except Exception:  # noqa: BLE001 — best-effort
         log.exception("dedup: _describe_recent_signal failed for %s", ticket.id)
     return "title overlap"
@@ -225,6 +311,7 @@ def find_inflight_overlap(
             sources=None,
             lookback_days=settings.epic_dedup_lookback_days,
             exclude_ids={ticket_id},
+            require_scope_for_single_path=True,
         )
         if prior is None:
             return None
@@ -345,6 +432,7 @@ def find_child_overlaps(
                 sources=None,
                 lookback_days=settings.epic_dedup_lookback_days,
                 exclude_ids=exclude_ids,
+                require_scope_for_single_path=True,
             )
             if prior is not None:
                 signal = _describe_recent_signal(prior, paths, settings, board_id)
