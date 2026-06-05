@@ -923,3 +923,169 @@ for future mail from the same address.
 The `triage-set` command requires a loadable configuration (for `db_path`),
 but does **not** require the `pydantic-ai` package or an LLM API key — it is
 purely a local decision-recording tool.
+
+## The `triage-rules` command
+
+To discover and manage **deterministic triage rules** — rules that automatically
+classify mail without an LLM call — use `triage-rules`:
+
+```sh
+$ robotsix-auto-mail triage-rules
+```
+
+This command **proposes** new deterministic rules derived from your triage
+history, then **lists** any rules you've already accepted. Proposals are
+recorded in a dedup ledger so you only see genuinely new ones.
+
+### How it works
+
+`triage-rules` scans your recorded triage decisions (from `triage` runs and
+`triage-set` calls) and identifies patterns:
+
+- **Sender rules:** When you've consistently triaged ≥3 messages from the same
+  sender into the same action (e.g. always archiving `newsletter@x.com`), a
+  rule is proposed.
+- **Domain rules:** When ≥2 different senders from the same domain consistently
+  map to the same action (e.g. `alice@news.com` and `bob@news.com` both
+  archived ≥3 times), a domain-level rule is proposed.
+
+Rules are **never proposed** from `user_triage` decisions — the system learns
+only from decisions it is confident about.
+
+Once you accept a rule via `triage-rules-set`, the `triage` command
+automatically applies it to matching inbox records **before** calling the LLM,
+saving cost and time. Matched records are triaged deterministically with reason
+`"matched deterministic rule"` and never reach the model.
+
+### Options
+
+| Option | Default | Purpose |
+|---|---|---|
+| `--output-format` | `text` | Output format: `text` (human-readable) or `json` (machine-readable) |
+
+### Representative text output
+
+```text
+
+Triage Rule Proposals
+------------------------------------------------------------
+
+abc1234567890def  Auto-triage mail from news@a.com as archive
+  confidence: high
+  rule: sender 'news@a.com' -> archive
+
+The user triaged 5 message(s) from `news@a.com` consistently as `archive`.
+Propose a deterministic rule so matching mail is triaged without an LLM call.
+
+Active Triage Rules
+------------------------------------------------------------
+
+  sender 'newsletters@b.com' -> delete
+  domain 'promo.com' -> archive
+```
+
+When no new proposals are found:
+
+```text
+
+Triage Rule Proposals
+------------------------------------------------------------
+No new triage rule proposals.
+
+Active Triage Rules
+------------------------------------------------------------
+
+  sender 'newsletters@b.com' -> delete
+```
+
+### JSON output
+
+With `--output-format json`, the output includes both proposals and active
+rules:
+
+```json
+{
+  "proposals": [
+    {
+      "fingerprint": "abc1234567890def",
+      "rule": {
+        "match_type": "sender",
+        "match_value": "news@a.com",
+        "action": "archive"
+      },
+      "title": "Auto-triage mail from news@a.com as archive",
+      "body": "...",
+      "confidence": "high"
+    }
+  ],
+  "active_rules": [
+    {
+      "match_type": "sender",
+      "match_value": "newsletters@b.com",
+      "action": "delete"
+    }
+  ]
+}
+```
+
+### Behavior
+
+- Exit code is `0` on success (even when proposals are found). Exit code is
+  `1` only on error (e.g. missing configuration or database).
+- Proposals are persisted in the SQLite `watermark` table under the key
+  `triage_rules_ledger`, keyed by a stable fingerprint derived from the rule
+  identity (match type + value + action). Once a proposal has been recorded,
+  it is filtered out of future runs (regardless of state — `pending`, `accepted`,
+  or `rejected` all suppress re-proposal).
+- Active rules are persisted under the key `triage_rules_active` and are
+  consulted by the `triage` command at runtime.
+
+### Requirements
+
+The `triage-rules` command requires a loadable configuration (for `db_path`),
+but does **not** require the `pydantic-ai` package or an LLM API key — rule
+derivation and application are deterministic.
+
+## The `triage-rules-set` command
+
+To accept or reject a proposed triage rule, use `triage-rules-set`:
+
+```sh
+$ robotsix-auto-mail triage-rules-set <fingerprint> <state>
+```
+
+### Arguments
+
+| Argument | Purpose |
+|---|---|
+| `<fingerprint>` | The fingerprint of the proposed rule (from `triage-rules` output) |
+| `<state>` | The new state: `accepted` or `rejected` |
+
+### Examples
+
+```sh
+# Accept a rule proposal so it becomes active
+robotsix-auto-mail triage-rules-set abc1234567890def accepted
+
+# Reject a rule proposal so it is not used
+robotsix-auto-mail triage-rules-set abc1234567890def rejected
+```
+
+### Behavior
+
+- **On `accepted`:** The rule is added to the active set and will be consulted
+  by the `triage` command. Matched inbox records are triaged deterministically
+  without an LLM call.
+- **On `rejected`:** The rule is marked as rejected but is never added to the
+  active set. Matched records will still reach the LLM.
+- Both states suppress re-proposal: once a fingerprint is recorded (in any
+  state), future `triage-rules` runs filter it out.
+- If the `fingerprint` is unknown, exits with code `1` and an error message.
+- If the `state` is invalid (not `accepted` or `rejected`), exits with code
+  `1` and an error message.
+- On success, exits code `0`.
+
+### Requirements
+
+The `triage-rules-set` command requires a loadable configuration (for `db_path`),
+but does **not** require the `pydantic-ai` package or an LLM API key.
