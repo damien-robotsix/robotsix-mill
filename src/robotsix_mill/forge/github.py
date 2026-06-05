@@ -243,7 +243,15 @@ class GitHubForge(Forge):
 
         s = self.settings
         api = s.github_api_url.rstrip("/")
-        token = github_token(s, repo_config=self._repo_config)
+        # Repo creation needs a token that can create repos. GitHub App
+        # installation tokens cannot create repositories under a personal
+        # account, so prefer a dedicated repo-creation PAT when configured;
+        # fall back to the normal (App or token) auth otherwise.
+        from ..config import get_secrets
+
+        token = get_secrets().forge_repo_create_token or github_token(
+            s, repo_config=self._repo_config
+        )
         headers = _build_headers(token)
         payload = {
             "name": name,
@@ -275,6 +283,18 @@ class GitHubForge(Forge):
                     )
                 raise RuntimeError(
                     f"GitHub repo create failed: {r.status_code} {r.text[:300]}"
+                )
+            if (
+                r.status_code == 403
+                and "not accessible by integration" in (r.text or "").lower()
+            ):
+                raise RuntimeError(
+                    "GitHub repo create failed: 403 Resource not accessible by "
+                    "integration. A GitHub App installation token cannot create "
+                    "repositories under a personal account — set "
+                    "`forge_repo_create_token` in secrets to a PAT with "
+                    "repo-creation rights (classic: `repo` scope; fine-grained: "
+                    "Administration:Read and write on the target account)."
                 )
             raise RuntimeError(
                 f"GitHub repo create failed: {r.status_code} {r.text[:300]}"

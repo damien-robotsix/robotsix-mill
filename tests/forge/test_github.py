@@ -1461,3 +1461,50 @@ def test_create_repo_other_non_2xx(tmp_path, monkeypatch):
     forge = _forge(tmp_path, enable_repo_creation=True)
     with pytest.raises(RuntimeError, match="GitHub repo create failed: 500"):
         forge.create_repo(name="my-repo", owner="o", private=True, description="desc")
+
+
+def test_create_repo_prefers_repo_create_token(tmp_path, monkeypatch):
+    """When forge_repo_create_token (a PAT) is set, the create call
+    authenticates with it instead of the normal forge token."""
+    captured = {"auth": None}
+
+    class HeaderCapturingClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            return _make_response(404, [], "")
+
+        def post(self, url, headers=None, json=None, **kwargs):
+            captured["auth"] = (headers or {}).get("Authorization")
+            return _make_response(
+                201, {"id": 1, "name": "b", "clone_url": "x", "html_url": "y"}
+            )
+
+    monkeypatch.setattr(real_httpx, "Client", HeaderCapturingClient)
+
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    # Set the PAT after building the forge (which seeds forge_token).
+    _set_secrets(forge_token="app-tok", forge_repo_create_token="pat-xyz")
+    forge.create_repo(name="b", owner="o", private=False, description="d")
+
+    assert captured["auth"] == "Bearer pat-xyz"
+
+
+def test_create_repo_403_integration_message(tmp_path, monkeypatch):
+    """A 403 'not accessible by integration' (App token, user account) →
+    RuntimeError naming the forge_repo_create_token PAT remedy."""
+    _mock_httpx(
+        monkeypatch,
+        post_response=_make_response(403, {}, "Resource not accessible by integration"),
+    )
+
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    with pytest.raises(RuntimeError, match="forge_repo_create_token"):
+        forge.create_repo(name="b", owner="o", private=False, description="d")

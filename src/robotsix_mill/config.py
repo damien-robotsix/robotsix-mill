@@ -1353,6 +1353,13 @@ class Secrets(BaseModel):
 
     openrouter_api_key: str | None = None
     forge_token: str | None = None
+    # A classic/fine-grained PAT used ONLY for repo creation (POST
+    # /user/repos or /orgs/.../repos). GitHub App installation tokens
+    # cannot create repositories under a personal account ("Resource not
+    # accessible by integration"), so this PAT — with repo-creation
+    # rights — is preferred for that one call while everyday push/PR
+    # keeps using the App token. Falls back to the normal token if unset.
+    forge_repo_create_token: str | None = None
     github_app_id: str | None = None
     github_app_private_key: str | None = None
     github_app_private_key_path: str | None = None
