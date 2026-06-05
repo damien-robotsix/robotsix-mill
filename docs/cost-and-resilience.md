@@ -63,6 +63,21 @@ as `max(0.0, session_total - pre_redraft_cost_usd)`. This means:
 - A second redraft re-snapshots the baseline to the then-current session
   total, tracking the cost hierarchy across multiple attempts.
 
+Worked example — a ticket redrafted twice:
+
+- **Attempt 1** spends $5.00 → session total `$5.00`, baseline
+  `pre_redraft_cost_usd = $0.00`, effective per-attempt cost
+  `max(0.0, 5.00 - 0.00) = $5.00`.
+- **Redraft** → baseline re-snapshotted to `pre_redraft_cost_usd = $5.00`;
+  effective cost restarts at `max(0.0, 5.00 - 5.00) = $0.00`.
+- **Attempt 2** spends $3.00 → session total `$8.00`, baseline
+  `pre_redraft_cost_usd = $5.00`, effective per-attempt cost
+  `max(0.0, 8.00 - 5.00) = $3.00`.
+
+The informational/historical **total** (the raw Langfuse session total)
+is `$8.00`, while the dollar cap only ever sees the `$3.00` effective
+cost for the current attempt.
+
 ## Cost dashboard
 
 The board's **Cost Dashboard** (💰 button in the drawer header) shows
