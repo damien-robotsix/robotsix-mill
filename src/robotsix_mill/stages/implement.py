@@ -1445,10 +1445,11 @@ class ImplementStage(Stage):
         ws = ctx.service.workspace(ticket)
         cache_path = ws.artifacts_dir / "baseline_check.json"
 
-        # Resolve the current base-branch SHA.
-        base_sha = git_ops.remote_branch_sha(repo_dir, settings.forge_target_branch)
-        if base_sha is None:
-            base_sha = git_ops.head_sha(repo_dir)
+        # Resolve the current base-branch SHA. Prefer the remote ref
+        # (origin/<branch>) — the local branch may be stale, and we must test
+        # the SAME commit we report as base_sha (see checkout below).
+        remote_sha = git_ops.remote_branch_sha(repo_dir, settings.forge_target_branch)
+        base_sha = remote_sha or git_ops.head_sha(repo_dir)
 
         # --- cache lookup ---
         if cache_path.exists():
@@ -1477,7 +1478,13 @@ class ImplementStage(Stage):
                 # (operator may have fixed the branch between retries).
 
         # --- execute baseline check ---
-        git_ops.checkout(repo_dir, settings.forge_target_branch)
+        # Check out the EXACT base commit (origin/<branch>), not the local
+        # branch ref — the clone's local main is often stale, which made the
+        # baseline run old code while labelling it with the fresh remote SHA,
+        # producing phantom "pre-existing failures on main" (e.g. a fix that
+        # already landed reported as still-broken) that poison the gate. When
+        # the remote branch is absent, fall back to the branch name.
+        git_ops.checkout(repo_dir, remote_sha or settings.forge_target_branch)
         try:
             passed, diag = run_test_agent(
                 settings=settings,
