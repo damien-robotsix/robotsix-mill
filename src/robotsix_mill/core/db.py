@@ -107,6 +107,12 @@ def init_db(settings: Settings, board_id: str) -> None:
             conn.exec_driver_sql("ALTER TABLE ticket ADD COLUMN unblocks TEXT")
     except Exception:
         pass
+    # labels column: JSON list of free-form label strings on the ticket.
+    try:
+        with engine.begin() as conn:
+            conn.exec_driver_sql("ALTER TABLE ticket ADD COLUMN labels TEXT")
+    except Exception:
+        pass
     # Hash-chain integrity columns for TicketEvent.
     try:
         with engine.begin() as conn:
