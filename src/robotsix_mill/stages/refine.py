@@ -1023,6 +1023,11 @@ class RefineStage(Stage):
                     len(saved_state),
                 )
 
+        from ..repo_settings import resolve_language_instructions
+
+        language_instructions = resolve_language_instructions(
+            s, repo_dir, ctx.repo_config
+        )
         try:
             result = refining.run_refine_agent(
                 settings=s,
@@ -1035,6 +1040,7 @@ class RefineStage(Stage):
                 extra_roots=extra_roots,
                 message_history=resume_history,
                 board_id=memory_board_id,
+                language_instructions=language_instructions,
             )
         except RuntimeError as e:  # e.g. OPENROUTER_API_KEY not set
             # ModelHTTPError subclasses RuntimeError, so a transient model

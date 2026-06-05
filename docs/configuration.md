@@ -129,6 +129,25 @@ in `repos.yaml`. The precedence is: per-repo `.robotsix-mill/config.yaml`
 `test_command` > `repos.yaml` per-repo `test_command` > this global
 `sandbox.test_command`; empty everywhere makes the gate pass.
 
+### Per-language instructions
+
+A repo declares the language(s) it uses in the same
+`.robotsix-mill/config.yaml`:
+
+```yaml
+languages: [python, rust]   # or singular: language: python
+```
+
+When set, the **implement** and **refine** agents receive a
+`## Language conventions` block for each declared language, appended to
+their system prompt. Each snippet is resolved per language with this
+precedence: the repo's own
+`.robotsix-mill/language_instructions/<lang>.md` (house override) if
+present, otherwise the mill's built-in
+`agent_definitions/language_instructions/<lang>.md`. If neither exists
+the language is silently skipped. The language source itself falls back
+to `repos.yaml`'s per-repo `language` when the repo file declares none.
+
 Then run:
 
 ```sh

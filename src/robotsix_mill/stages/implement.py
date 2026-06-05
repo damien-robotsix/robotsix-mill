@@ -685,22 +685,16 @@ class ImplementStage(Stage):
     def _resolve_language_instructions(
         ctx: StageContext, ticket: Ticket, settings
     ) -> str:
-        """Read the per-repo language snippet, or ``""`` when unavailable."""
-        if not (ctx.repo_config and ctx.repo_config.language):
-            return ""
-        lang = ctx.repo_config.language
-        snippet_path = settings.language_instructions_dir / f"{lang}.md"
-        try:
-            return snippet_path.read_text(encoding="utf-8")
-        except OSError:
-            log.info(
-                "%s: language '%s' configured but no snippet at %s — "
-                "skipping language instructions",
-                ticket.id,
-                lang,
-                snippet_path,
-            )
-            return ""
+        """Resolve the concatenated per-language instruction block, or
+        ``""``. The repo's own ``.robotsix-mill/config.yaml`` ``languages``
+        declaration (+ optional ``.robotsix-mill/language_instructions/``
+        overrides) win over the central ``repos.yaml`` ``language``."""
+        from ..repo_settings import resolve_language_instructions
+
+        repo_dir = ctx.service.workspace(ticket).dir / "repo"
+        return resolve_language_instructions(
+            settings, repo_dir if repo_dir.exists() else None, ctx.repo_config
+        )
 
     @staticmethod
     def _select_agent_model(ic: _ImplementContext, settings) -> str | None:

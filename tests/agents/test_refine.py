@@ -61,6 +61,7 @@ def _install_refine_spy(
         extra_roots=None,
         message_history=None,
         board_id="",
+        **kwargs,
     ):
         state["called"] = True
         return _single(spec)
@@ -114,6 +115,7 @@ def test_dep_gated_ticket_is_not_refined(ctx, service, monkeypatch):
         extra_roots=None,
         message_history=None,
         board_id="",
+        **kwargs,
     ):
         nonlocal refine_called
         refine_called = True
@@ -156,6 +158,7 @@ def test_dep_satisfied_ticket_is_refined(ctx, service, monkeypatch):
         extra_roots=None,
         message_history=None,
         board_id="",
+        **kwargs,
     ):
         nonlocal refine_called
         refine_called = True
@@ -182,6 +185,7 @@ def test_no_api_key_blocks(ctx, service, monkeypatch):
         extra_roots=None,
         message_history=None,
         board_id="",
+        **kwargs,
     ):
         raise RuntimeError("OPENROUTER_API_KEY is not set")
 
@@ -208,6 +212,7 @@ def test_title_only_proceeds_to_refine(ctx, service, monkeypatch):
         extra_roots=None,
         message_history=None,
         board_id="",
+        **kwargs,
     ):
         nonlocal refine_called
         refine_called = True
@@ -374,6 +379,7 @@ def test_refine_clones_repo_and_passes_repo_dir(ctx, service, monkeypatch):
         extra_roots=None,
         message_history=None,
         board_id="",
+        **kwargs,
     ):
         seen["repo_dir"] = repo_dir
         return _single("## Problem\nx\n## Scope\n- y\n")
@@ -423,6 +429,7 @@ def test_refine_clone_failure_blocks_with_history_note(ctx, service, monkeypatch
         extra_roots=None,
         message_history=None,
         board_id="",
+        **kwargs,
     ):
         refine_called.append(True)
         return _single("## Problem\nx\n")
@@ -517,6 +524,7 @@ def test_dedup_duplicate_ticket_closes(ctx, service, monkeypatch):
         extra_roots=None,
         message_history=None,
         board_id="",
+        **kwargs,
     ):
         nonlocal refine_called
         refine_called = True
@@ -568,6 +576,7 @@ def test_dedup_already_committed_closes(ctx, service, monkeypatch):
         extra_roots=None,
         message_history=None,
         board_id="",
+        **kwargs,
     ):
         nonlocal refine_called
         refine_called = True
@@ -619,6 +628,7 @@ def test_dedup_novel_draft_proceeds_normally(ctx, service, monkeypatch):
         extra_roots=None,
         message_history=None,
         board_id="",
+        **kwargs,
     ):
         nonlocal refine_called
         refine_called = True
@@ -971,6 +981,7 @@ def test_dedup_failure_degrades_gracefully(ctx, service, monkeypatch):
         extra_roots=None,
         message_history=None,
         board_id="",
+        **kwargs,
     ):
         nonlocal refine_called
         refine_called = True
@@ -1283,6 +1294,7 @@ def test_freshness_gate_enabled_stale_draft_all_missing(
         extra_roots=None,
         message_history=None,
         board_id="",
+        **kwargs,
     ):
         nonlocal refine_called
         refine_called = True
@@ -1327,6 +1339,7 @@ def test_freshness_gate_enabled_fresh_draft(ctx, service, settings, monkeypatch)
         extra_roots=None,
         message_history=None,
         board_id="",
+        **kwargs,
     ):
         nonlocal refine_called
         refine_called = True
@@ -1401,6 +1414,7 @@ def test_freshness_gate_failure_degrades_gracefully(
         extra_roots=None,
         message_history=None,
         board_id="",
+        **kwargs,
     ):
         nonlocal refine_called
         refine_called = True
@@ -1900,6 +1914,7 @@ def test_split_child_skips_re_refinement(ctx, service, monkeypatch):
         extra_roots=None,
         message_history=None,
         board_id="",
+        **kwargs,
     ):
         nonlocal refine_called
         refine_called = True
@@ -1967,6 +1982,7 @@ def test_retrospect_spawned_child_not_skipped(ctx, service, monkeypatch):
         extra_roots=None,
         message_history=None,
         board_id="",
+        **kwargs,
     ):
         nonlocal refine_called
         refine_called = True
@@ -2462,6 +2478,7 @@ def test_epic_context_passed_to_refine_agent(ctx, service, monkeypatch):
         extra_roots=None,
         message_history=None,
         board_id="",
+        **kwargs,
     ):
         seen_epic_context.append(epic_context)
         return _single("## Problem\nspec\n")
@@ -2498,6 +2515,7 @@ def test_epic_context_empty_for_non_epic_parent_in_refine(ctx, service, monkeypa
         extra_roots=None,
         message_history=None,
         board_id="",
+        **kwargs,
     ):
         seen_epic_context.append(epic_context)
         return _single("## Problem\nspec\n")
@@ -2527,6 +2545,7 @@ def test_epic_context_empty_for_no_parent_in_refine(ctx, service, monkeypatch):
         extra_roots=None,
         message_history=None,
         board_id="",
+        **kwargs,
     ):
         seen_epic_context.append(epic_context)
         return _single("## Problem\nspec\n")
@@ -2722,6 +2741,7 @@ def test_triage_skip_skips_full_refine(ctx, service, monkeypatch):
         extra_roots=None,
         message_history=None,
         board_id="",
+        **kwargs,
     ):
         nonlocal refine_called
         refine_called = True
@@ -2790,6 +2810,7 @@ def test_triage_refine_calls_full_refine(ctx, service, monkeypatch):
         extra_roots=None,
         message_history=None,
         board_id="",
+        **kwargs,
     ):
         nonlocal refine_called
         refine_called = True
@@ -2833,6 +2854,7 @@ def test_triage_feature_flag_off_calls_full_refine(
         extra_roots=None,
         message_history=None,
         board_id="",
+        **kwargs,
     ):
         nonlocal refine_called
         refine_called = True
@@ -2885,6 +2907,7 @@ def test_triage_sendback_always_refines(ctx, service, monkeypatch):
         extra_roots=None,
         message_history=None,
         board_id="",
+        **kwargs,
     ):
         nonlocal refine_called
         refine_called = True
@@ -2927,6 +2950,7 @@ def test_triage_failure_falls_through_to_refine(ctx, service, monkeypatch):
         extra_roots=None,
         message_history=None,
         board_id="",
+        **kwargs,
     ):
         nonlocal refine_called
         refine_called = True
