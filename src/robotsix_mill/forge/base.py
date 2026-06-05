@@ -135,15 +135,6 @@ class Forge(ABC):
         conflict, network error) — catch and return a failure dict."""
 
     @abstractmethod
-    def list_pr_comments(self, *, source_branch: str) -> list[dict]:
-        """Return general PR conversation comments for *source_branch*.
-
-        Returns ``[]`` when no PR exists for the branch.  Each dict has:
-        ``id``, ``author`` (login string), ``created_at`` (ISO 8601),
-        ``body``.
-        """
-
-    @abstractmethod
     def list_pr_reviews(self, *, source_branch: str) -> list[dict]:
         """Return formal PR reviews (approve/request-changes/comment).
 
