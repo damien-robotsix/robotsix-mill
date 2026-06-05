@@ -1542,3 +1542,103 @@ class TestPeriodicPresenceModel:
         )
         rr = load_repos_config(str(f))
         assert "r" in rr.repos and rr.repos["r"].repo_id == "r"
+
+
+# ---------------------------------------------------------------------------
+# 13. load_yaml_config → load_yaml_cascade delegation contract
+# ---------------------------------------------------------------------------
+
+
+class TestLoadYamlConfigDelegation:
+    """Pin the delegation contract: ``load_yaml_config`` builds the
+    ordered ``(Path, bool)`` layer list and forwards it to the shared
+    ``load_yaml_cascade``, returning its result unchanged.
+
+    The cascade name is patched on the *consumer* module
+    (``robotsix_mill.config_loader``) — because ``config_loader`` did
+    ``from robotsix_yaml_config import load_yaml_cascade``, patching the
+    source module ``robotsix_yaml_config.load_yaml_cascade`` would not
+    intercept the already-bound name.
+
+    Expected layer lists are built from the live
+    ``config_loader._DEFAULTS_FILE`` / ``_LOCAL_FILE`` module values
+    (the autouse ``_no_dotenv`` fixture monkeypatches ``_LOCAL_FILE``)
+    rather than hard-coded literals, so the assertions stay robust to
+    fixture isolation. ``_DEFAULTS_FILE`` is left at the committed
+    ``config/mill.defaults.yaml`` (which exists), so the missing-defaults
+    pre-check never short-circuits the delegation path."""
+
+    def test_default_layers(self):
+        from unittest import mock
+        import robotsix_mill.config_loader as cl
+
+        sentinel = {"sentinel": "cascade-result"}
+        with mock.patch.object(
+            cl, "load_yaml_cascade", return_value=sentinel
+        ) as mock_cascade:
+            result = cl.load_yaml_config()
+
+        # Result is passed through unchanged.
+        assert result is sentinel
+        mock_cascade.assert_called_once_with(
+            [(cl._DEFAULTS_FILE, True), (cl._LOCAL_FILE, False)]
+        )
+
+    def test_skip_local_drops_local_layer(self):
+        from unittest import mock
+        import robotsix_mill.config_loader as cl
+
+        sentinel = {"sentinel": "cascade-result"}
+        with mock.patch.object(
+            cl, "load_yaml_cascade", return_value=sentinel
+        ) as mock_cascade:
+            result = cl.load_yaml_config(skip_local=True)
+
+        assert result is sentinel
+        mock_cascade.assert_called_once_with([(cl._DEFAULTS_FILE, True)])
+
+    def test_config_file_appends_production_layer(self):
+        from pathlib import Path
+        from unittest import mock
+        import robotsix_mill.config_loader as cl
+
+        sentinel = {"sentinel": "cascade-result"}
+        with mock.patch.object(
+            cl, "load_yaml_cascade", return_value=sentinel
+        ) as mock_cascade:
+            result = cl.load_yaml_config(config_file="some/prod.yaml")
+
+        assert result is sentinel
+        mock_cascade.assert_called_once_with(
+            [
+                (cl._DEFAULTS_FILE, True),
+                (cl._LOCAL_FILE, False),
+                (Path("some/prod.yaml"), True),
+            ]
+        )
+
+
+class TestConfigErrorBackwardCompat:
+    """``ConfigError`` subclasses the shared ``YamlConfigError`` base, so
+    existing ``except ConfigError`` handlers (in ``cli.py``, ``config.py``,
+    and ``stages/*.py``) keep catching loader failures after the
+    delegation refactor — no production-code edits at the catch sites."""
+
+    def test_config_error_subclasses_shared_base(self):
+        from robotsix_yaml_config import YamlConfigError
+        from robotsix_mill.config_loader import ConfigError
+
+        assert issubclass(ConfigError, YamlConfigError)
+
+    def test_except_config_error_catches_loader_error(self, monkeypatch):
+        from robotsix_mill.config_loader import ConfigError, load_yaml_config
+        import robotsix_mill.config_loader as cl
+
+        # Force the missing-defaults path so the loader raises.
+        monkeypatch.setattr(cl, "_DEFAULTS_FILE", cl.Path("/nonexistent/defaults.yaml"))
+        caught = False
+        try:
+            load_yaml_config()
+        except ConfigError:
+            caught = True
+        assert caught
