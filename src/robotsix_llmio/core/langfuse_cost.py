@@ -14,6 +14,7 @@ the consumer always constructs it with explicit keys.
 from __future__ import annotations
 
 import base64
+from collections.abc import Iterator
 from datetime import datetime
 from typing import Any
 
@@ -52,6 +53,44 @@ class LangfuseCostLogSource:
         ).decode()
         return f"Basic {token}"
 
+    def _iter_pages(
+        self,
+        url: str,
+        base_params: dict[str, Any],
+        headers: dict[str, str],
+        error_label: str,
+    ) -> Iterator[list[dict[str, Any]]]:
+        """Paginate ``url`` (1-based ``page``), yielding each page's ``data``.
+
+        Owns the ``httpx.Client``, the page loop, the non-2xx ``RuntimeError``
+        (labelled with *error_label*), the empty-``data`` break, and the
+        ``meta.totalPages`` termination.
+        """
+        with httpx.Client(timeout=_TIMEOUT) as client:
+            page = 1
+            while True:
+                resp = client.get(
+                    url,
+                    params={**base_params, "page": page},
+                    headers=headers,
+                )
+                if not (200 <= resp.status_code < 300):
+                    raise RuntimeError(
+                        f"Langfuse {error_label} failed: "
+                        f"HTTP {resp.status_code}: {resp.text[:200]}"
+                    )
+                body = resp.json()
+                data = body.get("data") or []
+                if not data:
+                    break
+                yield data
+                meta = body.get("meta")
+                if isinstance(meta, dict):
+                    total_pages = meta.get("totalPages")
+                    if isinstance(total_pages, int) and page >= total_pages:
+                        break
+                page += 1
+
     def fetch_logged_cost(self, window: CostWindow) -> LoggedCost:
         """Fetch and aggregate logged trace cost over *window*.
 
@@ -70,32 +109,8 @@ class LangfuseCostLogSource:
         }
 
         all_traces: list[dict[str, Any]] = []
-        with httpx.Client(timeout=_TIMEOUT) as client:
-            page = 1
-            while True:
-                resp = client.get(
-                    url,
-                    params={**base_params, "page": page},
-                    headers=headers,
-                )
-                if not (200 <= resp.status_code < 300):
-                    snippet = resp.text[:200]
-                    raise RuntimeError(
-                        f"Langfuse traces request failed: "
-                        f"HTTP {resp.status_code}: {snippet}"
-                    )
-                body = resp.json()
-                data = body.get("data") or []
-                if not data:
-                    break
-                all_traces.extend(data)
-
-                meta = body.get("meta")
-                if isinstance(meta, dict):
-                    total_pages = meta.get("totalPages")
-                    if isinstance(total_pages, int) and page >= total_pages:
-                        break
-                page += 1
+        for data in self._iter_pages(url, base_params, headers, "traces request"):
+            all_traces.extend(data)
 
         records = [self._to_record(trace) for trace in all_traces]
         total_cost = sum(float(t.get("totalCost") or 0) for t in all_traces)
@@ -129,33 +144,10 @@ class LangfuseCostLogSource:
         }
 
         matched: list[dict[str, Any]] = []
-        with httpx.Client(timeout=_TIMEOUT) as client:
-            page = 1
-            while True:
-                resp = client.get(
-                    url,
-                    params={**base_params, "page": page},
-                    headers=headers,
-                )
-                if not (200 <= resp.status_code < 300):
-                    raise RuntimeError(
-                        f"Langfuse observations request failed: "
-                        f"HTTP {resp.status_code}: {resp.text[:200]}"
-                    )
-                body = resp.json()
-                data = body.get("data") or []
-                if not data:
-                    break
-                for obs in data:
-                    if _observation_provider(obs) == provider:
-                        matched.append(obs)
-
-                meta = body.get("meta")
-                if isinstance(meta, dict):
-                    total_pages = meta.get("totalPages")
-                    if isinstance(total_pages, int) and page >= total_pages:
-                        break
-                page += 1
+        for data in self._iter_pages(url, base_params, headers, "observations request"):
+            for obs in data:
+                if _observation_provider(obs) == provider:
+                    matched.append(obs)
 
         records = [self._observation_to_record(o) for o in matched]
         total_cost = sum(_observation_cost(o) for o in matched)
