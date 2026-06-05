@@ -54,6 +54,54 @@ _PER_RUN_CACHE_TTL_SECONDS = 30
 _cache: dict[str, tuple[float, tuple[int, str]]] = {}
 _cache_max_total_bytes = 1_000_000
 
+# Per-process web_fetch budget, reset once per ``ask_web_knowledge``
+# consult (see web_knowledge.run_web_knowledge). The ``*_request_limit``
+# knobs count model requests, not tool calls, so they can't bound the
+# fetch fan-out; these counters do. Same single-threaded-use assumption
+# as ``_cache`` — the tool runs inside the agent's synchronous loop.
+_fetch_calls: int = 0
+_fetch_bytes: int = 0
+
+
+def reset_web_fetch_budget() -> None:
+    """Zero the per-consult web_fetch budget counters. Called at the
+    start of each web-knowledge consult so the budget scopes to one
+    ``ask_web_knowledge`` call across every ``web_research`` sub-agent
+    it spawns."""
+    global _fetch_calls, _fetch_bytes
+    _fetch_calls = 0
+    _fetch_bytes = 0
+
+
+def web_fetch_budget() -> tuple[int, int]:
+    """Return the current ``(calls, bytes)`` consumed against the
+    budget. Exposed for tests."""
+    return _fetch_calls, _fetch_bytes
+
+
+def _budget_sentinel(settings: Settings) -> str | None:
+    """Return the budget-exhausted sentinel string when the per-consult
+    fetch budget is spent, else ``None``. Checked before a real sandbox
+    fetch (cache hits / raw-mode never reach here). A
+    ``web_fetch_max_total_bytes`` of 0 disables the byte ceiling."""
+    max_calls = settings.web_fetch_max_calls
+    max_total_bytes = settings.web_fetch_max_total_bytes
+    if _fetch_calls >= max_calls or (
+        max_total_bytes > 0 and _fetch_bytes >= max_total_bytes
+    ):
+        log.info(
+            "web_fetch: budget exhausted (%d calls / %d bytes)",
+            _fetch_calls,
+            _fetch_bytes,
+        )
+        return (
+            "web_fetch budget exhausted for this consult "
+            f"(cap: {max_calls} fetches / {max_total_bytes:,} bytes). "
+            "Answer from already-fetched content; do not request more "
+            "pages."
+        )
+    return None
+
 
 def _canonical_url(url: str) -> str:
     """Return the cache-keying form of *url*: scheme + netloc +
@@ -162,7 +210,7 @@ def _apply_text_cap(body: str, max_bytes: int) -> str:
     )
 
 
-def make_web_fetch(settings: Settings):
+def make_web_fetch(settings: Settings):  # noqa: C901 — adds a per-consult fetch budget gate to the existing cache/extract/cap pipeline
     def web_fetch(url: str) -> str:
         """Fetch an http(s) URL and return its text content (size
         capped). Use for official docs, source files, package
@@ -202,6 +250,14 @@ def make_web_fetch(settings: Settings):
                     )
                     return body if rc == 0 else f"fetch failed: {body}"
 
+        # Budget gate — real sandbox fetches only. Cache hits (returned
+        # above) and raw_mode (operator escape hatch, below) do NOT
+        # count. ``*_request_limit`` bounds model requests, not fetches,
+        # so this is the only thing that caps the fetch fan-out across a
+        # consult's web_research sub-agents.
+        if not raw_mode and (sentinel := _budget_sentinel(settings)) is not None:
+            return sentinel
+
         try:
             rc, body = sandbox.fetch(url, settings=settings)
         except sandbox.SandboxError as e:
@@ -224,6 +280,12 @@ def make_web_fetch(settings: Settings):
                 )
         body = _apply_text_cap(body, settings.web_fetch_max_text_bytes)
         _cache[canonical] = (now, (rc, body))
+        # Charge the budget for this real (cache-miss, non-raw) fetch —
+        # at the same point the result enters the cache, so the byte
+        # count reflects what the agent's context actually receives.
+        global _fetch_calls, _fetch_bytes
+        _fetch_calls += 1
+        _fetch_bytes += len(body.encode("utf-8", errors="ignore"))
         return body
 
     return web_fetch

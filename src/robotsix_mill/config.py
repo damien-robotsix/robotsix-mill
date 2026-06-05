@@ -470,6 +470,21 @@ class Settings(BaseSettings):
     # False — every agent we ship is a prose consumer.
     # Configured via ``web.fetch_raw`` in the YAML config.
     web_fetch_raw: bool = False
+    # Bounded web-fetch budget, reset once per ``ask_web_knowledge``
+    # consult and shared across every ``web_research`` sub-agent it
+    # spawns. The ``*_request_limit`` knobs count MODEL requests, not
+    # tool calls, so they can't bound fetch fan-out — a single consult
+    # can issue dozens of ``web_fetch`` calls (7 searches × up-to-8
+    # requests × multiple fetches → ~1.9M input tokens in one observed
+    # refine specimen). These two caps bound that explosion directly.
+    # Cache hits and ``web_fetch_raw`` returns do NOT count.
+    # Max real (cache-miss) fetches per consult.
+    # Configured via ``web.fetch_max_calls`` in the YAML config.
+    web_fetch_max_calls: int = Field(default=15, ge=1)
+    # Cumulative ceiling on returned (post-extraction, post-cap) text
+    # bytes per consult; ``0`` disables the byte ceiling.
+    # Configured via ``web.fetch_max_total_bytes`` in the YAML config.
+    web_fetch_max_total_bytes: int = Field(default=2_000_000, ge=0)
     # Pre-write Python syntax check on `write_file` / `edit_file`. When
     # True (default) a SyntaxError aborts the edit and the agent gets
     # an actionable error string instead of writing broken code that
