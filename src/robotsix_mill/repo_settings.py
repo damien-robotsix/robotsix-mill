@@ -131,13 +131,13 @@ def _load_language_snippet(settings, repo_dir: Path | None, lang: str) -> str:
         return ""
 
 
-def resolve_language_instructions(settings, repo_dir, repo_config) -> str:
+def resolve_language_instructions(settings, repo_dir) -> str:
     """Resolve the concatenated language-instruction block for a repo.
 
-    Language source precedence: the repo's own
-    ``.robotsix-mill/config.yaml`` ``languages``/``language`` (a managed
-    repo owns this) wins; otherwise fall back to ``repo_config.language``
-    from the operator's central ``repos.yaml``.
+    The language(s) come solely from the repo's own
+    ``.robotsix-mill/config.yaml`` (``languages``/``language``) — a managed
+    repo owns its language declaration (the old ``repos.yaml`` ``language``
+    fallback was removed).
 
     Per language, the snippet source is: the repo's
     ``.robotsix-mill/language_instructions/<lang>.md`` (house override) if
@@ -146,10 +146,6 @@ def resolve_language_instructions(settings, repo_dir, repo_config) -> str:
     multiple languages are concatenated. Returns ``""`` when no language is
     declared or no snippets resolve."""
     langs = load_repo_languages(repo_dir)
-    if not langs and repo_config is not None:
-        single = getattr(repo_config, "language", None)
-        if single:
-            langs = [single]
     blocks = [
         text.strip()
         for lang in langs

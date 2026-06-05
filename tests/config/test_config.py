@@ -971,34 +971,15 @@ class TestRepoConfig:
         assert rc.ci_monitor_enabled is False
         assert rc.ci_monitor_interval_seconds == 3600
 
-    # -- language field --
+    # -- test_command + language moved OUT of RepoConfig into the repo's own
+    # .robotsix-mill/config.yaml; RepoConfig no longer carries them.
 
-    def test_language_defaults_to_none(self):
-        """``language`` defaults to None when not provided."""
+    def test_repoconfig_rejects_removed_per_repo_keys(self):
+        """``test_command`` / ``language`` are no longer RepoConfig fields."""
         from robotsix_mill.config import RepoConfig
 
-        rc = RepoConfig(
-            repo_id="r",
-            board_id="b",
-            langfuse_project_name="p",
-            langfuse_public_key="pk",
-            langfuse_secret_key="sk",
-        )
-        assert rc.language is None
-
-    def test_language_can_be_set(self):
-        """``language`` can be explicitly set to a string."""
-        from robotsix_mill.config import RepoConfig
-
-        rc = RepoConfig(
-            repo_id="r",
-            board_id="b",
-            langfuse_project_name="p",
-            langfuse_public_key="pk",
-            langfuse_secret_key="sk",
-            language="python",
-        )
-        assert rc.language == "python"
+        assert "test_command" not in RepoConfig.model_fields
+        assert "language" not in RepoConfig.model_fields
 
 
 class TestReposRegistry:
@@ -1217,8 +1198,9 @@ class TestLoadReposConfig:
         # After reset, fresh load from default location (missing) → empty
         assert rr2.repos == {}
 
-    def test_language_loaded_from_yaml(self, tmp_path):
-        """``language`` field is loaded from top-level YAML key."""
+    def test_language_in_repos_yaml_is_ignored(self, tmp_path):
+        """A stray ``language`` key in repos.yaml is silently ignored —
+        language now lives in the repo's own .robotsix-mill/config.yaml."""
         from robotsix_mill.config import load_repos_config
 
         repos_file = tmp_path / "repos.yaml"
@@ -1226,31 +1208,14 @@ class TestLoadReposConfig:
             "repos:\n"
             "  r:\n"
             "    board_id: b\n"
-            "    language: python\n"
+            "    language: python\n"  # stray legacy key — ignored
             "    langfuse:\n"
             "      project_name: p\n"
             "      public_key: pk\n"
             "      secret_key: sk\n"
         )
         rr = load_repos_config(str(repos_file))
-        assert rr.repos["r"].language == "python"
-
-    def test_language_defaults_to_none_when_absent(self, tmp_path):
-        """``language`` defaults to None when not in YAML."""
-        from robotsix_mill.config import load_repos_config
-
-        repos_file = tmp_path / "repos.yaml"
-        repos_file.write_text(
-            "repos:\n"
-            "  r:\n"
-            "    board_id: b\n"
-            "    langfuse:\n"
-            "      project_name: p\n"
-            "      public_key: pk\n"
-            "      secret_key: sk\n"
-        )
-        rr = load_repos_config(str(repos_file))
-        assert rr.repos["r"].language is None
+        assert not hasattr(rr.repos["r"], "language")
 
 
 # ---------------------------------------------------------------------------

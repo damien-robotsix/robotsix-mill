@@ -115,17 +115,17 @@ def test_resolve_languages_from_repo_file_multi(tmp_path):
     repo.mkdir()
     _write_config(repo, "languages: [python, rust]\n")
     s = _settings_with_builtin(tmp_path)
-    out = resolve_language_instructions(s, repo, None)
+    out = resolve_language_instructions(s, repo)
     assert "PY BUILTIN" in out and "RUST BUILTIN" in out
 
 
-def test_resolve_falls_back_to_repo_config_language(tmp_path):
+def test_resolve_no_repos_yaml_fallback(tmp_path):
+    # A repo with no .robotsix-mill/config.yaml languages declares nothing —
+    # there is NO repos.yaml `language` fallback anymore.
     repo = tmp_path / "repo"
-    repo.mkdir()  # no .robotsix-mill/config.yaml languages
+    repo.mkdir()
     s = _settings_with_builtin(tmp_path)
-    rc = SimpleNamespace(language="rust")
-    out = resolve_language_instructions(s, repo, rc)
-    assert out.strip() == "RUST BUILTIN"
+    assert resolve_language_instructions(s, repo) == ""
 
 
 def test_resolve_repo_override_wins_over_builtin(tmp_path):
@@ -136,7 +136,7 @@ def test_resolve_repo_override_wins_over_builtin(tmp_path):
     override_dir.mkdir(parents=True)
     (override_dir / "python.md").write_text("REPO OVERRIDE", encoding="utf-8")
     s = _settings_with_builtin(tmp_path)
-    out = resolve_language_instructions(s, repo, None)
+    out = resolve_language_instructions(s, repo)
     assert out.strip() == "REPO OVERRIDE"
     assert "PY BUILTIN" not in out
 
@@ -145,4 +145,4 @@ def test_resolve_none_when_no_language(tmp_path):
     repo = tmp_path / "repo"
     repo.mkdir()
     s = _settings_with_builtin(tmp_path)
-    assert resolve_language_instructions(s, repo, None) == ""
+    assert resolve_language_instructions(s, repo) == ""
