@@ -38,6 +38,10 @@ Optionally run every hook across the whole tree once:
 pre-commit run --all-files
 ```
 
+`.secrets.baseline` records known/audited dummy values (placeholder API keys in
+`.env.example` and literal test fixtures) so the `detect-secrets` hook doesn't
+block on them; regenerate it via `detect-secrets scan` when needed.
+
 Hooks pinned in `.pre-commit-config.yaml`:
 
 | hook id              | description                                  |
@@ -51,6 +55,7 @@ Hooks pinned in `.pre-commit-config.yaml`:
 | ruff                 | linter (auto-fix on commit)                  |
 | ruff-format          | formatter (auto-applied on commit)           |
 | mypy                 | type-checks `src/`                           |
+| detect-secrets       | scans staged changes for plaintext secrets, audited against `.secrets.baseline` |
 
 ## 3. Running tests
 
@@ -104,7 +109,9 @@ it reports formatting issues without modifying files.
 - Branch naming: short, kebab-case, topic-prefixed — e.g. `feat/…`, `fix/…`,
   `docs/…`, `chore/…`. This is a convention, not a CI gate.
 - CI **must** pass — the full test matrix (3.11, 3.12, 3.13), ruff, mypy,
-  bandit, and pip-audit. The `security` job runs on Python 3.13 only.
+  bandit, and pip-audit. The `security` job runs on Python 3.13 only. CI also
+  runs a TruffleHog secret scan on pull requests to catch leaked credentials in
+  the PR diff.
 - Pre-commit hooks must pass locally before pushing.
 - New behaviour should ship with tests; bug fixes should ship with a regression
   test. Tests that depend on a live API must be decorated `@pytest.mark.live`
