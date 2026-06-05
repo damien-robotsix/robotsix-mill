@@ -129,13 +129,16 @@ class CIFixStage(Stage):
         conclusion = status.get("conclusion")
 
         if conclusion == "success":
-            # CI turned green while we were waiting.  This is the only
-            # authoritative "CI is actually fixed" signal — reset the hard
-            # cycle ceiling here (and only here).
-            cycle_counter_path = (
-                ctx.service.workspace(ticket).artifacts_dir / _CI_FIX_CYCLE_COUNTER
-            )
-            _write_counter(cycle_counter_path, 0)
+            # CI turned green while we were waiting — re-poll; merge will
+            # promote to HUMAN_MR_APPROVAL.
+            #
+            # Do NOT reset the hard cycle ceiling here. A flickering CI (a
+            # repo with several workflows / re-runs) returns a momentary
+            # "success" between failing cycles; resetting on that transient
+            # green was exactly what let a runaway ci_fix loop survive ~200
+            # cycles (the counter never reached the ceiling). The counter is
+            # reset only on GENUINE forward progress — when merge advances the
+            # ticket out of the CI gate to HUMAN_MR_APPROVAL (merge.py).
             return Outcome(State.IMPLEMENT_COMPLETE)
 
         if conclusion in ("pending", None):

@@ -106,8 +106,15 @@ def test_implement_complete_ci_green_mergeable_promotes_to_human_mr_approval(
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
     t = _implement_complete(ctx)
+    # Pre-seed a non-zero ci_fix cycle counter (as a prior ci_fix loop would).
+    cycle_path = ctx.service.workspace(t).artifacts_dir / "ci_fix_cycles.txt"
+    cycle_path.parent.mkdir(parents=True, exist_ok=True)
+    cycle_path.write_text("2", encoding="utf-8")
+
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.HUMAN_MR_APPROVAL
+    # Genuine forward progress (gates passed) resets the ci_fix cycle ceiling.
+    assert cycle_path.read_text().strip() == "0"
 
 
 def test_implement_complete_ci_failing_transitions_to_fixing_ci(tmp_path, monkeypatch):
