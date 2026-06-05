@@ -328,6 +328,8 @@ Every setting below shows:
 | `web.fetch_image` | `MILL_FETCH_IMAGE` | `curlimages/curl:8.17.0` | Docker image for isolated `web_fetch` container |
 | `web.fetch_max_bytes` | `MILL_WEB_FETCH_MAX_BYTES` | `2000000` | Max bytes fetched per URL |
 | `web.fetch_timeout` | `MILL_WEB_FETCH_TIMEOUT` | `30` | Timeout (seconds) per web fetch |
+| `web.fetch_max_calls` | — | `15` | (YAML-only) Max real (cache-miss) fetches per web-knowledge consult; cache hits and `web.fetch_raw` returns do NOT count |
+| `web.fetch_max_total_bytes` | — | `2000000` | (YAML-only) Cumulative ceiling on returned (post-extraction, post-cap) text bytes per consult; `0` disables the byte ceiling |
 
 ### 11. Pipeline tail (merge stage)
 
