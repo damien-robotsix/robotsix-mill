@@ -39,6 +39,33 @@ from robotsix_llmio.openrouter.transient import (
 )
 
 
+def _is_claude_sdk_degenerate_result(exc: BaseException) -> bool:
+    """Recognise the degenerate ``is_error=True`` + ``subtype="success"`` result.
+
+    When the ``claude`` CLI emits a ``result`` frame that is self-contradictory
+    (``is_error=True`` but an empty ``errors`` list and ``subtype="success"``),
+    the claude_agent_sdk computes its message as ``"; ".join(errors) or
+    str(subtype)`` → ``"success"`` and **replaces** the underlying ``ProcessError``
+    with a bare ``Exception("Claude Code returned an error result: success")``.
+    That erases the ``ProcessError`` type, so ``_is_claude_sdk_transient`` (which
+    matches by exception TYPE NAME) cannot see it. A string match on the message
+    is the only mechanism left — mirroring the library's string-based
+    ``is_claude_sdk_turn_limit`` approach. We walk the cause/context chain
+    (bounded) and match narrowly on the ``...: success`` contradiction only, so a
+    genuine ``error_during_execution`` / ``error_max_turns`` result still surfaces
+    as non-transient."""
+    seen: set[int] = set()
+    cur: BaseException | None = exc
+    for _ in range(10):
+        if cur is None or id(cur) in seen:
+            break
+        seen.add(id(cur))
+        if "returned an error result: success" in str(cur).lower():
+            return True
+        cur = cur.__cause__ or cur.__context__
+    return False
+
+
 def is_transient(exc: BaseException) -> bool:
     """Transient if EITHER backend's classifier says so.
 
@@ -49,7 +76,11 @@ def is_transient(exc: BaseException) -> bool:
     practice, so OR-ing them keeps local retries correct for whichever backend
     actually ran — previously only OpenRouter errors were retried, so a Claude
     CLI hiccup or query timeout skipped local retry entirely."""
-    return _is_openrouter_transient(exc) or _is_claude_sdk_transient(exc)
+    return (
+        _is_openrouter_transient(exc)
+        or _is_claude_sdk_transient(exc)
+        or _is_claude_sdk_degenerate_result(exc)
+    )
 
 
 # NOTE: is_deepseek_reasoning_roundtrip_error was removed from robotsix-llmio
