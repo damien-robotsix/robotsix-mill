@@ -338,6 +338,113 @@ def test_delete_missing_ticket_returns_false(service):
     assert service.delete("does-not-exist") is False
 
 
+# --- redraft: clean-slate reset ----------------------------------------
+
+
+def test_redraft_clean_slate_reset(service, settings):
+    """redraft folds description + comments + reason into a fresh
+    description.md, clears comments/history/branch, and prunes the
+    local clone — leaving a single genesis DRAFT event."""
+    t = service.create("redraft me", "original description text")
+    service.transition(t.id, State.READY)  # adds a second history event
+    service.add_comment(t.id, "first comment", author="alice")
+    service.add_comment(t.id, "second comment", author="bob")
+    service.set_branch(t.id, "feature/redraft-me")
+
+    # Simulate accumulated cost from the prior attempt.
+    from robotsix_mill.core import db as _db
+    from robotsix_mill.core.models import Ticket as _Ticket
+
+    with _db.session(service.settings, service.board_id) as s:
+        row = s.get(_Ticket, t.id)
+        row.cost_usd = 4.2
+        s.add(row)
+        s.commit()
+
+    # Simulate a per-ticket repo clone on disk.
+    ws = service.workspace(service.get(t.id))
+    ws.repo_dir.mkdir(parents=True, exist_ok=True)
+    (ws.repo_dir / "marker").write_text("clone", encoding="utf-8")
+    assert ws.repo_dir.exists()
+
+    comment, ticket = service.redraft(t.id, body="because X")
+
+    assert comment is None
+    assert service.get(t.id).state is State.DRAFT
+    assert service.list_comments(t.id) == []
+
+    hist = service.history(t.id)
+    assert len(hist) == 1
+    assert hist[0].state is State.DRAFT
+    assert hist[0].note == "redrafted: because X"
+    assert hist[0].prev_hash is None
+
+    assert service.get(t.id).branch is None
+    # Clean slate resets the accumulated cost ledger.
+    assert service.get(t.id).cost_usd == 0.0
+
+    # Local clone pruned; workspace dir + description.md remain.
+    assert not ws.repo_dir.exists()
+    assert ws.dir.exists()
+    assert ws.description_path.exists()
+
+    body = service.workspace(service.get(t.id)).read_description()
+    assert "original description text" in body
+    assert "first comment" in body
+    assert "second comment" in body
+    assert "because X" in body
+    assert "## Folded-in on redraft" in body
+
+
+def test_redraft_no_comments_empty_body(service):
+    """redraft with no comments and an empty body still resets history,
+    branch, and clone — but adds no spurious folded-in section."""
+    t = service.create("plain redraft", "just the description")
+    service.transition(t.id, State.READY)
+    service.set_branch(t.id, "feature/plain")
+    ws = service.workspace(service.get(t.id))
+    ws.repo_dir.mkdir(parents=True, exist_ok=True)
+
+    comment, ticket = service.redraft(t.id)
+
+    assert comment is None
+    assert service.get(t.id).state is State.DRAFT
+    assert service.get(t.id).branch is None
+    assert not ws.repo_dir.exists()
+
+    hist = service.history(t.id)
+    assert len(hist) == 1
+    assert hist[0].state is State.DRAFT
+    assert hist[0].note == "redrafted"
+    assert hist[0].prev_hash is None
+
+    body = service.workspace(service.get(t.id)).read_description()
+    assert body == "just the description"
+    assert "## Folded-in on redraft" not in body
+
+
+def test_redraft_missing_ticket_raises_keyerror(service):
+    with pytest.raises(KeyError):
+        service.redraft("does-not-exist")
+
+
+def test_redraft_non_redraftable_state_raises(service):
+    """A DRAFT ticket (in _NON_REDRAFTABLE) cannot be redrafted."""
+    t = service.create("already draft")
+    assert t.state is State.DRAFT
+    with pytest.raises(TransitionError):
+        service.redraft(t.id)
+
+
+def test_redraft_returns_none_comment(service):
+    """The returned tuple's first element is always None."""
+    t = service.create("redraft return", "desc")
+    service.transition(t.id, State.READY)
+    comment, ticket = service.redraft(t.id, body="reason")
+    assert comment is None
+    assert ticket.state is State.DRAFT
+
+
 # --- depends_on --------------------------------------------------------
 
 
