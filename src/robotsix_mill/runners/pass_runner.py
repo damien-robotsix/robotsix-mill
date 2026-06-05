@@ -11,9 +11,11 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from pathlib import Path
+from datetime import datetime, timezone
+from pathlib import Path, PurePath
 from typing import Any, Callable
 
+import yaml
 from pydantic import BaseModel, Field
 
 from ..config import Settings
@@ -24,6 +26,7 @@ from ..core.models import (
 from ..core.service import TicketService
 from ..core.states import State
 from ..core.workspace import Workspace
+from ..dedup import _extract_paths, annotate_child_body, find_inflight_overlap
 from ..draft_target import looks_like_mill_internal, resolve_mill_service
 
 log = logging.getLogger("robotsix_mill.pass_runner")
@@ -385,6 +388,69 @@ def _test_file_exists_for_gap(repo_dir: Path, title: str) -> bool:
     return False
 
 
+def _module_curator_premise_check(
+    repo_dir: Path, title: str, body: str
+) -> tuple[str, str] | None:
+    """Verify a module_curator draft's factual premise against the
+    cloned tree. Returns None when the premise holds (file the draft as-is),
+    or a (disposition, note) tuple where disposition is 'suppress' or
+    'advisory'. Conservative: returns None on any parse ambiguity so
+    legitimate drafts are never blocked.
+
+    ``(repo_dir / rel_path).exists()`` IS the HEAD check: ``repo_dir`` is a
+    fresh checkout of ``settings.forge_target_branch``.
+    """
+    paths = _extract_paths(f"{title}\n{body}")
+    title_lower = title.lower()
+    body_lower = body.lower()
+
+    # 1. suppress — a file-missing assertion that is in fact false.
+    missing_signal = (
+        re.match(r"^\s*create\s+\S", title_lower) is not None
+        or "missing" in title_lower
+        or "does not exist" in title_lower
+        or "is absent" in title_lower
+        or "missing" in body_lower
+        or "does not exist" in body_lower
+    )
+    if missing_signal:
+        for path in paths:
+            if (repo_dir / path).exists():
+                return ("suppress", f"{path} already exists on HEAD")
+
+    # 2. advisory — a stale classify/relocate premise.
+    classify_shape = (
+        re.match(r"^\s*classify\s+", title_lower) is not None
+        or re.match(r"^\s*reorganize module\s+", title_lower) is not None
+        or re.match(r"^\s*consolidate modules?\s+", title_lower) is not None
+        or re.match(r"^\s*cleanup module\s+", title_lower) is not None
+    )
+    if classify_shape:
+        for path in paths:
+            if not (repo_dir / path).exists():
+                return ("advisory", f"path {path} no longer exists on HEAD")
+        # Already classified under an existing module's paths glob?
+        try:
+            modules_file = repo_dir / "docs" / "modules.yaml"
+            if modules_file.exists():
+                data = yaml.safe_load(modules_file.read_text(encoding="utf-8"))
+                modules = data.get("modules", []) if isinstance(data, dict) else []
+                for path in paths:
+                    for mod in modules:
+                        mod_id = mod.get("id", "")
+                        for glob in mod.get("paths", []) or []:
+                            if PurePath(path).match(glob) or path in glob:
+                                return (
+                                    "advisory",
+                                    f"{path} is already classified under module "
+                                    f"{mod_id} in docs/modules.yaml",
+                                )
+        except Exception:
+            return None
+
+    return None
+
+
 def run_agent_pass(
     agent_fn: Callable[..., Any],
     *,
@@ -547,6 +613,50 @@ def run_agent_pass(
                     title,
                 )
                 continue
+        # Module-curator premise guard: verify the draft's factual claim
+        # against the cloned tree before filing. An unambiguous file-exists
+        # falsification suppresses the draft; every other stale/overlap
+        # signal annotates (never silently drops).
+        if source_label == SourceKind.MODULE_CURATOR and repo_dir is not None:
+            verdict = _module_curator_premise_check(repo_dir, title, body)
+            if verdict is not None:
+                disposition, note = verdict
+                if disposition == "suppress":
+                    log.warning(
+                        "%s draft suppressed — false premise (%s): %s",
+                        source_label,
+                        note,
+                        title,
+                    )
+                    continue
+                # advisory: annotate, never drop
+                body = annotate_child_body(
+                    body,
+                    note,
+                    source_desc="module_curator pre-filing premise check",
+                )
+            # In-flight sibling cross-reference (advisory, best-effort).
+            try:
+                overlap = find_inflight_overlap(
+                    service,
+                    "",
+                    title,
+                    body,
+                    settings,
+                    datetime.now(timezone.utc),
+                )
+                if overlap is not None:
+                    body = annotate_child_body(
+                        body,
+                        overlap,
+                        source_desc="module_curator pre-filing dedup",
+                    )
+            except Exception:
+                log.exception(
+                    "%s: in-flight sibling cross-reference failed: %s",
+                    source_label,
+                    title,
+                )
         # Append gap-id marker if available.
         if i < len(gap_ids) and gap_ids[i]:
             body += f"\n\n<!-- {source_label}-gap-id: {gap_ids[i]} -->"
