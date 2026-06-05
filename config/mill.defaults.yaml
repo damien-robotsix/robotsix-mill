@@ -123,6 +123,8 @@ web:
   fetch_max_text_bytes: 200000                # max bytes returned to the agent AFTER HTML→text extraction
   fetch_timeout: 30                           # timeout (seconds) per web fetch
   fetch_raw: false                            # when true, skip HTML→text + per-run URL dedupe (operator opt-in)
+  fetch_max_calls: 15                         # max web_fetch calls per web-knowledge consult (cache hits free)
+  fetch_max_total_bytes: 2000000              # cumulative cap on returned text bytes per consult
 
 # ---------------------------------------------------------------------------
 #  gates — human approval, auto-approve, code review, triage, auto-merge

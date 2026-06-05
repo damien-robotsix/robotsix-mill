@@ -395,3 +395,233 @@ def test_html_to_text_collapses_whitespace():
     assert "\n\n\n" not in out
     assert "one" in out
     assert "two" in out
+
+
+# --- web_fetch: per-consult fetch budget -------------------------------------
+
+
+def test_web_fetch_call_count_cap(tmp_path, monkeypatch):
+    """After N = web_fetch_max_calls real fetches, the (N+1)-th call
+    returns the budget-exhausted sentinel WITHOUT calling sandbox.fetch.
+    This is the cap that bounds the runaway fetch fan-out a single
+    consult could otherwise drive (specimen: 63 fetches → ~1.9M tokens)."""
+    from robotsix_mill.agents.web_tools import _cache, reset_web_fetch_budget
+
+    _cache.clear()
+    reset_web_fetch_budget()
+    s = _settings(tmp_path, web_fetch_max_calls=2)
+
+    calls: list[str] = []
+
+    def fake_fetch(url, *, settings):
+        calls.append(url)
+        return 0, f"body for {url}"
+
+    monkeypatch.setattr(sandbox, "fetch", fake_fetch)
+    wf = make_web_fetch(s)
+
+    # Two distinct URLs consume the budget.
+    assert wf("https://x.test/a") == "body for https://x.test/a"
+    assert wf("https://x.test/b") == "body for https://x.test/b"
+    assert len(calls) == 2
+
+    # The third distinct URL is refused without a sandbox fetch.
+    out = wf("https://x.test/c")
+    assert "budget exhausted" in out
+    assert len(calls) == 2  # sandbox.fetch NOT invoked past the cap
+
+
+def test_web_fetch_byte_ceiling(tmp_path, monkeypatch):
+    """Once cumulative returned-text bytes reach web_fetch_max_total_bytes
+    (>0), the next real fetch returns the sentinel without fetching."""
+    from robotsix_mill.agents.web_tools import _cache, reset_web_fetch_budget
+
+    _cache.clear()
+    reset_web_fetch_budget()
+    # Generous call cap so the BYTE ceiling is what trips.
+    s = _settings(
+        tmp_path,
+        web_fetch_max_calls=100,
+        web_fetch_max_total_bytes=500,
+    )
+
+    calls: list[str] = []
+
+    def fake_fetch(url, *, settings):
+        calls.append(url)
+        return 0, "x" * 400  # plain text, no extraction
+
+    monkeypatch.setattr(sandbox, "fetch", fake_fetch)
+    wf = make_web_fetch(s)
+
+    # First fetch (400 bytes) is under the ceiling and returns the body.
+    assert wf("https://x.test/a") == "x" * 400
+    # Cumulative now 400; still under 500 so the next fetch happens and
+    # pushes us to 800 (>= 500).
+    assert wf("https://x.test/b") == "x" * 400
+    assert len(calls) == 2
+
+    # Cumulative bytes (800) >= ceiling (500) → next call refused.
+    out = wf("https://x.test/c")
+    assert "budget exhausted" in out
+    assert len(calls) == 2
+
+
+def test_web_fetch_byte_ceiling_zero_disables(tmp_path, monkeypatch):
+    """A web_fetch_max_total_bytes of 0 disables the byte ceiling — only
+    the call-count cap applies."""
+    from robotsix_mill.agents.web_tools import _cache, reset_web_fetch_budget
+
+    _cache.clear()
+    reset_web_fetch_budget()
+    s = _settings(
+        tmp_path,
+        web_fetch_max_calls=100,
+        web_fetch_max_total_bytes=0,
+    )
+
+    calls: list[str] = []
+
+    def fake_fetch(url, *, settings):
+        calls.append(url)
+        return 0, "x" * 10_000
+
+    monkeypatch.setattr(sandbox, "fetch", fake_fetch)
+    wf = make_web_fetch(s)
+
+    # Many large fetches, none refused — the byte ceiling is off.
+    for i in range(5):
+        assert wf(f"https://x.test/{i}") == "x" * 10_000
+    assert len(calls) == 5
+
+
+def test_web_fetch_cache_hit_is_free(tmp_path, monkeypatch):
+    """Cache hits do NOT consume the budget. With cap=1, fetching the
+    SAME canonical URL twice within the TTL must return the body both
+    times — the second call is served from _cache and never charged."""
+    from robotsix_mill.agents.web_tools import (
+        _cache,
+        reset_web_fetch_budget,
+        web_fetch_budget,
+    )
+
+    _cache.clear()
+    reset_web_fetch_budget()
+    s = _settings(tmp_path, web_fetch_max_calls=1)
+
+    calls: list[str] = []
+
+    def fake_fetch(url, *, settings):
+        calls.append(url)
+        return 0, f"body for {url}"
+
+    monkeypatch.setattr(sandbox, "fetch", fake_fetch)
+    wf = make_web_fetch(s)
+
+    first = wf("https://x.test/page")
+    second = wf("https://x.test/page")
+    assert first == second == "body for https://x.test/page"
+    # Only ONE real fetch; the second was a cache hit.
+    assert len(calls) == 1
+    # Budget charged exactly once.
+    assert web_fetch_budget()[0] == 1
+
+
+def test_web_fetch_raw_mode_is_free(tmp_path, monkeypatch):
+    """web_fetch_raw=true returns do NOT consume the budget — the
+    operator escape hatch is exempt."""
+    from robotsix_mill.agents.web_tools import (
+        _cache,
+        reset_web_fetch_budget,
+        web_fetch_budget,
+    )
+
+    _cache.clear()
+    reset_web_fetch_budget()
+    s = _settings(tmp_path, web_fetch_raw=True, web_fetch_max_calls=1)
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        sandbox,
+        "fetch",
+        lambda url, *, settings: calls.append(url) or (0, "raw body"),
+    )
+    wf = make_web_fetch(s)
+
+    # Several raw fetches, never refused, never charged.
+    assert wf("https://x.test/a") == "raw body"
+    assert wf("https://x.test/b") == "raw body"
+    assert wf("https://x.test/c") == "raw body"
+    assert len(calls) == 3
+    assert web_fetch_budget() == (0, 0)
+
+
+def test_reset_web_fetch_budget_zeroes_counters(tmp_path, monkeypatch):
+    """reset_web_fetch_budget() zeroes the counters so a fresh consult
+    starts clean — even after a prior consult exhausted the cap."""
+    from robotsix_mill.agents.web_tools import (
+        _cache,
+        reset_web_fetch_budget,
+        web_fetch_budget,
+    )
+
+    _cache.clear()
+    reset_web_fetch_budget()
+    s = _settings(tmp_path, web_fetch_max_calls=1)
+    monkeypatch.setattr(
+        sandbox, "fetch", lambda url, *, settings: (0, f"body for {url}")
+    )
+    wf = make_web_fetch(s)
+
+    wf("https://x.test/a")
+    assert web_fetch_budget()[0] == 1
+    # Next distinct URL would be refused...
+    assert "budget exhausted" in wf("https://x.test/b")
+
+    # ...until the budget is reset.
+    reset_web_fetch_budget()
+    assert web_fetch_budget() == (0, 0)
+    assert wf("https://x.test/c") == "body for https://x.test/c"
+
+
+def test_run_web_knowledge_resets_budget(tmp_path, monkeypatch):
+    """run_web_knowledge resets the fetch budget once at the start of
+    each consult so every web_research sub-agent it fans out to shares
+    one fresh allowance. Stub the pydantic_ai Agent so no real model
+    request is made."""
+    from robotsix_mill.agents import web_tools
+    from robotsix_mill.agents.web_knowledge import run_web_knowledge
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+
+    reset_calls = {"n": 0}
+    real_reset = web_tools.reset_web_fetch_budget
+
+    def counting_reset():
+        reset_calls["n"] += 1
+        real_reset()
+
+    monkeypatch.setattr(web_tools, "reset_web_fetch_budget", counting_reset)
+
+    class FakeModel:
+        def __init__(self, name, **kw):
+            pass
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            pass
+
+        async def run(self, question, *, usage_limits=None):
+            return type("R", (), {"output": "the answer"})()
+
+    import pydantic_ai
+    import pydantic_ai.providers.openrouter as orp
+    from robotsix_mill.agents import openrouter_cost as oc
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+
+    out = asyncio.run(run_web_knowledge(settings=s, question="anything"))
+    assert out == "the answer"
+    assert reset_calls["n"] == 1

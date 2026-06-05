@@ -330,6 +330,16 @@ async def run_web_knowledge(
     if not get_secrets().openrouter_api_key:
         return "web_knowledge unavailable: OPENROUTER_API_KEY is not set"
 
+    # Reset the per-consult web_fetch budget so this consult — and every
+    # web_research sub-agent it fans out to — shares one fresh fetch/byte
+    # allowance. The counter is a process-global with the same single-
+    # threaded-use assumption as web_tools._cache (the tool runs inside
+    # the agent's synchronous loop); concurrent consults in one process
+    # would interleave, an accepted limitation consistent with _cache.
+    from .web_tools import reset_web_fetch_budget
+
+    reset_web_fetch_budget()
+
     # Lazy: keep the test suite hermetic, the core import-light.
     from pydantic_ai import Agent
     from pydantic_ai.providers.openrouter import OpenRouterProvider
