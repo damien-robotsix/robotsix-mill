@@ -49,6 +49,20 @@ set in `config/repos.yaml` for the selected repo. Session-summed cost is only co
 every trace carries the session id — the trace-health system enforces
 this across all agent runs.
 
+### Cost baseline on redraft
+
+When a ticket is redrafted (reset back to DRAFT from any active state),
+the full Langfuse session cost at that moment is captured as
+`pre_redraft_cost_usd`. The effective per-attempt cost is then computed
+as `max(0.0, session_total - pre_redraft_cost_usd)`. This means:
+
+- The dollar-cap limit restarts at zero for the new attempt — only spend
+  accrued after the redraft counts toward the limit.
+- The full session cost (including pre-redraft spend) remains available
+  for informational/historical display via the `pre_redraft_cost_usd` baseline.
+- A second redraft re-snapshots the baseline to the then-current session
+  total, tracking the cost hierarchy across multiple attempts.
+
 ## Cost dashboard
 
 The board's **Cost Dashboard** (💰 button in the drawer header) shows
@@ -95,7 +109,7 @@ endpoints, each accepting both `lookback_hours` and an optional
 
 - **`aggregate_cost_trend(settings, lookback_hours=24, max_tickets=None)`** —
   returns time-bucketed cost.  In time-window mode buckets span the
-  lookback period (hourly if ≤ 24 h, daily otherwise).  In ticket-count
+  lookback period (hourly if ≤ 24 h, daily otherwise).  In ticket-count
   mode buckets span the time range covered by the collected traces,
   with the same hourly/daily rule applied to that span.
 
@@ -121,7 +135,7 @@ from the requested number of distinct sessions.
 **Safety caps:** In time-window mode `most_expensive_ticket` and
 `most_expensive_trace` cap at 500 traces (`EXAMINE_CAP`).  In
 ticket-count mode all four functions cap at 100 pages × 100 traces
-(10 000 traces).  All functions catch exceptions and return gracefully
+(10 000 traces).  All functions catch exceptions and return gracefully
 (`None` or `[]`) rather than crashing the dashboard.
 
 ## Cost reconciliation
@@ -242,9 +256,12 @@ deduplication — the same day is never reported twice.
   capable model). No implement sub-agent and no `deep_*` layer — both
   re-explored everything and never converged.
 
-- **Dollar-cap safety net.** If a ticket's cumulative Langfuse-traced
-  LLM spend exceeds `MILL_MAX_SPEND_USD_PER_TICKET` (default `0.0` =
-  disabled), the worker escalates it to `BLOCKED`. Enforced inline in
+- **Dollar-cap safety net.** If a ticket's per-attempt Langfuse-traced
+  LLM spend (effective cost after subtracting the pre-redraft baseline)
+  exceeds `MILL_MAX_SPEND_USD_PER_TICKET` (default `0.0` = disabled),
+  the worker escalates it to `BLOCKED`. The effective cost is computed
+  as `max(0.0, session_total - pre_redraft_cost_usd)` so the limit
+  restarts at zero when a ticket is redrafted. Enforced inline in
   `worker.py:_check_progress`.
 
 - **No-progress safety net.** If a ticket re-enters the same
@@ -255,7 +272,7 @@ deduplication — the same day is never reported twice.
   (`in_review` waiting on an open PR) are exempt.
 
 - **Stage timeout.** If a single stage invocation runs longer than
-  `MILL_STAGE_TIMEOUT_SECONDS` (default 1800 s = 30 min), the worker
+  `MILL_STAGE_TIMEOUT_SECONDS` (default 1800 s = 30 min), the worker
   escalates the ticket to `BLOCKED` with a note and frees the worker
   slot.  Per-stage overrides are available via
   `MILL_STAGE_TIMEOUT_OVERRIDES` (JSON dict, e.g.
