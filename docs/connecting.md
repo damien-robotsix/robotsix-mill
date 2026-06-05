@@ -511,6 +511,59 @@ auto-refreshes every 30 seconds.
 Both commands read from the same local SQLite datastore — no configuration
 changes are needed to switch between them.
 
+### The `/config-sync` endpoint
+
+In addition to the board page, the server hosts a `POST /config-sync` endpoint
+that runs the optional LLM drift advisory agent and returns structured JSON.
+This is useful for external schedulers (cron, systemd timer) or monitoring
+systems that want to check for configuration drift on demand.
+
+#### Request
+
+```sh
+curl -X POST http://localhost:8080/config-sync
+```
+
+No request body is required.
+
+#### Response on success (HTTP 200)
+
+Content-Type: `application/json`
+
+```json
+{
+  "proposals": [
+    {
+      "title": "imap_folder default mismatch",
+      "body": "Docs say INBOX.All but the dataclass default is INBOX.",
+      "affected_field": "imap_folder",
+      "confidence": "high"
+    }
+  ]
+}
+```
+
+When no drift is detected, the `proposals` array is empty.
+
+#### Error responses (HTTP 503)
+
+If the LLM extra (`pydantic-ai`) is not installed or the agent encounters an
+error (e.g., missing API key):
+
+```json
+{"error": "Config-sync advisory requires the optional LLM extra, which is not installed"}
+```
+
+#### Requirements
+
+The endpoint requires the same setup as the CLI `config-sync` command:
+- The `pydantic-ai` package (install via `pip install robotsix-auto-mail[dev]`)
+- An LLM API key (via `LLM_API_KEY` env or `llm.api_key` in config)
+
+The endpoint applies dedup filtering by default (consulting the persisted
+ledger in the SQLite `watermark` table), so previously-seen drift proposals
+are suppressed automatically.
+
 ## The `config-sync` command
 
 For operators who want to audit their configuration, the `config-sync`

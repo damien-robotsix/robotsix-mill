@@ -1713,3 +1713,138 @@ def test_handler_email_detail_embed_unknown_returns_404() -> None:
             raise AssertionError("Expected HTTPError 404")
     finally:
         server.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# POST /config-sync tests
+# ---------------------------------------------------------------------------
+
+
+def _post_config_sync(port: int) -> tuple[int, str]:
+    """POST an empty body to /config-sync; return (status, body)."""
+    import urllib.request
+
+    url = f"http://127.0.0.1:{port}/config-sync"
+
+    class CaptureError(urllib.request.HTTPDefaultErrorHandler):
+        def http_error_default(  # type: ignore[override]
+            self,
+            req: urllib.request.Request,
+            fp: object,
+            code: int,
+            msg: object,
+            hdrs: object,
+        ) -> object:
+            return fp
+
+    opener = urllib.request.build_opener(CaptureError())
+    req = urllib.request.Request(url, data=b"", method="POST")  # noqa: S310
+    resp = opener.open(req)
+    body = resp.read().decode("utf-8")
+    return resp.status, body
+
+
+def test_config_sync_success_returns_200_json() -> None:
+    import json as _json
+    from unittest import mock
+
+    from robotsix_auto_mail.config_sync import ConfigSyncResult, DriftProposal
+
+    fake_result = ConfigSyncResult(
+        proposals=[
+            DriftProposal(
+                title="Default mismatch",
+                body="The YAML default differs from the dataclass default.",
+                affected_field="timeout",
+                confidence="high",
+            )
+        ]
+    )
+
+    import urllib.request
+
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        server, port = _start_test_server(db_path)
+        try:
+            with mock.patch(
+                "robotsix_auto_mail.config_sync.run_config_sync_agent",
+                return_value=fake_result,
+            ) as mocked:
+                req = urllib.request.Request(
+                    f"http://127.0.0.1:{port}/config-sync",
+                    data=b"",
+                    method="POST",
+                )
+                resp = urlopen(req)  # noqa: S310
+                assert resp.status == 200
+                assert resp.headers.get("Content-Type", "").startswith(
+                    "application/json"
+                )
+                payload = _json.loads(resp.read().decode("utf-8"))
+
+            assert list(payload.keys()) == ["proposals"]
+            assert len(payload["proposals"]) == 1
+            proposal = payload["proposals"][0]
+            assert proposal["title"] == "Default mismatch"
+            assert proposal["affected_field"] == "timeout"
+            assert proposal["confidence"] == "high"
+            assert "body" in proposal
+
+            # Verify the agent was invoked with a live DB connection so the
+            # dedup ledger wiring is exercised.
+            assert mocked.call_count == 1
+            assert "conn" in mocked.call_args.kwargs
+            assert mocked.call_args.kwargs["conn"] is not None
+        finally:
+            server.shutdown()
+    finally:
+        os.unlink(db_path)
+
+
+def test_config_sync_error_returns_503_json() -> None:
+    import json as _json
+    from unittest import mock
+
+    from robotsix_auto_mail.config_sync import ConfigSyncError
+
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        server, port = _start_test_server(db_path)
+        try:
+            with mock.patch(
+                "robotsix_auto_mail.config_sync.run_config_sync_agent",
+                side_effect=ConfigSyncError("No LLM API key found"),
+            ):
+                status, body = _post_config_sync(port)
+            assert status == 503
+            payload = _json.loads(body)
+            assert "error" in payload
+            assert "No LLM API key found" in payload["error"]
+        finally:
+            server.shutdown()
+    finally:
+        os.unlink(db_path)
+
+
+def test_config_sync_unknown_post_path_returns_404() -> None:
+    import urllib.error
+    import urllib.request
+
+    server, port = _start_test_server(":memory:")
+    try:
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/no-such-endpoint",
+            data=b"",
+            method="POST",
+        )
+        try:
+            urlopen(req)  # noqa: S310
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 404
+        else:
+            raise AssertionError("Expected HTTPError 404")
+    finally:
+        server.shutdown()

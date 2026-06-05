@@ -601,10 +601,33 @@ def make_board_handler(
             self.end_headers()
             self.wfile.write(encoded)
 
+        def _serve_json(self, payload: dict[str, object], status: int = 200) -> None:
+            """Serialize *payload* as JSON and send it with *status*."""
+            encoded = json.dumps(payload).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+
         def do_POST(self) -> None:
             """Route POST requests."""
+            # Periodic-trigger decision — Option A (on-demand endpoint
+            # only): no background/periodic runner is added.  The
+            # deterministic ``check_config_sync.py`` remains the fast, free,
+            # blocking CI gate; the LLM agent is an optional advisory tool,
+            # so it does not need to run on a schedule.  The board server is
+            # a single-threaded ``BaseHTTPRequestHandler``/``HTTPServer``
+            # with no scheduler — adding a ``while True``/``time.sleep`` loop
+            # would block request serving and is out of scope.  External
+            # schedulers (cron, systemd timer) can simply POST to
+            # ``/config-sync``, which fully satisfies optional periodic
+            # invocation without new in-process machinery.  Option B (an
+            # in-process periodic runner) is explicitly deferred.
             if self.path == "/move":
                 self._handle_move()
+            elif self.path == "/config-sync":
+                self._handle_config_sync()
             else:
                 self._not_found()
 
@@ -644,6 +667,48 @@ def make_board_handler(
                 self._redirect(redirect_to, code=302)
             else:
                 self._redirect("/board", code=302)
+
+        def _handle_config_sync(self) -> None:
+            """Process POST /config-sync — run the LLM drift advisory agent.
+
+            Lazily imports the optional LLM-backed agent so the rest of the
+            server works without ``pydantic_ai`` installed.  On success,
+            returns the ``ConfigSyncResult`` serialized as JSON; on a missing
+            optional extra returns 503, and on any agent failure returns 503
+            with a JSON error body (never a traceback).
+            """
+            try:
+                from robotsix_auto_mail.config_sync import (
+                    ConfigSyncError,
+                    run_config_sync_agent,
+                )
+            except ImportError:
+                self._serve_json(
+                    {
+                        "error": (
+                            "Config-sync advisory requires the optional LLM "
+                            "extra, which is not installed"
+                        )
+                    },
+                    status=503,
+                )
+                return
+
+            from robotsix_auto_mail.db import init_db
+
+            conn = init_db(self.db_path)
+            try:
+                result = run_config_sync_agent(conn=conn)
+            except ConfigSyncError as exc:
+                self._serve_json({"error": str(exc)}, status=503)
+                return
+            except Exception as exc:
+                self._serve_json({"error": str(exc)}, status=503)
+                return
+            finally:
+                conn.close()
+
+            self._serve_json(result.model_dump(), status=200)
 
         def _serve_email_status(self) -> None:
             """Serve GET /email/{message_id}/status — return status as text."""
