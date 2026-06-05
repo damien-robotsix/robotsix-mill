@@ -589,9 +589,7 @@ def _seed_history(
     for i in range(count):
         mid = f"<{prefix}{i}@x.com>"
         _insert_inbox(conn, mid, sender=sender)
-        set_triage_decision(  # type: ignore[arg-type]
-            conn, mid, action, source="user"
-        )
+        set_triage_decision(conn, mid, action, source="user")  # type: ignore[arg-type]
 
 
 def test_triage_rule_rejects_invalid_match_type() -> None:
