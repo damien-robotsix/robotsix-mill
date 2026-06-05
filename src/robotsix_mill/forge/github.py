@@ -438,6 +438,54 @@ class GitHubForge(Forge):
             head_sha=head_sha,
         )
 
+    def list_code_scanning_alerts(self, *, source_branch: str) -> list[dict]:
+        owner, repo = self._owner_repo
+        import httpx
+
+        from .auth import github_token
+
+        s = self.settings
+        api = s.github_api_url.rstrip("/")
+        headers = _build_headers(github_token(s, repo_config=self._repo_config))
+        try:
+            with httpx.Client(timeout=30) as c:
+                r = c.get(
+                    f"{api}/repos/{owner}/{repo}/code-scanning/alerts",
+                    headers=headers,
+                    params={
+                        "ref": f"refs/heads/{source_branch}",
+                        "state": "open",
+                        "per_page": 50,
+                    },
+                )
+                # 404 = code-scanning not enabled / no alerts endpoint; 403 =
+                # token lacks the security-events scope. Either way: no signal,
+                # not an error — degrade to "no alerts".
+                if r.status_code in (403, 404):
+                    return []
+                r.raise_for_status()
+                raw = r.json()
+        except Exception:  # noqa: BLE001 — best-effort enrichment, never fatal
+            return []
+        out: list[dict] = []
+        for a in raw if isinstance(raw, list) else []:
+            rule = a.get("rule") or {}
+            inst = a.get("most_recent_instance") or {}
+            loc = inst.get("location") or {}
+            out.append(
+                {
+                    "rule": rule.get("id", ""),
+                    "severity": rule.get("security_severity_level")
+                    or rule.get("severity", ""),
+                    "path": loc.get("path", ""),
+                    "line": loc.get("start_line"),
+                    "message": (inst.get("message") or {}).get("text", "")
+                    or rule.get("description", ""),
+                    "url": a.get("html_url", ""),
+                }
+            )
+        return out
+
     def fetch_workflow_job_logs(self, *, run_id: int) -> str:
         owner, repo = self._owner_repo
         return self._fetch_workflow_job_logs(

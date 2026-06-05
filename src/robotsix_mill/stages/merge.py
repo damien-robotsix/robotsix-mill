@@ -113,37 +113,18 @@ def _write_counter(path, value: int) -> None:
     path.write_text(str(value), encoding="utf-8")
 
 
-def _build_failing_summary(failing: list[dict], log_text: str = "") -> str:
+def _build_failing_summary(
+    failing: list[dict], log_text: str = "", alerts: list[dict] | None = None
+) -> str:
     """Markdown summary of failing checks for the CI-fix agent.
 
-    A local copy of ``stages.ci_fix._build_failing_summary`` — kept here
-    (not imported) to avoid a stage-to-stage dependency for a single
-    pure helper, mirroring how ``_paths_from_diff`` is duplicated across
-    the review/document stages.
+    A thin wrapper over ``stages.ci_fix._build_failing_summary`` (imported
+    lazily to avoid a module-load cycle) so the multi-repo path renders the
+    same job-logs + code-scanning-alert detail as the single-repo path.
     """
-    parts: list[str] = []
-    for i, chk in enumerate(failing):
-        parts.append(f"## Failing check #{i + 1}: {chk['name']}")
-        if chk.get("summary"):
-            parts.append(f"\n**Summary:**\n{chk['summary']}")
-        if chk.get("text"):
-            parts.append(f"\n**Details:**\n{chk['text']}")
-        anns = chk.get("annotations") or []
-        if anns:
-            parts.append("\n**Annotations:**")
-            for a in anns:
-                loc = f"{a['path']}"
-                if a.get("start_line"):
-                    loc += f":{a['start_line']}"
-                parts.append(f"- [{a['level']}] {loc}: {a['message']}")
-        parts.append("")
-    if log_text:
-        parts.append("**Job logs:**")
-        parts.append("```")
-        parts.append(log_text)
-        parts.append("```")
-        parts.append("")
-    return "\n".join(parts)
+    from .ci_fix import _build_failing_summary as _ci_fix_summary
+
+    return _ci_fix_summary(failing, log_text, alerts)
 
 
 def _read_reason(path) -> str:
@@ -468,7 +449,9 @@ class MergeStage(Stage):
         failing = (ci or {}).get("failing", [])
 
         log_text = ""
+        alerts: list[dict] = []
         try:
+            alerts = forge.list_code_scanning_alerts(source_branch=branch)
             pr = forge.pr_status(source_branch=branch)
             head_sha = (pr or {}).get("sha", "")
             if head_sha:
@@ -481,9 +464,11 @@ class MergeStage(Stage):
                                 f"(run {run['id']}) ---\n{logs}"
                             )
         except Exception:  # noqa: BLE001 — best-effort enrichment
-            log.warning("%s: failed to fetch job logs for %s", ticket.id, repo_id)
+            log.warning(
+                "%s: failed to fetch job logs / alerts for %s", ticket.id, repo_id
+            )
 
-        failing_summary = _build_failing_summary(failing, log_text)
+        failing_summary = _build_failing_summary(failing, log_text, alerts)
         log.info(
             "%s: multi-repo CI failing for %s — ci-fix attempt %d/%d",
             ticket.id,

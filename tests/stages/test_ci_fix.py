@@ -985,3 +985,23 @@ def test_ci_fix_stage_fetches_job_logs_on_failure(tmp_path, monkeypatch):
 
     out = CIFixStage().run(t, ctx)
     assert out.next_state is State.IMPLEMENT_COMPLETE
+
+
+def test_build_failing_summary_includes_codeql_alerts():
+    from robotsix_mill.stages.ci_fix import _build_failing_summary
+
+    out = _build_failing_summary(
+        failing=[{"name": "CodeQL"}],
+        log_text="",
+        alerts=[
+            {
+                "rule": "py/x",
+                "severity": "high",
+                "path": "t.py",
+                "line": 9,
+                "message": "bad",
+            }
+        ],
+    )
+    assert "Code-scanning alerts" in out
+    assert "py/x" in out and "t.py:9" in out and "high" in out

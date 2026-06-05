@@ -1512,3 +1512,39 @@ def test_create_repo_clamps_long_description(tmp_path, monkeypatch):
     forge.create_repo(name="b", owner="o", private=False, description="y" * 600)
 
     assert len(captured["payload"]["description"]) <= 350
+
+
+def test_list_code_scanning_alerts_parses(tmp_path, monkeypatch):
+    """Open CodeQL alerts are fetched + normalised (rule/severity/path/line)."""
+    raw = [
+        {
+            "rule": {
+                "id": "py/x",
+                "security_severity_level": "high",
+                "description": "desc",
+            },
+            "html_url": "u",
+            "most_recent_instance": {
+                "location": {"path": "tests/t.py", "start_line": 92},
+                "message": {"text": "bad url substring"},
+            },
+        }
+    ]
+    _mock_httpx(monkeypatch, get_map={"code-scanning/alerts": _make_response(200, raw)})
+    forge = _forge(tmp_path)
+    out = forge.list_code_scanning_alerts(source_branch="feature/x")
+    assert len(out) == 1
+    a = out[0]
+    assert a["rule"] == "py/x" and a["severity"] == "high"
+    assert a["path"] == "tests/t.py" and a["line"] == 92
+    assert "bad url substring" in a["message"]
+
+
+def test_list_code_scanning_alerts_404_returns_empty(tmp_path, monkeypatch):
+    """403/404 (code-scanning off, or token lacks scope) → [] (not an error)."""
+    _mock_httpx(
+        monkeypatch,
+        get_map={"code-scanning/alerts": _make_response(404, {}, "not found")},
+    )
+    forge = _forge(tmp_path)
+    assert forge.list_code_scanning_alerts(source_branch="feature/x") == []
