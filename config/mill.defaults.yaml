@@ -162,6 +162,7 @@ pipeline:
   merge_poll_seconds: 120                            # poll interval for PR merge/CI status
   rebase_max_attempts: 3                             # max rebase LLM invocations before BLOCK
   ci_fix_max_attempts: 2                             # max CI-fix LLM invocations before BLOCK
+  ci_fix_max_cycles: 3                             # hard ceiling on total ci-fix cycles per ticket
   review_revision_max_attempts: 2                    # max review-revision LLM invocations before BLOCK
   retrospect_spawn_drafts: true                      # allow retrospect to file improvement drafts
   retrospect_spawn_agented_proposals: true           # allow retrospect to propose AGENT.md additions

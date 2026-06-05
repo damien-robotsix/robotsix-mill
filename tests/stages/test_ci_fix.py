@@ -266,7 +266,7 @@ def test_fix_success_with_changes_resets_no_change_counter(tmp_path, monkeypatch
 def test_max_auto_retries_zero_disables_ceiling(tmp_path, monkeypatch):
     """When ci_max_auto_retries=0, the no-change ceiling is disabled
     (preserves pre-ceiling behaviour)."""
-    ctx = _gh(tmp_path, ci_max_auto_retries="0")
+    ctx = _gh(tmp_path, ci_max_auto_retries="0", ci_fix_max_cycles="0")
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
