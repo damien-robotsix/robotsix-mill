@@ -56,6 +56,7 @@ modules:
       - tests/core/test_text_noop.py
       - tests/core/test_duration.py
       - tests/core/test_prune_clone.py
+      - tests/core/test_proposed_action_executor.py
     dependencies: [config]
 
   # -------------------------------------------------------------------
