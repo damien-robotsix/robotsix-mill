@@ -10,11 +10,57 @@ jobs:
   verify:
     runs-on: ubuntu-latest
 
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Passing python-version to setup-uv sets UV_PYTHON for the job,
+      # overriding the pinned .python-version, and setup-uv downloads + caches
+      # the requested interpreter automatically — so the per-version core
+      # checks (lint, mypy, deptry, pytest) run against every supported Python.
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # --frozen uses uv.lock as-is and FAILS if pyproject.toml was changed
+      # without re-running `uv lock` — guaranteeing the committed lockfile is
+      # the single source of truth for the resolved dependency tree.
+      # --extra dev pulls the dev tooling (ruff/mypy/pytest/...) which lives
+      # in [project.optional-dependencies]; uv does not install extras by
+      # default.
+      - name: Install dependencies
+        run: uv sync --frozen --extra dev
+
+      - name: Lint (ruff)
+        run: uv run --frozen ruff check .
+
+      - name: Type check (mypy)
+        run: uv run --frozen mypy .
+
+      - name: Dependency hygiene (deptry)
+        run: uv run --frozen deptry src/ tests/
+
+      - name: Test (pytest)
+        run: uv run --frozen pytest
+
+      - name: Check config sync
+        run: uv run --frozen python scripts/config/check_config_sync.py
+
+  security:
+    runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
       # setup-uv installs uv and a Python matching .python-version, so a
-      # separate actions/setup-python step is no longer needed.
+      # separate actions/setup-python step is no longer needed. These
+      # supply-chain checks are version-independent, so they run once on the
+      # pinned interpreter rather than across the matrix.
       - name: Set up uv
         uses: astral-sh/setup-uv@v8.1.0
 
@@ -32,15 +78,6 @@ jobs:
           pip install check-jsonschema
           check-jsonschema --schemafile docs/modules.schema.yaml docs/modules.yaml
 
-      - name: Lint (ruff)
-        run: uv run --frozen ruff check .
-
-      - name: Type check (mypy)
-        run: uv run --frozen mypy .
-
-      - name: Dependency hygiene (deptry)
-        run: uv run --frozen deptry src/ tests/
-
       - name: SAST (bandit)
         run: |
           uv pip install 'bandit[toml]'
@@ -50,12 +87,6 @@ jobs:
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
-
-      - name: Test (pytest)
-        run: uv run --frozen pytest
-
-      - name: Check config sync
-        run: uv run --frozen python scripts/config/check_config_sync.py
 
       # Audit the FULL locked dependency set (incl. platform-specific
       # packages) rather than only what pip happened to install for this
