@@ -108,7 +108,7 @@ def test_run_periodic_pass_repo_config_none_raises_value_error(tmp_path, monkeyp
     settings = _make_settings(tmp_path)
     config = PERIODIC_PASS_CONFIGS["audit"]
 
-    with pytest.raises(ValueError, match="required"):
+    with pytest.raises(ValueError, match="repo_config is required"):
         run_periodic_pass(
             session_id="s",
             repo_config=None,
