@@ -31,7 +31,7 @@ from .models import (
     TicketEvent,
 )
 from .states import State, can_transition
-from .workspace import Workspace
+from .workspace import Workspace, prune_clone
 
 
 def _event_hash(
@@ -1386,11 +1386,27 @@ class TicketService:
     def redraft(
         self, ticket_id: str, body: str = "", author: str = "user"
     ) -> tuple[Comment | None, Ticket]:
-        """Redraft a ticket from any active state back to DRAFT.
+        """Redraft a ticket from any active state — a clean-slate reset
+        back to DRAFT.
 
-        Creates an optional comment, resets state to DRAFT, and appends
-        a TicketEvent.  Raises :class:`KeyError` if the ticket does not
-        exist, :class:`TransitionError` if it is already DRAFT or in a
+        Unlike a plain back-to-draft transition, redraft *really starts
+        the ticket over from scratch*: it folds the current description,
+        all comments, and the optional redraft *body* into a single
+        fresh ``description.md``; deletes the comment thread; drops all
+        prior ``TicketEvent`` rows so the new DRAFT event is the genesis
+        of a fresh hash chain; prunes the per-ticket repo clone (which
+        holds the local implement branch) and clears ``ticket.branch``.
+
+        Note: only the *local* clone/branch and the ``ticket.branch`` DB
+        pointer are cleared. The pushed remote branch and any open PR on
+        the forge are left untouched — there is no remote-branch-delete
+        helper and doing so would need network + forge API access.
+
+        The returned ``Comment`` is always ``None`` (the redraft reason
+        is folded into the body, not kept as a standalone comment).
+
+        Raises :class:`KeyError` if the ticket does not exist,
+        :class:`TransitionError` if it is already DRAFT or in a
         terminal state (CLOSED, ANSWERED, EPIC_CLOSED) or is an
         EPIC_OPEN epic.
         """
@@ -1410,10 +1426,53 @@ class TicketService:
                     f"{ticket_id}: cannot redraft — "
                     f"state {ticket.state} is not eligible for redraft"
                 )
-            comment = None
+
+            # --- compact issue + comments into a clean body ---
+            ws = self.workspace(ticket)
+            original = ws.read_description()
+            comments = list(
+                s.exec(
+                    select(Comment)
+                    .where(Comment.ticket_id == ticket_id)
+                    .order_by(Comment.created_at)
+                ).all()
+            )
+            folded: list[str] = []
             if body.strip():
-                comment = Comment(ticket_id=ticket_id, body=body, author=author)
-                s.add(comment)
+                folded.append(body)
+            for c in comments:
+                folded.append(f"**{c.author}** — {c.created_at.isoformat()}:\n{c.body}")
+            if folded:
+                new_body = (
+                    f"{original}\n\n---\n## Folded-in on redraft\n"
+                    + "\n\n".join(folded)
+                )
+            else:
+                new_body = original
+            ticket.content_hash = ws.write_description(new_body)
+
+            # --- delete the comment thread ---
+            for c in comments:
+                s.delete(c)
+
+            # --- delete ticket history so the DRAFT event below becomes
+            # the genesis of a fresh hash chain (prev_hash is None) ---
+            for ev in s.exec(
+                select(TicketEvent).where(TicketEvent.ticket_id == ticket_id)
+            ).all():
+                s.delete(ev)
+            s.flush()
+
+            # --- delete the local workspace clone/branch ---
+            # Only the LOCAL clone (repo/, which holds the implement
+            # branch) and the ticket.branch DB pointer are cleared. The
+            # pushed remote branch / open PR are NOT touched — there is
+            # no remote-branch-delete helper and it would need network +
+            # forge API access.
+            prune_clone(ws)
+            shutil.rmtree(ws.dir / "artifacts", ignore_errors=True)
+            ticket.branch = None
+
             note = f"redrafted: {body}" if body else "redrafted"
             ticket.state = State.DRAFT
             ticket.updated_at = datetime.now(timezone.utc)
@@ -1421,12 +1480,10 @@ class TicketService:
             s.flush()
             s.add(_make_event(s, ticket_id=ticket_id, state=State.DRAFT, note=note))
             s.commit()
-            if comment is not None:
-                s.refresh(comment)
             s.refresh(ticket)
             if self._on_transition is not None:
                 self._on_transition(ticket)
-            return comment, ticket
+            return None, ticket
 
     def request_changes(
         self, ticket_id: str, body: str, author: str = "user"

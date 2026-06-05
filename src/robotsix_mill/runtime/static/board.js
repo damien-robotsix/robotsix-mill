@@ -936,7 +936,7 @@ async function newChildTicket(epicId){
  titleEl.focus();
 }
 async function redraft(id){
- const body=prompt("Send this ticket back to draft. Why? (optional)");
+ const body=prompt("Start this ticket over from scratch? Branch, comments, and history will be discarded and folded into a clean draft. Add a note (optional):");
  if(body===null)return;
  const r=await jpost("/tickets/"+id+"/redraft",{body:body.trim()});
  if(!r.ok){const e=await r.text();alert("redraft failed: "+e)}else{refresh();if(sel===id)open_(id)}
