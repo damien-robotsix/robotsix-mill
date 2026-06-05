@@ -792,3 +792,89 @@ def test_closure_triggers_from_child_closed(settings, service, monkeypatch):
     last_note = service.history(epic.id)[-1].note
     assert last_note.startswith("[auto-closed]")
     assert "All children terminal" in last_note
+
+
+# -----------------------------------------------------------------------
+# Orphaned-epic safety-net sweep (_maybe_sweep_orphaned_epic)
+# -----------------------------------------------------------------------
+
+from types import SimpleNamespace  # noqa: E402
+
+from robotsix_mill.runtime.worker import Worker  # noqa: E402
+
+
+def _sweep_self(ctx):
+    return SimpleNamespace(_epic_sweep_seen={}, ctx=ctx)
+
+
+def _close_children(service, epic_id):
+    for c in service.list_children(epic_id):
+        for st in (
+            State.READY,
+            State.IMPLEMENT_COMPLETE,
+            State.HUMAN_MR_APPROVAL,
+            State.DONE,
+            State.CLOSED,
+        ):
+            try:
+                service.transition(c.id, st)
+            except Exception:
+                pass
+
+
+def test_sweep_reevaluates_orphaned_all_terminal_epic(ctx, service, monkeypatch):
+    """An EPIC_OPEN epic whose children are ALL terminal gets a sweep re-eval."""
+    spawned: list = []
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker._spawn_epic_reeval",
+        lambda epic_id, _c: spawned.append(epic_id),
+    )
+    epic = service.create("Epic", "goal", kind="epic")
+    service.create("c1", "x", parent_id=epic.id)
+    service.create("c2", "y", parent_id=epic.id)
+    _close_children(service, epic.id)
+
+    fake = _sweep_self(ctx)
+    Worker._maybe_sweep_orphaned_epic(fake, service.get(epic.id), service)
+    assert spawned == [epic.id]
+
+    # Idempotent: a second sweep over the same terminal child set does NOT
+    # re-spawn (no re-billing a healthy epic every poll).
+    Worker._maybe_sweep_orphaned_epic(fake, service.get(epic.id), service)
+    assert spawned == [epic.id]
+
+
+def test_sweep_skips_epic_with_open_child(ctx, service, monkeypatch):
+    spawned: list = []
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker._spawn_epic_reeval",
+        lambda epic_id, _c: spawned.append(epic_id),
+    )
+    epic = service.create("Epic", "goal", kind="epic")
+    c1 = service.create("c1", "x", parent_id=epic.id)
+    service.create("c2", "y", parent_id=epic.id)  # left in DRAFT (not terminal)
+    for st in (
+        State.READY,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+        State.DONE,
+        State.CLOSED,
+    ):
+        try:
+            service.transition(c1.id, st)
+        except Exception:
+            pass
+
+    Worker._maybe_sweep_orphaned_epic(_sweep_self(ctx), service.get(epic.id), service)
+    assert spawned == []  # one child still open → not swept
+
+
+def test_sweep_skips_childless_epic(ctx, service, monkeypatch):
+    spawned: list = []
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker._spawn_epic_reeval",
+        lambda epic_id, _c: spawned.append(epic_id),
+    )
+    epic = service.create("Epic", "goal", kind="epic")
+    Worker._maybe_sweep_orphaned_epic(_sweep_self(ctx), service.get(epic.id), service)
+    assert spawned == []
