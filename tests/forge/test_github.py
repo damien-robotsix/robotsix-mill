@@ -1398,3 +1398,49 @@ def test_create_repo_403_integration_message(tmp_path, monkeypatch):
     forge = _forge(tmp_path, enable_repo_creation=True)
     with pytest.raises(RuntimeError, match="forge_repo_create_token"):
         forge.create_repo(name="b", owner="o", private=False, description="d")
+
+
+def test_clamp_repo_description():
+    """Descriptions are single-lined and clamped to GitHub's 350-char cap."""
+    from robotsix_mill.forge.github import _clamp_repo_description
+
+    assert (
+        _clamp_repo_description("short  desc\nwith   lines") == "short desc with lines"
+    )
+    long = "x" * 500
+    out = _clamp_repo_description(long)
+    assert len(out) == 350
+    assert out.endswith("…")
+    assert _clamp_repo_description("") == ""
+
+
+def test_create_repo_clamps_long_description(tmp_path, monkeypatch):
+    """The create POST payload carries a ≤350-char description even when
+    the caller passes a longer one (the 422 root cause)."""
+    captured = {"payload": None}
+
+    class PayloadClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            return _make_response(404, [], "")
+
+        def post(self, url, headers=None, json=None, **kwargs):
+            captured["payload"] = json
+            return _make_response(
+                201, {"id": 1, "name": "b", "clone_url": "x", "html_url": "y"}
+            )
+
+    monkeypatch.setattr(real_httpx, "Client", PayloadClient)
+
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    forge.create_repo(name="b", owner="o", private=False, description="y" * 600)
+
+    assert len(captured["payload"]["description"]) <= 350
