@@ -39,6 +39,24 @@ fi
 
 cd "$REPO" || { log "ERROR: cannot cd to $REPO"; exit 1; }
 
+# Pin the deploy tree to main. This script ff-merges origin/main into
+# the CURRENTLY checked-out branch — so if the tree is parked on a
+# feature branch that diverged from main, every ff-merge aborts and
+# deploys silently stop. Switch back to main first. Refuse to auto-switch
+# if there are uncommitted tracked changes (don't clobber manual WIP).
+current_branch=$(git symbolic-ref --short -q HEAD || echo "(detached)")
+if [ "$current_branch" != "main" ]; then
+  if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+    log "on '$current_branch' with uncommitted changes — refusing to auto-switch to main; skipping"
+    exit 0
+  fi
+  log "deploy tree on '$current_branch', not main — switching to main"
+  if ! git checkout main >>"$LOG" 2>&1; then
+    log "ERROR: failed to checkout main — skipping"
+    exit 1
+  fi
+fi
+
 # Never clobber manual WIP — bail on uncommitted TRACKED changes.
 # (.env is untracked here, so it is ignored automatically; untracked
 # files don't block a fast-forward.)

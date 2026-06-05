@@ -9,6 +9,13 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 WORKDIR /build
 
+# git is required at build time: the only non-PyPI dep
+# (robotsix-llmio) is a git source in [tool.uv.sources], so uv
+# clones it during install. The slim base image has no git.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
+
 # Bring in the `uv` binary so the install step can honour
 # [tool.uv.sources] in pyproject.toml — pip cannot, and the
 # only non-PyPI dep (robotsix-llmio) is declared there.
