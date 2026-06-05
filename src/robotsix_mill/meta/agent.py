@@ -51,6 +51,10 @@ class DraftProposal(BaseModel):
     *Alignment* drafts (practice divergence → one repo should adopt
     another's pattern) set ``target_repo_id`` to the repo that needs
     the improvement.
+
+    *TODO* drafts (resolving an outstanding ``TODO`` / ``FIXME``
+    marker found in a repo clone) set ``target_repo_id`` to the repo
+    the marker lives in.
     """
 
     title: str
