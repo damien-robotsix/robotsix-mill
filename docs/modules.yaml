@@ -114,6 +114,7 @@ modules:
       - src/robotsix_mill/runtime/transient_errors.py
       - src/robotsix_mill/runtime/board_html.py
       - src/robotsix_mill/runtime/broadcaster.py
+      - src/robotsix_mill/runtime/cost_warm.py
       - src/robotsix_mill/runtime/run_registry.py
       - src/robotsix_mill/runtime/stage_retry.py
       - src/robotsix_mill/runtime/static/*
@@ -123,7 +124,7 @@ modules:
       - tests/runtime/test_tracing.py
       - tests/runtime/test_run_registry.py
       - tests/runtime/test_ci_monitor.py
-      - tests/runtime/test_cost_warmer.py
+      - tests/runtime/test_cost_warm.py
       - tests/runtime/test_recent_traces.py
       - tests/runtime/test_bespoke_supervisor.py
       - tests/runtime/test_transient_errors.py

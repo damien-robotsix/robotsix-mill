@@ -6,7 +6,7 @@ import json
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Request
 
 from ...core.models import (
     CommentCreate,
@@ -95,6 +95,7 @@ def create_ticket(
 
 @router.get("/tickets", response_model=list[TicketRead])
 def list_tickets(
+    background: BackgroundTasks,
     state: State | None = None,
     include_closed: bool = True,
     repo_id: str | None = None,
@@ -157,6 +158,19 @@ def list_tickets(
             tickets.extend(s.list(state=state, exclude_states=exclude))
         except Exception:
             log.exception("list_tickets: failed to query board %r", s.board_id)
+
+    # Demand-driven cost warming (replaces the old cost_warmer daemon): the
+    # list serves cost cache-only for speed, then fire-and-forgets a refresh
+    # of the rows it just returned so the next poll shows real values. Runs
+    # only when the board is actually being polled.
+    from ..cost_warm import warm_ticket_costs
+
+    rc_by_board = {rc.board_id: rc for rc in repos.repos.values()}
+    terminal = {State.CLOSED, State.EPIC_CLOSED}
+    warm_items = [
+        (t.id, rc_by_board.get(t.board_id)) for t in tickets if t.state not in terminal
+    ]
+    background.add_task(warm_ticket_costs, settings, warm_items)
 
     return [
         enrich_ticket_read(t, settings, svc, blocking_cost=False, fetch_pr_url=False)

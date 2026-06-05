@@ -85,11 +85,9 @@ _BUILTIN_KINDS: dict[str, str] = {
     "cost_reconciliation": "schedule_only",
     "data_dir_audit": "schedule_only",
     # Non-LLM maintenance loops.
-    "cost_warmer": "maintenance",
     "langfuse_cleanup": "maintenance",
     # Recognized but NOT per-repo-presence managed (cross-repo / always-on).
     "meta": "global_only",
-    "cost_warmer_fast": "global_only",
     "timeout_escalation": "global_only",
     "trace_health": "global_only",
 }

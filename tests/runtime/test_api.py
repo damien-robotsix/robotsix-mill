@@ -131,12 +131,12 @@ def test_get_ticket_detail_includes_cost_usd(client, service, monkeypatch):
 
 
 def test_get_tickets_list_is_cache_only_for_cost(client, service, monkeypatch):
-    """GET /tickets (the polled list) must NEVER call the blocking
-    Langfuse session_cost — that would cost N serial HTTP roundtrips
-    on cold cache and stall the response past the board's 1s poll
-    interval. Cost comes from session_cost_cached (no network), so
-    the list value is 0.0 for an unseeded cache, regardless of what
-    session_cost is monkeypatched to return."""
+    """GET /tickets (the polled list) builds its RESPONSE cache-only — never
+    blocking on Langfuse session_cost during the request (that would cost N
+    serial HTTP roundtrips on cold cache and stall the board poll). The cost
+    comes from session_cost_cached (no network), so it's 0.0 for an unseeded
+    cache. Warming then happens in a BACKGROUND task after the response is
+    sent (replaces the old cost_warmer daemon)."""
     t = service.create("Cache-only test")
     called = []
     monkeypatch.setattr(
@@ -147,12 +147,14 @@ def test_get_tickets_list_is_cache_only_for_cost(client, service, monkeypatch):
     ts = client.get("/tickets").json()
     found = [x for x in ts if x["id"] == t.id]
     assert len(found) == 1
+    # The RESPONSE is cache-only: 0.0 even though session_cost returns 0.999.
     assert found[0]["cost_usd"] == 0.0, (
-        "list endpoint must use the non-blocking cached path"
+        "list endpoint must build the response from the non-blocking cached path"
     )
-    assert called == [], (
-        f"blocking session_cost must not be called by /tickets list; got {called}"
-    )
+    # The background warm scheduled a refresh for the returned ticket (it runs
+    # after the response — TestClient executes background tasks before
+    # returning), so the next poll shows the real value.
+    assert t.id in called
 
 
 def test_board_renders_source_badge(client):
@@ -1426,33 +1428,25 @@ def test_epic_detail_cost_is_cumulative(client, service, monkeypatch):
 
 
 def test_epic_list_cost_is_cache_only(client, service, monkeypatch):
-    """GET /tickets must NOT call blocking session_cost for epic children."""
+    """GET /tickets builds its RESPONSE cache-only — epic cumulative cost must
+    not trigger blocking session_cost during the request. (Children are still
+    warmed afterwards by the background task, which is fine.)"""
     epic = service.create("Epic", kind="epic")
-    c1 = service.create("Child 1", kind="task", parent_id=epic.id)
-    c2 = service.create("Child 2", kind="task", parent_id=epic.id)
-
-    called = []
-
-    def fake_session_cost(settings, sid, **kw):
-        called.append(sid)
-        return 0.999
+    service.create("Child 1", kind="task", parent_id=epic.id)
+    service.create("Child 2", kind="task", parent_id=epic.id)
 
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client.session_cost",
-        fake_session_cost,
+        lambda settings, sid, **kw: 0.999,
     )
 
     ts = client.get("/tickets").json()
     epic_entry = [x for x in ts if x["id"] == epic.id]
     assert len(epic_entry) == 1
-    # Cold cache → epic's own cost is 0.0, cumulative_cost is None or 0.0.
+    # RESPONSE is cache-only: epic's own cost 0.0 and cumulative not computed,
+    # even though session_cost returns 0.999.
     assert epic_entry[0]["cost_usd"] == 0.0
     assert epic_entry[0]["cumulative_cost"] is None
-    # session_cost must NOT have been called for any child id.
-    child_calls = [x for x in called if x in (c1.id, c2.id)]
-    assert child_calls == [], (
-        f"blocking session_cost called for children: {child_calls}"
-    )
 
 
 def test_nested_epic_cost_is_recursive(client, service, monkeypatch):

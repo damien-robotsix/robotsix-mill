@@ -789,39 +789,8 @@ class Settings(BaseSettings):
     # daily. Enforced minimum 3600s (1h) in the worker.
     trace_review_interval_seconds: int = Field(default=86400)
 
-    # --- cost warmer ---
-    # When True, the worker runs a slow background task that walks every
-    # non-archived ticket on each repo and refreshes its cached Langfuse
-    # cost. Without this the board's /tickets list (which polls every
-    # 1s with blocking_cost=False to stay fast) shows $0 for any ticket
-    # whose detail drawer has never been opened — operators only see the
-    # actual cost when they click the ticket. The warmer pre-fills the
-    # cache so the cost column is always populated.
-    cost_warmer_periodic: bool = Field(default=True)
-    # Seconds between full cycles. Default 20s: a full sweep of a
-    # busy board (200+ tickets) finishes in ~15s with the default
-    # concurrency, so the column refreshes faster than the cache TTL
-    # — idle tickets stay populated without ever showing a $0 dip.
-    cost_warmer_interval_seconds: int = Field(default=20)
-    # Concurrent Langfuse calls during a sweep. Each call takes
-    # ~250ms; with concurrency=4 a 200-ticket sweep takes ~12s. Bump
-    # higher for snappier refreshes on large boards (mind the
-    # Langfuse rate limit); drop to 1 to revert to fully-serial.
-    cost_warmer_concurrency: int = Field(default=4)
-    # Independent on/off for the fast loop (see comment below).
-    # Gated separately from the slow loop so an operator can disable
-    # the per-active-ticket Langfuse polling without losing the
-    # comprehensive sweep, e.g. when Langfuse rate-limits become a
-    # concern.
-    cost_warmer_fast_periodic: bool = Field(default=True)
-    # Seconds between *fast* warmer cycles. The slow warmer above
-    # walks every ticket and is fine for idle ones, but a full sweep
-    # takes a minute or more on a busy board — long enough that an
-    # actively-running ticket's cost looks frozen to the operator
-    # watching it. The fast loop walks ONLY tickets in active stages
-    # (refine, implement, review, …) and bypasses the cache TTL, so a
-    # board user sees the cost climb in near-real-time.
-    cost_warmer_fast_interval_seconds: int = Field(default=5)
+    # (cost-cache warming is no longer a backend daemon — the board's
+    # /tickets poll drives it on demand via runtime/cost_warm.py.)
 
     # --- timeout escalation ---
     # When True, the worker runs periodic timeout-escalation passes at the
