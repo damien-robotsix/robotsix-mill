@@ -333,6 +333,12 @@ class MergeStage(Stage):
             if conclusion == "failure":
                 statuses.append({**base, "status": "failing_ci"})
             elif conclusion == "success":
+                # Reset per-repo ci-fix cycle counter when CI turns green.
+                cycle_path = (
+                    ctx.service.workspace(ticket).artifacts_dir
+                    / f"ci_fix_{repo_id}_cycles.txt"
+                )
+                _write_counter(cycle_path, 0)
                 statuses.append({**base, "status": "green"})
             else:
                 statuses.append({**base, "status": "pending"})
@@ -432,6 +438,33 @@ class MergeStage(Stage):
                 "%s: check_status failed for %s (retry): %s", ticket.id, repo_id, e
             )
             return Outcome(ticket.state)
+
+        # --- cycle-ceiling gate (mirrors CIFixStage) ---
+        conclusion = (ci or {}).get("conclusion")
+        cycle_counter_path = ws.artifacts_dir / f"ci_fix_{repo_id}_cycles.txt"
+        if conclusion == "success":
+            # CI turned green between polls — reset and re-poll.
+            _write_counter(cycle_counter_path, 0)
+            return Outcome(ticket.state)
+        if conclusion == "failure":
+            cycles = _read_counter(cycle_counter_path)
+            if s.ci_fix_max_cycles > 0 and cycles >= s.ci_fix_max_cycles:
+                _write_counter(cycle_counter_path, 0)
+                log.warning(
+                    "%s: multi-repo ci-fix for %s hit hard ceiling of %d cycle(s) "
+                    "without turning CI green — escalating to BLOCKED",
+                    ticket.id,
+                    repo_id,
+                    s.ci_fix_max_cycles,
+                )
+                return Outcome(
+                    State.BLOCKED,
+                    f"ci fix for {repo_id} exhausted hard ceiling of "
+                    f"{s.ci_fix_max_cycles} cycle(s) without turning CI green "
+                    f"— manual intervention required",
+                )
+            _write_counter(cycle_counter_path, cycles + 1)
+
         failing = (ci or {}).get("failing", [])
 
         log_text = ""

@@ -2918,6 +2918,174 @@ def test_multi_repo_failing_ci_with_clone_runs_ci_fix(tmp_path, monkeypatch):
     assert merge_mod._read_counter(counter) == 0
 
 
+def test_multi_repo_ci_fix_cycle_ceiling_blocks(tmp_path, monkeypatch):
+    """After ci_fix_max_cycles cycles of the agent reporting DONE + producing
+    commits while CI stays red, the next call triggers BLOCKED without
+    invoking the agent."""
+    ctx = _gh(tmp_path, ci_fix_max_cycles="3")
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-b", remote_b)])
+
+    _route_by_remote(
+        monkeypatch,
+        pr_responses={
+            remote_b: {
+                "merged": False,
+                "state": "open",
+                "url": "https://github.com/o/b/pull/2",
+                "mergeable": True,
+                "sha": "deadbeef",
+            },
+        },
+        ci_responses={
+            # check_status in _run_multi_repo returns failure (routes to ci_fix).
+            # But _multi_repo_fix_ci also calls check_status — we need
+            # consistent failure there too.
+            remote_b: {"conclusion": "failure", "failing": [{"name": "tests"}]},
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "list_workflow_runs", lambda self, *, head_sha: []
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    # Materialise repo-b clone.
+    repo_b_dir = ctx.service.workspace(t).dir / "repos" / "repo-b"
+    (repo_b_dir / ".git").mkdir(parents=True)
+
+    from robotsix_mill.stages import merge as merge_mod
+    from robotsix_mill.agents.ci_fixing import CiFixResult
+
+    agent_calls = {"n": 0}
+
+    def fake_agent(**kw):
+        agent_calls["n"] += 1
+        return CiFixResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(merge_mod, "run_ci_fix_agent", fake_agent)
+    monkeypatch.setattr(
+        merge_mod.tracing,
+        "start_ticket_root_span",
+        lambda *a, **k: contextlib.nullcontext(),
+    )
+    # Simulate a fresh churn commit every cycle: local != remote.
+    monkeypatch.setattr(merge_mod.git_ops, "head_sha", lambda d: "newsha")
+    monkeypatch.setattr(merge_mod.git_ops, "remote_branch_sha", lambda d, b: "oldsha")
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "push",
+        lambda *a, **k: None,
+    )
+
+    _write_pr_urls(
+        ctx,
+        t,
+        [
+            {
+                "repo_id": "repo-b",
+                "branch": branch,
+                "url": "https://github.com/o/b/pull/2",
+            },
+        ],
+    )
+
+    cycle_path = ctx.service.workspace(t).artifacts_dir / "ci_fix_repo-b_cycles.txt"
+
+    # Cycles 1-3 run the agent → IMPLEMENT_COMPLETE.
+    for expected in (1, 2, 3):
+        out = MergeStage().run(t, ctx)
+        assert out.next_state is State.IMPLEMENT_COMPLETE
+        assert merge_mod._read_counter(cycle_path) == expected
+    assert agent_calls["n"] == 3
+
+    # Cycle 4 reaches the ceiling → BLOCKED without running the agent.
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "hard ceiling of 3 cycle(s)" in out.note
+    # Agent NOT invoked on the blocking cycle.
+    assert agent_calls["n"] == 3
+    # Cycle counter reset to 0 on the blocking return.
+    assert merge_mod._read_counter(cycle_path) == 0
+
+
+def test_multi_repo_ci_fix_cycle_reset_on_green(tmp_path, monkeypatch):
+    """Two failing cycles bump the per-repo cycle counter; then CI turns green
+    → counter resets to 0."""
+    ctx = _gh(tmp_path, ci_fix_max_cycles="8")
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-b", remote_b)])
+
+    # Mutable dict so we can flip the CI conclusion between calls.
+    ci_state = {"conclusion": "failure", "failing": [{"name": "tests"}]}
+
+    def fake_pr_status(self, *, source_branch):
+        return {
+            "merged": False,
+            "state": "open",
+            "url": "https://github.com/o/b/pull/2",
+            "mergeable": True,
+            "sha": "deadbeef",
+        }
+
+    def fake_check_status(self, *, source_branch):
+        return dict(ci_state)
+
+    monkeypatch.setattr(github.GitHubForge, "pr_status", fake_pr_status)
+    monkeypatch.setattr(github.GitHubForge, "check_status", fake_check_status)
+    monkeypatch.setattr(
+        github.GitHubForge, "list_workflow_runs", lambda self, *, head_sha: []
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    repo_b_dir = ctx.service.workspace(t).dir / "repos" / "repo-b"
+    (repo_b_dir / ".git").mkdir(parents=True)
+
+    from robotsix_mill.stages import merge as merge_mod
+    from robotsix_mill.agents.ci_fixing import CiFixResult
+
+    monkeypatch.setattr(
+        merge_mod,
+        "run_ci_fix_agent",
+        lambda **kw: CiFixResult(status="DONE", summary="ok"),
+    )
+    monkeypatch.setattr(
+        merge_mod.tracing,
+        "start_ticket_root_span",
+        lambda *a, **k: contextlib.nullcontext(),
+    )
+    monkeypatch.setattr(merge_mod.git_ops, "head_sha", lambda d: "newsha")
+    monkeypatch.setattr(merge_mod.git_ops, "remote_branch_sha", lambda d, b: "oldsha")
+    monkeypatch.setattr(merge_mod.git_ops, "push", lambda *a, **k: None)
+
+    _write_pr_urls(
+        ctx,
+        t,
+        [
+            {
+                "repo_id": "repo-b",
+                "branch": branch,
+                "url": "https://github.com/o/b/pull/2",
+            },
+        ],
+    )
+
+    cycle_path = ctx.service.workspace(t).artifacts_dir / "ci_fix_repo-b_cycles.txt"
+
+    # Two failing cycles bump the counter.
+    MergeStage().run(t, ctx)
+    MergeStage().run(t, ctx)
+    assert merge_mod._read_counter(cycle_path) == 2
+
+    # CI turns green — the _run_multi_repo poll observes success and
+    # resets the counter.  The ticket stays IMPLEMENT_COMPLETE (re-poll).
+    ci_state["conclusion"] = "success"
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert merge_mod._read_counter(cycle_path) == 0
+
+
 def test_multi_repo_all_green_auto_merges_when_eligible(tmp_path, monkeypatch):
     """All PRs green + review marks auto-merge eligible → each green PR is
     merged via its own forge; stays same-state so the next poll sees DONE."""

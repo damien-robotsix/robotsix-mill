@@ -746,7 +746,7 @@ class Settings(BaseSettings):
     # only no-change cycles), this counter is reset ONLY when CI is observed
     # green, so a loop that keeps committing useless churn while CI stays red
     # is still bounded.  Set to 0 to disable.
-    ci_fix_max_cycles: int = Field(default=8, ge=0)
+    ci_fix_max_cycles: int = Field(default=3, ge=0)
 
     # Maximum review-revision attempts per ticket before escalating to BLOCKED.
     review_revision_max_attempts: int = Field(default=2, ge=1)
