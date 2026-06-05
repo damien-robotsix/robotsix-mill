@@ -137,7 +137,9 @@ class Settings(BaseSettings):
     #  - refine_model   : spec authoring (capable; may web_research).
     #  - answer_model   : investigative analyst (capable; web + repo +
     #                     Langfuse tools).
-    #  - retrospect_model / audit_model : structured analysis (capable).
+    #  - audit_model    : structured quality/security analysis (cheap).
+    #  - retrospect_model : extractive summarise/extract-lessons over a
+    #                     finished ticket (cheap/flash — not deep reasoning).
     # Transient 429/5xx/timeouts on any of these are absorbed by the
     # bounded retry+backoff (see transient_* below).
     #
@@ -182,7 +184,7 @@ class Settings(BaseSettings):
     # these re-check / resume passes cheap.
     no_change_model: str = Field(default="deepseek/deepseek-v4-flash")
     answer_model: str = Field(default="deepseek/deepseek-v4-pro")
-    retrospect_model: str = Field(default="deepseek/deepseek-v4-pro")
+    retrospect_model: str = Field(default="deepseek/deepseek-v4-flash")
     audit_model: str = Field(default="deepseek/deepseek-v4-flash")
     # Default model for bespoke per-repo periodic agents loaded from
     # ``<clone>/.robotsix-mill/agents/<name>.yaml``. Each bespoke YAML
