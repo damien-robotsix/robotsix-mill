@@ -1635,9 +1635,7 @@ class TestConfigErrorBackwardCompat:
         import robotsix_mill.config_loader as cl
 
         # Force the missing-defaults path so the loader raises.
-        monkeypatch.setattr(
-            cl, "_DEFAULTS_FILE", cl.Path("/nonexistent/defaults.yaml")
-        )
+        monkeypatch.setattr(cl, "_DEFAULTS_FILE", cl.Path("/nonexistent/defaults.yaml"))
         caught = False
         try:
             load_yaml_config()
