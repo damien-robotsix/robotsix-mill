@@ -556,6 +556,7 @@ modules:
       license, security policy, and gitignore.
     paths:
       - README.md
+      - ARCHITECTURE.md
       - CONTRIBUTING.md
       - LICENSE
       - SECURITY.md
