@@ -123,3 +123,24 @@ with:
 - the installed extras (`pip show robotsix-llmio`),
 - and — for provider-specific bugs — which transport you're using (OpenRouter /
   Claude SDK).
+
+## 8. Releasing
+
+Releases are published to [PyPI](https://pypi.org/p/robotsix-llmio)
+automatically by the `.github/workflows/release.yml` GitHub Actions workflow.
+The flow is:
+
+1. Bump `version` in `pyproject.toml`, then commit/merge the bump to `main`.
+2. Tag the release and create a **GitHub Release** for that tag. Publishing the
+   release triggers `release.yml`.
+3. The workflow builds the sdist + wheel (`python -m build`) and publishes them
+   to PyPI via **Trusted Publishing (OIDC)** — no API token is stored or
+   required.
+
+### One-time maintainer setup
+
+Trusted Publishing must be registered once by a project maintainer at
+<https://pypi.org/manage/project/robotsix-llmio/settings/publishing/>, pointing
+at this repository (`robotsix-dev/robotsix-llmio`), the workflow filename
+`release.yml`, and the `pypi` GitHub Environment. This is a manual action
+performed once on PyPI and cannot be done from the repository.
