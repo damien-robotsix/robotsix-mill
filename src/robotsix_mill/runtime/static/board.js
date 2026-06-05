@@ -41,6 +41,7 @@ const AGENT_COLORS={
  roadmap_sync:'#9333ea',
  trace_review:'#0ea5e9',
  module_curator:'#f97316',
+ copy_paste:'#ec4899',
  meta:'#a855f7',
 };
 // Resolve an agent color from any kind spelling. Normalizes hyphens to
