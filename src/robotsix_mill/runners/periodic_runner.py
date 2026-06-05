@@ -537,9 +537,8 @@ def run_board_cleanup_pass(
         )
 
     service = TicketService(settings, board_id=repo_config.board_id)
-    repo_data_dir = settings.data_dir / repo_config.repo_id
-    repo_data_dir.mkdir(parents=True, exist_ok=True)
-    memory_file = repo_data_dir / "board_cleanup_memory.md"
+    memory_file = settings.board_cleanup_memory_file(repo_config.repo_id)
+    memory_file.parent.mkdir(parents=True, exist_ok=True)
 
     # Fetch the full board (across all sources) so the agent can spot
     # stale/obsolete tickets, not just its own prior proposals.

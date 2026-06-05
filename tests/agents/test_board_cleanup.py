@@ -197,3 +197,25 @@ def test_run_board_cleanup_pass_injects_board_and_returns_result(tmp_path, monke
     # The proposed close action was persisted.
     assert len(result.proposed_actions) == 1
     assert result.proposed_actions[0]["action_type"] == "close"
+
+
+def test_run_board_cleanup_pass_honors_memory_path_override(tmp_path, monkeypatch):
+    """When board_cleanup_memory_path is set, the runner persists the
+    agent's memory to that pinned path instead of the per-repo default."""
+    override = tmp_path / "pinned" / "board_cleanup_memory.md"
+    settings = _make_settings(tmp_path, board_cleanup_memory_path=str(override))
+
+    def fake_agent(*, settings, memory, recent_proposals, verified_proposals, **kw):
+        return bc_agent.BoardCleanupResult(updated_memory="pinned-memory")
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.board_cleanup.run_board_cleanup_agent", fake_agent
+    )
+
+    run_board_cleanup_pass("sid", _test_repo_config(), settings=settings)
+
+    # The override path was used (and its parent created); the per-repo
+    # default path was NOT written.
+    assert override.read_text() == "pinned-memory"
+    default_path = settings.data_dir / "test-repo" / "board_cleanup_memory.md"
+    assert not default_path.exists()
