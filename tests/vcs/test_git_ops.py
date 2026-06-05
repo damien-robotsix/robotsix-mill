@@ -94,6 +94,46 @@ class TestClone:
         assert email == "mill@robotsix.local"
         assert name == "robotsix-mill"
 
+    def test_init_repo_creates_branch_and_identity(self, tmp_path):
+        dest = tmp_path / "fresh"
+        git_ops.init_repo(dest, "main")
+        assert (dest / ".git").is_dir()
+        # On the initial branch (no commits yet) HEAD points at refs/heads/main.
+        head = subprocess.run(
+            ["git", "-C", str(dest), "symbolic-ref", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        assert head == "main"
+        email = subprocess.run(
+            ["git", "-C", str(dest), "config", "user.email"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        assert email == "mill@robotsix.local"
+
+    def test_init_repo_commit_push_into_bare_remote(self, tmp_path):
+        """init → write → commit → force-push populates an empty bare remote
+        (the brand-new-repo scaffold path)."""
+        bare = tmp_path / "remote.git"
+        subprocess.run(
+            ["git", "init", "--quiet", "--bare", "-b", "main", str(bare)],
+            check=True,
+        )
+        dest = tmp_path / "work"
+        git_ops.init_repo(dest, "main")
+        (dest / "README.md").write_text("hi\n", encoding="utf-8")
+        git_ops.commit_all(dest, "Initial scaffold")
+        git_ops.push(dest, "main", f"file://{bare}", token=None)
+        # The bare remote now has the README on main.
+        show = subprocess.run(
+            ["git", "-C", str(bare), "show", "main:README.md"],
+            capture_output=True,
+            text=True,
+        )
+        assert show.returncode == 0
+        assert show.stdout.strip() == "hi"
+
     def test_clone_with_token_file_url_still_works(self, tmp_path):
         """Verify clone works with a token + file:// URL (token is ignored
         for file:// by _authed_url, but the codepath is exercised)."""

@@ -1400,6 +1400,61 @@ def test_create_repo_403_integration_message(tmp_path, monkeypatch):
         forge.create_repo(name="b", owner="o", private=False, description="d")
 
 
+def _empty_reuse_client(*, commits_status, commits_json=None):
+    """Client where create 422s 'name already exists', the repo GET 200s, and
+    the commits GET returns *commits_status* (409=empty) / *commits_json*."""
+
+    class C:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def post(self, url, headers=None, json=None, **kwargs):
+            # org create 404 → user create 422 name-exists
+            if url.endswith("/orgs/o/repos"):
+                return _make_response(404, {}, "no org")
+            return _make_response(422, {}, "name already exists on this account")
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            if url.endswith("/repos/o/b/commits"):
+                return _make_response(commits_status, commits_json or [], "")
+            if url.endswith("/repos/o/b"):
+                return _make_response(
+                    200,
+                    {"id": 7, "name": "b", "clone_url": "cu", "html_url": "hu"},
+                )
+            return _make_response(404, [], "")
+
+    return C
+
+
+def test_create_repo_reuses_existing_empty_repo(tmp_path, monkeypatch):
+    """A prior partial scaffold left an EMPTY repo → create reuses it
+    (returns its RepoInfo) instead of failing on 'already exists'."""
+    monkeypatch.setattr(real_httpx, "Client", _empty_reuse_client(commits_status=409))
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    info = forge.create_repo(name="b", owner="o", private=False, description="d")
+    assert info.id == 7
+    assert info.clone_url == "cu"
+
+
+def test_create_repo_existing_nonempty_repo_raises(tmp_path, monkeypatch):
+    """An existing repo WITH commits is a genuine conflict → RuntimeError."""
+    monkeypatch.setattr(
+        real_httpx,
+        "Client",
+        _empty_reuse_client(commits_status=200, commits_json=[{"sha": "abc"}]),
+    )
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    with pytest.raises(RuntimeError, match="not empty"):
+        forge.create_repo(name="b", owner="o", private=False, description="d")
+
+
 def test_clamp_repo_description():
     """Descriptions are single-lined and clamped to GitHub's 350-char cap."""
     from robotsix_mill.forge.github import _clamp_repo_description

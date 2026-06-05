@@ -416,14 +416,12 @@ class TestRunRepoScaffold:
         )
 
         # Mock git_ops
-        clone_calls = []
+        init_calls = []
         commit_calls = []
         push_calls = []
 
-        def _fake_clone(*, remote_url, dest, branch, token):
-            clone_calls.append(
-                {"remote_url": remote_url, "dest": dest, "branch": branch}
-            )
+        def _fake_init_repo(dest, branch):
+            init_calls.append({"dest": dest, "branch": branch})
             # Create the directory so subsequent writes work
             dest.mkdir(parents=True, exist_ok=True)
 
@@ -435,7 +433,9 @@ class TestRunRepoScaffold:
                 {"repo": repo, "branch": branch, "remote_url": remote_url}
             )
 
-        monkeypatch.setattr("robotsix_mill.repo_scaffold.git_ops.clone", _fake_clone)
+        monkeypatch.setattr(
+            "robotsix_mill.repo_scaffold.git_ops.init_repo", _fake_init_repo
+        )
         monkeypatch.setattr(
             "robotsix_mill.repo_scaffold.git_ops.commit_all", _fake_commit_all
         )
@@ -460,10 +460,9 @@ class TestRunRepoScaffold:
             description="A test repo",
         )
 
-        # git_ops.clone was called
-        assert len(clone_calls) == 1
-        assert clone_calls[0]["remote_url"] == "https://github.com/my-org/my-repo.git"
-        assert clone_calls[0]["branch"] == settings.forge_target_branch
+        # git_ops.init_repo was called (empty remote — init, don't clone)
+        assert len(init_calls) == 1
+        assert init_calls[0]["branch"] == settings.forge_target_branch
 
         # git_ops.commit_all was called
         assert len(commit_calls) == 1
@@ -472,9 +471,10 @@ class TestRunRepoScaffold:
         # git_ops.push was called
         assert len(push_calls) == 1
         assert push_calls[0]["branch"] == settings.forge_target_branch
+        assert push_calls[0]["remote_url"] == "https://github.com/my-org/my-repo.git"
 
-        # Verify scaffold files were written in the clone dest
-        dest = clone_calls[0]["dest"]
+        # Verify scaffold files were written in the init dest
+        dest = init_calls[0]["dest"]
         assert (dest / "README.md").exists()
         assert (dest / "LICENSE").exists()
         assert (dest / "pyproject.toml").exists()
