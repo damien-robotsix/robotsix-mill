@@ -40,7 +40,15 @@ jobs:
       - name: Bandit security scan
         run: bandit -r src/ -ll
       - name: Dependency vulnerability audit
-        run: pip-audit
+        run: |
+          pip-audit --format cyclonedx-json --output sbom.json || true
+          pip-audit  # for human-readable report
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.json
+          if-no-files-found: error
 
   codeql:
     runs-on: ubuntu-latest
