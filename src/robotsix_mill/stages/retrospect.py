@@ -384,6 +384,71 @@ class RetrospectStage(Stage):
         )
         return draft.id
 
+    def _suppress_duplicate_agented_proposals(
+        self,
+        res: RetrospectResult,
+        ticket: Ticket,
+        settings: Settings,
+        ctx: StageContext,
+    ) -> None:
+        """Drop AGENT.md proposals that duplicate a recently-filed or
+        in-flight proposal before either sink (AGENT_CANDIDATES.md or
+        the direct ticket-filing path) writes.
+
+        Runs once over ``res.agented_md_proposals`` and reassigns it to
+        the surviving (non-duplicate) proposals so BOTH downstream
+        ``_maybe_*`` calls see only the survivors. Each suppression is
+        recorded in ``res.findings`` (persisted into retrospect.md).
+
+        Reuses the shared
+        :func:`robotsix_mill.dedup.find_agent_md_proposal_overlap` seam
+        — no second matcher. Best-effort: a dedup-query failure inside
+        the helper logs and returns ``None`` (fall through to filing).
+        """
+        if not settings.retrospect_spawn_agented_proposals:
+            return
+        proposals = res.agented_md_proposals
+        if not proposals:
+            return
+
+        from datetime import datetime, timezone
+
+        from ..dedup import find_agent_md_proposal_overlap
+
+        now = datetime.now(timezone.utc)
+        kept: list[dict] = []
+        for prop in proposals:
+            section = prop.get("section", "")
+            rule = prop.get("rule", "")
+            matched = find_agent_md_proposal_overlap(
+                ctx.service,
+                section,
+                rule,
+                settings,
+                now,
+                exclude_ids={ticket.id},
+            )
+            if matched is None:
+                kept.append(prop)
+                continue
+            rule_snippet = " ".join(rule.split())
+            if len(rule_snippet) > 80:
+                rule_snippet = rule_snippet[:79].rstrip() + "…"
+            res.findings += (
+                f"\nSuppressed duplicate AGENT.md proposal "
+                f"({section} — {rule_snippet}) — scope-equivalent to "
+                f"{matched.id}."
+            )
+            log.info(
+                "%s: suppressed duplicate AGENT.md proposal "
+                "(%s — %s) — scope-equivalent to %s",
+                ticket.id,
+                section,
+                rule_snippet,
+                matched.id,
+            )
+        res.agented_md_proposals = kept
+
     def _maybe_write_agented_proposals(
         self,
         res: RetrospectResult,
@@ -735,6 +800,7 @@ class RetrospectStage(Stage):
 
         spawned = self._maybe_spawn_draft(res, ticket, s, ctx)
         follow_up = self._maybe_spawn_follow_up(res, ticket, s, ctx)
+        self._suppress_duplicate_agented_proposals(res, ticket, s, ctx)
         self._maybe_write_agented_proposals(res, ticket, s, ctx)
         # In addition to the candidates file, file a draft ticket per
         # AGENT.md proposal on the originating repo's board so the change

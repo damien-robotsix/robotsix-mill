@@ -1603,6 +1603,142 @@ def test_agented_proposal_tickets_dedup_on_repeat(ctx_factory, monkeypatch):
     assert after_second[0].id == after_first[0].id
 
 
+def test_agented_proposal_suppressed_vs_inflight_draft(ctx_factory, monkeypatch):
+    """A scope-equivalent proposal whose matching ticket is already in
+    flight (DRAFT) is suppressed before BOTH sinks: no new proposal
+    ticket is filed, nothing is appended to AGENT_CANDIDATES.md, and the
+    suppression is recorded in res.findings / retrospect.md."""
+    ctx = ctx_factory()
+    _agented_seams(monkeypatch)
+
+    # Pre-seed an in-flight (DRAFT) proposal ticket with the same title
+    # shape the filing path constructs.
+    existing = ctx.service.create(
+        "AGENT.md: Board UI — Always update board.js when adding new UI.",
+        "prior proposal body",
+    )
+    assert existing.state is State.DRAFT
+
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(
+            agented_md_proposals=[
+                {
+                    "section": "## Board UI",
+                    "rule": "Always update board.js when adding new UI.",
+                    "rationale": "Observed again.",
+                }
+            ]
+        ),
+    )
+
+    t = _ticket(ctx)
+    out = RetrospectStage().run(t, ctx)
+    assert out.next_state is State.CLOSED
+
+    # No NEW proposal ticket filed (only the pre-seeded one + original).
+    spawned = [tk.id for tk in ctx.service.list() if tk.id not in {t.id, existing.id}]
+    assert spawned == []
+
+    # Nothing written to the candidates file.
+    candidates_path = ctx.settings.data_dir / "test-board" / "AGENT_CANDIDATES.md"
+    assert not candidates_path.exists()
+
+    # Suppression recorded in the persisted retrospect.md.
+    content = (ctx.service.workspace(t).artifacts_dir / "retrospect.md").read_text()
+    assert "Suppressed duplicate AGENT.md proposal" in content
+    assert existing.id in content
+
+
+def test_agented_proposal_suppressed_vs_done(ctx_factory, monkeypatch):
+    """A scope-equivalent proposal whose matching ticket is already
+    merged (DONE) is suppressed — the case the exact-open-title check
+    misses (DONE is excluded from the open-title scan)."""
+    ctx = ctx_factory()
+    _agented_seams(monkeypatch)
+
+    # Pre-seed a same-scope ticket transitioned all the way to DONE.
+    existing = _ticket(
+        ctx,
+        title="AGENT.md: Board UI — Always update board.js when adding new UI.",
+        branch=None,
+    )
+    assert existing.state is State.DONE
+
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(
+            agented_md_proposals=[
+                {
+                    "section": "## Board UI",
+                    "rule": "Always update board.js when adding new UI.",
+                    "rationale": "Observed again.",
+                }
+            ]
+        ),
+    )
+
+    t = _ticket(ctx)
+    out = RetrospectStage().run(t, ctx)
+    assert out.next_state is State.CLOSED
+
+    spawned = [tk.id for tk in ctx.service.list() if tk.id not in {t.id, existing.id}]
+    assert spawned == []
+
+    candidates_path = ctx.settings.data_dir / "test-board" / "AGENT_CANDIDATES.md"
+    assert not candidates_path.exists()
+
+    content = (ctx.service.workspace(t).artifacts_dir / "retrospect.md").read_text()
+    assert "Suppressed duplicate AGENT.md proposal" in content
+    assert existing.id in content
+
+
+def test_agented_proposal_distinct_not_suppressed(ctx_factory, monkeypatch):
+    """A genuinely new proposal (distinct section/rule, no prior match)
+    is filed normally and written to the candidates file."""
+    ctx = ctx_factory()
+    _agented_seams(monkeypatch)
+
+    # Pre-seed an unrelated proposal so the board is non-empty but offers
+    # no scope-equivalent match.
+    ctx.service.create(
+        "AGENT.md: Git / CI — Rebase before committing.",
+        "unrelated prior proposal",
+    )
+
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(
+            agented_md_proposals=[
+                {
+                    "section": "## Board UI",
+                    "rule": "Always update board.js when adding new UI.",
+                    "rationale": "Observed on T-abc.",
+                }
+            ]
+        ),
+    )
+
+    t = _ticket(ctx)
+    out = RetrospectStage().run(t, ctx)
+    assert out.next_state is State.CLOSED
+
+    spawned = [
+        tk
+        for tk in ctx.service.list()
+        if tk.id != t.id and tk.title.startswith("AGENT.md: Board UI")
+    ]
+    assert len(spawned) == 1
+
+    candidates_path = ctx.settings.data_dir / "test-board" / "AGENT_CANDIDATES.md"
+    assert candidates_path.exists()
+    ctext = candidates_path.read_text()
+    assert "Always update board.js when adding new UI." in ctext
+
+
 # ---------------------------------------------------------------------------
 # 22. Draft routing: draft_target="mill" lands on the configured mill board
 # ---------------------------------------------------------------------------

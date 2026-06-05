@@ -237,6 +237,61 @@ def find_inflight_overlap(
         return None
 
 
+def find_agent_md_proposal_overlap(
+    service: TicketService,
+    section: str,
+    rule: str,
+    settings: Settings,
+    now: datetime,
+    *,
+    exclude_ids: Collection[str] = (),
+) -> Ticket | None:
+    """Code-level dedup for a retrospect AGENT.md proposal.
+
+    Reuses :func:`find_prior_matching_ticket` to spot a recent ticket
+    whose scope is equivalent to the proposed *section* / *rule* within
+    ``settings.epic_dedup_lookback_days`` — crucially including
+    CONCURRENT in-flight ones (DRAFT/READY/...) AND merged-then-DONE
+    candidates, the two classes the filing path's exact-open-title check
+    misses (a rephrased title, or an already-shipped proposal).
+
+    The candidate fingerprint mirrors the SAME title shape the filing
+    path constructs (``AGENT.md: <section label> — <rule snippet>``) so
+    it matches prior proposal tickets. AGENT.md proposals all share one
+    file, so path matching carries no signal — ``target_files`` is empty
+    and the title fingerprint does the work.
+
+    Returns the matched :class:`Ticket` on a strong match, or ``None``
+    when nothing overlaps.
+
+    Best-effort: any failure logs and returns ``None`` so the proposal
+    is still filed.
+    """
+    try:
+        section_label = section.lstrip("#").strip() or "AGENT.md"
+        rule_snippet = " ".join(rule.split())  # collapse whitespace
+        if len(rule_snippet) > 80:
+            rule_snippet = rule_snippet[:79].rstrip() + "…"
+        if rule_snippet:
+            fingerprint_text = f"AGENT.md: {section_label} — {rule_snippet}"
+        else:
+            fingerprint_text = f"AGENT.md: {section_label} — proposed rule"
+        return find_prior_matching_ticket(
+            service,
+            service.board_id,
+            [],
+            fingerprint_text,
+            settings,
+            now,
+            sources=None,
+            lookback_days=settings.epic_dedup_lookback_days,
+            exclude_ids=exclude_ids,
+        )
+    except Exception:  # noqa: BLE001 — best-effort dedup
+        log.exception("dedup: find_agent_md_proposal_overlap failed")
+        return None
+
+
 def find_child_overlaps(
     service: TicketService,
     parent_epic_id: str,
