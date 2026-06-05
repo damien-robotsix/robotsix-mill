@@ -154,7 +154,7 @@ def test_run_board_cleanup_pass_requires_repo_config(tmp_path):
     """A missing repo_config raises ValueError (no board-less fallback)."""
     settings = _make_settings(tmp_path)
     with pytest.raises(ValueError):
-        run_board_cleanup_pass("sid", None, settings=settings)
+        run_board_cleanup_pass("sid", None, settings=settings)  # type: ignore[arg-type]
 
 
 def test_run_board_cleanup_pass_injects_board_and_returns_result(tmp_path, monkeypatch):
