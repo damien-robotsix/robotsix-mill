@@ -76,12 +76,14 @@ def load_yaml_config(config_file: str | None = None, skip_local: bool = False) -
     # Build the ordered layer list at call time (reading the current
     # module-level _DEFAULTS_FILE / _LOCAL_FILE values so test
     # monkeypatching applies). Precedence is later-overrides-earlier:
-    # defaults → local → production.
-    layers: list[Path] = [_DEFAULTS_FILE]
+    # defaults → local → production. Each layer is a ``(path, required)``
+    # tuple consumed by ``load_yaml_cascade``; only the local overlay is
+    # optional.
+    layers: list[tuple[Path, bool]] = [(_DEFAULTS_FILE, True)]
     if not skip_local:
-        layers.append(_LOCAL_FILE)
+        layers.append((_LOCAL_FILE, False))
     if prod_path:
-        layers.append(Path(prod_path))
+        layers.append((Path(prod_path), True))
 
     try:
         return load_yaml_cascade(layers)
