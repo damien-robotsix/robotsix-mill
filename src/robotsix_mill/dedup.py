@@ -119,7 +119,17 @@ def find_prior_matching_ticket(
 # more directory segments — e.g. ``ci.yml``, ``CONTRIBUTING.md``,
 # ``tests/foo/test_bar.py``. Used to extract a child's ``target_files``
 # from its free-text body for the overlap checks below.
-_PATH_TOKEN_RE = re.compile(r"[\w.+-]+(?:/[\w.+-]+)*\.[A-Za-z][A-Za-z0-9]{0,6}\b")
+#
+# Multi-segment tokens (those containing ``/``) stay permissive — any
+# alpha-leading extension counts, so real paths like ``tests/foo/test_bar.py``
+# still match. Single-segment tokens must end in a recognised source/file
+# extension; this keeps dotted prose fragments like ``e.g`` / ``i.e`` (from
+# "e.g." / "i.e.") from being mistaken for file paths.
+_SOURCE_EXT = "py|md|yml|yaml|json|toml|js|mjs|cfg|ini|txt|sh|html|css"
+_PATH_TOKEN_RE = re.compile(
+    r"[\w.+-]+/[\w.+-]+(?:/[\w.+-]+)*\.[A-Za-z][A-Za-z0-9]{0,6}\b"
+    rf"|[\w.+-]+\.(?:{_SOURCE_EXT})\b"
+)
 
 
 def _extract_paths(text: str) -> list[str]:
