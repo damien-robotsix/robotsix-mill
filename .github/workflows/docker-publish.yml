@@ -112,7 +112,12 @@ jobs:
           format: cyclonedx-json
           output-file: sbom.cdx.json
 
+      # GitHub attestation persistence is best-effort: the signed attestation
+      # is already pushed to the registry (push-to-registry: true) and the SBOM
+      # is preserved as a workflow artifact, so a transient 401 from the
+      # create-an-attestation API must not gate the publish.
       - uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26  # v4
+        continue-on-error: true
         with:
           subject-name: docker.io/robotsix/mill
           subject-digest: ${{ steps.push.outputs.digest }}
@@ -216,7 +221,12 @@ jobs:
           format: cyclonedx-json
           output-file: sbom-sandbox.cdx.json
 
+      # GitHub attestation persistence is best-effort: the signed attestation
+      # is already pushed to the registry (push-to-registry: true) and the SBOM
+      # is preserved as a workflow artifact, so a transient 401 from the
+      # create-an-attestation API must not gate the publish.
       - uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26  # v4
+        continue-on-error: true
         with:
           subject-name: docker.io/robotsix/mill-sandbox
           subject-digest: ${{ steps.push.outputs.digest }}
@@ -330,7 +340,12 @@ jobs:
           format: cyclonedx-json
           output-file: sbom-proxy.cdx.json
 
+      # GitHub attestation persistence is best-effort: the signed attestation
+      # is already pushed to the registry (push-to-registry: true) and the SBOM
+      # is preserved as a workflow artifact, so a transient 401 from the
+      # create-an-attestation API must not gate the publish.
       - uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26  # v4
+        continue-on-error: true
         with:
           subject-name: docker.io/robotsix/mill-sandbox-proxy
           subject-digest: ${{ steps.push.outputs.digest }}
