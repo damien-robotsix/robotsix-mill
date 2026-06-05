@@ -478,7 +478,13 @@ class TestRunRepoScaffold:
         assert (dest / "README.md").exists()
         assert (dest / "LICENSE").exists()
         assert (dest / "pyproject.toml").exists()
-        assert (dest / "src" / "my-repo" / "__init__.py").exists()
+        # The package dir is import-safe (hyphens → underscores) so the
+        # hatchling wheel build resolves — "my-repo" → "src/my_repo/".
+        assert (dest / "src" / "my_repo" / "__init__.py").exists()
+        assert not (dest / "src" / "my-repo").exists()
+        pyproject = (dest / "pyproject.toml").read_text()
+        assert 'name = "my-repo"' in pyproject  # distribution name keeps hyphen
+        assert 'packages = ["src/my_repo"]' in pyproject  # explicit wheel target
         assert (dest / "tests" / "__init__.py").exists()
 
         # Verify repos.yaml was written

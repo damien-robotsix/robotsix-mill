@@ -348,9 +348,27 @@ SOFTWARE.
     (repo_dir / "LICENSE").write_text(license_text, encoding="utf-8")
 
 
+def _python_package_name(name: str) -> str:
+    """Convert a distribution name into an import-safe package name.
+
+    Python package directories must be valid identifiers — they cannot
+    contain hyphens. A repo named ``robotsix-board`` ships the
+    distribution ``robotsix-board`` but the import package is
+    ``robotsix_board``. Using the raw (hyphenated) name as the ``src/``
+    directory makes hatchling's wheel build fail with "Unable to
+    determine which files to ship inside the wheel", which then poisons
+    the new repo's baseline check and blocks every ticket.
+    """
+    return name.replace("-", "_")
+
+
 def _write_python_skeleton(repo_dir: Path, name: str) -> None:
     """Write a minimal Python project skeleton: ``pyproject.toml``,
-    ``src/{name}/__init__.py``, and ``tests/__init__.py``."""
+    ``src/{pkg}/__init__.py`` (``pkg`` = import-safe name), and
+    ``tests/__init__.py``. The wheel target is declared explicitly so
+    hatchling can always resolve the package regardless of how it
+    normalizes the distribution name."""
+    pkg_name = _python_package_name(name)
     pyproject = f"""[build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -359,10 +377,13 @@ build-backend = "hatchling.build"
 name = "{name}"
 version = "0.1.0"
 requires-python = ">=3.12"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/{pkg_name}"]
 """
     (repo_dir / "pyproject.toml").write_text(pyproject, encoding="utf-8")
 
-    pkg_dir = repo_dir / "src" / name
+    pkg_dir = repo_dir / "src" / pkg_name
     pkg_dir.mkdir(parents=True, exist_ok=True)
     (pkg_dir / "__init__.py").write_text("", encoding="utf-8")
 

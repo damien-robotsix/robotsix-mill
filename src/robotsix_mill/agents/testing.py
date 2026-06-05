@@ -58,6 +58,14 @@ def run_test_agent(
     if rc == 0:
         return True, "all tests passed"
 
+    # pytest exits 5 when it collects ZERO tests ("no tests ran"). A suite
+    # with no tests yet is not a regression — most importantly, it must NOT
+    # poison the baseline check of a freshly-scaffolded repo (which ships an
+    # empty tests/ dir) and block every ticket on its board. Treat the
+    # pytest no-tests signal as passing.
+    if rc == 5 and "no tests ran" in out.lower():
+        return True, "no tests collected (pytest rc=5) — treated as passing"
+
     tail = out[-6000:]
     if not get_secrets().openrouter_api_key:
         return False, f"tests failed (rc={rc}); raw tail:\n{tail[-1500:]}"
