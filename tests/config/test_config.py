@@ -60,9 +60,10 @@ def test_default_empty_and_none():
 
 
 def test_default_max_spend_sentinel():
-    """max_spend_usd_per_ticket defaults to 0.0 (disabled cap)."""
+    """max_spend_usd_per_ticket defaults to $10 — ON by default as the
+    universal runaway-loop backstop (0.0 would disable it)."""
     s = Settings()
-    assert s.max_spend_usd_per_ticket == 0.0
+    assert s.max_spend_usd_per_ticket == 10.0
 
 
 # ---------------------------------------------------------------------------

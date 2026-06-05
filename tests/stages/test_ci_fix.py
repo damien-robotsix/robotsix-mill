@@ -434,11 +434,14 @@ def test_cycle_counter_resets_on_ci_green(tmp_path, monkeypatch):
     CIFixStage().run(t, ctx)
     assert _read_counter(cycle_path) == 2
 
-    # CI turns green → counter resets.
+    # CI turns green → re-poll, but the cycle counter is NOT reset here. A
+    # flickering CI emits a transient "success" between failing cycles;
+    # resetting on that let a runaway loop survive ~200 cycles. The counter is
+    # reset only on genuine forward progress (merge → HUMAN_MR_APPROVAL).
     state["conclusion"] = "success"
     out = CIFixStage().run(t, ctx)
     assert out.next_state is State.IMPLEMENT_COMPLETE
-    assert _read_counter(cycle_path) == 0
+    assert _read_counter(cycle_path) == 2  # persists across the transient green
 
 
 def test_max_cycles_zero_disables_ceiling(tmp_path, monkeypatch):

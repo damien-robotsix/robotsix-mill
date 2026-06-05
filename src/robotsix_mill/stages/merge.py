@@ -1013,7 +1013,15 @@ class MergeStage(Stage):
             return Outcome(State.FIXING_CI)
 
         if conclusion == "success":
-            # Both gates passed! Promote to human review.
+            # Both gates passed! Promote to human review. This is the only
+            # GENUINE "CI is fixed" signal (sustained green that advances the
+            # ticket), so reset the ci_fix hard cycle ceiling here — not on a
+            # transient green read inside ci_fix (which a flickering CI emits
+            # between failing cycles and which let a runaway loop survive).
+            _write_counter(
+                ctx.service.workspace(ticket).artifacts_dir / "ci_fix_cycles.txt",
+                0,
+            )
             log.info("%s: gates passed → HUMAN_MR_APPROVAL", ticket.id)
             return Outcome(State.HUMAN_MR_APPROVAL)
 
