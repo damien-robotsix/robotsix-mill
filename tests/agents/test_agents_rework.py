@@ -107,6 +107,41 @@ def test_test_agent_pass(tmp_path, monkeypatch):
     assert passed is True and "passed" in fb
 
 
+def test_test_agent_no_tests_collected_passes(tmp_path, monkeypatch):
+    """pytest rc=5 ('no tests ran') is NOT a failure — a freshly-scaffolded
+    repo with an empty tests/ dir must not poison its baseline check."""
+    from robotsix_mill import sandbox
+
+    s = _settings(tmp_path, test_command="pytest")
+    monkeypatch.setattr(
+        sandbox,
+        "run",
+        lambda cmd, *, repo_dir, settings, **kwargs: (5, "no tests ran in 0.00s"),
+    )
+    passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
+    assert passed is True
+    assert "no tests collected" in fb
+
+
+def test_test_agent_rc5_with_real_failure_still_fails(tmp_path, monkeypatch):
+    """rc=5 WITHOUT the pytest no-tests marker is not auto-passed."""
+    from robotsix_mill import sandbox
+
+    s = _settings(tmp_path, test_command="pytest")
+    monkeypatch.setattr(
+        sandbox,
+        "run",
+        lambda cmd, *, repo_dir, settings, **kwargs: (5, "INTERNALERROR boom"),
+    )
+    # No openrouter key → returns the raw-tail failure path (passed False).
+    monkeypatch.setattr(
+        "robotsix_mill.agents.testing.get_secrets",
+        lambda: type("S", (), {"openrouter_api_key": ""})(),
+    )
+    passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
+    assert passed is False
+
+
 def test_test_agent_repo_file_command_wins(tmp_path, monkeypatch):
     """A per-repo ``.robotsix-mill/config.yaml`` ``test_command`` is the
     highest-precedence source: it overrides both ``repo_config.test_command``
