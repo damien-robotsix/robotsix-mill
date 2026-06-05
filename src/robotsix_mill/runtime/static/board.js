@@ -459,6 +459,7 @@ function renderCardInner(t,repoId,colState){
   (t.state==="awaiting_user_reply"?`<span class="needs-reply-badge">🙋 needs reply</span>`:"")+
   `<span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span>`+
   `<span class="cost">$${(t.cost_usd||0).toFixed(4)}</span>`+
+  (t.pre_redraft_cost_usd>0?`<span class="cost-total">(total $${((t.cost_usd||0)+(t.pre_redraft_cost_usd||0)).toFixed(4)})</span>`:"")+
   (t.cumulative_cost&&t.cumulative_cost>t.cost_usd?`<span class="cost-cumulative">/$${t.cumulative_cost.toFixed(4)}</span>`:"")+
   renderRetryChip(t)+
   (activeMap[t.id]?`<span class="live-badge"><span class="live-spinner"></span> ${colState==="rebasing"?"rebasing…":(ACTIVE_LABEL[activeMap[t.id].stage]||activeMap[t.id].stage+"…")}</span>`:"");
@@ -1394,6 +1395,7 @@ async function open_(id){
    (t.state==="human_mr_approval"?`<span class="sk-inline" style="width:60px;height:22px;vertical-align:middle"></span>`:"")+
    `</span>`+
    `<br>· cost <b>$${(t.cost_usd||0).toFixed(4)}</b>`+
+   (t.pre_redraft_cost_usd>0?`<br>· total (incl. pre-redraft) <b>$${((t.cost_usd||0)+(t.pre_redraft_cost_usd||0)).toFixed(4)}</b>`:"")+
    (t.cumulative_cost&&t.cumulative_cost>t.cost_usd?`<br>· cumulative (incl. children) <b>$${t.cumulative_cost.toFixed(4)}</b>`:"")+
    `<br>created ${t.created_at} · updated ${t.updated_at}</p>`+
    (t.dependencies&&t.dependencies.length?
