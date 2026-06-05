@@ -1024,3 +1024,478 @@ def test_mr_changes_no_diff(tmp_path, monkeypatch):
     assert files[0]["path"] == "b.py"
     assert files[0]["additions"] == 0
     assert files[0]["deletions"] == 0
+
+
+# ---------------------------------------------------------------------------
+# list_pr_reviews
+# ---------------------------------------------------------------------------
+
+
+def test_list_pr_reviews_maps_general_notes(tmp_path, monkeypatch):
+    """General (non-system, non-position) notes → mapped review dicts."""
+    project_json = {"id": 42}
+    mr = {"iid": 7, "web_url": "http://x"}
+    notes = [
+        {
+            "id": 1,
+            "system": False,
+            "author": {"username": "alice"},
+            "created_at": "2026-01-01T00:00:00Z",
+            "body": "looks good",
+        },
+        # system note → dropped
+        {"id": 2, "system": True, "author": {"username": "gitlab"}, "body": "merged"},
+        # inline note (has position) → dropped, belongs to review_comments
+        {
+            "id": 3,
+            "system": False,
+            "author": {"username": "bob"},
+            "body": "nit",
+            "position": {"new_path": "a.py", "new_line": 5},
+        },
+        # note with null body → "" not None
+        {"id": 4, "system": False, "author": {"username": "carol"}, "body": None},
+    ]
+    get_map = {
+        "merge_requests/7/notes": _make_response(200, notes),
+        "merge_requests": _make_response(200, [mr]),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    reviews = forge.list_pr_reviews(source_branch="feature/x")
+    assert reviews == [
+        {
+            "id": 1,
+            "author": "alice",
+            "created_at": "2026-01-01T00:00:00Z",
+            "body": "looks good",
+        },
+        {"id": 4, "author": "carol", "created_at": "", "body": ""},
+    ]
+
+
+def test_list_pr_reviews_no_mr_returns_empty(tmp_path, monkeypatch):
+    """No MR → []."""
+    project_json = {"id": 42}
+    get_map = {
+        "merge_requests": _make_response(200, []),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    assert forge.list_pr_reviews(source_branch="feature/x") == []
+
+
+# ---------------------------------------------------------------------------
+# list_review_comments
+# ---------------------------------------------------------------------------
+
+
+def test_list_review_comments_maps_inline_notes(tmp_path, monkeypatch):
+    """Only notes with a position → inline comment dicts."""
+    project_json = {"id": 42}
+    mr = {"iid": 7, "web_url": "http://x"}
+    notes = [
+        # general note (no position) → dropped
+        {"id": 1, "system": False, "author": {"username": "alice"}, "body": "hi"},
+        {
+            "id": 2,
+            "system": False,
+            "author": {"username": "bob"},
+            "created_at": "2026-02-02T00:00:00Z",
+            "body": "fix this",
+            "position": {"new_path": "src/a.py", "new_line": 12},
+        },
+        # position without new_path → falls back to old_path; null new_line
+        {
+            "id": 3,
+            "system": False,
+            "author": {"username": "carol"},
+            "body": None,
+            "position": {"old_path": "src/b.py", "new_line": None},
+        },
+    ]
+    get_map = {
+        "merge_requests/7/notes": _make_response(200, notes),
+        "merge_requests": _make_response(200, [mr]),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    comments = forge.list_review_comments(source_branch="feature/x")
+    assert comments == [
+        {
+            "id": 2,
+            "author": "bob",
+            "created_at": "2026-02-02T00:00:00Z",
+            "body": "fix this",
+            "file_path": "src/a.py",
+            "line": 12,
+            "diff_hunk": "",
+        },
+        {
+            "id": 3,
+            "author": "carol",
+            "created_at": "",
+            "body": "",
+            "file_path": "src/b.py",
+            "line": None,
+            "diff_hunk": "",
+        },
+    ]
+
+
+def test_list_review_comments_no_mr_returns_empty(tmp_path, monkeypatch):
+    """No MR → []."""
+    project_json = {"id": 42}
+    get_map = {
+        "merge_requests": _make_response(200, []),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    assert forge.list_review_comments(source_branch="feature/x") == []
+
+
+# ---------------------------------------------------------------------------
+# pr_review_status
+# ---------------------------------------------------------------------------
+
+
+def test_pr_review_status_no_mr_returns_none(tmp_path, monkeypatch):
+    """No MR → None (not the old PENDING stub)."""
+    project_json = {"id": 42}
+    get_map = {
+        "merge_requests": _make_response(200, []),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    assert forge.pr_review_status(source_branch="feature/x") is None
+
+
+def test_pr_review_status_approved(tmp_path, monkeypatch):
+    """approvals.approved → state=APPROVED, comments + files populated."""
+    project_json = {"id": 42}
+    mr = {"iid": 7, "web_url": "http://x"}
+    notes = [
+        {"id": 1, "system": False, "author": {"username": "a"}, "body": "general"},
+        {
+            "id": 2,
+            "system": False,
+            "author": {"username": "b"},
+            "body": "inline",
+            "position": {"new_path": "src/a.py", "new_line": 3},
+        },
+        {"id": 3, "system": True, "body": "approved this MR"},
+    ]
+    changes_resp = {
+        "changes": [
+            {"old_path": "src/a.py", "new_path": "src/a.py", "diff": "+x"},
+        ]
+    }
+    get_map = {
+        "merge_requests/7/approvals": _make_response(200, {"approved": True}),
+        "merge_requests/7/notes": _make_response(200, notes),
+        "merge_requests/7/changes": _make_response(200, changes_resp),
+        "merge_requests": _make_response(200, [mr]),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.pr_review_status(source_branch="feature/x")
+    assert result["state"] == "APPROVED"
+    assert result["files"] == ["src/a.py"]
+    assert result["comments"] == [
+        {"body": "general", "path": "", "line": None, "review_state": "APPROVED"},
+        {
+            "body": "inline",
+            "path": "src/a.py",
+            "line": 3,
+            "review_state": "APPROVED",
+        },
+    ]
+
+
+def test_pr_review_status_commented_when_notes_no_approval(tmp_path, monkeypatch):
+    """Not approved but notes exist → state=COMMENTED."""
+    project_json = {"id": 42}
+    mr = {"iid": 7, "web_url": "http://x"}
+    notes = [
+        {"id": 1, "system": False, "author": {"username": "a"}, "body": "thoughts"},
+    ]
+    get_map = {
+        "merge_requests/7/approvals": _make_response(200, {"approved": False}),
+        "merge_requests/7/notes": _make_response(200, notes),
+        "merge_requests/7/changes": _make_response(200, {"changes": []}),
+        "merge_requests": _make_response(200, [mr]),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.pr_review_status(source_branch="feature/x")
+    assert result["state"] == "COMMENTED"
+    assert result["files"] == []
+
+
+def test_pr_review_status_pending_when_no_notes(tmp_path, monkeypatch):
+    """No approval and no non-system notes → state=PENDING."""
+    project_json = {"id": 42}
+    mr = {"iid": 7, "web_url": "http://x"}
+    notes = [{"id": 1, "system": True, "body": "system event"}]
+    get_map = {
+        "merge_requests/7/approvals": _make_response(200, {"approved": False}),
+        "merge_requests/7/notes": _make_response(200, notes),
+        "merge_requests/7/changes": _make_response(200, {"changes": []}),
+        "merge_requests": _make_response(200, [mr]),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.pr_review_status(source_branch="feature/x")
+    assert result == {"state": "PENDING", "comments": [], "files": []}
+
+
+# ---------------------------------------------------------------------------
+# list_workflow_runs
+# ---------------------------------------------------------------------------
+
+
+def test_list_workflow_runs_maps_pipelines(tmp_path, monkeypatch):
+    """Pipelines → mapped workflow-run dicts."""
+    project_json = {"id": 42}
+    pipelines = [
+        {
+            "id": 100,
+            "ref": "feature/x",
+            "sha": "abc123",
+            "status": "success",
+            "web_url": "http://gl/pipelines/100",
+            "created_at": "2026-03-03T00:00:00Z",
+        },
+        {
+            "id": 101,
+            "ref": "feature/x",
+            "sha": "def456",
+            "status": "failed",
+            "web_url": "http://gl/pipelines/101",
+            "created_at": "2026-03-04T00:00:00Z",
+        },
+    ]
+    get_map = {
+        "projects/42/pipelines": _make_response(200, pipelines),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    runs = forge.list_workflow_runs(branch="feature/x", head_sha="abc123")
+    assert runs == [
+        {
+            "id": 100,
+            "name": "feature/x",
+            "workflow_id": None,
+            "head_sha": "abc123",
+            "conclusion": "success",
+            "html_url": "http://gl/pipelines/100",
+            "created_at": "2026-03-03T00:00:00Z",
+        },
+        {
+            "id": 101,
+            "name": "feature/x",
+            "workflow_id": None,
+            "head_sha": "def456",
+            "conclusion": "failure",
+            "html_url": "http://gl/pipelines/101",
+            "created_at": "2026-03-04T00:00:00Z",
+        },
+    ]
+
+
+def test_list_workflow_runs_empty(tmp_path, monkeypatch):
+    """No pipelines → []."""
+    project_json = {"id": 42}
+    get_map = {
+        "projects/42/pipelines": _make_response(200, []),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    assert forge.list_workflow_runs() == []
+
+
+# ---------------------------------------------------------------------------
+# fetch_workflow_job_logs
+# ---------------------------------------------------------------------------
+
+
+def test_fetch_workflow_job_logs_concatenates_traces(tmp_path, monkeypatch):
+    """Failed jobs → concatenated, ANSI-stripped, header-prefixed traces."""
+    project_json = {"id": 42}
+    failed_jobs = [
+        {"id": 11, "name": "build"},
+        {"id": 12, "name": "lint"},
+    ]
+    get_map = {
+        "pipelines/100/jobs": _make_response(200, failed_jobs),
+        "jobs/11/trace": _make_response(200, {}, "\x1b[31mboom\x1b[0m build error"),
+        "jobs/12/trace": _make_response(200, {}, "lint failed"),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    logs = forge.fetch_workflow_job_logs(run_id=100)
+    assert "### Job: build (id=11)" in logs
+    assert "### Job: lint (id=12)" in logs
+    # ANSI stripped
+    assert "\x1b[31m" not in logs
+    assert "boom build error" in logs
+    assert "lint failed" in logs
+
+
+def test_fetch_workflow_job_logs_no_failed_jobs(tmp_path, monkeypatch):
+    """No failed jobs → ""."""
+    project_json = {"id": 42}
+    get_map = {
+        "pipelines/100/jobs": _make_response(200, []),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    assert forge.fetch_workflow_job_logs(run_id=100) == ""
+
+
+def test_fetch_workflow_job_logs_trace_fetch_failure_is_placeholder(
+    tmp_path, monkeypatch
+):
+    """A failed trace fetch → placeholder, not a raise."""
+    project_json = {"id": 42}
+    failed_jobs = [{"id": 11, "name": "build"}]
+    get_map = {
+        "pipelines/100/jobs": _make_response(200, failed_jobs),
+        "jobs/11/trace": _make_response(404, {}, "not found"),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    logs = forge.fetch_workflow_job_logs(run_id=100)
+    assert "### Job: build (id=11)" in logs
+    assert "[log fetch failed for job 11: HTTP 404]" in logs
+
+
+# ---------------------------------------------------------------------------
+# create_repo
+# ---------------------------------------------------------------------------
+
+
+def test_create_repo_disabled_raises_notconfigured(tmp_path, monkeypatch):
+    """enable_repo_creation falsy → NotConfiguredError, no API call."""
+    from robotsix_mill.forge.base import NotConfiguredError
+
+    _mock_httpx(monkeypatch, get_map={})
+
+    forge = _forge(tmp_path, enable_repo_creation=False)
+    with pytest.raises(NotConfiguredError):
+        forge.create_repo(name="proj", owner="ns", private=True, description="d")
+
+
+def test_create_repo_201_returns_repo_info(tmp_path, monkeypatch):
+    """201 → populated RepoInfo; namespace resolved from owner."""
+    created = {
+        "id": 555,
+        "path": "proj",
+        "name": "Proj",
+        "http_url_to_repo": "https://gitlab.com/ns/proj.git",
+        "web_url": "https://gitlab.com/ns/proj",
+    }
+    get_map = {
+        "namespaces/ns": _make_response(200, {"id": 9}),
+    }
+    captured = _mock_httpx(
+        monkeypatch,
+        get_map=get_map,
+        post_response=_make_response(201, created),
+    )
+
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    info = forge.create_repo(name="proj", owner="ns", private=True, description="d")
+    assert info.id == 555
+    assert info.name == "proj"
+    assert info.clone_url == "https://gitlab.com/ns/proj.git"
+    assert info.html_url == "https://gitlab.com/ns/proj"
+    assert captured["post_payload"] == {
+        "name": "proj",
+        "visibility": "private",
+        "description": "d",
+        "namespace_id": 9,
+    }
+
+
+def test_create_repo_public_no_owner(tmp_path, monkeypatch):
+    """private=False, empty owner → visibility=public, no namespace_id."""
+    created = {
+        "id": 1,
+        "path": "proj",
+        "name": "proj",
+        "http_url_to_repo": "https://gitlab.com/me/proj.git",
+        "web_url": "https://gitlab.com/me/proj",
+    }
+    captured = _mock_httpx(
+        monkeypatch,
+        get_map={},
+        post_response=_make_response(201, created),
+    )
+
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    info = forge.create_repo(name="proj", owner="", private=False, description="d")
+    assert info.id == 1
+    assert captured["post_payload"] == {
+        "name": "proj",
+        "visibility": "public",
+        "description": "d",
+    }
+
+
+def test_create_repo_name_conflict_raises_runtimeerror(tmp_path, monkeypatch):
+    """400 name-taken → RuntimeError describing the conflict."""
+    get_map = {
+        "namespaces/ns": _make_response(200, {"id": 9}),
+    }
+    _mock_httpx(
+        monkeypatch,
+        get_map=get_map,
+        post_response=_make_response(400, {}, "{'name': ['has already been taken']}"),
+    )
+
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    with pytest.raises(RuntimeError, match="already exists"):
+        forge.create_repo(name="proj", owner="ns", private=True, description="d")
+
+
+def test_create_repo_other_error_raises_runtimeerror(tmp_path, monkeypatch):
+    """Non-201, non-conflict → generic RuntimeError."""
+    get_map = {
+        "namespaces/ns": _make_response(200, {"id": 9}),
+    }
+    _mock_httpx(
+        monkeypatch,
+        get_map=get_map,
+        post_response=_make_response(403, {}, "forbidden"),
+    )
+
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    with pytest.raises(RuntimeError, match="GitLab repo create failed"):
+        forge.create_repo(name="proj", owner="ns", private=True, description="d")
