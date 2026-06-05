@@ -396,6 +396,32 @@ def test_redraft_clean_slate_reset(service, settings):
     assert "## Folded-in on redraft" in body
 
 
+def test_redraft_captures_pre_redraft_cost_baseline(service, monkeypatch):
+    """redraft snapshots the full Langfuse session cost into
+    ``pre_redraft_cost_usd`` (the baseline for the dollar-cap limit)
+    while still zeroing the cached ``cost_usd``. A second redraft
+    re-snapshots to the then-current full total."""
+    import robotsix_mill.langfuse.client as lf_client
+
+    t = service.create("baseline me", "original description text")
+    service.transition(t.id, State.READY)
+
+    monkeypatch.setattr(lf_client, "session_cost", lambda *a, **k: 7.5)
+    service.redraft(t.id, body="first redraft")
+    row = service.get(t.id)
+    assert row.pre_redraft_cost_usd == 7.5
+    assert row.cost_usd == 0.0
+
+    # A later attempt grows the cumulative session total; the next
+    # redraft re-snapshots to that then-current full total.
+    service.transition(t.id, State.READY)
+    monkeypatch.setattr(lf_client, "session_cost", lambda *a, **k: 12.25)
+    service.redraft(t.id, body="second redraft")
+    row = service.get(t.id)
+    assert row.pre_redraft_cost_usd == 12.25
+    assert row.cost_usd == 0.0
+
+
 def test_redraft_no_comments_empty_body(service):
     """redraft with no comments and an empty body still resets history,
     branch, and clone — but adds no spurious folded-in section."""

@@ -198,6 +198,44 @@ def test_no_progress_guard_blocks_traced_stage(ctx, service):
     assert "no progress" in service.history(t.id)[-1].note
 
 
+def test_dollar_cap_excludes_pre_redraft_baseline(ctx, service, monkeypatch):
+    """The dollar-cap compares ``session_cost - pre_redraft_cost_usd``
+    (clamped ≥ 0) against the cap. A ticket whose pre-redraft baseline
+    already exceeds the cap but whose post-redraft (effective) spend is
+    below the cap must NOT be escalated to BLOCKED. The inverse —
+    effective spend above the cap — must block."""
+    from robotsix_mill.core import db as _db
+    from robotsix_mill.core.models import Ticket as _Ticket
+
+    cap = ctx.settings.max_spend_usd_per_ticket
+    # Live session total well above the cap (pre-redraft cost included).
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.session_cost", lambda *a, **k: cap + 100.0
+    )
+
+    def _set_baseline(ticket_id, value):
+        with _db.session(service.settings, service.board_id) as s:
+            row = s.get(_Ticket, ticket_id)
+            row.pre_redraft_cost_usd = value
+            s.add(row)
+            s.commit()
+
+    # Effective = (cap + 100) - (cap + 95) = 5 < cap → NOT blocked.
+    t = service.create("under cap after redraft")
+    service.transition(t.id, State.READY)
+    _set_baseline(t.id, cap + 95.0)
+    w = Worker(ctx)
+    w._check_progress(t.id, State.READY, State.READY)
+    assert service.get(t.id).state is State.READY
+
+    # Effective = (cap + 100) - 0 = cap + 100 > cap → BLOCKED.
+    t2 = service.create("over cap after redraft")
+    service.transition(t2.id, State.READY)
+    _set_baseline(t2.id, 0.0)
+    w._check_progress(t2.id, State.READY, State.READY)
+    assert service.get(t2.id).state is State.BLOCKED
+
+
 def test_no_progress_guard_exempts_poll_stage(ctx, service):
     """human_mr_approval (merge, traced=False) legitimately waits on an open PR
     across many poll cycles — it must NEVER be auto-blocked."""

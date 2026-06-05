@@ -187,6 +187,17 @@ def session_cost(
     return cost
 
 
+def effective_cost(total: float, baseline: float) -> float:
+    """Per-attempt cost after excluding the pre-redraft baseline.
+
+    The Langfuse session total is cumulative over the whole session
+    lifetime; ``baseline`` is the snapshot captured at the most recent
+    redraft. Subtracting it (clamped at zero) yields the cost spent
+    since that redraft — the value used for the dollar-cap limit and the
+    primary ``cost_usd`` display."""
+    return max(0.0, total - (baseline or 0.0))
+
+
 def session_cost_cached(session_id: str) -> float:
     """Non-blocking cost lookup: return the cached value if any, else
     0.0. NEVER hits the network. Use this in hot paths like the board's

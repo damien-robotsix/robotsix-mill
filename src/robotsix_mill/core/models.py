@@ -101,6 +101,12 @@ class Ticket(SQLModel, table=True):
     # cumulative LLM spend in USD, synced from Langfuse session totals
     # by the periodic cost-sync loop. Zero when Langfuse is unconfigured.
     cost_usd: float = Field(default=0.0)
+    # snapshot of the full Langfuse session cost captured at the last
+    # redraft. Subtracted from the live session total to yield the
+    # effective per-attempt cost used for the dollar-cap limit, so a
+    # redraft restarts the cost limit at zero while the full total
+    # (including pre-redraft spend) stays available for display.
+    pre_redraft_cost_usd: float = Field(default=0.0)
     # Count of consecutive REQUEST_CHANGES verdicts inside the current
     # review session.  Reset on APPROVE or when the cap is hit; persists
     # across the CODE_REVIEW → READY → DOCUMENTING → CODE_REVIEW loop.
@@ -238,6 +244,7 @@ class TicketRead(SQLModel):
     origin_session: str | None
     origin_session_url: str | None
     cost_usd: float
+    pre_redraft_cost_usd: float = 0.0
     cumulative_cost: float | None = None
     depends_on: str | None
     unmet_deps: list[str]

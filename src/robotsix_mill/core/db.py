@@ -113,6 +113,16 @@ def init_db(settings: Settings, board_id: str) -> None:
             conn.exec_driver_sql("ALTER TABLE ticket ADD COLUMN labels TEXT")
     except Exception:
         pass
+    # pre_redraft_cost_usd column: snapshot of the full Langfuse session
+    # cost captured at the last redraft, subtracted from the live session
+    # total so the dollar-cap limit restarts at zero after a redraft.
+    try:
+        with engine.begin() as conn:
+            conn.exec_driver_sql(
+                "ALTER TABLE ticket ADD COLUMN pre_redraft_cost_usd REAL DEFAULT 0.0"
+            )
+    except Exception:
+        pass
     # Hash-chain integrity columns for TicketEvent.
     try:
         with engine.begin() as conn:

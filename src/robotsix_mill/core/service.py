@@ -1396,7 +1396,12 @@ class TicketService:
         prior ``TicketEvent`` rows so the new DRAFT event is the genesis
         of a fresh hash chain; prunes the per-ticket repo clone (which
         holds the local implement branch); clears ``ticket.branch``; and
-        resets the accumulated ``ticket.cost_usd`` to ``0.0``.
+        snapshots the current full Langfuse session cost into
+        ``ticket.pre_redraft_cost_usd`` (zeroing the cached
+        ``ticket.cost_usd``) so the effective per-attempt cost —
+        ``max(0.0, session_total - pre_redraft_cost_usd)`` — restarts at
+        zero for the dollar-cap limit while the full total stays
+        available for informational display.
 
         Note: only the *local* clone/branch and the ``ticket.branch`` DB
         pointer are cleared. The pushed remote branch and any open PR on
@@ -1475,7 +1480,21 @@ class TicketService:
             ticket.branch = None
             # Clean slate also means a fresh cost ledger — the
             # accumulated cost of the prior (discarded) attempt must not
-            # carry over into the redrafted ticket.
+            # carry over into the redrafted ticket. The Langfuse session
+            # total is cumulative over the session's whole lifetime and
+            # cannot be cleared locally, so snapshot it as a baseline:
+            # the effective per-attempt cost subtracts this baseline so
+            # the dollar-cap limit restarts at zero. A forced
+            # (TTL-bypassing) read keeps the snapshot fresh; an
+            # unconfigured/unreachable Langfuse returns 0.0, the correct
+            # no-op baseline. ``repo_config`` is not available here, so
+            # the global ``Secrets`` fallback is used (as in
+            # ``cumulative_cost``).
+            from ..langfuse.client import session_cost
+
+            ticket.pre_redraft_cost_usd = session_cost(
+                self.settings, ticket_id, force=True
+            )
             ticket.cost_usd = 0.0
 
             note = f"redrafted: {body}" if body else "redrafted"
