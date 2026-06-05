@@ -16,11 +16,20 @@ report_issue: false
 read_ticket: true
 output_type: RetrospectResult
 retries: 2
-# 2048 was too small: the structured RetrospectResult (findings + conclusion
-# + a memory-ledger update) routinely exceeded it → "Model token limit (2048)
-# exceeded before any response was generated", blocking the post-merge
-# retrospect. 8192 comfortably fits the structured output.
-max_tokens: 8192
+# The ceiling must fit a full PATH-3 re-emit of the worst-case runtime
+# memory ledger. The runtime per-board ledger surfaced to the agent is
+# ~34K chars; for dense Markdown laden with snake_case identifiers, file
+# paths, and code, a conservative ~3 chars/token estimate puts the ledger
+# alone at ~11K output tokens — already above the old 8192 — before adding
+# the `findings`/`conclusion`/draft structured fields and the JSON
+# envelope. 16384 fits that worst case with headroom for ledger growth.
+# The `memory_delta` append-only path (PR #775) keeps the COMMON
+# no-change / append-only runs cheap (PATH 1 / PATH 2), so this higher
+# ceiling does not regress the cost win — it only unblocks the rarer
+# PATH-3 full-rewrite runs. If the ledger later grows well beyond ~40K
+# chars such that even 16384 is insufficient, pursue dynamic per-run
+# sizing or `## Historical`-compaction of the prompt as a follow-up.
+max_tokens: 16384
 module: retrospecting
 skills: [board-read]
 

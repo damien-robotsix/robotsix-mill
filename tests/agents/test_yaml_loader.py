@@ -351,6 +351,66 @@ def test_real_refine_yaml_parses():
             _os.environ.pop("MILL_REFINE_MODEL", None)
 
 
+# Representative worst-case size of the retrospect runtime memory ledger.
+# This tracks the observed ~34K-char per-board ledger surfaced to the agent
+# at runtime — NOT the checked-in seed docs/retrospect-memory.md (~946 bytes),
+# which is far too small to be representative. A full PATH-3 re-emit returns
+# this entire document in `updated_memory`, so the configured max_tokens must
+# be large enough to fit it plus the other structured fields.
+REPRESENTATIVE_LEDGER_CHARS = 34_000
+
+
+def test_real_retrospect_yaml_max_tokens_fits_full_ledger_reemit():
+    """The real retrospect.yaml's max_tokens must comfortably fit a full
+    PATH-3 re-emit of the worst-case runtime memory ledger.
+
+    Offline regression guard: a PATH-3 run returns the entire ~34K-char
+    ledger in `updated_memory` plus `findings`/`conclusion`/draft fields and
+    the JSON envelope. If max_tokens is lowered below that worst case, the
+    model raises "Model token limit (N) exceeded before any response was
+    generated" and the post-merge retrospect hard-fails. This test would FAIL
+    if max_tokens were reduced back toward 8192 or below the estimate.
+    """
+    p = Path("agent_definitions/retrospect.yaml")
+    if not p.exists():
+        pytest.skip("agent_definitions/retrospect.yaml not found")
+
+    # Mock the env var so resolution succeeds.
+    import os as _os
+
+    _os.environ.setdefault("MILL_RETROSPECT_MODEL", "test/model")
+
+    try:
+        ad = load_agent_definition(p)
+        assert ad.max_tokens is not None
+
+        # Conservative chars-per-token heuristic. There is no token-counting
+        # helper in the repo (no tiktoken), so this is an intentional,
+        # documented approximation: dense Markdown with snake_case
+        # identifiers, file paths, and code packs ~3 chars/token.
+        CHARS_PER_TOKEN = 3
+        # Fixed margin for the structured findings/conclusion/draft fields
+        # plus the JSON envelope wrapping the RetrospectResult.
+        STRUCTURED_FIELDS_MARGIN = 2_000
+        estimated = (
+            REPRESENTATIVE_LEDGER_CHARS // CHARS_PER_TOKEN
+            + STRUCTURED_FIELDS_MARGIN
+        )
+
+        assert ad.max_tokens >= estimated, (
+            f"retrospect max_tokens={ad.max_tokens} is below the conservative "
+            f"estimate {estimated} for a full PATH-3 re-emit of the "
+            f"~{REPRESENTATIVE_LEDGER_CHARS}-char worst-case runtime ledger "
+            f"plus structured fields. The cap can no longer fit a full "
+            f"re-emit and must be raised — or file a follow-up for dynamic "
+            f"per-run sizing / `## Historical`-compaction of the prompt."
+        )
+    finally:
+        # Don't leak the env var if it wasn't set before.
+        if "MILL_RETROSPECT_MODEL" not in _os.environ:
+            _os.environ.pop("MILL_RETROSPECT_MODEL", None)
+
+
 # ── AgentDefinition pydantic model ────────────────────────────────────
 
 
