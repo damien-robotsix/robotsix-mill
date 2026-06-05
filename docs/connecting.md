@@ -510,3 +510,80 @@ auto-refreshes every 30 seconds.
 
 Both commands read from the same local SQLite datastore — no configuration
 changes are needed to switch between them.
+
+## The `config-sync` command
+
+For operators who want to audit their configuration, the `config-sync`
+subcommand runs an **optional, advisory LLM agent** that examines four
+configuration surfaces and proposes human-readable drift corrections:
+
+```sh
+$ robotsix-auto-mail config-sync
+```
+
+This is an **advisory tool only** — it does not replace the deterministic
+`scripts/config/check_config_sync.py` CI gate (which is fast and free).
+A successful run exits code `0` even when drift is found, so it won't break
+operator scripts.
+
+### Options
+
+| Option | Default | Purpose |
+|---|---|---|
+| `--api-key` | – | OpenRouter API key; overrides `LLM_API_KEY` env and config file |
+| `--output-format` | `text` | Output format: `text` (human-readable) or `json` (machine-readable) |
+| `--dedup` | – | Consult/update the dedup memory ledger to suppress previously-seen findings; requires a loadable config (for db path) |
+
+### Requirements
+
+The `config-sync` command requires:
+- The `pydantic-ai` package (install via `pip install robotsix-auto-mail[dev]`)
+- An LLM API key (via `--api-key`, `LLM_API_KEY` env, or `llm.api_key` in config)
+
+When `--dedup` is **not** passed, the command does not require a full mail config
+— it skips config loading and uses `conn=None`. When `--dedup` **is** passed,
+it loads the config to retrieve `db_path` for the dedup ledger.
+
+### Representative text output
+
+```text
+
+Config Drift Advisory
+------------------------------------------------------------
+
+imap_folder default mismatch
+  confidence: high
+  affected field: imap_folder
+
+Docs say INBOX.All but the dataclass default is INBOX.
+```
+
+When no drift is detected:
+
+```text
+
+Config Drift Advisory
+------------------------------------------------------------
+No config drift detected.
+```
+
+### JSON output
+
+With `--output-format json`, the output is a single JSON object with a
+`proposals` array (empty when no drift is found):
+
+```json
+{
+  "proposals": [
+    {
+      "title": "imap_folder default mismatch",
+      "body": "Docs say INBOX.All but the dataclass default is INBOX.",
+      "affected_field": "imap_folder",
+      "confidence": "high"
+    }
+  ]
+}
+```
+
+Exit code is `0` on success (even with findings), `1` on error (missing API key,
+`pydantic-ai` not installed, or surface read failure).

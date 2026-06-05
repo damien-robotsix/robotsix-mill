@@ -9,6 +9,7 @@ import argparse
 import dataclasses
 import errno
 import getpass
+import json
 import sys
 import time
 from collections.abc import Callable
@@ -113,6 +114,25 @@ def build_parser() -> argparse.ArgumentParser:
             "Skip the post-write IMAP/SMTP connection check. "
             "By default detect verifies the settings once a password is known."
         ),
+    )
+
+    config_sync_parser = sub.add_parser(
+        "config-sync",
+        help="Run the LLM config-drift advisory agent (advisory only; "
+             "does not replace the deterministic check_config_sync.py CI gate)",
+    )
+    config_sync_parser.add_argument(
+        "--api-key", default=None,
+        help="OpenRouter API key. Overrides LLM_API_KEY env and config file.",
+    )
+    config_sync_parser.add_argument(
+        "--output-format", choices=["text", "json"], default="text",
+        help="Output format for drift findings (default: %(default)s).",
+    )
+    config_sync_parser.add_argument(
+        "--dedup", action="store_true", default=False,
+        help="Consult/update the dedup memory ledger so previously-seen "
+             "findings are suppressed. Requires a loadable config (for db_path).",
     )
 
     return parser
@@ -724,6 +744,60 @@ def _cmd_detect(args: argparse.Namespace) -> int:
         detect_provider=detect_provider, _detection_error=DetectionError)
 
 
+def _cmd_config_sync(args: argparse.Namespace) -> int:
+    """Run the config-drift advisory agent and render its proposals.
+
+    This is an advisory tool, not a CI gate: a successful run returns 0
+    even when drift proposals are found.  Returns 1 only on error (missing
+    pydantic_ai, ConfigSyncError, missing API key).
+    """
+    try:
+        from robotsix_auto_mail.config_sync import (
+            ConfigSyncError,
+            run_config_sync_agent,
+        )
+    except ImportError:
+        sys.stderr.write(
+            "The 'config-sync' command requires the pydantic-ai package. "
+            "Install it with: pip install robotsix-auto-mail[dev]\n"
+        )
+        return 1
+
+    # Resolve the dedup connection only when --dedup is requested; like
+    # detect, the advisory tool should not require a full mail config to run.
+    conn = None
+    if args.dedup:
+        config = _load_config_or_exit()
+        conn = init_db(config.db_path)
+
+    try:
+        result = run_config_sync_agent(api_key=args.api_key, conn=conn)
+    except ConfigSyncError as exc:
+        sys.stderr.write(f"Error: {exc}\n")
+        return 1
+
+    if args.output_format == "json":
+        sys.stdout.write(json.dumps(result.model_dump(), indent=2) + "\n")
+        # Advisory tool: a non-empty result is informational, not a gate.
+        return 0
+
+    _print_header(sys.stdout, "Config Drift Advisory")
+    if not result.proposals:
+        sys.stdout.write("No config drift detected.\n")
+        # Advisory tool: a non-empty result is informational, not a gate.
+        return 0
+
+    for proposal in result.proposals:
+        sys.stdout.write(f"\n{proposal.title}\n")
+        sys.stdout.write(f"  confidence: {proposal.confidence}\n")
+        field = proposal.affected_field if proposal.affected_field else "(none)"
+        sys.stdout.write(f"  affected field: {field}\n")
+        sys.stdout.write(f"\n{proposal.body}\n")
+
+    # Advisory tool: a non-empty result is informational, not a gate.
+    return 0
+
+
 def _cmd_serve(config: MailConfig, *, port: int) -> int:
     """Run the serve subcommand: start the web board HTTP server.
 
@@ -784,6 +858,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "detect":
         return _cmd_detect(args)
+
+    if args.command == "config-sync":
+        return _cmd_config_sync(args)
 
     # No command given — print help and exit 1.
     parser.print_help(sys.stderr)
