@@ -619,6 +619,83 @@ def _detect_settings(
     return provider, mx_hosts
 
 
+@dataclasses.dataclass(frozen=True)
+class _RefineOutcome:
+    """Result of one refinement strategy: a rebuilt config and/or provider.
+
+    ``config`` is ``None`` when the strategy produced no new config (the
+    user cancelled, or the LLM returned no refinement).  ``provider`` is
+    set only when the strategy updated the working provider (LLM refine).
+    """
+
+    config: MailConfig | None = None
+    provider: "MailProvider | None" = None
+
+
+def _refine_password(
+    build: Callable[["MailProvider", str | None], MailConfig],
+    provider: "MailProvider",
+) -> _RefineOutcome:
+    """Re-prompt the password after a reachable-but-rejected auth failure."""
+    sys.stderr.write("The server is reachable but the password was rejected.\n")
+    try:
+        new_pw = getpass.getpass("Re-enter email password: ")
+    except (EOFError, KeyboardInterrupt):
+        return _RefineOutcome()
+    if not new_pw:
+        return _RefineOutcome()
+    return _RefineOutcome(config=build(provider, new_pw))
+
+
+def _refine_with_llm(
+    build: Callable[["MailProvider", str | None], MailConfig],
+    provider: "MailProvider",
+    config: MailConfig,
+    result: _VerifyResult,
+    *,
+    email: str,
+    api_key: str | None,
+    mx_hosts: list[str],
+    detect_provider: Callable[..., "MailProvider"],
+    _detection_error: type[Exception],
+) -> _RefineOutcome:
+    """Ask the LLM for a refined provider after a host/connection failure."""
+    sys.stderr.write("Refining the host with the LLM…\n")
+    try:
+        refined = detect_provider(
+            email,
+            api_key=api_key,
+            feedback=_verify_feedback(config, result),
+            mx_hosts=mx_hosts,
+        )
+    except _detection_error as exc:
+        sys.stderr.write(f"  LLM refinement error: {exc}\n")
+        refined = None
+    if refined is None:
+        return _RefineOutcome()
+    sys.stderr.write(f"  LLM: imap={refined.imap_host} smtp={refined.smtp_host}\n")
+    return _RefineOutcome(config=build(refined, config.password), provider=refined)
+
+
+def _refine_manual(config: MailConfig, result: _VerifyResult) -> _RefineOutcome:
+    """Prompt the user for the failing host(s) as a last resort."""
+    sys.stderr.write(
+        "Could not auto-detect a working host — please enter it manually.\n"
+    )
+    updated = _prompt_hosts(config, result)
+    if updated is None:
+        return _RefineOutcome()
+    return _RefineOutcome(config=updated)
+
+
+def _report_failure(output_path: Path) -> None:
+    """Print the final verification-failed message before returning 1."""
+    sys.stderr.write(
+        f"\nVerification FAILED — could not confirm the settings. "
+        f"Edit {output_path} and re-run `probe`.\n"
+    )
+
+
 def _verify_and_refine(
     provider: "MailProvider",
     *,
@@ -704,61 +781,45 @@ def _verify_and_refine(
 
         if result.only_auth_problem and pw_budget > 0:
             pw_budget -= 1
-            sys.stderr.write(
-                "The server is reachable but the password was rejected.\n"
-            )
-            try:
-                new_pw = getpass.getpass("Re-enter email password: ")
-            except (EOFError, KeyboardInterrupt):
+            outcome = _refine_password(_build, provider)
+            if outcome.config is None:
                 break
-            if not new_pw:
-                break
-            config = _build(provider, new_pw)
+            config = outcome.config
             _write(config)
             continue
 
         if result.host_problem and llm_budget > 0:
             llm_budget -= 1
-            sys.stderr.write("Refining the host with the LLM…\n")
-            try:
-                refined = detect_provider(
-                    email,
-                    api_key=api_key,
-                    feedback=_verify_feedback(config, result),
-                    mx_hosts=mx_hosts,
-                )
-            except _detection_error as exc:
-                sys.stderr.write(f"  LLM refinement error: {exc}\n")
-                refined = None
-            if refined is not None:
-                provider = refined
-                sys.stderr.write(
-                    f"  LLM: imap={provider.imap_host} "
-                    f"smtp={provider.smtp_host}\n"
-                )
-                config = _build(provider, config.password)
+            outcome = _refine_with_llm(
+                _build,
+                provider,
+                config,
+                result,
+                email=email,
+                api_key=api_key,
+                mx_hosts=mx_hosts,
+                detect_provider=detect_provider,
+                _detection_error=_detection_error,
+            )
+            if outcome.provider is not None:
+                provider = outcome.provider
+            if outcome.config is not None:
+                config = outcome.config
                 _write(config)
                 continue
 
         if result.host_problem and not manual_used:
             manual_used = True
-            sys.stderr.write(
-                "Could not auto-detect a working host — "
-                "please enter it manually.\n"
-            )
-            updated = _prompt_hosts(config, result)
-            if updated is None:
+            outcome = _refine_manual(config, result)
+            if outcome.config is None:
                 break
-            config = updated
+            config = outcome.config
             _write(config)
             continue
 
         break
 
-    sys.stderr.write(
-        f"\nVerification FAILED — could not confirm the settings. "
-        f"Edit {output_path} and re-run `probe`.\n"
-    )
+    _report_failure(output_path)
     return 1
 
 

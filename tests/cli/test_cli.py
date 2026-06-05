@@ -14,7 +14,7 @@ from unittest import mock
 
 import pytest
 
-from robotsix_auto_mail.cli import build_parser, main
+from robotsix_auto_mail.cli import _VerifyResult, build_parser, main
 from robotsix_auto_mail.config import MailConfig
 from robotsix_auto_mail.config_sync import (
     ConfigSyncError,
@@ -2019,3 +2019,140 @@ def test_triage_rules_set_invalid_state(
     err = capsys.readouterr().err
     assert "invalid state" in err
     assert "pending" in err
+
+
+def _refine_test_config() -> MailConfig:
+    """Build a minimal MailConfig for refinement-helper unit tests."""
+    return MailConfig(
+        imap_host="imap.example.com",
+        smtp_host="smtp.example.com",
+        username="user@example.com",
+        password="s3cret",
+    )
+
+
+def _refine_host_result() -> "_VerifyResult":
+    """Build an IMAP-host-failure _VerifyResult for helper unit tests."""
+    from robotsix_auto_mail.cli import _VerifyResult
+
+    return _VerifyResult(imap_ok=False, smtp_ok=True, imap_error="connection refused")
+
+
+def test_refine_password_returns_rebuilt_config() -> None:
+    """_refine_password rebuilds the config from a freshly entered password."""
+    from robotsix_auto_mail.cli import _refine_password
+
+    provider = MailProvider(imap_host="imap.x.net", smtp_host="smtp.x.net")
+    rebuilt = _refine_test_config()
+    build = mock.MagicMock(return_value=rebuilt)
+
+    with mock.patch("getpass.getpass", return_value="newpw"):
+        outcome = _refine_password(build, provider)
+
+    assert outcome.config is rebuilt
+    assert outcome.provider is None
+    build.assert_called_once_with(provider, "newpw")
+
+
+def test_refine_password_stops_on_empty_input() -> None:
+    """_refine_password signals stop (config None) on empty input."""
+    from robotsix_auto_mail.cli import _refine_password
+
+    provider = MailProvider(imap_host="imap.x.net", smtp_host="smtp.x.net")
+    build = mock.MagicMock()
+
+    with mock.patch("getpass.getpass", return_value=""):
+        outcome = _refine_password(build, provider)
+
+    assert outcome.config is None
+    build.assert_not_called()
+
+
+def test_refine_password_stops_on_cancel() -> None:
+    """_refine_password signals stop when the prompt is cancelled."""
+    from robotsix_auto_mail.cli import _refine_password
+
+    provider = MailProvider(imap_host="imap.x.net", smtp_host="smtp.x.net")
+    build = mock.MagicMock()
+
+    with mock.patch("getpass.getpass", side_effect=KeyboardInterrupt):
+        outcome = _refine_password(build, provider)
+
+    assert outcome.config is None
+    build.assert_not_called()
+
+
+def test_refine_with_llm_success_returns_provider_and_config() -> None:
+    """_refine_with_llm returns the refined provider and rebuilt config."""
+    from robotsix_auto_mail.cli import _refine_with_llm
+
+    provider = MailProvider(imap_host="imap.bad.net", smtp_host="smtp.x.net")
+    refined = MailProvider(imap_host="imap.good.net", smtp_host="smtp.x.net")
+    rebuilt = _refine_test_config()
+    build = mock.MagicMock(return_value=rebuilt)
+    config = _refine_test_config()
+    result = _refine_host_result()
+
+    outcome = _refine_with_llm(
+        build,
+        provider,
+        config,
+        result,
+        email="user@example.com",
+        api_key="sk-test",
+        mx_hosts=[],
+        detect_provider=mock.MagicMock(return_value=refined),
+        _detection_error=DetectionError,
+    )
+
+    assert outcome.provider is refined
+    assert outcome.config is rebuilt
+    build.assert_called_once_with(refined, config.password)
+
+
+def test_refine_with_llm_detection_error_returns_empty(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """_refine_with_llm reports the error and returns no refinement."""
+    from robotsix_auto_mail.cli import _refine_with_llm
+
+    provider = MailProvider(imap_host="imap.bad.net", smtp_host="smtp.x.net")
+    build = mock.MagicMock()
+
+    outcome = _refine_with_llm(
+        build,
+        provider,
+        _refine_test_config(),
+        _refine_host_result(),
+        email="user@example.com",
+        api_key="sk-test",
+        mx_hosts=[],
+        detect_provider=mock.MagicMock(side_effect=DetectionError("down")),
+        _detection_error=DetectionError,
+    )
+
+    assert outcome.config is None
+    assert outcome.provider is None
+    build.assert_not_called()
+    assert "LLM refinement error: down" in capsys.readouterr().err
+
+
+def test_refine_manual_returns_updated_config() -> None:
+    """_refine_manual returns the config produced by _prompt_hosts."""
+    from robotsix_auto_mail.cli import _refine_manual
+
+    updated = _refine_test_config()
+    with mock.patch("robotsix_auto_mail.cli._prompt_hosts", return_value=updated):
+        outcome = _refine_manual(_refine_test_config(), _refine_host_result())
+
+    assert outcome.config is updated
+
+
+def test_refine_manual_stops_when_prompt_returns_none() -> None:
+    """_refine_manual signals stop when _prompt_hosts returns None."""
+    from robotsix_auto_mail.cli import _refine_manual
+
+    with mock.patch("robotsix_auto_mail.cli._prompt_hosts", return_value=None):
+        outcome = _refine_manual(_refine_test_config(), _refine_host_result())
+
+    assert outcome.config is None
