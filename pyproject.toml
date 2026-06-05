@@ -80,12 +80,19 @@ exclude_dirs = ["tests/"]
 skips = ["B101"]
 
 [tool.ruff.lint]
-extend-select = ["DTZ001", "DTZ002", "DTZ003", "C90"]
+extend-select = ["S", "DTZ001", "DTZ002", "DTZ003", "C90"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
 
 [tool.ruff.lint.per-file-ignores]
+# Security asserts, fixture credentials, and subprocess helpers are
+# expected idioms in these non-production trees — broadly ignore the
+# whole flake8-bandit (S) family there. (per-file-ignores are additive:
+# these union with the exact-path DTZ001/C901 entries below.)
+"tests/**" = ["S"]
+"dev/**" = ["S"]
+"scripts/**" = ["S"]
 # test_datetime_utils.py exercises TZDateTime's handling of naive
 # datetime inputs on purpose — DTZ001 (no tzinfo) is the contract
 # under test, not a defect.
@@ -111,7 +118,7 @@ max-complexity = 10
 # (httpx, AgentDefinition, AgentHandle, RepoConfig, Path) — the
 # strings stay correct at runtime; ruff would only be appeased by
 # a TYPE_CHECKING block, which is out of scope for the cleanup pass.
-"src/robotsix_mill/agents/base.py" = ["F821"]
+"src/robotsix_mill/agents/base.py" = ["F821", "S110"]
 "src/robotsix_mill/agents/expert_manager.py" = ["F821"]
 # C901 complexity: pre-existing legacy functions that exceed the
 # default threshold. Each refactor would touch its own ticket — list
@@ -120,40 +127,40 @@ max-complexity = 10
 "src/robotsix_mill/agents/answering.py" = ["C901"]
 "src/robotsix_mill/agents/consult_expert.py" = ["C901"]
 "src/robotsix_mill/agents/coordinating.py" = ["C901"]
-"src/robotsix_mill/agents/fs_tools.py" = ["C901"]
+"src/robotsix_mill/agents/fs_tools.py" = ["C901", "S112"]
 "src/robotsix_mill/agents/openrouter_cost.py" = ["C901"]
 "src/robotsix_mill/agents/read_ticket.py" = ["C901"]
 "src/robotsix_mill/agents/report_issue.py" = ["C901"]
-"src/robotsix_mill/agents/retry.py" = ["C901"]
+"src/robotsix_mill/agents/retry.py" = ["C901", "S101", "S311"]
 "src/robotsix_mill/agents/trace_inspector.py" = ["C901"]
 "src/robotsix_mill/cli.py" = ["C901"]
 "src/robotsix_mill/dedup.py" = ["C901"]
 "src/robotsix_mill/runners/cost_reconciliation_runner.py" = ["C901"]
 "src/robotsix_mill/langfuse/client.py" = ["C901", "DTZ003", "E731"]
 "src/robotsix_mill/runtime/routes.py" = ["F821", "C901"]
-"src/robotsix_mill/runtime/routes/_tickets.py" = ["C901"]
+"src/robotsix_mill/runtime/routes/_tickets.py" = ["C901", "S110"]
 "src/robotsix_mill/runtime/routes/_traces.py" = ["C901"]
-"src/robotsix_mill/runtime/worker.py" = ["C901"]
-"src/robotsix_mill/stages/implement.py" = ["C901"]
-"src/robotsix_mill/stages/refine.py" = ["C901"]
-"src/robotsix_mill/stages/retrospect.py" = ["F821", "C901"]
+"src/robotsix_mill/runtime/worker.py" = ["C901", "S110", "S603", "S607"]
+"src/robotsix_mill/stages/implement.py" = ["C901", "S603", "S607"]
+"src/robotsix_mill/stages/refine.py" = ["C901", "S603", "S607"]
+"src/robotsix_mill/stages/retrospect.py" = ["F821", "C901", "S112"]
 "src/robotsix_mill/stages/review.py" = ["C901"]
 "src/robotsix_mill/stages/document.py" = ["C901"]
 "src/robotsix_mill/stages/deliver.py" = ["C901"]
 "src/robotsix_mill/stages/code_reviewing.py" = ["C901"]
-"src/robotsix_mill/forge/github.py" = ["C901"]
+"src/robotsix_mill/forge/github.py" = ["C901", "S110"]
 "src/robotsix_mill/forge/gitlab.py" = ["C901"]
-"src/robotsix_mill/core/service.py" = ["F821", "C901"]
+"src/robotsix_mill/core/service.py" = ["F821", "C901", "S110"]
 "src/robotsix_mill/runners/pass_runner.py" = ["C901"]
 "src/robotsix_mill/agents/coding.py" = ["C901"]
 "src/robotsix_mill/agents/bespoke.py" = ["C901"]
-"src/robotsix_mill/runners/timeout_escalation_runner.py" = ["C901"]
+"src/robotsix_mill/runners/timeout_escalation_runner.py" = ["C901", "S110"]
 "src/robotsix_mill/agents/scope_triage.py" = ["C901"]
 "src/robotsix_mill/agents/dedup.py" = ["C901"]
 "src/robotsix_mill/agents/web_research.py" = ["C901"]
 "src/robotsix_mill/runners/trace_review_runner.py" = ["C901"]
 "src/robotsix_mill/runners/trace_health_runner.py" = ["C901"]
-"src/robotsix_mill/runners/verify_runner.py" = ["C901"]
+"src/robotsix_mill/runners/verify_runner.py" = ["C901", "S110"]
 "src/robotsix_mill/runtime/tracing.py" = ["C901"]
 "src/robotsix_mill/stages/merge.py" = ["C901"]
 "src/robotsix_mill/stages/pause.py" = ["C901"]
@@ -166,6 +173,22 @@ max-complexity = 10
 # wider refactor of the response-shape fixtures. Allow the legacy
 # call here while the rest of the codebase already moved off it.
 "tests/langfuse/test_langfuse_client.py" = ["DTZ003"]
+# --- src/ flake8-bandit (S) legacy hot spots --------------------------------
+# Pre-existing findings inherent to a git/subprocess-automation tool and
+# its best-effort cleanup paths (try-except-pass/continue, subprocess
+# without shell=True / with partial paths, hardcoded temp dirs, non-crypto
+# random). Grandfathered per-file with only the codes each file triggers so
+# the S gate stays active for every other src/ file and new violations are
+# caught. Not defects — refactoring them is future, per-finding work.
+"src/robotsix_mill/agents/fallback.py" = ["S110"]
+"src/robotsix_mill/agents/jscpd_tool.py" = ["S603", "S607"]
+"src/robotsix_mill/agents/prerequisite.py" = ["S603"]
+"src/robotsix_mill/core/db.py" = ["S110"]
+"src/robotsix_mill/runtime/routes/_health.py" = ["S110"]
+"src/robotsix_mill/runtime/routes/_misc.py" = ["S110"]
+"src/robotsix_mill/runtime/stage_retry.py" = ["S311"]
+"src/robotsix_mill/sandbox.py" = ["S108", "S603", "S607"]
+"src/robotsix_mill/vcs/git_ops.py" = ["S603", "S607"]
 
 [tool.deptry]
 known_first_party = ["robotsix_mill"]
