@@ -693,7 +693,7 @@ class ImplementStage(Stage):
 
         repo_dir = ctx.service.workspace(ticket).dir / "repo"
         return resolve_language_instructions(
-            settings, repo_dir if repo_dir.exists() else None, ctx.repo_config
+            settings, repo_dir if repo_dir.exists() else None
         )
 
     @staticmethod

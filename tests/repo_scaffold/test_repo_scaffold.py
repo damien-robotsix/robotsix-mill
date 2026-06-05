@@ -253,8 +253,10 @@ class TestAppendRepoConfig:
         assert entry["langfuse"]["secret_key"] == "sk-mill-456"
         assert entry["langfuse"]["base_url"] == "https://langfuse.example.com"
         assert entry["forge_remote_url"] == "https://github.com/my-org/my-new-repo.git"
-        assert entry["language"] == "python"
-        assert entry["test_command"] == "pytest -q"
+        # test_command + language are NOT written to repos.yaml — they live in
+        # the new repo's own .robotsix-mill/config.yaml (the scaffold commit).
+        assert "test_command" not in entry
+        assert "language" not in entry
         # Periodic config is NOT written to repos.yaml (the loader ignores
         # it); enablement is per-repo file presence in the new repo.
         assert "periodic" not in entry
@@ -486,6 +488,11 @@ class TestRunRepoScaffold:
         assert 'name = "my-repo"' in pyproject  # distribution name keeps hyphen
         assert 'packages = ["src/my_repo"]' in pyproject  # explicit wheel target
         assert (dest / "tests" / "__init__.py").exists()
+        # The scaffold writes the repo's own mill config (test_command +
+        # languages) — NOT the operator's repos.yaml.
+        repo_cfg = (dest / ".robotsix-mill" / "config.yaml").read_text()
+        assert "test_command: pytest -q" in repo_cfg
+        assert "languages: [python]" in repo_cfg
 
         # Verify repos.yaml was written
         assert repos_file.exists()

@@ -305,6 +305,10 @@ def _scaffold_initial_commit(settings, repo_info: RepoInfo, params: dict) -> Non
         if language == "python":
             _write_python_skeleton(workspace_dir, name)
 
+        # Per-repo mill config: the repo owns its test_command + languages in
+        # its own .robotsix-mill/config.yaml (not the operator's repos.yaml).
+        _write_repo_config(workspace_dir, language)
+
         # Periodic agents: enablement is file presence, so the new repo
         # opts into the default set by carrying these in its first commit.
         _write_periodic_presence_files(workspace_dir)
@@ -390,6 +394,18 @@ packages = ["src/{pkg_name}"]
     tests_dir = repo_dir / "tests"
     tests_dir.mkdir(parents=True, exist_ok=True)
     (tests_dir / "__init__.py").write_text("", encoding="utf-8")
+
+
+def _write_repo_config(repo_dir: Path, language: str) -> None:
+    """Write the new repo's ``.robotsix-mill/config.yaml`` declaring its
+    ``test_command`` + ``languages`` — the repo owns these (not repos.yaml)."""
+    cfg_dir = repo_dir / ".robotsix-mill"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    test_command = "pytest -q" if language == "python" else ""
+    lines = [f"test_command: {test_command}".rstrip()]
+    if language:
+        lines.append(f"languages: [{language}]")
+    (cfg_dir / "config.yaml").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _write_periodic_presence_files(repo_dir: Path) -> None:
@@ -496,8 +512,6 @@ def _append_repo_config(repo_info: RepoInfo, params: dict, settings) -> None:
         lf_secret_key = ""
         lf_base_url = "https://cloud.langfuse.com"
 
-    language = params.get("language", "python")
-
     new_entry: dict = {
         "board_id": repo_id,
         "langfuse": {
@@ -507,12 +521,10 @@ def _append_repo_config(repo_info: RepoInfo, params: dict, settings) -> None:
             "base_url": lf_base_url,
         },
         "forge_remote_url": repo_info.clone_url,
-        "language": language,
-        # Periodic agents are NOT configured here — enablement is per-repo
-        # file presence in the new repo's .robotsix-mill/periodic/ (written
-        # into the initial scaffold commit). A repos.yaml "periodic" block is
-        # dead (the loader ignores it).
-        "test_command": "pytest -q" if language == "python" else "",
+        # Per-repo `test_command` + `language(s)` are NOT configured here —
+        # they live in the new repo's own .robotsix-mill/config.yaml (written
+        # into the initial scaffold commit, see _write_repo_config). Periodic
+        # agents likewise opt in via .robotsix-mill/periodic/ file presence.
     }
 
     data["repos"][repo_id] = new_entry

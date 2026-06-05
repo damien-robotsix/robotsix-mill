@@ -143,12 +143,11 @@ def test_test_agent_rc5_with_real_failure_still_fails(tmp_path, monkeypatch):
 
 
 def test_test_agent_repo_file_command_wins(tmp_path, monkeypatch):
-    """A per-repo ``.robotsix-mill/config.yaml`` ``test_command`` is the
-    highest-precedence source: it overrides both ``repo_config.test_command``
-    and ``settings.test_command``, and is the command actually handed to
-    ``sandbox.run``."""
+    """The repo's own ``.robotsix-mill/config.yaml`` ``test_command`` is the
+    highest-precedence source: it overrides ``settings.test_command`` (the
+    global fallback) and is the command actually handed to ``sandbox.run``.
+    (``repo_config`` no longer carries a per-repo ``test_command``.)"""
     from robotsix_mill import sandbox
-    from robotsix_mill.config import RepoConfig
 
     cfg_dir = tmp_path / ".robotsix-mill"
     cfg_dir.mkdir()
@@ -157,14 +156,6 @@ def test_test_agent_repo_file_command_wins(tmp_path, monkeypatch):
     )
 
     s = _settings(tmp_path, test_command="settings-cmd")
-    repo_config = RepoConfig(
-        repo_id="r",
-        board_id="b",
-        langfuse_project_name="p",
-        langfuse_public_key="pk",
-        langfuse_secret_key="sk",
-        test_command="repo-config-cmd",
-    )
 
     cap = {}
 
@@ -174,9 +165,7 @@ def test_test_agent_repo_file_command_wins(tmp_path, monkeypatch):
 
     monkeypatch.setattr(sandbox, "run", fake_run)
 
-    passed, fb = testing.run_test_agent(
-        settings=s, repo_dir=tmp_path, repo_config=repo_config
-    )
+    passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
     assert passed is True
     assert cap["cmd"] == "repo-file-cmd"
 

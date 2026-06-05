@@ -1560,24 +1560,18 @@ class RepoConfig(BaseModel):
     # pool, so a busy repo can't starve another. Default 1 keeps the
     # blast radius of any one ticket's bad behaviour contained.
     max_concurrency: int = 1
-    # The shell command the test gate runs in the sandbox for tickets
-    # in THIS repo. Default empty — the test gate short-circuits to
-    # PASS when no command is set, which matches repos that don't
-    # have a test suite yet (e.g. a doc-only repo). Set in repos.yaml
-    # per repo, e.g. ``test_command: "pytest -q"``. A managed repo may
-    # instead set ``test_command`` in its own
-    # ``.robotsix-mill/config.yaml`` committed to its source tree; that
-    # per-repo value takes precedence over this repos.yaml value.
-    test_command: str = ""
-    # Per-repo periodic-agent enable flags. Default FALSE for every
-    # one — a repo opts IN by setting the flag to true in repos.yaml
-    # NOTE: the per-repo ``*_periodic`` enable flags were REMOVED. A periodic
-    # workflow now runs for a repo iff the repo ships
+    # NOTE: per-repo ``test_command`` and ``language`` were REMOVED from
+    # repos.yaml. A managed repo now owns both in its own source tree via
+    # ``.robotsix-mill/config.yaml`` (``test_command`` + ``languages``); the
+    # mill reads them from the clone (repo_settings.py). The global
+    # ``Settings.test_command`` remains as the fleet-wide test-gate fallback.
+    #
+    # NOTE: the per-repo ``*_periodic`` enable flags were also REMOVED. A
+    # periodic workflow now runs for a repo iff the repo ships
     # ``.robotsix-mill/periodic/<name>.yaml`` (file presence = enabled; see
     # agents/periodic_loader.py + the worker's periodic supervisor). The
     # global ``Settings.<name>_periodic`` switches remain as fleet-wide
     # kill-switches.
-    language: str | None = None
 
     @field_validator("repo_id", "board_id")
     @classmethod
@@ -1657,10 +1651,6 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             max_concurrency=repo_data.get("max_concurrency", 1)
             if isinstance(repo_data, dict)
             else 1,
-            test_command=repo_data.get("test_command", "")
-            if isinstance(repo_data, dict)
-            else "",
-            language=repo_data.get("language") if isinstance(repo_data, dict) else None,
         )
     return ReposRegistry(repos=repos)
 

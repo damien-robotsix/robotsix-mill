@@ -1025,9 +1025,7 @@ class RefineStage(Stage):
 
         from ..repo_settings import resolve_language_instructions
 
-        language_instructions = resolve_language_instructions(
-            s, repo_dir, ctx.repo_config
-        )
+        language_instructions = resolve_language_instructions(s, repo_dir)
         try:
             result = refining.run_refine_agent(
                 settings=s,

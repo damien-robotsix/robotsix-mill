@@ -32,17 +32,14 @@ def run_test_agent(
     Test command resolution (highest precedence first): the per-repo
     ``.robotsix-mill/config.yaml`` ``test_command`` committed in the
     clone wins when set (a managed repo owns its command), else
-    ``repo_config.test_command`` (the repos.yaml multi-repo source),
-    else ``settings.test_command`` (legacy / single-repo global). When
-    all three are empty the gate short-circuits to PASS — repos without
-    a test suite (doc-only, etc.) need no opt-out flag."""
+    ``settings.test_command`` (the fleet-wide global fallback). When both
+    are empty the gate short-circuits to PASS — repos without a test
+    suite (doc-only, etc.) need no opt-out flag. (``repo_config`` no
+    longer carries a per-repo ``test_command``; it moved to the repo's
+    own ``.robotsix-mill/config.yaml``.)"""
     from .. import sandbox
 
-    cmd = (
-        (load_repo_test_command(repo_dir) or "")
-        or (repo_config.test_command if repo_config else "")
-        or settings.test_command
-    ).strip()
+    cmd = ((load_repo_test_command(repo_dir) or "") or settings.test_command).strip()
     if not cmd:
         return True, "no test gate configured (treated as passing)"
     try:
