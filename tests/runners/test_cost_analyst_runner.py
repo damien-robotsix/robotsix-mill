@@ -146,3 +146,28 @@ def test_file_drafts_dedups_by_title(monkeypatch):
     assert svc.created[0].title == "cost: trim refine context"
     # The gap-id marker is embedded in the body for traceability.
     # (create() received description with the marker)
+
+
+# --- agent-failure resilience ----------------------------------------------
+
+
+def test_agent_failure_returns_empty_result(monkeypatch):
+    """run_cost_analyst_pass does not propagate an exception from the agent;
+    it returns an empty result with the incoming memory unchanged."""
+    s = _settings()
+
+    monkeypatch.setattr(car, "Settings", lambda: s)
+    monkeypatch.setattr(car, "_build_cost_digest", lambda settings: "<digest/>")
+    monkeypatch.setattr(car, "load_memory", lambda path: "PRE-PASS LEDGER")
+    monkeypatch.setattr(car, "_gather_recent_proposals", lambda settings, board_id: "")
+    monkeypatch.setattr(car, "get_repos_config", lambda: SimpleNamespace(repos={}))
+    monkeypatch.setattr(car, "persist_memory", lambda *a, **k: None)
+
+    def _boom(**kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(car, "run_cost_analyst_agent", _boom)
+
+    result = car.run_cost_analyst_pass("sess-1")
+    assert result.drafts_created == []
+    assert result.updated_memory == "PRE-PASS LEDGER"

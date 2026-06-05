@@ -109,6 +109,13 @@ def run_cost_analyst_agent(
     finally:
         _safe_close(agent)
 
+    if result is None or getattr(result, "output", None) is None:
+        raise RuntimeError(
+            "cost_analyst agent produced null output — "
+            "likely an infrastructure failure (Claude CLI crash, "
+            "timeout, or fallback exhaustion)"
+        )
+
     out: CostReductionResult = result.output
     # Clip parallel lists in lockstep.
     n = min(

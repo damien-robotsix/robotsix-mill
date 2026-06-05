@@ -3,6 +3,8 @@ and parallel-list clipping."""
 
 from types import SimpleNamespace
 
+import pytest
+
 from robotsix_mill.agents import cost_analyst as ca
 from robotsix_mill.config import Settings
 
@@ -67,3 +69,25 @@ def test_run_clips_parallel_lists(monkeypatch):
     assert len(out.draft_titles) == ca.MAX_PROPOSALS
     assert len(out.draft_bodies) == ca.MAX_PROPOSALS
     assert len(out.gap_ids) == ca.MAX_PROPOSALS
+
+
+def test_run_raises_on_null_output(monkeypatch):
+    """When run_agent returns None (or an object whose .output is None),
+    run_cost_analyst_agent raises a clear RuntimeError mentioning the null
+    output — not a cryptic AttributeError on .output."""
+    import robotsix_mill.agents.base as base
+    import robotsix_mill.agents.retry as retry
+
+    monkeypatch.setattr(base, "build_agent", lambda *a, **k: object())
+    monkeypatch.setattr(base, "_safe_close", lambda agent: None)
+    monkeypatch.setattr(
+        retry, "run_agent", lambda agent, fn, **k: SimpleNamespace(output=None)
+    )
+
+    with pytest.raises(RuntimeError, match="null output"):
+        ca.run_cost_analyst_agent(
+            settings=Settings(data_dir="/tmp/ca-test"),
+            memory="",
+            recent_proposals="",
+            digest="<aggregate-cost-by-stage>x</aggregate-cost-by-stage>",
+        )

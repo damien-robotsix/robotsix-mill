@@ -396,12 +396,20 @@ def run_cost_analyst_pass(session_id: str) -> CostAnalystPassResult:
         recent_proposals = _gather_recent_proposals(settings, board_id)
 
         # 3. Run the agent
-        result = run_cost_analyst_agent(
-            settings=settings,
-            memory=memory,
-            recent_proposals=recent_proposals,
-            digest=digest,
-        )
+        try:
+            result = run_cost_analyst_agent(
+                settings=settings,
+                memory=memory,
+                recent_proposals=recent_proposals,
+                digest=digest,
+            )
+        except Exception:
+            log.exception("cost_analyst agent failed — returning empty result")
+            return CostAnalystPassResult(
+                updated_memory=memory,
+                drafts_created=[],
+                session_id=session_id,
+            )
 
         # 4. File drafts
         created = _file_drafts(result, settings, session_id, board_id)
