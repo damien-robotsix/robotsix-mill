@@ -317,17 +317,6 @@ class GitHubForge(Forge):
             pull_number=pr["number"],
         )
 
-    def list_pr_comments(self, *, source_branch: str) -> list[dict]:
-        owner, repo = self._owner_repo
-        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
-        if pr is None:
-            return []
-        return self._list_pr_comments(
-            owner=owner,
-            repo=repo,
-            pull_number=pr["number"],
-        )
-
     def list_pr_reviews(self, *, source_branch: str) -> list[dict]:
         owner, repo = self._owner_repo
         pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
@@ -516,36 +505,6 @@ class GitHubForge(Forge):
                 }
         except Exception as e:
             return {"merged": False, "reason": str(e)}
-
-    # --- HTTP seam (monkeypatched in tests) ---
-    def _list_pr_comments(
-        self,
-        *,
-        owner: str,
-        repo: str,
-        pull_number: int,
-    ) -> list[dict]:
-        import httpx
-
-        from .auth import github_token  # lazy: avoid import cycle
-
-        s = self.settings
-        api = s.github_api_url.rstrip("/")
-        headers = _build_headers(github_token(s, repo_config=self._repo_config))
-        url = f"{api}/repos/{owner}/{repo}/issues/{pull_number}/comments"
-        with httpx.Client(timeout=30) as c:
-            r = c.get(url, headers=headers, params={"per_page": 100})
-            r.raise_for_status()
-            items = r.json()
-        return [
-            {
-                "id": item["id"],
-                "author": (item.get("user") or {}).get("login", ""),
-                "created_at": item.get("created_at", ""),
-                "body": item.get("body") or "",
-            }
-            for item in items
-        ]
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _list_pr_reviews(
