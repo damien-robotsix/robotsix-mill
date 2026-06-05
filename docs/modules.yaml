@@ -21,6 +21,7 @@ modules:
     paths:
       - src/robotsix_llmio/openrouter/**
       - tests/openrouter/test_openrouter.py
+      - tests/openrouter/test_openrouter_provider.py
       - tests/openrouter/test_openrouter_provider_cost.py
       - docs/openrouter/
   - id: robotsix_llmio-openrouter-deepseek
