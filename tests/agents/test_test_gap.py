@@ -56,6 +56,22 @@ def test_test_gap_system_prompt_covers_key_dimensions():
     assert "list_dir" in p
 
 
+def test_test_gap_prompt_is_language_agnostic():
+    """The prompt must NOT hardcode the mill's own source root — it has to
+    infer the source root / test pattern per repo so it can run on any
+    registered repo (robotsix-llmio, robotsix-auto-mail, …), not just mill."""
+    p = test_gap_agent.SYSTEM_PROMPT
+    # No mill-specific package path baked in.
+    assert "src/robotsix_mill" not in p
+    pl = p.lower()
+    # Must tell the agent to discover the layout itself.
+    assert "language-agnostic" in pl
+    assert "source root" in pl
+    # References more than one ecosystem's build manifest.
+    assert "pyproject.toml" in pl
+    assert any(m in pl for m in ("cargo.toml", "go.mod", "package.json"))
+
+
 def test_test_gap_result_model():
     """TestGapResult has the expected fields and defaults."""
     result = test_gap_agent.TestGapResult(
