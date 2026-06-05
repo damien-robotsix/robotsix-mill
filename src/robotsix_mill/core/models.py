@@ -120,6 +120,8 @@ class Ticket(SQLModel, table=True):
     # depends_on, declared on the *solver*: "merging me re-opens these".
     # Cross-board safe (targets resolved via _board_for).
     unblocks: str | None = Field(default=None)
+    # optional JSON list of free-form label strings applied to the ticket.
+    labels: str | None = Field(default=None)
     # board_id from RepoConfig — stamped at creation so every ticket
     # is tagged with its repository.  Empty string for legacy rows.
     board_id: str = Field(default="", index=True)

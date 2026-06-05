@@ -122,6 +122,20 @@ def _parse_depends_on_str(raw: str | None) -> list[str]:
     return []
 
 
+def _parse_labels(raw: str | None) -> list[str]:
+    """Parse a JSON-encoded list of label strings from the labels
+    column. Returns an empty list for ``None`` or malformed input."""
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, list) and all(isinstance(x, str) for x in parsed):
+            return parsed
+    except json.JSONDecodeError, TypeError:
+        pass
+    return []
+
+
 class TransitionError(RuntimeError):
     """Requested state transition is not allowed by the state machine."""
 
@@ -766,6 +780,25 @@ class TicketService:
             if ticket is None:
                 raise KeyError(ticket_id)
             ticket.unblocks = json.dumps(cleaned) if cleaned else None
+            ticket.updated_at = datetime.now(timezone.utc)
+            s.add(ticket)
+            s.commit()
+            s.refresh(ticket)
+            return ticket
+
+    def set_labels(self, ticket_id: str, labels: list[str]) -> Ticket:
+        """Set the free-form label list applied to *ticket_id*.
+
+        Stored as a JSON array; replaces any prior value. Duplicates are
+        dropped preserving order; an empty list is stored as ``None``.
+        Returns the updated ticket; raises ``KeyError`` if unknown.
+        """
+        cleaned: list[str] = list(dict.fromkeys(labels))
+        with db.session(self.settings, self._board_for(ticket_id)) as s:
+            ticket = s.get(Ticket, ticket_id)
+            if ticket is None:
+                raise KeyError(ticket_id)
+            ticket.labels = json.dumps(cleaned) if cleaned else None
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
             s.commit()
@@ -1679,6 +1712,47 @@ class TicketService:
         rationale: str,
         source: str,
     ) -> str:
-        """RELABEL is a recognised placeholder that fails deterministically
-        until label infrastructure is built."""
-        raise NotImplementedError("label infrastructure not yet available")
+        """Apply a relabel *payload* to *target_id* and leave a history
+        breadcrumb.
+
+        Payload schema (JSON object):
+
+        * ``set`` (optional ``list[str]``) — the ticket's labels become
+          exactly this list.
+        * otherwise ``add`` then ``remove`` (both optional ``list[str]``)
+          are applied on top of the ticket's current labels.
+
+        Raises :class:`ValueError` when none of ``set``/``add``/``remove``
+        is present or any provided value is not a list of strings, and
+        :class:`KeyError` when *target_id* is unknown.
+        """
+        data = json.loads(payload or "{}")
+
+        def _as_str_list(value: object, key: str) -> list[str]:
+            if not isinstance(value, list) or not all(
+                isinstance(x, str) for x in value
+            ):
+                raise ValueError(f"relabel {key!r} must be a list of strings")
+            return value
+
+        new_labels: list[str]
+        if "set" in data:
+            new_labels = _as_str_list(data["set"], "set")
+        elif "add" in data or "remove" in data:
+            ticket = self.get(target_id)
+            if ticket is None:
+                raise KeyError(target_id)
+            current = _parse_labels(ticket.labels)
+            add = _as_str_list(data["add"], "add") if "add" in data else []
+            remove = _as_str_list(data["remove"], "remove") if "remove" in data else []
+            removed = set(remove)
+            new_labels = [lbl for lbl in [*current, *add] if lbl not in removed]
+        else:
+            raise ValueError("relabel payload requires one of: set, add, remove")
+
+        self.set_labels(target_id, new_labels)
+        self.add_history_note(
+            target_id,
+            note=self._action_note("relabeled", source, rationale),
+        )
+        return f"relabeled: {new_labels}"

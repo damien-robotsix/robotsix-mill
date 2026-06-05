@@ -321,20 +321,112 @@ def test_comment_missing_ticket_fails(service):
 # ---------------------------------------------------------------------------
 
 
-def test_relabel_fails_with_clear_message(service):
-    """RELABEL always fails with the placeholder message."""
-    t = service.create("relabel-test")
+def _labels(service, ticket_id):
+    from robotsix_mill.core.service import _parse_labels
+
+    return _parse_labels(service.get(ticket_id).labels)
+
+
+def test_relabel_add_happy_path(service):
+    """RELABEL add on a label-less ticket applies the labels and notes."""
+    t = service.create("relabel-add")
 
     pa = _create_proposed(
         service,
         action_type=ActionType.RELABEL,
         target_ticket_id=t.id,
-        rationale="add priority label",
+        payload='{"add": ["bug", "urgent"]}',
+        rationale="triage outcome",
+    )
+    result = service.execute_proposed_action(pa.id, decided_by="operator")
+    assert result.status == ProposedActionStatus.EXECUTED
+    assert result.failure_reason is None
+    assert _labels(service, t.id) == ["bug", "urgent"]
+
+    notes = _history_notes(service, t.id)
+    assert any("relabeled via proposed action" in n for n in notes)
+
+
+def test_relabel_remove(service):
+    """RELABEL remove drops the named label."""
+    t = service.create("relabel-remove")
+    service.set_labels(t.id, ["bug", "stale"])
+
+    pa = _create_proposed(
+        service,
+        action_type=ActionType.RELABEL,
+        target_ticket_id=t.id,
+        payload='{"remove": ["stale"]}',
+        rationale="not stale anymore",
+    )
+    result = service.execute_proposed_action(pa.id, decided_by="operator")
+    assert result.status == ProposedActionStatus.EXECUTED
+    assert _labels(service, t.id) == ["bug"]
+
+
+def test_relabel_set_replaces(service):
+    """RELABEL set replaces the label list entirely."""
+    t = service.create("relabel-set")
+    service.set_labels(t.id, ["bug", "urgent"])
+
+    pa = _create_proposed(
+        service,
+        action_type=ActionType.RELABEL,
+        target_ticket_id=t.id,
+        payload='{"set": ["only"]}',
+        rationale="reset labels",
+    )
+    result = service.execute_proposed_action(pa.id, decided_by="operator")
+    assert result.status == ProposedActionStatus.EXECUTED
+    assert _labels(service, t.id) == ["only"]
+
+
+def test_relabel_dedupes(service):
+    """RELABEL add dedupes repeated labels preserving order."""
+    t = service.create("relabel-dedupe")
+
+    pa = _create_proposed(
+        service,
+        action_type=ActionType.RELABEL,
+        target_ticket_id=t.id,
+        payload='{"add": ["a", "a"]}',
+        rationale="dupes",
+    )
+    result = service.execute_proposed_action(pa.id, decided_by="operator")
+    assert result.status == ProposedActionStatus.EXECUTED
+    assert _labels(service, t.id) == ["a"]
+
+
+def test_relabel_empty_payload_fails(service):
+    """RELABEL with an empty payload → FAILED naming the required keys."""
+    t = service.create("relabel-empty")
+
+    pa = _create_proposed(
+        service,
+        action_type=ActionType.RELABEL,
+        target_ticket_id=t.id,
+        payload="{}",
+        rationale="nothing to do",
     )
     result = service.execute_proposed_action(pa.id, decided_by="operator")
     assert result.status == ProposedActionStatus.FAILED
-    assert result.failure_reason is not None
-    assert "label infrastructure not yet available" in result.failure_reason
+    assert "set" in (result.failure_reason or "")
+    assert "add" in (result.failure_reason or "")
+    assert "remove" in (result.failure_reason or "")
+
+
+def test_relabel_missing_ticket_fails(service):
+    """RELABEL on a nonexistent ticket → FAILED naming the id."""
+    pa = _create_proposed(
+        service,
+        action_type=ActionType.RELABEL,
+        target_ticket_id="does-not-exist",
+        payload='{"add": ["bug"]}',
+        rationale="ghost relabel",
+    )
+    result = service.execute_proposed_action(pa.id, decided_by="operator")
+    assert result.status == ProposedActionStatus.FAILED
+    assert "does-not-exist" in (result.failure_reason or "")
 
 
 # ---------------------------------------------------------------------------
