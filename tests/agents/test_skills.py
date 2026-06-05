@@ -318,6 +318,60 @@ def test_module_map_tiered_view_above_20_modules(tmp_path, monkeypatch):
     assert "docs/modules.yaml" in result
 
 
+def test_render_module_map_truncates_oversized_block():
+    """An oversized rendered Module Map is capped to MODULE_MAP_MAX_CHARS
+    and ends with the docs/modules.yaml pointer line."""
+    from robotsix_mill.agents.base import MODULE_MAP_MAX_CHARS, _render_module_map
+
+    # ≤20 modules (so each is rendered in full) but with descriptions
+    # large enough to blow past the char cap.
+    oversized = [
+        {
+            "id": f"mod_{i}",
+            "description": "x" * 5000,
+            "paths": [f"mod_{i}.py"],
+            "dependencies": [],
+        }
+        for i in range(5)
+    ]
+
+    rendered = _render_module_map(oversized)
+
+    assert len(rendered) <= MODULE_MAP_MAX_CHARS
+    assert rendered.endswith(
+        "…(module map truncated — see docs/modules.yaml for the full taxonomy)"
+    )
+
+
+def test_render_module_map_small_list_unchanged():
+    """A normal (small) module list is rendered in full with no
+    truncation pointer."""
+    from robotsix_mill.agents.base import MODULE_MAP_MAX_CHARS, _render_module_map
+
+    small = [
+        {
+            "id": "config",
+            "description": "Configuration loading.",
+            "paths": ["src/robotsix_mill/config.py"],
+            "dependencies": [],
+        },
+        {
+            "id": "agents",
+            "description": "Agent runtime.",
+            "paths": ["src/robotsix_mill/agents/"],
+            "dependencies": ["config"],
+        },
+    ]
+
+    rendered = _render_module_map(small)
+
+    assert len(rendered) <= MODULE_MAP_MAX_CHARS
+    assert "truncated" not in rendered
+    assert "### config" in rendered
+    assert "### agents" in rendered
+    assert "Depends on: config" in rendered
+
+
 def test_module_map_missing_yaml_logs_warning(tmp_path, caplog, monkeypatch):
     """When docs/modules.yaml doesn't exist, a warning is logged and
     the prompt is returned unchanged."""

@@ -1490,7 +1490,9 @@ def test_refine_agent_does_not_inject_tech_references(monkeypatch, tmp_path):
         seen_system_prompt.append(system_prompt)
 
         class FakeAgent:
-            def run_sync(self, msg, message_history=None, board_id=""):
+            def run_sync(
+                self, msg, message_history=None, board_id="", usage_limits=None
+            ):
                 return type("R", (), {"output": _single("## Problem\nok\n")})()
 
         return FakeAgent()
@@ -1526,7 +1528,9 @@ def test_run_command_present_when_repo_dir_given(monkeypatch, tmp_path):
         seen_tools.extend(t.__name__ for t in tools)
 
         class FakeAgent:
-            def run_sync(self, msg, message_history=None, board_id=""):
+            def run_sync(
+                self, msg, message_history=None, board_id="", usage_limits=None
+            ):
                 return type("R", (), {"output": _single("## Problem\nok\n")})()
 
         return FakeAgent()
@@ -1565,7 +1569,9 @@ def test_run_command_absent_when_repo_dir_is_none(monkeypatch, tmp_path):
         seen_tools.extend(t.__name__ for t in tools)
 
         class FakeAgent:
-            def run_sync(self, msg, message_history=None, board_id=""):
+            def run_sync(
+                self, msg, message_history=None, board_id="", usage_limits=None
+            ):
                 return type("R", (), {"output": _single("## Problem\nok\n")})()
 
         return FakeAgent()
@@ -2075,7 +2081,9 @@ def test_refine_agent_fallback_raw_markdown(monkeypatch, tmp_path):
         settings, system_prompt, tools, web_knowledge, model_name, **kwargs
     ):
         class FakeAgent:
-            def run_sync(self, msg, message_history=None, board_id=""):
+            def run_sync(
+                self, msg, message_history=None, board_id="", usage_limits=None
+            ):
                 return type("R", (), {"output": _single(raw_md)})()
 
         return FakeAgent()
@@ -2107,7 +2115,9 @@ def test_refine_agent_malformed_json_fallback(monkeypatch, tmp_path):
         settings, system_prompt, tools, web_knowledge, model_name, **kwargs
     ):
         class FakeAgent:
-            def run_sync(self, msg, message_history=None, board_id=""):
+            def run_sync(
+                self, msg, message_history=None, board_id="", usage_limits=None
+            ):
                 # Simulate PromptedOutput parsing — returns a RefineResult.
                 return type("R", (), {"output": _single(raw)})()
 
@@ -2140,7 +2150,9 @@ def test_split_heuristic_present_in_system_prompt(monkeypatch, tmp_path):
         seen_system_prompt.append(system_prompt)
 
         class FakeAgent:
-            def run_sync(self, msg, message_history=None, board_id=""):
+            def run_sync(
+                self, msg, message_history=None, board_id="", usage_limits=None
+            ):
                 return type("R", (), {"output": _single("## Problem\nok\n")})()
 
         return FakeAgent()
@@ -2173,7 +2185,9 @@ def test_tool_strategy_present_in_system_prompt(monkeypatch, tmp_path):
         seen_system_prompt.append(system_prompt)
 
         class FakeAgent:
-            def run_sync(self, msg, message_history=None, board_id=""):
+            def run_sync(
+                self, msg, message_history=None, board_id="", usage_limits=None
+            ):
                 return type("R", (), {"output": _single("## Problem\nok\n")})()
 
         return FakeAgent()
@@ -2290,7 +2304,9 @@ def test_sendback_uses_short_prompt(monkeypatch, tmp_path):
         seen_system_prompt.append(system_prompt)
 
         class FakeAgent:
-            def run_sync(self, msg, message_history=None, board_id=""):
+            def run_sync(
+                self, msg, message_history=None, board_id="", usage_limits=None
+            ):
                 return type("R", (), {"output": _single("## Problem\nok\n")})()
 
         return FakeAgent()
@@ -2323,7 +2339,9 @@ def test_first_refinement_uses_full_prompt(monkeypatch, tmp_path):
         seen_system_prompt.append(system_prompt)
 
         class FakeAgent:
-            def run_sync(self, msg, message_history=None, board_id=""):
+            def run_sync(
+                self, msg, message_history=None, board_id="", usage_limits=None
+            ):
                 return type("R", (), {"output": _single("## Problem\nok\n")})()
 
         return FakeAgent()
@@ -2353,7 +2371,9 @@ def test_sendback_enables_reply_and_close_thread_tools(monkeypatch, tmp_path):
         run_kwargs.append(kwargs)
 
         class FakeAgent:
-            def run_sync(self, msg, message_history=None, board_id=""):
+            def run_sync(
+                self, msg, message_history=None, board_id="", usage_limits=None
+            ):
                 return type("R", (), {"output": _single("## Problem\nok\n")})()
 
         return FakeAgent()
@@ -2656,7 +2676,9 @@ def test_triage_refine_agent_config(monkeypatch, tmp_path):
         )
 
         class FakeAgent:
-            def run_sync(self, msg, message_history=None, board_id=""):
+            def run_sync(
+                self, msg, message_history=None, board_id="", usage_limits=None
+            ):
                 return type(
                     "R", (), {"output": TriageResult(decision="REFINE", reason="test")}
                 )()
@@ -3555,7 +3577,7 @@ def test_continuation_guard_fires_on_tool_calls(monkeypatch, settings):
     run_sync_calls = []
 
     class _MockAgent:
-        def run_sync(self, user_prompt, *, message_history=None):
+        def run_sync(self, user_prompt, *, message_history=None, usage_limits=None):
             run_sync_calls.append(
                 {"user_prompt": user_prompt, "message_history": message_history}
             )
@@ -3622,7 +3644,7 @@ def test_continuation_guard_not_triggered_on_stop(monkeypatch, settings):
     run_sync_calls = []
 
     class _MockAgent:
-        def run_sync(self, user_prompt, *, message_history=None):
+        def run_sync(self, user_prompt, *, message_history=None, usage_limits=None):
             run_sync_calls.append(user_prompt)
             return _FakeRunResult(
                 output=expected_spec,
@@ -3665,7 +3687,7 @@ def test_continuation_guard_skipped_when_response_missing(monkeypatch, settings)
     run_sync_calls = []
 
     class _MockAgent:
-        def run_sync(self, user_prompt, *, message_history=None):
+        def run_sync(self, user_prompt, *, message_history=None, usage_limits=None):
             run_sync_calls.append(user_prompt)
             return _FakeRunResult(
                 output=expected_spec,
@@ -3902,7 +3924,7 @@ def test_run_refine_agent_no_match_proceeds_to_llm(monkeypatch, settings):
     agent_called = False
 
     class _MockAgent:
-        def run_sync(self, user_prompt, *, message_history=None):
+        def run_sync(self, user_prompt, *, message_history=None, usage_limits=None):
             nonlocal agent_called
             agent_called = True
             # Return a simple valid result to avoid continuation guard
@@ -3936,6 +3958,45 @@ def test_run_refine_agent_no_match_proceeds_to_llm(monkeypatch, settings):
     assert agent_called is True
     assert result.no_change_needed is False
     assert result.spec_markdown == "## Problem\nok\n"
+
+
+def test_run_refine_agent_passes_request_limit(monkeypatch, settings):
+    """run_refine_agent bounds its tool loop with
+    ``UsageLimits(request_limit=settings.refine_request_limit)`` on its
+    run_sync call (mirrors the explore-agent capture pattern)."""
+    import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
+
+    captured: dict = {}
+
+    class _MockAgent:
+        def run_sync(self, user_prompt, *, message_history=None, usage_limits=None):
+            captured["usage_limits"] = usage_limits
+            return _FakeRunResult(
+                output=RefineResult(split=False, spec_markdown="## Problem\nok\n"),
+                finish_reason="stop",
+                all_messages=[],
+            )
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        base_module, "build_agent_from_definition", lambda *a, **kw: _MockAgent()
+    )
+    monkeypatch.setattr(
+        retry_module,
+        "run_agent",
+        lambda agent, make_run, *, settings, what="model call", sleep=None: make_run(
+            agent
+        ),
+    )
+
+    monkeypatch.setattr(settings, "refine_request_limit", 23)
+    refining.run_refine_agent(settings=settings, title="t", draft="d")
+
+    assert captured["usage_limits"] is not None
+    assert captured["usage_limits"].request_limit == 23
 
 
 # ---------------------------------------------------------------------------
