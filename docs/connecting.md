@@ -650,6 +650,110 @@ intentional:
   and updating the ledger on every request — well suited to a periodic external
   scheduler that should only be alerted about previously-unseen drift.
 
+#### Ledger state semantics
+
+The ledger lives in the SQLite `watermark` table under the key
+`config_sync_ledger`, stored as a single JSON object keyed by a per-finding
+fingerprint:
+
+```json
+{
+  "<fingerprint>": {
+    "title": "imap_folder default mismatch",
+    "affected_field": "imap_folder",
+    "state": "pending"
+  }
+}
+```
+
+- **Fingerprint basis.** Each `<fingerprint>` is a SHA-256 hash derived from a
+  proposal's **stable identity fields only** — `affected_field` + `title`. The
+  `body` is deliberately **excluded** so that a reworded body (the LLM rephrases
+  its prose between runs) does not escape dedup and resurface the same finding
+  as new.
+- **States.** An entry's `state` is one of `pending`, `accepted`, or `rejected`.
+  All three suppress re-reporting equally — once a fingerprint is recorded in
+  *any* state, that proposal is filtered out of future `--dedup` CLI runs and
+  `POST /config-sync` responses.
+- **First-seen proposals are recorded as `pending`** automatically. The
+  `accepted` and `rejected` states are **reserved/internal**: they are set only
+  by the internal `set_finding_state()` helper in
+  `src/robotsix_auto_mail/config_sync.py` and are **not currently exposed**
+  through any CLI flag or HTTP endpoint. Operators cannot set those states
+  today; there is no merge/decline command. (Behavioural exposure, if ever
+  wanted, would be a separate ticket.)
+
+### Responding to drift proposals
+
+The advisory agent only *reports* — it never edits config or files anything.
+Acting on a proposal is the operator's job. For each `DriftProposal` in the
+text or JSON output, look at its `title`, `body`, `affected_field`, and
+`confidence`, then decide:
+
+- **Real divergence → reconcile the authoritative surfaces.** If the proposal
+  describes a genuine inconsistency, fix it by editing the surfaces the
+  deterministic checker compares so that
+  `python scripts/config/check_config_sync.py` goes green again. Those surfaces
+  are:
+  - the `MailConfig` dataclass (`src/robotsix_auto_mail/config/__init__.py`),
+  - the YAML template (`config/mail.local.example.yaml`),
+  - `.env.example`, and
+  - the two config tables in this file — "YAML config file" and "Environment
+    variables".
+
+  The `FIELD_TO_YAML` / `FIELD_TO_ENV` mappings in
+  `scripts/config/check_config_sync.py` are the **source of truth** for which
+  YAML key and environment variable each `MailConfig` field corresponds to;
+  reconcile every surface to agree with them.
+- **Intentional divergence → ignore the proposal.** If the reported difference
+  is a deliberate design choice the deterministic rules simply don't model,
+  treat the proposal as a false positive and do nothing — no code change is
+  needed.
+
+Either way, the dedup ledger suppresses an already-surfaced proposal on the
+next `--dedup` CLI run or `POST /config-sync` request **regardless of your
+decision**, because any recorded state (`pending` / `accepted` / `rejected`)
+suppresses re-reporting.
+
+#### Worked reconciliation example
+
+Suppose an advisory run surfaces this proposal:
+
+```text
+
+Config Drift Advisory
+------------------------------------------------------------
+
+imap_folder documented value mismatch
+  confidence: high
+  affected field: imap_folder
+
+The `MAIL_IMAP_FOLDER` row in the "Environment variables" table documents a
+default of `INBOX.All`, but the MailConfig default for imap_folder is INBOX.
+```
+
+You confirm it is a **real drift** — the documented default no longer matches
+the dataclass. Reconcile the affected surface(s), e.g. fix the `MAIL_IMAP_FOLDER`
+row in the "Environment variables" table (and any other surface that disagrees,
+such as `.env.example`) so the documented default reads `INBOX` again:
+
+```text
+| `MAIL_IMAP_FOLDER` | no | `INBOX` | IMAP mailbox folder name |
+```
+
+Then re-run the deterministic gate, which now exits `0`:
+
+```sh
+$ python scripts/config/check_config_sync.py
+OK
+$ echo $?
+0
+```
+
+By contrast, if the proposal had flagged an **intentional** design choice the
+deterministic rules don't encode — e.g. a deliberately commented-out optional
+key — you would simply ignore it: no surface edit and no code change is needed.
+
 ### Representative text output
 
 ```text
