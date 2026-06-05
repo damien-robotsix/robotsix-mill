@@ -393,8 +393,7 @@ def test_real_retrospect_yaml_max_tokens_fits_full_ledger_reemit():
         # plus the JSON envelope wrapping the RetrospectResult.
         STRUCTURED_FIELDS_MARGIN = 2_000
         estimated = (
-            REPRESENTATIVE_LEDGER_CHARS // CHARS_PER_TOKEN
-            + STRUCTURED_FIELDS_MARGIN
+            REPRESENTATIVE_LEDGER_CHARS // CHARS_PER_TOKEN + STRUCTURED_FIELDS_MARGIN
         )
 
         assert ad.max_tokens >= estimated, (
