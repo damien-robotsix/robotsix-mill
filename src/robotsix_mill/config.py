@@ -1262,20 +1262,6 @@ class Settings(BaseSettings):
         return self.data_dir / repo_id / "board_cleanup_memory.md"
 
     @property
-    def cost_reconciliation_memory_file(self) -> Path:
-        """Resolved path to the agent-maintained cost-reconciliation memory ledger."""
-        if self.cost_reconciliation_memory_path is not None:
-            return self.cost_reconciliation_memory_path
-        return self.data_dir / "cost_reconciliation_memory.md"
-
-    @property
-    def data_dir_audit_memory_file(self) -> Path:
-        """Resolved path to the agent-maintained data-dir audit memory ledger."""
-        if self.data_dir_audit_memory_path is not None:
-            return self.data_dir_audit_memory_path
-        return self.data_dir / "data_dir_audit_memory.md"
-
-    @property
     def completeness_check_memory_file(self) -> Path:
         """Resolved path to the agent-maintained completeness-check memory ledger."""
         if self.completeness_check_memory_path is not None:
@@ -1335,13 +1321,6 @@ class Settings(BaseSettings):
         if board_id:
             return self.data_dir / board_id / "ci_patterns.json"
         return self.data_dir / "ci_patterns.json"
-
-    @property
-    def review_revision_memory_file(self) -> Path:
-        """Resolved path to the agent-maintained review-revision memory ledger."""
-        if self.review_revision_memory_path is not None:
-            return self.review_revision_memory_path
-        return self.data_dir / "review_revision_memory.md"
 
     # ------------------------------------------------------------------
     #  Validators
