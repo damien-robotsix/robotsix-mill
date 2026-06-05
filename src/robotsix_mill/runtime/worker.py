@@ -167,6 +167,12 @@ async def _handle_stage_error(
         await _block_ticket_and_notify(ticket_id, ctx, stage_name, note, trace_id)
 
 
+# Child states that count as "complete" for epic-closing purposes.
+_EPIC_CHILD_TERMINAL = frozenset(
+    {State.DONE, State.CLOSED, State.ANSWERED, State.EPIC_CLOSED}
+)
+
+
 def _maybe_reevaluate_epic(
     ticket_id: str, ctx: StageContext, next_state: State
 ) -> None:
@@ -176,7 +182,7 @@ def _maybe_reevaluate_epic(
     ``_spawn_epic_reeval`` fires-and-forgets a daemon thread, so this
     helper does not need to be ``async``.
     """
-    if next_state in (State.DONE, State.CLOSED, State.ANSWERED):
+    if next_state in _EPIC_CHILD_TERMINAL:
         ticket = ctx.service.get(ticket_id)
         if ticket is not None and ticket.parent_id is not None:
             parent = ctx.service.get(ticket.parent_id)
@@ -946,6 +952,10 @@ class Worker:
         self._periodic_supervisor_tasks: dict[str, asyncio.Task] = {}
         # ticket_id -> consecutive no-progress cycles in a traced stage
         self._stuck: dict[str, int] = {}
+        # Epic-sweep dedup: epic_id → child count at last sweep re-eval, so the
+        # safety-net sweep re-evaluates an all-children-terminal epic at most
+        # once per stable child set (re-eval again only when children change).
+        self._epic_sweep_seen: dict[str, int] = {}
         # ids queued OR in-flight — dedupe so the same ticket is never
         # processed by two workers at once (the merge poll, emit, and
         # requeue can all enqueue the same id).
@@ -1129,6 +1139,31 @@ class Worker:
                 self._active.pop(ticket_id, None)
                 queue.task_done()
 
+    def _maybe_sweep_orphaned_epic(self, epic, svc) -> None:
+        """Re-evaluate an EPIC_OPEN epic whose children are ALL terminal but
+        which is still open (a missed child-close trigger orphaned it).
+
+        Idempotent: re-evaluates at most once per stable terminal child set
+        (keyed on child count), so a healthy epic isn't re-billed every poll.
+        Re-evaluates again only when the child count changes (e.g. epic_status
+        spawned new children). The epic_status agent itself decides whether to
+        actually close — this just ensures it gets the chance."""
+        children = svc.list_children(epic.id)
+        if not children:
+            return
+        if not all(c.state in _EPIC_CHILD_TERMINAL for c in children):
+            return
+        if self._epic_sweep_seen.get(epic.id) == len(children):
+            return  # already swept this stable terminal child set
+        self._epic_sweep_seen[epic.id] = len(children)
+        log.info(
+            "epic %s: all %d children terminal but still EPIC_OPEN — "
+            "sweep-triggering re-evaluation (missed child-close trigger)",
+            epic.id,
+            len(children),
+        )
+        _spawn_epic_reeval(epic.id, self.ctx)
+
     def _check_progress(
         self, ticket_id: str, before, after, repo_config: RepoConfig | None = None
     ) -> None:
@@ -1274,6 +1309,16 @@ class Worker:
                         else TicketService(self.ctx.settings, board_id=board_id)
                     )
                     for t in svc.list():
+                        # Safety net: an EPIC_OPEN epic is normally re-evaluated
+                        # by the child-close hook (_maybe_reevaluate_epic). If
+                        # that trigger is ever missed (a child closes via a path
+                        # that bypasses it, a race, or an error), the epic is
+                        # orphaned in EPIC_OPEN forever — epics are NOT in
+                        # STAGE_FOR_STATE, so the requeue sweep below skips them.
+                        # Catch it here.
+                        if t.kind == "epic" and t.state == State.EPIC_OPEN:
+                            self._maybe_sweep_orphaned_epic(t, svc)
+                            continue
                         if t.state == State.AWAITING_USER_REPLY:
                             log.debug(
                                 "%s: skipping reconcile — awaiting user reply",
