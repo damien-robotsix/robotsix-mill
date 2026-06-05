@@ -1337,6 +1337,7 @@ async function open_(id){
    (t.kind==="inquiry"?` <span class="inquiry-badge">🔍 inquiry</span>`:"")+
    (t.kind==="epic"?` <span class="epic-badge">📋 epic</span>`:"")+
    ` · branch ${esc(t.branch)||"—"}<br>`+
+   (t.board_id?`repo <span class="repo-badge">${esc(repoIdForBoardId(t.board_id))}</span> · `:"")+
    `source <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span>`+
    (t.origin_session_url?` · origin <a href="${esc(t.origin_session_url)}" target="_blank" rel="noopener" class="origin-link">${esc(t.origin_session)}</a>`:
     t.origin_session?` · origin <span class="muted">${esc(t.origin_session)}</span>`:"")+
