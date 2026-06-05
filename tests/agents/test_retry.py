@@ -67,6 +67,40 @@ def test_is_transient_jsondecode_wrapped():
     assert is_transient(wrapped) is True
 
 
+def test_is_transient_claude_sdk_degenerate_success():
+    """Regression: the claude_agent_sdk masks a ProcessError into a bare
+    Exception('Claude Code returned an error result: success') when the CLI
+    emits a self-contradictory is_error=True + subtype='success' result. The
+    type is erased, so it must be matched by message signature — directly and
+    through the cause chain — and treated as transient so it gets retried."""
+    assert (
+        is_transient(Exception("Claude Code returned an error result: success"))
+        is True
+    )
+    inner = Exception("Claude Code returned an error result: success")
+    wrapped = RuntimeError("agent run failed")
+    wrapped.__cause__ = inner
+    assert is_transient(wrapped) is True
+
+    ctx_wrapped = RuntimeError("agent run failed")
+    ctx_wrapped.__context__ = Exception(
+        "Claude Code returned an error result: success"
+    )
+    assert is_transient(ctx_wrapped) is True
+
+
+def test_is_transient_claude_sdk_genuine_error_not_transient():
+    """The broadening must stay narrow: a genuine error result subtype (e.g.
+    error_during_execution) and an unrelated failure must remain non-transient."""
+    assert (
+        is_transient(
+            Exception("Claude Code returned an error result: error_during_execution")
+        )
+        is False
+    )
+    assert is_transient(Exception("some other failure")) is False
+
+
 def test_is_transient_openrouter_finish_reason_error():
     """OpenRouter returns finish_reason='error' on an upstream provider
     failure; the OpenAI SDK raises a pydantic ValidationError because
