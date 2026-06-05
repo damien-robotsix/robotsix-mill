@@ -1093,6 +1093,22 @@ async function runModuleCurator(){
    btn.disabled=false; btn.textContent='Module Curator';
  }
 }
+async function runCopyPaste(){
+ const btn=event.target;
+ btn.disabled=true; btn.textContent='Running...';
+ try {
+   const repoId=getRepoId();
+   const url=repoId!=="all"?"/copy-paste?repo_id="+encodeURIComponent(repoId):"/copy-paste";
+   const r=await jpost(url);
+   if(!r.ok){throw new Error(await r.text())}
+   alert("Copy-paste detection started — new draft tickets will appear on the board when it finishes.");
+   setTimeout(refresh,4000);
+ } catch(e) {
+   alert("Copy-paste detection failed to start: "+e);
+ } finally {
+   btn.disabled=false; btn.textContent='Copy Paste';
+ }
+}
 async function runBcCheck(){
  const btn=event.target;
  btn.disabled=true; btn.textContent='Running...';
