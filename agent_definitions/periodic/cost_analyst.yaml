@@ -24,7 +24,7 @@ web_knowledge: false
 output_type: CostReductionResult
 retries: 4
 module: cost_analyst
-skills: [board-read, board-propose]
+skills: [board-read]
 
 system_prompt: |
   You are a cost-analyst agent for an autonomous software project (the
