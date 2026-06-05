@@ -579,6 +579,40 @@ This is an **advisory tool only** — it does not replace the deterministic
 A successful run exits code `0` even when drift is found, so it won't break
 operator scripts.
 
+### Advisory tool vs. the deterministic gate
+
+`robotsix-auto-mail` checks configuration consistency at two distinct layers,
+and they are **complementary** — neither replaces the other:
+
+| | `scripts/config/check_config_sync.py` | `config-sync` advisory agent |
+|---|---|---|
+| **Role** | Authoritative CI / pre-commit gate | Optional operator-facing advisory tool |
+| **Mechanism** | Deterministic, rule-based checks | LLM inspection of config surfaces |
+| **Cost** | Fast and free (no LLM, no API key) | Requires `pydantic-ai` + an LLM API key |
+| **Coverage** | Known, encoded drift patterns | *Unanticipated* drift the rules don't encode |
+| **On drift** | Fails the build (blocks merge) | Reports proposals; still exits `0` |
+| **When it runs** | Every commit / PR, automatically | On demand, when an operator chooses |
+
+`scripts/config/check_config_sync.py` is the **source of truth**: it is the
+fast, free, deterministic gate that blocks merges on known configuration drift,
+and it runs automatically on every commit and pull request. The `config-sync`
+LLM agent (CLI subcommand and `POST /config-sync` endpoint) is an **optional,
+operator-facing advisory tool** that surfaces *unanticipated* drift patterns the
+deterministic checker doesn't encode. Because a successful advisory run exits
+`0` even when it reports drift, it **does not gate anything** — running
+`config-sync` is never a substitute for the deterministic gate passing.
+
+### When to use which
+
+- **Rely on the deterministic gate for every commit and PR.** It is automatic,
+  free, and authoritative — it is what actually keeps configuration surfaces in
+  sync, and a green build means the known drift checks pass.
+- **Reach for the advisory tool occasionally / on demand.** Good moments are
+  after a large config refactor, when onboarding a new configuration surface, or
+  on a periodic external schedule (e.g. a cron job hitting `POST /config-sync`)
+  to catch drift the deterministic rules don't yet cover. Treat its proposals as
+  hints to review, not as merge blockers.
+
 ### Options
 
 | Option | Default | Purpose |
@@ -596,6 +630,25 @@ The `config-sync` command requires:
 When `--dedup` is **not** passed, the command does not require a full mail config
 — it skips config loading and uses `conn=None`. When `--dedup` **is** passed,
 it loads the config to retrieve `db_path` for the dedup ledger.
+
+### The dedup memory ledger
+
+Operators who run the advisory tool regularly would otherwise see the same drift
+proposals on every run. The **dedup memory ledger** prevents that repeated noise:
+it persists a fingerprint of every drift proposal that has already been surfaced,
+stored in the SQLite `watermark` table under the key `config_sync_ledger`. On
+subsequent runs, proposals whose fingerprints are already recorded (i.e. those
+already seen, accepted, or rejected) are suppressed, so only genuinely new drift
+is reported.
+
+The two entry points apply the ledger differently, and this asymmetry is
+intentional:
+
+- The **CLI** applies dedup only when you pass `--dedup` (which requires a
+  loadable config, since the ledger lives in the configured database).
+- The **`POST /config-sync` endpoint** applies dedup **by default**, consulting
+  and updating the ledger on every request — well suited to a periodic external
+  scheduler that should only be alerted about previously-unseen drift.
 
 ### Representative text output
 
