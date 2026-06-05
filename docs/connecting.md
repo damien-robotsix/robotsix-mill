@@ -675,13 +675,9 @@ fingerprint:
   All three suppress re-reporting equally — once a fingerprint is recorded in
   *any* state, that proposal is filtered out of future `--dedup` CLI runs and
   `POST /config-sync` responses.
-- **First-seen proposals are recorded as `pending`** automatically. The
-  `accepted` and `rejected` states are **reserved/internal**: they are set only
-  by the internal `set_finding_state()` helper in
-  `src/robotsix_auto_mail/config_sync.py` and are **not currently exposed**
-  through any CLI flag or HTTP endpoint. Operators cannot set those states
-  today; there is no merge/decline command. (Behavioural exposure, if ever
-  wanted, would be a separate ticket.)
+- **First-seen proposals are recorded as `pending`** automatically. Operators
+  can set any of the three states (`pending`, `accepted`, or `rejected`)
+  manually via the [`config-sync-set`](#the-config-sync-set-command) command.
 
 ### Responding to drift proposals
 
@@ -923,3 +919,72 @@ for future mail from the same address.
 The `triage-set` command requires a loadable configuration (for `db_path`),
 but does **not** require the `pydantic-ai` package or an LLM API key — it is
 purely a local decision-recording tool.
+
+## The config-sync-set command
+
+To manually record an operator decision for a single config-drift finding in
+the dedup memory ledger, use `config-sync-set`:
+
+```sh
+$ robotsix-auto-mail config-sync-set <fingerprint> <state>
+```
+
+This writes the chosen `state` (`pending`, `accepted`, or `rejected`) into the
+finding's entry in the persisted dedup ledger. See [The dedup memory
+ledger](#the-dedup-memory-ledger) and [Ledger state
+semantics](#ledger-state-semantics) under the `config-sync` command for how the
+ledger is stored in the `watermark` table under the `config_sync_ledger` key,
+how per-finding fingerprints are derived, and why all three states suppress
+re-reporting equally.
+
+### Arguments
+
+| Argument | Purpose |
+|---|---|
+| `<fingerprint>` | The per-finding fingerprint of a config-drift proposal, as recorded in the ledger by a prior `config-sync --dedup` run (the same SHA-256 fingerprint described in [Ledger state semantics](#ledger-state-semantics)) |
+| `<state>` | The ledger state: `pending`, `accepted`, or `rejected` |
+
+### Examples
+
+```sh
+# Accept a drift finding (records state=accepted in the ledger)
+robotsix-auto-mail config-sync-set <fingerprint> accepted
+
+# Reject a drift finding
+robotsix-auto-mail config-sync-set <fingerprint> rejected
+```
+
+### Behavior
+
+The state is written into the `config_sync_ledger` entry inside the SQLite
+`watermark` table. Because any recorded state suppresses re-reporting, setting a
+finding's state keeps it from resurfacing on future `config-sync --dedup` CLI
+runs and `POST /config-sync` endpoint calls (see [The dedup memory
+ledger](#the-dedup-memory-ledger) for the full detail).
+
+Error handling:
+
+- If `<state>` is not one of `pending`, `accepted`, or `rejected`, prints an
+  `Error: invalid state ...` message listing the valid states and exits with
+  code `1`.
+- If `<fingerprint>` matches no ledger entry, prints
+  `Error: No ledger finding with fingerprint '<fingerprint>'` and exits with
+  code `1`.
+- If the configuration cannot be loaded, prints an
+  `Error loading configuration: ...` message and exits with code `1`.
+
+On success, the state is recorded and exit code is `0`.
+
+### Requirements
+
+The `config-sync-set` command requires:
+- A **loadable configuration** (for `db_path`) and an existing SQLite database
+  whose `config_sync_ledger` has already been populated by a prior
+  `config-sync --dedup` run.
+- The **`pydantic-ai` package** (install via
+  `pip install robotsix-auto-mail[dev]`); the command's import guard exits `1`
+  with an install hint if it is absent. This matches `config-sync`'s
+  pydantic-ai requirement.
+
+It does **not** require an LLM API key — unlike `config-sync`, it performs no
+LLM call.
