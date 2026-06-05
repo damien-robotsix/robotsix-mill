@@ -182,6 +182,20 @@ class Forge(ABC):
         by configuration (e.g. a feature flag).
         """
 
+    def list_code_scanning_alerts(self, *, source_branch: str) -> list[dict]:
+        """List OPEN code-scanning (e.g. CodeQL) alerts on *source_branch*.
+
+        Concrete (not abstract) with a ``[]`` default — code-scanning is a
+        GitHub feature, so non-GitHub forges inherit the no-op. CodeQL
+        findings live in the security/code-scanning API, NOT the workflow
+        job logs, so without this the CI-fix agent is blind to a CodeQL
+        failure (it sees only "CodeQL: failure" with no detail).
+
+        Each dict: ``rule`` (id), ``severity``, ``path``, ``line``,
+        ``message``, ``url``.
+        """
+        return []
+
 
 def get_forge(settings: Settings, repo_config: RepoConfig | None = None) -> Forge:
     """Resolve the configured forge adapter.

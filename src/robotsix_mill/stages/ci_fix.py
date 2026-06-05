@@ -52,11 +52,30 @@ def _workspace_repo_dir(ctx, ticket) -> str | None:
     return str(repo)
 
 
-def _build_failing_summary(failing: list[dict], log_text: str = "") -> str:
+def _format_code_scanning_alerts(alerts: list[dict]) -> str:
+    """Render open code-scanning (CodeQL) alerts as a markdown block. These
+    come from the security/code-scanning API, NOT the workflow job logs, so
+    without them the agent can't see what a CodeQL check actually flagged."""
+    if not alerts:
+        return ""
+    lines = ["**Code-scanning alerts (CodeQL — these are NOT in the job logs):**"]
+    for a in alerts:
+        loc = a.get("path", "")
+        if a.get("line"):
+            loc += f":{a['line']}"
+        sev = a.get("severity") or "?"
+        lines.append(f"- [{sev}] `{a.get('rule', '')}` {loc}: {a.get('message', '')}")
+    return "\n".join(lines)
+
+
+def _build_failing_summary(
+    failing: list[dict], log_text: str = "", alerts: list[dict] | None = None
+) -> str:
     """Build a markdown summary from the failing check list.
 
     When *log_text* is provided (non-empty), it is included under a
-    **Job logs:** heading after the annotations.
+    **Job logs:** heading. When *alerts* (open code-scanning/CodeQL alerts)
+    are provided they are listed too — they don't appear in the job logs.
     """
     parts = []
     for i, chk in enumerate(failing):
@@ -73,6 +92,10 @@ def _build_failing_summary(failing: list[dict], log_text: str = "") -> str:
                 if a.get("start_line"):
                     loc += f":{a['start_line']}"
                 parts.append(f"- [{a['level']}] {loc}: {a['message']}")
+        parts.append("")
+    alert_block = _format_code_scanning_alerts(alerts or [])
+    if alert_block:
+        parts.append(alert_block)
         parts.append("")
     if log_text:
         parts.append("**Job logs:**")
@@ -152,11 +175,13 @@ class CIFixStage(Stage):
         # --- CI is failing → attempt fix ---
         failing = status.get("failing", [])
 
-        # Fetch job logs for richer context (only on failure, not on
-        # every PR poll — this stage runs infrequently).
+        # Fetch job logs + code-scanning alerts for richer context (only on
+        # failure, not on every PR poll — this stage runs infrequently).
         log_text = ""
+        alerts: list[dict] = []
         try:
             forge = get_forge(s, repo_config=ctx.repo_config)
+            alerts = forge.list_code_scanning_alerts(source_branch=branch)
             pr = forge.pr_status(source_branch=branch)
             head_sha = (pr or {}).get("sha", "")
             if head_sha:
@@ -170,9 +195,9 @@ class CIFixStage(Stage):
                                 f"(run {run['id']}) ---\n{logs}"
                             )
         except Exception:  # noqa: BLE001 — best-effort enrichment
-            log.warning("%s: failed to fetch job logs", ticket.id)
+            log.warning("%s: failed to fetch job logs / alerts", ticket.id)
 
-        failing_summary = _build_failing_summary(failing, log_text)
+        failing_summary = _build_failing_summary(failing, log_text, alerts)
 
         # Hard per-ticket cycle ceiling: count every cycle that actually runs
         # the agent on still-failing CI, regardless of self-reported status or
@@ -194,6 +219,16 @@ class CIFixStage(Stage):
                 ticket.id,
                 s.ci_fix_max_cycles,
             )
+            # Persist WHAT failed to the ticket history so a human doesn't have
+            # to dig into GitHub/Langfuse to learn why ci-fix gave up.
+            try:
+                ctx.service.add_history_note(
+                    ticket.id,
+                    "ci-fix gave up — last CI failure:\n\n"
+                    + (failing_summary or "(no failure detail captured)")[:3000],
+                )
+            except Exception:  # noqa: BLE001 — history note is best-effort
+                log.warning("%s: failed to record ci-fix failure note", ticket.id)
             return Outcome(
                 State.BLOCKED,
                 f"ci fix exhausted hard ceiling of {s.ci_fix_max_cycles} "
