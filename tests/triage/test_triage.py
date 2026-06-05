@@ -16,17 +16,26 @@ from robotsix_llmio.core import Tier
 from robotsix_auto_mail.db import MailRecord, init_db, insert_record
 from robotsix_auto_mail.triage import (
     VALID_TRIAGE_ACTIONS,
+    RuleLedgerEntry,
     SenderMemory,
     TriageDecision,
     TriageError,
     TriageItem,
     TriageResult,
+    TriageRule,
+    TriageRuleProposal,
     _build_memory_guidance,
     _load_memory,
+    _rule_fingerprint,
+    apply_triage_rules,
     get_triage_decision,
+    list_active_rules,
     list_triage_decisions,
+    propose_triage_rules,
+    record_and_filter_rule_proposals,
     record_human_decision,
     run_triage_agent,
+    set_rule_state,
     set_triage_decision,
 )
 
@@ -564,5 +573,374 @@ def test_run_triage_agent_prompt_omits_guidance_when_empty(
             run_triage_agent(conn)
         prompt = handle.run_sync.call_args.args[0]
         assert "triaged by the user" not in prompt
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Deterministic triage rules — models
+# ---------------------------------------------------------------------------
+
+
+def _seed_history(
+    conn: object, sender: str, action: str, count: int, *, prefix: str = "m"
+) -> None:
+    """Insert *count* inbox records from *sender* triaged as *action*."""
+    for i in range(count):
+        mid = f"<{prefix}{i}@x.com>"
+        _insert_inbox(conn, mid, sender=sender)
+        set_triage_decision(  # type: ignore[arg-type]
+            conn, mid, action, source="user"
+        )
+
+
+def test_triage_rule_rejects_invalid_match_type() -> None:
+    with pytest.raises(pydantic.ValidationError):
+        TriageRule(match_type="regex", match_value="x", action="archive")
+
+
+def test_triage_rule_rejects_invalid_action() -> None:
+    with pytest.raises(pydantic.ValidationError):
+        TriageRule(match_type="sender", match_value="x", action="banana")
+
+
+def test_rule_ledger_entry_rejects_unknown_state() -> None:
+    rule = TriageRule(
+        match_type="sender", match_value="a@x.com", action="archive"
+    )
+    with pytest.raises(pydantic.ValidationError):
+        RuleLedgerEntry(rule=rule, state="bogus")
+
+
+def _proposal(
+    match_type: str = "sender",
+    match_value: str = "a@x.com",
+    action: str = "archive",
+    *,
+    title: str = "t",
+    body: str = "b",
+) -> TriageRuleProposal:
+    return TriageRuleProposal(
+        rule=TriageRule(
+            match_type=match_type, match_value=match_value, action=action
+        ),
+        title=title,
+        body=body,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Fingerprinting
+# ---------------------------------------------------------------------------
+
+
+def test_rule_fingerprint_stable_across_presentation() -> None:
+    """Fingerprint ignores title/body/confidence wording."""
+    a = _proposal(title="One", body="x")
+    b = _proposal(title="Totally different", body="y")
+    assert _rule_fingerprint(a) == _rule_fingerprint(b)
+
+
+def test_rule_fingerprint_ignores_case_and_whitespace() -> None:
+    a = _proposal(match_value="A@X.com", action="archive")
+    b = _proposal(match_value="  a@x.com  ", action="archive")
+    assert _rule_fingerprint(a) == _rule_fingerprint(b)
+
+
+def test_rule_fingerprint_distinct_for_different_rules() -> None:
+    base = _proposal(match_type="sender", match_value="a@x.com",
+                     action="archive")
+    other_type = _proposal(match_type="domain", match_value="a@x.com",
+                           action="archive")
+    other_value = _proposal(match_value="b@x.com")
+    other_action = _proposal(action="delete")
+    assert _rule_fingerprint(base) != _rule_fingerprint(other_type)
+    assert _rule_fingerprint(base) != _rule_fingerprint(other_value)
+    assert _rule_fingerprint(base) != _rule_fingerprint(other_action)
+
+
+# ---------------------------------------------------------------------------
+# propose_triage_rules
+# ---------------------------------------------------------------------------
+
+
+def test_propose_rules_above_threshold() -> None:
+    """A consistent sender at/above threshold yields a sender rule."""
+    conn = init_db(":memory:")
+    try:
+        _seed_history(conn, "news@a.com", "archive", 3)
+        proposals = propose_triage_rules(conn)
+        senders = [
+            p.rule for p in proposals if p.rule.match_type == "sender"
+        ]
+        assert any(
+            r.match_value == "news@a.com" and r.action == "archive"
+            for r in senders
+        )
+    finally:
+        conn.close()
+
+
+def test_propose_rules_respects_threshold() -> None:
+    """Below threshold (2 decisions) yields no rule."""
+    conn = init_db(":memory:")
+    try:
+        _seed_history(conn, "news@a.com", "archive", 2)
+        assert propose_triage_rules(conn) == []
+    finally:
+        conn.close()
+
+
+def test_propose_rules_excludes_user_triage() -> None:
+    """user_triage decisions never produce a rule."""
+    conn = init_db(":memory:")
+    try:
+        _seed_history(conn, "news@a.com", "user_triage", 5)
+        assert propose_triage_rules(conn) == []
+    finally:
+        conn.close()
+
+
+def test_propose_rules_requires_consistency() -> None:
+    """An inconsistent sender (mixed actions) yields no rule."""
+    conn = init_db(":memory:")
+    try:
+        _insert_inbox(conn, "<a@x.com>", sender="news@a.com")
+        _insert_inbox(conn, "<b@x.com>", sender="news@a.com")
+        _insert_inbox(conn, "<c@x.com>", sender="news@a.com")
+        set_triage_decision(conn, "<a@x.com>", "archive", source="user")
+        set_triage_decision(conn, "<b@x.com>", "archive", source="user")
+        set_triage_decision(conn, "<c@x.com>", "delete", source="user")
+        senders = [
+            p for p in propose_triage_rules(conn)
+            if p.rule.match_type == "sender"
+        ]
+        assert senders == []
+    finally:
+        conn.close()
+
+
+def test_propose_rules_domain_when_multiple_senders() -> None:
+    """A domain spanning >=2 consistent senders yields a domain rule."""
+    conn = init_db(":memory:")
+    try:
+        _seed_history(conn, "a@news.com", "archive", 2, prefix="a")
+        _seed_history(conn, "b@news.com", "archive", 2, prefix="b")
+        domains = [
+            p.rule for p in propose_triage_rules(conn)
+            if p.rule.match_type == "domain"
+        ]
+        assert any(
+            r.match_value == "news.com" and r.action == "archive"
+            for r in domains
+        )
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Dedup ledger & state transitions
+# ---------------------------------------------------------------------------
+
+
+def test_record_and_filter_rule_proposals_dedups() -> None:
+    conn = init_db(":memory:")
+    try:
+        proposals = [_proposal(match_value="a@x.com"),
+                     _proposal(match_value="b@x.com")]
+        first = record_and_filter_rule_proposals(conn, proposals)
+        assert len(first) == 2
+        second = record_and_filter_rule_proposals(conn, proposals)
+        assert second == []
+    finally:
+        conn.close()
+
+
+def test_record_and_filter_suppresses_any_state() -> None:
+    """A rejected proposal is not re-proposed."""
+    conn = init_db(":memory:")
+    try:
+        proposal = _proposal()
+        record_and_filter_rule_proposals(conn, [proposal])
+        set_rule_state(conn, _rule_fingerprint(proposal), "rejected")
+        assert record_and_filter_rule_proposals(conn, [proposal]) == []
+    finally:
+        conn.close()
+
+
+def test_accept_adds_active_rule() -> None:
+    conn = init_db(":memory:")
+    try:
+        proposal = _proposal(match_value="a@x.com", action="archive")
+        record_and_filter_rule_proposals(conn, [proposal])
+        set_rule_state(conn, _rule_fingerprint(proposal), "accepted")
+        active = list_active_rules(conn)
+        assert len(active) == 1
+        assert active[0].match_value == "a@x.com"
+        assert active[0].action == "archive"
+    finally:
+        conn.close()
+
+
+def test_reject_does_not_add_active_rule() -> None:
+    conn = init_db(":memory:")
+    try:
+        proposal = _proposal()
+        record_and_filter_rule_proposals(conn, [proposal])
+        set_rule_state(conn, _rule_fingerprint(proposal), "rejected")
+        assert list_active_rules(conn) == []
+    finally:
+        conn.close()
+
+
+def test_set_rule_state_invalid_state_raises() -> None:
+    conn = init_db(":memory:")
+    try:
+        proposal = _proposal()
+        record_and_filter_rule_proposals(conn, [proposal])
+        with pytest.raises(TriageError):
+            set_rule_state(conn, _rule_fingerprint(proposal), "bogus")
+    finally:
+        conn.close()
+
+
+def test_set_rule_state_unknown_fingerprint_raises() -> None:
+    conn = init_db(":memory:")
+    try:
+        with pytest.raises(TriageError):
+            set_rule_state(conn, "deadbeefdeadbeef", "accepted")
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# apply_triage_rules
+# ---------------------------------------------------------------------------
+
+
+def _activate(conn: object, proposal: TriageRuleProposal) -> None:
+    record_and_filter_rule_proposals(conn, [proposal])  # type: ignore[arg-type]
+    set_rule_state(conn, _rule_fingerprint(proposal), "accepted")  # type: ignore[arg-type]
+
+
+def test_apply_rules_matches_sender() -> None:
+    conn = init_db(":memory:")
+    try:
+        _activate(conn, _proposal(match_type="sender",
+                                  match_value="news@a.com", action="archive"))
+        record = MailRecord(
+            message_id="<m@x.com>", sender="News@A.com",
+            subject="Hi", date="2025-06-01T00:00:00",
+        )
+        assert apply_triage_rules(conn, record) == "archive"
+    finally:
+        conn.close()
+
+
+def test_apply_rules_matches_domain() -> None:
+    conn = init_db(":memory:")
+    try:
+        _activate(conn, _proposal(match_type="domain",
+                                  match_value="news.com", action="delete"))
+        record = MailRecord(
+            message_id="<m@x.com>", sender="anyone@news.com",
+            subject="Hi", date="2025-06-01T00:00:00",
+        )
+        assert apply_triage_rules(conn, record) == "delete"
+    finally:
+        conn.close()
+
+
+def test_apply_rules_matches_subject_substring() -> None:
+    conn = init_db(":memory:")
+    try:
+        _activate(conn, _proposal(match_type="subject_contains",
+                                  match_value="invoice", action="answer"))
+        record = MailRecord(
+            message_id="<m@x.com>", sender="a@x.com",
+            subject="Your INVOICE is ready", date="2025-06-01T00:00:00",
+        )
+        assert apply_triage_rules(conn, record) == "answer"
+    finally:
+        conn.close()
+
+
+def test_apply_rules_returns_none_when_no_match() -> None:
+    conn = init_db(":memory:")
+    try:
+        _activate(conn, _proposal(match_type="sender",
+                                  match_value="news@a.com", action="archive"))
+        record = MailRecord(
+            message_id="<m@x.com>", sender="other@b.com",
+            subject="Hi", date="2025-06-01T00:00:00",
+        )
+        assert apply_triage_rules(conn, record) is None
+    finally:
+        conn.close()
+
+
+def test_apply_rules_none_without_active_rules() -> None:
+    conn = init_db(":memory:")
+    try:
+        record = MailRecord(
+            message_id="<m@x.com>", sender="a@x.com",
+            subject="Hi", date="2025-06-01T00:00:00",
+        )
+        assert apply_triage_rules(conn, record) is None
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# run_triage_agent rule fast-path
+# ---------------------------------------------------------------------------
+
+
+def test_run_triage_agent_rule_matched_records_skip_llm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Rule-matched records are triaged deterministically; only the rest
+    reach the LLM."""
+    monkeypatch.setenv("LLM_API_KEY", "sk-test")
+    conn = init_db(":memory:")
+    try:
+        _activate(conn, _proposal(match_type="sender",
+                                  match_value="news@a.com", action="archive"))
+        _insert_inbox(conn, "<ruled@x.com>", sender="news@a.com")
+        _insert_inbox(conn, "<llm@x.com>", sender="alice@example.com")
+        handle, patcher = _patch_llm(
+            TriageResult(items=[TriageItem(index=1, action="answer")])
+        )
+        with patcher:
+            out = run_triage_agent(conn)
+
+        by_id = {d.message_id: d for d in out}
+        assert by_id["<ruled@x.com>"].action == "archive"
+        assert by_id["<ruled@x.com>"].reason == "matched deterministic rule"
+        assert by_id["<llm@x.com>"].action == "answer"
+        # Only the unmatched record was sent to the LLM.
+        prompt = handle.run_sync.call_args.args[0]
+        assert "alice@example.com" in prompt
+        assert "news@a.com" not in prompt
+    finally:
+        conn.close()
+
+
+def test_run_triage_agent_all_matched_skips_llm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When every inbox record matches a rule, the LLM is never built."""
+    monkeypatch.setenv("LLM_API_KEY", "sk-test")
+    conn = init_db(":memory:")
+    try:
+        _activate(conn, _proposal(match_type="sender",
+                                  match_value="news@a.com", action="archive"))
+        _insert_inbox(conn, "<ruled@x.com>", sender="news@a.com")
+        with mock.patch(
+            "robotsix_auto_mail.triage.OpenRouterDeepseekProvider"
+        ) as cls:
+            out = run_triage_agent(conn)
+        assert [d.action for d in out] == ["archive"]
+        cls.assert_not_called()
     finally:
         conn.close()

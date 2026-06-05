@@ -14,6 +14,7 @@ The ``pydantic_ai`` import is lazy to keep module-load time low, mirroring
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sqlite3
@@ -26,6 +27,7 @@ from robotsix_llmio.openrouter_deepseek import OpenRouterDeepseekProvider
 
 from robotsix_auto_mail.config import load_llm
 from robotsix_auto_mail.db import (
+    MailRecord,
     get_record_by_message_id,
     get_watermark,
     set_watermark,
@@ -56,6 +58,29 @@ _MEMORY_WATERMARK_KEY = "triage_human_memory"
 
 #: Accepted confidence levels (mirrors ``DriftProposal.confidence``).
 _VALID_CONFIDENCE_LEVELS = frozenset({"low", "medium", "high"})
+
+#: Accepted deterministic-rule match types.  Intentionally limited — no
+#: regex / DSL — to keep matching exact and cheap.
+_VALID_RULE_MATCH_TYPES = frozenset(
+    {"sender", "domain", "subject_contains"}
+)
+
+#: Accepted :class:`RuleLedgerEntry` states.  All three suppress
+#: re-proposal of a rule once it has been recorded.
+_VALID_RULE_LEDGER_STATES = frozenset({"pending", "accepted", "rejected"})
+
+#: Minimum number of consistent, non-``user_triage`` decisions required
+#: before a deterministic rule is proposed for a sender / domain.
+_RULE_MIN_DECISIONS = 3
+
+#: Watermark key owned by this module for the deterministic-rule proposal
+#: dedup ledger.  Persisted in ``db.py``'s ``watermark`` key-value table
+#: (same json round-trip as :data:`_MEMORY_WATERMARK_KEY`) — no new table.
+_RULES_LEDGER_WATERMARK_KEY = "triage_rules_ledger"
+
+#: Watermark key owned by this module for the list of accepted (active)
+#: deterministic rules.  Persisted in the same ``watermark`` table.
+_RULES_ACTIVE_WATERMARK_KEY = "triage_rules_active"
 
 
 # ---------------------------------------------------------------------------
@@ -165,6 +190,96 @@ class SenderMemory(pydantic.BaseModel):
             raise ValueError(
                 "action must be one of "
                 f"{sorted(VALID_TRIAGE_ACTIONS)!r}; got {v!r}"
+            )
+        return v
+
+
+# ---------------------------------------------------------------------------
+# Pydantic models — deterministic triage rules
+# ---------------------------------------------------------------------------
+
+
+class TriageRule(pydantic.BaseModel):
+    """A deterministic triage rule.
+
+    ``match_type`` is one of ``sender`` (exact, lowercased sender address),
+    ``domain`` (the sender's domain) or ``subject_contains`` (case-insensitive
+    substring of the subject).  ``action`` is validated against
+    :data:`VALID_TRIAGE_ACTIONS`.  No regex / DSL is supported — matching is
+    intentionally exact and cheap.
+    """
+
+    match_type: str
+    match_value: str
+    action: str
+
+    @pydantic.field_validator("match_type")
+    @classmethod
+    def _validate_match_type(cls, v: str) -> str:
+        if v not in _VALID_RULE_MATCH_TYPES:
+            raise ValueError(
+                "match_type must be one of "
+                f"{sorted(_VALID_RULE_MATCH_TYPES)!r}; got {v!r}"
+            )
+        return v
+
+    @pydantic.field_validator("action")
+    @classmethod
+    def _validate_action(cls, v: str) -> str:
+        if v not in VALID_TRIAGE_ACTIONS:
+            raise ValueError(
+                "action must be one of "
+                f"{sorted(VALID_TRIAGE_ACTIONS)!r}; got {v!r}"
+            )
+        return v
+
+
+class TriageRuleProposal(pydantic.BaseModel):
+    """A :class:`TriageRule` plus human-readable presentation fields.
+
+    Derived deterministically from the recorded triage history; ``title`` /
+    ``body`` describe the proposed rule and ``confidence`` reflects how
+    strong / consistent the supporting evidence is.
+    """
+
+    rule: TriageRule
+    title: str = pydantic.Field(..., min_length=1)
+    body: str = pydantic.Field(..., min_length=1)
+    #: Confidence level — one of ``low`` / ``medium`` / ``high``.
+    confidence: str = pydantic.Field(default="medium")
+
+    @pydantic.field_validator("confidence")
+    @classmethod
+    def _validate_confidence(cls, v: str) -> str:
+        if v not in _VALID_CONFIDENCE_LEVELS:
+            raise ValueError(
+                "confidence must be one of "
+                f"{sorted(_VALID_CONFIDENCE_LEVELS)!r}; got {v!r}"
+            )
+        return v
+
+
+class RuleLedgerEntry(pydantic.BaseModel):
+    """One remembered rule proposal in the dedup ledger.
+
+    Keyed (in the ledger dict) by the rule's stable fingerprint.  The
+    ``state`` tracks whether the operator has acted on the proposal; any of
+    ``pending`` / ``accepted`` / ``rejected`` suppresses re-proposal.  The
+    embedded ``rule`` lets :func:`set_rule_state` promote an accepted
+    proposal into the active-rules list.
+    """
+
+    rule: TriageRule
+    title: str = ""
+    state: str = "pending"
+
+    @pydantic.field_validator("state")
+    @classmethod
+    def _validate_state(cls, v: str) -> str:
+        if v not in _VALID_RULE_LEDGER_STATES:
+            raise ValueError(
+                "state must be one of "
+                f"{sorted(_VALID_RULE_LEDGER_STATES)!r}; got {v!r}"
             )
         return v
 
@@ -390,6 +505,275 @@ def _build_memory_guidance(conn: sqlite3.Connection) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Deterministic triage rules — proposal, dedup ledger & application
+# ---------------------------------------------------------------------------
+
+
+def _rule_identity(rule: TriageRule) -> tuple[str, str, str]:
+    """Return the normalized identity triple for *rule*.
+
+    Each component is stripped and lower-cased so case / whitespace do not
+    affect rule identity (matching the fingerprint normalization).
+    """
+    return (
+        rule.match_type.strip().lower(),
+        rule.match_value.strip().lower(),
+        rule.action.strip().lower(),
+    )
+
+
+def _rule_fingerprint(proposal: TriageRuleProposal) -> str:
+    """Return a deterministic fingerprint identifying *proposal*.
+
+    The fingerprint is derived from the **stable** identity fields only —
+    ``match_type``, ``match_value`` and ``action`` (each stripped and
+    lower-cased) — and hashed with SHA-256.  ``title`` / ``body`` /
+    ``confidence`` are deliberately EXCLUDED so re-wording does not defeat
+    dedup, mirroring :func:`config_sync._proposal_fingerprint`.
+    """
+    match_type, match_value, action = _rule_identity(proposal.rule)
+    raw = f"{match_type}\x00{match_value}\x00{action}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def _domain_of(sender_key: str) -> str:
+    """Return the domain part of a lowercased sender key, or ""."""
+    if "@" in sender_key:
+        return sender_key.rsplit("@", 1)[1]
+    return ""
+
+
+def _rule_confidence(count: int) -> str:
+    """Map the supporting-decision *count* to a confidence level."""
+    if count >= _RULE_MIN_DECISIONS * 2:
+        return "high"
+    return "medium"
+
+
+def propose_triage_rules(
+    conn: sqlite3.Connection,
+) -> list[TriageRuleProposal]:
+    """Derive deterministic triage-rule proposals from triage history.
+
+    Scans :func:`list_triage_decisions`; for each sender (and each domain
+    spanning at least two senders) that maps **consistently** to a single
+    non-``user_triage`` action across at least :data:`_RULE_MIN_DECISIONS`
+    decisions, emits a :class:`TriageRuleProposal`.  ``user_triage``
+    decisions are ignored entirely.  No LLM is involved — derivation is
+    deterministic and exact.  Proposals are ordered sender rules first
+    (by sender), then domain rules (by domain).
+    """
+    sender_actions: dict[str, list[str]] = {}
+    domain_actions: dict[str, list[str]] = {}
+    domain_senders: dict[str, set[str]] = {}
+    for decision in list_triage_decisions(conn):
+        if decision.action == "user_triage":
+            continue
+        record = get_record_by_message_id(conn, decision.message_id)
+        if record is None:
+            continue
+        sender = _sender_key(record.sender)
+        sender_actions.setdefault(sender, []).append(decision.action)
+        domain = _domain_of(sender)
+        if domain:
+            domain_actions.setdefault(domain, []).append(decision.action)
+            domain_senders.setdefault(domain, set()).add(sender)
+
+    proposals: list[TriageRuleProposal] = []
+    for sender in sorted(sender_actions):
+        actions = sender_actions[sender]
+        distinct = set(actions)
+        if len(distinct) != 1 or len(actions) < _RULE_MIN_DECISIONS:
+            continue
+        action = next(iter(distinct))
+        rule = TriageRule(
+            match_type="sender", match_value=sender, action=action
+        )
+        proposals.append(
+            TriageRuleProposal(
+                rule=rule,
+                title=f"Auto-triage mail from {sender} as {action}",
+                body=(
+                    f"The user triaged {len(actions)} message(s) from "
+                    f"`{sender}` consistently as `{action}`. Propose a "
+                    "deterministic rule so matching mail is triaged "
+                    "without an LLM call."
+                ),
+                confidence=_rule_confidence(len(actions)),
+            )
+        )
+
+    for domain in sorted(domain_actions):
+        actions = domain_actions[domain]
+        distinct = set(actions)
+        if (
+            len(domain_senders[domain]) < 2
+            or len(distinct) != 1
+            or len(actions) < _RULE_MIN_DECISIONS
+        ):
+            continue
+        action = next(iter(distinct))
+        rule = TriageRule(
+            match_type="domain", match_value=domain, action=action
+        )
+        proposals.append(
+            TriageRuleProposal(
+                rule=rule,
+                title=f"Auto-triage mail from domain {domain} as {action}",
+                body=(
+                    f"The user triaged {len(actions)} message(s) from "
+                    f"domain `{domain}` consistently as `{action}`. Propose "
+                    "a deterministic rule so matching mail is triaged "
+                    "without an LLM call."
+                ),
+                confidence=_rule_confidence(len(actions)),
+            )
+        )
+
+    return proposals
+
+
+def _load_rule_ledger(
+    conn: sqlite3.Connection,
+) -> dict[str, RuleLedgerEntry]:
+    """Load the rule-proposal dedup ledger from the watermark table."""
+    raw = get_watermark(conn, _RULES_LEDGER_WATERMARK_KEY)
+    if raw is None:
+        return {}
+    data: dict[str, object] = json.loads(raw)
+    return {
+        fingerprint: RuleLedgerEntry.model_validate(entry)
+        for fingerprint, entry in data.items()
+    }
+
+
+def _save_rule_ledger(
+    conn: sqlite3.Connection, ledger: dict[str, RuleLedgerEntry]
+) -> None:
+    """Persist the rule-proposal ledger to the watermark table."""
+    payload = {
+        fingerprint: entry.model_dump()
+        for fingerprint, entry in ledger.items()
+    }
+    set_watermark(
+        conn, _RULES_LEDGER_WATERMARK_KEY, json.dumps(payload)
+    )
+
+
+def _load_active_rules(conn: sqlite3.Connection) -> list[TriageRule]:
+    """Load the list of accepted (active) deterministic rules."""
+    raw = get_watermark(conn, _RULES_ACTIVE_WATERMARK_KEY)
+    if raw is None:
+        return []
+    data: list[object] = json.loads(raw)
+    return [TriageRule.model_validate(entry) for entry in data]
+
+
+def _save_active_rules(
+    conn: sqlite3.Connection, rules: list[TriageRule]
+) -> None:
+    """Persist the active deterministic rules to the watermark table."""
+    payload = [rule.model_dump() for rule in rules]
+    set_watermark(
+        conn, _RULES_ACTIVE_WATERMARK_KEY, json.dumps(payload)
+    )
+
+
+def list_active_rules(conn: sqlite3.Connection) -> list[TriageRule]:
+    """Return the accepted (active) deterministic triage rules."""
+    return _load_active_rules(conn)
+
+
+def record_and_filter_rule_proposals(
+    conn: sqlite3.Connection, proposals: list[TriageRuleProposal]
+) -> list[TriageRuleProposal]:
+    """Record genuinely-new rule proposals and filter already-seen ones.
+
+    A proposal is *new* iff its fingerprint is not already present in the
+    ledger in ANY state — ``pending`` / ``accepted`` / ``rejected`` all
+    suppress re-proposal.  New proposals are recorded as ``pending`` and
+    returned in input order; the ledger is only written when there is at
+    least one new entry.  Mirrors
+    :func:`config_sync.record_and_filter_proposals`.
+    """
+    ledger = _load_rule_ledger(conn)
+    new_proposals: list[TriageRuleProposal] = []
+    for proposal in proposals:
+        fingerprint = _rule_fingerprint(proposal)
+        if fingerprint in ledger:
+            continue
+        ledger[fingerprint] = RuleLedgerEntry(
+            rule=proposal.rule,
+            title=proposal.title,
+            state="pending",
+        )
+        new_proposals.append(proposal)
+    if new_proposals:
+        _save_rule_ledger(conn, ledger)
+    return new_proposals
+
+
+def set_rule_state(
+    conn: sqlite3.Connection, fingerprint: str, state: str
+) -> None:
+    """Transition rule-proposal *fingerprint* to *state*.
+
+    Accepting (``state="accepted"``) adds the proposal's
+    :class:`TriageRule` to the active-rules list; any other state removes it
+    from the active set (rejecting a never-accepted rule is a no-op for the
+    active list).  Raises :class:`TriageError` for an invalid *state* or an
+    unknown *fingerprint*.
+    """
+    if state not in _VALID_RULE_LEDGER_STATES:
+        raise TriageError(
+            "state must be one of "
+            f"{sorted(_VALID_RULE_LEDGER_STATES)!r}; got {state!r}"
+        )
+    ledger = _load_rule_ledger(conn)
+    entry = ledger.get(fingerprint)
+    if entry is None:
+        raise TriageError(
+            f"No triage-rule proposal with fingerprint {fingerprint!r}"
+        )
+    ledger[fingerprint] = entry.model_copy(update={"state": state})
+    _save_rule_ledger(conn, ledger)
+
+    # -- keep the active-rules list in sync --
+    identity = _rule_identity(entry.rule)
+    active = [
+        rule
+        for rule in _load_active_rules(conn)
+        if _rule_identity(rule) != identity
+    ]
+    if state == "accepted":
+        active.append(entry.rule)
+    _save_active_rules(conn, active)
+
+
+def apply_triage_rules(
+    conn: sqlite3.Connection, record: MailRecord
+) -> str | None:
+    """Return the action of the first active rule matching *record*.
+
+    Matches by exact lowercased sender address, sender domain, or
+    case-insensitive subject substring.  Returns ``None`` when no active
+    rule matches.
+    """
+    sender = _sender_key(record.sender)
+    domain = _domain_of(sender)
+    subject = record.subject.lower()
+    for rule in _load_active_rules(conn):
+        value = rule.match_value.strip().lower()
+        if rule.match_type == "sender" and sender == value:
+            return rule.action
+        if rule.match_type == "domain" and domain and domain == value:
+            return rule.action
+        if rule.match_type == "subject_contains" and value in subject:
+            return rule.action
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Prompt building
 # ---------------------------------------------------------------------------
 
@@ -474,6 +858,36 @@ def run_triage_agent(
     if not records:
         return []
 
+    # -- deterministic rule fast-path: triage matching records without the
+    #    LLM and exclude them from the batch sent to the model --
+    decisions: list[TriageDecision] = []
+    remaining: list[MailRecord] = []
+    for record in records:
+        rule_action = apply_triage_rules(conn, record)
+        if rule_action is None:
+            remaining.append(record)
+            continue
+        reason = "matched deterministic rule"
+        set_triage_decision(
+            conn,
+            record.message_id,
+            rule_action,
+            source="agent",
+            reason=reason,
+        )
+        decisions.append(
+            TriageDecision(
+                message_id=record.message_id,
+                action=rule_action,
+                source="agent",
+                reason=reason,
+            )
+        )
+
+    # Every inbox record was handled deterministically — no LLM needed.
+    if not remaining:
+        return decisions
+
     # -- resolve API key (arg -> LLM_API_KEY env -> config.llm_api_key) --
     resolved_key = api_key or os.environ.get("LLM_API_KEY", "")
     if not resolved_key:
@@ -495,7 +909,7 @@ def run_triage_agent(
         output_type=PromptedOutput(TriageResult),
     )
 
-    user_message = _build_user_message(records)
+    user_message = _build_user_message(remaining)
 
     # -- bias the model toward established human preferences (advisory) --
     guidance = _build_memory_guidance(conn)
@@ -518,11 +932,10 @@ def run_triage_agent(
     # -- map 1-based indices back to records; default omissions to user_triage --
     by_index: dict[int, TriageItem] = {}
     for item in output.items:
-        if 1 <= item.index <= len(records) and item.index not in by_index:
+        if 1 <= item.index <= len(remaining) and item.index not in by_index:
             by_index[item.index] = item
 
-    decisions: list[TriageDecision] = []
-    for i, record in enumerate(records, start=1):
+    for i, record in enumerate(remaining, start=1):
         matched = by_index.get(i)
         if matched is None:
             action, reason, confidence = "user_triage", "", "medium"

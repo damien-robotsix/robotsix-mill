@@ -180,6 +180,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="Ledger state: pending, accepted, or rejected.",
     )
 
+    triage_rules_parser = sub.add_parser(
+        "triage-rules",
+        help="Propose deterministic triage rules from triage history and "
+             "list active rules (advisory; exits 0 even with proposals)",
+    )
+    triage_rules_parser.add_argument(
+        "--output-format", choices=["text", "json"], default="text",
+        help="Output format for rule proposals (default: %(default)s).",
+    )
+
+    triage_rules_set_parser = sub.add_parser(
+        "triage-rules-set",
+        help="Accept or reject a proposed triage rule by fingerprint, "
+             "updating the active-rules set",
+    )
+    triage_rules_set_parser.add_argument(
+        "fingerprint", help="Fingerprint of the proposed rule.",
+    )
+    triage_rules_set_parser.add_argument(
+        "state", help="New state: accepted or rejected.",
+    )
+
     return parser
 
 
@@ -984,6 +1006,113 @@ def _cmd_config_sync_set(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_triage_rules(args: argparse.Namespace) -> int:
+    """Propose deterministic triage rules and list the active rules.
+
+    Advisory tool: derivation is deterministic (no LLM).  New proposals are
+    recorded in the dedup ledger as ``pending`` and printed with their
+    fingerprints.  Returns 0 even when there are proposals; 1 only on error.
+    """
+    try:
+        from robotsix_auto_mail.triage import (
+            _rule_fingerprint,
+            list_active_rules,
+            propose_triage_rules,
+            record_and_filter_rule_proposals,
+        )
+    except ImportError:
+        sys.stderr.write(
+            "The 'triage-rules' command requires the pydantic-ai package. "
+            "Install it with: pip install robotsix-auto-mail[dev]\n"
+        )
+        return 1
+
+    config = _load_config_or_exit()
+    conn = init_db(config.db_path)
+    try:
+        proposals = record_and_filter_rule_proposals(
+            conn, propose_triage_rules(conn)
+        )
+        active = list_active_rules(conn)
+    finally:
+        conn.close()
+
+    if args.output_format == "json":
+        payload = {
+            "proposals": [
+                {"fingerprint": _rule_fingerprint(p), **p.model_dump()}
+                for p in proposals
+            ],
+            "active_rules": [r.model_dump() for r in active],
+        }
+        sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+        return 0
+
+    _print_header(sys.stdout, "Triage Rule Proposals")
+    if not proposals:
+        sys.stdout.write("No new triage rule proposals.\n")
+    else:
+        for proposal in proposals:
+            rule = proposal.rule
+            sys.stdout.write(f"\n{_rule_fingerprint(proposal)}  {proposal.title}\n")
+            sys.stdout.write(f"  confidence: {proposal.confidence}\n")
+            sys.stdout.write(
+                f"  rule: {rule.match_type} {rule.match_value!r} "
+                f"-> {rule.action}\n"
+            )
+            sys.stdout.write(f"\n{proposal.body}\n")
+
+    _print_header(sys.stdout, "Active Triage Rules")
+    if not active:
+        sys.stdout.write("No active triage rules.\n")
+    else:
+        for rule in active:
+            sys.stdout.write(
+                f"  {rule.match_type} {rule.match_value!r} -> {rule.action}\n"
+            )
+
+    return 0
+
+
+def _cmd_triage_rules_set(args: argparse.Namespace) -> int:
+    """Accept or reject a proposed triage rule by fingerprint.
+
+    Returns 0 on success, 1 on an invalid state or an unknown fingerprint.
+    """
+    try:
+        from robotsix_auto_mail.triage import TriageError, set_rule_state
+    except ImportError:
+        sys.stderr.write(
+            "The 'triage-rules-set' command requires the pydantic-ai "
+            "package. Install it with: pip install robotsix-auto-mail[dev]\n"
+        )
+        return 1
+
+    allowed = ("accepted", "rejected")
+    if args.state not in allowed:
+        sys.stderr.write(
+            f"Error: invalid state {args.state!r}. "
+            f"Must be one of {list(allowed)}\n"
+        )
+        return 1
+
+    config = _load_config_or_exit()
+    conn = init_db(config.db_path)
+    try:
+        try:
+            set_rule_state(conn, args.fingerprint, args.state)
+        except TriageError as exc:
+            sys.stderr.write(f"Error: {exc}\n")
+            return 1
+    finally:
+        conn.close()
+
+    sys.stdout.write(
+        f"Triage rule {args.fingerprint} -> {args.state}\n"
+    )
+    return 0
+
+
 def _cmd_serve(config: MailConfig, *, port: int) -> int:
     """Run the serve subcommand: start the web board HTTP server.
 
@@ -1056,6 +1185,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "config-sync-set":
         return _cmd_config_sync_set(args)
+
+    if args.command == "triage-rules":
+        return _cmd_triage_rules(args)
+
+    if args.command == "triage-rules-set":
+        return _cmd_triage_rules_set(args)
 
     # No command given — print help and exit 1.
     parser.print_help(sys.stderr)

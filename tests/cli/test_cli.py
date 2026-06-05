@@ -1856,3 +1856,170 @@ def test_triage_set_unknown_message_id(
     err = capsys.readouterr().err
     assert "no mail with message_id" in err
     assert "<missing@x.com>" in err
+
+
+# ---------------------------------------------------------------------------
+# triage-rules / triage-rules-set subcommands
+# ---------------------------------------------------------------------------
+
+
+def _seed_rule_history(
+    db_path: str, sender: str, action: str, count: int
+) -> None:
+    """Seed a DB with *count* user decisions from *sender* as *action*."""
+    from robotsix_auto_mail.db import (
+        MailRecord,
+        insert_record,
+    )
+    from robotsix_auto_mail.db import (
+        init_db as real_init_db,
+    )
+    from robotsix_auto_mail.triage import set_triage_decision
+
+    conn = real_init_db(db_path)
+    try:
+        for i in range(count):
+            mid = f"<r{i}@x.com>"
+            insert_record(
+                conn,
+                MailRecord(
+                    message_id=mid,
+                    sender=sender,
+                    subject="Hello",
+                    date="2025-06-01T12:00:00",
+                ),
+            )
+            set_triage_decision(conn, mid, action, source="user")
+    finally:
+        conn.close()
+
+
+def test_parser_has_triage_rules_subcommands() -> None:
+    """The parser knows triage-rules and triage-rules-set."""
+    args = build_parser().parse_args(["triage-rules", "--output-format", "json"])
+    assert args.command == "triage-rules"
+    assert args.output_format == "json"
+    args2 = build_parser().parse_args(["triage-rules-set", "abc123", "accepted"])
+    assert args2.command == "triage-rules-set"
+    assert args2.fingerprint == "abc123"
+    assert args2.state == "accepted"
+
+
+def test_triage_rules_text_output(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """triage-rules prints derived proposals with fingerprints and exits 0."""
+    db_path = str(tmp_path / "rules.db")
+    _seed_rule_history(db_path, "news@a.com", "archive", 3)
+    cfg = MailConfig(
+        imap_host="imap.example.com", smtp_host="smtp.example.com",
+        username="u@example.com", password="s3cret", db_path=db_path,
+    )
+    with mock.patch("robotsix_auto_mail.cli.load", return_value=cfg):
+        rc = main(["triage-rules"])
+
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Triage Rule Proposals" in out
+    assert "news@a.com" in out
+    assert "archive" in out
+
+
+def test_triage_rules_json_output(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """triage-rules --output-format json emits proposals + active rules."""
+    db_path = str(tmp_path / "rules.db")
+    _seed_rule_history(db_path, "news@a.com", "archive", 3)
+    cfg = MailConfig(
+        imap_host="imap.example.com", smtp_host="smtp.example.com",
+        username="u@example.com", password="s3cret", db_path=db_path,
+    )
+    with mock.patch("robotsix_auto_mail.cli.load", return_value=cfg):
+        rc = main(["triage-rules", "--output-format", "json"])
+
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert "proposals" in payload
+    assert "active_rules" in payload
+    assert payload["proposals"]
+    fp = payload["proposals"][0]["fingerprint"]
+    assert isinstance(fp, str) and fp
+
+
+def test_triage_rules_set_accept_and_apply(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """triage-rules-set accepted adds an active rule visible to the agent."""
+    from robotsix_auto_mail.db import init_db as real_init_db
+    from robotsix_auto_mail.triage import (
+        _rule_fingerprint,
+        list_active_rules,
+        propose_triage_rules,
+    )
+
+    db_path = str(tmp_path / "rules.db")
+    _seed_rule_history(db_path, "news@a.com", "archive", 3)
+    cfg = MailConfig(
+        imap_host="imap.example.com", smtp_host="smtp.example.com",
+        username="u@example.com", password="s3cret", db_path=db_path,
+    )
+
+    conn = real_init_db(db_path)
+    try:
+        proposals = propose_triage_rules(conn)
+        fp = _rule_fingerprint(proposals[0])
+    finally:
+        conn.close()
+
+    with mock.patch("robotsix_auto_mail.cli.load", return_value=cfg):
+        rc = main(["triage-rules", "--output-format", "json"])  # record proposals
+        assert rc == 0
+        rc = main(["triage-rules-set", fp, "accepted"])
+
+    assert rc == 0
+    assert "accepted" in capsys.readouterr().out
+
+    conn = real_init_db(db_path)
+    try:
+        active = list_active_rules(conn)
+        assert len(active) == 1
+        assert active[0].match_value == "news@a.com"
+    finally:
+        conn.close()
+
+
+def test_triage_rules_set_invalid_state(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """triage-rules-set exits 1 on an invalid state."""
+    cfg = MailConfig(
+        imap_host="imap.example.com", smtp_host="smtp.example.com",
+        username="u@example.com", password="s3cret",
+        db_path=str(tmp_path / "rules.db"),
+    )
+    with mock.patch("robotsix_auto_mail.cli.load", return_value=cfg):
+        rc = main(["triage-rules-set", "abc123", "pending"])
+
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "invalid state" in err
+    assert "pending" in err
+
+
+def test_triage_rules_set_unknown_fingerprint(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """triage-rules-set exits 1 on an unknown fingerprint."""
+    cfg = MailConfig(
+        imap_host="imap.example.com", smtp_host="smtp.example.com",
+        username="u@example.com", password="s3cret",
+        db_path=str(tmp_path / "rules.db"),
+    )
+    with mock.patch("robotsix_auto_mail.cli.load", return_value=cfg):
+        rc = main(["triage-rules-set", "deadbeefdeadbeef", "accepted"])
+
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "Error:" in err
+    assert "deadbeefdeadbeef" in err
