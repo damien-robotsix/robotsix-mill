@@ -164,6 +164,7 @@ reference are covered in [docs/configuration.md](docs/configuration.md).
 - [docs/epic-dedup.md](docs/epic-dedup.md) — Advisory pre-filing dedup for epic-decomposition children
 - [docs/merge-stage.md](docs/merge-stage.md) — Gate-check, auto-rebase, and auto-fix for merge-ready PRs
 - [docs/audit-agent.md](docs/audit-agent.md) — Meta-audit agent for quality/security coverage gaps
+- [docs/board-cleanup.md](docs/board-cleanup.md) — Board-cleanup agent for hygiene actions
 - [docs/blocked-ticket-recovery.md](docs/blocked-ticket-recovery.md) — Recovering from BLOCKED tickets
 - [docs/retrospect-memory.md](docs/retrospect-memory.md) — Retrospect agent's Markdown memory ledger
 - [docs/trace-health.md](docs/trace-health.md) — Deterministic check for unsessioned Langfuse traces

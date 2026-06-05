@@ -351,9 +351,9 @@ Each periodic agent shares this pattern:
 | `periodic.<name>.interval_seconds` | `MILL_<NAME>_INTERVAL_SECONDS` | `86400` | Seconds between automatic passes |
 | `periodic.<name>.memory_path` | `MILL_<NAME>_MEMORY_PATH` | `None` | Override path for memory ledger ² ³ |
 
-Periodic agents: `audit`, `trace_health`, `health`, `test_gap`,
+Periodic agents: `audit`, `board_cleanup`, `trace_health`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_monitor`, `config_sync`, `bc_check`,
-`completeness_check`, `cost_reconciliation`.
+`completeness_check`, `cost_reconciliation`, `module_curator`.
 
 > ¹ `survey` is the exception — its default is `enabled: true`.
 >
@@ -375,9 +375,12 @@ Additional fields:
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
+| `periodic.board_cleanup.model` | `MILL_BOARD_CLEANUP_MODEL` | `deepseek/deepseek-v4-flash` | Board-cleanup agent model (read-only board hygiene proposer, flash sufficient) |
+| `periodic.board_cleanup.enabled` | `MILL_BOARD_CLEANUP_PERIODIC` | `true` | Enable periodic board-cleanup passes |
+| `periodic.board_cleanup.interval_seconds` | `MILL_BOARD_CLEANUP_INTERVAL_SECONDS` | `86400` | Seconds between board-cleanup passes |
+| `periodic.board_cleanup.memory_path` | `MILL_BOARD_CLEANUP_MEMORY_PATH` | `None` | Override path for board-cleanup memory; defaults to `<data_dir>/<repo_id>/board_cleanup_memory.md` |
 | `periodic.ci_monitor.log_max_bytes` | `MILL_CI_LOG_MAX_BYTES` | `65536` | Max bytes fetched per CI job log |
 | `pipeline.retrospect_spawn_drafts` | `MILL_RETROSPECT_SPAWN_DRAFTS` | `true` | Allow retrospect to file improvement draft tickets |
-| `pipeline.retrospect_deep_analysis_frequency` | `MILL_RETROSPECT_DEEP_ANALYSIS_FREQUENCY` | `10` | How many retrospect runs between deep trace analyses |
 | `pipeline.retrospect_memory_path` | `MILL_RETROSPECT_MEMORY_PATH` | `None` | Override path for retrospect memory |
 | `pipeline.trace_inspector_memory_path` | `MILL_TRACE_INSPECTOR_MEMORY_PATH` | `None` | Override path for trace-inspector memory |
 
