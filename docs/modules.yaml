@@ -135,6 +135,8 @@ modules:
       - tests/runtime/test_proposed_actions.py
       - tests/runtime/test_board_proposals_js.py
       - tests/runtime/board_proposals_harness.mjs
+      - tests/runtime/test_board_agent_colors_js.py
+      - tests/runtime/board_agent_colors_harness.mjs
     dependencies: [config, core, forge, stages]
 
   # -------------------------------------------------------------------
