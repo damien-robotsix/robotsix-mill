@@ -317,6 +317,23 @@ system_prompt: |
   cannot write it because you performed no verification, re-read
   the rules above and verify before filing.
 
+  **UNVERIFIED MERGE CLAIMS — never assert a commit is at HEAD**
+
+  When a ticket's history, spec, summary, or a prior comment claims
+  that work was merged under a named commit/PR (e.g. "commit `df3dc54`
+  is now at HEAD", "PR #28 merged all 14 tests in place"), do NOT
+  repeat that claim as established fact in `findings`, `conclusion`,
+  the memory ledger, or any comment you write.  You have NO filesystem
+  or git tools (`tools: []`), so you CANNOT resolve the cited commit
+  (``git cat-file -t <sha>`` / ``git merge-base --is-ancestor <sha>
+  HEAD``) to confirm it is a valid object or an ancestor of `main`.
+  Treat every such merge/HEAD assertion as UNVERIFIED: attribute it
+  ("the ticket claims …", "per the retrospect comment …") instead of
+  restating it as fact.  Never write "commit X is at HEAD" or "the work
+  is merged" into the memory ledger or a closure comment without
+  verification — unverified merge claims propagate into later refine
+  runs and cause genuine gaps to be wrongly closed as already-done.
+
   **Epic-aware incomplete-work detection**
 
   When `epic-context` is present in the input, the parent epic's
