@@ -886,6 +886,7 @@ def _cmd_triage_set(args: argparse.Namespace) -> int:
         from robotsix_auto_mail.triage import (
             VALID_TRIAGE_ACTIONS,
             TriageError,
+            record_human_decision,
             set_triage_decision,
         )
     except ImportError:
@@ -914,6 +915,7 @@ def _cmd_triage_set(args: argparse.Namespace) -> int:
             set_triage_decision(
                 conn, args.message_id, args.action, source="user"
             )
+            record_human_decision(conn, args.message_id, args.action)
         except TriageError as exc:
             sys.stderr.write(f"Error: {exc}\n")
             return 1

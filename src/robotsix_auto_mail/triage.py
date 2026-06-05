@@ -14,15 +14,22 @@ The ``pydantic_ai`` import is lazy to keep module-load time low, mirroring
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from datetime import datetime, timezone
+from email.utils import parseaddr
 
 import pydantic
 from robotsix_llmio.core import Tier
 from robotsix_llmio.openrouter_deepseek import OpenRouterDeepseekProvider
 
 from robotsix_auto_mail.config import load_llm
+from robotsix_auto_mail.db import (
+    get_record_by_message_id,
+    get_watermark,
+    set_watermark,
+)
 from robotsix_auto_mail.format import _BODY_PREVIEW_LIMIT
 from robotsix_auto_mail.status import list_by_status
 
@@ -38,6 +45,14 @@ VALID_TRIAGE_ACTIONS = frozenset(
 
 #: Accepted decision sources.
 _VALID_TRIAGE_SOURCES = frozenset({"agent", "user"})
+
+#: Watermark key owned by this module for the persistent human-decision
+#: memory.  The memory is persisted in ``db.py``'s ``watermark`` key-value
+#: table — NOT a separate on-disk file — using the same ``json.dumps`` /
+#: ``json.loads`` round-trip :mod:`robotsix_auto_mail.config_sync` uses for
+#: its dedup ledger.  Reusing the watermark table keeps a single storage
+#: mechanism and a single DB file instead of a parallel format.
+_MEMORY_WATERMARK_KEY = "triage_human_memory"
 
 #: Accepted confidence levels (mirrors ``DriftProposal.confidence``).
 _VALID_CONFIDENCE_LEVELS = frozenset({"low", "medium", "high"})
@@ -123,6 +138,33 @@ class TriageDecision(pydantic.BaseModel):
             raise ValueError(
                 "source must be one of "
                 f"{sorted(_VALID_TRIAGE_SOURCES)!r}; got {v!r}"
+            )
+        return v
+
+
+class SenderMemory(pydantic.BaseModel):
+    """One sender's remembered human-triage preference.
+
+    Stored in the human-decision memory ledger keyed by the lowercased
+    sender email.  ``action`` is the most recent human action for the
+    sender, ``last_action`` is the action recorded immediately before this
+    one (equal to ``action`` for a brand-new entry), ``count`` is how many
+    times the user has triaged mail from this sender and ``updated_at`` is
+    the ISO-8601 UTC timestamp of the latest update.
+    """
+
+    action: str
+    count: int = 1
+    last_action: str = ""
+    updated_at: str = ""
+
+    @pydantic.field_validator("action", "last_action")
+    @classmethod
+    def _validate_action(cls, v: str) -> str:
+        if v and v not in VALID_TRIAGE_ACTIONS:
+            raise ValueError(
+                "action must be one of "
+                f"{sorted(VALID_TRIAGE_ACTIONS)!r}; got {v!r}"
             )
         return v
 
@@ -244,6 +286,110 @@ def list_triage_decisions(
 
 
 # ---------------------------------------------------------------------------
+# Human-decision memory ledger — watermark table
+# ---------------------------------------------------------------------------
+
+
+def _sender_key(sender: str) -> str:
+    """Return the generalization key for *sender*.
+
+    Extracts the bare email address (lowercased); falls back to the raw
+    lowercased sender string when no address can be parsed.
+    """
+    address = parseaddr(sender)[1]
+    return (address or sender).strip().lower()
+
+
+def _load_memory(conn: sqlite3.Connection) -> dict[str, SenderMemory]:
+    """Load the human-decision memory from the watermark table.
+
+    Returns an empty dict when the memory has never been written.
+    """
+    raw = get_watermark(conn, _MEMORY_WATERMARK_KEY)
+    if raw is None:
+        return {}
+    data: dict[str, object] = json.loads(raw)
+    return {
+        sender: SenderMemory.model_validate(entry)
+        for sender, entry in data.items()
+    }
+
+
+def _save_memory(
+    conn: sqlite3.Connection, memory: dict[str, SenderMemory]
+) -> None:
+    """Persist *memory* to the watermark table (json round-trip)."""
+    payload = {
+        sender: entry.model_dump() for sender, entry in memory.items()
+    }
+    set_watermark(conn, _MEMORY_WATERMARK_KEY, json.dumps(payload))
+
+
+def record_human_decision(
+    conn: sqlite3.Connection, message_id: str, action: str
+) -> None:
+    """Remember a human triage *action* for the sender of *message_id*.
+
+    Looks up the sender via :func:`get_record_by_message_id`, updates that
+    sender's :class:`SenderMemory` entry (incrementing ``count`` and moving
+    ``action`` toward the latest human decision) and persists the memory.
+    A no-op when *message_id* is unknown.  Validates *action* against
+    :data:`VALID_TRIAGE_ACTIONS`.
+    """
+    if action not in VALID_TRIAGE_ACTIONS:
+        raise TriageError(
+            "action must be one of "
+            f"{sorted(VALID_TRIAGE_ACTIONS)!r}; got {action!r}"
+        )
+    record = get_record_by_message_id(conn, message_id)
+    if record is None:
+        return
+    key = _sender_key(record.sender)
+    memory = _load_memory(conn)
+    previous = memory.get(key)
+    if previous is None:
+        entry = SenderMemory(
+            action=action,
+            count=1,
+            last_action=action,
+            updated_at=_utc_now_iso(),
+        )
+    else:
+        entry = SenderMemory(
+            action=action,
+            count=previous.count + 1,
+            last_action=previous.action,
+            updated_at=_utc_now_iso(),
+        )
+    memory[key] = entry
+    _save_memory(conn, memory)
+
+
+def _build_memory_guidance(conn: sqlite3.Connection) -> str:
+    """Render the human-decision memory as concise prompt guidance.
+
+    Returns one line per remembered sender (ordered by sender key) and an
+    empty string when the memory is empty.
+    """
+    memory = _load_memory(conn)
+    if not memory:
+        return ""
+    lines = [
+        "Established human triage preferences (advisory — follow unless "
+        "the new message clearly differs):"
+    ]
+    for sender in sorted(memory):
+        entry = memory[sender]
+        times = "time" if entry.count == 1 else "times"
+        lines.append(
+            f"- Mail from `{sender}` was triaged by the user as "
+            f"`{entry.action}` ({entry.count} {times}) — prefer this "
+            "unless the new message clearly differs."
+        )
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Prompt building
 # ---------------------------------------------------------------------------
 
@@ -350,6 +496,11 @@ def run_triage_agent(
     )
 
     user_message = _build_user_message(records)
+
+    # -- bias the model toward established human preferences (advisory) --
+    guidance = _build_memory_guidance(conn)
+    if guidance:
+        user_message = f"{guidance}\n\n{user_message}"
 
     # -- call LLM --
     try:

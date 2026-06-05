@@ -797,3 +797,129 @@ With `--output-format json`, the output is a single JSON object with a
 
 Exit code is `0` on success (even with findings), `1` on error (missing API key,
 `pydantic-ai` not installed, or surface read failure).
+
+## The `triage` command
+
+The `triage` subcommand runs an **LLM-driven inbox classifier** that reads
+each ingested mail record and assigns it an *action status*:
+
+```sh
+$ robotsix-auto-mail triage
+```
+
+Action statuses are **advisory labels only** — they are stored locally in the
+SQLite `triage_decisions` table and do **not** move mail in the original
+mailbox or modify the kanban status column. The agent defaults uncertain cases
+to `user_triage` (explicit deferral to a human) rather than guessing.
+
+### Action statuses
+
+| Status | Meaning |
+|---|---|
+| `answer` | The message needs a personal reply |
+| `archive` | Keep the message for reference but no reply needed |
+| `delete` | The message is junk / worthless and can be discarded |
+| `ignore` | No action needed and it need not be kept |
+| `user_triage` | The system is not confident — defer to a human |
+
+### Human-decision memory
+
+The agent learns from your manual triage decisions. When you record a user
+decision (via `triage-set`, below), the system remembers that sender's
+preference in a persistent, per-sender memory. On future triage runs, the agent
+is biased toward repeating those preferences — it treats them as advisory
+guidance (not hard rules) so it can still adapt when a message from the same
+sender clearly differs in content.
+
+For example, if you've told the system "mail from alice@x.com goes to archive
+(3 times)", the prompt will note this preference and the agent will favor
+archiving alice's new messages unless context suggests otherwise.
+
+The memory is stored in the SQLite `watermark` table under the key
+`triage_human_memory` (alongside other persistent metadata like the archive
+structure). It survives across runs and connections.
+
+### Options
+
+| Option | Default | Purpose |
+|---|---|---|
+| `--api-key` | – | OpenRouter API key; overrides `LLM_API_KEY` env and config file |
+| `--output-format` | `text` | Output format: `text` (human-readable) or `json` (machine-readable) |
+
+### Requirements
+
+The `triage` command requires:
+- The `pydantic-ai` package (install via `pip install robotsix-auto-mail[dev]`)
+- An LLM API key (via `--api-key`, `LLM_API_KEY` env, or `llm.api_key` in config)
+
+### Representative text output
+
+```text
+
+Inbox Triage
+------------------------------------------------------------
+
+<a@x.com>
+  action: answer
+  confidence: high
+  reason: Sender is asking a direct question that needs a response.
+
+<b@x.com>
+  action: archive
+  confidence: high
+  reason: Promotional content; keep for reference but no reply needed.
+
+2 message(s) triaged
+```
+
+Exit code is `0` on success (even if decisions are produced), `1` on error
+(missing API key, `pydantic-ai` not installed, or LLM failure).
+
+## The `triage-set` command
+
+To manually record a triage decision for a single message, use `triage-set`:
+
+```sh
+$ robotsix-auto-mail triage-set <message_id> <action>
+```
+
+This records the decision in the `triage_decisions` table with `source=user`
+(distinguishing it from agent decisions) and **also updates the
+human-decision memory ledger**, so future triage runs will favor that action
+for mail from the same sender.
+
+### Arguments
+
+| Argument | Purpose |
+|---|---|
+| `<message_id>` | The Message-ID of the mail to triage (from `board` or `triage` output) |
+| `<action>` | The action status: `answer`, `archive`, `delete`, `ignore`, or `user_triage` |
+
+### Examples
+
+```sh
+# Record that alice@x.com's message should be archived
+robotsix-auto-mail triage-set '<a@x.com>' archive
+
+# Mark a message as needing a reply
+robotsix-auto-mail triage-set '<b@x.com>' answer
+
+# Explicitly defer to a human (use this for ambiguous messages)
+robotsix-auto-mail triage-set '<c@x.com>' user_triage
+```
+
+### Behavior
+
+- If the `message_id` is unknown, exits with code `1` and an error message.
+- If the `action` is invalid, exits with code `1` and an error message.
+- On success, the decision is stored and the human-decision memory is
+  updated; exit code is `0`.
+
+The next `triage` run will treat this sender's preference as advisory guidance
+for future mail from the same address.
+
+### Requirements
+
+The `triage-set` command requires a loadable configuration (for `db_path`),
+but does **not** require the `pydantic-ai` package or an LLM API key — it is
+purely a local decision-recording tool.

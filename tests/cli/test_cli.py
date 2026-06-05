@@ -1712,7 +1712,7 @@ def test_triage_set_success(
 ) -> None:
     """triage-set records a user decision and exits 0."""
     from robotsix_auto_mail.db import init_db as real_init_db
-    from robotsix_auto_mail.triage import get_triage_decision
+    from robotsix_auto_mail.triage import _load_memory, get_triage_decision
 
     cfg_db = _cfg_with_inbox(tmp_path)
     with mock.patch("robotsix_auto_mail.cli.load", return_value=cfg_db):
@@ -1727,6 +1727,10 @@ def test_triage_set_success(
         assert decision is not None
         assert decision.action == "archive"
         assert decision.source == "user"
+        # The user decision also updates the human-decision memory ledger.
+        memory = _load_memory(conn)
+        assert "alice@example.com" in memory
+        assert memory["alice@example.com"].action == "archive"
     finally:
         conn.close()
 
