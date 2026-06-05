@@ -129,7 +129,7 @@ other code depends on.
 
 | Env var | Field | Default | Type | Source | Sensitivity | YAML | Docs | Consumers | Notes |
 |---|---|---|---|---|---|---|---|---|---|
-| `MILL_TEST_COMMAND` | `test_command` | `pytest -q` | `str` | Settings | non-sensitive | default | §19 | `stages/implement.py` | |
+| `MILL_TEST_COMMAND` | `test_command` | `pytest -q` | `str` | Settings | non-sensitive | default | §19 | `stages/implement.py`, `agents/testing.py` | Global fallback only. Precedence: per-repo `.robotsix-mill/config.yaml` `test_command` (read by `repo_settings.load_repo_test_command`) > `repos.yaml` per-repo `test_command` > this. |
 | `MILL_BRANCH_PREFIX` | `branch_prefix` | `mill/` | `str` | Settings | non-sensitive | default | §19 | `forge/*.py` | |
 | `MILL_COMMAND_TIMEOUT` | `command_timeout` | `1800` | `int` | Settings | non-sensitive | default | §7 | `sandbox.py` | Listed in §7 (sandbox), not §19 |
 | `MILL_SKILLS_DIR` | `skills_dir` | `skills` | `Path` | Settings | non-sensitive | default | §21 | `stages/refine.py`, `stages/implement.py` | |

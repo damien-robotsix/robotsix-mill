@@ -30,6 +30,13 @@ repos:
     #                             #   gets its own consumer pool, so a
     #                             #   busy repo can't block another.
     # language: python             # optional — auto-injects language conventions into implement agent
+    # test_command: "pytest -q"   # optional — shell command the implement test
+    #                             #   gate runs in the sandbox for this repo.
+    # NOTE: a managed repo may instead set `test_command` in its own
+    #   <repo>/.robotsix-mill/config.yaml (committed in the MANAGED repo, not
+    #   here). That per-repo file TAKES PRECEDENCE over this repos.yaml value,
+    #   which remains a supported fallback (and `MILL_TEST_COMMAND` the global
+    #   fallback under that).
     # NOTE: periodic agents are NO LONGER enabled here. A periodic workflow
     # runs for a repo iff that repo ships a presence file at
     #   <repo>/.robotsix-mill/periodic/<name>.yaml

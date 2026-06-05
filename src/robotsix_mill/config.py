@@ -1506,7 +1506,10 @@ class RepoConfig(BaseModel):
     # in THIS repo. Default empty — the test gate short-circuits to
     # PASS when no command is set, which matches repos that don't
     # have a test suite yet (e.g. a doc-only repo). Set in repos.yaml
-    # per repo, e.g. ``test_command: "pytest -q"``.
+    # per repo, e.g. ``test_command: "pytest -q"``. A managed repo may
+    # instead set ``test_command`` in its own
+    # ``.robotsix-mill/config.yaml`` committed to its source tree; that
+    # per-repo value takes precedence over this repos.yaml value.
     test_command: str = ""
     # Per-repo periodic-agent enable flags. Default FALSE for every
     # one — a repo opts IN by setting the flag to true in repos.yaml
