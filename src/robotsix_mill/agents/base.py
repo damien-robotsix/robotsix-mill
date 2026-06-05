@@ -20,6 +20,12 @@ from typing import Any
 from ..config import Settings, get_secrets
 from .report_issue import make_report_issue_tool
 
+# Defensive char cap on the inlined ``## Module Map`` block so the static
+# prompt can't grow unbounded as ``docs/modules.yaml`` grows. A hardcoded
+# constant (not a Settings field) per the repo's pattern for internal
+# tuning constants; the default sits well above today's rendered size.
+MODULE_MAP_MAX_CHARS = 12000
+
 
 def _close_async_client(client: "httpx.AsyncClient") -> None:
     """Close an httpx.AsyncClient from outside its original event loop.
@@ -247,7 +253,18 @@ def _render_module_map(module_list: list[dict]) -> str:
             if deps:
                 lines.append(f"Depends on: {', '.join(deps)}")
 
-    return "\n".join(lines)
+    rendered = "\n".join(lines)
+    if len(rendered) > MODULE_MAP_MAX_CHARS:
+        # Truncate on a line boundary and append a pointer to the full
+        # taxonomy. Reserve room for the pointer so the whole block stays
+        # within MODULE_MAP_MAX_CHARS.
+        pointer = (
+            "\n…(module map truncated — see docs/modules.yaml for the full taxonomy)"
+        )
+        budget = MODULE_MAP_MAX_CHARS - len(pointer)
+        truncated = rendered[:budget].rsplit("\n", 1)[0]
+        rendered = truncated + pointer
+    return rendered
 
 
 def compose_prompt(

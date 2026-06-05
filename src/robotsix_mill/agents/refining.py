@@ -670,6 +670,8 @@ def run_refine_agent(
             updated_memory=memory,  # unchanged — nothing new to record
         )
 
+    from pydantic_ai.usage import UsageLimits
+
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
     from .retry import run_agent
@@ -731,12 +733,15 @@ def run_refine_agent(
             f"{reviewer_comments}",
         )
 
+    limits = UsageLimits(request_limit=settings.refine_request_limit)
+
     try:
         result = run_agent(
             agent,
             lambda h: h.run_sync(
                 user_prompt,
                 message_history=message_history,
+                usage_limits=limits,
             ),
             settings=settings,
             what="refine",
@@ -756,6 +761,7 @@ def run_refine_agent(
                 lambda h: h.run_sync(
                     "Please synthesise a final answer based on the tool results above.",
                     message_history=result.all_messages(),
+                    usage_limits=limits,
                 ),
                 settings=settings,
                 what="refine (continuation after tool_calls stop)",

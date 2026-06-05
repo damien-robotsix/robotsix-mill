@@ -93,6 +93,7 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("triage_model", "MILL_TRIAGE_MODEL", "test/triage", "test/triage"),
     # --- request limits ---
     ("coordinator_request_limit", "MILL_COORDINATOR_REQUEST_LIMIT", "42", 42),
+    ("refine_request_limit", "MILL_REFINE_REQUEST_LIMIT", "42", 42),
     ("test_request_limit", "MILL_TEST_REQUEST_LIMIT", "15", 15),
     ("max_fix_iterations", "MILL_MAX_FIX_ITERATIONS", "6", 6),
     ("model_request_timeout", "MILL_MODEL_REQUEST_TIMEOUT", "123.5", 123.5),
@@ -1342,6 +1343,13 @@ class TestValidationInvalid:
             ValidationError, match="Input should be greater than or equal to 1"
         ):
             Settings(explore_request_limit=0)
+
+    def test_refine_request_limit_zero_raises(self):
+        """``refine_request_limit=0`` raises ValidationError."""
+        with pytest.raises(
+            ValidationError, match="Input should be greater than or equal to 1"
+        ):
+            Settings(refine_request_limit=0)
 
 
 # ---------------------------------------------------------------------------

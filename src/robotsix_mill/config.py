@@ -292,6 +292,14 @@ class Settings(BaseSettings):
     consult_request_limit: int = Field(default=15, ge=1)
     explore_request_limit: int = Field(default=100, ge=1)
     explore_max_tokens: int = Field(default=2048, ge=1)
+    # Per-call cap for the refine agent's tool loop. The refine agent
+    # delegates deep search to the cheap ``explore`` sub-agent (which
+    # has its own 100-call budget), so the top-level refine loop should
+    # rarely exceed a few dozen tool calls — 40 (matching
+    # ``review_request_limit``) sits well below the old implicit
+    # pydantic-ai default of 50 a runaway hit, while leaving headroom
+    # for legitimate grounding.
+    refine_request_limit: int = Field(default=40, ge=1)
     # Per-call cap for the dedup check — one cheap call, so keep it tight.
     dedup_request_limit: int = Field(default=4, ge=1)
     doc_request_limit: int = Field(default=8)
