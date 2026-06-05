@@ -104,6 +104,15 @@ def test_user_facing_commits_and_progresses(ctx_factory, monkeypatch):
     t = _ticket(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
 
+    step_events = []
+    orig_add_step = ctx.service.add_step_event
+
+    def _spy_add_step_event(ticket_id, note):
+        step_events.append(note)
+        return orig_add_step(ticket_id, note)
+
+    monkeypatch.setattr(ctx.service, "add_step_event", _spy_add_step_event)
+
     def _fake_doc(
         self,
         *,
@@ -132,6 +141,9 @@ def test_user_facing_commits_and_progresses(ctx_factory, monkeypatch):
     # Verify a commit exists with the doc prefix.
     log = _git_log(repo_dir)
     assert "mill(docs):" in log
+
+    # The guardrail did NOT fire — edits were applied.
+    assert not any("recommendation-only" in note for note in step_events)
 
 
 # --- internal-only diff → no-op ---------------------------------------
@@ -186,6 +198,15 @@ def test_user_facing_no_changes_skips_commit(ctx_factory, monkeypatch):
 
     commits_before = _git_log(repo_dir).count("\n") + 1
 
+    step_events = []
+    orig_add_step = ctx.service.add_step_event
+
+    def _spy_add_step_event(ticket_id, note):
+        step_events.append(note)
+        return orig_add_step(ticket_id, note)
+
+    monkeypatch.setattr(ctx.service, "add_step_event", _spy_add_step_event)
+
     def _fake_doc(
         self,
         *,
@@ -210,6 +231,10 @@ def test_user_facing_no_changes_skips_commit(ctx_factory, monkeypatch):
     # No new commits — agent claimed user-facing but wrote nothing.
     commits_after = _git_log(repo_dir).count("\n") + 1
     assert commits_after == commits_before
+
+    # The non-blocking guardrail fired: a step event flags the
+    # recommendation-only doc deliverable.
+    assert any("recommendation-only" in note for note in step_events)
 
 
 # --- empty diff → pass-through without agent --------------------------

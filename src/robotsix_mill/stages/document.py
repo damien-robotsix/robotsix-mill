@@ -179,6 +179,22 @@ class DocumentStage(Stage):
                         repo_dir,
                         f"mill(docs): {ticket.title} ({ticket.id})",
                     )
+                else:
+                    # Recommendation-only deliverable: the agent reported a
+                    # user-facing change but wrote no edits. Non-blocking —
+                    # we still pass through (losing a finished implementation
+                    # over a doc hiccup is the wrong trade) but flag it so
+                    # retrospect/operators can see the gap.
+                    log.warning(
+                        "%s: doc agent reported user_facing=True but wrote no "
+                        "edits — recommendation-only doc deliverable",
+                        ticket.id,
+                    )
+                    ctx.service.add_step_event(
+                        ticket.id,
+                        "doc agent: recommendation-only doc deliverable "
+                        "(user_facing=True but no edits applied)",
+                    )
             except Exception:
                 log.warning(
                     "%s: doc commit failed — passing through",
