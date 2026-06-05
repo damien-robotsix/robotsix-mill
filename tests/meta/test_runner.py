@@ -142,6 +142,13 @@ class TestRunMetaPass:
                     target_repo_id="repo-b",
                 ),
             ],
+            todo_drafts=[
+                DraftProposal(
+                    title="Resolve TODO in repo-a",
+                    body="TODO: refactor foo() in repo-a/src/foo.py.",
+                    target_repo_id="repo-a",
+                ),
+            ],
         )
 
         agent_kwargs: list[dict] = []
@@ -189,6 +196,7 @@ class TestRunMetaPass:
         assert result.updated_memory == "meta ledger v1"
         assert len(result.extraction_drafts_created) == 1
         assert len(result.alignment_drafts_created) == 1
+        assert len(result.todo_drafts_created) == 1
 
         # Extraction draft on meta board
         meta_svc = TicketService(settings, board_id="meta")
@@ -216,9 +224,18 @@ class TestRunMetaPass:
         ).read_description()
         assert "<!-- meta-gap-id: adopt-pattern-from-repo-a -->" in aln_desc
 
-        # No tickets on repo-a board
+        # TODO draft on repo-a board
         repo_a_svc = TicketService(settings, board_id="repo-a")
-        assert repo_a_svc.list() == []
+        repo_a_tickets = repo_a_svc.list()
+        assert len(repo_a_tickets) == 1
+        todo_ticket = repo_a_tickets[0]
+        assert todo_ticket.title == "Resolve TODO in repo-a"
+        assert todo_ticket.source == "meta"
+        assert todo_ticket.origin_session == "test-session"
+        todo_desc = Workspace(
+            settings.workspaces_dir_for("repo-a"), todo_ticket.id
+        ).read_description()
+        assert "<!-- meta-gap-id: resolve-todo-in-repo-a -->" in todo_desc
 
         # persist_memory called with correct path
         assert len(persist_calls) == 1
@@ -298,6 +315,85 @@ class TestRunMetaPass:
 
         # Alignment draft was skipped
         assert result.alignment_drafts_created == []
+
+        db.reset_engine()
+
+    def test_todo_draft_unknown_target_repo_id(self, tmp_path, monkeypatch, caplog):
+        """A TODO draft targeting a non-existent (or missing) repo_id is
+        skipped with a warning; other drafts are still filed."""
+        settings = _make_settings(tmp_path)
+        db.reset_engine()
+        db.init_db(settings, board_id="meta")
+        db.init_db(settings, board_id="repo-a")
+
+        monkeypatch.setattr(
+            "robotsix_mill.meta.runner.Settings",
+            lambda: settings,
+        )
+
+        monkeypatch.setattr(
+            "robotsix_mill.meta.runner.clone_all_repos",
+            lambda _s: {},
+        )
+
+        agent_result = MetaAgentResult(
+            updated_memory="ledger",
+            extraction_drafts=[
+                DraftProposal(
+                    title="Extract X",
+                    body="body",
+                    target_repo_id=None,
+                ),
+            ],
+            todo_drafts=[
+                DraftProposal(
+                    title="Bad todo",
+                    body="bad body",
+                    target_repo_id="no-such-repo",
+                ),
+                DraftProposal(
+                    title="Missing target todo",
+                    body="no target",
+                    target_repo_id=None,
+                ),
+            ],
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.meta.runner.run_meta_agent",
+            lambda **kw: agent_result,
+        )
+
+        reg = ReposRegistry(
+            repos={
+                "repo-a": _repo_cfg("repo-a", board_id="repo-a"),
+            }
+        )
+        monkeypatch.setattr("robotsix_mill.meta.runner.get_repos_config", lambda: reg)
+
+        monkeypatch.setattr(
+            "robotsix_mill.meta.runner.persist_memory", lambda p, t: None
+        )
+        monkeypatch.setattr("robotsix_mill.meta.runner.load_memory", lambda _p: "")
+        monkeypatch.setattr(
+            "robotsix_mill.meta.runner._gather_meta_proposals",
+            lambda _s: "",
+        )
+
+        with caplog.at_level(logging.WARNING):
+            result = run_meta_pass("test-session")
+
+        # Warning logged about unknown repo and missing target
+        assert any("no-such-repo" in m and "skipping" in m for m in caplog.messages)
+        assert any(
+            "no target_repo_id" in m and "skipping" in m for m in caplog.messages
+        )
+
+        # Extraction draft was still filed
+        assert len(result.extraction_drafts_created) == 1
+        assert result.extraction_drafts_created[0]["title"] == "Extract X"
+
+        # Both TODO drafts were skipped
+        assert result.todo_drafts_created == []
 
         db.reset_engine()
 

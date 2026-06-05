@@ -61,13 +61,20 @@ class DraftProposal(BaseModel):
 class MetaAgentResult(BaseModel):
     """Structured output from the meta-agent pass.
 
-    ``extraction_drafts`` and ``alignment_drafts`` are each clipped to
-    ``MAX_PROPOSALS`` by ``run_meta_agent`` before returning.
+    ``extraction_drafts``, ``alignment_drafts``, and ``todo_drafts`` are
+    each clipped to ``MAX_PROPOSALS`` by ``run_meta_agent`` before
+    returning.
+
+    ``todo_drafts`` are per-repo tickets to resolve outstanding
+    ``TODO`` / ``FIXME`` markers found in a repo clone — each sets
+    ``target_repo_id`` to the repo the marker lives in (routed to that
+    repo's board, exactly like ``alignment_drafts``).
     """
 
     updated_memory: str = ""
     extraction_drafts: list[DraftProposal] = Field(default_factory=list)
     alignment_drafts: list[DraftProposal] = Field(default_factory=list)
+    todo_drafts: list[DraftProposal] = Field(default_factory=list)
     proposed_actions: list[ProposedActionItem] = Field(default_factory=list)
 
 
@@ -246,4 +253,5 @@ def run_meta_agent(
     out: MetaAgentResult = result.output
     out.extraction_drafts = out.extraction_drafts[:MAX_PROPOSALS]
     out.alignment_drafts = out.alignment_drafts[:MAX_PROPOSALS]
+    out.todo_drafts = out.todo_drafts[:MAX_PROPOSALS]
     return out

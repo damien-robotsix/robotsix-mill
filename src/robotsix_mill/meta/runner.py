@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .agent import MetaAgentResult, run_meta_agent
 from ..config import Settings, get_repos_config
@@ -34,6 +34,7 @@ class MetaPassResult:
     updated_memory: str
     extraction_drafts_created: list[dict]  # [{"id": ..., "title": ...}, ...]
     alignment_drafts_created: list[dict]
+    todo_drafts_created: list[dict] = field(default_factory=list)
     session_id: str = ""
 
 
@@ -82,18 +83,25 @@ def _file_extraction_drafts(
     return created
 
 
-def _file_alignment_drafts(
+def _file_repo_drafts(
     drafts: list,
     settings: Settings,
     session_id: str,
+    *,
+    label: str,
 ) -> list[dict]:
-    """File alignment drafts to their target repo boards.  Best-effort."""
+    """File per-repo drafts to their target repo boards.  Best-effort.
+
+    Shared by alignment and TODO filing — ``label`` (``"alignment"`` /
+    ``"todo"``) is used only in log messages.
+    """
     created: list[dict] = []
     repos_config = get_repos_config()
     for draft in drafts:
         if not draft.target_repo_id:
             log.warning(
-                "meta_pass: alignment draft %r has no target_repo_id — skipping",
+                "meta_pass: %s draft %r has no target_repo_id — skipping",
+                label,
                 draft.title,
             )
             continue
@@ -101,7 +109,8 @@ def _file_alignment_drafts(
         target_rc = repos_config.repos.get(draft.target_repo_id)
         if target_rc is None:
             log.warning(
-                "meta_pass: alignment draft %r targets unknown repo_id %r — skipping",
+                "meta_pass: %s draft %r targets unknown repo_id %r — skipping",
+                label,
                 draft.title,
                 draft.target_repo_id,
             )
@@ -118,10 +127,11 @@ def _file_alignment_drafts(
                 origin_session=session_id,
             )
             created.append({"id": ticket.id, "title": ticket.title})
-            log.info("meta pass: filed alignment draft %r", ticket.id)
+            log.info("meta pass: filed %s draft %r", label, ticket.id)
         except Exception:
             log.exception(
-                "meta pass: failed to create alignment draft %r",
+                "meta pass: failed to create %s draft %r",
+                label,
                 draft.title,
             )
     return created
@@ -163,8 +173,8 @@ def run_meta_pass(session_id: str) -> MetaPassResult:
     4. Load the meta memory ledger.
     5. Gather prior meta proposals from all relevant boards.
     6. Invoke the meta-agent.
-    7. File extraction drafts to the meta board and alignment drafts
-       to their target repo boards.
+    7. File extraction drafts to the meta board and alignment + TODO
+       drafts to their target repo boards.
     8. Persist updated memory.
     """
     # 1. Instantiate settings
@@ -218,8 +228,11 @@ def run_meta_pass(session_id: str) -> MetaPassResult:
         extraction_created = _file_extraction_drafts(
             result.extraction_drafts, settings, session_id
         )
-        alignment_created = _file_alignment_drafts(
-            result.alignment_drafts, settings, session_id
+        alignment_created = _file_repo_drafts(
+            result.alignment_drafts, settings, session_id, label="alignment"
+        )
+        todo_created = _file_repo_drafts(
+            result.todo_drafts, settings, session_id, label="todo"
         )
 
         # 8. Persist memory
@@ -229,5 +242,6 @@ def run_meta_pass(session_id: str) -> MetaPassResult:
         updated_memory=result.updated_memory,
         extraction_drafts_created=extraction_created,
         alignment_drafts_created=alignment_created,
+        todo_drafts_created=todo_created,
         session_id=session_id,
     )
