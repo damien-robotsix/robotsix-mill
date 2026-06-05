@@ -336,7 +336,16 @@ class GitHubForge(Forge):
         returns 409 (``Git Repository is empty``) for a repo with no commits.
         An empty repo is safe for the scaffold to force-push into; a repo with
         real content is not, so we signal a genuine conflict by returning None.
+
+        When *owner* is empty the create fell back to ``/user/repos`` (the
+        authenticated user), so resolve that login via ``/user`` — otherwise
+        the ``/repos//{name}`` lookup 404s and a re-run wrongly blocks.
         """
+        if not owner:
+            u = c.get(f"{api}/user", headers=headers)
+            owner = u.json().get("login", "") if u.status_code == 200 else ""
+            if not owner:
+                return None
         repo_url = f"{api}/repos/{owner}/{name}"
         rr = c.get(repo_url, headers=headers)
         if rr.status_code != 200:
