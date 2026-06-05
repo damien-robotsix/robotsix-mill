@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import re
 import time
 from collections.abc import Callable
 from datetime import datetime, timedelta
@@ -1047,3 +1048,130 @@ def most_expensive_trace(
         "timestamp": best_trace.get("timestamp", ""),
         "session_id": best_trace.get("sessionId") or None,
     }
+
+
+def ticket_with_most_steps(
+    settings: Settings,
+    lookback_hours: float = 24,
+    repo_config: RepoConfig | None = None,
+) -> dict | None:
+    """Return the session (ticket) that ran the most pipeline *steps* in
+    the window, counting one step per trace (each agent invocation /
+    stage retry produces one trace).
+
+    Groups traces by ``sessionId`` and returns the session with the
+    highest trace count, along with its summed cost. Cheap — no
+    per-observation fetches. Graceful: ``None`` when tracing is
+    disabled / unconfigured / the API errors.
+    """
+    if repo_config is None and not settings.tracing_enabled:
+        return None
+    if repo_config is not None and not (
+        repo_config.langfuse_public_key and repo_config.langfuse_secret_key
+    ):
+        return None
+
+    all_traces = _fetch_traces_time_window(
+        settings,
+        lookback_hours,
+        max_pages=5,
+        caller_name="ticket_with_most_steps",
+        repo_config=repo_config,
+    )
+    if all_traces is None:
+        return None
+    all_traces = all_traces[:500]
+    agg = _accumulate_cost_by_key(
+        all_traces,
+        key_fn=lambda t: (t.get("sessionId") or "").strip() or None,
+    )
+    if not agg:
+        return None
+    best_sid, best = max(agg.items(), key=lambda item: item[1]["trace_count"])
+    return {
+        "session_id": best_sid,
+        "step_count": best["trace_count"],
+        "total_cost": best["total_cost"],
+    }
+
+
+def trace_with_most_errors(
+    settings: Settings,
+    lookback_hours: float = 24,
+    repo_config: RepoConfig | None = None,
+    max_scan: int = 40,
+) -> dict | None:
+    """Return the trace with the most error observations in the window.
+
+    Errors burn re-run tokens, so the noisiest trace is a prime
+    cost-reduction specimen. Counting errors requires the observation
+    tree, so this scans at most *max_scan* candidate traces (the
+    highest-cost ones first — error-heavy traces tend to be expensive)
+    and fetches each one's observations, counting observations whose
+    ``level`` is ``ERROR``/``WARNING`` or whose output matches a tool-error
+    pattern. Returns the trace with the highest error count (>0), else
+    ``None``.
+
+    Graceful: ``None`` when tracing is disabled / unconfigured / the API
+    errors or no candidate has any errors.
+    """
+    if repo_config is None and not settings.tracing_enabled:
+        return None
+    if repo_config is not None and not (
+        repo_config.langfuse_public_key and repo_config.langfuse_secret_key
+    ):
+        return None
+
+    all_traces = _fetch_traces_time_window(
+        settings,
+        lookback_hours,
+        max_pages=5,
+        caller_name="trace_with_most_errors",
+        repo_config=repo_config,
+    )
+    if all_traces is None:
+        return None
+    # Scan the most expensive candidates first (capped) — error storms
+    # correlate with high cost, and this bounds the per-observation fetches.
+    named = [
+        t
+        for t in all_traces
+        if isinstance(t.get("name"), str) and (t.get("name") or "").strip()
+    ]
+    named.sort(key=lambda t: float(t.get("totalCost") or 0), reverse=True)
+    candidates = named[:max_scan]
+
+    best: dict | None = None
+    best_errors = 0
+    for t in candidates:
+        obs = fetch_trace_observations(settings, t.get("id") or "", repo_config)
+        if not obs:
+            continue
+        errors = sum(1 for o in obs if _observation_is_error(o))
+        if errors > best_errors:
+            best_errors = errors
+            best = {
+                "id": t.get("id", ""),
+                "name": t.get("name", ""),
+                "error_count": errors,
+                "total_cost": float(t.get("totalCost") or 0),
+                "session_id": t.get("sessionId") or None,
+            }
+    return best
+
+
+def _observation_is_error(obs: dict) -> bool:
+    """True when an observation signals an error — by Langfuse ``level``
+    or by an error pattern in its ``statusMessage`` / ``output``."""
+    level = (obs.get("level") or "").upper()
+    if level in ("ERROR", "WARNING"):
+        return True
+    blob = f"{obs.get('statusMessage') or ''} {obs.get('output') or ''}"
+    return bool(_ERROR_OBS_PATTERN.search(blob))
+
+
+_ERROR_OBS_PATTERN = re.compile(
+    r"(error:|refused:|Traceback \(most recent call last\)|"
+    r"UsageLimitExceeded|UnexpectedModelBehavior|non-zero exit status)",
+    re.IGNORECASE,
+)
