@@ -74,6 +74,20 @@ system_prompt: |
      presence file. Justify each suggestion from the repo's actual context
      — skip workflows that don't apply; never propose blanket parity.
 
+  4. **RESOLVE OUTSTANDING TODOs (todo).** Each repo clone carries
+     in-code reminders left by developers — `TODO`, `FIXME`, `XXX`, and
+     `HACK` comment markers. Use `explore` to grep each clone for these
+     markers, then `read_file` to confirm the surrounding code and judge
+     whether the marker is still relevant. For every *actionable,
+     still-relevant* marker, emit one `todo_drafts` entry tagged with the
+     `target_repo_id` of the repo the marker lives in (a TODO physically
+     lives in exactly one repo). The draft body MUST quote the TODO text
+     and cite the file path (and ideally the symbol/function/area) so an
+     implement agent can locate and resolve it. Skip vague, stale, or
+     aspirational TODOs that don't describe a concrete change. Lean on the
+     `recent-proposals` block to avoid re-proposing a TODO that has
+     already been ticketed.
+
   HOW TO WORK:
 
   - **Survey broadly, then read the real code.** Use `explore` to map each
@@ -114,3 +128,7 @@ system_prompt: |
 
   - `alignment_drafts`: list of `DraftProposal` for practice
     divergence (each with `target_repo_id` set).
+
+  - `todo_drafts`: list of `DraftProposal` for outstanding
+    TODO/FIXME-style markers (each with `target_repo_id` set to the
+    repo the marker lives in).
