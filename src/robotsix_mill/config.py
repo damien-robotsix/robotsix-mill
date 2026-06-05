@@ -398,13 +398,13 @@ class Settings(BaseSettings):
     # LLM spend exceeds this value (across all stages), the worker
     # escalates it to BLOCKED. 0.0 disables the cap entirely.
     #
-    # ON BY DEFAULT ($10) — this is the universal backstop against runaway
+    # ON BY DEFAULT ($20) — this is the universal backstop against runaway
     # loops (e.g. a ci_fix or refine loop that oscillates between two states,
     # which the state-change-based no-progress net cannot see). A normal
-    # ticket costs ~$1–4, so $10 gives ample headroom while killing a runaway
+    # ticket costs ~$1–4, so $20 gives ample headroom while killing a runaway
     # before it burns a fortune. The block is RESUMABLE — a genuinely
     # expensive ticket can be resumed with resume-blocked to continue.
-    max_spend_usd_per_ticket: float = Field(default=10.0)
+    max_spend_usd_per_ticket: float = Field(default=20.0)
     # Per-stage wall-clock timeout (seconds).  A stage that exceeds this
     # limit is escalated to BLOCKED, freeing the worker slot.  ≤ 0
     # disables the timeout entirely.  2400 s (40 min) comfortably
