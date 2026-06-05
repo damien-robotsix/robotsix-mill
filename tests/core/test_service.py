@@ -422,6 +422,37 @@ def test_redraft_captures_pre_redraft_cost_baseline(service, monkeypatch):
     assert row.cost_usd == 0.0
 
 
+def test_redraft_zero_session_cost_baseline_stays_zero(service, monkeypatch):
+    """A zero (e.g. unconfigured) live session total leaves the
+    ``pre_redraft_cost_usd`` baseline at 0.0 — the no-op baseline path —
+    while still zeroing the cached ``cost_usd``."""
+    import robotsix_mill.langfuse.client as lf_client
+
+    t = service.create("zero baseline", "original description text")
+    service.transition(t.id, State.READY)
+
+    monkeypatch.setattr(lf_client, "session_cost", lambda *a, **k: 0.0)
+    service.redraft(t.id, body="zero redraft")
+    row = service.get(t.id)
+    assert row.pre_redraft_cost_usd == 0.0
+    assert row.cost_usd == 0.0
+
+
+def test_redraft_large_session_cost_baseline_preserved(service, monkeypatch):
+    """A large live session total is snapshotted into
+    ``pre_redraft_cost_usd`` without truncation or precision loss — the
+    field is a plain ``float``."""
+    import robotsix_mill.langfuse.client as lf_client
+
+    t = service.create("large baseline", "original description text")
+    service.transition(t.id, State.READY)
+
+    monkeypatch.setattr(lf_client, "session_cost", lambda *a, **k: 999999.99)
+    service.redraft(t.id, body="large redraft")
+    row = service.get(t.id)
+    assert row.pre_redraft_cost_usd == 999999.99
+
+
 def test_redraft_no_comments_empty_body(service):
     """redraft with no comments and an empty body still resets history,
     branch, and clone — but adds no spurious folded-in section."""
