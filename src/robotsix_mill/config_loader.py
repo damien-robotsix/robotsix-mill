@@ -11,10 +11,14 @@ Design: `docs/rfc-config-v2.md` §6 (Load order and precedence).
 from __future__ import annotations
 
 import os
-from copy import deepcopy
 from pathlib import Path
 
-import yaml
+from robotsix_yaml_config import (
+    YamlConfigError,
+    flatten_config,
+    load_yaml_cascade,
+    read_yaml_file,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -22,30 +26,12 @@ import yaml
 # ---------------------------------------------------------------------------
 
 
-class ConfigError(Exception):
+class ConfigError(YamlConfigError):
     """Raised for config-loading failures — missing required files,
-    YAML parse errors, etc."""
+    YAML parse errors, etc. Subclasses the shared base so existing
+    ``except ConfigError`` handlers keep working."""
 
     pass
-
-
-# ---------------------------------------------------------------------------
-#  Deep merge
-# ---------------------------------------------------------------------------
-
-
-def _deep_merge(base: dict, overlay: dict) -> dict:
-    """Recursively merge *overlay* into *base* (mutates *base*).
-
-    Scalar values in *overlay* overwrite those in *base*.  Nested dicts
-    are merged recursively; lists are replaced wholesale.
-    """
-    for key, value in overlay.items():
-        if key in base and isinstance(base[key], dict) and isinstance(value, dict):
-            _deep_merge(base[key], value)
-        else:
-            base[key] = deepcopy(value)
-    return base
 
 
 # ---------------------------------------------------------------------------
@@ -55,28 +41,6 @@ def _deep_merge(base: dict, overlay: dict) -> dict:
 _YAML_DIR = Path("config")
 _DEFAULTS_FILE = _YAML_DIR / "mill.defaults.yaml"
 _LOCAL_FILE = _YAML_DIR / "mill.local.yaml"
-
-
-def _read_yaml_file(path: Path) -> dict:
-    """Read and parse a single YAML file, returning a dict.
-
-    Returns an empty dict for non-existent optional files.
-    Raises ``ConfigError`` on parse failures.
-    """
-    if not path.exists():
-        return {}
-    try:
-        with open(path, "r", encoding="utf-8") as fh:
-            data = yaml.safe_load(fh)
-    except yaml.YAMLError as exc:
-        raise ConfigError(f"YAML parse error in {path}: {exc}") from exc
-    if data is None:
-        return {}
-    if not isinstance(data, dict):
-        raise ConfigError(
-            f"Expected a mapping at top level of {path}, got {type(data).__name__}"
-        )
-    return data
 
 
 def load_yaml_config(config_file: str | None = None, skip_local: bool = False) -> dict:
@@ -101,30 +65,28 @@ def load_yaml_config(config_file: str | None = None, skip_local: bool = False) -
             "This file is committed to the repo and must always be present."
         )
 
-    merged: dict = {}
-
-    # Layer 1: committed defaults (required)
-    defaults = _read_yaml_file(_DEFAULTS_FILE)
-    _deep_merge(merged, defaults)
-
-    # Layer 2: per-developer local overrides (optional)
-    if not skip_local:
-        local = _read_yaml_file(_LOCAL_FILE)
-        if local:
-            _deep_merge(merged, local)
-
-    # Layer 3: production overrides (optional)
+    # Resolve the production overlay path (explicit arg > env var). An
+    # explicit empty string means "no production file".
     prod_path: str = ""
     if config_file is not None:
         prod_path = config_file
     else:
         prod_path = os.environ.get("MILL_CONFIG_FILE", "")
-    if prod_path:
-        prod = _read_yaml_file(Path(prod_path))
-        if prod:
-            _deep_merge(merged, prod)
 
-    return merged
+    # Build the ordered layer list at call time (reading the current
+    # module-level _DEFAULTS_FILE / _LOCAL_FILE values so test
+    # monkeypatching applies). Precedence is later-overrides-earlier:
+    # defaults → local → production.
+    layers: list[Path] = [_DEFAULTS_FILE]
+    if not skip_local:
+        layers.append(_LOCAL_FILE)
+    if prod_path:
+        layers.append(Path(prod_path))
+
+    try:
+        return load_yaml_cascade(layers)
+    except YamlConfigError as exc:
+        raise ConfigError(str(exc)) from exc
 
 
 def load_secrets_yaml(secrets_file: str | None = None) -> dict:
@@ -156,17 +118,9 @@ def load_secrets_yaml(secrets_file: str | None = None) -> dict:
         return {}
 
     try:
-        with open(path, "r", encoding="utf-8") as fh:
-            data = yaml.safe_load(fh)
-    except yaml.YAMLError as exc:
-        raise ConfigError(f"YAML parse error in {path}: {exc}") from exc
-
-    if data is None:
-        return {}
-    if not isinstance(data, dict):
-        raise ConfigError(
-            f"Expected a mapping at top level of {path}, got {type(data).__name__}"
-        )
+        data = read_yaml_file(path)
+    except YamlConfigError as exc:
+        raise ConfigError(str(exc)) from exc
     return dict(data)
 
 
@@ -200,17 +154,9 @@ def load_repos_yaml(file_path: str | None = None) -> dict:
         return {}
 
     try:
-        with open(path, "r", encoding="utf-8") as fh:
-            data = yaml.safe_load(fh)
-    except yaml.YAMLError as exc:
-        raise ConfigError(f"YAML parse error in {path}: {exc}") from exc
-
-    if data is None:
-        return {}
-    if not isinstance(data, dict):
-        raise ConfigError(
-            f"Expected a mapping at top level of {path}, got {type(data).__name__}"
-        )
+        data = read_yaml_file(path)
+    except YamlConfigError as exc:
+        raise ConfigError(str(exc)) from exc
     # Extract the ``repos`` key if present (standard format).
     if "repos" in data:
         repos_data = data["repos"]
@@ -456,20 +402,4 @@ def flatten_yaml_config(yaml_config: dict) -> dict[str, object]:
     map to ``MILL_WEB_RESEARCH_MODEL``), the value from the *last* path
     traversed wins (dict insertion order).
     """
-    result: dict[str, object] = {}
-
-    def _walk(d: dict, prefix: str = "") -> None:
-        for key, value in d.items():
-            full_key = f"{prefix}.{key}" if prefix else key
-            alias = _YAML_PATH_TO_ALIAS.get(full_key)
-            if alias is not None:
-                # Dict-valued aliases (e.g. stage_timeout_overrides) must
-                # emit the dict itself — recursing would only find leaf
-                # scalars without their own alias and silently drop them.
-                result[alias] = value
-                continue
-            if isinstance(value, dict):
-                _walk(value, full_key)
-
-    _walk(yaml_config)
-    return result
+    return flatten_config(yaml_config, alias_map=_YAML_PATH_TO_ALIAS)

@@ -210,10 +210,6 @@ DEP002 = [
     "mkdocs-material",
     "langfuse",
     "robotsix-modules",
-    # TEMPORARY: no src/ file imports robotsix_yaml_config yet, so deptry would
-    # raise DEP002. Remove this entry in the follow-on integration ticket once
-    # config_loader.py actually imports the package.
-    "robotsix-yaml-config",
 ]
 # Packages imported directly but pulled in transitively through
 # pydantic-ai-slim / sqlmodel — the imports are intentional.
