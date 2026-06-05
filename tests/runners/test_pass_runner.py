@@ -12,6 +12,7 @@ from robotsix_mill.runners.pass_runner import (
     _format_recent_proposals,
     _render_verified_table,
     _test_file_exists_for_gap,
+    _module_curator_premise_check,
     strip_ephemeral_sections,
     ProposedActionItem,
     _verify_proposed_actions,
@@ -2641,5 +2642,323 @@ def test_verified_proposals_still_works_with_module_curator_style(tmp_path):
     vp = captured[0]
     assert "## Prior proposals — verified state" in vp
     assert "## Prior proposed actions — decided" in vp
+
+    db.reset_engine()
+
+
+# ==================================================================
+# module_curator pre-filing premise check
+# ==================================================================
+
+
+def _write_modules_yaml(repo_dir, modules):
+    """Write a minimal docs/modules.yaml under *repo_dir*."""
+    import yaml as _yaml
+
+    docs = repo_dir / "docs"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / "modules.yaml").write_text(
+        _yaml.safe_dump({"modules": modules}), encoding="utf-8"
+    )
+
+
+# --- suppression: false file-missing premise (the 9c29 case) ---
+
+
+def test_module_curator_suppresses_false_missing_premise(tmp_path, caplog):
+    """A MODULE_CURATOR draft asserting docs/modules.yaml is missing is
+    suppressed when the file actually exists under repo_dir."""
+    import logging
+
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    # The file the draft claims is missing actually exists.
+    _write_modules_yaml(tmp_path, [{"id": "config", "paths": ["src/config.py"]}])
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=[
+            "Create docs/modules.yaml: canonical module taxonomy is missing (CRITICAL)"
+        ],
+        draft_bodies=["docs/modules.yaml does not exist; create it."],
+    )
+
+    caplog.set_level(logging.WARNING)
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.MODULE_CURATOR,
+        service=service,
+        settings=settings,
+        repo_dir=tmp_path,
+    )
+
+    assert result.drafts_created == []
+    assert service.list() == []
+    assert "docs/modules.yaml" in caplog.text
+
+    db.reset_engine()
+
+
+def test_module_curator_files_when_missing_premise_is_true(tmp_path):
+    """Counter-example: when the file really is absent, the create draft
+    is filed normally (no suppression)."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    # No docs/modules.yaml on disk.
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=[
+            "Create docs/modules.yaml: canonical module taxonomy is missing (CRITICAL)"
+        ],
+        draft_bodies=["docs/modules.yaml does not exist; create it."],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.MODULE_CURATOR,
+        service=service,
+        settings=settings,
+        repo_dir=tmp_path,
+    )
+
+    assert len(result.drafts_created) == 1
+    assert len(service.list()) == 1
+
+    db.reset_engine()
+
+
+# --- advisory: stale classify premise (the fdd7 case) ---
+
+
+def test_module_curator_annotates_stale_classify(tmp_path):
+    """A `Classify <file>:` draft whose file does not exist on HEAD is
+    filed, but its body carries a [!warning] advisory block."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=["Classify src/robotsix_mill/gone.py: assign to a module"],
+        draft_bodies=["The file src/robotsix_mill/gone.py is unclassified."],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.MODULE_CURATOR,
+        service=service,
+        settings=settings,
+        repo_dir=tmp_path,
+    )
+
+    assert len(result.drafts_created) == 1
+    tickets = service.list()
+    assert len(tickets) == 1
+    desc = Workspace(
+        settings.workspaces_dir_for("test-board"), tickets[0].id
+    ).read_description()
+    assert "[!warning]" in desc
+    assert "no longer exists on HEAD" in desc
+
+    db.reset_engine()
+
+
+# --- legitimate classify draft is unaffected ---
+
+
+def test_module_curator_legitimate_classify_unaffected(tmp_path):
+    """A `Classify <file>:` draft for a path that exists on HEAD and is
+    NOT yet in docs/modules.yaml is filed unchanged (no advisory)."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    # File exists on disk; modules.yaml does NOT cover it.
+    newfile = tmp_path / "src" / "robotsix_mill" / "newthing.py"
+    newfile.parent.mkdir(parents=True, exist_ok=True)
+    newfile.write_text("# new\n", encoding="utf-8")
+    _write_modules_yaml(tmp_path, [{"id": "config", "paths": ["src/config.py"]}])
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=["Classify src/robotsix_mill/newthing.py: assign to a module"],
+        draft_bodies=["The file src/robotsix_mill/newthing.py is unclassified."],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.MODULE_CURATOR,
+        service=service,
+        settings=settings,
+        repo_dir=tmp_path,
+    )
+
+    assert len(result.drafts_created) == 1
+    tickets = service.list()
+    assert len(tickets) == 1
+    desc = Workspace(
+        settings.workspaces_dir_for("test-board"), tickets[0].id
+    ).read_description()
+    assert "[!warning]" not in desc
+
+    db.reset_engine()
+
+
+# --- advisory: already-classified path ---
+
+
+def test_module_curator_premise_check_already_classified(tmp_path):
+    """A classify draft for a path already covered by a module glob in
+    docs/modules.yaml returns an advisory verdict."""
+    newfile = tmp_path / "src" / "robotsix_mill" / "agents" / "coding.py"
+    newfile.parent.mkdir(parents=True, exist_ok=True)
+    newfile.write_text("# code\n", encoding="utf-8")
+    _write_modules_yaml(
+        tmp_path,
+        [{"id": "agents", "paths": ["src/robotsix_mill/agents/*.py"]}],
+    )
+
+    verdict = _module_curator_premise_check(
+        tmp_path,
+        "Classify src/robotsix_mill/agents/coding.py: assign to a module",
+        "src/robotsix_mill/agents/coding.py is unclassified.",
+    )
+    assert verdict is not None
+    disposition, note = verdict
+    assert disposition == "advisory"
+    assert "already classified under module agents" in note
+
+
+# --- conservative: unmatched / malformed titles return None ---
+
+
+def test_module_curator_premise_check_unmatched_title_returns_none(tmp_path):
+    """A title that matches none of the curator shapes returns None."""
+    assert (
+        _module_curator_premise_check(
+            tmp_path, "Some unrelated free-form title", "body"
+        )
+        is None
+    )
+
+
+def test_module_curator_premise_check_no_path_returns_none(tmp_path):
+    """A create/missing title with no extractable path returns None."""
+    assert (
+        _module_curator_premise_check(
+            tmp_path,
+            "Create the missing taxonomy file (CRITICAL)",
+            "the taxonomy is missing",
+        )
+        is None
+    )
+
+
+def test_module_curator_premise_check_malformed_modules_yaml(tmp_path):
+    """A malformed docs/modules.yaml never blocks: the helper returns
+    None for an existing classify path when YAML parsing fails."""
+    newfile = tmp_path / "src" / "robotsix_mill" / "thing.py"
+    newfile.parent.mkdir(parents=True, exist_ok=True)
+    newfile.write_text("# x\n", encoding="utf-8")
+    docs = tmp_path / "docs"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / "modules.yaml").write_text(": : not valid yaml : [", encoding="utf-8")
+
+    verdict = _module_curator_premise_check(
+        tmp_path,
+        "Classify src/robotsix_mill/thing.py: assign to a module",
+        "src/robotsix_mill/thing.py is unclassified.",
+    )
+    assert verdict is None
+
+
+# --- guard only fires for MODULE_CURATOR + repo_dir set ---
+
+
+def test_module_curator_guard_not_fired_for_other_sources(tmp_path):
+    """A non-MODULE_CURATOR source with the same 'missing file' title is
+    never suppressed, even when the file exists."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    _write_modules_yaml(tmp_path, [{"id": "config", "paths": ["src/config.py"]}])
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=["Create docs/modules.yaml: missing"],
+        draft_bodies=["docs/modules.yaml does not exist"],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.AUDIT,
+        service=service,
+        settings=settings,
+        repo_dir=tmp_path,
+    )
+
+    assert len(result.drafts_created) == 1
+    assert len(service.list()) == 1
+
+    db.reset_engine()
+
+
+def test_module_curator_guard_not_fired_without_repo_dir(tmp_path):
+    """With repo_dir=None the guard short-circuits — the draft is filed."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=["Create docs/modules.yaml: missing"],
+        draft_bodies=["docs/modules.yaml does not exist"],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.MODULE_CURATOR,
+        service=service,
+        settings=settings,
+        # repo_dir not passed -> None
+    )
+
+    assert len(result.drafts_created) == 1
+    assert len(service.list()) == 1
 
     db.reset_engine()
