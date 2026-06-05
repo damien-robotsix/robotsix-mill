@@ -125,9 +125,7 @@ def find_prior_matching_ticket(
 # still match. Single-segment tokens must end in a recognised source/file
 # extension; this keeps dotted prose fragments like ``e.g`` / ``i.e`` (from
 # "e.g." / "i.e.") from being mistaken for file paths.
-_SOURCE_EXT = (
-    "py|md|yml|yaml|json|toml|js|mjs|cfg|ini|txt|sh|html|css"
-)
+_SOURCE_EXT = "py|md|yml|yaml|json|toml|js|mjs|cfg|ini|txt|sh|html|css"
 _PATH_TOKEN_RE = re.compile(
     r"[\w.+-]+/[\w.+-]+(?:/[\w.+-]+)*\.[A-Za-z][A-Za-z0-9]{0,6}\b"
     rf"|[\w.+-]+\.(?:{_SOURCE_EXT})\b"
