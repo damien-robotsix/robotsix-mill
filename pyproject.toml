@@ -5,7 +5,27 @@ build-backend = "hatchling.build"
 [project]
 name = "robotsix-board"
 version = "0.1.0"
-requires-python = ">=3.12"
+description = "Shared kanban-board frontend library: column-per-status board chrome parameterized by a data adapter and render mode."
+requires-python = ">=3.14"
+license = "MIT"
+authors = [{ name = "Damien Robotsix" }]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "ruff==0.15.15",
+    "pytest",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/robotsix_board"]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.deptry]
+known_first_party = ["robotsix_board"]
+optional_dependencies_dev_groups = ["dev"]

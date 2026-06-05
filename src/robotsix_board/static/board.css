@@ -1,0 +1,11 @@
+/*
+ * robotsix-board — shared board styles (skeleton placeholder).
+ *
+ * TODO(build-out): port the shared column/card/move-form styles here.
+ * The create step only ships this placeholder so the file exists on disk
+ * and resolves via robotsix_board.static_dir(). The real shared CSS lands
+ * in the dedicated build-out ticket (highest-overlap, lowest-risk slice
+ * first: shared CSS + column/card/move-form markup contract). Mill-specific
+ * chrome (agents menu, cost dashboard, repo selector, proposals/runs panels)
+ * stays in robotsix-mill and is OUT of scope for this library.
+ */
