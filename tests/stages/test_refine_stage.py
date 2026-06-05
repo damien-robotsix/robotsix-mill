@@ -2171,3 +2171,112 @@ def test_meta_ticket_blocks_when_no_repos_clonable(ctx_factory, monkeypatch):
 
     out = RefineStage().run(t, ctx)
     assert out.next_state is State.BLOCKED
+
+
+# ---------------------------------------------------------------------------
+# _verify_branch_merged: real git repo, local-only (unpushed) branch fallback
+# ---------------------------------------------------------------------------
+
+
+def _git(repo, *args):
+    """Run a git command in *repo*, raising on failure."""
+    subprocess.run(
+        ["git", "-C", str(repo), *args],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _build_repo_with_origin(tmp_path):
+    """Build a work repo with an ``origin/main`` remote-tracking ref.
+
+    Creates a bare repo used as ``origin``, a work repo with an initial
+    commit on ``main`` pushed to it, and fetches so ``origin/main``
+    resolves locally.  Returns the work-repo ``Path``.
+    """
+    origin = tmp_path / "origin.git"
+    repo = tmp_path / "repo"
+    subprocess.run(
+        ["git", "init", "--bare", "-b", "main", str(origin)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "init", "-b", "main", str(repo)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    _git(repo, "config", "user.email", "test@example.com")
+    _git(repo, "config", "user.name", "Test")
+    (repo / "README.md").write_text("initial\n", encoding="utf-8")
+    _git(repo, "add", "README.md")
+    _git(repo, "commit", "-m", "initial commit on main")
+    _git(repo, "remote", "add", "origin", str(origin))
+    _git(repo, "push", "origin", "main")
+    _git(repo, "fetch", "origin")
+    return repo
+
+
+def test_verify_branch_merged_local_only_unmerged_returns_false(tmp_path):
+    """A branch that exists ONLY locally (absent from origin so
+    ``git fetch origin <branch>`` fails) and is NOT an ancestor of
+    ``origin/main`` must return ``False`` — the local-only / unpushed
+    case must not slip through the fetch-failure best-effort allow."""
+    from robotsix_mill.core.models import Ticket
+
+    repo = _build_repo_with_origin(tmp_path)
+    # Local-only branch carrying a NEW commit not on origin/main.
+    _git(repo, "checkout", "-b", "mill/local-only")
+    (repo / "feature.txt").write_text("wip\n", encoding="utf-8")
+    _git(repo, "add", "feature.txt")
+    _git(repo, "commit", "-m", "WIP feature commit never pushed")
+
+    ticket = Ticket(
+        id="t-local-unmerged",
+        title="t",
+        workspace_path="x",
+        branch="mill/local-only",
+    )
+
+    assert refine_module._verify_branch_merged(repo, ticket) is False
+
+
+def test_verify_branch_merged_local_only_ancestor_returns_true(tmp_path):
+    """A local-only branch whose tip IS an ancestor of ``origin/main``
+    (e.g. it points at the already-merged main commit) returns
+    ``True`` — the local fallback confirms it is merged."""
+    from robotsix_mill.core.models import Ticket
+
+    repo = _build_repo_with_origin(tmp_path)
+    # Local-only branch pointing at the main commit already on origin.
+    _git(repo, "branch", "mill/merged", "main")
+
+    ticket = Ticket(
+        id="t-local-merged",
+        title="t",
+        workspace_path="x",
+        branch="mill/merged",
+    )
+
+    assert refine_module._verify_branch_merged(repo, ticket) is True
+
+
+def test_verify_branch_merged_unresolvable_branch_returns_true(tmp_path):
+    """A branch that resolves on NEITHER origin nor locally returns
+    ``True`` — best-effort allow is preserved when there is genuinely
+    nothing to verify."""
+    from robotsix_mill.core.models import Ticket
+
+    repo = _build_repo_with_origin(tmp_path)
+
+    ticket = Ticket(
+        id="t-ghost",
+        title="t",
+        workspace_path="x",
+        branch="mill/does-not-exist",
+    )
+
+    assert refine_module._verify_branch_merged(repo, ticket) is True

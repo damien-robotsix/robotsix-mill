@@ -79,7 +79,14 @@ def _verify_branch_merged(repo_dir: Path | None, ticket: Ticket) -> bool:
     never block a ticket on a transient git error).
 
     Returns ``False`` only when the branch is confirmed **unmerged**
-    — i.e. ``git merge-base --is-ancestor <branch> main`` exits 1.
+    — i.e. ``git merge-base --is-ancestor <branch> origin/main`` exits 1.
+
+    When the branch cannot be fetched from origin (e.g. it was committed
+    locally by a prior implement run but never pushed), fall back to the
+    **local** branch ref ``refs/heads/<branch>`` and check its ancestry
+    against ``origin/main``.  Only when neither an origin branch nor a
+    local ref can be resolved do we best-effort ``return True`` — there
+    is then genuinely nothing to verify.
     """
     if repo_dir is None or not ticket.branch:
         # Nothing to verify — let the no-change-needed pass through.
@@ -94,8 +101,66 @@ def _verify_branch_merged(repo_dir: Path | None, ticket: Ticket) -> bool:
             text=True,
         )
     except subprocess.CalledProcessError:
+        # The branch is absent from origin (fetch failed). It may still
+        # exist as a local-only ref committed by a prior implement run
+        # that never pushed. Fall back to the local ref before allowing
+        # the no-change-needed pass-through — otherwise a complete,
+        # working feature strands on an orphaned local WIP commit.
         log.debug(
-            "%s: cannot fetch branch '%s' for merge check — "
+            "%s: cannot fetch branch '%s' from origin — "
+            "falling back to local ref for merge check",
+            ticket.id,
+            branch,
+        )
+        local_ref = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_dir),
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                f"refs/heads/{branch}",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if local_ref.returncode != 0:
+            # Neither an origin branch nor a local ref — nothing to
+            # verify, best-effort allow.
+            log.debug(
+                "%s: branch '%s' resolves on neither origin nor locally "
+                "— allowing no-change-needed (best-effort)",
+                ticket.id,
+                branch,
+            )
+            return True
+        local_check = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_dir),
+                "merge-base",
+                "--is-ancestor",
+                f"refs/heads/{branch}",
+                "origin/main",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if local_check.returncode == 0:
+            return True  # local branch is merged
+        if local_check.returncode == 1:
+            log.info(
+                "%s: local branch '%s' is NOT an ancestor of origin/main "
+                "— implementation unmerged",
+                ticket.id,
+                branch,
+            )
+            return False  # local branch is unmerged
+        # Any other exit code (git error) — best-effort, don't block.
+        log.debug(
+            "%s: local merge-base check failed for branch '%s' — "
             "allowing no-change-needed (best-effort)",
             ticket.id,
             branch,
@@ -111,7 +176,7 @@ def _verify_branch_merged(repo_dir: Path | None, ticket: Ticket) -> bool:
             "merge-base",
             "--is-ancestor",
             f"origin/{branch}",
-            "main",
+            "origin/main",
         ],
         capture_output=True,
         text=True,
