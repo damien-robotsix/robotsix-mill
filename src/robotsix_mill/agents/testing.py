@@ -14,6 +14,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..config import RepoConfig, Settings, get_secrets
+from ..repo_settings import load_repo_test_command
 
 
 def run_test_agent(
@@ -28,15 +29,19 @@ def run_test_agent(
     Sandbox infra failure -> ``(False, "<reason>")`` so the coordinator
     can react.
 
-    Test command resolution: ``repo_config.test_command`` wins when
-    set (the multi-repo authoritative source), else
-    ``settings.test_command`` (legacy / single-repo). When both are
-    empty the gate short-circuits to PASS — repos without a test
-    suite (doc-only, etc.) need no opt-out flag."""
+    Test command resolution (highest precedence first): the per-repo
+    ``.robotsix-mill/config.yaml`` ``test_command`` committed in the
+    clone wins when set (a managed repo owns its command), else
+    ``repo_config.test_command`` (the repos.yaml multi-repo source),
+    else ``settings.test_command`` (legacy / single-repo global). When
+    all three are empty the gate short-circuits to PASS — repos without
+    a test suite (doc-only, etc.) need no opt-out flag."""
     from .. import sandbox
 
     cmd = (
-        (repo_config.test_command if repo_config else "") or settings.test_command
+        (load_repo_test_command(repo_dir) or "")
+        or (repo_config.test_command if repo_config else "")
+        or settings.test_command
     ).strip()
     if not cmd:
         return True, "no test gate configured (treated as passing)"

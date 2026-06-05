@@ -20,6 +20,7 @@ modules:
     paths:
       - src/robotsix_mill/config.py
       - src/robotsix_mill/config_loader.py
+      - src/robotsix_mill/repo_settings.py
       - src/robotsix_mill/__init__.py
       - src/robotsix_mill/py.typed
       - config/mill.defaults.yaml
@@ -27,6 +28,7 @@ modules:
       - config/repos.example.yaml
       - config/secrets.example.yaml
       - tests/config/test_config.py
+      - tests/test_repo_settings.py
     dependencies: []
 
   - id: core

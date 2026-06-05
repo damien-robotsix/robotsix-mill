@@ -107,7 +107,7 @@ sandbox:
   data_volume: mill_data               # named Docker volume for data (fallback)
   data_mount: null                     # host path for bind-mounted data (overrides data_volume)
   command_timeout: 1800                # wall-clock cap (seconds) for shell/test commands
-  test_command: ""                     # global fallback; per-repo override in repos.yaml.test_command. Empty = PASS short-circuit.
+  test_command: ""                     # global fallback. Precedence: per-repo .robotsix-mill/config.yaml test_command (highest) > repos.yaml.test_command > this. Empty everywhere = PASS short-circuit.
   skills_dir: skills                   # directory of skill docs injected into system prompts
 
 # ---------------------------------------------------------------------------

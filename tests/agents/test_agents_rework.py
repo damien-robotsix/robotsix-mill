@@ -107,6 +107,45 @@ def test_test_agent_pass(tmp_path, monkeypatch):
     assert passed is True and "passed" in fb
 
 
+def test_test_agent_repo_file_command_wins(tmp_path, monkeypatch):
+    """A per-repo ``.robotsix-mill/config.yaml`` ``test_command`` is the
+    highest-precedence source: it overrides both ``repo_config.test_command``
+    and ``settings.test_command``, and is the command actually handed to
+    ``sandbox.run``."""
+    from robotsix_mill import sandbox
+    from robotsix_mill.config import RepoConfig
+
+    cfg_dir = tmp_path / ".robotsix-mill"
+    cfg_dir.mkdir()
+    (cfg_dir / "config.yaml").write_text(
+        'test_command: "repo-file-cmd"\n', encoding="utf-8"
+    )
+
+    s = _settings(tmp_path, test_command="settings-cmd")
+    repo_config = RepoConfig(
+        repo_id="r",
+        board_id="b",
+        langfuse_project_name="p",
+        langfuse_public_key="pk",
+        langfuse_secret_key="sk",
+        test_command="repo-config-cmd",
+    )
+
+    cap = {}
+
+    def fake_run(cmd, *, repo_dir, settings, **kwargs):
+        cap["cmd"] = cmd
+        return (0, "ok")
+
+    monkeypatch.setattr(sandbox, "run", fake_run)
+
+    passed, fb = testing.run_test_agent(
+        settings=s, repo_dir=tmp_path, repo_config=repo_config
+    )
+    assert passed is True
+    assert cap["cmd"] == "repo-file-cmd"
+
+
 def test_test_agent_fail_distills_via_cheap_model(tmp_path, monkeypatch):
     from robotsix_mill import sandbox
 
