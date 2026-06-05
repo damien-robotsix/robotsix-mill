@@ -946,8 +946,10 @@ recorded in a dedup ledger so you only see genuinely new ones.
   sender into the same action (e.g. always archiving `newsletter@x.com`), a
   rule is proposed.
 - **Domain rules:** When ≥2 different senders from the same domain consistently
-  map to the same action (e.g. `alice@news.com` and `bob@news.com` both
-  archived ≥3 times), a domain-level rule is proposed.
+  map to the same action across ≥3 decisions in total (e.g. `alice@news.com`
+  and `bob@news.com` archived twice each, four decisions combined), a
+  domain-level rule is proposed. The ≥3 threshold is a domain-wide total, not a
+  per-sender count.
 
 Rules are **never proposed** from `user_triage` decisions — the system learns
 only from decisions it is confident about.
