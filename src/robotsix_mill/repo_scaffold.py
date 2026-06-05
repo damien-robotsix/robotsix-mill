@@ -271,20 +271,26 @@ def _file_implementation_followup(
 
 
 def _scaffold_initial_commit(settings, repo_info: RepoInfo, params: dict) -> None:
-    """Clone the newly created repo, write scaffold files, commit, and
-    force-push to the default branch."""
-    token = github_token(settings, repo_config=None)
+    """Initialise a fresh local repo, write scaffold files, commit, and
+    force-push to the new remote's default branch.
+
+    The remote was just created with ``auto_init: false`` so it is empty —
+    cloning ``--branch main`` would fail (no branch yet). ``git init`` + a
+    force-push populates the default branch directly. Use the repo-creation
+    PAT when set: it created the repo and definitely has push access, whereas
+    the GitHub App installation may not yet include the brand-new repo.
+    """
+    from .config import get_secrets
+
+    token = get_secrets().forge_repo_create_token or github_token(
+        settings, repo_config=None
+    )
     name = params["name"]
     description = params.get("description", "")
 
     workspace_dir = Path(tempfile.mkdtemp(prefix="repo_scaffold_"))
     try:
-        git_ops.clone(
-            remote_url=repo_info.clone_url,
-            dest=workspace_dir,
-            branch=settings.forge_target_branch,
-            token=token,
-        )
+        git_ops.init_repo(workspace_dir, settings.forge_target_branch)
 
         # README.md
         (workspace_dir / "README.md").write_text(

@@ -50,6 +50,25 @@ def clone(remote_url: str, dest: Path, branch: str, token: str | None = None) ->
     _git(dest, "config", "user.name", "robotsix-mill")
 
 
+def init_repo(dest: Path, branch: str) -> None:
+    """Initialise a fresh, empty git repo at ``dest`` with ``branch`` as the
+    initial branch and the mill's commit identity configured.
+
+    Use this to scaffold a brand-new (empty) remote: a freshly-created GitHub
+    repo (``auto_init: false``) has no branches, so ``clone --branch <main>``
+    fails. ``init`` + force-``push`` populates the default branch instead.
+    """
+    dest.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        ["git", "init", "--quiet", "-b", branch, str(dest)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    _git(dest, "config", "user.email", "mill@robotsix.local")
+    _git(dest, "config", "user.name", "robotsix-mill")
+
+
 def has_changes(repo: Path) -> bool:
     """Return ``True`` if the repo has uncommitted changes."""
     return bool(_git(repo, "status", "--porcelain"))

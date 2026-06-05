@@ -297,8 +297,17 @@ class GitHubForge(Forge):
             if r.status_code == 422:
                 err_text = r.text or ""
                 if "name already exists" in err_text.lower():
+                    # Re-run safety: a prior scaffold attempt may have created
+                    # the repo before failing later (e.g. on the initial
+                    # push). If the existing repo is EMPTY (no commits), reuse
+                    # it so the scaffold's force-push completes the job; only a
+                    # repo with real content is treated as a genuine conflict.
+                    existing = self._reuse_if_empty(c, api, headers, owner, name)
+                    if existing is not None:
+                        return existing
                     raise RuntimeError(
-                        f"Repository '{name}' already exists under '{owner}'"
+                        f"Repository '{name}' already exists under '{owner}' "
+                        f"and is not empty — refusing to overwrite"
                     )
                 raise RuntimeError(
                     f"GitHub repo create failed: {r.status_code} {r.text[:300]}"
@@ -318,6 +327,26 @@ class GitHubForge(Forge):
             raise RuntimeError(
                 f"GitHub repo create failed: {r.status_code} {r.text[:300]}"
             )
+
+    def _reuse_if_empty(self, c, api, headers, owner, name) -> RepoInfo | None:
+        """Return the existing repo's ``RepoInfo`` iff it exists and is EMPTY
+        (no commits), else ``None``.
+
+        Used to make repo creation re-run-safe: GitHub's commits endpoint
+        returns 409 (``Git Repository is empty``) for a repo with no commits.
+        An empty repo is safe for the scaffold to force-push into; a repo with
+        real content is not, so we signal a genuine conflict by returning None.
+        """
+        repo_url = f"{api}/repos/{owner}/{name}"
+        rr = c.get(repo_url, headers=headers)
+        if rr.status_code != 200:
+            return None
+        commits = c.get(f"{repo_url}/commits", headers=headers, params={"per_page": 1})
+        # 409 = "Git Repository is empty"; an empty 200 list is empty too.
+        is_empty = commits.status_code == 409 or (
+            commits.status_code == 200 and not commits.json()
+        )
+        return _parse_repo_info(rr.json()) if is_empty else None
 
     def pr_status(self, *, source_branch: str) -> dict | None:
         owner, repo = self._owner_repo
