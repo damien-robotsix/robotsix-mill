@@ -336,6 +336,8 @@ Every setting below shows:
 | `pipeline.merge_poll_seconds` | `MILL_MERGE_POLL_SECONDS` | `120` | Poll interval for PR merge/CI status |
 | `pipeline.rebase_max_attempts` | `MILL_REBASE_MAX_ATTEMPTS` | `5` | Max rebase LLM invocations before BLOCK |
 | `pipeline.ci_fix_max_attempts` | `MILL_CI_FIX_MAX_ATTEMPTS` | `2` | Max CI-fix LLM invocations before BLOCK |
+| `pipeline.ci_max_auto_retries` | `MILL_CI_MAX_AUTO_RETRIES` | `3` | Max consecutive ci-fix cycles with no code changes before BLOCK |
+| `pipeline.ci_fix_max_cycles` | `MILL_CI_FIX_MAX_CYCLES` | `8` | Hard ceiling on total ci-fix cycles per ticket (counts every agent-running cycle on failing CI; reset only when CI turns green). Set to 0 to disable. |
 | `pipeline.review_revision_max_attempts` | `MILL_REVIEW_REVISION_MAX_ATTEMPTS` | `2` | Max review-revision LLM invocations before BLOCK |
 | `pipeline.branch_prefix` | `MILL_BRANCH_PREFIX` | `mill/` | Prefix for deliver-stage branch names |
 | `pipeline.prune_clone_on_close` | `MILL_PRUNE_CLONE_ON_CLOSE` | `true` | Delete workspace repo clone on ticket close |

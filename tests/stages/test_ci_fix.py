@@ -318,6 +318,200 @@ def test_max_auto_retries_zero_disables_ceiling(tmp_path, monkeypatch):
     assert len(push_seen) == 5
 
 
+# --- Hard cycle ceiling bounds a churn-commit loop ---
+
+
+def test_churn_loop_bounded_by_max_cycles(tmp_path, monkeypatch):
+    """A churn loop (agent reports DONE + produces a commit every cycle while
+    CI stays red) resets both pre-existing counters each cycle, so only the
+    new hard ceiling can bound it.  After ci_fix_max_cycles cycles the stage
+    blocks WITHOUT running the agent."""
+    ctx = _gh(tmp_path, ci_fix_max_cycles="3")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "lint", "summary": "err", "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    agent_calls = {"n": 0}
+
+    def fake_agent(**k):
+        agent_calls["n"] += 1
+        return CiFixResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        fake_agent,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        lambda *a, **k: None,
+    )
+    # Simulate a fresh churn commit every cycle: local != remote, so both
+    # the attempt counter and no-change counter reset each cycle.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.head_sha",
+        lambda repo: "local-sha",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.remote_branch_sha",
+        lambda repo, branch: "remote-sha",
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+    cycle_path = ctx.service.workspace(t).artifacts_dir / "ci_fix_cycles.txt"
+
+    # Cycles 1-3 run the agent → IMPLEMENT_COMPLETE.
+    for expected in (1, 2, 3):
+        out = CIFixStage().run(t, ctx)
+        assert out.next_state is State.IMPLEMENT_COMPLETE
+        assert _read_counter(cycle_path) == expected
+    assert agent_calls["n"] == 3
+
+    # Cycle 4 reaches the ceiling → BLOCKED without running the agent.
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "hard ceiling of 3 cycle(s)" in out.note
+    # Agent NOT invoked on the blocking cycle.
+    assert agent_calls["n"] == 3
+    # Cycle counter reset to 0 on the blocking return.
+    assert _read_counter(cycle_path) == 0
+
+
+def test_cycle_counter_resets_on_ci_green(tmp_path, monkeypatch):
+    """A few failing cycles bump the cycle counter; once CI is observed green
+    the counter resets to 0."""
+    ctx = _gh(tmp_path, ci_fix_max_cycles="8")
+    state = {"conclusion": "failure"}
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": state["conclusion"],
+            "failing": [
+                {"name": "lint", "summary": "err", "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(status="DONE", summary="ok"),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.head_sha",
+        lambda repo: "local-sha",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.remote_branch_sha",
+        lambda repo, branch: "remote-sha",
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+    cycle_path = ctx.service.workspace(t).artifacts_dir / "ci_fix_cycles.txt"
+
+    # Two failing cycles bump the counter.
+    CIFixStage().run(t, ctx)
+    CIFixStage().run(t, ctx)
+    assert _read_counter(cycle_path) == 2
+
+    # CI turns green → counter resets.
+    state["conclusion"] = "success"
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert _read_counter(cycle_path) == 0
+
+
+def test_max_cycles_zero_disables_ceiling(tmp_path, monkeypatch):
+    """When ci_fix_max_cycles=0, the hard ceiling never fires (loop relies
+    solely on the existing caps)."""
+    ctx = _gh(tmp_path, ci_fix_max_cycles="0")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "lint", "summary": "err", "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    agent_calls = {"n": 0}
+
+    def fake_agent(**k):
+        agent_calls["n"] += 1
+        return CiFixResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        fake_agent,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.head_sha",
+        lambda repo: "local-sha",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.remote_branch_sha",
+        lambda repo, branch: "remote-sha",
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    # Run 10 cycles — none should block on the hard ceiling.
+    for _ in range(10):
+        out = CIFixStage().run(t, ctx)
+        assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert agent_calls["n"] == 10
+
+
+def test_cycle_counter_not_incremented_on_transient_repoll(tmp_path, monkeypatch):
+    """A pending/None conclusion does not run the agent and must not bump
+    the cycle counter."""
+    ctx = _gh(tmp_path, ci_fix_max_cycles="3")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "pending", "failing": []},
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+    cycle_path = ctx.service.workspace(t).artifacts_dir / "ci_fix_cycles.txt"
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert _read_counter(cycle_path) == 0
+
+
 # --- Fix success + push failure → BLOCKED ---
 
 
