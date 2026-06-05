@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import RepoConfig, get_repos_config
-from ..langfuse.client import session_cost
+from ..langfuse.client import effective_cost, session_cost
 from ..stages import StageContext, get_stage
 from ..core.states import STAGE_FOR_STATE, State
 from ..core.models import SourceKind
@@ -1154,10 +1154,21 @@ class Worker:
         # forward progress (cost accumulates across all stages). ---
         if self.ctx.settings.max_spend_usd_per_ticket > 0.0:
             cost = session_cost(self.ctx.settings, ticket_id, repo_config=repo_config)
-            if cost > self.ctx.settings.max_spend_usd_per_ticket:
+            # Exclude the pre-redraft baseline so the cap restarts at
+            # zero after a redraft: only spend accrued since the most
+            # recent redraft counts toward the limit. ``ticket`` was
+            # fetched above for the retry-attempt check.
+            baseline = (
+                getattr(ticket, "pre_redraft_cost_usd", 0.0) or 0.0
+                if ticket is not None
+                else 0.0
+            )
+            effective = effective_cost(cost, baseline)
+            if effective > self.ctx.settings.max_spend_usd_per_ticket:
                 note = (
-                    f"Cost cap exceeded: ${cost:.2f} spent "
-                    f"(limit ${self.ctx.settings.max_spend_usd_per_ticket:.2f}). "
+                    f"Cost cap exceeded: ${effective:.2f} spent "
+                    f"(limit ${self.ctx.settings.max_spend_usd_per_ticket:.2f}; "
+                    "pre-redraft cost excluded). "
                     "Escalated to BLOCKED to stop further LLM billing. "
                     "Use resume-blocked to override and continue."
                 )

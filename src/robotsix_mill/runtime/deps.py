@@ -129,12 +129,21 @@ def with_cost(
     When *repo_config* is provided, its Langfuse credentials are used
     for the cost lookup (per-repo isolation).
     """
-    from ..langfuse.client import session_cost, session_cost_cached
+    from ..langfuse.client import (
+        effective_cost,
+        session_cost,
+        session_cost_cached,
+    )
 
+    baseline = ticket.pre_redraft_cost_usd or 0.0
     if blocking:
-        ticket.cost_usd = session_cost(settings, ticket.id, repo_config=repo_config)
+        total = session_cost(settings, ticket.id, repo_config=repo_config)
     else:
-        ticket.cost_usd = session_cost_cached(ticket.id)
+        total = session_cost_cached(ticket.id)
+    # Subtract the pre-redraft baseline so ``cost_usd`` reflects the
+    # effective post-redraft spend (clamped at zero); the full session
+    # total stays available for informational display via the baseline.
+    ticket.cost_usd = effective_cost(total, baseline)
     return ticket
 
 
@@ -375,6 +384,7 @@ def enrich_ticket_read(
             ticket, settings, repo_config=repo_config
         ),
         cost_usd=ticket.cost_usd,
+        pre_redraft_cost_usd=ticket.pre_redraft_cost_usd,
         cumulative_cost=cumulative,
         depends_on=ticket.depends_on,
         unmet_deps=service.unmet_dependencies(ticket),

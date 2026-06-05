@@ -15,6 +15,7 @@ from robotsix_mill.runtime.deps import (
     get_settings,
     get_worker,
     maybe_enqueue,
+    with_cost,
 )
 
 
@@ -149,6 +150,43 @@ def _make_ticket(**overrides) -> Ticket:
     kwargs = {"id": "t1", "title": "Test", "workspace_path": "tasks/t1"}
     kwargs.update(overrides)
     return Ticket(**kwargs)
+
+
+# ---------------------------------------------------------------------------
+# with_cost — effective (post-redraft) cost
+# ---------------------------------------------------------------------------
+
+
+def test_with_cost_blocking_subtracts_pre_redraft_baseline(monkeypatch):
+    """The blocking branch sets cost_usd to max(0, session_total -
+    pre_redraft_cost_usd)."""
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_cost", lambda *a, **kw: 10.0
+    )
+    ticket = _make_ticket(pre_redraft_cost_usd=4.0)
+    with_cost(ticket, MagicMock(), blocking=True)
+    assert ticket.cost_usd == 6.0
+
+
+def test_with_cost_blocking_clamped_at_zero(monkeypatch):
+    """When the baseline exceeds the live total the effective cost is
+    clamped to 0.0 rather than going negative."""
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_cost", lambda *a, **kw: 3.0
+    )
+    ticket = _make_ticket(pre_redraft_cost_usd=8.0)
+    with_cost(ticket, MagicMock(), blocking=True)
+    assert ticket.cost_usd == 0.0
+
+
+def test_with_cost_cache_only_subtracts_pre_redraft_baseline(monkeypatch):
+    """The cache-only (non-blocking) branch also subtracts the baseline."""
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_cost_cached", lambda sid: 9.0
+    )
+    ticket = _make_ticket(pre_redraft_cost_usd=2.5)
+    with_cost(ticket, MagicMock(), blocking=False)
+    assert ticket.cost_usd == 6.5
 
 
 def test_enrich_ticket_read_cost_enrichment(monkeypatch):
