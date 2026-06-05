@@ -23,9 +23,7 @@ from email.utils import parseaddr
 
 import pydantic
 from robotsix_llmio.core import Tier
-from robotsix_llmio.openrouter_deepseek import OpenRouterDeepseekProvider
 
-from robotsix_auto_mail.config import load_llm
 from robotsix_auto_mail.db import (
     MailRecord,
     get_record_by_message_id,
@@ -891,6 +889,8 @@ def run_triage_agent(
     # -- resolve API key (arg -> LLM_API_KEY env -> config.llm_api_key) --
     resolved_key = api_key or os.environ.get("LLM_API_KEY", "")
     if not resolved_key:
+        from robotsix_auto_mail.config import load_llm
+
         resolved_key, _ = load_llm()
     if not resolved_key:
         raise TriageError(
@@ -898,8 +898,11 @@ def run_triage_agent(
             "variable or add an `llm.api_key` entry to your config file"
         )
 
-    # -- lazy import so the rest of the CLI works without pydantic_ai --
+    # -- lazy imports so the rest of the module (deterministic rule
+    #    proposal / application, decision persistence) works without the
+    #    optional pydantic_ai / openrouter_deepseek LLM dependencies --
     from pydantic_ai import PromptedOutput
+    from robotsix_llmio.openrouter_deepseek import OpenRouterDeepseekProvider
 
     # -- build agent --
     llm_provider = OpenRouterDeepseekProvider(api_key=resolved_key)

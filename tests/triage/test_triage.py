@@ -57,7 +57,7 @@ def _patch_llm(
     mock_provider.call_with_retry.side_effect = lambda fn, what: fn()
 
     patcher = mock.patch(
-        "robotsix_auto_mail.triage.OpenRouterDeepseekProvider",
+        "robotsix_llmio.openrouter_deepseek.OpenRouterDeepseekProvider",
         return_value=mock_provider,
     )
     return mock_handle, patcher
@@ -232,7 +232,7 @@ def test_run_triage_agent_empty_inbox_no_llm(
     conn = init_db(":memory:")
     try:
         with mock.patch(
-            "robotsix_auto_mail.triage.OpenRouterDeepseekProvider"
+            "robotsix_llmio.openrouter_deepseek.OpenRouterDeepseekProvider"
         ) as cls:
             out = run_triage_agent(conn)
         assert out == []
@@ -347,7 +347,7 @@ def test_run_triage_agent_missing_api_key(
     try:
         _insert_inbox(conn, "<a@x.com>")
         with mock.patch(
-            "robotsix_auto_mail.triage.OpenRouterDeepseekProvider"
+            "robotsix_llmio.openrouter_deepseek.OpenRouterDeepseekProvider"
         ) as cls:
             with pytest.raises(TriageError) as exc:
                 run_triage_agent(conn, api_key=None)
@@ -370,7 +370,7 @@ def test_run_triage_agent_llm_failure_wrapped(
         mock_provider.build_agent.return_value = mock_handle
         mock_provider.call_with_retry.side_effect = RuntimeError("timeout")
         with mock.patch(
-            "robotsix_auto_mail.triage.OpenRouterDeepseekProvider",
+            "robotsix_llmio.openrouter_deepseek.OpenRouterDeepseekProvider",
             return_value=mock_provider,
         ):
             with pytest.raises(TriageError) as exc:
@@ -935,7 +935,7 @@ def test_run_triage_agent_all_matched_skips_llm(
                                   match_value="news@a.com", action="archive"))
         _insert_inbox(conn, "<ruled@x.com>", sender="news@a.com")
         with mock.patch(
-            "robotsix_auto_mail.triage.OpenRouterDeepseekProvider"
+            "robotsix_llmio.openrouter_deepseek.OpenRouterDeepseekProvider"
         ) as cls:
             out = run_triage_agent(conn)
         assert [d.action for d in out] == ["archive"]

@@ -1013,19 +1013,12 @@ def _cmd_triage_rules(args: argparse.Namespace) -> int:
     recorded in the dedup ledger as ``pending`` and printed with their
     fingerprints.  Returns 0 even when there are proposals; 1 only on error.
     """
-    try:
-        from robotsix_auto_mail.triage import (
-            _rule_fingerprint,
-            list_active_rules,
-            propose_triage_rules,
-            record_and_filter_rule_proposals,
-        )
-    except ImportError:
-        sys.stderr.write(
-            "The 'triage-rules' command requires the pydantic-ai package. "
-            "Install it with: pip install robotsix-auto-mail[dev]\n"
-        )
-        return 1
+    from robotsix_auto_mail.triage import (
+        _rule_fingerprint,
+        list_active_rules,
+        propose_triage_rules,
+        record_and_filter_rule_proposals,
+    )
 
     config = _load_config_or_exit()
     conn = init_db(config.db_path)
@@ -1079,14 +1072,7 @@ def _cmd_triage_rules_set(args: argparse.Namespace) -> int:
 
     Returns 0 on success, 1 on an invalid state or an unknown fingerprint.
     """
-    try:
-        from robotsix_auto_mail.triage import TriageError, set_rule_state
-    except ImportError:
-        sys.stderr.write(
-            "The 'triage-rules-set' command requires the pydantic-ai "
-            "package. Install it with: pip install robotsix-auto-mail[dev]\n"
-        )
-        return 1
+    from robotsix_auto_mail.triage import TriageError, set_rule_state
 
     allowed = ("accepted", "rejected")
     if args.state not in allowed:

@@ -1667,7 +1667,7 @@ def _patch_triage_llm(
     mock_provider.call_with_retry.side_effect = lambda fn, what: fn()
 
     return mock.patch(
-        "robotsix_auto_mail.triage.OpenRouterDeepseekProvider",
+        "robotsix_llmio.openrouter_deepseek.OpenRouterDeepseekProvider",
         return_value=mock_provider,
     )
 
@@ -1774,7 +1774,7 @@ def test_triage_empty_inbox(
         db_path=str(tmp_path / "empty.db"),
     )
     with mock.patch(
-        "robotsix_auto_mail.triage.OpenRouterDeepseekProvider"
+        "robotsix_llmio.openrouter_deepseek.OpenRouterDeepseekProvider"
     ) as cls, mock.patch(
         "robotsix_auto_mail.cli.load", return_value=cfg_db
     ), mock.patch.dict(os.environ, {"LLM_API_KEY": "sk-test"}):
