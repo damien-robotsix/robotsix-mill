@@ -123,6 +123,7 @@ def run_run_health_agent(
     n = min(
         len(out.draft_titles),
         len(out.draft_bodies),
+        len(out.gap_ids),
         MAX_PROPOSALS,
     )
     out.draft_titles = out.draft_titles[:n]
