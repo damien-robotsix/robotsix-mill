@@ -51,14 +51,24 @@ If you are upgrading from an older version that used `.env` and
 `secrets.env` files, run the one-shot migration script:
 
 ```sh
-python dev/migrate-env-to-yaml.py
+python scripts/migrate-config
 ```
 
-This reads your existing `.env` (and optional `secrets.env`), diffs
-against the committed defaults in `config/mill.defaults.yaml`, and
-writes `config/mill.local.yaml` and `config/secrets.yaml` with only
-the values that differ.  The original `.env` files are left untouched
-— you can remove them after verifying the migration.
+This reads your existing `.env` and `secrets.env` (if present), maps
+each variable to its YAML dotted path per the configuration reference,
+and writes:
+
+- `config/mill.production.yaml` — non-secret overrides (only values that
+  differ from the committed defaults in `config/mill.defaults.yaml`)
+- `config/secrets.yaml` — all secret values (API keys, tokens, etc.)
+
+The original `.env` and `secrets.env` files are left untouched — you
+can remove them after verifying the migration. Use `--dry-run` to see
+what would be written without modifying disk:
+
+```sh
+python scripts/migrate-config --dry-run
+```
 
 ---
 

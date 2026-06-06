@@ -29,6 +29,7 @@ modules:
       - config/secrets.example.yaml
       - tests/config/test_config.py
       - tests/test_repo_settings.py
+      - tests/test_migrate_config.py
     dependencies: []
 
   - id: core
