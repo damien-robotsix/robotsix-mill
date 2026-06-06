@@ -319,3 +319,66 @@ def make_explore_tool(
     )
 
     return explore
+
+
+def make_repo_scoped_explore_tool(settings: Settings, repo_clones: dict[str, Path]):
+    """Return an ``explore(repo, question)`` closure for multi-repo agents.
+
+    The plain :func:`make_explore_tool` binds a single ``repo_dir`` (in a
+    multi-repo workspace, the *first* clone), so every relative path the
+    scout uses resolves against that one repo — it then reports the other
+    repos as "empty". This variant takes the target repo as an explicit
+    argument and scopes the scout to THAT repo's clone, so a cross-repo
+    agent (e.g. meta) can reliably survey any selected repository.
+    """
+    repo_list = ", ".join(sorted(repo_clones))
+
+    async def explore(
+        repo: str, question: str, known_context: str | None = None
+    ) -> str:
+        """Ask a fresh, context-isolated sub-agent a complex, multi-step
+        question about ONE selected repository clone.
+
+        ``repo`` MUST be exactly one of the registered repo ids:
+        {repo_list}. The scout is scoped to that repo only, so ask about
+        one repo per call (issue several calls to compare repos). Returns
+        concise paths/symbols/line-ranges, never whole files.
+
+        Optionally pass ``known_context``: COMPACT facts you ALREADY have
+        (paths, symbols, line ranges) so the scout skips redundant work.
+        """
+        clone = repo_clones.get(repo)
+        if clone is None:
+            return f"explore: unknown repo {repo!r}. Choose exactly one of: {repo_list}"
+        extra = {} if known_context is None else {"known_context": known_context}
+        return await run_explore(
+            settings=settings,
+            repo_dir=clone,
+            question=question,
+            extra_roots=[clone],
+            **extra,
+        )
+
+    # pydantic-ai derives the tool schema from __doc__; inject the repo list.
+    if explore.__doc__:
+        explore.__doc__ = explore.__doc__.replace("{repo_list}", repo_list)
+
+    from .tool_registry import ToolInfo, ToolRegistry
+
+    ToolRegistry.register(
+        ToolInfo(
+            name="explore",
+            description=(
+                "Ask a context-isolated sub-agent a complex question about "
+                "ONE selected repository clone (pass repo=<id>)."
+            ),
+            category="exploration",
+            parameters={
+                "repo": "str",
+                "question": "str",
+                "known_context": "str | None",
+            },
+        )
+    )
+
+    return explore

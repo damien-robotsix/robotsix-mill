@@ -67,7 +67,9 @@ def test_meta_build_agent_kwargs_match_real_signature(tmp_path, monkeypatch):
     monkeypatch.setattr(base_mod, "build_agent", _spy_build_agent)
     monkeypatch.setattr(base_mod, "_safe_close", lambda _agent: None)
     # Keep tool construction hermetic and offline.
-    monkeypatch.setattr(explore_mod, "make_explore_tool", lambda *a, **k: lambda: None)
+    monkeypatch.setattr(
+        explore_mod, "make_repo_scoped_explore_tool", lambda *a, **k: lambda **kw: None
+    )
     monkeypatch.setattr(fs_tools_mod, "build_fs_tools", lambda *a, **k: [])
 
     settings = Settings(data_dir=str(tmp_path / "data"))
