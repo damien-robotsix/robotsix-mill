@@ -20,8 +20,22 @@ import inspect
 from robotsix_mill.agents import base as base_mod
 from robotsix_mill.agents import explore as explore_mod
 from robotsix_mill.agents import fs_tools as fs_tools_mod
-from robotsix_mill.meta.agent import MetaAgentResult, run_meta_agent
+from robotsix_mill.meta.agent import SYSTEM_PROMPT, MetaAgentResult, run_meta_agent
 from robotsix_mill.config import Settings
+
+
+def test_prompt_covers_adoption_check_contract():
+    """The live system prompt (loaded from meta.yaml at import) must teach
+    the ADOPTION-CHECK dimension: verify that DONE/CLOSED proposals were
+    actually adopted, distinguishing extraction (consumer must depend on /
+    import the lib) from alignment, and file `migrate` follow-ups."""
+    p = SYSTEM_PROMPT.lower()
+    assert "adopt" in p
+    assert "done" in p
+    assert "closed" in p
+    assert "consume" in p
+    assert "import" in p
+    assert "migrate" in p
 
 
 class _StubResult:
