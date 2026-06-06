@@ -6,16 +6,13 @@ are exercised with ``httpx.MockTransport`` (no network, no respx dependency).
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import os
+from datetime import UTC, datetime
 
 import httpx
-
-from robotsix_llmio.core.cost_log import CostWindow
-
-import os
-
 import pytest
 
+from robotsix_llmio.core.cost_log import CostWindow
 from robotsix_llmio.openrouter import provider_cost as orpc
 from robotsix_llmio.openrouter.provider_cost import (
     OpenRouterKeyCostSource,
@@ -26,8 +23,8 @@ from robotsix_llmio.openrouter.provider_cost import (
 
 def _window(start: str, end: str) -> CostWindow:
     return CostWindow(
-        start=datetime.fromisoformat(start).replace(tzinfo=timezone.utc),
-        end=datetime.fromisoformat(end).replace(tzinfo=timezone.utc),
+        start=datetime.fromisoformat(start).replace(tzinfo=UTC),
+        end=datetime.fromisoformat(end).replace(tzinfo=UTC),
     )
 
 

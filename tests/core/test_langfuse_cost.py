@@ -8,7 +8,7 @@ timestamp parsing, and the observation provider/cost extraction helpers.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -45,8 +45,8 @@ def _install_transport(monkeypatch, handler) -> list[httpx.Request]:
 
 def _window() -> CostWindow:
     return CostWindow(
-        start=datetime(2026, 6, 3, 10, 0, tzinfo=timezone.utc),
-        end=datetime(2026, 6, 3, 11, 0, tzinfo=timezone.utc),
+        start=datetime(2026, 6, 3, 10, 0, tzinfo=UTC),
+        end=datetime(2026, 6, 3, 11, 0, tzinfo=UTC),
     )
 
 
@@ -129,7 +129,7 @@ def test_fetch_logged_cost_record_aggregation(monkeypatch):
     first = result.records[0]
     assert first.id == "t1"
     assert first.cost == pytest.approx(0.75)
-    assert first.timestamp == datetime(2026, 6, 3, 10, 1, tzinfo=timezone.utc)
+    assert first.timestamp == datetime(2026, 6, 3, 10, 1, tzinfo=UTC)
     assert first.session_id == "sess-1"
     assert first.name == "trace-one"
 
@@ -265,7 +265,7 @@ def test_fetch_by_provider_non_2xx_raises(monkeypatch):
 def test_prune_before_deletes_and_counts(monkeypatch):
     """GET lists traces ≤ cutoff, DELETE removes them by id, and the loop stops
     once a list page is empty; the total deleted count is returned."""
-    cutoff = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    cutoff = datetime(2026, 6, 1, tzinfo=UTC)
     list_pages = iter(
         [
             [{"id": "t1"}, {"id": "t2"}],
@@ -301,7 +301,7 @@ def test_prune_before_empty_returns_zero(monkeypatch):
         return httpx.Response(200, json={"data": []})
 
     _install_transport(monkeypatch, handler)
-    count = _adapter().prune_before(datetime(2026, 6, 1, tzinfo=timezone.utc))
+    count = _adapter().prune_before(datetime(2026, 6, 1, tzinfo=UTC))
 
     assert count == 0
 
@@ -312,7 +312,7 @@ def test_prune_before_non_2xx_raises(monkeypatch):
 
     _install_transport(monkeypatch, handler)
     with pytest.raises(RuntimeError, match="503"):
-        _adapter().prune_before(datetime(2026, 6, 1, tzinfo=timezone.utc))
+        _adapter().prune_before(datetime(2026, 6, 1, tzinfo=UTC))
 
 
 def test_prune_before_delete_non_2xx_raises(monkeypatch):
@@ -323,7 +323,7 @@ def test_prune_before_delete_non_2xx_raises(monkeypatch):
 
     _install_transport(monkeypatch, handler)
     with pytest.raises(RuntimeError, match="delete"):
-        _adapter().prune_before(datetime(2026, 6, 1, tzinfo=timezone.utc))
+        _adapter().prune_before(datetime(2026, 6, 1, tzinfo=UTC))
 
 
 # --------------------------------------------------------------------------- #
@@ -331,18 +331,18 @@ def test_prune_before_delete_non_2xx_raises(monkeypatch):
 # --------------------------------------------------------------------------- #
 def test_parse_timestamp_z_suffix():
     assert _parse_timestamp("2024-01-01T12:00:00Z") == datetime(
-        2024, 1, 1, 12, 0, tzinfo=timezone.utc
+        2024, 1, 1, 12, 0, tzinfo=UTC
     )
 
 
 def test_parse_timestamp_offset_suffix():
     assert _parse_timestamp("2024-01-01T12:00:00+00:00") == datetime(
-        2024, 1, 1, 12, 0, tzinfo=timezone.utc
+        2024, 1, 1, 12, 0, tzinfo=UTC
     )
 
 
 def test_parse_timestamp_datetime_passthrough():
-    moment = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
+    moment = datetime(2024, 1, 1, 12, 0, tzinfo=UTC)
     assert _parse_timestamp(moment) is moment
 
 

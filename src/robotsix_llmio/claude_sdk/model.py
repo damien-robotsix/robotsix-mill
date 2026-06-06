@@ -269,14 +269,14 @@ class ClaudeSDKModel(Model):
             # Hard wall-clock cap so a stalled CLI subprocess fails fast and
             # retryable instead of hanging on the SDK's own ~2h backstop.
             await asyncio.wait_for(_consume(), timeout=constants.SDK_QUERY_TIMEOUT)
-        except (TimeoutError, asyncio.TimeoutError) as exc:
+        except TimeoutError as exc:
             raise ClaudeSDKQueryTimeout(
                 f"Claude Agent SDK query exceeded the "
                 f"{constants.SDK_QUERY_TIMEOUT:.0f}s per-call wall-clock cap "
                 f"(model={self._model_name!r}) — the call stalled without "
                 f"completing. Treated as transient so the bounded retry re-runs it."
             ) from exc
-        except Exception as exc:  # noqa: BLE001 — re-raised (converted or as-is)
+        except Exception as exc:
             if is_claude_sdk_turn_limit(exc):
                 raise ClaudeSDKTurnLimitError(
                     f"Claude Agent SDK hit the {_MAX_TURNS}-turn cap without "

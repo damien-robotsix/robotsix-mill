@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import httpx
-
 import pytest
 
 from robotsix_llmio.core.retry import (
@@ -122,9 +121,7 @@ def test_fallback_not_used_when_primary_succeeds():
         calls["fallback"] += 1
         return "fallback-ok"
 
-    out = call_with_retry_and_fallback(
-        primary, fallback, sleep=_noop_sleep
-    )
+    out = call_with_retry_and_fallback(primary, fallback, sleep=_noop_sleep)
     assert out == "primary-ok"
     assert calls == {"primary": 1, "fallback": 0}
 

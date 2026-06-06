@@ -46,13 +46,13 @@ def build_agent(
     composition and tool selection)."""
     from pydantic_ai import Agent
 
-    agent_kwargs: dict[str, Any] = dict(
-        model=model,
-        system_prompt=system_prompt,
-        output_type=output_type,
-        tools=list(tools or []),
-        retries=retries,
-    )
+    agent_kwargs: dict[str, Any] = {
+        "model": model,
+        "system_prompt": system_prompt,
+        "output_type": output_type,
+        "tools": list(tools or []),
+        "retries": retries,
+    }
     if name is not None:
         agent_kwargs["name"] = name
     return AgentHandle(Agent(**agent_kwargs), http_client)

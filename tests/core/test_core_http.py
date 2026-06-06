@@ -67,9 +67,7 @@ def test_timeout_http_client_registers_weakref_finalize(monkeypatch):
         recorded.append((args, kwargs))
         return SimpleNamespace(alive=True)
 
-    monkeypatch.setattr(
-        http_module, "weakref", SimpleNamespace(finalize=fake_finalize)
-    )
+    monkeypatch.setattr(http_module, "weakref", SimpleNamespace(finalize=fake_finalize))
 
     client = timeout_http_client()
     try:

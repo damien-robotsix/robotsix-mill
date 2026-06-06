@@ -12,7 +12,6 @@ import pytest
 from robotsix_llmio.core import agent as agent_module
 from robotsix_llmio.core.agent import AgentHandle, build_agent
 
-
 # --- §1 AgentHandle.__getattr__ delegation ---------------------------------
 
 
@@ -61,9 +60,7 @@ def test_close_calls_close_async_client_once_and_nulls_client(monkeypatch):
     ``agent.py`` does ``from .http import _close_async_client``, so patch the
     *consumer* namespace ``agent_module._close_async_client``."""
     calls: list[Any] = []
-    monkeypatch.setattr(
-        agent_module, "_close_async_client", lambda c: calls.append(c)
-    )
+    monkeypatch.setattr(agent_module, "_close_async_client", lambda c: calls.append(c))
 
     client = SimpleNamespace()
     handle = AgentHandle(agent=SimpleNamespace(), http_client=client)
@@ -78,9 +75,7 @@ def test_close_is_idempotent(monkeypatch):
     None`` guard short-circuits once the client has been nulled, so
     ``_close_async_client`` is not invoked again."""
     calls: list[Any] = []
-    monkeypatch.setattr(
-        agent_module, "_close_async_client", lambda c: calls.append(c)
-    )
+    monkeypatch.setattr(agent_module, "_close_async_client", lambda c: calls.append(c))
 
     handle = AgentHandle(agent=SimpleNamespace(), http_client=SimpleNamespace())
     handle.close()
@@ -93,9 +88,7 @@ def test_close_with_none_http_client_is_noop(monkeypatch):
     """A handle constructed with ``http_client=None`` makes ``close()`` a
     safe no-op — the guard never reaches ``_close_async_client``."""
     calls: list[Any] = []
-    monkeypatch.setattr(
-        agent_module, "_close_async_client", lambda c: calls.append(c)
-    )
+    monkeypatch.setattr(agent_module, "_close_async_client", lambda c: calls.append(c))
 
     handle = AgentHandle(agent=SimpleNamespace(), http_client=None)
     handle.close()

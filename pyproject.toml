@@ -45,6 +45,17 @@ packages = ["src/robotsix_llmio"]
 [tool.ruff]
 line-length = 88
 
+[tool.ruff.lint]
+select = [
+    "E", "F",   # pycodestyle errors + Pyflakes (was the default; now explicit)
+    "I",        # isort — import sorting (no separate isort tool today)
+    "UP",       # pyupgrade — modernize for the >=3.11 floor
+    "B",        # flake8-bugbear
+    "SIM",      # flake8-simplify
+    "C4",       # flake8-comprehensions
+    "RUF",      # Ruff-specific rules
+]
+
 [tool.mypy]
 python_version = "3.11"
 ignore_missing_imports = false

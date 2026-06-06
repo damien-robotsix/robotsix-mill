@@ -9,7 +9,7 @@ from typing import Any
 from . import constants
 
 
-def _close_async_client(client: "Any") -> None:
+def _close_async_client(client: Any) -> None:
     """Close an httpx.AsyncClient from outside its original event loop.
 
     Creates a temporary event loop to run aclose(), swallowing errors so

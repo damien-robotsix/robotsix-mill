@@ -15,7 +15,7 @@ in explicitly — the adapter reads no env vars.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import httpx
 
@@ -132,8 +132,8 @@ class OpenRouterProviderCostSource:
 def _as_utc(dt: datetime) -> datetime:
     """Normalize *dt* to UTC, treating a naive datetime as already-UTC."""
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
 def _utc_dates(window: CostWindow) -> list[str]:
@@ -143,7 +143,7 @@ def _utc_dates(window: CostWindow) -> list[str]:
     start = _as_utc(window.start)
     end = _as_utc(window.end)
     out: list[str] = []
-    day = datetime(start.year, start.month, start.day, tzinfo=timezone.utc)
+    day = datetime(start.year, start.month, start.day, tzinfo=UTC)
     while day < end:
         out.append(day.date().isoformat())
         day += timedelta(days=1)

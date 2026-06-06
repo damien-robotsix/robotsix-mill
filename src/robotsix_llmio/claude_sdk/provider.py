@@ -20,8 +20,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ..core.tracing import get_tracer, start_span
 from ..core.provider import LLMProvider, Tier
+from ..core.tracing import get_tracer, start_span
 from .transient import is_claude_sdk_transient
 
 if TYPE_CHECKING:  # pragma: no cover — types-only; runtime imports stay lazy
@@ -91,7 +91,7 @@ def _log_stream_message(message: Any, turn: list[int], label: str) -> None:
                 turn[0],
                 getattr(message, "duration_ms", "?"),
             )
-    except Exception:  # noqa: BLE001 — logging must never break the agent loop
+    except Exception:
         pass
 
 
@@ -248,12 +248,11 @@ def _convert_tools(tools: list[Any]) -> tuple[list[str], Any]:
         (``"mcp__milltools__<name>"``) and the MCP server object to pass
         to ``ClaudeAgentOptions.mcp_servers``.
     """
+    import pydantic_ai
     from claude_agent_sdk import (  # type: ignore[import-not-found]
         create_sdk_mcp_server,
     )
     from claude_agent_sdk import tool as sdk_tool  # type: ignore[import-not-found]
-
-    import pydantic_ai
 
     wrapped: list[Any] = []
     allowed: list[str] = []
@@ -589,7 +588,7 @@ class _SdkToolAgentHandle:
             # Hard wall-clock cap so a stalled CLI subprocess fails fast and
             # retryable instead of hanging on the SDK's own ~2h backstop.
             await asyncio.wait_for(_consume(), timeout=constants.SDK_QUERY_TIMEOUT)
-        except (TimeoutError, asyncio.TimeoutError) as exc:
+        except TimeoutError as exc:
             raise ClaudeSDKQueryTimeout(
                 f"Claude Agent SDK query exceeded the "
                 f"{constants.SDK_QUERY_TIMEOUT:.0f}s per-call wall-clock cap "

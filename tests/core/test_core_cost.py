@@ -43,9 +43,7 @@ def test_record_cost_happy_path_with_provider(monkeypatch):
     """A float cost + recording span + provider stamps all four cost/operation
     attributes plus the provider metadata attribute."""
     span = _FakeSpan()
-    monkeypatch.setattr(
-        "robotsix_llmio.core.cost.get_recording_span", lambda: span
-    )
+    monkeypatch.setattr("robotsix_llmio.core.cost.get_recording_span", lambda: span)
 
     record_cost(object(), lambda _resp: 0.0123, provider="openrouter")
 
@@ -60,17 +58,15 @@ def test_record_cost_without_provider(monkeypatch):
     """With no provider, the cost/operation attributes are stamped but the
     provider metadata attribute is NOT set."""
     span = _FakeSpan()
-    monkeypatch.setattr(
-        "robotsix_llmio.core.cost.get_recording_span", lambda: span
-    )
+    monkeypatch.setattr("robotsix_llmio.core.cost.get_recording_span", lambda: span)
 
     record_cost(object(), lambda _resp: 0.0123)
 
     assert span.attributes["gen_ai.usage.cost"] == 0.0123
     assert span.attributes["gen_ai.operation.name"] == "chat"
-    assert json.loads(
-        span.attributes["langfuse.observation.cost_details"]
-    ) == {"total": 0.0123}
+    assert json.loads(span.attributes["langfuse.observation.cost_details"]) == {
+        "total": 0.0123
+    }
     assert "langfuse.observation.metadata.provider" not in span.attributes
 
 
@@ -78,9 +74,7 @@ def test_record_cost_no_op_without_recording_span(monkeypatch):
     """When no span is recording, the function returns ``None`` without
     stamping anything onto the (unused) span fake."""
     span = _FakeSpan()
-    monkeypatch.setattr(
-        "robotsix_llmio.core.cost.get_recording_span", lambda: None
-    )
+    monkeypatch.setattr("robotsix_llmio.core.cost.get_recording_span", lambda: None)
 
     result = record_cost(object(), lambda _resp: 0.0123, provider="openrouter")
 
@@ -95,9 +89,7 @@ def test_record_cost_no_op_when_cost_is_none(monkeypatch):
     def _exploding_span():
         raise AssertionError("get_recording_span must not be called when cost is None")
 
-    monkeypatch.setattr(
-        "robotsix_llmio.core.cost.get_recording_span", _exploding_span
-    )
+    monkeypatch.setattr("robotsix_llmio.core.cost.get_recording_span", _exploding_span)
 
     result = record_cost(object(), lambda _resp: None, provider="openrouter")
 
@@ -109,9 +101,7 @@ def test_record_cost_no_op_when_cost_is_none(monkeypatch):
 
 def _patch_tracer_provider(monkeypatch, provider):
     """Patch ``opentelemetry.trace.get_tracer_provider`` to return *provider*."""
-    monkeypatch.setattr(
-        "opentelemetry.trace.get_tracer_provider", lambda: provider
-    )
+    monkeypatch.setattr("opentelemetry.trace.get_tracer_provider", lambda: provider)
 
 
 def test_flush_current_provider_invokes_flush(monkeypatch):
@@ -159,9 +149,7 @@ def test_flush_current_provider_swallows_runtime_and_os_error(monkeypatch):
     )
     flush_current_provider()  # must not raise
 
-    _patch_tracer_provider(
-        monkeypatch, types.SimpleNamespace(force_flush=_raise_os)
-    )
+    _patch_tracer_provider(monkeypatch, types.SimpleNamespace(force_flush=_raise_os))
     flush_current_provider()  # must not raise
 
 
@@ -171,9 +159,7 @@ def test_flush_current_provider_propagates_other_errors(monkeypatch):
     def _raise_value():
         raise ValueError("programming error")
 
-    _patch_tracer_provider(
-        monkeypatch, types.SimpleNamespace(force_flush=_raise_value)
-    )
+    _patch_tracer_provider(monkeypatch, types.SimpleNamespace(force_flush=_raise_value))
 
     with pytest.raises(ValueError):
         flush_current_provider()

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
-from enum import Enum
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from enum import StrEnum
+from typing import Any, TypeVar
 
 from . import retry as _retry
 from .agent import AgentHandle
@@ -14,7 +15,7 @@ from .agent import build_agent as _build_agent
 T = TypeVar("T")
 
 
-class Tier(str, Enum):
+class Tier(StrEnum):
     """The only model selector a consumer chooses. A derived provider maps each
     tier to a concrete model + policy."""
 

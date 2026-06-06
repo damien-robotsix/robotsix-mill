@@ -4,7 +4,8 @@ These exist to eliminate duplicated span-guard boilerplate across modules.
 """
 
 import contextlib
-from typing import TYPE_CHECKING, Any, Iterator
+from collections.abc import Iterator
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from opentelemetry.trace import Span

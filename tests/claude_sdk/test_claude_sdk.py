@@ -10,7 +10,7 @@ import json
 import logging
 import sys
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 from pydantic import BaseModel as _BM
@@ -37,20 +37,19 @@ from robotsix_llmio.claude_sdk.model import (
 )
 from robotsix_llmio.claude_sdk.provider import (
     ClaudeSDKProvider,
-    _SdkToolAgentHandle,
-    _SdkToolResult,
     _chat_messages_input,
     _convert_tools,
     _extract_json_object,
     _parse_output,
+    _SdkToolAgentHandle,
+    _SdkToolResult,
 )
 from robotsix_llmio.claude_sdk.transient import (
     is_claude_sdk_transient,
     is_claude_sdk_turn_limit,
 )
-from robotsix_llmio.core.provider import Tier
 from robotsix_llmio.core.agent import AgentHandle
-
+from robotsix_llmio.core.provider import Tier
 
 # --- prompt rendering ------------------------------------------------------
 
@@ -135,7 +134,7 @@ def test_rejects_function_tools():
 
 def test_map_usage_from_result():
     class _R:
-        usage = {
+        usage: ClassVar = {
             "input_tokens": 10,
             "output_tokens": 5,
             "cache_read_input_tokens": 3,
@@ -151,7 +150,7 @@ def test_map_usage_handles_none_and_partial():
     assert _map_usage(None).input_tokens == 0
 
     class _R:
-        usage = {"input_tokens": 4}
+        usage: ClassVar = {"input_tokens": 4}
 
     assert _map_usage(_R()).output_tokens == 0
 
@@ -298,7 +297,7 @@ def _fake_sdk_module() -> SimpleNamespace:
         name: str, description: str | None, parameters_json_schema: dict[str, Any]
     ):
         tool_regs.append(
-            dict(name=name, description=description, schema=parameters_json_schema)
+            {"name": name, "description": description, "schema": parameters_json_schema}
         )
 
         def _decorator(fn):
@@ -307,7 +306,7 @@ def _fake_sdk_module() -> SimpleNamespace:
         return _decorator
 
     def _fake_create_sdk_mcp_server(name: str, tools: list):
-        server_calls.append(dict(name=name, tools=list(tools)))
+        server_calls.append({"name": name, "tools": list(tools)})
         return SimpleNamespace()
 
     class _FakeTextBlock:
@@ -741,6 +740,7 @@ def test_live_tool_run_sync_honors_message_history():
 
 
 # --- structured-output JSON extraction (prose + fenced / stray braces) -------
+
 
 class _Verdict(_BM):
     verdict: str

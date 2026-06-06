@@ -564,7 +564,7 @@ def test_langfuse_cost_log_source_reads_back_logged_cost() -> None:
 
     assert setup_langfuse_tracing() is True, "tracing should configure with creds"
 
-    start = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(minutes=5)
+    start = _dt.datetime.now(_dt.UTC) - _dt.timedelta(minutes=5)
     session_id = f"llmio-livetest-costlog-{uuid.uuid4().hex[:12]}"
     provider = OpenRouterDeepseekProvider()
     agent = provider.build_agent(
@@ -596,7 +596,7 @@ def test_langfuse_cost_log_source_reads_back_logged_cost() -> None:
 
     pk, sk, base = _langfuse_creds()
     source = LangfuseCostLogSource(public_key=pk, secret_key=sk, base_url=base)
-    end = _dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(minutes=1)
+    end = _dt.datetime.now(_dt.UTC) + _dt.timedelta(minutes=1)
     logged = source.fetch_logged_cost(CostWindow(start=start, end=end))
     assert logged.total_cost > 0, (
         f"expected total_cost > 0 read back via LangfuseCostLogSource, "

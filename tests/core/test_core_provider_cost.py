@@ -7,7 +7,7 @@ so it is exercised with ``httpx.MockTransport`` (no network, no respx dependency
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 
@@ -21,8 +21,8 @@ from robotsix_llmio.core.provider_cost import (
 
 def _window(start: str, end: str) -> CostWindow:
     return CostWindow(
-        start=datetime.fromisoformat(start).replace(tzinfo=timezone.utc),
-        end=datetime.fromisoformat(end).replace(tzinfo=timezone.utc),
+        start=datetime.fromisoformat(start).replace(tzinfo=UTC),
+        end=datetime.fromisoformat(end).replace(tzinfo=UTC),
     )
 
 
@@ -147,6 +147,6 @@ def test_langfuse_prune_before_deletes_old_traces(monkeypatch):
 
     _mock_client_factory(monkeypatch, lc, handler)
     src = lc.LangfuseCostLogSource(public_key="pk", secret_key="sk")
-    n = src.prune_before(datetime(2026, 6, 1, tzinfo=timezone.utc))
+    n = src.prune_before(datetime(2026, 6, 1, tzinfo=UTC))
     assert n == 2
     assert deleted_payloads == [["t1", "t2"]]

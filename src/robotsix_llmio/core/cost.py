@@ -10,7 +10,8 @@ ignored by backends that don't consume it).
 from __future__ import annotations
 
 import json
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from ._otel import get_recording_span
 

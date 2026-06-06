@@ -33,7 +33,7 @@ the sequence is consistently reasoning-free.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 from ..openrouter.model import OpenRouterModel, _resolve_model_settings
 
@@ -66,7 +66,7 @@ class OpenRouterDeepseekModel(OpenRouterModel):
     ``reasoning_setting`` (no separate flag needed).
     """
 
-    reasoning_setting: dict = {"effort": "xhigh"}
+    reasoning_setting: ClassVar[dict] = {"effort": "xhigh"}
 
     @property
     def _echo_reasoning(self) -> bool:

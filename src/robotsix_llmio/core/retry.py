@@ -21,7 +21,8 @@ from __future__ import annotations
 import logging
 import random
 import time
-from typing import Callable, Iterator, TypeVar
+from collections.abc import Callable, Iterator
+from typing import TypeVar
 
 from . import constants
 from ._otel import get_recording_span
@@ -140,7 +141,7 @@ def call_with_retry(
                 assert fallback_fn is not None  # type-narrowing
                 return fallback_fn()
             return fn()
-        except Exception as e:  # noqa: BLE001 — re-raised unless retryable
+        except Exception as e:
             if attempt >= attempts:
                 _safe_flush()
                 raise
@@ -214,7 +215,7 @@ def call_with_retry_and_fallback(
         return call_with_retry(
             primary, what=what, sleep=sleep, is_transient_fn=is_transient_primary
         )
-    except Exception as primary_exc:  # noqa: BLE001 — re-raised when no fallback
+    except Exception as primary_exc:
         if fallback is None or not should_fallback(primary_exc):
             raise
         log.warning(
@@ -231,7 +232,7 @@ def call_with_retry_and_fallback(
                 sleep=sleep,
                 is_transient_fn=is_transient_fallback,
             )
-        except Exception as fallback_exc:  # noqa: BLE001
+        except Exception as fallback_exc:
             # Chain the primary cause so the original failure isn't lost when the
             # fallback also fails.
             raise fallback_exc from primary_exc

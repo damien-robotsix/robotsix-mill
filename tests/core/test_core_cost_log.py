@@ -5,7 +5,7 @@ aggregation, and protocol conformance, driven offline via ``httpx.MockTransport`
 from __future__ import annotations
 
 import base64
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -37,8 +37,8 @@ def _install_transport(monkeypatch, handler) -> list[httpx.Request]:
 
 def _window() -> CostWindow:
     return CostWindow(
-        start=datetime(2026, 6, 3, 10, 0, tzinfo=timezone.utc),
-        end=datetime(2026, 6, 3, 11, 0, tzinfo=timezone.utc),
+        start=datetime(2026, 6, 3, 10, 0, tzinfo=UTC),
+        end=datetime(2026, 6, 3, 11, 0, tzinfo=UTC),
     )
 
 
@@ -94,7 +94,7 @@ def test_per_record_population(monkeypatch):
     record = result.records[0]
     assert record.id == "t1"
     assert record.cost == pytest.approx(0.5)
-    assert record.timestamp == datetime(2026, 6, 3, 10, 1, tzinfo=timezone.utc)
+    assert record.timestamp == datetime(2026, 6, 3, 10, 1, tzinfo=UTC)
     assert record.session_id == "sess-1"
     assert record.name == "trace-one"
 

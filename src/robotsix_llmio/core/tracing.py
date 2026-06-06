@@ -30,7 +30,8 @@ import contextvars
 import json
 import os
 import uuid
-from typing import Any, Callable, Iterator
+from collections.abc import Callable, Iterator
+from typing import Any
 
 from ._otel import get_recording_span as get_recording_span
 from ._otel import get_tracer, start_span
@@ -192,15 +193,13 @@ def setup_langfuse_tracing(
                 self._hook = _hook
 
             def _report(self, ok: bool, error: str | None) -> None:
-                try:
+                with contextlib.suppress(Exception):
                     self._hook(self._pk, ok, error)
-                except Exception:  # noqa: BLE001 — a health hook must never break export
-                    pass
 
             def export(self, spans):  # type: ignore[no-untyped-def]
                 try:
                     result = super().export(spans)
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     self._report(False, f"{type(e).__name__}: {e}")
                     return SpanExportResult.FAILURE
                 self._report(
@@ -359,7 +358,5 @@ def flush_tracing(timeout_millis: int = 10_000) -> None:
     flush = getattr(provider, "force_flush", None)
     if flush is None:
         return
-    try:
+    with contextlib.suppress(Exception):  # pragma: no cover — flushing must never raise
         flush(timeout_millis=timeout_millis)
-    except Exception:  # pragma: no cover — flushing must never raise
-        pass

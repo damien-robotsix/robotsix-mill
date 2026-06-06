@@ -29,9 +29,7 @@ class _MockProvider(LLMProvider):
 
     def __init__(self, model: Any = None, http_client: Any = None) -> None:
         self.model_obj = model if model is not None else object()
-        self.http_client_obj = (
-            http_client if http_client is not None else object()
-        )
+        self.http_client_obj = http_client if http_client is not None else object()
         self.new_model_calls: list[Tier] = []
 
     def new_model(self, tier: Tier = Tier.DEFAULT) -> tuple[Any, Any]:
@@ -240,9 +238,7 @@ def test_call_with_retry_passes_through_to_retry_module(monkeypatch):
     def fallback():  # pragma: no cover — never invoked
         return "fb"
 
-    out = p.call_with_retry(
-        target, what="probe", sleep=sleep, fallback_fn=fallback
-    )
+    out = p.call_with_retry(target, what="probe", sleep=sleep, fallback_fn=fallback)
     assert out == "ok"
     assert captured["fn"] is target
     assert captured["what"] == "probe"
