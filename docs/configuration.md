@@ -212,6 +212,7 @@ Every setting below shows:
 | `core.models.retrospect` | `MILL_RETROSPECT_MODEL` | `deepseek/deepseek-v4-pro` | Retrospect agent — audits finished tickets; proposes improvements |
 | `core.models.audit` | `MILL_AUDIT_MODEL` | `deepseek/deepseek-v4-pro` | Audit agent — meta-audit for quality/security coverage gaps |
 | `core.models.dedup` | `MILL_DEDUP_MODEL` | `deepseek/deepseek-v4-pro` | Dedup agent — pre-refine duplicate/already-done check |
+| `core.models.obsolescence` | `MILL_OBSOLESCENCE_MODEL` | `deepseek/deepseek-v4-flash` | Obsolescence agent — pre-refine gap re-validation check |
 | `core.models.web_research` | `MILL_WEB_RESEARCH_MODEL` | `deepseek/deepseek-v4-pro` | Web-research sub-agent — web lookups, conclusion only |
 | `core.models.review` | `MILL_REVIEW_MODEL` | `deepseek/deepseek-v4-pro` | Review agent — blind dual-model diff audit (opt-in) |
 | `core.models.review_revision` | `MILL_REVIEW_REVISION_MODEL` | `deepseek/deepseek-v4-pro` | Review-revision agent — autonomously implements changes requested by human reviewers (opt-in) |
@@ -239,6 +240,7 @@ Every setting below shows:
 | `core.limits.test_requests` | `MILL_TEST_REQUEST_LIMIT` | `8` | Per-call request cap for the test sub-agent |
 | `core.limits.web_research_requests` | `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `8` | Per-call request cap for the web-research sub-agent |
 | `core.limits.dedup_requests` | `MILL_DEDUP_REQUEST_LIMIT` | `4` | Per-call request cap for the dedup check |
+| `core.limits.obsolescence_requests` | `MILL_OBSOLESCENCE_REQUEST_LIMIT` | `6` | Per-call request cap for the obsolescence gate |
 | `core.limits.scope_triage_requests` | `MILL_SCOPE_TRIAGE_REQUEST_LIMIT` | `4` | Per-call request cap for the scope-triage agent |
 | — (env-var only) | `MILL_DOC_REQUEST_LIMIT` | `4` | Per-run request cap for the document agent |
 | `core.limits.doc_classifier_requests` | `MILL_DOC_CLASSIFIER_REQUEST_LIMIT` | `3` | Per-call request cap for the doc-classifier gate |
@@ -306,6 +308,8 @@ Every setting below shows:
 | `gates.review_model` | `MILL_REVIEW_MODEL` | `deepseek/deepseek-v4-pro` | Review agent model |
 | `gates.review_max_rounds` | `MILL_REVIEW_MAX_ROUNDS` | `3` | Max CODE_REVIEW round-trips before escalate |
 | `gates.refine_triage_enabled` | `MILL_REFINE_TRIAGE_ENABLED` | `true` | Cheap triage before full refine (skip if precise) |
+| `gates.freshness_gate_enabled` | `MILL_FRESHNESS_GATE_ENABLED` | `false` | Pre-refine freshness check: verify cited evidence paths exist on HEAD |
+| `gates.obsolescence_gate_enabled` | `MILL_OBSOLESCENCE_GATE_ENABLED` | `false` | Pre-refine obsolescence check: re-validate spawned-draft gaps (opt-in) |
 | `gates.spec_review_enabled` | `MILL_SPEC_REVIEW_ENABLED` | `false` | Post-refinement spec narrative stripping |
 | `gates.scope_triage_enabled` | `MILL_SCOPE_TRIAGE_ENABLED` | `true` | Cheap scope-violation triage before blocking (EXPAND/REJECT/ESCALATE) |
 | `gates.auto_merge_enabled` | `MILL_AUTO_MERGE_ENABLED` | `false` | Auto-merge PR when CI passes |
