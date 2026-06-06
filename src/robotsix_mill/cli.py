@@ -14,6 +14,7 @@
     robotsix-mill audit                        # run an audit pass
     robotsix-mill trace-health                 # run a trace-health check
     robotsix-mill health                        # run a health pass
+    robotsix-mill board-cleanup                # run a board-cleanup pass
     robotsix-mill copy-paste                   # run a copy-paste detection pass
 
 The same API backs a future web frontend.
@@ -121,6 +122,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Verify",
         "format": "verify",
     },
+    "board-cleanup": {
+        "module": "runners.periodic_runner",
+        "function": "run_board_cleanup_pass",
+        "label": "Board-cleanup pass",
+        "format": "memory_drafts",
+    },
 }
 
 
@@ -169,6 +176,33 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                 result = func(session_id=session_id, repo_config=rc)
             else:
                 result = func(session_id=session_id)
+        elif cmd == "board-cleanup":
+            from .runtime.tracing import make_session_id
+            from .config import Settings, get_repos_config
+
+            session_id = make_session_id(cmd)
+            repos = get_repos_config()
+            repo_id = getattr(args, "repo_id", None)
+            if repo_id is None:
+                if len(repos.repos) == 1:
+                    rc = next(iter(repos.repos.values()))
+                else:
+                    print(
+                        "board-cleanup: --repo-id is required (multiple repos "
+                        f"configured). Known repos: {sorted(repos.repos.keys())}",
+                        file=sys.stderr,
+                    )
+                    return 2
+            elif repo_id not in repos.repos:
+                print(
+                    f"board-cleanup: unknown repo '{repo_id}'. "
+                    f"Known repos: {sorted(repos.repos.keys())}",
+                    file=sys.stderr,
+                )
+                return 2
+            else:
+                rc = repos.repos[repo_id]
+            result = func(session_id=session_id, repo_config=rc, settings=Settings())
         else:
             from .runtime.tracing import make_session_id
 
@@ -744,6 +778,20 @@ def main(argv: list[str] | None = None) -> int:
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",
+    )
+
+    # --- board-cleanup command ---
+    p_board_cleanup = sub.add_parser(
+        "board-cleanup", help="run a board-cleanup pass and emit cleanup drafts"
+    )
+    p_board_cleanup.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+    p_board_cleanup.add_argument(
+        "--repo-id",
+        help="scope to a specific repo (required when multiple repos are configured)",
     )
 
     # --- inquire command ---

@@ -436,6 +436,56 @@ def langfuse_cleanup_pass(
     return {"status": "started"}
 
 
+@router.post("/board-cleanup", status_code=202)
+def board_cleanup_pass(
+    repo_id: str | None = None,
+    request: Request = None,
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off a board-cleanup pass in the BACKGROUND and return at once.
+
+    The board-cleanup agent reviews recent board tickets for stale /
+    obsolete / duplicate entries and drafts cleanup actions. New drafts
+    appear on the board when it finishes.
+    """
+    from ...runners import periodic_runner
+    from ..tracing import make_session_id, start_ticket_root_span
+
+    settings = request.app.state.settings
+    repo_configs = _resolve_agent_run_repos(repo_id, request)
+    # board_cleanup REQUIRES a real RepoConfig (it raises on None). When
+    # _resolve returns the [None] single-repo backward-compat sentinel,
+    # substitute the actually-configured repos.
+    if repo_configs == [None]:
+        repo_configs = list(request.app.state.repos.repos.values())
+
+    def _run() -> None:
+        for rc in repo_configs:
+            run_id = None
+            try:
+                run_id = registry.start(
+                    "board-cleanup", repo_id=rc.repo_id if rc else ""
+                )
+                session_id = make_session_id("board-cleanup")
+                with start_ticket_root_span(
+                    session_id, "board-cleanup", repo_config=rc
+                ):
+                    r = periodic_runner.run_board_cleanup_pass(
+                        session_id=session_id,
+                        repo_config=rc,
+                        settings=settings,
+                    )
+                registry.finish_ok(run_id, _default_summary(r))
+                log.info("board-cleanup pass done")
+            except Exception as e:  # noqa: BLE001 — background; just log
+                log.exception("board-cleanup pass failed")
+                if run_id:
+                    registry.finish_error(run_id, str(e))
+
+    threading.Thread(target=_run, name="board-cleanup-pass", daemon=True).start()
+    return {"status": "started"}
+
+
 @router.post("/meta", status_code=202)
 def meta_pass(
     request: Request = None,

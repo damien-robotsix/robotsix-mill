@@ -677,6 +677,50 @@ def test_board_html_includes_agent_check_button(client):
     assert '"/agent-check"' in js
 
 
+def test_board_cleanup_endpoint_is_fire_and_forget(client, monkeypatch):
+    """POST /board-cleanup returns 202 immediately and runs the
+    board-cleanup pass in the background — same fire-and-forget
+    contract as /audit, /agent-check. The bespoke runner needs a real
+    repo_config + settings, so the route substitutes the configured
+    repos for the single-repo [None] sentinel."""
+    import threading
+
+    from robotsix_mill.runners import periodic_runner
+
+    ran = threading.Event()
+    release = threading.Event()
+
+    class _R:
+        updated_memory: str = ""
+        drafts_created: list = []
+
+    def slow_board_cleanup(session_id=None, repo_config=None, settings=None, **kw):
+        ran.set()
+        release.wait(5)  # simulate a minutes-long run
+        return _R()
+
+    monkeypatch.setattr(periodic_runner, "run_board_cleanup_pass", slow_board_cleanup)
+
+    r = client.post("/board-cleanup")  # must NOT block on slow_board_cleanup
+    assert r.status_code == 202
+    assert r.json() == {"status": "started"}
+    assert ran.wait(5)  # board-cleanup really started in the background
+    release.set()  # let the daemon thread finish
+
+
+def test_board_html_includes_board_cleanup_button(client):
+    """The board exposes a 'Board Cleanup' button wired to
+    runBoardCleanup() in the JS. Without it the user can't see the
+    board-cleanup feature exists, and only the periodic scheduler can
+    trigger it."""
+    body = client.get("/").text
+    assert "Board Cleanup" in body
+    assert "runBoardCleanup()" in body
+    js = client.get("/static/board.js").text
+    assert "runBoardCleanup" in js
+    assert '"/board-cleanup"' in js
+
+
 def test_setup_logging_surfaces_app_logs_idempotently(capsys):
     """Regression: robotsix_mill.* logs were dropped (no handler under
     uvicorn), masking the silently-failing /audit thread. setup_logging

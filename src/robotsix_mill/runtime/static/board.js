@@ -42,6 +42,7 @@ const AGENT_COLORS={
  trace_review:'#0ea5e9',
  module_curator:'#f97316',
  copy_paste:'#ec4899',
+ board_cleanup:'#10b981',
  meta:'#a855f7',
 };
 // Resolve an agent color from any kind spelling. Normalizes hyphens to
@@ -1109,6 +1110,22 @@ async function runCopyPaste(){
    alert("Copy-paste detection failed to start: "+e);
  } finally {
    btn.disabled=false; btn.textContent='Copy Paste';
+ }
+}
+async function runBoardCleanup(){
+ const btn=event.target;
+ btn.disabled=true; btn.textContent='Running...';
+ try {
+   const repoId=getRepoId();
+   const url=repoId!=="all"?"/board-cleanup?repo_id="+encodeURIComponent(repoId):"/board-cleanup";
+   const r=await jpost(url);
+   if(!r.ok){throw new Error(await r.text())}
+   alert("Board cleanup started — new draft tickets will appear on the board when it finishes.");
+   setTimeout(refresh,4000);
+ } catch(e) {
+   alert("Board cleanup failed to start: "+e);
+ } finally {
+   btn.disabled=false; btn.textContent='Board Cleanup';
  }
 }
 async function runBcCheck(){

@@ -225,6 +225,19 @@ def test_copy_paste_registered_in_runners():
     assert entry["format"] == "memory_drafts"
 
 
+def test_board_cleanup_registered_in_runners():
+    """The board-cleanup pass is wired into the _RUNNERS dispatch table.
+
+    Its runner lives in periodic_runner.py (not a dedicated
+    *_runner.py) and emits the standard memory_drafts result shape."""
+    from robotsix_mill.cli import _RUNNERS
+
+    entry = _RUNNERS["board-cleanup"]
+    assert entry["module"] == "runners.periodic_runner"
+    assert entry["function"] == "run_board_cleanup_pass"
+    assert entry["format"] == "memory_drafts"
+
+
 # --- proposed action CLI tests ---
 
 
