@@ -12,7 +12,54 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from pydantic import BaseModel, Field
+
 from ..config import Settings
+from ..runners.pass_runner import ProposedActionItem
+
+
+def load_periodic_system_prompt(name: str) -> str:
+    """Load a periodic agent's static system prompt from its YAML
+    definition without env-var resolution.
+
+    Resolves ``agent_definitions/periodic/<name>.yaml`` (relative to the
+    package root) and returns its ``system_prompt`` value.  Periodic
+    agent modules re-export the result as a module-level
+    ``SYSTEM_PROMPT`` for their test seams.
+    """
+    import yaml
+
+    path = (
+        Path(__file__).parent.parent.parent.parent
+        / "agent_definitions"
+        / "periodic"
+        / f"{name}.yaml"
+    )
+    return yaml.safe_load(path.read_text())["system_prompt"]
+
+
+class PeriodicAgentResult(BaseModel):
+    """Shared structured-output model for the periodic gap-finding agents.
+
+    Agents whose result shape matches these six fields alias this class
+    directly (e.g. ``AuditResult = PeriodicAgentResult``); agents that
+    add fields subclass it (e.g. ``AgentCheckResult`` adds ``findings``).
+    """
+
+    updated_memory: str = ""
+    summary: str = Field(
+        default="",
+        description=(
+            "One sentence: what you examined and the basis for the number "
+            "of drafts filed (e.g. 'scanned 142 files; jscpd found 3 clone "
+            "pairs, 0 above the severity threshold'). ALWAYS fill this so "
+            "an operator can verify a 0-draft run is legitimate."
+        ),
+    )
+    draft_titles: list[str] = Field(default_factory=list)
+    draft_bodies: list[str] = Field(default_factory=list)
+    gap_ids: list[str] = Field(default_factory=list)
+    proposed_actions: list[ProposedActionItem] = Field(default_factory=list)
 
 
 def run_periodic_agent(

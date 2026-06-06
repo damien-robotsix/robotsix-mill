@@ -7,10 +7,8 @@ the runner has a clear result to work with.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
-
 from ..config import Settings
-from ..runners.pass_runner import ProposedActionItem
+from .periodic_base import PeriodicAgentResult
 
 # One subject per run → one proposal max. The previous limit of 5
 # encouraged the agent to sweep the codebase for five gaps in a
@@ -21,21 +19,7 @@ from ..runners.pass_runner import ProposedActionItem
 MAX_GAPS = 1
 
 
-class SurveyResult(BaseModel):
-    updated_memory: str = ""
-    summary: str = Field(
-        default="",
-        description=(
-            "One sentence: what you examined and the basis for the number "
-            "of drafts filed (e.g. 'scanned 142 files; jscpd found 3 clone "
-            "pairs, 0 above the severity threshold'). ALWAYS fill this so "
-            "an operator can verify a 0-draft run is legitimate."
-        ),
-    )
-    draft_titles: list[str] = Field(default_factory=list)
-    draft_bodies: list[str] = Field(default_factory=list)
-    gap_ids: list[str] = Field(default_factory=list)
-    proposed_actions: list[ProposedActionItem] = Field(default_factory=list)
+SurveyResult = PeriodicAgentResult
 
 
 def run_survey_agent(

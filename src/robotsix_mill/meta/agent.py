@@ -24,13 +24,9 @@ from ..runners.pass_runner import ProposedActionItem
 
 import yaml as _yaml
 
-_SYSPROMPT_PATH = (
-    Path(__file__).parent.parent.parent.parent
-    / "agent_definitions"
-    / "periodic"
-    / "meta.yaml"
-)
-SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt"]
+from ..agents.periodic_base import load_periodic_system_prompt
+
+SYSTEM_PROMPT: str = load_periodic_system_prompt("meta")
 
 
 MAX_PROPOSALS = 10
