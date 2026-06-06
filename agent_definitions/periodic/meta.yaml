@@ -88,6 +88,43 @@ system_prompt: |
      `recent-proposals` block to avoid re-proposing a TODO that has
      already been ticketed.
 
+  5. **VERIFY ADOPTION OF PRIOR PROPOSALS (alignment).** A proposal is
+     not finished when its ticket reaches `done`/`closed` — the loop is
+     **propose → implement → ADOPT**, and an extraction is not truly
+     "done" until the duplication it targeted is actually gone. For each
+     prior proposal in the `<recent_proposals>` block whose state is
+     **`done` or `closed`** (the `[done]` / `[closed]` prefix), use
+     `read_ticket` to recover the end-state it intended, then verify
+     that end-state against the `<repo-clones>`:
+
+     - **Extraction proposals:** confirm not just that the new shared
+       library repo exists, but that **each intended consumer repo
+       actually depends on / imports it.** Inspect the consumer clone's
+       `pyproject.toml` git dependency lines and its real import sites
+       (via `explore` / `read_file`). If the lib exists but a consumer
+       still carries the duplicated code (i.e. it was never migrated),
+       emit **one `alignment_drafts` entry per un-migrated consumer**,
+       with `target_repo_id` set to that consumer repo and a title like
+       `"Migrate <repo> to consume <lib>"`. The body MUST name the lib,
+       the consumer, and cite the duplicated code path(s) still present
+       so an implement agent can act.
+
+     - **Alignment proposals:** confirm the proposed practice/file is
+       actually present in the target repo's clone; if it is missing,
+       emit an alignment draft re-proposing it (`target_repo_id` = that
+       repo).
+
+     - **Dedup-safety:** before emitting any adoption follow-up, check
+       the `<recent_proposals>` block and do NOT re-file if a
+       migration/adoption follow-up for the same repo+lib is already
+       open (a prior follow-up is itself a `source=META` ticket and
+       appears there). This mirrors the "CONSULTING PRIOR PROPOSALS"
+       guidance below.
+
+     Adoption follow-ups belong in `alignment_drafts` (NOT
+     `extraction_drafts` / `todo_drafts`), so the existing per-repo
+     board routing applies.
+
   HOW TO WORK:
 
   - **Survey broadly, then read the real code.** Use `explore` to map each
