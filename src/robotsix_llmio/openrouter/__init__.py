@@ -24,16 +24,28 @@ __all__ = [
 
 
 def __getattr__(name: str) -> Any:  # PEP 562 — lazy heavy imports
-    if name in ("OpenRouterModel", "record_openrouter_cost"):
-        from . import model
+    if name == "OpenRouterModel":
+        from .model import OpenRouterModel
 
-        return getattr(model, name)
+        return OpenRouterModel
+    if name == "record_openrouter_cost":
+        from .model import record_openrouter_cost
+
+        return record_openrouter_cost
     if name == "OpenRouterProvider":
         from .provider import OpenRouterProvider
 
         return OpenRouterProvider
-    if name in ("OpenRouterProviderCostSource", "OpenRouterKeyCostSource", "KeyUsage"):
-        from . import provider_cost
+    if name == "OpenRouterProviderCostSource":
+        from .provider_cost import OpenRouterProviderCostSource
 
-        return getattr(provider_cost, name)
+        return OpenRouterProviderCostSource
+    if name == "OpenRouterKeyCostSource":
+        from .provider_cost import OpenRouterKeyCostSource
+
+        return OpenRouterKeyCostSource
+    if name == "KeyUsage":
+        from .provider_cost import KeyUsage
+
+        return KeyUsage
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
