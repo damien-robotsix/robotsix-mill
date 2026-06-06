@@ -1130,11 +1130,13 @@ class MergeStage(Stage):
                 )
 
             try:
+                # Per-repo remote + token (see the rebase push for why the
+                # global forge_remote_url/tokenless mint break non-mill boards).
                 git_ops.push(
                     repo_dir,
                     branch=branch,
-                    remote_url=s.forge_remote_url,
-                    token=github_token(s),
+                    remote_url=_resolve_remote_url(s, ctx.repo_config),
+                    token=github_token(s, repo_config=ctx.repo_config),
                 )
             except Exception as e:  # noqa: BLE001
                 log.exception(
@@ -1351,12 +1353,18 @@ class MergeStage(Stage):
             )
 
         # Remote is behind / missing → genuine push needed.
+        # Push to the *per-repo* remote with a per-repo token — the global
+        # ``s.forge_remote_url`` + tokenless mint point at the mill's own
+        # repo, so for any ticket on another board the rebased commit
+        # lands on the wrong remote, the real PR branch never changes, and
+        # the loop blocks ("force-pushed Nx but still conflicting"). Mirror
+        # the fetch above, which already resolves these per-repo.
         try:
             git_ops.push(
                 repo_dir,
                 branch=branch,
-                remote_url=s.forge_remote_url,
-                token=github_token(s),
+                remote_url=_resolve_remote_url(s, ctx.repo_config),
+                token=github_token(s, repo_config=ctx.repo_config),
             )
         except Exception as e:  # noqa: BLE001
             log.exception("%s: force-push after rebase failed: %s", ticket.id, e)
