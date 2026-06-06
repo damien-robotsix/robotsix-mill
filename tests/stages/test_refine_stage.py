@@ -1076,6 +1076,75 @@ def test_refiner_none_spec_falls_back(ctx_factory, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# 18b. refiner placeholder spec ("(see spec above)") → fallback, no clobber
+# ---------------------------------------------------------------------------
+
+
+def test_refiner_placeholder_spec_falls_back_to_draft(ctx_factory, monkeypatch):
+    """Regression: a refiner that returns a placeholder pointer like
+    "(see spec above)" must NOT overwrite description.md with it — the
+    placeholder blanked the ticket body on the board. Refine treats it as
+    no-spec and keeps the original draft."""
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
+    t = _ticket(ctx, body="Original draft body")
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_ok(spec_markdown="(see spec above)"),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert "kept original draft" in out.note
+    desc = ctx.service.workspace(t).read_description()
+    assert "see spec above" not in desc.lower()
+    assert "Original draft body" in desc
+
+
+# ---------------------------------------------------------------------------
+# 18c. _spec_is_degenerate unit coverage
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        "",
+        "   ",
+        "\n\n",
+        "(see spec above)",
+        "See spec above.",
+        "see above",
+        "**see the spec above**",
+        "_(as written above)_",
+        "> see description",
+        "TBD",
+        "TODO",
+    ],
+)
+def test_spec_is_degenerate_true(spec):
+    assert refine_module._spec_is_degenerate(spec) is True
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        "## Problem\nThe logout button does nothing. Fix the handler.",
+        "Add a docstring to utils.py describing the return value.",
+        # Starts with a pointer phrase but is a real, long spec — the
+        # length cap must keep it.
+        "see the spec above and then implement the new caching layer with "
+        "an LRU eviction policy and a configurable max size honoring env.",
+        # "above" not used as a pointer.
+        "above all, the function must validate its inputs before use",
+    ],
+)
+def test_spec_is_degenerate_false(spec):
+    assert refine_module._spec_is_degenerate(spec) is False
+
+
+# ---------------------------------------------------------------------------
 # 19. split child shortcut → detected and resolved
 # ---------------------------------------------------------------------------
 
