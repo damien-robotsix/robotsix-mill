@@ -451,7 +451,7 @@ class TestComputedProperties:
         s = Settings()
         assert s.tracing_enabled is False
 
-    # -- memory_file properties (14 total) --
+    # -- memory_file properties (11 total) --
 
     MEMORY_FILE_PROPERTIES = [
         ("retrospect_memory_file", "retrospect_memory_path", "retrospect_memory.md"),
