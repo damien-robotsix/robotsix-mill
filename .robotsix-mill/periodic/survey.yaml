@@ -1,0 +1,5 @@
+# Per-repo periodic workflow: presence enables survey for this repo.
+# Studies similar open-source projects on one subject per run and proposes
+# a concrete improvement. Name-only → inherits the built-in survey
+# definition (robotsix-mill: agent_definitions/periodic/survey.yaml).
+name: survey
