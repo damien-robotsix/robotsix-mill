@@ -10,40 +10,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml as _yaml
-from pydantic import BaseModel, Field
-
 from ..config import Settings
-from ..runners.pass_runner import ProposedActionItem
+from .periodic_base import PeriodicAgentResult, load_periodic_system_prompt
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
-_SYSPROMPT_PATH = (
-    Path(__file__).parent.parent.parent.parent
-    / "agent_definitions"
-    / "periodic"
-    / "agent_check.yaml"
-)
-SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt"]
+SYSTEM_PROMPT: str = load_periodic_system_prompt("agent_check")
 
 MAX_GAPS = 10
 
 
-class AgentCheckResult(BaseModel):
+class AgentCheckResult(PeriodicAgentResult):
     findings: str = ""
-    updated_memory: str = ""
-    summary: str = Field(
-        default="",
-        description=(
-            "One sentence: what you examined and the basis for the number "
-            "of drafts filed (e.g. 'scanned 142 files; jscpd found 3 clone "
-            "pairs, 0 above the severity threshold'). ALWAYS fill this so "
-            "an operator can verify a 0-draft run is legitimate."
-        ),
-    )
-    draft_titles: list[str] = Field(default_factory=list)
-    draft_bodies: list[str] = Field(default_factory=list)
-    gap_ids: list[str] = Field(default_factory=list)
-    proposed_actions: list[ProposedActionItem] = Field(default_factory=list)
 
 
 def run_agent_check_agent(

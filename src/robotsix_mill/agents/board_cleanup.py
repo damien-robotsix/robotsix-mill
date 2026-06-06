@@ -20,18 +20,11 @@ from pydantic import BaseModel, Field
 
 from ..config import Settings
 from ..runners.pass_runner import ProposedActionItem
+from .periodic_base import load_periodic_system_prompt
 from .prompt_blocks import section
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
-import yaml as _yaml
-
-_SYSPROMPT_PATH = (
-    Path(__file__).parent.parent.parent.parent
-    / "agent_definitions"
-    / "periodic"
-    / "board_cleanup.yaml"
-)
-SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt"]
+SYSTEM_PROMPT: str = load_periodic_system_prompt("board_cleanup")
 
 
 MAX_DRAFTS = 20
