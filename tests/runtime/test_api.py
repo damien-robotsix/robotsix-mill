@@ -721,6 +721,18 @@ def test_board_html_includes_board_cleanup_button(client):
     assert '"/board-cleanup"' in js
 
 
+def test_board_html_includes_cost_analyst_button(client):
+    """The board exposes a 'Cost Analyst' button wired to
+    runCostAnalyst() in the JS. Without it the user can't trigger the
+    cost-analyst pass from the board, and only the CLI is discoverable."""
+    body = client.get("/").text
+    assert "Cost Analyst" in body
+    assert "runCostAnalyst()" in body
+    js = client.get("/static/board.js").text
+    assert "runCostAnalyst" in js
+    assert '"/cost-analyst"' in js
+
+
 def test_setup_logging_surfaces_app_logs_idempotently(capsys):
     """Regression: robotsix_mill.* logs were dropped (no handler under
     uvicorn), masking the silently-failing /audit thread. setup_logging

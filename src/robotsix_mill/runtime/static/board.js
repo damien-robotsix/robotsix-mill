@@ -1178,6 +1178,21 @@ async function runCostReconciliation(){
  }
 }
 
+async function runCostAnalyst(){
+ const btn=event.target;
+ btn.disabled=true; btn.textContent='Running...';
+ try {
+   const r=await jpost("/cost-analyst");
+   if(!r.ok){throw new Error(await r.text())}
+   alert("Cost-analyst started — it aggregates spend across all repos and files cost-reduction drafts to the mill board.");
+   setTimeout(refresh,4000);
+ } catch(e) {
+   alert("Cost-analyst failed to start: "+e);
+ } finally {
+   btn.disabled=false; btn.textContent='Cost Analyst';
+ }
+}
+
 async function runConfigSync(){
  const btn=event.target;
  btn.disabled=true; btn.textContent='Running...';
