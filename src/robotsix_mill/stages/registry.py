@@ -34,6 +34,17 @@ STAGES: dict[str, Stage] = {cls.name: cls() for cls in _REGISTERED}
 
 
 def get_stage(name: str) -> Stage:
+    """Retrieve a stage instance by name from the registry.
+
+    Args:
+        name: The stage name (e.g., 'refine', 'implement', 'deliver').
+
+    Returns:
+        The Stage instance for the given name.
+
+    Raises:
+        KeyError: If the stage name is unknown.
+    """
     try:
         return STAGES[name]
     except KeyError:
