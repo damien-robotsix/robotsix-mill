@@ -6,12 +6,14 @@ import pytest
 
 from robotsix_mill.agents import dedup
 from robotsix_mill.agents import freshness
+from robotsix_mill.agents import obsolescence
 from robotsix_mill.agents import refining
 from robotsix_mill.agents.refining import ChildSpec, FileMapEntry, RefineResult
 from robotsix_mill.config import Settings
+from robotsix_mill.core.models import SourceKind
 from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
-from robotsix_mill.stages.refine import RefineStage
+from robotsix_mill.stages.refine import OBSOLESCENCE_GAP_PREFIX, RefineStage
 from robotsix_mill.runtime.worker import process_ticket
 
 
@@ -1429,6 +1431,154 @@ def test_freshness_gate_failure_degrades_gracefully(
 
     assert out.next_state is State.READY
     assert refine_called
+
+
+# --- obsolescence gate tests ---
+
+# A draft body long enough to clear the trivial-draft guard (≥50 chars).
+_OBSOLESCENCE_BODY = (
+    "Follow-up from the parent review: remove the `pyyaml` dependency "
+    "from pyproject.toml — the migration ticket replaced it with the "
+    "stdlib tomllib loader, so it is no longer used anywhere.\n"
+)
+
+
+def test_obsolescence_gate_disabled_by_default(ctx, service, monkeypatch):
+    """Obsolescence gate is off by default — the check is never invoked
+    and refine proceeds normally."""
+    spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
+
+    called = False
+
+    def fake_check(*, settings, draft_title, draft_body, repo_dir):
+        nonlocal called
+        called = True
+        return {"obsolete": True, "reason": "already done"}
+
+    monkeypatch.setattr(obsolescence, "run_obsolescence_check", fake_check)
+
+    t = service.create(
+        "Remove pyyaml", _OBSOLESCENCE_BODY, source=SourceKind.RETROSPECT
+    )
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert not called
+
+
+def test_obsolescence_gate_enabled_obsolete_draft(ctx, service, settings, monkeypatch):
+    """Gate enabled, non-USER draft, check says obsolete → DONE with the
+    obsolescence prefix and the refine agent is not invoked."""
+    settings.obsolescence_gate_enabled = True
+
+    def fake_check(*, settings, draft_title, draft_body, repo_dir):
+        return {"obsolete": True, "reason": "pyyaml already removed on HEAD"}
+
+    monkeypatch.setattr(obsolescence, "run_obsolescence_check", fake_check)
+
+    refine_state = _install_refine_spy(monkeypatch)
+
+    t = service.create(
+        "Remove pyyaml", _OBSOLESCENCE_BODY, source=SourceKind.RETROSPECT
+    )
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.DONE
+    assert out.note.startswith(OBSOLESCENCE_GAP_PREFIX)
+    assert "pyyaml already removed on HEAD" in out.note
+    assert not refine_state["called"]
+
+
+def test_obsolescence_gate_enabled_not_obsolete_proceeds(
+    ctx, service, settings, monkeypatch
+):
+    """Gate enabled but check says not obsolete → refine proceeds."""
+    settings.obsolescence_gate_enabled = True
+
+    def fake_check(*, settings, draft_title, draft_body, repo_dir):
+        return {"obsolete": False, "reason": "pyyaml still listed on HEAD"}
+
+    monkeypatch.setattr(obsolescence, "run_obsolescence_check", fake_check)
+
+    refine_state = _install_refine_spy(monkeypatch)
+
+    t = service.create(
+        "Remove pyyaml", _OBSOLESCENCE_BODY, source=SourceKind.RETROSPECT
+    )
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert refine_state["called"]
+
+
+def test_obsolescence_gate_skips_user_source(ctx, service, settings, monkeypatch):
+    """Gate enabled but a USER-sourced draft is never auto-closed — the
+    check is not invoked even when it would report obsolete."""
+    settings.obsolescence_gate_enabled = True
+
+    called = False
+
+    def fake_check(*, settings, draft_title, draft_body, repo_dir):
+        nonlocal called
+        called = True
+        return {"obsolete": True, "reason": "already done"}
+
+    monkeypatch.setattr(obsolescence, "run_obsolescence_check", fake_check)
+
+    refine_state = _install_refine_spy(monkeypatch)
+
+    t = service.create("Remove pyyaml", _OBSOLESCENCE_BODY, source=SourceKind.USER)
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert not called
+    assert refine_state["called"]
+
+
+def test_obsolescence_gate_skips_trivial_draft(ctx, service, settings, monkeypatch):
+    """Gate enabled but a draft <50 chars is skipped without invoking
+    the check."""
+    settings.obsolescence_gate_enabled = True
+
+    called = False
+
+    def fake_check(*, settings, draft_title, draft_body, repo_dir):
+        nonlocal called
+        called = True
+        return {"obsolete": True, "reason": "already done"}
+
+    monkeypatch.setattr(obsolescence, "run_obsolescence_check", fake_check)
+
+    _install_refine_spy(monkeypatch)
+
+    t = service.create("Short", "x", source=SourceKind.RETROSPECT)
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert not called
+
+
+def test_obsolescence_gate_failure_degrades_gracefully(
+    ctx, service, settings, monkeypatch
+):
+    """Obsolescence check raises → refine proceeds normally (best-effort)."""
+    settings.obsolescence_gate_enabled = True
+
+    def fake_check(*, settings, draft_title, draft_body, repo_dir):
+        raise RuntimeError("simulated failure")
+
+    monkeypatch.setattr(obsolescence, "run_obsolescence_check", fake_check)
+
+    refine_state = _install_refine_spy(monkeypatch)
+
+    t = service.create(
+        "Remove pyyaml", _OBSOLESCENCE_BODY, source=SourceKind.RETROSPECT
+    )
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert refine_state["called"]
 
 
 # --- datetime timezone-awareness round-trip tests ---

@@ -27,9 +27,10 @@ from pathlib import Path
 
 from ..agents import dedup
 from ..agents import freshness
+from ..agents import obsolescence
 from ..agents import refining
 from ..core.datetime_utils import _as_utc
-from ..core.models import Ticket
+from ..core.models import SourceKind, Ticket
 from ..core.states import State
 from ..forge.auth import _resolve_remote_url, github_token
 from ..runners.pass_runner import load_memory, persist_memory
@@ -56,10 +57,12 @@ log = logging.getLogger("robotsix_mill.stages.refine")
 DEDUP_DUPLICATE_PREFIX = "duplicate of "
 DEDUP_ALREADY_DONE_PREFIX = "already implemented in "
 FRESHNESS_STALE_PREFIX = "stale or invalid finding"
+OBSOLESCENCE_GAP_PREFIX = "obsolete — gap already resolved"
 NON_IMPLEMENTATION_CLOSE_PREFIXES = (
     DEDUP_DUPLICATE_PREFIX,
     DEDUP_ALREADY_DONE_PREFIX,
     FRESHNESS_STALE_PREFIX,
+    OBSOLESCENCE_GAP_PREFIX,
 )
 
 UNMERGED_BRANCH_PREFIX = "Implementation exists on branch"
@@ -421,6 +424,15 @@ class RefineStage(Stage):
         stale = RefineStage._run_freshness_gate(ctx, ticket, draft, repo_dir, s)
         if stale is not None:
             return stale
+
+        # Phase 2.5: obsolescence gate — for *spawned* follow-up drafts,
+        # re-evaluate (via a cheap LLM call) whether the cited gap was
+        # already resolved in place by a parallel/parent ticket.  Runs
+        # after the deterministic freshness gate and before the dedup
+        # guard.
+        obsolete = RefineStage._run_obsolescence_gate(ctx, ticket, draft, repo_dir, s)
+        if obsolete is not None:
+            return obsolete
 
         # Phase 3: dedup guard
         dup = RefineStage._run_dedup_guard(ctx, ticket, draft, repo_dir, s)
@@ -842,6 +854,88 @@ class RefineStage(Stage):
 
         log.debug(
             "%s: freshness gate passed — %s",
+            ticket.id,
+            result.get("reason", ""),
+        )
+        return None
+
+    @staticmethod
+    def _run_obsolescence_gate(
+        ctx: StageContext,
+        ticket: Ticket,
+        draft: str,
+        repo_dir: Path | None,
+        s,
+    ) -> Outcome | None:
+        """Run the LLM-based obsolescence gate (best-effort).
+
+        For a *spawned* follow-up/corrective draft, re-evaluate whether
+        the cited evidence gap (a missing doc section, a still-listed
+        dependency, a grep that should return nothing) still exists on
+        HEAD.  When the gap was already resolved in place by a
+        parallel/parent ticket, short-circuit the draft straight to
+        ``DONE`` before any refine LLM budget is spent.
+
+        Returns ``None`` (proceed) when the gate is disabled, the draft
+        is trivial, the ticket is user-authored, the check fails, or the
+        gap is confirmed to still exist.  Returns
+        ``Outcome(State.DONE, ...)`` when the gap is already resolved.
+
+        The gate is gated behind ``obsolescence_gate_enabled`` (default
+        ``False``, opt-in).  User-authored drafts reflect deliberate
+        human intent and are never auto-closed — the gate targets the
+        spawned follow-up/corrective drafts (retrospect, agent,
+        review-spawned) that make up the Evidence population.
+        """
+        if not s.obsolescence_gate_enabled:
+            return None
+
+        if not draft or len(draft) < 50:
+            log.debug(
+                "%s: trivial draft (%d chars), skipping obsolescence gate",
+                ticket.id,
+                len(draft),
+            )
+            return None
+
+        if ticket.source == SourceKind.USER:
+            log.debug(
+                "%s: user-authored draft, skipping obsolescence gate",
+                ticket.id,
+            )
+            return None
+
+        try:
+            result = obsolescence.run_obsolescence_check(
+                settings=s,
+                draft_title=ticket.title,
+                draft_body=draft,
+                repo_dir=repo_dir,
+            )
+        except Exception:
+            log.warning(
+                "%s: obsolescence check failed, proceeding with refine",
+                ticket.id,
+                exc_info=True,
+            )
+            return None
+
+        if result.get("obsolete"):
+            reason = result.get("reason", "cited gap already resolved on HEAD")
+            log.info(
+                "%s: obsolescence gate flagged as obsolete — %s",
+                ticket.id,
+                reason,
+            )
+            # Discarded drafts go to DONE so retrospect still analyses
+            # them — same pattern as the freshness/dedup gates.
+            return Outcome(
+                State.DONE,
+                f"{OBSOLESCENCE_GAP_PREFIX} — {reason}",
+            )
+
+        log.debug(
+            "%s: obsolescence gate passed — %s",
             ticket.id,
             result.get("reason", ""),
         )

@@ -497,6 +497,7 @@ _ENV_VAR_TO_SETTINGS_ALIAS: dict[str, str] = {
     "MILL_RETROSPECT_MODEL": "MILL_RETROSPECT_MODEL",
     "MILL_AUDIT_MODEL": "MILL_AUDIT_MODEL",
     "MILL_DEDUP_MODEL": "MILL_DEDUP_MODEL",
+    "MILL_OBSOLESCENCE_MODEL": "MILL_OBSOLESCENCE_MODEL",
     "MILL_TRIAGE_MODEL": "MILL_TRIAGE_MODEL",
     "MILL_WEB_RESEARCH_MODEL": "MILL_WEB_RESEARCH_MODEL",
     "MILL_AUTO_APPROVE_MODEL": "MILL_AUTO_APPROVE_MODEL",
@@ -649,6 +650,7 @@ def test_report_issue_consistency(monkeypatch):
         "ci_fix",
         "rebase",
         "dedup",
+        "obsolescence",
         "review_revision",
     }
 

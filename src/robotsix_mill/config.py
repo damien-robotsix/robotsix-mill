@@ -219,6 +219,10 @@ class Settings(BaseSettings):
     # Model for the pre-refine dedup/already-done check — a cheap call
     # that short-circuits duplicate drafts before the expensive refiner.
     dedup_model: str = Field(default="deepseek/deepseek-v4-flash")
+    # Model for the pre-refine obsolescence gate — a cheap call that
+    # re-evaluates whether a spawned follow-up draft's cited gap was
+    # already resolved in place by a parallel/parent ticket.
+    obsolescence_model: str = Field(default="deepseek/deepseek-v4-flash")
     # Model for the pre-refine triage pass — a single cheap call that
     # decides whether the draft needs refinement at all.  Must be a
     # fast, inexpensive model; classification is the only task.
@@ -302,6 +306,10 @@ class Settings(BaseSettings):
     refine_request_limit: int = Field(default=40, ge=1)
     # Per-call cap for the dedup check — one cheap call, so keep it tight.
     dedup_request_limit: int = Field(default=4, ge=1)
+    # Per-call cap for the obsolescence gate — the agent reads a few
+    # cited files to verify the gap, so allow a slightly larger budget
+    # than the dedup check.
+    obsolescence_request_limit: int = Field(default=6, ge=1)
     doc_request_limit: int = Field(default=8)
     # Cheap classifier gate that runs *before* the full doc agent.
     doc_classifier_model: str = Field(default="deepseek/deepseek-v4-flash")
@@ -562,6 +570,14 @@ class Settings(BaseSettings):
     # ticket is short-circuited to DONE before the expensive refine
     # agent runs.  Default False (opt-in).
     freshness_gate_enabled: bool = Field(default=False)
+    # When True, an LLM-based pre-refine gate re-evaluates whether a
+    # spawned follow-up/corrective draft's cited gap (e.g. "add doc
+    # section X", "remove dependency Y") still exists on HEAD.  When the
+    # gap was already resolved in place by a parallel/parent ticket the
+    # ticket is short-circuited to DONE before the expensive refine
+    # agent runs.  Default False (opt-in — auto-closing tickets is
+    # risky).
+    obsolescence_gate_enabled: bool = Field(default=False)
     # When True, a deterministic pre-implement gate verifies that
     # external symbol/import prerequisites the spec declares in a
     # ``## Prerequisites`` / ````prereq```` block are satisfiable in the

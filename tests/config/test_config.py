@@ -61,6 +61,14 @@ def test_default_empty_and_none():
     assert s.delete_branch_on_merge is True
 
 
+def test_default_obsolescence_gate():
+    """The opt-in obsolescence gate defaults to off with a modest
+    per-call request budget."""
+    s = Settings()
+    assert s.obsolescence_gate_enabled is False
+    assert s.obsolescence_request_limit == 6
+
+
 def test_default_max_spend_sentinel():
     """max_spend_usd_per_ticket defaults to $20 — ON by default as the
     universal runaway-loop backstop (0.0 would disable it)."""
@@ -93,6 +101,12 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("retrospect_model", "MILL_RETROSPECT_MODEL", "test/retro", "test/retro"),
     ("audit_model", "MILL_AUDIT_MODEL", "test/audit", "test/audit"),
     ("dedup_model", "MILL_DEDUP_MODEL", "test/dedup", "test/dedup"),
+    (
+        "obsolescence_model",
+        "MILL_OBSOLESCENCE_MODEL",
+        "test/obsolescence",
+        "test/obsolescence",
+    ),
     ("triage_model", "MILL_TRIAGE_MODEL", "test/triage", "test/triage"),
     # --- request limits ---
     ("coordinator_request_limit", "MILL_COORDINATOR_REQUEST_LIMIT", "42", 42),
@@ -115,6 +129,12 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ),
     ("explore_request_limit", "MILL_EXPLORE_REQUEST_LIMIT", "99", 99),
     ("dedup_request_limit", "MILL_DEDUP_REQUEST_LIMIT", "3", 3),
+    (
+        "obsolescence_request_limit",
+        "MILL_OBSOLESCENCE_REQUEST_LIMIT",
+        "5",
+        5,
+    ),
     # --- memory / reference files ---
     ("max_memory_chars", "MILL_MAX_MEMORY_CHARS", "16000", 16000),
     ("reference_files_max_count", "MILL_REFERENCE_FILES_MAX_COUNT", "10", 10),
