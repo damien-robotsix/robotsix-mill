@@ -602,6 +602,10 @@ class Settings(BaseSettings):
     # explicitly enable this and ensure the GitHub App installation has
     # the necessary repository-creation scope.
     enable_repo_creation: bool = Field(default=False)
+    # When True, the merge stage deletes the per-ticket head branch on the
+    # forge after a ticket merges to DONE. Default True — cleans up
+    # mill/<id> branches automatically; set False to keep them.
+    delete_branch_on_merge: bool = Field(default=True)
     # Maximum number of CODE_REVIEW → READY → DOCUMENTING → CODE_REVIEW
     # round-trips before escalating to DELIVERABLE for human merge approval.
     # A value ≤ 0 means escalate on the first REQUEST_CHANGES (the loop is

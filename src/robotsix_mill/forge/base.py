@@ -196,6 +196,14 @@ class Forge(ABC):
         """
         return []
 
+    def delete_branch(self, *, branch: str) -> bool:
+        """Delete the remote head branch *branch* after merge.
+
+        Returns True on success, False on any failure (branch already
+        gone, 404/422, network error, insufficient scope). Must NEVER
+        raise — catch all API-level failures and return False."""
+        return False
+
 
 def get_forge(settings: Settings, repo_config: RepoConfig | None = None) -> Forge:
     """Resolve the configured forge adapter.

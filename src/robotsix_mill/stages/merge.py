@@ -573,6 +573,17 @@ class MergeStage(Stage):
                     r["repo_id"],
                     r["url"],
                 )
+                if s.delete_branch_on_merge:
+                    try:
+                        get_forge(s, repo_config=rc).delete_branch(branch=r["branch"])
+                    except Exception as e:  # noqa: BLE001 — best-effort cleanup
+                        log.warning(
+                            "%s: branch cleanup failed for %s (%s): %s",
+                            ticket.id,
+                            r["repo_id"],
+                            r["branch"],
+                            e,
+                        )
             except Exception as e:  # noqa: BLE001 — transient; re-poll
                 log.warning(
                     "%s: multi-repo merge failed for %s (retry): %s",
@@ -603,6 +614,7 @@ class MergeStage(Stage):
             ctx.service.workspace(ticket).artifacts_dir.joinpath("merge.md").write_text(
                 f"merged: {pr.get('url', '')}\n", encoding="utf-8"
             )
+            self._cleanup_branch_on_done(ticket, ctx, branch)
             log.info("%s: PR merged → done", ticket.id)
             return Outcome(State.DONE, f"merged: {pr.get('url', '')}")
         if pr.get("state") == "closed":
@@ -713,6 +725,7 @@ class MergeStage(Stage):
                         f"auto-merged: {pr.get('url', '')}\n",
                         encoding="utf-8",
                     )
+                    self._cleanup_branch_on_done(ticket, ctx, branch)
                     log.info("%s: auto-merged → done", ticket.id)
                     return Outcome(
                         State.DONE,
@@ -795,6 +808,19 @@ class MergeStage(Stage):
         ctx.service.add_step_event(ticket.id, f"merge: {reason}")
         _write_reason(reason_path, reason)
 
+    def _cleanup_branch_on_done(self, ticket, ctx, branch: str) -> None:
+        """Best-effort: delete the merged head branch on the forge.
+        Gated by settings.delete_branch_on_merge. Never raises — a
+        cleanup failure must not block the DONE transition."""
+        if not ctx.settings.delete_branch_on_merge:
+            return
+        try:
+            get_forge(ctx.settings, repo_config=ctx.repo_config).delete_branch(
+                branch=branch
+            )
+        except Exception as e:  # noqa: BLE001 — best-effort cleanup, never fatal
+            log.warning("%s: branch cleanup failed for %s: %s", ticket.id, branch, e)
+
     def _poll_waiting_auto_merge(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Re-poll CI for a ticket in WAITING_AUTO_MERGE.
 
@@ -829,6 +855,7 @@ class MergeStage(Stage):
             ctx.service.workspace(ticket).artifacts_dir.joinpath("merge.md").write_text(
                 f"merged: {pr.get('url', '')}\n", encoding="utf-8"
             )
+            self._cleanup_branch_on_done(ticket, ctx, branch)
             log.info("%s: PR merged → done", ticket.id)
             return Outcome(State.DONE, f"merged: {pr.get('url', '')}")
         if pr.get("state") == "closed":
@@ -881,6 +908,7 @@ class MergeStage(Stage):
                     f"auto-merged: {pr.get('url', '')}\n",
                     encoding="utf-8",
                 )
+                self._cleanup_branch_on_done(ticket, ctx, branch)
                 log.info("%s: auto-merged → done", ticket.id)
                 return Outcome(
                     State.DONE,
@@ -931,6 +959,7 @@ class MergeStage(Stage):
             ctx.service.workspace(ticket).artifacts_dir.joinpath("merge.md").write_text(
                 f"merged: {pr.get('url', '')}\n", encoding="utf-8"
             )
+            self._cleanup_branch_on_done(ticket, ctx, branch)
             log.info("%s: PR merged → done", ticket.id)
             return Outcome(State.DONE, f"merged: {pr.get('url', '')}")
         if pr.get("state") == "closed":

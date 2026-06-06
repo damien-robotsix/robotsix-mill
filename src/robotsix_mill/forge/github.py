@@ -511,6 +511,10 @@ class GitHubForge(Forge):
             description=description,
         )
 
+    def delete_branch(self, *, branch: str) -> bool:
+        owner, repo = self._owner_repo
+        return self._delete_branch(owner=owner, repo=repo, branch=branch)
+
     # --- HTTP seamm (monkeypatched in tests) ---
     def _get_pr(self, *, owner: str, repo: str, head: str) -> dict | None:
         import httpx
@@ -630,6 +634,28 @@ class GitHubForge(Forge):
                 }
         except Exception as e:
             return {"merged": False, "reason": str(e)}
+
+    # --- HTTP seam (monkeypatched in tests) ---
+    def _delete_branch(self, *, owner: str, repo: str, branch: str) -> bool:
+        import httpx
+
+        from .auth import github_token  # lazy: avoid import cycle
+
+        s = self.settings
+        api = s.github_api_url.rstrip("/")
+        headers = _build_headers(github_token(s, repo_config=self._repo_config))
+        url = f"{api}/repos/{owner}/{repo}/git/refs/heads/{branch}"
+        try:
+            with httpx.Client(timeout=30) as c:
+                r = c.delete(url, headers=headers)
+                # 204 = deleted; 404/422 = ref does not exist (already gone,
+                # e.g. by GitHub auto-delete) — the branch is gone either way,
+                # which is the desired end state.
+                if r.status_code in (204, 404, 422):
+                    return True
+                return False
+        except Exception:
+            return False
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _list_pr_reviews(

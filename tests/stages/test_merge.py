@@ -3387,3 +3387,90 @@ def test_multi_repo_entry_missing_repo_id_blocks(tmp_path):
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.BLOCKED
     assert "unknown repo_id" in out.note
+
+
+# ============================================================
+# Branch cleanup on DONE-via-merge (delete_branch_on_merge)
+# ============================================================
+
+
+def _merged_pr_status(monkeypatch):
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": True,
+            "state": "closed",
+            "url": "https://gh/o/r/pull/3",
+        },
+    )
+
+
+def test_done_via_merge_deletes_branch_when_flag_enabled(tmp_path, monkeypatch):
+    """delete_branch_on_merge=True → delete_branch called once with the branch."""
+    ctx = _gh(tmp_path, delete_branch_on_merge=True)
+    _merged_pr_status(monkeypatch)
+    calls = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "delete_branch",
+        lambda self, *, branch: calls.append(branch) or True,
+    )
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+    assert calls == [f"mill/{t.id}"]
+
+
+def test_done_via_merge_skips_delete_when_flag_disabled(tmp_path, monkeypatch):
+    """delete_branch_on_merge=False → delete_branch never called."""
+    ctx = _gh(tmp_path, delete_branch_on_merge=False)
+    _merged_pr_status(monkeypatch)
+    calls = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "delete_branch",
+        lambda self, *, branch: calls.append(branch) or True,
+    )
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+    assert calls == []
+
+
+def test_done_via_merge_cleanup_failure_does_not_block_done(tmp_path, monkeypatch):
+    """A delete_branch that raises/returns False must not prevent DONE."""
+    ctx = _gh(tmp_path, delete_branch_on_merge=True)
+    _merged_pr_status(monkeypatch)
+
+    def boom(self, *, branch):
+        raise RuntimeError("forge down")
+
+    monkeypatch.setattr(github.GitHubForge, "delete_branch", boom)
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+
+
+def test_blocked_closed_unmerged_does_not_delete_branch(tmp_path, monkeypatch):
+    """A BLOCKED/PR-closed transition must not trigger branch deletion."""
+    ctx = _gh(tmp_path, delete_branch_on_merge=True)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "closed",
+            "url": "u",
+        },
+    )
+    calls = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "delete_branch",
+        lambda self, *, branch: calls.append(branch) or True,
+    )
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert calls == []
