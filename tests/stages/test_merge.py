@@ -589,6 +589,69 @@ def test_rebasing_clean_rebase_returns_to_implement_complete(tmp_path, monkeypat
     assert push_calls["branch"] == f"mill/{t.id}"
 
 
+def test_rebasing_push_targets_per_repo_remote(tmp_path, monkeypatch):
+    """Regression: the post-rebase force-push must target the ticket's
+    *per-repo* remote, not the global FORGE_REMOTE_URL.
+
+    A ticket on a non-mill board whose rebased commit was pushed to the
+    global (mill) remote left the real PR branch untouched → GitHub kept
+    reporting the PR conflicting → endless REBASING → BLOCKED.
+    """
+    from robotsix_mill.config import RepoConfig
+
+    base = _gh(tmp_path)  # global FORGE_REMOTE_URL = https://github.com/o/r.git
+    per_repo_url = "https://github.com/o/other-repo.git"
+    ctx = StageContext(
+        settings=base.settings,
+        service=base.service,
+        repo_config=RepoConfig(
+            repo_id="other-repo",
+            board_id="test-board",
+            langfuse_project_name="test",
+            langfuse_public_key="pk-test",
+            langfuse_secret_key="sk-test",
+            forge_remote_url=per_repo_url,
+        ),
+    )
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        lambda *, settings, repo_dir, branch, target, memory="": RebaseResult(
+            status="DONE", summary="ok"
+        ),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch", lambda *a, **k: None
+    )
+
+    push_calls = {}
+
+    def fake_push(repo, branch, remote_url, token):
+        push_calls.update(branch=branch, remote_url=remote_url)
+
+    monkeypatch.setattr("robotsix_mill.stages.merge.git_ops.push", fake_push)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+        },
+    )
+
+    t = _in_rebasing(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    # The push must go to the per-repo remote, not the global one.
+    assert push_calls["remote_url"] == per_repo_url
+
+
 def test_rebasing_success_no_pr_routes_to_ready(tmp_path, monkeypatch):
     """Rebase agent succeeds, force-pushes, but no PR exists for the
     branch → route to READY so the ticket re-enters implement."""

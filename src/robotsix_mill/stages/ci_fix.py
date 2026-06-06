@@ -20,7 +20,7 @@ from ..agents.ci_fixing import run_ci_fix_agent
 from ..core.models import Ticket
 from ..core.states import State
 from ..forge import get_forge
-from ..forge.auth import github_token
+from ..forge.auth import _resolve_remote_url, github_token
 from ..runners.pass_runner import load_memory, persist_memory
 from ..runtime import tracing
 from ..vcs import git_ops
@@ -439,13 +439,16 @@ class CIFixStage(Stage):
             # Agent produced commits — reset the no-change counter.
             _write_counter(no_change_counter_path, 0)
 
-        # Fix applied → force-push only the ticket branch.
+        # Fix applied → force-push only the ticket branch. Use the
+        # per-repo remote + token; the global s.forge_remote_url and a
+        # tokenless mint point at the mill's own repo, so a ci-fix on
+        # another board would push to the wrong remote.
         try:
             git_ops.push(
                 repo_dir,
                 branch=branch,
-                remote_url=s.forge_remote_url,
-                token=github_token(s),
+                remote_url=_resolve_remote_url(s, ctx.repo_config),
+                token=github_token(s, repo_config=ctx.repo_config),
             )
         except Exception as e:  # noqa: BLE001
             log.exception("%s: force-push after ci-fix failed: %s", ticket.id, e)
