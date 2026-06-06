@@ -1467,9 +1467,7 @@ def test_obsolescence_gate_disabled_by_default(ctx, service, monkeypatch):
     assert not called
 
 
-def test_obsolescence_gate_enabled_obsolete_draft(
-    ctx, service, settings, monkeypatch
-):
+def test_obsolescence_gate_enabled_obsolete_draft(ctx, service, settings, monkeypatch):
     """Gate enabled, non-USER draft, check says obsolete → DONE with the
     obsolescence prefix and the refine agent is not invoked."""
     settings.obsolescence_gate_enabled = True
