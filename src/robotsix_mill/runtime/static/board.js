@@ -37,6 +37,7 @@ const AGENT_COLORS={
  bc_check:'#84cc16',
  completeness_check:'#84cc16',
  cost_reconciliation:'#6366f1',
+ cost_analyst:'#4f46e5',
  config_sync:'#6366f1',
  roadmap_sync:'#9333ea',
  trace_review:'#0ea5e9',
