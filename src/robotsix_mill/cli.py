@@ -14,6 +14,7 @@
     robotsix-mill audit                        # run an audit pass
     robotsix-mill trace-health                 # run a trace-health check
     robotsix-mill health                        # run a health pass
+    robotsix-mill board-cleanup                # run a board-cleanup pass
     robotsix-mill copy-paste                   # run a copy-paste detection pass
 
 The same API backs a future web frontend.
