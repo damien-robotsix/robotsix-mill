@@ -44,6 +44,7 @@ class SourceKind(StrEnum):
     ROADMAP_SYNC = "roadmap_sync"
     META = "meta"
     COST_ANALYST = "cost-analyst"
+    RUN_HEALTH = "run-health"
     BOARD_CLEANUP = "board_cleanup"
 
 

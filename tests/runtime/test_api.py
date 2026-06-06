@@ -665,6 +665,34 @@ def test_agent_check_endpoint_is_fire_and_forget(client, monkeypatch):
     release.set()
 
 
+def test_run_health_endpoint_is_fire_and_forget(client, monkeypatch):
+    """POST /run-health returns 202 immediately and runs the run-health
+    pass in the background — same fire-and-forget contract as /audit,
+    /health-check, /cost-analyst. It is a global pass (no repo_id)."""
+    import threading
+
+    from robotsix_mill.runners import run_health_runner
+
+    ran = threading.Event()
+    release = threading.Event()
+
+    class _R:
+        drafts_created: list = []
+
+    def slow_run_health(session_id=None):
+        ran.set()
+        release.wait(5)  # simulate a minutes-long run
+        return _R()
+
+    monkeypatch.setattr(run_health_runner, "run_run_health_pass", slow_run_health)
+
+    r = client.post("/run-health")  # must NOT block on slow_run_health
+    assert r.status_code == 202
+    assert r.json() == {"status": "started"}
+    assert ran.wait(5)  # run-health really started in the background
+    release.set()  # let the daemon thread finish
+
+
 def test_board_html_includes_agent_check_button(client):
     """The board exposes an 'Agent Check' button wired to
     runAgentCheck() in the JS. Without it the user can't see the

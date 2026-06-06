@@ -946,6 +946,7 @@ class Worker:
         self._timeout_escalation_task: asyncio.Task | None = None
         self._meta_task: asyncio.Task | None = None
         self._cost_analyst_task: asyncio.Task | None = None
+        self._run_health_task: asyncio.Task | None = None
         # board_id -> per-repo bespoke supervisor task. The supervisor
         # itself owns each repo's per-bespoke child tasks; cancelling
         # the supervisor cancels its children.
@@ -1790,6 +1791,54 @@ class Worker:
                     self.run_registry.finish_ok(run_id, summary)
             except Exception as e:  # noqa: BLE001 — never let the poll die
                 log.exception("Meta pass failed")
+                if self.run_registry and run_id:
+                    self.run_registry.finish_error(run_id, str(e))
+            await asyncio.sleep(interval)
+
+    async def _run_health_pass_loop(self) -> None:
+        """Global run-health loop — fires once per interval (not per-repo).
+
+        Reads every board's run registry over the window, flags failed/
+        degraded runs deterministically, runs one LLM pass to separate real
+        failures from legitimate empties, and files high-confidence draft
+        tickets to the mill board.
+        """
+        from robotsix_mill.runners.run_health_runner import (
+            RunHealthPassResult,
+            run_run_health_pass,
+        )
+
+        interval = max(60, self.ctx.settings.run_health_interval_seconds)
+        initial = self._initial_delay("run-health", interval)
+        await asyncio.sleep(initial)
+        while True:
+            run_id = None
+            session_id = tracing.make_session_id("run_health")
+            try:
+                log.info("Starting periodic run-health pass")
+                if self.run_registry:
+                    run_id = self.run_registry.start("run_health")
+                with tracing.start_ticket_root_span(
+                    session_id, "run_health", repo_config=None
+                ):
+                    result: RunHealthPassResult = await self._tracked_to_thread(
+                        run_run_health_pass,
+                        session_id=session_id,
+                    )
+                log.info(
+                    "Run-health pass completed, created %d draft(s)",
+                    len(result.drafts_created),
+                )
+                if self.run_registry and run_id:
+                    ids = [d["id"] for d in result.drafts_created[:3]]
+                    summary = (
+                        f"{len(result.drafts_created)} draft(s): {', '.join(ids)}"
+                        if ids
+                        else "No drafts created"
+                    )
+                    self.run_registry.finish_ok(run_id, summary)
+            except Exception as e:  # noqa: BLE001 — never let the poll die
+                log.exception("Run-health pass failed")
                 if self.run_registry and run_id:
                     self.run_registry.finish_error(run_id, str(e))
             await asyncio.sleep(interval)
@@ -2675,6 +2724,13 @@ class Worker:
             log_msg="Periodic cost-analyst enabled: interval %ds",
             log_args=(self.ctx.settings.cost_analyst_interval_seconds,),
         )
+        self._start_poll_loop_pass(
+            "run-health",
+            self._run_health_pass_loop,
+            "_run_health_task",
+            log_msg="Periodic run-health enabled: interval %ds",
+            log_args=(self.ctx.settings.run_health_interval_seconds,),
+        )
 
         # --- CI monitor (unique: checks repo config, not just settings) ---
         if self._ci_monitor_task is None:
@@ -2749,6 +2805,7 @@ class Worker:
             "_timeout_escalation_task",
             "_meta_task",
             "_cost_analyst_task",
+            "_run_health_task",
         ):
             t = getattr(self, attr)
             if t is not None:

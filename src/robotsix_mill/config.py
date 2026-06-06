@@ -1110,6 +1110,22 @@ class Settings(BaseSettings):
     # Board the cost-analyst files its drafts to (the levers live in mill).
     cost_analyst_target_repo_id: str = Field(default="robotsix-mill")
 
+    # --- run-health (global, cross-board run-registry monitor) ---
+    # When True, a global daily pass reads every board's run registry over a
+    # window, flags failed/degraded runs deterministically, runs one LLM pass
+    # to separate real failures from legitimate empties, and files
+    # high-confidence draft tickets to the mill board. Off by default.
+    run_health_periodic: bool = Field(default=False)
+    # Seconds between automatic run-health passes. Default 86400 (1 day).
+    run_health_interval_seconds: int = Field(default=86400)
+    # Lookback window (hours) over which run registries are scanned.
+    run_health_window_hours: int = Field(default=168)
+    # Board the run-health agent files its drafts to (the mill board).
+    run_health_target_repo_id: str = Field(default="robotsix-mill")
+    # Path to the run-health agent's Markdown memory ledger. Override to pin
+    # a specific path; unset (default) derives <data_dir>/<board>/run_health_memory.md.
+    run_health_memory_path: Path | None = Field(default=None)
+
     # --- action-agent memory paths ---
     # Path to the implement agent's Markdown memory ledger. Override to
     # pin a specific path; unset (default) derives <data_dir>/implement_memory.md.
