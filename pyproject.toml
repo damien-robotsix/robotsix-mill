@@ -29,3 +29,14 @@ line-length = 88
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.deptry]
+# 'pyyaml' is distributed under the import name 'yaml'; map it so deptry
+# does not report DEP001 (yaml missing) / DEP002 (pyyaml unused).
+[tool.deptry.package_module_name_map]
+pyyaml = "yaml"
+
+[tool.deptry.per_rule_ignores]
+# These are dev-only tools invoked via the CLI (and a type-stub package),
+# not imported in the codebase, so DEP002 is a false positive for them.
+DEP002 = ["pytest", "ruff", "mypy", "types-PyYAML"]
