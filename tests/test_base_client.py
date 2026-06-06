@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import secrets
 from unittest import mock
 
 import pytest
 
 from robotsix_auto_mail._base_client import _ProtocolClient
+
+# Runtime-generated fake passwords avoid CodeQL py/hardcoded-credentials
+# false positives on these test fixtures (no real secret involved).
+_FAKE_PASSWORD = secrets.token_urlsafe(8)
+_FAKE_PASSWORD_ALT = secrets.token_urlsafe(8)
 
 
 class _FakeClient(_ProtocolClient):
@@ -49,7 +55,7 @@ def _make_client(**overrides: object) -> _FakeClient:
         "port": 993,
         "tls_mode": "direct-tls",
         "username": "user@example.com",
-        "password": "s3cret",
+        "password": _FAKE_PASSWORD,
     }
     fields.update(overrides)
     return _FakeClient(**fields)  # type: ignore[arg-type]
@@ -67,13 +73,13 @@ def test_init_stores_all_fields() -> None:
         port=143,
         tls_mode="starttls",
         username="alice@example.com",
-        password="hunter2",
+        password=_FAKE_PASSWORD_ALT,
     )
     assert client._host == "imap.example.com"
     assert client._port == 143
     assert client._tls_mode == "starttls"
     assert client._username == "alice@example.com"
-    assert client._password == "hunter2"
+    assert client._password == _FAKE_PASSWORD_ALT
 
 
 # ---------------------------------------------------------------------------
@@ -88,7 +94,7 @@ def test_repr_format_and_redaction() -> None:
         port=143,
         tls_mode="starttls",
         username="alice@example.com",
-        password="hunter2",
+        password=_FAKE_PASSWORD_ALT,
     )
     r = repr(client)
     assert type(client).__name__ in r
@@ -96,7 +102,7 @@ def test_repr_format_and_redaction() -> None:
     assert "143" in r
     assert "alice@example.com" in r
     assert "<redacted>" in r
-    assert "hunter2" not in r
+    assert _FAKE_PASSWORD_ALT not in r
 
 
 # ---------------------------------------------------------------------------
