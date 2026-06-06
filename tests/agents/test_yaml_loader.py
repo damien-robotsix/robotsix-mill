@@ -381,6 +381,42 @@ def test_real_implement_yaml_has_output_style_brevity_guidance():
             _os.environ.pop("MILL_MODEL", None)
 
 
+def test_real_review_yaml_has_conciseness_directive():
+    """The real review.yaml must carry a conciseness directive.
+
+    Guards the trace-review cost fix: trace a7672211 showed the review
+    agent emitting a ~2,304-char prose narrative before an APPROVE verdict
+    (15,119 output tokens for 202 input tokens, $0.50 for one approve).
+    The directive tells the model to be concise and put findings in the
+    structured ReviewVerdict fields instead of a free-form essay. If a
+    future edit removes it, this test FAILS so the regression is visible.
+    """
+    p = Path("agent_definitions/review.yaml")
+    if not p.exists():
+        pytest.skip("agent_definitions/review.yaml not found")
+
+    # Mock the env var so resolution succeeds.
+    import os as _os
+
+    had_model = "MILL_REVIEW_MODEL" in _os.environ
+    _os.environ.setdefault("MILL_REVIEW_MODEL", "test/model")
+
+    try:
+        ad = load_agent_definition(p)
+        assert ad.name == "review"
+        assert ad.output_type == "ReviewVerdict"
+
+        prompt_lower = ad.system_prompt.lower()
+        assert "be concise" in prompt_lower
+        assert (
+            "restate" in prompt_lower or "summarize the implementation" in prompt_lower
+        )
+    finally:
+        # Don't leak the env var if it wasn't set before.
+        if not had_model:
+            _os.environ.pop("MILL_REVIEW_MODEL", None)
+
+
 # Representative worst-case size of the retrospect runtime memory ledger.
 # This tracks the observed ~34K-char per-board ledger surfaced to the agent
 # at runtime — NOT the checked-in seed docs/retrospect-memory.md (~946 bytes),
