@@ -12,7 +12,7 @@ from robotsix_mill.runners.periodic_runner import (
     BoardCleanupPassResult,
     run_board_cleanup_pass,
 )
-from robotsix_mill.runners.pass_runner import _GAP_ID_RE
+from robotsix_mill.runners.pass_runner import _GAP_ID_RE, ProposedActionItem
 
 
 # --- Agent tests ---
@@ -175,7 +175,7 @@ def test_run_board_cleanup_pass_injects_board_and_returns_result(tmp_path, monke
         return bc_agent.BoardCleanupResult(
             updated_memory="updated",
             proposed_actions=[
-                bc_agent.ProposedActionItem(
+                ProposedActionItem(
                     target_ticket_id=ticket.id,
                     action_type="close",
                     rationale="superseded",

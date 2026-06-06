@@ -17,11 +17,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import BaseModel, Field
-
 from ..config import Settings
-from ..runners.pass_runner import ProposedActionItem
-from .periodic_base import load_periodic_system_prompt
+from .periodic_base import PeriodicAgentResult, load_periodic_system_prompt
 from .prompt_blocks import section
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
@@ -31,12 +28,7 @@ SYSTEM_PROMPT: str = load_periodic_system_prompt("module_curator")
 MAX_DRAFTS = 20
 
 
-class ModuleCuratorResult(BaseModel):
-    updated_memory: str = ""
-    draft_titles: list[str] = Field(default_factory=list)
-    draft_bodies: list[str] = Field(default_factory=list)
-    gap_ids: list[str] = Field(default_factory=list)
-    proposed_actions: list[ProposedActionItem] = Field(default_factory=list)
+ModuleCuratorResult = PeriodicAgentResult
 
 
 def run_module_curator_agent(
