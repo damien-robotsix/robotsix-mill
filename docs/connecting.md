@@ -803,20 +803,28 @@ each ingested mail record and assigns it an *action status*:
 $ robotsix-auto-mail triage
 ```
 
-Action statuses are **advisory labels only** — they are stored locally in the
-SQLite `triage_decisions` table and do **not** move mail in the original
-mailbox or modify the kanban status column. The agent defaults uncertain cases
-to `user_triage` (explicit deferral to a human) rather than guessing.
+Each triage decision is stored in the SQLite `triage_decisions` table **and
+also moves the card's position on the local kanban board** by writing the
+`status` column. The board move is **local-only** — triage performs **zero
+IMAP / mailbox operations**. No mail is archived, deleted, moved, or modified
+in the original mailbox. The agent defaults uncertain cases to `user_triage`
+(explicit deferral to a human) rather than guessing.
 
-### Action statuses
+### Action statuses and kanban board mapping
 
-| Status | Meaning |
-|---|---|
-| `answer` | The message needs a personal reply |
-| `archive` | Keep the message for reference but no reply needed |
-| `delete` | The message is junk / worthless and can be discarded |
-| `ignore` | No action needed and it need not be kept |
-| `user_triage` | The system is not confident — defer to a human |
+| Status | Meaning | Board column |
+|---|---|---|
+| `answer` | The message needs a personal reply | Triaging |
+| `archive` | Keep the message for reference but no reply needed | Archive |
+| `delete` | The message is junk / worthless and can be discarded | Archive |
+| `ignore` | No action needed and it need not be kept | Done |
+| `user_triage` | The system is not confident — defer to a human | Triaging |
+
+Each action automatically moves the card to its mapped board column. The
+kanban board has four columns — Inbox, Triaging, Done, and Archive — and a
+triage decision always places the card in one of these four columns. Note
+that `delete` moves the card to the Archive column (a board move only, not an
+IMAP deletion).
 
 ### Human-decision memory
 
@@ -880,9 +888,13 @@ $ robotsix-auto-mail triage-set <message_id> <action>
 ```
 
 This records the decision in the `triage_decisions` table with `source=user`
-(distinguishing it from agent decisions) and **also updates the
-human-decision memory ledger**, so future triage runs will favor that action
-for mail from the same sender.
+(distinguishing it from agent decisions), **moves the card to the mapped
+kanban board column** (see the action-to-column table under [Action statuses
+and kanban board mapping](#action-statuses-and-kanban-board-mapping)), and
+**also updates the human-decision memory ledger**, so future triage runs will
+favor that action for mail from the same sender. Like the LLM-driven
+`triage` command, this is a local-only board move — no IMAP operations
+occur.
 
 ### Arguments
 

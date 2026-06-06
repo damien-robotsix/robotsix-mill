@@ -3,10 +3,13 @@
 The triage agent classifies each ingested inbox ``MailRecord`` into an
 *action status* — ``answer`` / ``archive`` / ``delete`` / ``ignore``, with
 ``user_triage`` as the explicit "the system does not know what to do"
-fallback.  These action statuses are **advisory local labels**: they are
-stored only in the ``triage_decisions`` table and must NOT move the mail in
-the original mailbox (no IMAP side effects) nor be written to the kanban
-``status`` column owned by :mod:`robotsix_auto_mail.status`.
+fallback.  These action statuses are stored in the ``triage_decisions``
+table AND, in addition, a triage decision now moves the mail's card on the
+local kanban board by writing the ``status`` column owned by
+:mod:`robotsix_auto_mail.status` via :func:`robotsix_auto_mail.status.set_status`.
+Triage performs **NO IMAP / mailbox side effects** whatsoever: the kanban is
+a local-only board, so moving a card never touches the original mailbox (no
+archive / delete / move / expunge / append / store).
 
 The ``pydantic_ai`` import is lazy to keep module-load time low, mirroring
 :mod:`robotsix_auto_mail.config_sync`.
@@ -32,7 +35,7 @@ from robotsix_auto_mail.db import (
     set_watermark,
 )
 from robotsix_auto_mail.format import _BODY_PREVIEW_LIMIT
-from robotsix_auto_mail.status import list_by_status
+from robotsix_auto_mail.status import list_by_status, set_status
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -43,6 +46,16 @@ from robotsix_auto_mail.status import list_by_status
 VALID_TRIAGE_ACTIONS = frozenset(
     {"answer", "archive", "delete", "ignore", "user_triage"}
 )
+
+#: Maps each triage action to the kanban column its card moves to.
+#: This is a LOCAL board move only — it never touches IMAP.
+TRIAGE_ACTION_TO_STATUS: dict[str, str] = {
+    "archive": "archive",
+    "ignore": "done",
+    "delete": "archive",  # user does NOT want real deletion — board column only
+    "answer": "triaging",  # needs a human reply
+    "user_triage": "triaging",  # system unsure → human decides
+}
 
 #: Accepted decision sources.
 _VALID_TRIAGE_SOURCES = frozenset({"agent", "user"})
@@ -300,6 +313,12 @@ def set_triage_decision(
     against ``{"agent", "user"}`` (raising :class:`TriageError` otherwise),
     then upserts keyed on ``message_id`` and commits.  ``updated_at`` is set
     to an ISO-8601 UTC timestamp.
+
+    In addition to the advisory upsert, this moves the mail's card on the
+    local kanban board to the column mapped by
+    :data:`TRIAGE_ACTION_TO_STATUS` via
+    :func:`robotsix_auto_mail.status.set_status` — a local-only board move
+    that performs NO IMAP / mailbox side effects.
     """
     if action not in VALID_TRIAGE_ACTIONS:
         raise TriageError(
@@ -334,6 +353,7 @@ ON CONFLICT(message_id) DO UPDATE SET
         },
     )
     conn.commit()
+    set_status(conn, message_id, TRIAGE_ACTION_TO_STATUS[action])
 
 
 def get_triage_decision(

@@ -13,8 +13,10 @@ import pydantic
 import pytest
 from robotsix_llmio.core import Tier
 
+from robotsix_auto_mail import status
 from robotsix_auto_mail.db import MailRecord, init_db, insert_record
 from robotsix_auto_mail.triage import (
+    TRIAGE_ACTION_TO_STATUS,
     VALID_TRIAGE_ACTIONS,
     RuleLedgerEntry,
     SenderMemory,
@@ -382,10 +384,10 @@ def test_run_triage_agent_llm_failure_wrapped(
         conn.close()
 
 
-def test_run_triage_agent_does_not_touch_status_column(
+def test_run_triage_agent_moves_status_column(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Triage must not change the kanban status column."""
+    """Triage moves the kanban status column to the mapped column."""
     monkeypatch.setenv("LLM_API_KEY", "sk-test")
     conn = init_db(":memory:")
     try:
@@ -395,12 +397,75 @@ def test_run_triage_agent_does_not_touch_status_column(
         )
         with patcher:
             run_triage_agent(conn)
-        # mail_records.status is still 'inbox'.
+        # mail_records.status moved to 'archive' (archive -> archive column).
         row = conn.execute(
             "SELECT status FROM mail_records WHERE message_id = ?",
             ("<a@x.com>",),
         ).fetchone()
-        assert row[0] == "inbox"
+        assert row[0] == "archive"
+    finally:
+        conn.close()
+
+
+def test_triage_action_to_status_mapping_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each action moves the card to its mapped, valid kanban column."""
+    monkeypatch.setenv("LLM_API_KEY", "sk-test")
+    # Keys agree with the action vocabulary; values are valid columns.
+    assert set(TRIAGE_ACTION_TO_STATUS) == set(VALID_TRIAGE_ACTIONS)
+    assert all(v in status.VALID_STATUSES for v in TRIAGE_ACTION_TO_STATUS.values())
+    expected = {
+        "archive": "archive",
+        "ignore": "done",
+        "delete": "archive",
+        "answer": "triaging",
+        "user_triage": "triaging",
+    }
+    for action, column in expected.items():
+        conn = init_db(":memory:")
+        try:
+            _insert_inbox(conn, "<a@x.com>")
+            _handle, patcher = _patch_llm(
+                TriageResult(items=[TriageItem(index=1, action=action)])
+            )
+            with patcher:
+                run_triage_agent(conn)
+            row = conn.execute(
+                "SELECT status FROM mail_records WHERE message_id = ?",
+                ("<a@x.com>",),
+            ).fetchone()
+            assert row[0] == column
+        finally:
+            conn.close()
+
+
+def test_run_triage_agent_performs_no_imap_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The triage path moves the card but performs ZERO IMAP calls."""
+    monkeypatch.setenv("LLM_API_KEY", "sk-test")
+    conn = init_db(":memory:")
+    try:
+        _insert_inbox(conn, "<a@x.com>")
+        _handle, patcher = _patch_llm(
+            TriageResult(items=[TriageItem(index=1, action="archive")])
+        )
+        with (
+            patcher,
+            mock.patch("imaplib.IMAP4") as imap4,
+            mock.patch("imaplib.IMAP4_SSL") as imap4_ssl,
+        ):
+            run_triage_agent(conn)
+        # (a) status moved to the mapped column.
+        row = conn.execute(
+            "SELECT status FROM mail_records WHERE message_id = ?",
+            ("<a@x.com>",),
+        ).fetchone()
+        assert row[0] == "archive"
+        # (b) no IMAP constructor was ever called.
+        assert imap4.call_count == 0
+        assert imap4_ssl.call_count == 0
     finally:
         conn.close()
 
