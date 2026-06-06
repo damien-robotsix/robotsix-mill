@@ -232,6 +232,10 @@ class GitLabForge(Forge):
             description=description,
         )
 
+    def delete_branch(self, *, branch: str) -> bool:
+        project_path = _parse_gitlab_project_path(self._remote_url)
+        return self._delete_branch(project_path, branch)
+
     # ------------------------------------------------------------------
     # HTTP seams (monkeypatched in tests)
     # ------------------------------------------------------------------
@@ -714,6 +718,30 @@ class GitLabForge(Forge):
                 }
         except Exception as e:
             return {"merged": False, "reason": str(e)}
+
+    def _delete_branch(self, project_path: str, branch: str) -> bool:
+        """DELETE /projects/:id/repository/branches/:branch."""
+        import httpx
+
+        from urllib.parse import quote
+
+        s = self.settings
+        api = s.gitlab_api_url.rstrip("/")
+        headers = _build_headers(get_secrets().forge_token or "")
+        try:
+            pid = self._resolve_project_id(project_path)
+            encoded = quote(branch, safe="")
+            with httpx.Client(timeout=30) as c:
+                r = c.delete(
+                    f"{api}/projects/{pid}/repository/branches/{encoded}",
+                    headers=headers,
+                )
+                # 204 = deleted; 404 = branch already gone — desired end state.
+                if r.status_code in (204, 404):
+                    return True
+                return False
+        except Exception:
+            return False
 
 
 def _map_merge_status(merge_status: str) -> bool | None:

@@ -57,6 +57,8 @@ def test_default_empty_and_none():
     assert s.openrouter_api_key is None
     assert s.rate_limit_fallback_model == ""
     assert s.forge_remote_url is None
+    # Branch cleanup after merge is on by default.
+    assert s.delete_branch_on_merge is True
 
 
 def test_default_max_spend_sentinel():

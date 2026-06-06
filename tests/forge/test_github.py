@@ -1548,3 +1548,58 @@ def test_list_code_scanning_alerts_404_returns_empty(tmp_path, monkeypatch):
     )
     forge = _forge(tmp_path)
     assert forge.list_code_scanning_alerts(source_branch="feature/x") == []
+
+
+# ---------------------------------------------------------------------------
+# _delete_branch (via delete_branch)
+# ---------------------------------------------------------------------------
+
+
+def _mock_httpx_delete(monkeypatch, *, delete_response=None, raise_exc=None):
+    """Replace httpx.Client with a mock whose .delete() is controllable."""
+    captured = {"url": None}
+
+    class MockClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def delete(self, url, headers=None, **kwargs):
+            captured["url"] = url
+            if raise_exc is not None:
+                raise raise_exc
+            return delete_response
+
+    monkeypatch.setattr(real_httpx, "Client", MockClient)
+    return captured
+
+
+def test_delete_branch_204_returns_true(tmp_path, monkeypatch):
+    cap = _mock_httpx_delete(monkeypatch, delete_response=_make_response(204, {}))
+    forge = _forge(tmp_path)
+    assert forge.delete_branch(branch="mill/t-1") is True
+    assert cap["url"].endswith("/repos/o/r/git/refs/heads/mill/t-1")
+
+
+@pytest.mark.parametrize("status", [404, 422])
+def test_delete_branch_already_gone_returns_true(tmp_path, monkeypatch, status):
+    _mock_httpx_delete(monkeypatch, delete_response=_make_response(status, {}, "gone"))
+    forge = _forge(tmp_path)
+    assert forge.delete_branch(branch="mill/t-1") is True
+
+
+def test_delete_branch_other_status_returns_false(tmp_path, monkeypatch):
+    _mock_httpx_delete(monkeypatch, delete_response=_make_response(500, {}, "boom"))
+    forge = _forge(tmp_path)
+    assert forge.delete_branch(branch="mill/t-1") is False
+
+
+def test_delete_branch_exception_returns_false(tmp_path, monkeypatch):
+    _mock_httpx_delete(monkeypatch, raise_exc=real_httpx.ConnectError("net down"))
+    forge = _forge(tmp_path)
+    assert forge.delete_branch(branch="mill/t-1") is False

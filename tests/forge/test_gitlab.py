@@ -1499,3 +1499,62 @@ def test_create_repo_other_error_raises_runtimeerror(tmp_path, monkeypatch):
     forge = _forge(tmp_path, enable_repo_creation=True)
     with pytest.raises(RuntimeError, match="GitLab repo create failed"):
         forge.create_repo(name="proj", owner="ns", private=True, description="d")
+
+
+# ---------------------------------------------------------------------------
+# _delete_branch (via delete_branch)
+# ---------------------------------------------------------------------------
+
+
+def _mock_httpx_delete(monkeypatch, *, delete_response=None, raise_exc=None):
+    """Replace httpx.Client with a mock that resolves the project id (GET)
+    and exposes a controllable .delete()."""
+    captured = {"url": None}
+
+    class MockClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            # project-id resolution
+            return _make_response(200, {"id": 7})
+
+        def delete(self, url, headers=None, **kwargs):
+            captured["url"] = url
+            if raise_exc is not None:
+                raise raise_exc
+            return delete_response
+
+    monkeypatch.setattr(real_httpx, "Client", MockClient)
+    return captured
+
+
+def test_delete_branch_204_returns_true(tmp_path, monkeypatch):
+    cap = _mock_httpx_delete(monkeypatch, delete_response=_make_response(204, {}))
+    forge = _forge(tmp_path)
+    assert forge.delete_branch(branch="mill/t-1") is True
+    assert cap["url"].endswith("/projects/7/repository/branches/mill%2Ft-1")
+
+
+def test_delete_branch_404_returns_true(tmp_path, monkeypatch):
+    _mock_httpx_delete(monkeypatch, delete_response=_make_response(404, {}, "gone"))
+    forge = _forge(tmp_path)
+    assert forge.delete_branch(branch="mill/t-1") is True
+
+
+def test_delete_branch_other_status_returns_false(tmp_path, monkeypatch):
+    _mock_httpx_delete(monkeypatch, delete_response=_make_response(500, {}, "boom"))
+    forge = _forge(tmp_path)
+    assert forge.delete_branch(branch="mill/t-1") is False
+
+
+def test_delete_branch_exception_returns_false(tmp_path, monkeypatch):
+    _mock_httpx_delete(monkeypatch, raise_exc=real_httpx.ConnectError("net down"))
+    forge = _forge(tmp_path)
+    assert forge.delete_branch(branch="mill/t-1") is False
