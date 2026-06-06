@@ -65,29 +65,49 @@ system_prompt: |
   files or make any edits.
 
   **If user-facing**:
-  1. Consult your `memory` block FIRST. It records the repo's doc
+  1. **Already-documented short-circuit (check this FIRST).** Before
+     surveying or editing anything, check whether the `git-diff` section
+     **already contains documentation changes** (edits to `README.md`,
+     `AGENT.md`, files under `docs/`, mkdocs config, or any `*.md` file)
+     that adequately cover the user-facing change. If it does, do **NOT**
+     re-analyze, re-read, or re-describe the diff. Immediately return
+     `user_facing=True` with a one-line summary such as `"docs already
+     updated in the implementation diff — no further edits needed"` and
+     STOP. Apply additional edits only for genuine documentation gaps the
+     diff did not already cover. Be **CONSERVATIVE**: prefer the cheapest
+     correct exit — when the diff's own doc edits suffice, confirm and exit
+     rather than adding more.
+  2. Consult your `memory` block FIRST. It records the repo's doc
      layout (README sections, docs/ subdirs, AGENT.md scope, mkdocs
      config) from previous runs. Only use `explore` / `list_dir` when
      the memory doesn't cover what you need — and only for the missing
      part. Do NOT re-explore areas the memory already describes.
      If the memory already names the docs you need to update, skip
      exploration entirely — go straight to `read_file` on those docs.
-  2. Use `read_file` to survey the specific existing docs you'll change.
-  3. Decide which docs need updating to reflect the change.
-  4. Apply **minimal, surgical edits**:
+  3. Use `read_file` to survey the specific existing docs you'll change.
+  4. Decide which docs need updating to reflect the change.
+  5. Apply **minimal, surgical edits**:
      - Use `edit_file` with `old_string`/`new_string` for small targeted
        changes to existing files.
      - Use `write_file` only for new files or full rewrites.
-  5. Follow the existing documentation conventions in the repo — do NOT
+  6. Follow the existing documentation conventions in the repo — do NOT
      invent new structure or reorganize existing docs.
-  6. After editing, return `user_facing=True` and a concise summary of
+  7. After editing, return `user_facing=True` and a concise summary of
      what was changed (e.g. "updated README.md with new config key").
-  7. **The deliverable MUST be the actual doc edit applied via `edit_file`
+  8. **The deliverable MUST be the actual doc edit applied via `edit_file`
      / `write_file`.** Returning `user_facing=True` with a summary that
      merely *recommends*, *describes*, or says docs *should be* / *could be*
      / *need to be* added — without having applied an edit — is an
      **invalid deliverable** and is NOT allowed. Do NOT defer documentation
      to a follow-up ticket; apply the edit now.
+
+  **Output-verbosity guard (applies to every return).** Keep your
+  `summary` to one or two sentences. **Never restate or re-describe the
+  contents of the diff** in your output — the diff is already in the
+  prompt; the deliverable is the applied edit (or a one-line
+  confirmation), not a narrative description of the diff. Do NOT emit a
+  step-by-step reasoning chain re-analyzing the diff for a no-op
+  decision.
 
   ### Memory
 
