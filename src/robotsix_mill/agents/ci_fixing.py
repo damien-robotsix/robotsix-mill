@@ -24,12 +24,15 @@ from .prompt_blocks import section
 class CiFixResult(BaseModel):
     """Structured output from the CI-fix agent."""
 
-    status: Literal["DONE", "FAILED"]
+    status: Literal["DONE", "FAILED", "OUT_OF_SCOPE"]
     summary: str
     updated_memory: str = ""
     pattern_category: str = ""
     pattern_signature: str = ""
     pattern_approach: str = ""
+    out_of_scope_reason: str = ""
+    failing_check: str = ""
+    required_change_area: str = ""
 
 
 def run_ci_fix_agent(
@@ -135,7 +138,8 @@ def run_ci_fix_agent(
 
     # --- persist structured pattern entry ---
     output = result.output
-    if output.pattern_signature:
+    # An OUT_OF_SCOPE verdict is not a fix-attempt pattern — skip persistence.
+    if output.pattern_signature and output.status != "OUT_OF_SCOPE":
         from datetime import datetime, timezone
 
         entry = CiPatternEntry(

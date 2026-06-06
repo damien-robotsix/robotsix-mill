@@ -1,7 +1,10 @@
 """Tests for the CIFixStage (FIXING_CI → IMPLEMENT_COMPLETE | BLOCKED)."""
 
+import json
+
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
+from robotsix_mill.core.models import SourceKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.forge import github
@@ -1005,3 +1008,158 @@ def test_build_failing_summary_includes_codeql_alerts():
     )
     assert "Code-scanning alerts" in out
     assert "py/x" in out and "t.py:9" in out and "high" in out
+
+
+# ---------------------------------------------------------------------------
+# OUT_OF_SCOPE → spawn fix ticket + park + auto-resume
+# ---------------------------------------------------------------------------
+
+
+def _oos_forge(monkeypatch):
+    """Wire the forge seams for an OUT_OF_SCOPE run (failing CI + a sha)."""
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "CodeQL", "summary": "alert", "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+
+
+def _oos_result(**over):
+    kwargs = dict(
+        status="OUT_OF_SCOPE",
+        summary="repo debt — not this ticket's diff",
+        out_of_scope_reason="alert lives in __init__.py, outside this ticket's diff",
+        failing_check="py/clear-text-logging",
+        required_change_area="src/pkg/__init__.py",
+    )
+    kwargs.update(over)
+    return CiFixResult(**kwargs)
+
+
+def test_out_of_scope_spawns_fix_ticket_and_parks(tmp_path, monkeypatch):
+    """An OUT_OF_SCOPE verdict creates exactly one fix ticket, wires
+    depends_on/unblocks both ways, parks the original to BLOCKED, and never
+    pushes."""
+    ctx = _gh(tmp_path)
+    _oos_forge(monkeypatch)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: _oos_result(),
+    )
+    push_calls = []
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        lambda *a, **k: push_calls.append(1),
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "out of scope" in out.note
+    # The OUT_OF_SCOPE path never force-pushes.
+    assert push_calls == []
+
+    # Exactly one fix ticket on the same board.
+    fixes = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)
+    assert len(fixes) == 1
+    fix = fixes[0]
+    assert fix.board_id == "test-board"
+    assert fix.source == SourceKind.CI_FIX_DEPENDENCY
+
+    # Dependency wired both directions.
+    orig = ctx.service.get(t.id)
+    assert json.loads(orig.depends_on) == [fix.id]
+    assert json.loads(fix.unblocks) == [t.id]
+
+
+def test_out_of_scope_is_idempotent_across_cycles(tmp_path, monkeypatch):
+    """A second OUT_OF_SCOPE cycle with the same failing_check +
+    required_change_area (while the fix ticket is still open) reuses the
+    existing ticket instead of creating a duplicate."""
+    ctx = _gh(tmp_path)
+    _oos_forge(monkeypatch)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: _oos_result(),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        lambda *a, **k: None,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out1 = CIFixStage().run(t, ctx)
+    assert out1.next_state is State.BLOCKED
+    out2 = CIFixStage().run(t, ctx)
+    assert out2.next_state is State.BLOCKED
+
+    fixes = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)
+    assert len(fixes) == 1
+
+
+def test_out_of_scope_fix_done_auto_resumes_original(tmp_path, monkeypatch):
+    """When the spawned fix ticket reaches DONE, the existing _fire_unblocks
+    path moves the parked original BLOCKED → DRAFT."""
+    ctx = _gh(tmp_path)
+    _oos_forge(monkeypatch)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: _oos_result(),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        lambda *a, **k: None,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    # Simulate the worker applying the stage outcome (FIXING_CI → BLOCKED).
+    ctx.service.transition(t.id, State.BLOCKED, note=out.note)
+
+    fix = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)[0]
+
+    # Fix ticket completes → original is auto-unblocked to DRAFT.
+    ctx.service.transition(fix.id, State.DONE)
+    orig = ctx.service.get(t.id)
+    assert orig.state is State.DRAFT
+
+
+def test_in_scope_done_still_pushes_no_fix_ticket(tmp_path, monkeypatch):
+    """Regression: an in-scope DONE verdict still force-pushes and returns
+    IMPLEMENT_COMPLETE without spawning any out-of-scope fix ticket."""
+    ctx = _gh(tmp_path)
+    _oos_forge(monkeypatch)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(status="DONE", summary="fixed"),
+    )
+    push_calls = []
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        lambda *a, **k: push_calls.append(1),
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert push_calls == [1]
+    assert ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY) == []
