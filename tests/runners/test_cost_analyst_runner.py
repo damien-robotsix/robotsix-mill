@@ -39,11 +39,23 @@ def test_render_stage_table_ranks_by_total_cost():
 
 
 def test_stage_tier_resolves_known_stage():
-    s = _settings(audit_model="deepseek/deepseek-v4-flash")
+    s = _settings(audit_model="deepseek/deepseek-v4-flash", llm_backend="deepseek")
     tier = car._stage_tier(s, "audit")
     assert "flash" in tier and "cheap" in tier
     # Unknown stage degrades gracefully.
     assert "varies" in car._stage_tier(s, "ci_fix")
+
+
+def test_stage_tier_backend_aware_on_claude_sdk():
+    """On claude_sdk the digest reports the EFFECTIVE Claude model (the
+    deepseek config name is ignored), keeping the correct tier class."""
+    s = _settings(llm_backend="claude_sdk")
+    # implement runs on `model` (deepseek-v4-pro = non-flash) → default → opus
+    pro = car._stage_tier(s, "implement")
+    assert "claude-opus" in pro and "capable/default" in pro
+    s2 = _settings(audit_model="deepseek/deepseek-v4-flash", llm_backend="claude_sdk")
+    cheap = car._stage_tier(s2, "audit")
+    assert "claude-haiku" in cheap and "cheap" in cheap
 
 
 def test_token_split_and_tool_calls():

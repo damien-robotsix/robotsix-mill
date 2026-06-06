@@ -78,7 +78,15 @@ def _stage_tier(settings: Settings, stage: str) -> str:
     model = str(getattr(settings, attr, "") or "")
     if not model:
         return "(model varies — see specimens)"
-    return f"{model} [{_tier_label(model)}]"
+    tier = _tier_label(model)  # cheap / capable-default, from the config name
+    # On the claude_sdk backend the configured (deepseek) model NAME is ignored
+    # — only the tier CLASS carries over (flash→cheap→Haiku, else→default→Opus).
+    # Report the EFFECTIVE Claude model so the agent doesn't propose a nonsense
+    # "downgrade to deepseek-flash" while actually running on Claude.
+    if settings.llm_backend == "claude_sdk":
+        effective = "claude-haiku" if tier == "cheap" else "claude-opus"
+        return f"{effective} [{tier}] (claude_sdk; config name: {model})"
+    return f"{model} [{tier}]"
 
 
 # ---------------------------------------------------------------------------
