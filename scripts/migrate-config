@@ -19,6 +19,7 @@ The script is idempotent — running it twice produces the same output.
 from __future__ import annotations
 
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 import yaml
@@ -103,7 +104,7 @@ def resolve_dotted_path(key: str, alias_to_path: dict[str, str]) -> str | None:
     return None
 
 
-def _lookup_default(defaults: dict, dotted: str) -> object:
+def _lookup_default(defaults: dict[str, object], dotted: str) -> object:
     """Look up the committed default at a dotted path, or ``_MISSING``."""
     node: object = defaults
     for part in dotted.split("."):
@@ -137,23 +138,26 @@ def _coerce_to_type(value: str, default: object) -> object:
     return value
 
 
-def _set_nested(root: dict, dotted: str, value: object) -> None:
+def _set_nested(root: dict[str, object], dotted: str, value: object) -> None:
     """Assign ``value`` into ``root`` following a dotted path."""
     parts = dotted.split(".")
     node = root
     for part in parts[:-1]:
-        child = node.setdefault(part, {})
+        child = node.get(part)
+        if not isinstance(child, dict):
+            child = {}
+            node[part] = child
         node = child
     node[parts[-1]] = value
 
 
 def build_outputs(
     env_vars: dict[str, str],
-    defaults: dict,
+    defaults: dict[str, object],
     *,
     alias_to_path: dict[str, str] | None = None,
     secret_fields: set[str] | None = None,
-) -> tuple[dict, dict, list[str]]:
+) -> tuple[dict[str, object], dict[str, str], list[str]]:
     """Split env vars into production overrides, secrets, and unmapped.
 
     Returns ``(production, secrets, unmapped)`` where ``production`` is a
@@ -167,8 +171,8 @@ def build_outputs(
     if secret_fields is None:
         secret_fields = set(Secrets.model_fields)
 
-    production: dict = {}
-    secrets: dict = {}
+    production: dict[str, object] = {}
+    secrets: dict[str, str] = {}
     unmapped: list[str] = []
 
     for key, value in env_vars.items():
@@ -190,7 +194,7 @@ def build_outputs(
     return production, secrets, sorted(unmapped)
 
 
-def _dump_yaml(data: dict) -> str:
+def _dump_yaml(data: Mapping[str, object]) -> str:
     """Serialize a dict to deterministic YAML."""
     text: str = yaml.safe_dump(data, sort_keys=True, default_flow_style=False)
     return text

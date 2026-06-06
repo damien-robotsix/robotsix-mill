@@ -12,6 +12,7 @@ import importlib.util
 import sys
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -19,7 +20,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SCRIPT_PATH = _REPO_ROOT / "scripts" / "migrate-config"
 
 
-def _load_script():
+def _load_script() -> ModuleType:
     # The script is extensionless, so importlib cannot infer a loader
     # from the suffix — supply a SourceFileLoader explicitly.
     loader = SourceFileLoader("migrate_config", str(_SCRIPT_PATH))
