@@ -361,6 +361,7 @@ Every setting below shows:
 | `pipeline.ci_fix_max_cycles` | `MILL_CI_FIX_MAX_CYCLES` | `8` | Hard ceiling on total ci-fix cycles per ticket (counts every agent-running cycle on failing CI; reset only when CI turns green). Set to 0 to disable. |
 | `pipeline.review_revision_max_attempts` | `MILL_REVIEW_REVISION_MAX_ATTEMPTS` | `2` | Max review-revision LLM invocations before BLOCK |
 | `pipeline.branch_prefix` | `MILL_BRANCH_PREFIX` | `mill/` | Prefix for deliver-stage branch names |
+| `pipeline.delete_branch_on_merge` | `MILL_DELETE_BRANCH_ON_MERGE` | `true` | Delete the per-ticket head branch on the forge after merge to DONE |
 | `pipeline.prune_clone_on_close` | `MILL_PRUNE_CLONE_ON_CLOSE` | `true` | Delete workspace repo clone on ticket close |
 | `pipeline.max_archived_tickets` | `MILL_MAX_ARCHIVED_TICKETS` | `100` | Max terminal-state tickets retained (0 = no purge) |
 
