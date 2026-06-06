@@ -170,6 +170,7 @@ modules:
       - src/robotsix_mill/runners/completeness_check_runner.py
       - src/robotsix_mill/runners/cost_reconciliation_runner.py
       - src/robotsix_mill/runners/cost_analyst_runner.py
+      - src/robotsix_mill/runners/run_health_runner.py
       - src/robotsix_mill/runners/config_sync_runner.py
       - src/robotsix_mill/runners/health_runner.py
       - src/robotsix_mill/runners/roadmap_sync_runner.py
@@ -190,6 +191,7 @@ modules:
       - tests/runners/test_periodic_runner.py
       - tests/runners/test_cost_reconciliation_runner.py
       - tests/runners/test_cost_analyst_runner.py
+      - tests/runners/test_run_health_runner.py
       - tests/runners/test_config_sync_runner.py
       - tests/runners/test_roadmap_sync_runner.py
       - tests/runners/test_trace_review_runner.py
@@ -355,6 +357,7 @@ modules:
       - src/robotsix_mill/agents/surveying.py
       - src/robotsix_mill/agents/health.py
       - src/robotsix_mill/agents/cost_analyst.py
+      - src/robotsix_mill/agents/run_health.py
       - src/robotsix_mill/agents/agent_check.py
       - src/robotsix_mill/agents/bc_check.py
       - src/robotsix_mill/agents/completeness_check.py
@@ -392,6 +395,7 @@ modules:
       - tests/agents/test_survey.py
       - tests/agents/test_health.py
       - tests/agents/test_cost_analyst.py
+      - tests/agents/test_run_health.py
       - tests/agents/test_agent_check.py
       - tests/agents/test_bc_check.py
       - tests/agents/test_completeness_check.py

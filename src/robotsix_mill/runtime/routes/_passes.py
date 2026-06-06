@@ -575,3 +575,45 @@ def cost_analyst_pass(
 
     threading.Thread(target=_run, name="cost-analyst-pass", daemon=True).start()
     return {"status": "started"}
+
+
+@router.post("/run-health", status_code=202)
+def run_health_pass(
+    request: Request = None,
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off a RUN-HEALTH pass in the BACKGROUND and return at once.
+
+    The run-health agent reads every board's run registry over the window,
+    flags failed/degraded runs deterministically, runs one LLM pass to
+    separate real failures from legitimate empties, and files
+    high-confidence draft tickets to the mill board. Global — it does not
+    fan out per-repo.
+    """
+    from ...runners.run_health_runner import (
+        RunHealthPassResult,
+        run_run_health_pass,
+    )
+    from ..tracing import make_session_id
+
+    def _run() -> None:
+        run_id = None
+        try:
+            run_id = registry.start("run_health")
+            session_id = make_session_id("run_health")
+            result: RunHealthPassResult = run_run_health_pass(session_id=session_id)
+            ids = [d["id"] for d in result.drafts_created[:3]]
+            summary = (
+                f"{len(result.drafts_created)} draft(s): {', '.join(ids)}"
+                if ids
+                else "No drafts created"
+            )
+            registry.finish_ok(run_id, summary)
+            log.info("run-health pass done: %d draft(s)", len(result.drafts_created))
+        except Exception as e:  # noqa: BLE001 — background; just log
+            log.exception("run-health pass failed")
+            if run_id:
+                registry.finish_error(run_id, str(e))
+
+    threading.Thread(target=_run, name="run-health-pass", daemon=True).start()
+    return {"status": "started"}

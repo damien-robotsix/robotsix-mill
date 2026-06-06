@@ -90,6 +90,7 @@ _BUILTIN_KINDS: dict[str, str] = {
     # Recognized but NOT per-repo-presence managed (cross-repo / always-on).
     "meta": "global_only",
     "cost_analyst": "global_only",
+    "run_health": "global_only",
     "timeout_escalation": "global_only",
     "trace_health": "global_only",
 }

@@ -41,6 +41,8 @@ class RunEntry:
         "proposed-action",
         "proposed_action",
         "roadmap-sync",
+        "run-health",
+        "run_health",
         "survey",
         "test-gap",
         "trace-health",
