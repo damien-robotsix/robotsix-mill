@@ -64,6 +64,15 @@ allow-direct-references = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = ["--strict-markers", "--strict-config"]
+xfail_strict = true
+# filterwarnings = ["error"] is intentionally NOT enabled yet: a local
+# `pytest -W error` run surfaces hundreds of pre-existing warnings (mostly
+# PytestCollectionWarning / PytestUnraisableExceptionWarning, plus some
+# upstream DeprecationWarnings) that must be triaged and pinned behind
+# narrowly-scoped, documented `ignore::` entries first. That promotion is a
+# follow-up; the strict-markers/strict-config/xfail_strict guards above are
+# zero-risk for the already-passing suite and land now.
 
 [tool.coverage.report]
 precision = 2
