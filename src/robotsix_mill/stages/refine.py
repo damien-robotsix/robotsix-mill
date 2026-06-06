@@ -65,6 +65,54 @@ NON_IMPLEMENTATION_CLOSE_PREFIXES = (
 UNMERGED_BRANCH_PREFIX = "Implementation exists on branch"
 
 
+# Short pointer phrases a refine/conciseness agent sometimes emits in the
+# structured spec field *instead of* the actual spec — the real content was
+# only in its prose ("…as written above"). Matched against a normalized,
+# length-capped string so a genuine (always far longer) spec never trips it.
+_PLACEHOLDER_SPEC_PHRASES = (
+    "see spec above",
+    "see the spec above",
+    "see above",
+    "see spec",
+    "see the spec",
+    "see description",
+    "see the description",
+    "spec above",
+    "as above",
+    "as written above",
+    "see previous",
+    "see below",
+    "refer to spec",
+    "tbd",
+    "todo",
+)
+
+
+def _spec_is_degenerate(spec: str | None) -> bool:
+    """True when *spec* is empty or a placeholder pointer, not a real spec.
+
+    The refine agent's structured ``spec_markdown`` occasionally collapses
+    to a short reference like ``"(see spec above)"`` — non-empty, so the
+    bare ``not spec.strip()`` guard misses it, and refine writes the
+    pointer straight into the canonical ``description.md`` (blanking the
+    ticket body on the board). Treat such degenerate output as "no spec"
+    so refine falls back to the original draft instead of clobbering it.
+
+    Only short (≤120-char) single-idea strings can match; a genuine spec
+    is much longer, so real content is never dropped.
+    """
+    text = (spec or "").strip()
+    if not text:
+        return True
+    if len(text) > 120:
+        return False
+    # Drop markdown/punctuation, collapse whitespace, lowercase.
+    norm = " ".join(re.sub(r"[^a-z0-9 ]+", " ", text.lower()).split())
+    if not norm:
+        return True
+    return any(norm == p or norm.startswith(p + " ") for p in _PLACEHOLDER_SPEC_PHRASES)
+
+
 def _verify_branch_merged(repo_dir: Path | None, ticket: Ticket) -> bool:
     """Check whether *ticket*'s branch is an ancestor of the base branch.
 
@@ -232,7 +280,7 @@ def _resolve_next_state(
     """
     if not ctx.settings.require_approval:
         return State.READY, None
-    if not spec or not spec.strip():
+    if _spec_is_degenerate(spec):
         return State.HUMAN_ISSUE_APPROVAL, None
     if not ctx.settings.auto_approve_enabled:
         return State.HUMAN_ISSUE_APPROVAL, None
@@ -1270,16 +1318,19 @@ class RefineStage(Stage):
         # --- normal single-scope path ---
         if not result.split:
             spec = result.spec_markdown or ""
-            if not spec or not spec.strip():
+            if _spec_is_degenerate(spec):
                 log.warning(
-                    "%s: refiner produced an empty spec — "
-                    "proceeding with original draft",
+                    "%s: refiner produced no usable spec (empty or "
+                    "placeholder %r) — proceeding with original draft",
                     ticket.id,
+                    spec[:60],
                 )
                 next_state, _auto_reason = _resolve_next_state(
                     ctx, "", ticket.id, source=ticket.source
                 )
-                return Outcome(next_state, "refined (empty spec — kept original draft)")
+                return Outcome(
+                    next_state, "refined (no usable spec — kept original draft)"
+                )
 
             # --- spec review (conciseness pass) ---
             if s.spec_review_enabled and not reviewer_comments:
@@ -1293,10 +1344,10 @@ class RefineStage(Stage):
                         encoding="utf-8",
                     )
                     concise = review_result.concise_spec
-                    if not concise or not concise.strip():
+                    if _spec_is_degenerate(concise):
                         log.warning(
-                            "%s: spec review returned empty concise spec, "
-                            "using verbose spec",
+                            "%s: spec review returned empty/placeholder "
+                            "concise spec, using verbose spec",
                             ticket.id,
                         )
                     else:
@@ -1333,9 +1384,9 @@ class RefineStage(Stage):
         if not children_raw or len(children_raw) == 0:
             # Degrade gracefully: treat as single-spec with whatever we got.
             spec = result.spec_markdown or ""
-            if not spec or not spec.strip():
+            if _spec_is_degenerate(spec):
                 log.warning(
-                    "%s: refiner produced an empty spec "
+                    "%s: refiner produced no usable spec "
                     "(split with no children) — "
                     "proceeding with original draft",
                     ticket.id,
@@ -1404,10 +1455,10 @@ class RefineStage(Stage):
                         encoding="utf-8",
                     )
                     concise = review_result.concise_spec
-                    if not concise or not concise.strip():
+                    if _spec_is_degenerate(concise):
                         log.warning(
-                            "%s: spec review child %d returned empty concise spec, "
-                            "using verbose spec",
+                            "%s: spec review child %d returned empty/placeholder "
+                            "concise spec, using verbose spec",
                             ticket.id,
                             i + 1,
                         )
