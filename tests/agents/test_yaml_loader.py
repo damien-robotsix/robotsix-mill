@@ -367,6 +367,7 @@ def test_real_implement_yaml_has_output_style_brevity_guidance():
     # Mock the env var so resolution succeeds (model: "${MILL_MODEL}").
     import os as _os
 
+    had_model = "MILL_MODEL" in _os.environ
     _os.environ.setdefault("MILL_MODEL", "test/model")
 
     try:
@@ -376,7 +377,7 @@ def test_real_implement_yaml_has_output_style_brevity_guidance():
         assert "running commentary" in ad.system_prompt
     finally:
         # Don't leak the env var if it wasn't set before.
-        if "MILL_MODEL" not in _os.environ:
+        if not had_model:
             _os.environ.pop("MILL_MODEL", None)
 
 
