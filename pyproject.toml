@@ -201,6 +201,10 @@ max-complexity = 10
 "src/robotsix_mill/runtime/stage_retry.py" = ["S311"]
 "src/robotsix_mill/sandbox.py" = ["S108", "S603", "S607"]
 "src/robotsix_mill/vcs/git_ops.py" = ["S603", "S607"]
+# Meta's deterministic ground-truth blocks shell out to read-only
+# ``git grep`` over the repo clones (fixed argv, no shell, no untrusted
+# input) — same safe git-subprocess pattern as git_ops above.
+"src/robotsix_mill/meta/agent.py" = ["S603", "S607"]
 
 [tool.deptry]
 known_first_party = ["robotsix_mill"]

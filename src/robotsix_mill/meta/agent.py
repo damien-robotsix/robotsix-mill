@@ -118,6 +118,166 @@ def _available_periodic_catalog() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Deterministic ground-truth blocks (injected into the prompt)
+#
+# The meta-agent reliably confabulates surveys it never runs (it has, on
+# observed passes, produced its whole output in a single LLM turn with zero
+# tool calls — narrating "let me grep…" without grepping). So the facts that
+# MUST NOT be missed are computed deterministically here and injected, turning
+# discovery the LLM skips into judgement it can't avoid.
+# ---------------------------------------------------------------------------
+
+_TODO_MARKER_RE = r"TODO|FIXME|XXX|HACK"
+
+
+def _git_grep(clone: Path, args: list[str], *, timeout: int = 60) -> str:
+    """Run ``git -C <clone> grep <args>`` and return stdout.
+
+    Returns ``""`` on any failure or no-match (git grep exits 1 when there
+    are no matches). Read-only, fixed argv (no shell, no untrusted input).
+    """
+    import subprocess
+
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(clone), "grep", *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except Exception:  # noqa: BLE001 — best-effort; never crash the pass
+        return ""
+    return proc.stdout
+
+
+def _outstanding_todos(repo_clones: dict[str, Path], *, cap: int = 200) -> str:
+    """Deterministic ``<outstanding-todos>`` block.
+
+    Greps **every tracked file** (not just ``src/``) in every clone for
+    ``TODO``/``FIXME``/``XXX``/``HACK`` markers via ``git grep`` (tracked
+    files only → respects ``.gitignore``, skips ``.git``/build dirs).
+    One line per hit: ``<repo_id> <file>:<line>  <text>``. Capped with a
+    truncation note so a marker-heavy repo can't blow the prompt.
+
+    The agent only *judges* this list — it no longer has to discover the
+    markers itself (the prior LLM-driven sweep only ever looked at
+    ``src/`` and missed e.g. a TODO in ``.robotsix-mill/periodic/*.yaml``).
+    """
+    lines: list[str] = []
+    overflow = 0
+    for repo_id in sorted(repo_clones):
+        for raw in _git_grep(
+            repo_clones[repo_id], ["-nIE", _TODO_MARKER_RE]
+        ).splitlines():
+            parts = raw.split(":", 2)
+            if len(parts) < 3:
+                continue
+            fpath, lineno, text = parts
+            entry = f"{repo_id} {fpath}:{lineno}  {text.strip()[:200]}"
+            if len(lines) < cap:
+                lines.append(entry)
+            else:
+                overflow += 1
+    if not lines:
+        return "(no TODO/FIXME/XXX/HACK markers found in any clone)"
+    out = "\n".join(lines)
+    if overflow:
+        out += f"\n… (+{overflow} more markers truncated)"
+    return out
+
+
+def _has_buildout_placeholder(clone: Path) -> bool:
+    """True when a clone still ships build-out placeholders (skeleton lib).
+
+    Matches the exact ``TODO(build-out)`` marker convention (e.g. in
+    robotsix-board's placeholder ``static/board.{js,css}``), NOT loose
+    prose mentions of "build-out" — so a repo that merely *describes*
+    build-out in prompts/docs (mill, auto-mail) is not misflagged.
+    """
+    return bool(_git_grep(clone, ["-lF", "TODO(build-out)"], timeout=30).strip())
+
+
+def _robotsix_deps_of(clone: Path) -> tuple[str, set[str]]:
+    """Return ``(package_name, {robotsix-* dependency names})`` for a clone.
+
+    Parses ``pyproject.toml`` ``[project]`` dependencies + optional groups.
+    Best-effort: a missing/unparsable file yields the clone name and no
+    deps. Names are lowercased for stable matching.
+    """
+    import re
+    import tomllib
+
+    pp = clone / "pyproject.toml"
+    if not pp.is_file():
+        return clone.name.lower(), set()
+    try:
+        data = tomllib.loads(pp.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 — best-effort
+        return clone.name.lower(), set()
+    proj = data.get("project", {}) or {}
+    pkg = str(proj.get("name", clone.name)).lower()
+    dep_strs = list(proj.get("dependencies", []) or [])
+    for grp in (proj.get("optional-dependencies", {}) or {}).values():
+        dep_strs.extend(grp or [])
+    found = {
+        m.group(1).lower()
+        for d in dep_strs
+        if (m := re.match(r"\s*([A-Za-z0-9._-]+)", str(d)))
+        and m.group(1).lower().startswith("robotsix-")
+    }
+    return pkg, found
+
+
+def _cross_repo_adoption(repo_clones: dict[str, Path]) -> str:
+    """Deterministic ``<cross-repo-adoption>`` block.
+
+    For every ``robotsix-*`` package that is depended on by at least one
+    repo (i.e. a shared library), list which repos consume it and which
+    do NOT — plus a ``[SKELETON]`` flag for libs that still ship
+    build-out placeholders. Lets the agent judge adoption gaps (an
+    un-migrated consumer that should adopt a built-out lib) instead of
+    rediscovering dependency graphs with unreliable tools.
+    """
+    names: dict[str, str] = {}  # repo_id -> declared package name (lowercased)
+    deps: dict[str, set[str]] = {}  # repo_id -> {robotsix-* dep names}
+    for repo_id, clone in repo_clones.items():
+        names[repo_id], deps[repo_id] = _robotsix_deps_of(clone)
+
+    pkg_to_repo = {names[r]: r for r in repo_clones}
+    consumers: dict[str, set[str]] = {}  # lib repo_id -> consumer repo_ids
+    for r, ds in deps.items():
+        for d in ds:
+            lib = pkg_to_repo.get(d)
+            if lib and lib != r:
+                consumers.setdefault(lib, set()).add(r)
+
+    # Report a repo as a library if it is consumed by ≥1 other repo OR it is
+    # a skeleton (a lib mid-build-out with no consumers yet, e.g. board).
+    all_repos = set(repo_clones)
+    lib_ids = set(consumers) | {
+        r for r in repo_clones if _has_buildout_placeholder(repo_clones[r])
+    }
+    if not lib_ids:
+        return "(no shared robotsix-* libraries detected across the clones)"
+
+    lines: list[str] = []
+    for lib in sorted(lib_ids):
+        cons = consumers.get(lib, set())
+        non = sorted(all_repos - {lib} - cons)
+        skel = (
+            " [SKELETON: still ships build-out placeholders]"
+            if _has_buildout_placeholder(repo_clones[lib])
+            else ""
+        )
+        lines.append(
+            f"- `{lib}` (pkg `{names[lib]}`){skel}: "
+            f"consumed by [{', '.join(sorted(cons)) or '—'}]; "
+            f"NOT consumed by [{', '.join(non) or '—'}]"
+        )
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -172,7 +332,7 @@ def run_meta_agent(
     # Build tools: explore (with extra_roots) + read-only fs tools
     # (filtered to read_file / list_dir — no run_command).
     # ------------------------------------------------------------------
-    from ..agents.explore import make_explore_tool
+    from ..agents.explore import make_repo_scoped_explore_tool
     from ..agents.fs_tools import build_fs_tools
 
     ro = [
@@ -185,7 +345,9 @@ def run_meta_agent(
         if t.__name__ in ("read_file", "list_dir")
     ]
 
-    tools = [make_explore_tool(settings, repo_dir, extra_roots=extra_roots)]
+    # Repo-scoped explore: the agent picks the target repo per call, so a
+    # survey of any repo resolves against THAT clone (not the first one).
+    tools = [make_repo_scoped_explore_tool(settings, repo_clones)]
     tools.extend(ro)
 
     # ------------------------------------------------------------------
@@ -230,6 +392,10 @@ def run_meta_agent(
     # Hand the agent the full periodic-workflow catalogue so it can check each
     # repo for missing-but-valuable workflows without rediscovering the list.
     prompt += section("available-periodic-workflows", _available_periodic_catalog())
+    # Deterministic ground-truth blocks: discovery the agent reliably skips,
+    # pre-computed so it only has to judge (see the helpers' docstrings).
+    prompt += section("outstanding-todos", _outstanding_todos(repo_clones))
+    prompt += section("cross-repo-adoption", _cross_repo_adoption(repo_clones))
     prompt += "\n\nPerform the cross-repo analysis and return your result."
 
     # ------------------------------------------------------------------

@@ -41,6 +41,40 @@ def test_missing_repo_degrades_not_raises(tmp_path):
     assert "not been cloned yet" in out
 
 
+def test_repo_scoped_explore_unknown_repo(tmp_path):
+    """A repo-scoped explore call naming an unregistered repo returns a
+    helpful error listing the valid ids — never raises, never explores."""
+    s = _settings(tmp_path)
+    tool = explore.make_repo_scoped_explore_tool(s, {"repo-a": tmp_path / "a"})
+    out = asyncio.run(tool("repo-z", "where is X?"))
+    assert "unknown repo" in out
+    assert "repo-a" in out
+
+
+def test_repo_scoped_explore_routes_to_selected_repo(tmp_path, monkeypatch):
+    """The selected repo determines the scout's ``repo_dir`` and the
+    ``extra_roots`` are confined to that one clone (no mill-bias)."""
+    s = _settings(tmp_path)
+    seen = {}
+
+    async def fake(*, settings, repo_dir, question, extra_roots=None):
+        seen["dir"] = repo_dir
+        seen["extra_roots"] = extra_roots
+        return f"OK {question}"
+
+    monkeypatch.setattr(explore, "run_explore", fake)
+    a = tmp_path / "a"
+    b = tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    tool = explore.make_repo_scoped_explore_tool(s, {"repo-a": a, "repo-b": b})
+    assert (
+        asyncio.run(tool("repo-b", "where is the worker?")) == "OK where is the worker?"
+    )
+    assert seen["dir"] == b
+    assert seen["extra_roots"] == [b]
+
+
 def test_tool_delegates_to_seam(tmp_path, monkeypatch):
     s = _settings(tmp_path)
     seen = {}
