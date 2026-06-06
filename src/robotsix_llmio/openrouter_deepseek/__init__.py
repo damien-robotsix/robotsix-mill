@@ -9,7 +9,11 @@ OpenRouter layer (this layer adds no DeepSeek-specific transient signature).
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:  # static-only: real module-scope names for type checkers / CodeQL
+    from .model import OpenRouterDeepseekModel
+    from .provider import OpenRouterDeepseekProvider
 
 __all__ = [
     "OpenRouterDeepseekModel",

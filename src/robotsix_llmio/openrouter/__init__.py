@@ -7,9 +7,18 @@ helpers does not drag in pydantic-ai/OTel at module load.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .transient import is_openrouter_transient, is_openrouter_upstream_error
+
+if TYPE_CHECKING:  # static-only: real module-scope names for type checkers / CodeQL
+    from .model import OpenRouterModel, record_openrouter_cost
+    from .provider import OpenRouterProvider
+    from .provider_cost import (
+        KeyUsage,
+        OpenRouterKeyCostSource,
+        OpenRouterProviderCostSource,
+    )
 
 __all__ = [
     "KeyUsage",

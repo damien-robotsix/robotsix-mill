@@ -8,9 +8,17 @@ extra surfaces a clear install hint when the model/provider is actually used.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .transient import is_claude_sdk_transient, is_claude_sdk_turn_limit
+
+if TYPE_CHECKING:  # static-only: real module-scope names for type checkers / CodeQL
+    from .model import (
+        ClaudeSDKModel,
+        ClaudeSDKQueryTimeout,
+        ClaudeSDKTurnLimitError,
+    )
+    from .provider import ClaudeSDKProvider
 
 __all__ = [
     "ClaudeSDKModel",
