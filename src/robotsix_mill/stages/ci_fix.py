@@ -13,6 +13,8 @@ Failure after max attempts escalates to BLOCKED (resumable).
 from __future__ import annotations
 
 import logging
+from pathlib import Path
+from typing import Any, NamedTuple
 
 from ..agents.ci_fixing import run_ci_fix_agent
 from ..core.models import Ticket
@@ -106,6 +108,14 @@ def _build_failing_summary(
     return "\n".join(parts)
 
 
+class _FailingContext(NamedTuple):
+    """Data the counter/agent phases need once CI is confirmed failing."""
+
+    repo_dir: str
+    branch: str
+    failing_summary: str
+
+
 class CIFixStage(Stage):
     """Check forge CI status and run automated fix logic to resolve CI failures on the ticket branch."""
 
@@ -113,8 +123,46 @@ class CIFixStage(Stage):
     input_state = State.FIXING_CI
     traced = False
 
-    def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:  # noqa: C901  # TODO: split counter, clone, and agent phases (ticket: split_ci_fix_stage)
+    def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Process a FIXING_CI ticket: poll forge CI status on the ticket branch and, on failure, run the automated CI-fix agent to push corrective commits."""
+        # Clone phase: guards, branch resolution, and CI status routing.
+        resolved = self._resolve_clone_and_status(ticket, ctx)
+        if isinstance(resolved, Outcome):
+            return resolved
+        repo_dir, branch, failing_summary = resolved
+
+        # Counter phase: enforce the hard per-ticket cycle ceiling.
+        ceiling = self._enforce_cycle_ceiling(ticket, ctx, failing_summary)
+        if ceiling is not None:
+            return ceiling
+
+        s = ctx.settings
+        counter_path = ctx.service.workspace(ticket).artifacts_dir / _CI_FIX_COUNTER
+        attempt = _read_counter(counter_path) + 1
+        max_attempts = s.ci_fix_max_attempts
+
+        log.info(
+            "%s: CI failing — ci-fix attempt %d/%d",
+            ticket.id,
+            attempt,
+            max_attempts,
+        )
+
+        # Agent phase: run the ci-fix agent and route the result.
+        return self._run_agent_and_finalize(
+            ticket, ctx, repo_dir, branch, failing_summary, attempt, max_attempts
+        )
+
+    def _resolve_clone_and_status(
+        self, ticket: Ticket, ctx: StageContext
+    ) -> Outcome | _FailingContext:
+        """Run the guards, resolve the clone, and route on CI status.
+
+        Returns an early ``Outcome`` for every non-failure path (guards
+        failing → BLOCKED; transient/None/pending/success/unknown →
+        IMPLEMENT_COMPLETE). When CI is genuinely failing, returns a
+        ``_FailingContext`` carrying the data the later phases need.
+        """
         s = ctx.settings
 
         # Guard: forge configured.
@@ -174,6 +222,18 @@ class CIFixStage(Stage):
 
         # --- CI is failing → attempt fix ---
         failing = status.get("failing", [])
+        failing_summary = self._build_failure_detail(ticket, ctx, branch, failing)
+        return _FailingContext(repo_dir, branch, failing_summary)
+
+    def _build_failure_detail(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        branch: str,
+        failing: list[dict[str, Any]],
+    ) -> str:
+        """Enrich the failing-check list with job logs + code-scanning alerts."""
+        s = ctx.settings
 
         # Fetch job logs + code-scanning alerts for richer context (only on
         # failure, not on every PR poll — this stage runs infrequently).
@@ -197,7 +257,18 @@ class CIFixStage(Stage):
         except Exception:  # noqa: BLE001 — best-effort enrichment
             log.warning("%s: failed to fetch job logs / alerts", ticket.id)
 
-        failing_summary = _build_failing_summary(failing, log_text, alerts)
+        return _build_failing_summary(failing, log_text, alerts)
+
+    def _enforce_cycle_ceiling(
+        self, ticket: Ticket, ctx: StageContext, failing_summary: str
+    ) -> Outcome | None:
+        """Apply the hard per-ticket cycle ceiling.
+
+        On a ceiling hit, resets the cycle counter, logs, records the
+        best-effort history note and returns the BLOCKED ``Outcome``.
+        Otherwise increments the cycle counter and returns ``None``.
+        """
+        s = ctx.settings
 
         # Hard per-ticket cycle ceiling: count every cycle that actually runs
         # the agent on still-failing CI, regardless of self-reported status or
@@ -236,18 +307,58 @@ class CIFixStage(Stage):
                 f"required. Resume-blocked to retry from human_mr_approval.",
             )
         _write_counter(cycle_counter_path, cycles + 1)
+        return None
 
+    def _run_agent_and_finalize(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        repo_dir: str,
+        branch: str,
+        failing_summary: str,
+        attempt: int,
+        max_attempts: int,
+    ) -> Outcome:
+        """Run the ci-fix agent and route success / retry / exhausted cases."""
         counter_path = ctx.service.workspace(ticket).artifacts_dir / _CI_FIX_COUNTER
-        attempt = _read_counter(counter_path) + 1
-        max_attempts = s.ci_fix_max_attempts
 
-        log.info(
-            "%s: CI failing — ci-fix attempt %d/%d",
-            ticket.id,
-            attempt,
-            max_attempts,
+        ok = self._invoke_agent(ticket, ctx, repo_dir, branch, failing_summary)
+
+        if ok:
+            return self._finalize_success(
+                ticket, ctx, repo_dir, branch, counter_path, attempt
+            )
+
+        # Agent failed.
+        if attempt < max_attempts:
+            _write_counter(counter_path, attempt)
+            log.warning(
+                "%s: ci-fix attempt %d/%d failed — retrying next poll",
+                ticket.id,
+                attempt,
+                max_attempts,
+            )
+            return Outcome(State.IMPLEMENT_COMPLETE)  # no-op; retry next poll
+
+        # Exhausted all attempts.
+        _write_counter(counter_path, 0)  # reset for any future resume
+        return Outcome(
+            State.BLOCKED,
+            f"ci fix failed after {max_attempts} attempt(s) — "
+            "manual intervention required. "
+            "Resume-blocked to retry from human_mr_approval.",
         )
 
+    def _invoke_agent(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        repo_dir: str,
+        branch: str,
+        failing_summary: str,
+    ) -> bool:
+        """Run the ci-fix agent inside the ticket span; return success."""
+        s = ctx.settings
         try:
             # ci_fix is traced=False, so wrap the LLM agent in the
             # ticket's Langfuse session (session.id = ticket.id) — same
@@ -273,85 +384,77 @@ class CIFixStage(Stage):
         except Exception as e:  # noqa: BLE001
             log.exception("%s: ci-fix agent crashed: %s", ticket.id, e)
             ok = False
+        return ok
 
-        if ok:
-            # Detect no-change cycles: the agent reported success but
-            # produced no commits (local HEAD matches remote).  Track
-            # consecutive no-change cycles in a separate counter so a
-            # flake-storm on a diff that cannot plausibly cause test
-            # failures doesn't retry unboundedly.
-            no_change_counter_path = (
-                ctx.service.workspace(ticket).artifacts_dir / _CI_NO_CHANGE_COUNTER
-            )
-            no_change_cycles = _read_counter(no_change_counter_path)
+    def _finalize_success(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        repo_dir: str,
+        branch: str,
+        counter_path: Path,
+        attempt: int,
+    ) -> Outcome:
+        """On agent success: no-change detection, force-push, counter resets."""
+        s = ctx.settings
 
-            try:
-                local = git_ops.head_sha(repo_dir)
-                remote = git_ops.remote_branch_sha(repo_dir, branch)
-            except Exception:  # noqa: BLE001 — be safe: assume changes
-                local, remote = None, "force-push"
+        # Detect no-change cycles: the agent reported success but
+        # produced no commits (local HEAD matches remote).  Track
+        # consecutive no-change cycles in a separate counter so a
+        # flake-storm on a diff that cannot plausibly cause test
+        # failures doesn't retry unboundedly.
+        no_change_counter_path = (
+            ctx.service.workspace(ticket).artifacts_dir / _CI_NO_CHANGE_COUNTER
+        )
+        no_change_cycles = _read_counter(no_change_counter_path)
 
-            if local is not None and remote == local:
-                # Agent made no commits — count as a no-change cycle.
-                no_change_cycles += 1
-                max_no_change = s.ci_max_auto_retries
-                if max_no_change > 0 and no_change_cycles >= max_no_change:
-                    _write_counter(counter_path, 0)
-                    _write_counter(no_change_counter_path, 0)
-                    return Outcome(
-                        State.BLOCKED,
-                        f"ci fix succeeded but made no code changes "
-                        f"{no_change_cycles} consecutive time(s) — "
-                        f"CI failures are likely infrastructure flakes. "
-                        f"Resume-blocked to retry from human_mr_approval.",
-                    )
-                _write_counter(no_change_counter_path, no_change_cycles)
-                log.info(
-                    "%s: ci fix succeeded but no code changes — no-change cycle %d/%s",
-                    ticket.id,
-                    no_change_cycles,
-                    max_no_change if max_no_change > 0 else float("inf"),
-                )
-            else:
-                # Agent produced commits — reset the no-change counter.
+        try:
+            local = git_ops.head_sha(repo_dir)
+            remote = git_ops.remote_branch_sha(repo_dir, branch)
+        except Exception:  # noqa: BLE001 — be safe: assume changes
+            local, remote = None, "force-push"
+
+        if local is not None and remote == local:
+            # Agent made no commits — count as a no-change cycle.
+            no_change_cycles += 1
+            max_no_change = s.ci_max_auto_retries
+            if max_no_change > 0 and no_change_cycles >= max_no_change:
+                _write_counter(counter_path, 0)
                 _write_counter(no_change_counter_path, 0)
-
-            # Fix applied → force-push only the ticket branch.
-            try:
-                git_ops.push(
-                    repo_dir,
-                    branch=branch,
-                    remote_url=s.forge_remote_url,
-                    token=github_token(s),
-                )
-            except Exception as e:  # noqa: BLE001
-                log.exception("%s: force-push after ci-fix failed: %s", ticket.id, e)
-                _write_counter(counter_path, attempt)
                 return Outcome(
                     State.BLOCKED,
-                    f"ci fix succeeded but force-push failed: {e}",
+                    f"ci fix succeeded but made no code changes "
+                    f"{no_change_cycles} consecutive time(s) — "
+                    f"CI failures are likely infrastructure flakes. "
+                    f"Resume-blocked to retry from human_mr_approval.",
                 )
-            # Reset attempt counter on success.
-            _write_counter(counter_path, 0)
-            log.info("%s: ci fix succeeded, branch force-pushed", ticket.id)
-            return Outcome(State.IMPLEMENT_COMPLETE)  # re-check CI on next poll
-
-        # Agent failed.
-        if attempt < max_attempts:
-            _write_counter(counter_path, attempt)
-            log.warning(
-                "%s: ci-fix attempt %d/%d failed — retrying next poll",
+            _write_counter(no_change_counter_path, no_change_cycles)
+            log.info(
+                "%s: ci fix succeeded but no code changes — no-change cycle %d/%s",
                 ticket.id,
-                attempt,
-                max_attempts,
+                no_change_cycles,
+                max_no_change if max_no_change > 0 else float("inf"),
             )
-            return Outcome(State.IMPLEMENT_COMPLETE)  # no-op; retry next poll
+        else:
+            # Agent produced commits — reset the no-change counter.
+            _write_counter(no_change_counter_path, 0)
 
-        # Exhausted all attempts.
-        _write_counter(counter_path, 0)  # reset for any future resume
-        return Outcome(
-            State.BLOCKED,
-            f"ci fix failed after {max_attempts} attempt(s) — "
-            "manual intervention required. "
-            "Resume-blocked to retry from human_mr_approval.",
-        )
+        # Fix applied → force-push only the ticket branch.
+        try:
+            git_ops.push(
+                repo_dir,
+                branch=branch,
+                remote_url=s.forge_remote_url,
+                token=github_token(s),
+            )
+        except Exception as e:  # noqa: BLE001
+            log.exception("%s: force-push after ci-fix failed: %s", ticket.id, e)
+            _write_counter(counter_path, attempt)
+            return Outcome(
+                State.BLOCKED,
+                f"ci fix succeeded but force-push failed: {e}",
+            )
+        # Reset attempt counter on success.
+        _write_counter(counter_path, 0)
+        log.info("%s: ci fix succeeded, branch force-pushed", ticket.id)
+        return Outcome(State.IMPLEMENT_COMPLETE)  # re-check CI on next poll
