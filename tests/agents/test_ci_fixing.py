@@ -68,6 +68,83 @@ def test_run_ci_fix_agent_reads_output(tmp_path, fake_ai, status, expected):
     assert (result.status == "DONE") is expected
 
 
+def test_ci_fix_result_out_of_scope_fields():
+    """CiFixResult accepts status='OUT_OF_SCOPE' plus the three new fields,
+    which default to empty strings so existing DONE/FAILED construction is
+    unaffected."""
+    # Existing construction unchanged: new fields default to "".
+    done = CiFixResult(status="DONE", summary="ok")
+    assert done.out_of_scope_reason == ""
+    assert done.failing_check == ""
+    assert done.required_change_area == ""
+
+    oos = CiFixResult(
+        status="OUT_OF_SCOPE",
+        summary="not mine to fix",
+        out_of_scope_reason="alert in __init__.py, outside this ticket's diff",
+        failing_check="py/clear-text-logging",
+        required_change_area="src/pkg/__init__.py",
+    )
+    assert oos.status == "OUT_OF_SCOPE"
+    assert oos.out_of_scope_reason == "alert in __init__.py, outside this ticket's diff"
+    assert oos.failing_check == "py/clear-text-logging"
+    assert oos.required_change_area == "src/pkg/__init__.py"
+
+
+def test_out_of_scope_skips_pattern_persistence(tmp_path, monkeypatch):
+    """An OUT_OF_SCOPE verdict does not persist a fix-attempt pattern even
+    when pattern_signature is set."""
+    s = _s(tmp_path)
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            pass
+
+        def run_sync(self, *a, **k):
+            return type(
+                "R",
+                (),
+                {
+                    "output": CiFixResult(
+                        status="OUT_OF_SCOPE",
+                        summary="repo debt",
+                        pattern_signature="py/some-rule",
+                        failing_check="py/some-rule",
+                        required_change_area="other.py",
+                    )
+                },
+            )()
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+
+    class FakeModel:
+        def __init__(self, name, **kw):
+            pass
+
+    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+
+    from robotsix_mill.agents import fs_tools, ci_patterns
+
+    monkeypatch.setattr(fs_tools, "build_fs_tools", lambda rd, s: [])
+
+    calls = []
+    monkeypatch.setattr(ci_patterns, "load_patterns", lambda path: [])
+    monkeypatch.setattr(
+        ci_patterns, "save_patterns", lambda path, entries: calls.append("called")
+    )
+
+    result = run_ci_fix_agent(
+        settings=s,
+        repo_dir=tmp_path,
+        branch="mill/x",
+        failing_summary="CodeQL alert",
+        ticket_id="t-oos",
+    )
+    assert result.status == "OUT_OF_SCOPE"
+    assert len(calls) == 0
+
+
 def test_missing_api_key_raises(tmp_path):
     """B.11: Raises RuntimeError when OPENROUTER_API_KEY is missing."""
     s = Settings(data_dir=str(tmp_path))  # no key
