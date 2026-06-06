@@ -351,6 +351,35 @@ def test_real_refine_yaml_parses():
             _os.environ.pop("MILL_REFINE_MODEL", None)
 
 
+def test_real_implement_yaml_has_output_style_brevity_guidance():
+    """The real implement.yaml's system_prompt must carry the
+    output-style brevity guidance that discourages running commentary.
+
+    Regression guard for the verbosity cost-outlier fix: the implement
+    agent's prose between tool calls was a large share of output tokens,
+    so the prompt now tells it to keep inter-tool narration terse. If
+    that section is removed or reworded away, this test fails.
+    """
+    p = Path("agent_definitions/implement.yaml")
+    if not p.exists():
+        pytest.skip("agent_definitions/implement.yaml not found")
+
+    # Mock the env var so resolution succeeds (model: "${MILL_MODEL}").
+    import os as _os
+
+    _os.environ.setdefault("MILL_MODEL", "test/model")
+
+    try:
+        ad = load_agent_definition(p)
+        assert ad.name == "implement"
+        assert "## Output style" in ad.system_prompt
+        assert "running commentary" in ad.system_prompt
+    finally:
+        # Don't leak the env var if it wasn't set before.
+        if "MILL_MODEL" not in _os.environ:
+            _os.environ.pop("MILL_MODEL", None)
+
+
 # Representative worst-case size of the retrospect runtime memory ledger.
 # This tracks the observed ~34K-char per-board ledger surfaced to the agent
 # at runtime — NOT the checked-in seed docs/retrospect-memory.md (~946 bytes),
