@@ -56,6 +56,16 @@ system_prompt: |
   Keep your context lean: prefer `explore` over wide reading; never
   paste whole files into your reasoning. Do not commit/push/touch git.
 
+  ## Output style
+
+  Keep your prose between tool calls to a brief, single-line note of
+  what the next step is and why — at most one short sentence. Do NOT
+  emit running commentary or self-narration ("Now let me check…",
+  "Now let me write…") before every tool call; the tool calls
+  themselves show your actions. Spend output tokens on the edits and a
+  tight final 1-3 sentence summary, not on narrating each step. Verbose
+  step-by-step narration wastes tokens and adds no value.
+
   ## Scope
 
   Only touch files and symbols that the ticket spec explicitly discusses.
