@@ -20,21 +20,26 @@ __all__ = [
     "OpenRouterDeepseekProvider",
 ]
 
+_DEEPSEEK_INSTALL_HINT = (
+    "robotsix_llmio.openrouter_deepseek requires the "
+    "'openrouter_deepseek' extra. Install with: "
+    "pip install 'robotsix-llmio[openrouter_deepseek]'"
+)
+
 
 def __getattr__(name: str) -> Any:  # PEP 562 — lazy heavy imports
-    if name in ("OpenRouterDeepseekProvider", "OpenRouterDeepseekModel"):
+    # One explicit top-level guard per export so CodeQL's static export
+    # analysis (py/undefined-export) can resolve each name to a real import.
+    if name == "OpenRouterDeepseekModel":
         try:
-            if name == "OpenRouterDeepseekProvider":
-                from .provider import OpenRouterDeepseekProvider
-
-                return OpenRouterDeepseekProvider
             from .model import OpenRouterDeepseekModel
-
-            return OpenRouterDeepseekModel
         except ImportError as exc:  # pragma: no cover
-            raise ImportError(
-                "robotsix_llmio.openrouter_deepseek requires the "
-                "'openrouter_deepseek' extra. Install with: "
-                "pip install 'robotsix-llmio[openrouter_deepseek]'"
-            ) from exc
+            raise ImportError(_DEEPSEEK_INSTALL_HINT) from exc
+        return OpenRouterDeepseekModel
+    if name == "OpenRouterDeepseekProvider":
+        try:
+            from .provider import OpenRouterDeepseekProvider
+        except ImportError as exc:  # pragma: no cover
+            raise ImportError(_DEEPSEEK_INSTALL_HINT) from exc
+        return OpenRouterDeepseekProvider
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

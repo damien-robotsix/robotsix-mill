@@ -29,34 +29,38 @@ __all__ = [
     "is_claude_sdk_turn_limit",
 ]
 
+_CLAUDE_SDK_INSTALL_HINT = (
+    "robotsix_llmio.claude_sdk requires the 'claude_sdk' extra. "
+    "Install with: pip install 'robotsix-llmio[claude_sdk]' "
+    "(also needs Node.js and a logged-in `claude` CLI)."
+)
+
 
 def __getattr__(name: str) -> Any:  # PEP 562 — lazy heavy imports
-    if name in (
-        "ClaudeSDKProvider",
-        "ClaudeSDKModel",
-        "ClaudeSDKTurnLimitError",
-        "ClaudeSDKQueryTimeout",
-    ):
+    # One explicit top-level guard per export so CodeQL's static export
+    # analysis (py/undefined-export) can resolve each name to a real import.
+    if name == "ClaudeSDKModel":
         try:
-            if name == "ClaudeSDKProvider":
-                from .provider import ClaudeSDKProvider
-
-                return ClaudeSDKProvider
-            if name == "ClaudeSDKTurnLimitError":
-                from .model import ClaudeSDKTurnLimitError
-
-                return ClaudeSDKTurnLimitError
-            if name == "ClaudeSDKQueryTimeout":
-                from .model import ClaudeSDKQueryTimeout
-
-                return ClaudeSDKQueryTimeout
             from .model import ClaudeSDKModel
-
-            return ClaudeSDKModel
         except ImportError as exc:  # pragma: no cover
-            raise ImportError(
-                "robotsix_llmio.claude_sdk requires the 'claude_sdk' extra. "
-                "Install with: pip install 'robotsix-llmio[claude_sdk]' "
-                "(also needs Node.js and a logged-in `claude` CLI)."
-            ) from exc
+            raise ImportError(_CLAUDE_SDK_INSTALL_HINT) from exc
+        return ClaudeSDKModel
+    if name == "ClaudeSDKQueryTimeout":
+        try:
+            from .model import ClaudeSDKQueryTimeout
+        except ImportError as exc:  # pragma: no cover
+            raise ImportError(_CLAUDE_SDK_INSTALL_HINT) from exc
+        return ClaudeSDKQueryTimeout
+    if name == "ClaudeSDKTurnLimitError":
+        try:
+            from .model import ClaudeSDKTurnLimitError
+        except ImportError as exc:  # pragma: no cover
+            raise ImportError(_CLAUDE_SDK_INSTALL_HINT) from exc
+        return ClaudeSDKTurnLimitError
+    if name == "ClaudeSDKProvider":
+        try:
+            from .provider import ClaudeSDKProvider
+        except ImportError as exc:  # pragma: no cover
+            raise ImportError(_CLAUDE_SDK_INSTALL_HINT) from exc
+        return ClaudeSDKProvider
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
