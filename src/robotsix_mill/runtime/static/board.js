@@ -37,6 +37,7 @@ const AGENT_COLORS={
  bc_check:'#84cc16',
  completeness_check:'#84cc16',
  cost_reconciliation:'#6366f1',
+ cost_analyst:'#4f46e5',
  config_sync:'#6366f1',
  roadmap_sync:'#9333ea',
  trace_review:'#0ea5e9',
@@ -1175,6 +1176,21 @@ async function runCostReconciliation(){
    alert("Cost-reconciliation failed to start: "+e);
  } finally {
    btn.disabled=false; btn.textContent='Cost Recon';
+ }
+}
+
+async function runCostAnalyst(){
+ const btn=event.target;
+ btn.disabled=true; btn.textContent='Running...';
+ try {
+   const r=await jpost("/cost-analyst");
+   if(!r.ok){throw new Error(await r.text())}
+   alert("Cost-analyst started — it aggregates spend across all repos and files cost-reduction drafts to the mill board.");
+   setTimeout(refresh,4000);
+ } catch(e) {
+   alert("Cost-analyst failed to start: "+e);
+ } finally {
+   btn.disabled=false; btn.textContent='Cost Analyst';
  }
 }
 
