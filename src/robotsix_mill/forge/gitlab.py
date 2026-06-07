@@ -8,8 +8,13 @@ from __future__ import annotations
 import re
 
 from ..config import get_secrets
-from .base import Forge, NotConfiguredError, RepoInfo
-from .github import _ANSI_RE, _MAX_FAILED_JOBS, _capture_failure_window
+from .base import BranchInfo, Forge, NotConfiguredError, RepoInfo
+from .github import (
+    _ANSI_RE,
+    _MAX_FAILED_JOBS,
+    _capture_failure_window,
+    _parse_iso_utc,
+)
 
 
 def _build_headers(token: str) -> dict:
@@ -235,6 +240,20 @@ class GitLabForge(Forge):
     def delete_branch(self, *, branch: str) -> bool:
         project_path = _parse_gitlab_project_path(self._remote_url)
         return self._delete_branch(project_path, branch)
+
+    def list_branches(self) -> list[BranchInfo]:
+        try:
+            project_path = _parse_gitlab_project_path(self._remote_url)
+            return self._list_branches(project_path)
+        except Exception:
+            return []
+
+    def list_open_pr_branches(self) -> set[str]:
+        try:
+            project_path = _parse_gitlab_project_path(self._remote_url)
+            return self._list_open_pr_branches(project_path)
+        except Exception:
+            return set()
 
     # ------------------------------------------------------------------
     # HTTP seams (monkeypatched in tests)
@@ -742,6 +761,67 @@ class GitLabForge(Forge):
                 return False
         except Exception:
             return False
+
+    def _list_branches(self, project_path: str) -> list[BranchInfo]:
+        """GET /projects/:id/repository/branches?per_page=100 (paginated)."""
+        import httpx
+
+        s = self.settings
+        api = s.gitlab_api_url.rstrip("/")
+        headers = _build_headers(get_secrets().forge_token or "")
+        pid = self._resolve_project_id(project_path)
+        out: list[BranchInfo] = []
+        with httpx.Client(timeout=30) as c:
+            page = 1
+            while True:
+                r = c.get(
+                    f"{api}/projects/{pid}/repository/branches",
+                    headers=headers,
+                    params={"per_page": 100, "page": page},
+                )
+                r.raise_for_status()
+                items = r.json()
+                for b in items:
+                    date = (b.get("commit") or {}).get("committed_date")
+                    out.append(
+                        BranchInfo(
+                            name=b["name"],
+                            last_commit_at=_parse_iso_utc(date),
+                            is_protected=bool(b.get("protected")),
+                        )
+                    )
+                if len(items) < 100:
+                    break
+                page += 1
+        return out
+
+    def _list_open_pr_branches(self, project_path: str) -> set[str]:
+        """GET /projects/:id/merge_requests?state=opened (paginated)."""
+        import httpx
+
+        s = self.settings
+        api = s.gitlab_api_url.rstrip("/")
+        headers = _build_headers(get_secrets().forge_token or "")
+        pid = self._resolve_project_id(project_path)
+        out: set[str] = set()
+        with httpx.Client(timeout=30) as c:
+            page = 1
+            while True:
+                r = c.get(
+                    f"{api}/projects/{pid}/merge_requests",
+                    headers=headers,
+                    params={"state": "opened", "per_page": 100, "page": page},
+                )
+                r.raise_for_status()
+                items = r.json()
+                for mr in items:
+                    ref = mr.get("source_branch")
+                    if ref:
+                        out.add(ref)
+                if len(items) < 100:
+                    break
+                page += 1
+        return out
 
 
 def _map_merge_status(merge_status: str) -> bool | None:

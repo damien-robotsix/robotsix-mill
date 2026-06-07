@@ -6,8 +6,9 @@ stage (it owns the repo dir); this only does the API call.
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 
-from .base import Forge, NotConfiguredError, RepoInfo
+from .base import BranchInfo, Forge, NotConfiguredError, RepoInfo
 
 # Regex for stripping ANSI escape sequences (CSI / SGR).
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
@@ -82,6 +83,24 @@ _PENDING_STATUSES = frozenset(
         "pending",
     }
 )
+
+
+def _parse_iso_utc(value: str | None) -> datetime:
+    """Parse an ISO-8601 timestamp into a timezone-aware UTC datetime.
+
+    Accepts a trailing ``Z`` (GitHub's UTC marker). Naive timestamps are
+    assumed UTC; aware ones are converted to UTC. Returns the Unix epoch
+    (UTC) when *value* is missing or unparseable.
+    """
+    if not value:
+        return datetime.fromtimestamp(0, tz=timezone.utc)
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return datetime.fromtimestamp(0, tz=timezone.utc)
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
 def _build_headers(token: str) -> dict:
@@ -515,6 +534,14 @@ class GitHubForge(Forge):
         owner, repo = self._owner_repo
         return self._delete_branch(owner=owner, repo=repo, branch=branch)
 
+    def list_branches(self) -> list[BranchInfo]:
+        owner, repo = self._owner_repo
+        return self._list_branches(owner=owner, repo=repo)
+
+    def list_open_pr_branches(self) -> set[str]:
+        owner, repo = self._owner_repo
+        return self._list_open_pr_branches(owner=owner, repo=repo)
+
     # --- HTTP seamm (monkeypatched in tests) ---
     def _get_pr(self, *, owner: str, repo: str, head: str) -> dict | None:
         import httpx
@@ -656,6 +683,82 @@ class GitHubForge(Forge):
                 return False
         except Exception:
             return False
+
+    # --- HTTP seam (monkeypatched in tests) ---
+    def _list_branches(self, *, owner: str, repo: str) -> list[BranchInfo]:
+        import httpx
+
+        from .auth import github_token  # lazy: avoid import cycle
+
+        s = self.settings
+        api = s.github_api_url.rstrip("/")
+        headers = _build_headers(github_token(s, repo_config=self._repo_config))
+        url = f"{api}/repos/{owner}/{repo}/branches"
+        out: list[BranchInfo] = []
+        try:
+            with httpx.Client(timeout=30) as c:
+                page = 1
+                while True:
+                    r = c.get(
+                        url,
+                        headers=headers,
+                        params={"per_page": 100, "page": page},
+                    )
+                    r.raise_for_status()
+                    items = r.json()
+                    for b in items:
+                        date = (
+                            ((b.get("commit") or {}).get("commit") or {}).get(
+                                "committer"
+                            )
+                            or {}
+                        ).get("date")
+                        out.append(
+                            BranchInfo(
+                                name=b["name"],
+                                last_commit_at=_parse_iso_utc(date),
+                                is_protected=bool(b.get("protected")),
+                            )
+                        )
+                    if len(items) < 100:
+                        break
+                    page += 1
+        except Exception:
+            return []
+        return out
+
+    # --- HTTP seam (monkeypatched in tests) ---
+    def _list_open_pr_branches(self, *, owner: str, repo: str) -> set[str]:
+        import httpx
+
+        from .auth import github_token  # lazy: avoid import cycle
+
+        s = self.settings
+        api = s.github_api_url.rstrip("/")
+        headers = _build_headers(github_token(s, repo_config=self._repo_config))
+        url = f"{api}/repos/{owner}/{repo}/pulls"
+        out: set[str] = set()
+        try:
+            with httpx.Client(timeout=30) as c:
+                page = 1
+                while True:
+                    r = c.get(
+                        url,
+                        headers=headers,
+                        params={"state": "open", "per_page": 100, "page": page},
+                    )
+                    r.raise_for_status()
+                    items = r.json()
+                    for pr in items:
+                        ref = (pr.get("head") or {}).get("ref")
+                        if ref:
+                            out.add(ref)
+                    if len(items) < 100:
+                        break
+                    page += 1
+        except Exception:
+            return set()
+        return out
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _list_pr_reviews(
