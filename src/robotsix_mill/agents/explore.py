@@ -13,6 +13,8 @@ network), like the other agent seams.
 
 from __future__ import annotations
 
+import asyncio
+
 from pathlib import Path
 
 from ..config import Settings, get_secrets
@@ -392,3 +394,68 @@ def make_repo_scoped_explore_tool(settings: Settings, repo_clones: dict[str, Pat
     )
 
     return explore
+
+
+def make_parallel_explore_tool(
+    settings: Settings, repo_dir: Path, extra_roots: list[Path] | None = None
+):
+    """Return a ``parallel_explore(questions)`` closure that fans out.
+
+    Spawns one independent :func:`run_explore` scout per question and runs
+    them **concurrently** (bounded by ``settings.parallel_explore_max``),
+    returning all answers labeled by question. Each scout has its own fresh
+    context + read-only repo tools (incl. the isolated, concurrency-safe
+    sandbox ``run_command``), so genuinely long work splits across subagents
+    instead of running serially in one agent and blowing the stage timeout
+    (e.g. enumerating warnings by partitioning the test suite across scouts).
+
+    Scouts run on the cheap OpenRouter explore model, so the fan-out is true
+    concurrency (not bounded by the Claude subprocess cap). A failing scout
+    yields an error string for its slot rather than failing the whole batch.
+    """
+    cap = max(1, settings.parallel_explore_max)
+
+    async def parallel_explore(questions: list[str]) -> str:
+        """Run SEVERAL independent investigations CONCURRENTLY — one fresh
+        scout sub-agent per question. Use this (instead of many serial
+        ``explore`` calls) for long, splittable work: e.g. partition a big
+        task into independent slices ("enumerate warnings in tests/core",
+        "...in tests/agents", …) and pass them all at once. Each scout can
+        read files and run sandboxed commands in the repo. Returns every
+        answer, labeled by its question. Keep each question self-contained;
+        they cannot see each other's results."""
+        if not questions:
+            return "parallel_explore: no questions provided"
+        sem = asyncio.Semaphore(cap)
+
+        async def _one(idx: int, q: str) -> str:
+            async with sem:
+                try:
+                    ans = await run_explore(
+                        settings=settings,
+                        repo_dir=repo_dir,
+                        question=q,
+                        extra_roots=extra_roots,
+                    )
+                except Exception as e:  # noqa: BLE001 — isolate per-slot failure
+                    ans = f"(explore failed: {e})"
+            return f"### [{idx + 1}] {q}\n{ans}"
+
+        results = await asyncio.gather(*(_one(i, q) for i, q in enumerate(questions)))
+        return "\n\n".join(results)
+
+    from .tool_registry import ToolInfo, ToolRegistry
+
+    ToolRegistry.register(
+        ToolInfo(
+            name="parallel_explore",
+            description=(
+                "Run several independent explore investigations concurrently "
+                "(one scout per question) for long, splittable work."
+            ),
+            category="exploration",
+            parameters={"questions": "list[str]"},
+        )
+    )
+
+    return parallel_explore

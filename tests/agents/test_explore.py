@@ -41,6 +41,62 @@ def test_missing_repo_degrades_not_raises(tmp_path):
     assert "not been cloned yet" in out
 
 
+def test_parallel_explore_fans_out_labeled(tmp_path, monkeypatch):
+    """parallel_explore runs one scout per question and returns every
+    answer labeled by question."""
+    s = _settings(tmp_path)
+
+    async def fake(*, settings, repo_dir, question, extra_roots=None):
+        return f"ANS:{question}"
+
+    monkeypatch.setattr(explore, "run_explore", fake)
+    tool = explore.make_parallel_explore_tool(s, tmp_path)
+    out = asyncio.run(tool(["q1", "q2", "q3"]))
+    assert "[1] q1" in out and "ANS:q1" in out
+    assert "[2] q2" in out and "[3] q3" in out
+
+
+def test_parallel_explore_bounds_concurrency(tmp_path, monkeypatch):
+    """No more than ``parallel_explore_max`` scouts run at once."""
+    s = _settings(tmp_path, parallel_explore_max=2)
+    state = {"cur": 0, "max": 0}
+
+    async def fake(*, settings, repo_dir, question, extra_roots=None):
+        state["cur"] += 1
+        state["max"] = max(state["max"], state["cur"])
+        await asyncio.sleep(0.02)
+        state["cur"] -= 1
+        return question
+
+    monkeypatch.setattr(explore, "run_explore", fake)
+    tool = explore.make_parallel_explore_tool(s, tmp_path)
+    asyncio.run(tool([f"q{i}" for i in range(6)]))
+    assert state["max"] <= 2
+
+
+def test_parallel_explore_isolates_per_slot_failures(tmp_path, monkeypatch):
+    """One failing scout yields an error string for its slot; the rest
+    still return."""
+    s = _settings(tmp_path)
+
+    async def fake(*, settings, repo_dir, question, extra_roots=None):
+        if question == "boom":
+            raise RuntimeError("nope")
+        return f"ok:{question}"
+
+    monkeypatch.setattr(explore, "run_explore", fake)
+    tool = explore.make_parallel_explore_tool(s, tmp_path)
+    out = asyncio.run(tool(["a", "boom", "c"]))
+    assert "ok:a" in out and "ok:c" in out
+    assert "explore failed" in out and "nope" in out
+
+
+def test_parallel_explore_empty_questions(tmp_path):
+    s = _settings(tmp_path)
+    tool = explore.make_parallel_explore_tool(s, tmp_path)
+    assert "no questions" in asyncio.run(tool([]))
+
+
 def test_system_prompt_forbids_whole_file_shell_dumps():
     """The explore system prompt closes the two run_command escape
     hatches flagged in trace review: shelling out to dump whole files,
