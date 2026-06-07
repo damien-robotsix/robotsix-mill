@@ -242,18 +242,12 @@ class GitLabForge(Forge):
         return self._delete_branch(project_path, branch)
 
     def list_branches(self) -> list[BranchInfo]:
-        try:
-            project_path = _parse_gitlab_project_path(self._remote_url)
-            return self._list_branches(project_path)
-        except Exception:
-            return []
+        project_path = _parse_gitlab_project_path(self._remote_url)
+        return self._list_branches(project_path)
 
     def list_open_pr_branches(self) -> set[str]:
-        try:
-            project_path = _parse_gitlab_project_path(self._remote_url)
-            return self._list_open_pr_branches(project_path)
-        except Exception:
-            return set()
+        project_path = _parse_gitlab_project_path(self._remote_url)
+        return self._list_open_pr_branches(project_path)
 
     # ------------------------------------------------------------------
     # HTTP seams (monkeypatched in tests)
@@ -769,30 +763,33 @@ class GitLabForge(Forge):
         s = self.settings
         api = s.gitlab_api_url.rstrip("/")
         headers = _build_headers(get_secrets().forge_token or "")
-        pid = self._resolve_project_id(project_path)
         out: list[BranchInfo] = []
-        with httpx.Client(timeout=30) as c:
-            page = 1
-            while True:
-                r = c.get(
-                    f"{api}/projects/{pid}/repository/branches",
-                    headers=headers,
-                    params={"per_page": 100, "page": page},
-                )
-                r.raise_for_status()
-                items = r.json()
-                for b in items:
-                    date = (b.get("commit") or {}).get("committed_date")
-                    out.append(
-                        BranchInfo(
-                            name=b["name"],
-                            last_commit_at=_parse_iso_utc(date),
-                            is_protected=bool(b.get("protected")),
-                        )
+        try:
+            pid = self._resolve_project_id(project_path)
+            with httpx.Client(timeout=30) as c:
+                page = 1
+                while True:
+                    r = c.get(
+                        f"{api}/projects/{pid}/repository/branches",
+                        headers=headers,
+                        params={"per_page": 100, "page": page},
                     )
-                if len(items) < 100:
-                    break
-                page += 1
+                    r.raise_for_status()
+                    items = r.json()
+                    for b in items:
+                        date = (b.get("commit") or {}).get("committed_date")
+                        out.append(
+                            BranchInfo(
+                                name=b["name"],
+                                last_commit_at=_parse_iso_utc(date),
+                                is_protected=bool(b.get("protected")),
+                            )
+                        )
+                    if len(items) < 100:
+                        break
+                    page += 1
+        except Exception:
+            return []
         return out
 
     def _list_open_pr_branches(self, project_path: str) -> set[str]:
@@ -802,25 +799,28 @@ class GitLabForge(Forge):
         s = self.settings
         api = s.gitlab_api_url.rstrip("/")
         headers = _build_headers(get_secrets().forge_token or "")
-        pid = self._resolve_project_id(project_path)
         out: set[str] = set()
-        with httpx.Client(timeout=30) as c:
-            page = 1
-            while True:
-                r = c.get(
-                    f"{api}/projects/{pid}/merge_requests",
-                    headers=headers,
-                    params={"state": "opened", "per_page": 100, "page": page},
-                )
-                r.raise_for_status()
-                items = r.json()
-                for mr in items:
-                    ref = mr.get("source_branch")
-                    if ref:
-                        out.add(ref)
-                if len(items) < 100:
-                    break
-                page += 1
+        try:
+            pid = self._resolve_project_id(project_path)
+            with httpx.Client(timeout=30) as c:
+                page = 1
+                while True:
+                    r = c.get(
+                        f"{api}/projects/{pid}/merge_requests",
+                        headers=headers,
+                        params={"state": "opened", "per_page": 100, "page": page},
+                    )
+                    r.raise_for_status()
+                    items = r.json()
+                    for mr in items:
+                        ref = mr.get("source_branch")
+                        if ref:
+                            out.add(ref)
+                    if len(items) < 100:
+                        break
+                    page += 1
+        except Exception:
+            return set()
         return out
 
 
