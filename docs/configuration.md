@@ -219,6 +219,7 @@ Every setting below shows:
 | `core.models.test` | `MILL_TEST_MODEL` | `deepseek/deepseek-v4-pro` | Test sub-agent — distills suite failures into diagnosis |
 | `core.models.refine` | `MILL_REFINE_MODEL` | `deepseek/deepseek-v4-pro` | Refine agent — authors engineering specs from drafts |
 | `core.models.answer` | `MILL_ANSWER_MODEL` | `deepseek/deepseek-v4-pro` | Answer agent — investigative Q&A via repo + web + traces |
+| `core.models.ask_to_ticket` | `MILL_ASK_TO_TICKET_MODEL` | `deepseek/deepseek-v4-pro` | Ask-to-ticket agent — drafts task tickets from answered inquiries' Q&A |
 | `core.models.retrospect` | `MILL_RETROSPECT_MODEL` | `deepseek/deepseek-v4-pro` | Retrospect agent — audits finished tickets; proposes improvements |
 | `core.models.audit` | `MILL_AUDIT_MODEL` | `deepseek/deepseek-v4-pro` | Audit agent — meta-audit for quality/security coverage gaps |
 | `core.models.dedup` | `MILL_DEDUP_MODEL` | `deepseek/deepseek-v4-pro` | Dedup agent — pre-refine duplicate/already-done check |
