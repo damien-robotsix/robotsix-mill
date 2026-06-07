@@ -210,6 +210,13 @@ periodic:
     enabled: true                   # enable periodic trace-health checks
     interval_seconds: 86400         # seconds between checks (min 3600 enforced in worker)
 
+  # -- stale-branch-cleanup — deletes old mill branches with no open PR -----
+  stale_branch_cleanup:
+    enabled: false                  # enable periodic stale-branch cleanup (destructive: opt-in)
+    interval_seconds: 86400         # seconds between passes (min 3600 enforced in worker)
+    max_age_days: 30                # branch must be older than this to be eligible
+    prefix_only: true               # when true, only delete branches starting with branch_prefix
+
   # -- health agent — codebase-health across 6 dimensions ------------------
   health:
     model: deepseek/deepseek-v4-flash  # read-only 6-dim summariser, flash sufficient

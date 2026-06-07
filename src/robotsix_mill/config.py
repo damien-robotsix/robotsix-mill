@@ -640,6 +640,22 @@ class Settings(BaseSettings):
     # forge after a ticket merges to DONE. Default True — cleans up
     # mill/<id> branches automatically; set False to keep them.
     delete_branch_on_merge: bool = Field(default=True)
+    # -- periodic stale-branch cleanup --
+    # When True, the worker runs a periodic pass that lists remote branches
+    # and deletes old, unprotected, no-open-PR branches (per prefix/age guards).
+    # Default False — destructive, opt-in.
+    stale_branch_cleanup_periodic: bool = Field(default=False)
+    # Seconds between automatic stale-branch cleanup passes. Only used when
+    # MILL_STALE_BRANCH_CLEANUP_PERIODIC=true. Enforced minimum 3600s (1h)
+    # in the worker to avoid hammering the forge API.
+    stale_branch_cleanup_interval_seconds: int = Field(default=86400)
+    # A branch is eligible for cleanup only if its last commit is older than
+    # this many days. Default 30 days.
+    stale_branch_max_age_days: int = Field(default=30)
+    # When True, only delete branches whose name starts with ``branch_prefix``
+    # (the "old mill" branches). When False, also reap any other stale branch
+    # ("stale dev").
+    stale_branch_cleanup_prefix_only: bool = Field(default=True)
     # Maximum number of CODE_REVIEW → READY → DOCUMENTING → CODE_REVIEW
     # round-trips before escalating to DELIVERABLE for human merge approval.
     # A value ≤ 0 means escalate on the first REQUEST_CHANGES (the loop is
