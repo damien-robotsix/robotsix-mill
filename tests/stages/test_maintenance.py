@@ -3,8 +3,7 @@ from __future__ import annotations
 
 import sys
 from types import ModuleType
-from unittest.mock import patch, MagicMock
-import pytest
+from unittest.mock import MagicMock
 
 from robotsix_mill.core.states import State
 from robotsix_mill.stages.maintenance import MaintenanceStage
