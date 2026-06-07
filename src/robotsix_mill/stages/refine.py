@@ -67,6 +67,14 @@ NON_IMPLEMENTATION_CLOSE_PREFIXES = (
 
 UNMERGED_BRANCH_PREFIX = "Implementation exists on branch"
 
+# History-note prefix written by ``TicketService.request_changes`` when an
+# operator sends a refined ticket back to DRAFT with feedback. Its presence
+# means a human is actively shaping THIS ticket — the dedup guard must not
+# then auto-close it as a "duplicate"/"already done" (that silently discards
+# the operator's intent; see the auto-mail board-columns ticket that was
+# dedup-closed after two rounds of operator "changes requested").
+OPERATOR_SENDBACK_PREFIX = "changes requested:"
+
 
 # Short pointer phrases a refine/conciseness agent sometimes emits in the
 # structured spec field *instead of* the actual spec — the real content was
@@ -528,6 +536,24 @@ class RefineStage(Stage):
                 len(draft),
             )
             return None
+
+        # Operator-iteration guard: if a human has sent this ticket back with
+        # "changes requested" feedback, they are actively shaping it — do NOT
+        # let dedup auto-close it as a duplicate/already-done (that discards
+        # their intent). Proceed straight to refine instead.
+        try:
+            if any(
+                ev.note and ev.note.startswith(OPERATOR_SENDBACK_PREFIX)
+                for ev in ctx.service.history(ticket.id)
+            ):
+                log.info(
+                    "%s: operator has requested changes — skipping dedup guard "
+                    "(human is actively iterating this ticket)",
+                    ticket.id,
+                )
+                return None
+        except Exception:  # noqa: BLE001 — best-effort; never block refine
+            log.debug("%s: dedup sendback-check skipped", ticket.id, exc_info=True)
 
         # Gather candidate tickets: all non-terminal + recently closed.
         all_tickets = ctx.service.list()
