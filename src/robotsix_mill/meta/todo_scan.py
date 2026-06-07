@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 import re
 import subprocess
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -58,6 +59,24 @@ class TodoMarker:
     line: int
     marker: str
     text: str
+
+
+@dataclass(frozen=True)
+class ScanResult:
+    """The outcome of :func:`scan_outstanding_todos`.
+
+    ``markers`` is the capped, sorted marker list (identical to what the
+    function returned before this wrapper existed). ``truncated_repos``
+    holds every ``repo_id`` whose per-repo cap actually dropped >=1
+    marker, and ``global_truncated`` is True when the global cap dropped
+    >=1 marker. These facts are computed where they are knowable (the
+    cap loop, which sees the full pre-cap ``found`` list) so the
+    formatter never has to re-infer truncation from the capped list.
+    """
+
+    markers: list[TodoMarker]
+    truncated_repos: frozenset[str]
+    global_truncated: bool
 
 
 def _first_marker(line: str) -> str | None:
@@ -135,13 +154,19 @@ def scan_outstanding_todos(
     *,
     max_per_repo: int = MAX_PER_REPO,
     max_total: int = MAX_TOTAL,
-) -> list[TodoMarker]:
+) -> ScanResult:
     """Deterministically scan every clone for outstanding markers.
 
     Markers are sorted by ``(repo_id, path, line)`` *before* the
     ``max_per_repo`` / ``max_total`` caps are applied, so truncation is
     reproducible across calls. Clones that are not git repos are skipped
     (see :func:`_scan_clone`).
+
+    Returns a :class:`ScanResult` whose ``markers`` is the capped/sorted
+    list (byte-for-byte unchanged from the legacy return value) plus the
+    truncation facts observed while applying the caps: which repos had a
+    marker dropped by ``max_per_repo`` and whether ``max_total`` dropped
+    any markers.
     """
     found: list[TodoMarker] = []
     for repo_id in sorted(repo_clones):
@@ -150,26 +175,45 @@ def scan_outstanding_todos(
 
     capped: list[TodoMarker] = []
     per_repo: dict[str, int] = {}
+    truncated_repos: set[str] = set()
+    global_truncated = False
     for marker in found:
         if len(capped) >= max_total:
+            # We stopped with markers still unconsumed in ``found`` → the
+            # global cap genuinely dropped at least one marker.
+            global_truncated = True
             break
         if per_repo.get(marker.repo_id, 0) >= max_per_repo:
+            truncated_repos.add(marker.repo_id)
             continue
         per_repo[marker.repo_id] = per_repo.get(marker.repo_id, 0) + 1
         capped.append(marker)
-    return capped
+    return ScanResult(
+        markers=capped,
+        truncated_repos=frozenset(truncated_repos),
+        global_truncated=global_truncated,
+    )
 
 
-def format_outstanding_todos(markers: list[TodoMarker]) -> str:
+def format_outstanding_todos(
+    markers: list[TodoMarker],
+    *,
+    truncated_repos: Iterable[str] = (),
+    global_truncated: bool = False,
+) -> str:
     """Render *markers* as a deterministic Markdown listing grouped by repo.
 
-    Returns ``"(none found)"`` when *markers* is empty. When a per-repo or
-    global cap truncated the results (a group reaches :data:`MAX_PER_REPO`
-    or the total reaches :data:`MAX_TOTAL`), an explicit note is appended
-    so silent truncation is never possible.
+    Returns ``"(none found)"`` when *markers* is empty. A per-repo or
+    global truncation note is appended only when the caller reports that
+    truncation actually occurred: a repo's note when its ``repo_id`` is
+    in *truncated_repos*, and the global note when *global_truncated* is
+    True. With the safe defaults a bare ``format_outstanding_todos(markers)``
+    renders no truncation note.
     """
     if not markers:
         return "(none found)"
+
+    truncated = frozenset(truncated_repos)
 
     by_repo: dict[str, list[TodoMarker]] = {}
     for marker in markers:
@@ -183,12 +227,12 @@ def format_outstanding_todos(markers: list[TodoMarker]) -> str:
             lines.append(
                 f"- `{marker.path}:{marker.line}` [{marker.marker}] {marker.text}"
             )
-        if len(group) >= MAX_PER_REPO:
+        if repo_id in truncated:
             lines.append(
                 f"  (... per-repo cap of {MAX_PER_REPO} reached for `{repo_id}`; "
                 "additional markers omitted)"
             )
-    if len(markers) >= MAX_TOTAL:
+    if global_truncated:
         lines.append(
             f"(... global cap of {MAX_TOTAL} markers reached; additional markers omitted)"
         )
