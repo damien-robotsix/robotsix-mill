@@ -250,7 +250,7 @@ check.
 |----------|---------|--------------|
 | [`docker-publish.yml`](.github/workflows/docker-publish.yml) | Push to `main` | hadolint lint → build Docker image → Trivy CRITICAL scan → push to Docker Hub with SBOM + SLSA attestation |
 | hadolint gate (in `docker-publish.yml`) | (within `docker-publish.yml` push) | `hadolint/hadolint-action@v3.3.0` with `failure-threshold: warning` |
-| [`security-audit.yml`](.github/workflows/security-audit.yml) | Push/PR to `main`, weekly cron | `pip-audit` on installed dependencies |
+| [`security-audit.yml`](.github/workflows/security-audit.yml) | Push/PR to `main`, weekly cron | `pip-audit` (CVEs) + `pip-licenses` (license allowlist gate) on installed dependencies |
 | [`ci.yml`](.github/workflows/ci.yml) | Push/PR to `main` | deptry → module taxonomy → Ruff → mypy `--strict` (advisory) → Bandit MEDIUM+ (advisory; see `[tool.bandit]`) → pytest (70% cov) |
 
 **Note on the hadolint gate in `docker-publish.yml`:** hadolint runs with
@@ -277,6 +277,27 @@ pattern this repo uses for the Bandit severity floor. Once the backlog
 is cleared in separate dedicated tickets (a future sub-epic), the
 `|| true`/`exit 0` advisory wrapper will be removed and mypy promoted to
 a hard gate.
+
+**Note on the license gate in `security-audit.yml`:** the `license-audit`
+job runs `pip-licenses` over the installed `.[tracing]` dependency tree
+with an **allowlist** (`--allow-only`) of permissive licenses (MIT,
+Apache-2.0, BSD 2/3-clause, ISC, PSF, MPL-2.0, Unlicense). Because it is
+an allowlist, it fails on **anything** not explicitly permitted —
+copyleft (GPL/AGPL/LGPL) *and* unlicensed/`UNKNOWN` dependencies — so a
+restrictively-licensed transitive dep cannot slip into this MIT project
+undetected. This is a hard **gate**, not advisory. The allowlist strings
+are the exact license names `pip-licenses --from=mixed` emits from
+package metadata (not bare SPDX ids). The per-package **escape hatch** is
+`--ignore-packages`, used for the first-party MIT robotsix git
+dependencies that can report `UNKNOWN` license metadata, plus the rare
+third-party package that is verifiably permissive but whose metadata
+format defeats the allowlist (e.g. `tiktoken`, which ships the full MIT
+license text as its `License` field with no Trove classifier, so
+`--from=mixed` emits the whole blob instead of a short token); each
+suppression carries an inline justification in the workflow, the same
+pattern as pip-audit's `--ignore-vuln`. Policy lives entirely in the workflow's CLI
+flags and comments — there is intentionally no separate
+`.licenserc`/`.scancode` config file.
 
 ### Trivy vulnerability scanning
 
