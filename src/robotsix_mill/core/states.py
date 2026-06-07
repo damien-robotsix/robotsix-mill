@@ -65,6 +65,7 @@ class State(StrEnum):
     WAITING_AUTO_MERGE = (
         "waiting_auto_merge"  # PR open + CI pending; auto-merge when green
     )
+    MAINTENANCE = "maintenance"  # operational action (create/fork repo, investigation)
     REBASING = "rebasing"  # conflicting PR; rebase agent in progress
     FIXING_CI = "fixing_ci"  # PR open + failing CI; auto-fix in progress
     ADDRESSING_REVIEW = (
@@ -92,6 +93,7 @@ TRANSITIONS: dict[State, set[State]] = {
     # transition so the worker writes the canonical state event.
     State.DRAFT: {
         State.READY,
+        State.MAINTENANCE,
         State.HUMAN_ISSUE_APPROVAL,
         State.ERRORED,
         State.BLOCKED,
@@ -212,6 +214,15 @@ TRANSITIONS: dict[State, set[State]] = {
         State.ERRORED,
         State.AWAITING_USER_REPLY,
     },
+    # maintenance: operational action (create/fork repo, investigation).
+    # On success → done; on failure → blocked; on crash → errored;
+    # can pause mid-execution → awaiting_user_reply.
+    State.MAINTENANCE: {
+        State.DONE,
+        State.BLOCKED,
+        State.ERRORED,
+        State.AWAITING_USER_REPLY,
+    },
     # done = merged: retrospect analyses it -> reviewed
     State.DONE: {State.CLOSED, State.ERRORED, State.BLOCKED, State.AWAITING_USER_REPLY},
     State.CLOSED: set(),
@@ -242,6 +253,7 @@ STAGE_FOR_STATE: dict[State, str] = {
     State.DRAFT: "refine",
     State.READY: "implement",
     State.IMPLEMENT_COMPLETE: "merge",
+    State.MAINTENANCE: "maintenance",
     State.DOCUMENTING: "document",
     State.CODE_REVIEW: "review",
     State.DELIVERABLE: "deliver",
