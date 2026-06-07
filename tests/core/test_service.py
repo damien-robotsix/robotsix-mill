@@ -85,6 +85,15 @@ def test_state_machine_edges():
     # READY → DONE: implement-stage ``no_change_needed`` bypass.
     assert can_transition(State.READY, State.DONE)
 
+    # MAINTENANCE state transitions
+    assert can_transition(State.DRAFT, State.MAINTENANCE)
+    assert can_transition(State.MAINTENANCE, State.DONE)
+    assert can_transition(State.MAINTENANCE, State.BLOCKED)
+    assert can_transition(State.MAINTENANCE, State.ERRORED)
+    assert can_transition(State.MAINTENANCE, State.AWAITING_USER_REPLY)
+    # negative: MAINTENANCE cannot go back to DRAFT
+    assert not can_transition(State.MAINTENANCE, State.DRAFT)
+
 
 # --- BLOCKED resume path ---
 
