@@ -229,29 +229,38 @@ def test_implement_complete_stage_for_state():
 
 # --- MAINTENANCE state ---
 
+
 def test_maintenance_to_done():
     assert can_transition(State.MAINTENANCE, State.DONE) is True
+
 
 def test_maintenance_to_blocked():
     assert can_transition(State.MAINTENANCE, State.BLOCKED) is True
 
+
 def test_maintenance_to_errored():
     assert can_transition(State.MAINTENANCE, State.ERRORED) is True
+
 
 def test_maintenance_to_awaiting_user_reply():
     assert can_transition(State.MAINTENANCE, State.AWAITING_USER_REPLY) is True
 
+
 def test_maintenance_not_to_draft():
     assert can_transition(State.MAINTENANCE, State.DRAFT) is False
+
 
 def test_maintenance_not_to_ready():
     assert can_transition(State.MAINTENANCE, State.READY) is False
 
+
 def test_draft_to_maintenance():
     assert can_transition(State.DRAFT, State.MAINTENANCE) is True
 
+
 def test_maintenance_stage_for_state():
     assert STAGE_FOR_STATE[State.MAINTENANCE] == "maintenance"
+
 
 def test_blocked_resume_to_maintenance():
     assert (
