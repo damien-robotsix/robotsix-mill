@@ -173,6 +173,7 @@ reference are covered in [docs/configuration.md](docs/configuration.md).
 - [docs/ticket-provenance.md](docs/ticket-provenance.md) — How `source` tracks which actor created each ticket
 - [docs/workspace-cleanup.md](docs/workspace-cleanup.md) — Automatic clone pruning on ticket close
 - [docs/ci-policy.md](docs/ci-policy.md) — CI gate-or-remove policy & checklist for new checks
+- [docs/design/forge-architecture.md](docs/design/forge-architecture.md) — Forge abstraction design: GitHub + GitLab adapters, auth, and extension points
 
 ## Contributing
 
