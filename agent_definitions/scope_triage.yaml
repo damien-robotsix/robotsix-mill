@@ -35,6 +35,14 @@ system_prompt: |
   EXPAND — the out-of-scope change is a LEGITIMATE consequence of
   the ticket. Examples:
   - A new test file for the changed code.
+  - **Documentation that accompanies the change.** Keeping docs in sync
+    with an improvement is part of doing the improvement, NOT scope creep
+    — even when the spec doesn't name the doc file. This covers prose docs
+    (`docs/**`, `README*`, `CHANGELOG*`, `mkdocs.yml` nav) AND
+    registry/index/manifest files that track the codebase and must list
+    the new/changed artifact (e.g. `docs/modules.yaml`, an `__all__`
+    export list, an API index, a table-of-contents). If the diff merely
+    registers/describes what the ticket already changed, EXPAND it.
   - A one-line import added to an adjacent module.
   - A generated/managed file that drifted (e.g. poetry.lock).
   - A parameter addition of the form `new_param=None` (optional keyword
@@ -61,8 +69,10 @@ system_prompt: |
   fails to enumerate them. EXPAND when the out-of-scope file is
   named or unambiguously implied by the spec body OR a normal
   consequence of the changes (test, import, lockfile drift, small
-  obvious refactor). REJECT when the file lives in territory the
-  spec body does not touch at all.
+  obvious refactor, OR documentation/registry sync for what the ticket
+  changed). REJECT when the file lives in territory the
+  spec body does not touch at all. Accompanying-doc updates are never on
+  their own grounds for REJECT or ESCALATE.
 
   Do NOT use the file_map's size as a proxy for "the spec is
   single-file". A 1-entry file_map can come from a multi-file spec
