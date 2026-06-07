@@ -984,11 +984,12 @@ def test_ws_board_connects_and_sends_initial_list(client):
 class _FakeRegistry:
     """Minimal fake RunRegistry for testing _make_background_pass."""
 
-    def __init__(self):
+    def __init__(self, entries: list[dict] | None = None):
         self.starts: list[tuple] = []
         self.oks: list[tuple] = []
         self.errors: list[tuple] = []
         self._next_id = 1
+        self._entries = entries or []
 
     def start(self, kind: str, repo_id: str = "") -> int:
         rid = self._next_id
@@ -1001,6 +1002,9 @@ class _FakeRegistry:
 
     def finish_error(self, run_id: int, error: str) -> None:
         self.errors.append((run_id, error))
+
+    def list_all(self) -> list[dict]:
+        return list(self._entries)
 
 
 class _FakeRepos:
@@ -1280,3 +1284,24 @@ def test_factory_thread_is_daemon():
 
     hold.set()  # release the thread
     _wait_for_thread(found)
+
+
+# -- list_runs: synthetic meta board ------------------------------------
+
+
+def test_list_runs_meta_board_no_400_and_filters_meta_entries():
+    """``GET /runs?repo_id=meta`` must not raise 400 (the meta board is a
+    valid synthetic board) and returns only meta-tagged entries (plus any
+    legacy entries with an empty repo_id)."""
+    from robotsix_mill.runtime.routes._traces import list_runs
+
+    entries = [
+        {"id": "m1", "kind": "meta", "repo_id": "meta", "started_at": "2026-01-02"},
+        {"id": "r1", "kind": "audit", "repo_id": "repo-a", "started_at": "2026-01-01"},
+        {"id": "g1", "kind": "health", "repo_id": "", "started_at": "2026-01-03"},
+    ]
+    registry = _FakeRegistry(entries=entries)
+    repos = _FakeRepos()  # "meta" deliberately absent from repos.repos
+    result = list_runs(repo_id="meta", request=_FakeRequest(repos), registry=registry)
+    ids = {e["id"] for e in result}
+    assert ids == {"m1", "g1"}  # meta-tagged + empty-repo_id, never repo-a

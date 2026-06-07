@@ -91,6 +91,20 @@ def test_get_run_registry_repo_id_not_found_falls_back():
     assert result is default_registry
 
 
+def test_get_run_registry_synthetic_meta_board_resolves():
+    """The synthetic "meta" board is absent from repos.repos but has a
+    dedicated registry keyed directly by its board id."""
+    req = MagicMock()
+    default_registry = object()
+    meta_registry = object()
+    req.app.state.run_registry = default_registry
+    req.app.state.run_registries = {"meta": meta_registry}
+    # "meta" is deliberately not registered as a real repo.
+    req.app.state.repos.repos = {}
+    result = get_run_registry(req, repo_id="meta")
+    assert result is meta_registry
+
+
 # ---------------------------------------------------------------------------
 # get_repo_config_for
 # ---------------------------------------------------------------------------

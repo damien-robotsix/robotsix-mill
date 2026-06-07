@@ -58,6 +58,9 @@ def lifespan_mocks(monkeypatch):
     mock_worker = MagicMock()
     mock_worker.stop = AsyncMock()
     mock_worker_class = MagicMock(return_value=mock_worker)
+    # Preserve the real synthetic-meta-board constant — lifespan keys the
+    # dedicated meta registry off Worker._META_BOARD.
+    mock_worker_class._META_BOARD = "meta"
     monkeypatch.setattr("robotsix_mill.runtime.lifespan.Worker", mock_worker_class)
 
     mock_rr_instance = MagicMock()
@@ -95,7 +98,12 @@ async def test_create_lifespan_multi_repo_sets_app_state(
         assert app.state.single_repo_id is None
         assert app.state.worker is lifespan_mocks["worker"]
         assert app.state.run_registry is lifespan_mocks["rr_instance"]
-        assert app.state.run_registries == {"test-board": lifespan_mocks["rr_instance"]}
+        # A dedicated synthetic "meta" registry is always added alongside
+        # the per-repo registries (even in single-repo mode).
+        assert app.state.run_registries == {
+            "test-board": lifespan_mocks["rr_instance"],
+            "meta": lifespan_mocks["rr_instance"],
+        }
 
     # Startup assertions
     lifespan_mocks["init_db"].assert_called_once_with(settings, "test-board")
@@ -139,13 +147,18 @@ async def test_create_lifespan_per_repo_run_registries(
 
     async with lifespan(app):
         registries = app.state.run_registries
-        assert set(registries.keys()) == {"board-a", "board-b"}
+        # Per-repo registries plus the synthetic meta-board registry.
+        assert set(registries.keys()) == {"board-a", "board-b", "meta"}
 
-    # Two RunRegistry instances should have been created.
-    assert lifespan_mocks["rr_class"].call_count == 2
-    # Both calls should have received a Path ending with the right
+    # Three RunRegistry instances should have been created (two repos +
+    # the dedicated meta board).
+    assert lifespan_mocks["rr_class"].call_count == 3
+    # Each call should have received a Path ending with the right
     # board-id / runs.json.
     calls = lifespan_mocks["rr_class"].call_args_list
     paths = [c[0][0] for c in calls]
     assert any("board-a" in str(p) and p.name == "runs.json" for p in paths)
     assert any("board-b" in str(p) and p.name == "runs.json" for p in paths)
+    assert any(
+        str(p).endswith("meta/runs.json") and p.name == "runs.json" for p in paths
+    )
