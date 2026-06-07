@@ -4,7 +4,11 @@ UserError every time -> dedup silently dead). These lock the contract.
 """
 
 from robotsix_mill.agents import dedup
-from robotsix_mill.agents.dedup import DedupResult, rank_candidates_by_similarity
+from robotsix_mill.agents.dedup import (
+    DedupResult,
+    any_candidate_overlap,
+    rank_candidates_by_similarity,
+)
 from robotsix_mill.core.models import Ticket
 
 
@@ -155,6 +159,63 @@ def test_fs_tools_passed_when_repo_dir_provided(settings, monkeypatch):
 def _t(id: str, title: str) -> Ticket:
     """Minimal Ticket for ranking tests — only id/title needed."""
     return Ticket(id=id, title=title, workspace_path="")
+
+
+# ---------------------------------------------------------------------------
+# any_candidate_overlap unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_overlap_empty_candidates_returns_false():
+    assert (
+        any_candidate_overlap(
+            draft_title="Add dark mode toggle",
+            draft_body="We need a dark mode toggle.",
+            candidates_texts=[],
+        )
+        is False
+    )
+
+
+def test_overlap_no_shared_tokens_returns_false():
+    assert (
+        any_candidate_overlap(
+            draft_title="Add dark mode toggle",
+            draft_body="settings panel preference theme switch",
+            candidates_texts=[
+                "Refactor database layer migration scripts",
+                "Implement rate limiting middleware xyzzy",
+            ],
+        )
+        is False
+    )
+
+
+def test_overlap_empty_draft_tokens_returns_false():
+    # All draft tokens <= 2 chars → empty token set → False.
+    assert (
+        any_candidate_overlap(
+            draft_title="a b",
+            draft_body="c d",
+            candidates_texts=["Add dark mode toggle"],
+        )
+        is False
+    )
+
+
+def test_overlap_body_match_returns_true():
+    # Title differs entirely, but a body term overlaps → must reach LLM.
+    assert (
+        any_candidate_overlap(
+            draft_title="Add dark mode toggle",
+            draft_body="settings panel theme",
+            candidates_texts=[
+                "Refactor database layer",
+                "Improve user preferences — the settings page rework",
+            ],
+        )
+        is True
+    )
 
 
 def test_ranking_exact_title_match_ranks_highest():

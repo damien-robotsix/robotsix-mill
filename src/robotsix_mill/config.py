@@ -343,6 +343,15 @@ class Settings(BaseSettings):
     # similarity-based pre-filtering.  Caps the token budget regardless
     # of repo size.  ≥ 1 enforced by validator.
     dedup_max_candidates: int = Field(default=8, ge=1)
+    # When True (default), the pre-refine dedup LLM call is skipped
+    # entirely when the draft shares zero meaningful token overlap with
+    # every candidate (title+body) — the common "clearly unrelated"
+    # case.  Saves 100% of the call cost for genuine non-duplicates.
+    dedup_skip_on_no_overlap: bool = Field(default=True)
+    # Caps each candidate body fed to the dedup prompt (mirrors
+    # doc_classifier_diff_max_chars). Generous by default so it only
+    # clips pathologically long specs; ≤ 0 disables truncation.
+    dedup_candidate_body_max_chars: int = Field(default=4000)
     # Local-dev default: ``.data`` — the same path the docker-compose
     # volume mounts at /data, so host CLI invocations and the container
     # share state instead of leaking a separate sibling tree. The

@@ -551,6 +551,10 @@ def test_dedup_already_committed_closes(ctx, service, monkeypatch):
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
 
     t = service.create("Add X", _DEDUP_BODY)
+    # A token-overlapping candidate so the zero-overlap short-circuit
+    # does not skip the dedup LLM call (this test exercises the
+    # already_done closure path, which must reach run_dedup_check).
+    service.create("Add X again", _DEDUP_BODY)
 
     def fake_dedup(
         *, settings, draft_title, draft_body, repo_dir=None, candidates_json
@@ -644,6 +648,107 @@ def test_dedup_novel_draft_proceeds_normally(ctx, service, monkeypatch):
 
     assert out.next_state is State.READY
     assert refine_called
+
+
+def test_dedup_skip_on_no_overlap_avoids_llm_call(ctx, service, monkeypatch, caplog):
+    """Unrelated candidates + dedup_skip_on_no_overlap (default) →
+    run_dedup_check is NOT called and refine proceeds."""
+    import logging
+
+    refine_state = _install_refine_spy(monkeypatch)
+
+    called = {"dedup": False}
+
+    def fake_dedup(**_):
+        called["dedup"] = True
+        return {"duplicate_of": None, "already_done": None, "reason": "no match"}
+
+    monkeypatch.setattr(dedup, "run_dedup_check", fake_dedup)
+
+    # Candidate whose tokens are disjoint from the draft.
+    service.create(
+        "Refactor billing invoice exporter",
+        "Rework the billing invoice exporter to emit csv reports for "
+        "finance reconciliation dashboards every month.",
+    )
+    t = service.create(
+        "Zephyr quasar nebula configuration",
+        "Implement zephyr quasar nebula orchestration across distributed "
+        "quantum lattices ensuring photon entanglement stays coherent "
+        "throughout galactic transmission windows daily.",
+    )
+
+    with caplog.at_level(logging.DEBUG, logger="robotsix_mill.stages.refine"):
+        out = RefineStage().run(t, ctx)
+
+    assert called["dedup"] is False  # LLM dedup skipped
+    assert refine_state["called"] is True
+    assert out.next_state is State.READY
+    assert "no candidate token overlap" in caplog.text
+
+
+def test_dedup_overlap_invokes_llm(ctx, service, monkeypatch):
+    """A candidate sharing a meaningful token with the draft → the
+    dedup LLM call IS made."""
+    refine_state = _install_refine_spy(monkeypatch)
+
+    called = {"dedup": False}
+
+    def fake_dedup(**_):
+        called["dedup"] = True
+        return {"duplicate_of": None, "already_done": None, "reason": "no match"}
+
+    monkeypatch.setattr(dedup, "run_dedup_check", fake_dedup)
+
+    service.create("Add dark mode toggle", _DEDUP_BODY)
+    t = service.create("Add dark mode toggle", _DEDUP_BODY)
+
+    out = RefineStage().run(t, ctx)
+
+    assert called["dedup"] is True
+    assert refine_state["called"] is True
+    assert out.next_state is State.READY
+
+
+def test_build_candidates_block_truncates_long_body(ctx, service):
+    """A candidate body longer than the cap is truncated with a marker;
+    the rendered block stays bounded."""
+    from robotsix_mill.stages.refine import _build_candidates_block
+
+    long_body = "word " * 2000  # ~10k chars
+    t = service.create("Some candidate", long_body)
+    block = _build_candidates_block([service.get(t.id)], ctx)
+
+    assert "description truncated" in block
+    assert len(block) < ctx.settings.dedup_candidate_body_max_chars + 500
+
+
+def test_build_candidates_block_keeps_short_body(ctx, service):
+    """A short candidate body is rendered unchanged (no truncation)."""
+    from robotsix_mill.stages.refine import _build_candidates_block
+
+    short = "A concise candidate body well under the cap."
+    t = service.create("Short candidate", short)
+    block = _build_candidates_block([service.get(t.id)], ctx)
+
+    assert short in block
+    assert "description truncated" not in block
+
+
+def test_build_candidates_block_no_truncation_when_cap_disabled(
+    service, repo_config, tmp_path
+):
+    """A cap of 0 disables truncation entirely."""
+    from robotsix_mill.stages.refine import _build_candidates_block
+
+    long_body = "word " * 2000
+    t = service.create("Some candidate", long_body)
+    settings0 = Settings(data_dir=str(tmp_path), dedup_candidate_body_max_chars=0)
+    ctx0 = StageContext(settings=settings0, service=service, repo_config=repo_config)
+    block = _build_candidates_block([service.get(t.id)], ctx0)
+
+    assert "description truncated" not in block
+    assert long_body.strip() in block
 
 
 def test_dedup_circular_target_refused(ctx, service, monkeypatch):

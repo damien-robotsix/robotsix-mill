@@ -54,6 +54,8 @@ core:
     refine_requests: 40                # per-call request cap for the refine agent
     dedup_requests: 4                  # per-call cap for dedup check
     dedup_max_candidates: 8               # max candidates passed to dedup LLM (similarity pre-filter cap)
+    dedup_skip_on_no_overlap: true        # skip dedup LLM call when draft shares no token overlap with any candidate
+    dedup_candidate_body_max_chars: 4000  # cap each candidate body fed to dedup prompt (≤0 disables truncation)
     web_research_requests: 8           # per-call cap for web-research sub-agent
     scope_triage_requests: 4           # per-call cap for scope-triage agent
     doc_classifier_requests: 3         # per-call cap for doc-classifier gate

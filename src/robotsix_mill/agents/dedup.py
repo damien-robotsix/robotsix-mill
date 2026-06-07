@@ -41,6 +41,31 @@ def tokenize(text: str) -> set[str]:
     )
 
 
+def any_candidate_overlap(
+    *,
+    draft_title: str,
+    draft_body: str,
+    candidates_texts: list[str],
+) -> bool:
+    """True iff the draft shares at least one meaningful token with any
+    candidate's title or body. Used to skip the LLM dedup call when no
+    candidate could plausibly be a duplicate.
+
+    *candidates_texts* are the caller-assembled title+body strings for
+    each candidate (kept as plain strings so this helper stays pure and
+    unit-testable). Returns ``False`` for an empty candidate list or an
+    empty draft token set; returns ``True`` on the first non-empty
+    token intersection.
+    """
+    draft_tokens = tokenize(draft_title + " " + draft_body)
+    if not draft_tokens:
+        return False
+    for text in candidates_texts:
+        if draft_tokens & tokenize(text):
+            return True
+    return False
+
+
 def rank_candidates_by_similarity(
     *,
     draft_title: str,
