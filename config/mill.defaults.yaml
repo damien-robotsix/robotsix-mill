@@ -17,7 +17,7 @@
 
 core:
 
-  # -- per-agent model selection (19 fields) --------------------------------
+  # -- per-agent model selection (20 fields) --------------------------------
   # Each agent role gets its own model.  All capable roles default to the
   # same model via the &default_model anchor; cheap/classification roles
   # override to smaller models.
@@ -27,6 +27,7 @@ core:
     test: *default_model                                  # distills test failures
     refine: *default_model                                # authors engineering specs from drafts
     answer: *default_model                                # investigative Q&A via repo + web + traces
+    ask_to_ticket: *default_model                         # drafts a task ticket from an answered inquiry's Q&A + operator comment
     retrospect: deepseek/deepseek-v4-flash                # audits finished tickets; extractive summarise/extract-lessons — flash sufficient (cost: was 12.3% of spend on pro tier)
     audit: deepseek/deepseek-v4-flash                     # periodic quality/security scan; flash is enough — read-only proposer, no code-writing risk
     dedup: *default_model                                 # pre-refine duplicate/already-done check

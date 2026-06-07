@@ -190,6 +190,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.models.test": "test_model",
     "core.models.refine": "refine_model",
     "core.models.answer": "answer_model",
+    "core.models.ask_to_ticket": "ask_to_ticket_model",
     "core.models.retrospect": "retrospect_model",
     "core.models.audit": "audit_model",
     "core.models.dedup": "dedup_model",
