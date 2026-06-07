@@ -1151,6 +1151,26 @@ class TestAggregateExpertResultsCaps:
         # a.py (5 lines) fits; b.py would push total to 10 > 8 → stop.
         assert result.reference_files == ["a.py"]
 
+    def test_first_file_respects_line_cap(self, tmp_path):
+        from robotsix_mill.agents.coordinating import _aggregate_expert_results
+
+        # The very first file already exceeds the line cap — it must be
+        # dropped, not unconditionally included.
+        (tmp_path / "big.py").write_text("x\n" * 5000, encoding="utf-8")
+        (tmp_path / "small.py").write_text("x\n" * 2, encoding="utf-8")
+        settings = _settings(
+            tmp_path,
+            reference_files_max_count=10,
+            reference_files_max_total_lines=3000,
+        )
+        result = _aggregate_expert_results(
+            [("d1", self._refs("big.py", "small.py"))],
+            settings=settings,
+            repo_dir=tmp_path,
+        )
+        # big.py (5000 lines) > 3000 cap → stop immediately; nothing kept.
+        assert result.reference_files == []
+
     def test_dedup_preserved_before_caps(self, tmp_path):
         from robotsix_mill.agents.coordinating import _aggregate_expert_results
 

@@ -629,9 +629,7 @@ def _aggregate_expert_results(
             )
         except OSError:
             line_count = 0
-        if trimmed and total_lines + line_count > (
-            settings.reference_files_max_total_lines
-        ):
+        if total_lines + line_count > settings.reference_files_max_total_lines:
             break
         trimmed.append(ref_file)
         total_lines += line_count
