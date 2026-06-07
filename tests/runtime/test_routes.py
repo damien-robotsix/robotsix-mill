@@ -1392,3 +1392,96 @@ def test_convert_to_task_comment_failure_does_not_fail_request(
     r = client.post(f"/tickets/{inquiry.id}/convert-to-task", json={})
     assert r.status_code == 201
     assert r.json()["title"] == "Y task"
+
+
+def test_convert_to_task_503_when_agent_unavailable(client, service, monkeypatch):
+    """When the agent raises RuntimeError the route returns 503 and
+    does not create a new task ticket."""
+    from robotsix_mill.runtime.routes import _tickets as tmod
+
+    inquiry = service.create("How do I X?", kind="inquiry")
+    ticket_count_before = len(service.list())
+
+    def broken_agent(*, settings, question, answer, comment, repo_dir=None):
+        raise RuntimeError("no OpenRouter key")
+
+    monkeypatch.setattr(tmod, "run_ask_to_ticket_agent", broken_agent)
+
+    r = client.post(
+        f"/tickets/{inquiry.id}/convert-to-task",
+        json={"comment": "x"},
+    )
+    assert r.status_code == 503
+    assert "ask-to-ticket agent unavailable" in r.json()["detail"]
+
+    # No new ticket was created.
+    assert len(service.list()) == ticket_count_before
+
+
+def test_convert_to_task_reads_question_artifact(client, service, monkeypatch):
+    """When the question-original.md artifact exists, the route reads the
+    question from it (not the title) and the answer from description.md."""
+    from robotsix_mill.agents.ask_to_ticket import AskToTicketResult
+    from robotsix_mill.runtime.routes import _tickets as tmod
+
+    inquiry = service.create("Fallback title", kind="inquiry")
+    ws = service.workspace(inquiry)
+    ws.write_description("The answer body.")
+    (ws.artifacts_dir / "question-original.md").write_text(
+        "The ORIGINAL question?", encoding="utf-8"
+    )
+
+    captured = {}
+
+    def fake_agent(*, settings, question, answer, comment, repo_dir=None):
+        captured["question"] = question
+        captured["answer"] = answer
+        return AskToTicketResult(title="T", description="D")
+
+    monkeypatch.setattr(tmod, "run_ask_to_ticket_agent", fake_agent)
+
+    r = client.post(
+        f"/tickets/{inquiry.id}/convert-to-task",
+        json={"comment": "convert please"},
+    )
+    assert r.status_code == 201
+    assert captured["question"] == "The ORIGINAL question?"
+    assert captured["answer"] == "The answer body."
+
+
+def test_convert_to_task_leaves_inquiry_unchanged(client, service, monkeypatch):
+    """Conversion creates a NEW task and leaves the source inquiry's
+    kind, title, state, and answer (description) untouched."""
+    from robotsix_mill.agents.ask_to_ticket import AskToTicketResult
+    from robotsix_mill.runtime.routes import _tickets as tmod
+
+    inquiry = service.create("An inquiry", kind="inquiry")
+    ws = service.workspace(inquiry)
+    ws.write_description("Answer text.")
+
+    orig_kind = inquiry.kind
+    orig_title = inquiry.title
+    orig_state = inquiry.state
+    orig_answer = ws.read_description()
+
+    monkeypatch.setattr(
+        tmod,
+        "run_ask_to_ticket_agent",
+        lambda **kw: AskToTicketResult(title="New task", description="new body"),
+    )
+
+    r = client.post(
+        f"/tickets/{inquiry.id}/convert-to-task",
+        json={"comment": "go"},
+    )
+    assert r.status_code == 201
+    new_id = r.json()["id"]
+    assert new_id != inquiry.id
+
+    # Re-fetch the source inquiry.
+    refreshed = service.get(inquiry.id)
+    assert refreshed is not None
+    assert refreshed.kind == orig_kind
+    assert refreshed.title == orig_title
+    assert refreshed.state == orig_state
+    assert service.workspace(refreshed).read_description() == orig_answer
