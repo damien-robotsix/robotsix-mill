@@ -441,5 +441,3 @@ def run_coordinator(
     finally:
         _safe_close(agent)
     return output
-
-

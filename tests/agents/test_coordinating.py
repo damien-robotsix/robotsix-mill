@@ -800,5 +800,3 @@ class TestRunCoordinator:
         # run_coordinator, which reads fresh. There's no stale cache path
         # because the artifact is paths-only with no content key.
         assert tr.content == "original content"
-
-
