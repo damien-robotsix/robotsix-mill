@@ -288,10 +288,14 @@ restrictively-licensed transitive dep cannot slip into this MIT project
 undetected. This is a hard **gate**, not advisory. The allowlist strings
 are the exact license names `pip-licenses --from=mixed` emits from
 package metadata (not bare SPDX ids). The per-package **escape hatch** is
-`--ignore-packages`, used only for the first-party MIT robotsix git
-dependencies that can report `UNKNOWN` license metadata; each suppression
-carries an inline justification in the workflow, the same pattern as
-pip-audit's `--ignore-vuln`. Policy lives entirely in the workflow's CLI
+`--ignore-packages`, used for the first-party MIT robotsix git
+dependencies that can report `UNKNOWN` license metadata, plus the rare
+third-party package that is verifiably permissive but whose metadata
+format defeats the allowlist (e.g. `tiktoken`, which ships the full MIT
+license text as its `License` field with no Trove classifier, so
+`--from=mixed` emits the whole blob instead of a short token); each
+suppression carries an inline justification in the workflow, the same
+pattern as pip-audit's `--ignore-vuln`. Policy lives entirely in the workflow's CLI
 flags and comments — there is intentionally no separate
 `.licenserc`/`.scancode` config file.
 

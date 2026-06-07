@@ -102,17 +102,26 @@ jobs:
           # not in a separate .licenserc/.scancode file — same inline-policy
           # convention as pip-audit's --ignore-vuln and Bandit's [tool.bandit].
           #
-          # --ignore-packages suppresses first-party robotsix code installed
-          # from git. All four are MIT-licensed (this repo and its sibling
-          # robotsix libraries ship a MIT LICENSE), but a pip install from a
-          # git ref can surface UNKNOWN license metadata, which the allowlist
-          # would otherwise reject. This is the per-package escape hatch,
-          # analogous to pip-audit's --ignore-vuln and Trivy's .trivyignore.
+          # --ignore-packages is the per-package escape hatch, analogous to
+          # pip-audit's --ignore-vuln and Trivy's .trivyignore. It suppresses
+          # individual packages that are verifiably permissive-licensed but
+          # whose metadata format the allowlist cannot match — NOT a way to
+          # bypass the copyleft/unknown gate, which stays in force for every
+          # other dependency. Two cases here:
+          #   1. First-party robotsix code installed from a git ref. All are
+          #      MIT (this repo and its sibling libraries ship a MIT LICENSE),
+          #      but a pip install from a git ref can surface UNKNOWN license
+          #      metadata, which the allowlist would otherwise reject.
+          #   2. Third-party packages that ship the FULL license text in the
+          #      `License:` metadata field with no license Trove classifier:
+          #      `--from=mixed` then emits the whole multi-line text as the
+          #      "license name", so the short allowlist tokens can't match.
           ignore_packages=(
             robotsix-mill         # this project itself; MIT (see LICENSE), git/editable install may report UNKNOWN
             robotsix-llmio        # first-party MIT lib, git dep (git+https://github.com/damien-robotsix/robotsix-llmio)
             robotsix-yaml-config  # first-party MIT lib, git dep (git+https://github.com/damien-robotsix/robotsix-yaml-config)
             robotsix-modules      # first-party MIT lib, transitive git dep of robotsix-llmio / robotsix-mill
+            tiktoken              # MIT (OpenAI; verified license text in metadata) but ships full MIT text as License field w/ no classifier, so --from=mixed reports the whole blob and the allowlist tokens can't match
           )
           .venv/bin/pip-licenses \
             --from=mixed \
