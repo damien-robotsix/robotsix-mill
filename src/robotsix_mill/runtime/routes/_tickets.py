@@ -55,7 +55,13 @@ def create_ticket(
 ) -> TicketRead:
     repos = request.app.state.repos
     board_id = ""
-    if body.repo_id:
+    if body.repo_id == "meta":
+        # The synthetic cross-repo meta board is selectable in the UI
+        # and queryable via ?repo_id=meta, but it is not a registered
+        # repo. Accept it here so creating a ticket on the meta board
+        # works instead of 400-ing as an "unknown repo".
+        board_id = "meta"
+    elif body.repo_id:
         # Explicit repo_id provided — look up its board_id.
         if body.repo_id not in repos.repos:
             sorted_keys = sorted(repos.repos.keys())

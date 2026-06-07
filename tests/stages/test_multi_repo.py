@@ -321,6 +321,32 @@ def test_meta_board_visible_and_listable(multi_repo_client, settings):
     assert t.id in {x["id"] for x in r_all.json()}
 
 
+def test_create_ticket_on_meta_board(multi_repo_client):
+    """POST /tickets with repo_id="meta" must succeed (the meta board is
+    selectable in the UI), not 400 as an "unknown repo"."""
+    r = multi_repo_client.post(
+        "/tickets",
+        json={"title": "Meta task", "repo_id": "meta"},
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["title"] == "Meta task"
+    # The created ticket is visible under the meta board.
+    listed = multi_repo_client.get("/tickets?repo_id=meta").json()
+    assert "Meta task" in {t["title"] for t in listed}
+
+
+def test_create_epic_on_meta_board(multi_repo_client):
+    """POST /epics with repo_id="meta" must succeed instead of 400-ing."""
+    r = multi_repo_client.post(
+        "/epics",
+        json={"title": "Meta epic", "repo_id": "meta"},
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["title"] == "Meta epic"
+    listed = multi_repo_client.get("/tickets?repo_id=meta").json()
+    assert "Meta epic" in {t["title"] for t in listed}
+
+
 # -- 4. Periodic-agent isolation (Approach B) ---------------------------
 
 
