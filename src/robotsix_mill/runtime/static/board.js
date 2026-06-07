@@ -1332,7 +1332,7 @@ async function togglePriority(id,want){
 async function convertToTicket(id){
  const comment=prompt("Add a comment to guide the new ticket (optional):");
  if(comment===null)return;
- const r=await jpost("/tickets/"+id+"/convert-to-task",{comment});
+ const r=await jpost("/tickets/"+id+"/convert-to-task",{comment:comment.trim()});
  if(!r.ok){const e=await r.text();alert("convert to ticket failed: "+e);return}
  const nt=await r.json();
  refresh();
