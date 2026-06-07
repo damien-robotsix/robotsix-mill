@@ -351,6 +351,20 @@ class TestRunWebKnowledge:
         assert agent.last_question == "precise question"
         assert agent.last_limits.request_limit == s.web_knowledge_request_limit
 
+    def test_system_prompt_interpolates_stale_days(
+        self, tmp_path, secrets_set, monkeypatch
+    ):
+        """The ``web_knowledge_stale_days`` setting is interpolated into
+        the agent's system prompt rather than hardcoded."""
+        secrets_set(openrouter_api_key="k")
+        instances = _patch_agent_chain(monkeypatch)
+        s = _settings(tmp_path)
+        s.web_knowledge_stale_days = 45
+        asyncio.run(run_web_knowledge(settings=s, question="q"))
+        assert len(instances) == 1
+        assert "~45 days" in instances[0].system_prompt
+        assert "~30 days" not in instances[0].system_prompt
+
     def test_agent_failure_degrades_to_error_string(
         self, tmp_path, secrets_set, monkeypatch
     ):

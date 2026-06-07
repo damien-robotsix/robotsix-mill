@@ -177,7 +177,7 @@ you've learned).
    - If a library file exists for the topic AND its ``last_updated``
      is recent enough that the answer likely hasn't drifted, read
      it with ``read_library`` and try to answer from there.
-   - If the relevant cached file is older than ~30 days OR doesn't
+   - If the relevant cached file is older than ~{stale_days} days OR doesn't
      exist OR you suspect the question is about something the file
      wouldn't cover (a new feature, an edge case), ``web_search``
      first and integrate.
@@ -361,7 +361,9 @@ async def run_web_knowledge(
     index = _build_index(settings)
     agent = Agent(
         model=model,
-        system_prompt=_SYSTEM_PROMPT_TEMPLATE.format(index=index),
+        system_prompt=_SYSTEM_PROMPT_TEMPLATE.format(
+            index=index, stale_days=settings.web_knowledge_stale_days
+        ),
         output_type=str,
         tools=_make_tools(settings),
         name="web_knowledge",
