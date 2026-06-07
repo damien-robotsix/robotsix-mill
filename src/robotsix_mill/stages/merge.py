@@ -1037,7 +1037,10 @@ class MergeStage(Stage):
                 0,
             )
             log.info("%s: gates passed → HUMAN_MR_APPROVAL", ticket.id)
-            return Outcome(State.HUMAN_MR_APPROVAL)
+            return Outcome(
+                State.HUMAN_MR_APPROVAL,
+                "CI checks green and PR is mergeable — awaiting human merge approval",
+            )
 
         # pending or None — keep waiting.
         return Outcome(State.IMPLEMENT_COMPLETE)
