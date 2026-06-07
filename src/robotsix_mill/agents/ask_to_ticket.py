@@ -47,6 +47,10 @@ def run_ask_to_ticket_agent(
         / "ask_to_ticket.yaml"
     )
 
+    # Repo tools (explore, read_file, list_dir, run_command) are only
+    # attached when grounded in a local clone.  The web route passes
+    # ``repo_dir=None`` because the draft is composed from the Q&A text
+    # and operator comment alone — there is no codebase to ground in.
     tools: list = []
     if repo_dir is not None:
         from .explore import make_explore_tool
@@ -67,6 +71,9 @@ def run_ask_to_ticket_agent(
         output_type=AskToTicketResult,
     )
 
+    # Format the Q&A + comment as XML-delimited blocks so the model can
+    # unambiguously separate the three inputs without relying on ad-hoc
+    # separators that might appear in the text itself.
     user_prompt = (
         f"<question>\n{question}\n</question>\n"
         f"<answer>\n{answer}\n</answer>\n"
@@ -84,5 +91,7 @@ def run_ask_to_ticket_agent(
             what="ask_to_ticket",
         )
     finally:
+        # Always close the transport connection, even on failure, so
+        # the underlying HTTP/SSE session is released and does not leak.
         _safe_close(agent)
     return result.output
