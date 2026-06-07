@@ -364,6 +364,14 @@ Every setting below shows:
 | `web.fetch_max_calls` | — | `15` | (YAML-only) Max real (cache-miss) fetches per web-knowledge consult; cache hits and `web.fetch_raw` returns do NOT count |
 | `web.fetch_max_total_bytes` | — | `2000000` | (YAML-only) Cumulative ceiling on returned (post-extraction, post-cap) text bytes per consult; `0` disables the byte ceiling |
 
+### 10.1 Web knowledge agent
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| — | `MILL_WEB_KNOWLEDGE_MODEL` | `deepseek/deepseek-v4-flash` | Web-knowledge gateway sub-agent model — multi-turn flash agent that owns the per-library Markdown knowledge base and decides autonomously whether to answer from cache or web-search. Every agent's route to the internet flows through this gateway. |
+| — | `MILL_WEB_KNOWLEDGE_STALE_DAYS` | `30` | Days before a cached web-knowledge .md file is considered stale. A consult that hits a stale file is allowed to web-search and update it. Users can tune this to match their tolerance for stale documentation. |
+| — | `MILL_WEB_KNOWLEDGE_REQUEST_LIMIT` | `8` | Per-consult request cap for the web-knowledge sub-agent. Each request is one Markdown read, one web-search, or one Markdown write. |
+
 ### 11. Pipeline tail (merge stage)
 
 | YAML path | Env var | Default | Description |
