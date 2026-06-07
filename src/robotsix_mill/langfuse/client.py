@@ -567,8 +567,10 @@ def _fetch_traces_time_window(
     contains no traces.
     """
     from_timestamp = (
-        datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
-    ).isoformat().replace("+00:00", "Z")
+        (datetime.now(timezone.utc) - timedelta(hours=lookback_hours))
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
     PAGE_SIZE = 100
     all_traces: list[dict] = []
@@ -787,7 +789,9 @@ def aggregate_cost_trend(
             for i in range(num_buckets)
         ]
         ts_fmt = lambda dt: (
-            dt.replace(minute=0, second=0, microsecond=0).isoformat().replace("+00:00", "Z")
+            dt.replace(minute=0, second=0, microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z")
         )
     else:
         # Daily buckets

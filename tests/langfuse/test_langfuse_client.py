@@ -620,7 +620,9 @@ def test_aggregate_cost_trend_multi_page(monkeypatch):
             seq += 1
             # Spread traces across the lookback window
             offset_hours = (seq % 30) / 10.0  # 0.0 – 2.9 hours ago
-            ts = (now - timedelta(hours=offset_hours)).isoformat().replace("+00:00", "Z")
+            ts = (
+                (now - timedelta(hours=offset_hours)).isoformat().replace("+00:00", "Z")
+            )
             page_traces.append(
                 {"id": f"t{seq}", "name": "test", "timestamp": ts, "totalCost": 0.001}
             )
