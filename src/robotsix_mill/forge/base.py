@@ -192,6 +192,24 @@ class Forge(ABC):
         by configuration (e.g. a feature flag).
         """
 
+    @abstractmethod
+    def fork_repo(
+        self,
+        *,
+        source_owner: str,
+        source_repo: str,
+        target_namespace: str | None = None,
+    ) -> RepoInfo:
+        """Fork *source_owner/source_repo* and return the new fork's metadata.
+
+        When *target_namespace* is provided, the fork is created under that
+        organization (GitHub) or namespace path/id (GitLab).  Otherwise the
+        fork is created under the authenticated user's account.
+
+        Must raise ``NotConfiguredError`` when repo creation is disabled
+        by configuration (e.g. a feature flag).
+        """
+
     def list_code_scanning_alerts(self, *, source_branch: str) -> list[dict]:
         """List OPEN code-scanning (e.g. CodeQL) alerts on *source_branch*.
 

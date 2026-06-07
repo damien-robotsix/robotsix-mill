@@ -79,7 +79,7 @@ def _mock_httpx(monkeypatch, *, post_response=None, get_map=None):
     *post_response*: returned for every POST call.
     *get_map*: dict mapping URL substrings → FakeResponse for GET calls.
     """
-    captured = {"post_payload": None}
+    captured = {"post_payload": None, "post_url": None}
 
     class MockClient:
         def __init__(self, **kw):
@@ -93,6 +93,7 @@ def _mock_httpx(monkeypatch, *, post_response=None, get_map=None):
 
         def post(self, url, headers=None, json=None, **kwargs):
             captured["post_payload"] = json
+            captured["post_url"] = url
             return post_response or _make_response(500, {}, "error")
 
         def get(self, url, headers=None, params=None, **kwargs):
@@ -1512,6 +1513,63 @@ def test_create_repo_clamps_long_description(tmp_path, monkeypatch):
     forge.create_repo(name="b", owner="o", private=False, description="y" * 600)
 
     assert len(captured["payload"]["description"]) <= 350
+
+
+# ---------------------------------------------------------------------------
+# fork_repo
+# ---------------------------------------------------------------------------
+
+
+def test_fork_repo_happy_path(tmp_path, monkeypatch):
+    """202 response with repo info → returns RepoInfo; POST URL contains /forks."""
+    fake_json = {
+        "id": 99,
+        "name": "r",
+        "clone_url": "https://github.com/my-org/r.git",
+        "html_url": "https://github.com/my-org/r",
+    }
+    captured = _mock_httpx(
+        monkeypatch,
+        post_response=_make_response(202, fake_json),
+    )
+
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    result = forge.fork_repo(source_owner="o", source_repo="r")
+    assert isinstance(result, RepoInfo)
+    assert result.id == 99
+    assert result.name == "r"
+    assert result.clone_url == "https://github.com/my-org/r.git"
+    assert result.html_url == "https://github.com/my-org/r"
+    # POST URL contains /repos/o/r/forks
+    assert "/repos/o/r/forks" in captured["post_url"]
+
+
+def test_fork_repo_with_target_namespace(tmp_path, monkeypatch):
+    """target_namespace → payload includes organization."""
+    fake_json = {
+        "id": 99,
+        "name": "r",
+        "clone_url": "cu",
+        "html_url": "hu",
+    }
+    captured = _mock_httpx(
+        monkeypatch,
+        post_response=_make_response(202, fake_json),
+    )
+
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    result = forge.fork_repo(
+        source_owner="o", source_repo="r", target_namespace="my-org"
+    )
+    assert isinstance(result, RepoInfo)
+    assert captured["post_payload"] == {"organization": "my-org"}
+
+
+def test_fork_repo_flag_disabled(tmp_path, monkeypatch):
+    """enable_repo_creation=False (default) → NotConfiguredError."""
+    forge = _forge(tmp_path)  # no enable_repo_creation
+    with pytest.raises(NotConfiguredError, match="Repo creation is disabled"):
+        forge.fork_repo(source_owner="o", source_repo="r")
 
 
 def test_list_code_scanning_alerts_parses(tmp_path, monkeypatch):

@@ -8,6 +8,7 @@ import httpx as real_httpx
 import pytest
 
 from robotsix_mill.config import Settings, Secrets, _reset_secrets
+from robotsix_mill.forge.base import NotConfiguredError, RepoInfo
 from robotsix_mill.forge.gitlab import (
     GitLabForge,
     _build_headers,
@@ -1403,7 +1404,6 @@ def test_fetch_workflow_job_logs_trace_fetch_failure_is_placeholder(
 
 def test_create_repo_disabled_raises_notconfigured(tmp_path, monkeypatch):
     """enable_repo_creation falsy → NotConfiguredError, no API call."""
-    from robotsix_mill.forge.base import NotConfiguredError
 
     _mock_httpx(monkeypatch, get_map={})
 
@@ -1499,6 +1499,72 @@ def test_create_repo_other_error_raises_runtimeerror(tmp_path, monkeypatch):
     forge = _forge(tmp_path, enable_repo_creation=True)
     with pytest.raises(RuntimeError, match="GitLab repo create failed"):
         forge.create_repo(name="proj", owner="ns", private=True, description="d")
+
+
+# ---------------------------------------------------------------------------
+# fork_repo
+# ---------------------------------------------------------------------------
+
+
+def test_fork_repo_201_returns_repo_info(tmp_path, monkeypatch):
+    """201 → populated RepoInfo; source project resolved, no namespace in payload."""
+    created = {
+        "id": 555,
+        "path": "forked-proj",
+        "name": "Forked Proj",
+        "http_url_to_repo": "https://gitlab.com/me/forked-proj.git",
+        "web_url": "https://gitlab.com/me/forked-proj",
+    }
+    get_map = {
+        "projects/o%2Fr": _make_response(200, {"id": 99}),
+    }
+    captured = _mock_httpx(
+        monkeypatch,
+        get_map=get_map,
+        post_response=_make_response(201, created),
+    )
+
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    result = forge.fork_repo(source_owner="o", source_repo="r")
+    assert isinstance(result, RepoInfo)
+    assert result.id == 555
+    assert result.name == "forked-proj"
+    assert result.clone_url == "https://gitlab.com/me/forked-proj.git"
+    assert result.html_url == "https://gitlab.com/me/forked-proj"
+    assert captured["post_payload"] == {}
+
+
+def test_fork_repo_with_target_namespace(tmp_path, monkeypatch):
+    """target_namespace → payload includes namespace."""
+    created = {
+        "id": 1,
+        "path": "r",
+        "name": "r",
+        "http_url_to_repo": "cu",
+        "web_url": "hu",
+    }
+    get_map = {
+        "projects/o%2Fr": _make_response(200, {"id": 99}),
+    }
+    captured = _mock_httpx(
+        monkeypatch,
+        get_map=get_map,
+        post_response=_make_response(201, created),
+    )
+
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    forge.fork_repo(source_owner="o", source_repo="r", target_namespace="my-ns")
+    assert captured["post_payload"] == {"namespace": "my-ns"}
+
+
+def test_fork_repo_disabled_raises_notconfigured(tmp_path, monkeypatch):
+    """enable_repo_creation=False → NotConfiguredError."""
+
+    _mock_httpx(monkeypatch, get_map={})
+
+    forge = _forge(tmp_path, enable_repo_creation=False)
+    with pytest.raises(NotConfiguredError):
+        forge.fork_repo(source_owner="o", source_repo="r")
 
 
 # ---------------------------------------------------------------------------
