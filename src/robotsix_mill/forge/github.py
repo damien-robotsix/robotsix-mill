@@ -376,6 +376,48 @@ class GitHubForge(Forge):
         )
         return _parse_repo_info(rr.json()) if is_empty else None
 
+    # --- HTTP seam (monkeypatched in tests) ---
+    def _fork_repo(
+        self,
+        *,
+        source_owner: str,
+        source_repo: str,
+        target_namespace: str | None = None,
+    ) -> RepoInfo:
+        import httpx
+
+        from .auth import github_token  # lazy: avoid import cycle
+        from ..config import get_secrets
+
+        s = self.settings
+        api = s.github_api_url.rstrip("/")
+        token = get_secrets().forge_repo_create_token or github_token(
+            s, repo_config=self._repo_config
+        )
+        headers = _build_headers(token)
+        url = f"{api}/repos/{source_owner}/{source_repo}/forks"
+        payload: dict = {}
+        if target_namespace is not None:
+            payload["organization"] = target_namespace
+
+        with httpx.Client(timeout=30) as c:
+            r = c.post(url, headers=headers, json=payload)
+            if r.status_code in (200, 201, 202):
+                return _parse_repo_info(r.json())
+            if (
+                r.status_code == 403
+                and "not accessible by integration" in (r.text or "").lower()
+            ):
+                raise RuntimeError(
+                    "GitHub fork failed: 403 Resource not accessible by "
+                    "integration. A GitHub App installation token cannot fork "
+                    "repositories under a personal account — set "
+                    "`forge_repo_create_token` in secrets to a PAT with "
+                    "repo-creation rights (classic: `repo` scope; fine-grained: "
+                    "Administration:Read and write on the target account)."
+                )
+            raise RuntimeError(f"GitHub fork failed: {r.status_code} {r.text[:300]}")
+
     def pr_status(self, *, source_branch: str) -> dict | None:
         owner, repo = self._owner_repo
         return self._get_pr(owner=owner, repo=repo, head=source_branch)
@@ -528,6 +570,26 @@ class GitHubForge(Forge):
             owner=owner,
             private=private,
             description=description,
+        )
+
+    def fork_repo(
+        self,
+        *,
+        source_owner: str,
+        source_repo: str,
+        target_namespace: str | None = None,
+    ) -> RepoInfo:
+        if not self.settings.enable_repo_creation:
+            raise NotConfiguredError(
+                "Repo creation is disabled. Set enable_repo_creation=True "
+                "and verify the GitHub App installation has the "
+                "Administration:Read and write permission (or equivalent "
+                "PAT scope)."
+            )
+        return self._fork_repo(
+            source_owner=source_owner,
+            source_repo=source_repo,
+            target_namespace=target_namespace,
         )
 
     def delete_branch(self, *, branch: str) -> bool:

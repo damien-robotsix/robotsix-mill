@@ -237,6 +237,25 @@ class GitLabForge(Forge):
             description=description,
         )
 
+    def fork_repo(
+        self,
+        *,
+        source_owner: str,
+        source_repo: str,
+        target_namespace: str | None = None,
+    ) -> RepoInfo:
+        if not self.settings.enable_repo_creation:
+            raise NotConfiguredError(
+                "Repo creation is disabled. Set enable_repo_creation=True "
+                "and verify the GitLab token has api scope with permission to "
+                "create projects in the target namespace."
+            )
+        return self._fork_repo(
+            source_owner=source_owner,
+            source_repo=source_repo,
+            target_namespace=target_namespace,
+        )
+
     def delete_branch(self, *, branch: str) -> bool:
         project_path = _parse_gitlab_project_path(self._remote_url)
         return self._delete_branch(project_path, branch)
@@ -585,6 +604,46 @@ class GitLabForge(Forge):
             raise RuntimeError(
                 f"GitLab repo create failed: {r.status_code} {r.text[:300]}"
             )
+
+    def _fork_repo(
+        self,
+        *,
+        source_owner: str,
+        source_repo: str,
+        target_namespace: str | None = None,
+    ) -> RepoInfo:
+        """POST /projects/:id/fork → RepoInfo."""
+        import httpx
+
+        s = self.settings
+        api = s.gitlab_api_url.rstrip("/")
+        headers = _build_headers(get_secrets().forge_token or "")
+        source_path = f"{source_owner}/{source_repo}"
+        pid = self._resolve_project_id(source_path)
+        url = f"{api}/projects/{pid}/fork"
+        payload: dict = {}
+        if target_namespace is not None:
+            payload["namespace"] = target_namespace
+
+        with httpx.Client(timeout=30) as c:
+            r = c.post(url, headers=headers, json=payload)
+            if r.status_code == 201:
+                data = r.json()
+                return RepoInfo(
+                    id=data["id"],
+                    name=data["path"] or data["name"],
+                    clone_url=data["http_url_to_repo"],
+                    html_url=data["web_url"],
+                )
+            if r.status_code == 409 and (
+                "already been taken" in (r.text or "").lower()
+                or "already exists" in (r.text or "").lower()
+            ):
+                raise RuntimeError(
+                    f"GitLab fork failed: a fork of '{source_path}' already "
+                    f"exists in the target namespace: {r.text[:300]}"
+                )
+            raise RuntimeError(f"GitLab fork failed: {r.status_code} {r.text[:300]}")
 
     def _create_mr(
         self,
