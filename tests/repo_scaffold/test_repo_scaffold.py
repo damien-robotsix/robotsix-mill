@@ -67,7 +67,7 @@ def _new_repo_marker(**fields) -> str:
     defaults = {
         "name": "my-new-repo",
         "owner": "my-org",
-        "private": True,
+        "private": False,
         "description": "A test repo",
         "language": "python",
     }
@@ -120,7 +120,7 @@ class TestParseNewRepoParams:
         assert params is not None
         assert params["name"] == "my-new-repo"
         assert params["owner"] == "my-org"
-        assert params["private"] is True
+        assert params["private"] is False
         assert params["description"] == "A test repo"
         assert params["language"] == "python"
 
@@ -132,18 +132,18 @@ class TestParseNewRepoParams:
         assert params is not None
         assert params["name"] == "minimal-repo"
         assert params["owner"] == ""
-        assert params["private"] is True  # default
+        assert params["private"] is False
         assert params["description"] == ""
         assert params["language"] == "python"  # default
 
-    def test_private_defaults_true_when_absent(self):
+    def test_private_defaults_false_when_absent(self):
         desc = """<!-- meta-extraction-kind: new-repo
   name: my-repo
   owner: someone
 -->"""
         params = parse_new_repo_params(desc)
         assert params is not None
-        assert params["private"] is True
+        assert params["private"] is False
 
     def test_missing_marker(self):
         desc = "Just a regular ticket description"
@@ -458,7 +458,7 @@ class TestRunRepoScaffold:
         forge.create_repo.assert_called_once_with(
             name="my-repo",
             owner="my-org",
-            private=True,
+            private=False,
             description="A test repo",
         )
 
