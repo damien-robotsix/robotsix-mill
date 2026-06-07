@@ -62,3 +62,60 @@ jobs:
           # Advisory has since been withdrawn from the OSV database
           # (2026); retained for documentation.
           GHA_PIP_AUDIT_INTERNAL_BE_CAREFUL_ALLOW_FAILURE: false
+
+  license-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.14"
+
+      - name: Create virtual environment
+        run: python -m venv .venv
+
+      - name: Install project + tracing extras
+        run: .venv/bin/pip install ".[tracing]"
+
+      - name: Install pip-licenses
+        run: .venv/bin/pip install "pip-licenses>=5"
+
+      - name: Audit dependency licenses (allowlist gate)
+        run: |
+          # Allowlist gate: pip-licenses exits non-zero on ANY installed
+          # dependency whose license is not explicitly permitted below.
+          # Unlike a denylist, an allowlist also fails on UNKNOWN/unlicensed
+          # packages — copyleft AND unlicensed deps are both rejected.
+          # --allow-only is the real enforcement; --fail-on is kept as
+          # belt-and-suspenders that documents the copyleft intent explicitly.
+          #
+          # The --allow-only strings are the EXACT license names that
+          # `pip-licenses --from=mixed` emits from installed-package metadata
+          # (PEP 639 License-Expression + Trove classifiers, classifier-first)
+          # for the current `.[tracing]` dependency tree — they are NOT bare
+          # SPDX ids and must match verbatim. They cover the permissive
+          # families this MIT-licensed project accepts: MIT, Apache-2.0, BSD
+          # (2/3-clause), ISC, PSF, MPL-2.0 and Unlicense, including the
+          # compound "A OR B" / "A AND B" expressions pip-licenses reports as
+          # a single atomic token. Policy lives here (CLI flags + comments),
+          # not in a separate .licenserc/.scancode file — same inline-policy
+          # convention as pip-audit's --ignore-vuln and Bandit's [tool.bandit].
+          #
+          # --ignore-packages suppresses first-party robotsix code installed
+          # from git. All four are MIT-licensed (this repo and its sibling
+          # robotsix libraries ship a MIT LICENSE), but a pip install from a
+          # git ref can surface UNKNOWN license metadata, which the allowlist
+          # would otherwise reject. This is the per-package escape hatch,
+          # analogous to pip-audit's --ignore-vuln and Trivy's .trivyignore.
+          ignore_packages=(
+            robotsix-mill         # this project itself; MIT (see LICENSE), git/editable install may report UNKNOWN
+            robotsix-llmio        # first-party MIT lib, git dep (git+https://github.com/damien-robotsix/robotsix-llmio)
+            robotsix-yaml-config  # first-party MIT lib, git dep (git+https://github.com/damien-robotsix/robotsix-yaml-config)
+            robotsix-modules      # first-party MIT lib, transitive git dep of robotsix-llmio / robotsix-mill
+          )
+          .venv/bin/pip-licenses \
+            --from=mixed \
+            --allow-only="MIT;MIT License;Apache-2.0;Apache Software License;BSD License;BSD-2-Clause;BSD-3-Clause;3-Clause BSD License;ISC;ISC License (ISCL);PSF-2.0;Python Software Foundation License;Mozilla Public License 2.0 (MPL 2.0);MPL-2.0;The Unlicense (Unlicense);Apache-2.0 OR BSD-3-Clause;Apache-2.0 OR BSD-2-Clause;MIT OR Apache-2.0;MIT AND PSF-2.0;MPL-2.0 AND MIT;Apache-2.0 AND CNRI-Python" \
+            --ignore-packages "${ignore_packages[@]}" \
+            --fail-on="GPL;AGPL;LGPL"
