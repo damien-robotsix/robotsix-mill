@@ -98,6 +98,12 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("test_model", "MILL_TEST_MODEL", "test/tester", "test/tester"),
     ("refine_model", "MILL_REFINE_MODEL", "test/refine", "test/refine"),
     ("answer_model", "MILL_ANSWER_MODEL", "test/answer", "test/answer"),
+    (
+        "ask_to_ticket_model",
+        "MILL_ASK_TO_TICKET_MODEL",
+        "test/a2t",
+        "test/a2t",
+    ),
     ("retrospect_model", "MILL_RETROSPECT_MODEL", "test/retro", "test/retro"),
     ("audit_model", "MILL_AUDIT_MODEL", "test/audit", "test/audit"),
     ("dedup_model", "MILL_DEDUP_MODEL", "test/dedup", "test/dedup"),

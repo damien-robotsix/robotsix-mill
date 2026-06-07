@@ -1305,3 +1305,90 @@ def test_list_runs_meta_board_no_400_and_filters_meta_entries():
     result = list_runs(repo_id="meta", request=_FakeRequest(repos), registry=registry)
     ids = {e["id"] for e in result}
     assert ids == {"m1", "g1"}  # meta-tagged + empty-repo_id, never repo-a
+
+
+# -- POST /tickets/{id}/convert-to-task ---------------------------------
+
+
+def test_convert_to_task_404(client):
+    """Unknown ticket returns 404."""
+    r = client.post("/tickets/nonexistent/convert-to-task", json={})
+    assert r.status_code == 404
+
+
+def test_convert_to_task_409_non_inquiry(client, service):
+    """A non-inquiry ticket cannot be converted -> 409."""
+    t = service.create("A regular task", kind="task")
+    r = client.post(f"/tickets/{t.id}/convert-to-task", json={"comment": "x"})
+    assert r.status_code == 409
+
+
+def test_convert_to_task_happy_path(client, service, monkeypatch):
+    """A valid inquiry is converted into a new task on the same board,
+    using the agent's drafted title/description, with a backlink comment
+    posted on the source inquiry."""
+    from robotsix_mill.agents.ask_to_ticket import AskToTicketResult
+    from robotsix_mill.runtime.routes import _tickets as tmod
+
+    inquiry = service.create("How do I X?", kind="inquiry")
+
+    captured = {}
+
+    def fake_agent(*, settings, question, answer, comment, repo_dir=None):
+        captured["question"] = question
+        captured["comment"] = comment
+        return AskToTicketResult(title="Implement X", description="Do the X work.")
+
+    monkeypatch.setattr(tmod, "run_ask_to_ticket_agent", fake_agent)
+
+    r = client.post(
+        f"/tickets/{inquiry.id}/convert-to-task",
+        json={"comment": "please make this a task"},
+    )
+    assert r.status_code == 201
+    data = r.json()
+    assert data["title"] == "Implement X"
+    assert data["kind"] == "task"
+    assert data["board_id"] == inquiry.board_id
+    assert data["id"] != inquiry.id
+
+    # Comment was forwarded; question falls back to the title.
+    assert captured["comment"] == "please make this a task"
+    assert captured["question"] == "How do I X?"
+
+    # New task exists with the agent-drafted description.
+    new = service.get(data["id"])
+    assert new is not None
+    assert service.workspace(new).read_description() == "Do the X work."
+
+    # Backlink comment posted on the source inquiry.
+    comments = service.list_comments(inquiry.id)
+    assert any(f"task {data['id']}" in c.body for c in comments), comments
+
+
+def test_convert_to_task_comment_failure_does_not_fail_request(
+    client, service, monkeypatch
+):
+    """A backlink comment failure must not fail the conversion."""
+    from robotsix_mill.agents.ask_to_ticket import AskToTicketResult
+    from robotsix_mill.runtime.routes import _tickets as tmod
+
+    inquiry = service.create("How do I Y?", kind="inquiry")
+
+    monkeypatch.setattr(
+        tmod,
+        "run_ask_to_ticket_agent",
+        lambda **kw: AskToTicketResult(title="Y task", description="body"),
+    )
+
+    def boom(*a, **k):
+        raise RuntimeError("comment backend down")
+
+    # Patch the service class method used by the route handler.
+    from robotsix_mill.core.service import TicketService
+
+    monkeypatch.setattr(TicketService, "add_comment", boom)
+
+    r = client.post(f"/tickets/{inquiry.id}/convert-to-task", json={})
+    assert r.status_code == 201
+    assert r.json()["title"] == "Y task"

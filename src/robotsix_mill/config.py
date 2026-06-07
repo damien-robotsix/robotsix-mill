@@ -188,6 +188,7 @@ class Settings(BaseSettings):
     # these re-check / resume passes cheap.
     no_change_model: str = Field(default="deepseek/deepseek-v4-flash")
     answer_model: str = Field(default="deepseek/deepseek-v4-pro")
+    ask_to_ticket_model: str = Field(default="deepseek/deepseek-v4-pro")
     retrospect_model: str = Field(default="deepseek/deepseek-v4-flash")
     audit_model: str = Field(default="deepseek/deepseek-v4-flash")
     # Default model for bespoke per-repo periodic agents loaded from
