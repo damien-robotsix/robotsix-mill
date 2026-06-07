@@ -1377,9 +1377,32 @@ async function open_(id){
    `</div>`:"");
  }
  function flushHistory(){
+  flushApprovalReason();
   if(_h===undefined)return;const el=document.getElementById("ticket-history");if(!el)return;
   const traces=(_cb&&_cb.traces)||[];
   el.innerHTML=renderHistoryHtml(_h,id,traces);
+ }
+ // Surface the most-recent human-approval event note prominently in the
+ // header so the operator sees WHY a ticket is parked at
+ // human_issue_approval / human_mr_approval without expanding history.
+ function flushApprovalReason(){
+  if(_h===undefined)return;          // history not resolved yet
+  if(!tData)return;                  // header not built yet
+  const el=document.getElementById("ticket-approval-reason");if(!el)return;
+  const st=tData.state;
+  if(st!=="human_issue_approval"&&st!=="human_mr_approval"){el.innerHTML="";return}
+  const hist=Array.isArray(_h)?_h:[];
+  let note="";
+  for(let i=hist.length-1;i>=0;i--){
+   const e=hist[i];
+   if(e&&e.state===st&&typeof e.note==="string"&&e.note.trim()){note=e.note;break}
+  }
+  if(!note){
+   note=st==="human_issue_approval"
+    ?"Awaiting human approval of the refined spec."
+    :"Awaiting human merge approval.";
+  }
+  el.innerHTML=`<div style="margin-top:8px;padding:6px 10px;border-left:3px solid #f59e0b;background:#1f1b12;border-radius:4px"><b style="color:#f59e0b;font-size:11px">Why this is awaiting approval:</b><div class="md-body" style="font-size:12px;margin-top:2px">${renderMD(note)}</div></div>`;
  }
  function flushDescription(){
   if(_d===undefined)return;const el=document.getElementById("ticket-body-area");if(!el)return;
@@ -1403,7 +1426,7 @@ async function open_(id){
   const mel=document.getElementById("ticket-merge");
   if(mel&&_mi!==undefined)mel.innerHTML=(tData&&tData.state==="human_mr_approval"&&_mi?renderMergeInfo(_mi):"");
  }
- function flushAllSections(){flushChildren();flushHistory();flushDescription();flushRetrospect();flushComments();flushMerge();}
+ function flushAllSections(){flushChildren();flushHistory();flushApprovalReason();flushDescription();flushRetrospect();flushComments();flushMerge();}
  // 4. Render header as soon as ticket data resolves
  tP.then(t=>{
   if(sel!==id)return;
@@ -1448,6 +1471,7 @@ async function open_(id){
    (t.unmet_deps&&t.unmet_deps.length?`<p style="color:#f59e0b;font-weight:bold">⏳ waiting on ${t.unmet_deps.length} unfinished dep${t.unmet_deps.length>1?"s":""}</p>`:"")+
    (t.parent_id?`<p><b>Part of epic:</b> <span class="epic-ref">📋 ${esc(t.parent_title||t.parent_id)}</span></p>`:"")+
    (t.kind==="epic"?`<p><button class="add-comment-btn" style="background:#9333ea;color:#fff" onclick="generateChildren(${jsq(t.id)})">Generate Tickets</button> <button class="add-comment-btn" style="background:#2563eb;color:#fff" onclick="newChildTicket(${jsq(t.id)})">Add Ticket</button></p>`:"")+
+   `<div id="ticket-approval-reason"></div>`+
    `<div id="ticket-action-buttons">${_actionButtonsHtml(t)}</div>`+
    `</div>`+
    `</div>`+

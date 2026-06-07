@@ -113,6 +113,9 @@ def test_implement_complete_ci_green_mergeable_promotes_to_human_mr_approval(
 
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.HUMAN_MR_APPROVAL
+    # The primary MR-approval transition records an operator-facing reason.
+    assert out.note
+    assert "mergeable" in out.note
     # Genuine forward progress (gates passed) resets the ci_fix cycle ceiling.
     assert cycle_path.read_text().strip() == "0"
 
