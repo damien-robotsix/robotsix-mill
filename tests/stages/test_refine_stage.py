@@ -300,6 +300,43 @@ def test_dedup_duplicate_short_circuits_to_done(ctx_factory, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# 3b. dedup: SKIPPED once the operator has requested changes
+# ---------------------------------------------------------------------------
+
+
+def test_dedup_skipped_after_operator_changes_requested(ctx_factory, monkeypatch):
+    """Regression: once an operator sends a ticket back with 'changes
+    requested', dedup must NOT auto-close it as a duplicate/already-done —
+    the human is actively iterating it. (The auto-mail board-columns ticket
+    was silently dedup-closed this way after two operator sendbacks.)"""
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
+    t = _ticket(
+        ctx, body="The board columns should reflect the awaiting action on each mail"
+    )
+    # Operator sendback: DRAFT -> HUMAN_ISSUE_APPROVAL -> request_changes -> DRAFT
+    ctx.service.transition(t.id, State.HUMAN_ISSUE_APPROVAL)
+    ctx.service.request_changes(t.id, "use awaiting-action columns")
+    t = ctx.service.get(t.id)
+
+    _apply_default_mocks(
+        monkeypatch,
+        # dedup WOULD flag a duplicate — the guard must skip it entirely.
+        run_dedup_check=_mock_dedup(
+            duplicate_of="ticket-abc", already_done=None, reason="same idea"
+        ),
+        run_refine_agent=_mock_refine_ok(
+            spec_markdown="## Problem\nawaiting-action cols"
+        ),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    # Refined (not closed as a duplicate) — dedup was skipped.
+    assert out.next_state is State.READY
+    assert "duplicate" not in (out.note or "")
+
+
+# ---------------------------------------------------------------------------
 # 4. dedup: already done → DONE
 # ---------------------------------------------------------------------------
 
