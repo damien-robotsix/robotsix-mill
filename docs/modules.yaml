@@ -439,6 +439,7 @@ modules:
       - src/robotsix_mill/meta/runner.py
       - src/robotsix_mill/meta/workspace.py
       - tests/meta/test_agent_build.py
+      - tests/meta/test_agent_helpers.py
       - tests/meta/test_todo_scan.py
       - tests/meta/test_triage.py
       - tests/meta/test_runner.py
