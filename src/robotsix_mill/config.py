@@ -634,6 +634,12 @@ class Settings(BaseSettings):
     # round-trips. 20 was the original default and routinely BLOCKED
     # medium PRs with "review agent error — resumable" mid-review.
     review_request_limit: int = Field(default=40)
+    # Maximum characters of the re-review prior-context block (prior
+    # review comments + the implement rebuttal) fed to the review agent.
+    # Each component is tail-kept (most-recent content survives) so multi-
+    # round reviews don't re-pay for the entire accumulated history. 0
+    # disables the cap.
+    review_prior_context_max_chars: int = Field(default=8000, ge=0)
     # How many model requests the scope-triage agent may make per
     # invocation (main call + any tool calls). Default 4.
     scope_triage_request_limit: int = Field(default=4)

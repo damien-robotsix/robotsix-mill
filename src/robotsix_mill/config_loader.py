@@ -250,6 +250,8 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.memory.reference_files_max_count": "reference_files_max_count",
     "core.memory.reference_files_max_total_lines": "reference_files_max_total_lines",
     "core.memory.dedup_lookback_days": "dedup_lookback_days",
+    # -- stages.review --
+    "stages.review.prior_context_max_chars": "review_prior_context_max_chars",
     # -- forge --
     "forge.kind": "FORGE_KIND",
     "forge.remote_url": "FORGE_REMOTE_URL",

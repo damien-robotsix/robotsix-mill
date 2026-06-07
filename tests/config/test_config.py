@@ -145,6 +145,12 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         5000,
     ),
     ("dedup_lookback_days", "MILL_DEDUP_LOOKBACK_DAYS", "14", 14),
+    (
+        "review_prior_context_max_chars",
+        "MILL_REVIEW_PRIOR_CONTEXT_MAX_CHARS",
+        "16000",
+        16000,
+    ),
     # --- paths ---
     ("data_dir", "MILL_DATA_DIR", "/custom/data", Path("/custom/data")),
     # --- API ---

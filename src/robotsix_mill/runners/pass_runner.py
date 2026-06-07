@@ -25,6 +25,7 @@ from ..core.models import (
 )
 from ..core.service import TicketService
 from ..core.states import State
+from ..core.text_utils import tail_keep
 from ..core.workspace import Workspace
 from ..dedup import _extract_paths, annotate_child_body, find_inflight_overlap
 from ..draft_target import looks_like_mill_internal, resolve_mill_service
@@ -280,17 +281,7 @@ def load_memory(memory_file: Path, max_chars: int | None = None) -> str:
             text = memory_file.read_text(encoding="utf-8")
             if max_chars is not None and len(text) > max_chars:
                 original_size = len(text)
-                # Find the cut point (keep the last max_chars), then
-                # advance to the next newline so the first kept line is
-                # a complete line.
-                cut_point = original_size - max_chars
-                nl_idx = text.find("\n", cut_point)
-                if nl_idx != -1:
-                    kept = text[nl_idx + 1 :]  # start after the newline
-                else:
-                    kept = text[cut_point:]  # fallback (no newline found)
-                omitted = original_size - len(kept)
-                text = f"[... memory truncated: {omitted} chars omitted]\n\n{kept}"
+                text = tail_keep(text, max_chars, label="memory")
                 log.warning(
                     "memory file %s truncated: %d → %d chars",
                     memory_file,
