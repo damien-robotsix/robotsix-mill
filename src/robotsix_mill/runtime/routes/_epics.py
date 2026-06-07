@@ -42,7 +42,13 @@ def create_epic(
     repo_id = body.get("repo_id")
     repos = request.app.state.repos
     board_id = ""
-    if repo_id:
+    if repo_id == "meta":
+        # The synthetic cross-repo meta board is selectable in the UI
+        # and queryable via ?repo_id=meta, but it is not a registered
+        # repo. Accept it here so creating an epic on the meta board
+        # works instead of 400-ing as an "unknown repo".
+        board_id = "meta"
+    elif repo_id:
         if repo_id not in repos.repos:
             sorted_keys = sorted(repos.repos.keys())
             raise HTTPException(
