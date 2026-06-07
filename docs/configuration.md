@@ -282,6 +282,7 @@ Every setting below shows:
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `core.memory.max_memory_chars` | `MILL_MAX_MEMORY_CHARS` | `8000` | Max characters loaded from any memory ledger per agent pass |
+| `core.memory.retrospect_log_max_chars` | `MILL_RETROSPECT_LOG_MAX_CHARS` | `12000` | Max characters of the retrospect stage's history + comments logs (keeps most-recent, drops oldest; `0` disables) |
 | `core.memory.reference_files_max_count` | `MILL_REFERENCE_FILES_MAX_COUNT` | `5` | Max files whose full content refine stores |
 | `core.memory.reference_files_max_total_lines` | `MILL_REFERENCE_FILES_MAX_TOTAL_LINES` | `3000` | Max total lines across selected reference files |
 | `pipeline.implement_memory_path` | `MILL_IMPLEMENT_MEMORY_PATH` | `None` | Override path for implement memory; defaults to `<data_dir>/implement_memory.md` |

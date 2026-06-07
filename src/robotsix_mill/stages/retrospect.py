@@ -134,6 +134,24 @@ _WORD_TO_NUM: dict[str, int] = {
 }
 
 
+def _tail_truncate_log(text: str, max_chars: int) -> str:
+    """Cap *text* to its most-recent ``max_chars`` characters.
+
+    History and comment logs are chronological — the recent tail is what
+    matters for a retrospective — so the oldest lines are dropped and the
+    newest kept (mirroring the tail-keep semantics of ``load_memory``).
+    Truncation aligns to a line boundary and prepends a short omission
+    note.  ``max_chars <= 0`` disables capping (returns *text* unchanged).
+    """
+    if max_chars <= 0 or len(text) <= max_chars:
+        return text
+    cut_point = len(text) - max_chars
+    nl_idx = text.find("\n", cut_point)
+    kept = text[nl_idx + 1 :] if nl_idx != -1 else text[cut_point:]
+    omitted_lines = text[: len(text) - len(kept)].count("\n") + 1
+    return f"[... {omitted_lines} earlier lines omitted]\n{kept}"
+
+
 def _parse_numeric_count(text: str) -> int | None:
     """Extract a numeric ticket-count claim from text.
 
@@ -698,6 +716,9 @@ class RetrospectStage(Stage):
         history_text = "\n".join(
             f"{e.at:%Y-%m-%d %H:%M} {e.state} {e.note or ''}".rstrip() for e in history
         )
+        # Cap to the most-recent tail — every state transition ever
+        # recorded is otherwise fed in uncapped.
+        history_text = _tail_truncate_log(history_text, s.retrospect_log_max_chars)
         # Fetch comments
         comments = ctx.service.list_comments(ticket.id)
         if comments:
@@ -706,6 +727,9 @@ class RetrospectStage(Stage):
             )
         else:
             comments_text = ""
+        # Cap to the most-recent tail — every comment body is otherwise
+        # fed in verbatim.
+        comments_text = _tail_truncate_log(comments_text, s.retrospect_log_max_chars)
 
         desc = ws.read_description()
         if desc:
@@ -737,14 +761,13 @@ class RetrospectStage(Stage):
                 lines.append("</epic_siblings>")
                 sibling_ctx = "\n".join(lines)
 
-        # Read current memory — empty string if missing/unreadable.
-        memory_text = ""
+        # Read current memory through the shared helper — returns "" on
+        # missing/unreadable files and tail-truncates to max_memory_chars
+        # (keeps the most-recent entries), matching every other stage.
+        from ..runners.pass_runner import load_memory
+
         memory_file = s.memory_file_for("retrospect", ctx.memory_board_id(ticket))
-        try:
-            if memory_file.exists():
-                memory_text = memory_file.read_text(encoding="utf-8")
-        except OSError:
-            log.warning("%s: could not read memory file %s", ticket.id, memory_file)
+        memory_text = load_memory(memory_file, max_chars=s.max_memory_chars)
 
         # Verify prior proposals and prepend verified-state table.
         from ..runners.pass_runner import (
