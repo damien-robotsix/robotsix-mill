@@ -68,7 +68,6 @@ Used as tools by primary agents.
 | Dedup | (no YAML — `build_agent` called directly) | `agents/dedup.py` | `MILL_DEDUP_MODEL` | Refine stage (pre-refine guard) | Checks whether draft is duplicate or already implemented; short-circuits to CLOSED |
 | Scope-triage | `agent_definitions/scope_triage.yaml` | `agents/scope_triage.py` | `MILL_SCOPE_TRIAGE_MODEL` | Implement stage (scope-violation guard) | Cheap classifier: EXPAND (legitimate out-of-scope change), REJECT (scope creep), or ESCALATE (uncertain) |
 | Trace-inspector | (no YAML — `build_agent` called directly) | `agents/trace_inspector.py` | `MILL_TRACE_INSPECTOR_MODEL` | Retrospect | Inspects full Langfuse trace observation tree |
-| Cross-trace-analyzer | (no YAML — `make_cross_trace_analyze_tool` closure) | `agents/cross_trace_analyzer.py` | `MILL_TRACE_INSPECTOR_MODEL` | Retrospect | Analyses per-trace summaries for cross-stage patterns (redundant exploration, information loss, retry cascades, context waste, stage inefficiencies) |
 
 ## Agent infrastructure
 

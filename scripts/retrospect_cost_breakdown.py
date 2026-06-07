@@ -4,8 +4,7 @@ Surfaces the actual cost drivers behind retrospect runs by drilling into
 Langfuse: every retrospect session's traces, the model used per
 generation, input/output tokens, observation count, and aggregated
 totals. Especially useful when investigating deep-analysis runs (the
-~10× outliers that include `trace_inspect` + `cross_trace_analyze`
-sub-agents).
+~10× outliers that include `trace_inspect` sub-agent calls).
 
 Run from the host's local venv (the container doesn't bind-mount
 scripts/, but the host has the same robotsix_mill package installed):
@@ -14,9 +13,9 @@ scripts/, but the host has the same robotsix_mill package installed):
     .venv/bin/python3 scripts/retrospect_cost_breakdown.py --top 5
     .venv/bin/python3 scripts/retrospect_cost_breakdown.py --session-id <sid>
 
-The trace name `retrospect` is matched; `trace_inspect` and
-`cross_trace_analyze` sub-agent traces share the same Langfuse
-session_id (the parent retrospect's) so they roll up automatically.
+The trace name `retrospect` is matched; `trace_inspect` sub-agent
+traces share the same Langfuse session_id (the parent retrospect's)
+so they roll up automatically.
 """
 
 from __future__ import annotations
@@ -62,8 +61,8 @@ def _fetch_session_traces(
     settings, session_id: str, repo_config=None
 ) -> list[dict[str, Any]]:
     """Pull all traces (any name) for a single session — picks up
-    `retrospect` plus `trace_inspect` / `cross_trace_analyze`
-    sub-calls that share the session_id."""
+    `retrospect` plus `trace_inspect` sub-calls that share the
+    session_id."""
     r = _langfuse_api_get(
         settings,
         "/api/public/traces",
