@@ -416,9 +416,7 @@ class GitHubForge(Forge):
                     "repo-creation rights (classic: `repo` scope; fine-grained: "
                     "Administration:Read and write on the target account)."
                 )
-            raise RuntimeError(
-                f"GitHub fork failed: {r.status_code} {r.text[:300]}"
-            )
+            raise RuntimeError(f"GitHub fork failed: {r.status_code} {r.text[:300]}")
 
     def pr_status(self, *, source_branch: str) -> dict | None:
         owner, repo = self._owner_repo

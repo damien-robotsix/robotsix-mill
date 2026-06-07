@@ -615,7 +615,6 @@ class GitLabForge(Forge):
         """POST /projects/:id/fork → RepoInfo."""
         import httpx
 
-
         s = self.settings
         api = s.gitlab_api_url.rstrip("/")
         headers = _build_headers(get_secrets().forge_token or "")
@@ -644,9 +643,7 @@ class GitLabForge(Forge):
                     f"GitLab fork failed: a fork of '{source_path}' already "
                     f"exists in the target namespace: {r.text[:300]}"
                 )
-            raise RuntimeError(
-                f"GitLab fork failed: {r.status_code} {r.text[:300]}"
-            )
+            raise RuntimeError(f"GitLab fork failed: {r.status_code} {r.text[:300]}")
 
     def _create_mr(
         self,
