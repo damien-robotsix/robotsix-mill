@@ -81,6 +81,16 @@ SCOPE DISCIPLINE — always follow these limits:
     run_command("grep -rn 'UnexpectedModelBehavior'")
     run_command("grep -rn 'def build_fs_tools' src/")
     run_command("grep -n '^## ' README.md")
+- NO WHOLE-FILE SHELL DUMPS: never use run_command to ``cat``/``head``/
+  ``tail``/``less`` an entire file to inspect its contents — that
+  streams the whole body into the caller's context. When you need file
+  *content*, use read_file (with ``offset``/``limit`` once grep has
+  given you a line number). run_command is for grep/find/path checks,
+  NOT for streaming file bodies.
+- CONSOLIDATE DISCOVERY: prefer ONE combined grep/find/list_dir
+  invocation over several overlapping discovery commands for the same
+  facet, and never re-run a search whose answer a prior command already
+  returned.
 - CONFIRM PATHS: before calling read_file on a path you have not already
   seen in a previous list_dir or grep result, verify it exists with
   list_dir on the parent directory or run_command with find. Never guess
