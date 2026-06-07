@@ -51,7 +51,7 @@ def test_scan_finds_all_four_markers(tmp_path):
             "d.md": "HACK qux\n",
         },
     )
-    markers = scan_outstanding_todos({"repo-a": repo})
+    markers = scan_outstanding_todos({"repo-a": repo}).markers
     assert len(markers) == 4
     by_path = {m.path: m for m in markers}
 
@@ -72,7 +72,7 @@ def test_scan_finds_all_four_markers(tmp_path):
 
 def test_lowercase_does_not_match(tmp_path):
     repo = _git_repo(tmp_path / "repo", {"a.py": "x = 1  # todo: lowercase\n"})
-    assert scan_outstanding_todos({"repo": repo}) == []
+    assert scan_outstanding_todos({"repo": repo}).markers == []
 
 
 def test_untracked_and_gitignored_files_excluded(tmp_path):
@@ -87,7 +87,7 @@ def test_untracked_and_gitignored_files_excluded(tmp_path):
     # An untracked file created after the initial `git add` is invisible.
     (repo / "untracked.py").write_text("# TODO: untracked\n", encoding="utf-8")
 
-    markers = scan_outstanding_todos({"repo": repo})
+    markers = scan_outstanding_todos({"repo": repo}).markers
     paths = {m.path for m in markers}
     assert paths == {"tracked.py"}
 
@@ -100,13 +100,13 @@ def test_results_sorted_and_stable(tmp_path):
     repo_a = _git_repo(tmp_path / "a", {"m.py": "# FIXME m\n"})
     clones = {"repo-b": repo_b, "repo-a": repo_a}
 
-    first = scan_outstanding_todos(clones)
+    first = scan_outstanding_todos(clones).markers
     keys = [(m.repo_id, m.path, m.line) for m in first]
     assert keys == sorted(keys)
     # repo-a sorts before repo-b regardless of dict insertion order.
     assert keys[0][0] == "repo-a"
     # Repeated calls are identical.
-    second = scan_outstanding_todos(clones)
+    second = scan_outstanding_todos(clones).markers
     assert [(m.repo_id, m.path, m.line, m.marker, m.text) for m in first] == [
         (m.repo_id, m.path, m.line, m.marker, m.text) for m in second
     ]
@@ -117,24 +117,48 @@ def test_caps_truncate_deterministically(tmp_path):
     repo = _git_repo(tmp_path / "many", {"notes.txt": body})
 
     capped = scan_outstanding_todos({"many": repo}, max_per_repo=3)
-    assert len(capped) == 3
+    assert len(capped.markers) == 3
     # Deterministic: the first three by (repo, path, line) are lines 1-3.
-    assert [m.line for m in capped] == [1, 2, 3]
+    assert [m.line for m in capped.markers] == [1, 2, 3]
+    assert capped.truncated_repos == frozenset({"many"})
 
     total_capped = scan_outstanding_todos({"many": repo}, max_total=2)
-    assert len(total_capped) == 2
+    assert len(total_capped.markers) == 2
+    assert total_capped.global_truncated is True
 
 
 def test_format_emits_truncation_note(tmp_path):
     body = "".join(f"# TODO item {i}\n" for i in range(MAX_PER_REPO + 25))
     repo = _git_repo(tmp_path / "many", {"notes.txt": body})
 
-    markers = scan_outstanding_todos({"many": repo})
-    assert len(markers) == MAX_PER_REPO
+    res = scan_outstanding_todos({"many": repo})
+    assert len(res.markers) == MAX_PER_REPO
 
-    out = format_outstanding_todos(markers)
+    out = format_outstanding_todos(
+        res.markers,
+        truncated_repos=res.truncated_repos,
+        global_truncated=res.global_truncated,
+    )
     assert str(MAX_PER_REPO) in out
     assert "omitted" in out.lower()
+
+
+def test_format_no_truncation_note_at_exact_cap(tmp_path):
+    body = "".join(f"# TODO item {i}\n" for i in range(MAX_PER_REPO))
+    repo = _git_repo(tmp_path / "many", {"notes.txt": body})
+
+    result = scan_outstanding_todos({"many": repo})
+    assert len(result.markers) == MAX_PER_REPO
+    assert result.truncated_repos == frozenset()
+    assert result.global_truncated is False
+
+    out = format_outstanding_todos(
+        result.markers,
+        truncated_repos=result.truncated_repos,
+        global_truncated=result.global_truncated,
+    )
+    assert "omitted" not in out.lower()
+    assert "per-repo cap" not in out
 
 
 def test_format_groups_and_renders(tmp_path):
@@ -158,7 +182,7 @@ def test_non_git_clone_is_skipped(tmp_path):
     not_a_repo.mkdir()
     (not_a_repo / "a.py").write_text("# TODO: invisible\n", encoding="utf-8")
 
-    markers = scan_outstanding_todos({"good": good, "broken": not_a_repo})
+    markers = scan_outstanding_todos({"good": good, "broken": not_a_repo}).markers
     # The non-git clone is skipped without raising; the good clone is scanned.
     assert {m.repo_id for m in markers} == {"good"}
     assert markers[0].text == "TODO: real"

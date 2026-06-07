@@ -357,9 +357,14 @@ def run_meta_agent(
     prompt += section("available-periodic-workflows", _available_periodic_catalog())
     # Deterministic ground-truth blocks: discovery the agent reliably skips,
     # pre-computed so it only has to judge (see the helpers' docstrings).
+    _todo_scan = scan_outstanding_todos(repo_clones)
     prompt += section(
         "outstanding-todos",
-        format_outstanding_todos(scan_outstanding_todos(repo_clones)),
+        format_outstanding_todos(
+            _todo_scan.markers,
+            truncated_repos=_todo_scan.truncated_repos,
+            global_truncated=_todo_scan.global_truncated,
+        ),
     )
     prompt += section("cross-repo-adoption", _cross_repo_adoption(repo_clones))
     prompt += "\n\nPerform the cross-repo analysis and return your result."
