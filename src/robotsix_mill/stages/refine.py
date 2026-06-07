@@ -359,6 +359,9 @@ def _build_candidates_block(candidates: list[Ticket], ctx: StageContext) -> str:
     """
     if not candidates:
         return "(no candidates)"
+    from ..core.text_utils import truncate_at_boundary
+
+    max_chars = ctx.settings.dedup_candidate_body_max_chars
     sections: list[str] = []
     for t in candidates:
         try:
@@ -367,13 +370,19 @@ def _build_candidates_block(candidates: list[Ticket], ctx: StageContext) -> str:
             body = ""
         from ..agents.prompt_blocks import section as _section
 
+        body = body.strip()
+        # Bound pathologically long candidate bodies so they can't blow
+        # up the dedup prompt. ``max_chars <= 0`` disables truncation
+        # (and guards the ``truncate_at_boundary(text, 0) == ""`` edge).
+        if max_chars > 0:
+            body = truncate_at_boundary(body, max_chars)
         meta = (
             f"## {t.id}\n"
             f"- title: {t.title}\n"
             f"- state: {t.state.value}\n"
             f"- source: {t.source}\n"
         )
-        sections.append(meta + "\n" + _section("body", body.strip()))
+        sections.append(meta + "\n" + _section("body", body))
     return "\n\n".join(sections)
 
 
@@ -621,25 +630,57 @@ class RefineStage(Stage):
 
         candidates_json = _build_candidates_block(candidates, ctx)
 
-        try:
-            verdict = dedup.run_dedup_check(
-                settings=s,
+        # Zero-overlap short-circuit: when the draft shares no meaningful
+        # token with any candidate (title+body), no candidate could
+        # plausibly be a duplicate — skip the LLM call entirely. Bodies
+        # are assembled the same way _build_candidates_block reads them.
+        candidate_texts: list[str] = []
+        for t in candidates:
+            try:
+                body = ctx.service.workspace(t).read_description()
+            except Exception:
+                body = ""
+            candidate_texts.append(f"{t.title} {body}")
+
+        if s.dedup_skip_on_no_overlap and (
+            not candidates
+            or not dedup.any_candidate_overlap(
                 draft_title=ticket.title,
                 draft_body=draft,
-                candidates_json=candidates_json,
-                repo_dir=repo_dir,
+                candidates_texts=candidate_texts,
             )
-        except Exception:
-            log.warning(
-                "%s: dedup check failed, proceeding with refine",
+        ):
+            log.debug(
+                "%s: no candidate token overlap (%d candidates) — "
+                "skipping dedup LLM call",
                 ticket.id,
-                exc_info=True,
+                len(candidates),
             )
             verdict = {
                 "duplicate_of": None,
                 "already_done": None,
-                "reason": "dedup check failed",
+                "reason": "skipped: no candidate token overlap",
             }
+        else:
+            try:
+                verdict = dedup.run_dedup_check(
+                    settings=s,
+                    draft_title=ticket.title,
+                    draft_body=draft,
+                    candidates_json=candidates_json,
+                    repo_dir=repo_dir,
+                )
+            except Exception:
+                log.warning(
+                    "%s: dedup check failed, proceeding with refine",
+                    ticket.id,
+                    exc_info=True,
+                )
+                verdict = {
+                    "duplicate_of": None,
+                    "already_done": None,
+                    "reason": "dedup check failed",
+                }
 
         # Discarded drafts go to DONE (not directly CLOSED) so retrospect
         # still analyses them — sanity-check the dedup verdict, capture

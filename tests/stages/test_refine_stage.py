@@ -281,6 +281,9 @@ def test_unmet_dependencies_noop(ctx_factory, monkeypatch):
 def test_dedup_duplicate_short_circuits_to_done(ctx_factory, monkeypatch):
     ctx = ctx_factory()
     t = _ticket(ctx, body="Fix the login form")
+    # A candidate sharing tokens with the draft so the zero-overlap
+    # short-circuit does NOT fire and the (mocked) dedup LLM runs.
+    _ticket(ctx, title="Login form fix", body="Fix the login form")
 
     agent_called = []
     monkeypatch.setattr(
@@ -344,6 +347,9 @@ def test_dedup_skipped_after_operator_changes_requested(ctx_factory, monkeypatch
 def test_dedup_already_done_short_circuits_to_done(ctx_factory, monkeypatch):
     ctx = ctx_factory()
     t = _ticket(ctx, body="Add dark mode toggle")
+    # A candidate sharing tokens with the draft so the zero-overlap
+    # short-circuit does NOT fire and the (mocked) dedup LLM runs.
+    _ticket(ctx, title="Dark mode toggle", body="Add dark mode toggle")
 
     agent_called = []
     monkeypatch.setattr(

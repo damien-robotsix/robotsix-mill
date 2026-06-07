@@ -152,6 +152,18 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "16000",
         16000,
     ),
+    (
+        "dedup_skip_on_no_overlap",
+        "MILL_DEDUP_SKIP_ON_NO_OVERLAP",
+        "0",
+        False,
+    ),
+    (
+        "dedup_candidate_body_max_chars",
+        "MILL_DEDUP_CANDIDATE_BODY_MAX_CHARS",
+        "1234",
+        1234,
+    ),
     # --- paths ---
     ("data_dir", "MILL_DATA_DIR", "/custom/data", Path("/custom/data")),
     # --- API ---
