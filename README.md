@@ -154,6 +154,7 @@ reference are covered in [docs/configuration.md](docs/configuration.md).
 - [docs/deployment.md](docs/deployment.md) — Continuous deployment via GitHub Actions + Watchtower
 - [docs/docker-architecture.md](docs/docker-architecture.md) — Container topology & conceptual architecture
 - [docs/github-app.md](docs/github-app.md) — Delivery identity setup (PAT or GitHub App bot)
+- [docs/inquiry-to-task.md](docs/inquiry-to-task.md) — Convert an answered inquiry into an actionable task ticket
 - [docs/security.md](docs/security.md) — Security model
 - [docs/agents.md](docs/agents.md) — Full agent catalog
 - [docs/agent-yaml-schema.md](docs/agent-yaml-schema.md) — Field reference for `agent_definitions/*.yaml` files
