@@ -24,6 +24,7 @@ model: "${MILL_REFINE_MODEL}"
 # coordinator's prompt across iterations.
 tools:
   - explore
+  - parallel_explore
   - read_file
   - list_dir
   - run_command
@@ -92,6 +93,15 @@ system_prompt: |
       distinct bullet sub-questions inside one `explore` request.
       Serial single-facet calls re-read the same large files and
       module map each time, wasting context and cost.
+    * For genuinely LONG work that splits into INDEPENDENT slices, use
+      `parallel_explore(questions=[...])` — it runs one scout per slice
+      CONCURRENTLY. This is the right tool when a single `run_command`
+      would be too slow on the whole repo: e.g. to enumerate test
+      warnings, partition the suite and ask each scout to run
+      `pytest -W error <subset>` and report the warnings it sees, then
+      merge the slices yourself. Prefer this over re-running an expensive
+      whole-suite command serially many times (that blows the stage
+      timeout). Slices are independent — they can't see each other.
   - Prefer `explore` over `read_file` walks for building broad
     context. Use `read_file` only after `explore` (or a direct
     lookup) has pointed you at a specific symbol or location worth

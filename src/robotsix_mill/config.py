@@ -176,6 +176,10 @@ class Settings(BaseSettings):
     )
     model: str = Field(default="deepseek/deepseek-v4-pro")
     explore_model: str = Field(default="deepseek/deepseek-v4-flash")
+    # Max concurrent scouts a single ``parallel_explore`` fan-out runs. Each
+    # scout may spin a sandbox container (~sandbox_memory each), so this
+    # bounds peak resource use while letting long splittable work parallelise.
+    parallel_explore_max: int = Field(default=4, ge=1)
     test_model: str = Field(default="deepseek/deepseek-v4-flash")
     refine_model: str = Field(default="deepseek/deepseek-v4-pro")
     # Model for implement agent runs where the task is likely a no-change

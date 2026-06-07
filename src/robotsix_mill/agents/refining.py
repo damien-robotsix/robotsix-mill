@@ -709,7 +709,7 @@ def run_refine_agent(
 
     tools: list = []
     if repo_dir is not None:
-        from .explore import make_explore_tool
+        from .explore import make_explore_tool, make_parallel_explore_tool
         from .fs_tools import build_fs_tools
 
         ro = [
@@ -717,7 +717,14 @@ def run_refine_agent(
             for t in build_fs_tools(repo_dir, settings, extra_roots=extra_roots)
             if t.__name__ in ("read_file", "list_dir", "run_command")
         ]
-        tools = [make_explore_tool(settings, repo_dir, extra_roots=extra_roots), *ro]
+        tools = [
+            make_explore_tool(settings, repo_dir, extra_roots=extra_roots),
+            # Fan-out scout: split genuinely long work (e.g. enumerating
+            # warnings across test subsets) across concurrent subagents so it
+            # fits the stage budget instead of running serially.
+            make_parallel_explore_tool(settings, repo_dir, extra_roots=extra_roots),
+            *ro,
+        ]
 
     # Meta refine can declare an extraction targets a brand-new repo. The
     # tool records the request; the marker is stamped onto the spec below
