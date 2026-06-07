@@ -5,7 +5,7 @@ round-trip, and cost recording were extracted into the standalone
 ``robotsix-llmio`` package (layers ``openrouter`` + ``openrouter_deepseek``).
 This module re-exports those symbols under their historical names so the ~6
 modules that construct a model directly (explore, web_research, consult_expert,
-trace_inspector, cross_trace_analyzer, web_knowledge) and the existing tests
+trace_inspector, web_knowledge) and the existing tests
 keep working unchanged.
 
 The one behaviour preserved here is the *interim* substring-based tiering for

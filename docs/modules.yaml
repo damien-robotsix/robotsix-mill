@@ -372,7 +372,6 @@ modules:
       - src/robotsix_mill/agents/config_syncing.py
       - src/robotsix_mill/agents/retrospecting.py
       - src/robotsix_mill/agents/trace_inspector.py
-      - src/robotsix_mill/agents/cross_trace_analyzer.py
       - src/robotsix_mill/agents/test_gap.py
       - src/robotsix_mill/agents/bespoke.py
       - src/robotsix_mill/agents/bespoke_loader.py
@@ -412,7 +411,6 @@ modules:
       - tests/agents/test_config_syncing.py
       - tests/agents/test_retrospect.py
       - tests/agents/test_trace_inspector.py
-      - tests/agents/test_cross_trace_analyzer.py
       - tests/agents/test_test_gap.py
       - tests/agents/test_timeout_escalation.py
       - tests/agents/test_cost.py
