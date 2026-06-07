@@ -1320,12 +1320,24 @@ function _actionButtonsHtml(t){
   (redraftable?
    `<button class="redraft-btn" title="Send back to draft" onclick="event.stopPropagation();redraft(${jsq(t.id)})">Redraft</button>`:"")+
   `<button class="${prioClass}" title="Pulled from the queue ahead of non-priority tickets" onclick="event.stopPropagation();togglePriority(${jsq(t.id)},${t.priority?"false":"true"})">${prioLabel}</button>`+
+  (t.kind==="inquiry"&&t.state==="answered"?
+   `<button class="redraft-btn" title="Turn this Q&A into an actionable task" onclick="event.stopPropagation();convertToTicket(${jsq(t.id)})">Convert to ticket</button>`:"")+
   `<button class="del-btn" title="Delete ticket" style="position:static;opacity:1;margin-left:4px;margin-top:5px;display:inline-block" onclick="event.stopPropagation();del_(${jsq(t.id)})">✕</button>`;
 }
 async function togglePriority(id,want){
  const r=await jpost("/tickets/"+id+"/priority",{priority:want==="true"||want===true});
  if(!r.ok){const e=await r.text();alert("priority toggle failed: "+e);return}
  refresh();if(sel===id)open_(id);
+}
+async function convertToTicket(id){
+ const comment=prompt("Add a comment to guide the new ticket (optional):");
+ if(comment===null)return;
+ const r=await jpost("/tickets/"+id+"/convert-to-task",{comment:comment.trim()});
+ if(!r.ok){const e=await r.text();alert("convert to ticket failed: "+e);return}
+ const nt=await r.json();
+ refresh();
+ if(nt&&nt.id)open_(nt.id);
+ else if(sel===id)open_(id);
 }
 async function open_(id){
  sel=id;
