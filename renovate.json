@@ -1,0 +1,42 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "enabledManagers": ["pep621", "github-actions", "dockerfile", "docker-compose"],
+  "timezone": "Etc/UTC",
+  "schedule": ["before 9am on monday"],
+  "prConcurrentLimit": 5,
+  "labels": ["dependencies", "automated"],
+  "rangeStrategy": "bump",
+  "packageRules": [
+    {
+      "description": "Mirror Dependabot 'patch-dependencies' group for Python (uv/PEP 621).",
+      "matchManagers": ["pep621"],
+      "matchUpdateTypes": ["patch"],
+      "groupName": "patch-dependencies"
+    },
+    {
+      "description": "Mirror Dependabot 'minor-dependencies' group for Python (uv/PEP 621).",
+      "matchManagers": ["pep621"],
+      "matchUpdateTypes": ["minor"],
+      "groupName": "minor-dependencies"
+    },
+    {
+      "description": "Keep Python major updates as separate, individual PRs (not grouped).",
+      "matchManagers": ["pep621"],
+      "matchUpdateTypes": ["major"],
+      "groupName": null
+    },
+    {
+      "description": "Mirror Dependabot 'action-deps' group for GitHub Actions.",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "action-deps",
+      "addLabels": ["github-actions"]
+    },
+    {
+      "description": "Mirror Dependabot 'docker' manager labels.",
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "addLabels": ["docker"]
+    }
+  ]
+}

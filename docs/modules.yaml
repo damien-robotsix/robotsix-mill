@@ -558,6 +558,7 @@ modules:
       - .hadolint.yaml
       - pyproject.toml
       - .pre-commit-config.yaml
+      - renovate.json
       - .github/**/*
       - .jscpd.json
       - .python-version
