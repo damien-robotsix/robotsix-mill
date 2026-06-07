@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import datetime
 
 from ..config import RepoConfig, Settings
 
@@ -26,6 +27,15 @@ class RepoInfo:
     name: str
     clone_url: str
     html_url: str
+
+
+@dataclass
+class BranchInfo:
+    """Metadata about a remote branch returned by :meth:`Forge.list_branches`."""
+
+    name: str
+    last_commit_at: datetime  # timezone-aware (UTC)
+    is_protected: bool
 
 
 class Forge(ABC):
@@ -203,6 +213,16 @@ class Forge(ABC):
         gone, 404/422, network error, insufficient scope). Must NEVER
         raise — catch all API-level failures and return False."""
         return False
+
+    def list_branches(self) -> list[BranchInfo]:
+        """List all remote branches with last-commit timestamp and
+        protection flag. Returns [] on any failure. Must NEVER raise."""
+        return []
+
+    def list_open_pr_branches(self) -> set[str]:
+        """Head branch names of all currently-open PRs/MRs. Returns an
+        empty set on any failure. Must NEVER raise."""
+        return set()
 
 
 def get_forge(settings: Settings, repo_config: RepoConfig | None = None) -> Forge:

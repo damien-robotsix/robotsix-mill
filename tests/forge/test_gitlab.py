@@ -1558,3 +1558,101 @@ def test_delete_branch_exception_returns_false(tmp_path, monkeypatch):
     _mock_httpx_delete(monkeypatch, raise_exc=real_httpx.ConnectError("net down"))
     forge = _forge(tmp_path)
     assert forge.delete_branch(branch="mill/t-1") is False
+
+
+# ---------------------------------------------------------------------------
+# _list_branches / _list_open_pr_branches
+# ---------------------------------------------------------------------------
+
+
+def _gl_branch(name, date, protected=False):
+    return {
+        "name": name,
+        "protected": protected,
+        "commit": {"committed_date": date},
+    }
+
+
+def _mock_httpx_list(monkeypatch, *, branch_url, pages=None, raise_on_list=False):
+    """Mock httpx.Client: resolves project id (GET on the project path) and
+    serves paginated list responses (GET whose url contains *branch_url*)."""
+
+    class MockClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            if branch_url in url:
+                if raise_on_list:
+                    raise real_httpx.ConnectError("net down")
+                page = (params or {}).get("page", 1)
+                return pages[page - 1]
+            # project-id resolution
+            return _make_response(200, {"id": 7})
+
+    monkeypatch.setattr(real_httpx, "Client", MockClient)
+
+
+def test_list_branches_parses_and_paginates(tmp_path, monkeypatch):
+    page1 = [
+        _gl_branch(f"b{i}", "2024-01-15T10:30:00.000+00:00", protected=(i == 0))
+        for i in range(100)
+    ]
+    page2 = [_gl_branch("last", "2024-02-01T08:00:00.000Z", protected=True)]
+    _mock_httpx_list(
+        monkeypatch,
+        branch_url="/repository/branches",
+        pages=[_make_response(200, page1), _make_response(200, page2)],
+    )
+    forge = _forge(tmp_path)
+    branches = forge.list_branches()
+    assert len(branches) == 101
+    assert branches[0].name == "b0"
+    assert branches[0].is_protected is True
+    assert branches[1].is_protected is False
+    assert branches[0].last_commit_at.tzinfo is not None
+    assert branches[0].last_commit_at.utcoffset().total_seconds() == 0
+    assert branches[-1].name == "last"
+
+
+def test_list_branches_exception_returns_empty(tmp_path, monkeypatch):
+    _mock_httpx_list(monkeypatch, branch_url="/repository/branches", raise_on_list=True)
+    forge = _forge(tmp_path)
+    assert forge.list_branches() == []
+
+
+def test_list_branches_non_2xx_returns_empty(tmp_path, monkeypatch):
+    _mock_httpx_list(
+        monkeypatch,
+        branch_url="/repository/branches",
+        pages=[_make_response(500, [], "boom")],
+    )
+    forge = _forge(tmp_path)
+    assert forge.list_branches() == []
+
+
+def test_list_open_pr_branches_returns_source_branches(tmp_path, monkeypatch):
+    mrs = [
+        {"source_branch": "feature/a"},
+        {"source_branch": "feature/b"},
+        {"source_branch": ""},
+    ]
+    _mock_httpx_list(
+        monkeypatch,
+        branch_url="/merge_requests",
+        pages=[_make_response(200, mrs)],
+    )
+    forge = _forge(tmp_path)
+    assert forge.list_open_pr_branches() == {"feature/a", "feature/b"}
+
+
+def test_list_open_pr_branches_exception_returns_empty(tmp_path, monkeypatch):
+    _mock_httpx_list(monkeypatch, branch_url="/merge_requests", raise_on_list=True)
+    forge = _forge(tmp_path)
+    assert forge.list_open_pr_branches() == set()
