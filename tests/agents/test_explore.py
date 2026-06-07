@@ -41,6 +41,20 @@ def test_missing_repo_degrades_not_raises(tmp_path):
     assert "not been cloned yet" in out
 
 
+def test_system_prompt_forbids_whole_file_shell_dumps():
+    """The explore system prompt closes the two run_command escape
+    hatches flagged in trace review: shelling out to dump whole files,
+    and issuing redundant overlapping discovery commands."""
+    sp = explore._SYSTEM_PROMPT.lower()
+    # No whole-file shell dumps via run_command — redirect to read_file.
+    assert "run_command" in sp
+    assert "cat" in sp and "head" in sp and "tail" in sp
+    assert "read_file" in sp
+    # Consolidate / avoid redundant discovery commands.
+    assert "consolidate" in sp or "overlapping" in sp
+    assert "re-run" in sp
+
+
 def test_repo_scoped_explore_unknown_repo(tmp_path):
     """A repo-scoped explore call naming an unregistered repo returns a
     helpful error listing the valid ids — never raises, never explores."""
