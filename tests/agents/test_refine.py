@@ -4401,3 +4401,77 @@ def test_run_refine_agent_no_new_repo_tool_off_meta(tmp_path, monkeypatch):
     assert "request_new_repo" not in [
         getattr(t, "__name__", "") for t in captured["tools"]
     ]
+
+
+# ---------------------------------------------------------------------------
+# deterministic <test-warnings> injection for warnings-hardening refines
+# ---------------------------------------------------------------------------
+
+
+def test_test_warnings_block_skips_non_warnings_ticket(tmp_path):
+    s = Settings(data_dir=str(tmp_path))
+    assert (
+        refining._collect_test_warnings_block("Refactor the CLI parser", tmp_path, s)
+        == ""
+    )
+
+
+def test_test_warnings_block_skips_when_no_repo(tmp_path):
+    s = Settings(data_dir=str(tmp_path))
+    assert (
+        refining._collect_test_warnings_block(
+            "Add filterwarnings = error to pytest", None, s
+        )
+        == ""
+    )
+
+
+def test_test_warnings_block_injects_summary(tmp_path, monkeypatch):
+    """A warnings-hardening draft triggers ONE sandbox run and injects the
+    summary as a <test-warnings> block telling the agent not to re-run."""
+    import robotsix_mill.sandbox as sandbox
+
+    s = Settings(data_dir=str(tmp_path))
+    calls = {}
+
+    def fake_run(cmd, *, repo_dir, settings, install_project=False):
+        calls["cmd"] = cmd
+        calls["install"] = install_project
+        return 0, "=== warnings summary ===\nsrc/x.py:1: DeprecationWarning: old\n===="
+
+    monkeypatch.setattr(sandbox, "run", fake_run)
+    out = refining._collect_test_warnings_block(
+        "Add filterwarnings = error to pytest config with documented ignores",
+        tmp_path,
+        s,
+    )
+    assert "test-warnings" in out
+    assert "DeprecationWarning" in out
+    assert "do not run the test suite" in out.lower()
+    assert calls["install"] is True  # deps installed so warnings are real
+    assert "pytest" in calls["cmd"]
+
+
+def test_test_warnings_block_best_effort_on_sandbox_failure(tmp_path, monkeypatch):
+    import robotsix_mill.sandbox as sandbox
+
+    s = Settings(data_dir=str(tmp_path))
+
+    def boom(*a, **k):
+        raise sandbox.SandboxError("docker unavailable")
+
+    monkeypatch.setattr(sandbox, "run", boom)
+    assert (
+        refining._collect_test_warnings_block("filterwarnings hardening", tmp_path, s)
+        == ""
+    )
+
+
+def test_test_warnings_block_empty_output(tmp_path, monkeypatch):
+    import robotsix_mill.sandbox as sandbox
+
+    s = Settings(data_dir=str(tmp_path))
+    monkeypatch.setattr(sandbox, "run", lambda *a, **k: (0, "   "))
+    assert (
+        refining._collect_test_warnings_block("make warnings strict", tmp_path, s) == ""
+    )

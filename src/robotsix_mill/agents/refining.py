@@ -15,6 +15,7 @@ repo (no forge configured) it falls back to draft-only as before.
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -26,6 +27,70 @@ from ..config import Settings
 from .prompt_blocks import section
 
 log = logging.getLogger(__name__)
+
+
+# Triggers for "pytest warnings / filterwarnings hardening" tickets — the spec
+# needs the suite's CURRENT warnings enumerated to write the documented-ignore
+# list. Without deterministic injection, the refine agent re-runs the whole
+# suite many times to discover them and blows the stage timeout.
+_WARNINGS_TICKET_RE = re.compile(
+    r"filterwarnings"
+    r"|-W\s*error"
+    r"|[A-Za-z]*Warning\b"
+    r"|warnings?\b[^.\n]{0,40}\b(strict|error|hardening|ignore|enumerate)\b"
+    r"|\b(strict|error|hardening)\b[^.\n]{0,40}\bwarnings?\b",
+    re.IGNORECASE,
+)
+
+
+def _collect_test_warnings_block(
+    draft: str, repo_dir: Path | None, settings: Settings
+) -> str:
+    """Deterministic ``<test-warnings>`` prompt block for warnings-hardening
+    refines.
+
+    When *draft* is about pytest warnings/filterwarnings, run the suite's
+    warning collection ONCE in the sandbox and return the summary as a prompt
+    section, so refine writes the documented-ignore list from this ground
+    truth instead of re-running the whole suite many times (which times out
+    the stage — see ticket …filterwarnings…-f946). Best-effort: returns ``""``
+    when the ticket isn't warnings-related, there's no clone, or the run
+    fails — the agent then falls back to its own tools.
+    """
+    if repo_dir is None or not _WARNINGS_TICKET_RE.search(draft or ""):
+        return ""
+    from ..sandbox import run as sandbox_run
+
+    # -W default surfaces warnings; -rw lists them in the run's "warnings
+    # summary" section with file:line + category — exactly what the ignore
+    # list needs. Extract just that section to keep the prompt bounded.
+    cmd = (
+        "python -m pytest -p no:cacheprovider -q -W default -rw 2>&1 "
+        "| sed -n '/warnings summary/,/^====*/p'"
+    )
+    try:
+        _code, out = sandbox_run(
+            cmd, repo_dir=Path(repo_dir), settings=settings, install_project=True
+        )
+    except Exception:  # noqa: BLE001 — best-effort; never block refine (incl. SandboxError)
+        log.warning(
+            "refine: deterministic test-warnings collection failed", exc_info=True
+        )
+        return ""
+    out = (out or "").strip()
+    if not out:
+        return ""
+    max_chars = 12000
+    if len(out) > max_chars:
+        out = out[:max_chars] + "\n… (truncated — more warnings exist)"
+    return "\n\n" + section(
+        "test-warnings",
+        "Deterministic ONE-TIME `pytest -W default -rw` warnings summary for "
+        "this repo, collected for you. Write the `filterwarnings` ignore list "
+        "from THIS — do NOT run the test suite yourself to rediscover "
+        "warnings (that is what timed this ticket out before):\n\n" + out,
+    )
+
 
 # Pre-LLM memory guard: skip the model call when a recent prior refine
 # run already concluded no_change_needed for the same topic.
@@ -755,6 +820,10 @@ def run_refine_agent(
         + "\n\n"
         + section("memory", memory or "(empty — start a new ledger)")
     )
+    # Deterministic ground truth for warnings-hardening tickets: run the
+    # suite's warning collection ONCE here and inject it, so the agent writes
+    # the ignore list from facts instead of re-running pytest many times.
+    user_prompt += _collect_test_warnings_block(draft, repo_dir, settings)
     if reviewer_comments:
         user_prompt += "\n\n" + section(
             "reviewer-feedback",
