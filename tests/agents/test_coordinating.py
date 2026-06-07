@@ -1107,3 +1107,86 @@ class TestRunCoordinatorWithExperts:
         result = self._call(tmp_path, file_map={"src/foo.py"})
         assert self.run_coordinator_called
         assert result.summary == "fallback"
+
+
+class TestAggregateExpertResultsCaps:
+    """`_aggregate_expert_results` enforces the reference-file caps."""
+
+    def _refs(self, *names):
+        return ImplementResult(summary="s", reference_files=list(names))
+
+    def test_trims_by_max_count(self, tmp_path):
+        from robotsix_mill.agents.coordinating import _aggregate_expert_results
+
+        for n in ("a", "b", "c", "d"):
+            (tmp_path / f"{n}.py").write_text("x\n", encoding="utf-8")
+        settings = _settings(
+            tmp_path,
+            reference_files_max_count=2,
+            reference_files_max_total_lines=10_000,
+        )
+        result = _aggregate_expert_results(
+            [("d1", self._refs("a.py", "b.py", "c.py", "d.py"))],
+            settings=settings,
+            repo_dir=tmp_path,
+        )
+        assert result.reference_files == ["a.py", "b.py"]
+
+    def test_trims_by_max_total_lines(self, tmp_path):
+        from robotsix_mill.agents.coordinating import _aggregate_expert_results
+
+        (tmp_path / "a.py").write_text("x\n" * 5, encoding="utf-8")
+        (tmp_path / "b.py").write_text("x\n" * 5, encoding="utf-8")
+        (tmp_path / "c.py").write_text("x\n" * 5, encoding="utf-8")
+        settings = _settings(
+            tmp_path,
+            reference_files_max_count=10,
+            reference_files_max_total_lines=8,
+        )
+        result = _aggregate_expert_results(
+            [("d1", self._refs("a.py", "b.py", "c.py"))],
+            settings=settings,
+            repo_dir=tmp_path,
+        )
+        # a.py (5 lines) fits; b.py would push total to 10 > 8 → stop.
+        assert result.reference_files == ["a.py"]
+
+    def test_first_file_respects_line_cap(self, tmp_path):
+        from robotsix_mill.agents.coordinating import _aggregate_expert_results
+
+        # The very first file already exceeds the line cap — it must be
+        # dropped, not unconditionally included.
+        (tmp_path / "big.py").write_text("x\n" * 5000, encoding="utf-8")
+        (tmp_path / "small.py").write_text("x\n" * 2, encoding="utf-8")
+        settings = _settings(
+            tmp_path,
+            reference_files_max_count=10,
+            reference_files_max_total_lines=3000,
+        )
+        result = _aggregate_expert_results(
+            [("d1", self._refs("big.py", "small.py"))],
+            settings=settings,
+            repo_dir=tmp_path,
+        )
+        # big.py (5000 lines) > 3000 cap → stop immediately; nothing kept.
+        assert result.reference_files == []
+
+    def test_dedup_preserved_before_caps(self, tmp_path):
+        from robotsix_mill.agents.coordinating import _aggregate_expert_results
+
+        for n in ("a", "b"):
+            (tmp_path / f"{n}.py").write_text("x\n", encoding="utf-8")
+        settings = _settings(
+            tmp_path,
+            reference_files_max_count=5,
+            reference_files_max_total_lines=10_000,
+        )
+        result = _aggregate_expert_results(
+            [
+                ("d1", self._refs("a.py", "b.py")),
+                ("d2", self._refs("a.py")),
+            ],
+            settings=settings,
+            repo_dir=tmp_path,
+        )
+        assert result.reference_files == ["a.py", "b.py"]

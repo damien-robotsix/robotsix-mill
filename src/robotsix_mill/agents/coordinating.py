@@ -586,11 +586,17 @@ def _build_expert_prompt(
 
 def _aggregate_expert_results(
     results: list[tuple[str, ImplementResult]],
+    *,
+    settings: Settings,
+    repo_dir: Path,
 ) -> ImplementResult:
     """Merge per-expert `(domain, ImplementResult)` tuples into one.
 
     - summary: ``[{domain}] {expert.summary}`` joined by newlines.
-    - reference_files: deduplicated union, preserving first-seen order.
+    - reference_files: deduplicated union, preserving first-seen order,
+      then trimmed to ``reference_files_max_count`` and
+      ``reference_files_max_total_lines`` so large expert result sets
+      don't bloat the coordinator's preload context.
     - updated_memory: empty string (per-expert memory is persisted by
       the runner; the implement-stage memory ledger is the coordinator's
       responsibility, handled at the stage level).
@@ -605,6 +611,30 @@ def _aggregate_expert_results(
             if f not in seen_refs:
                 seen_refs.add(f)
                 merged_refs.append(f)
+
+    # Enforce the reference-file caps (config: core.memory.*). Trim by
+    # count first, then by cumulative line count across the referenced
+    # files' on-disk contents.
+    if len(merged_refs) > settings.reference_files_max_count:
+        merged_refs = merged_refs[: settings.reference_files_max_count]
+
+    total_lines = 0
+    trimmed: list[str] = []
+    for ref_file in merged_refs:
+        try:
+            line_count = len(
+                (repo_dir / ref_file)
+                .read_text(encoding="utf-8", errors="replace")
+                .splitlines()
+            )
+        except OSError:
+            line_count = 0
+        if total_lines + line_count > settings.reference_files_max_total_lines:
+            break
+        trimmed.append(ref_file)
+        total_lines += line_count
+    merged_refs = trimmed
+
     return ImplementResult(
         summary="\n".join(lines) if lines else "(no expert produced a summary)",
         updated_memory="",
@@ -799,4 +829,4 @@ def run_coordinator_with_experts(
     if not results:
         return _fallback("every expert failed")
 
-    return _aggregate_expert_results(results)
+    return _aggregate_expert_results(results, settings=settings, repo_dir=repo_dir)
