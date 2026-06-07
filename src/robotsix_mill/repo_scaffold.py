@@ -48,7 +48,7 @@ def parse_new_repo_params(description: str) -> dict | None:
 
     Returns a dict with keys ``name``, ``owner``, ``private``,
     ``description``, and ``language`` when the marker is present and
-    parseable; ``None`` otherwise.  ``private`` defaults to ``True``,
+    parseable; ``None`` otherwise.  ``private`` defaults to ``False``,
     ``language`` defaults to ``"python"``.
     """
     m = _MARKER_RE.search(description)
@@ -88,7 +88,7 @@ def parse_new_repo_params(description: str) -> dict | None:
     return {
         "name": name.strip(),
         "owner": str(data.get("owner", "")).strip(),
-        "private": bool(data.get("private", True)),
+        "private": bool(data.get("private", False)),
         "description": str(data.get("description", "")).strip(),
         "language": str(data.get("language", "python")).strip().lower(),
     }
