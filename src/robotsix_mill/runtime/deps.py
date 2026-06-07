@@ -54,6 +54,10 @@ def get_run_registry(
         rc = repos.repos.get(repo_id)
         if rc is not None and rc.board_id in registries:
             return registries[rc.board_id]
+        # Synthetic boards (e.g. "meta") are not in ReposRegistry but may
+        # have a dedicated registry keyed directly by board_id.
+        if repo_id in registries:
+            return registries[repo_id]
     return request.app.state.run_registry
 
 

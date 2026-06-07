@@ -113,6 +113,15 @@ def create_lifespan(
             )
             for rc in repos.repos.values()
         }
+        # The synthetic cross-repo meta board is not a registered repo
+        # (deliberately kept out of ReposRegistry), so the comprehension
+        # above never builds a registry for it. Add one explicitly so the
+        # meta-agent's periodic runs land on the meta board's runs drawer
+        # instead of leaking into the lead repo's. Harmless in single-repo
+        # mode (an empty registry that is never queried).
+        run_registries[Worker._META_BOARD] = RunRegistry(
+            settings.data_dir / Worker._META_BOARD / "runs.json",
+        )
         # Default registry for the worker's own (board-less) periodic
         # ticks — points at the lead repo's registry so legacy
         # callers without repo context still record somewhere.

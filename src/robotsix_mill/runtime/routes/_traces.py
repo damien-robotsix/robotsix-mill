@@ -49,8 +49,11 @@ def list_runs(
 
     # Specific repo: validate, then read THAT repo's registry (the Depends
     # already resolved it from the repo_id query param).
+    # The synthetic meta board is a valid board id even though it is not a
+    # registered repo — its runs live in the dedicated "meta" registry that
+    # get_run_registry now resolves.
     repos = request.app.state.repos
-    if repo_id not in repos.repos:
+    if repo_id != "meta" and repo_id not in repos.repos:
         raise HTTPException(
             status_code=400,
             detail=f"Unknown repo: '{repo_id}'. Known repos: "

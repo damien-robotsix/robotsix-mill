@@ -1172,6 +1172,54 @@ def test_periodic_pass_uses_per_repo_registry(ctx, tmp_path):
     assert delay > 86000
 
 
+async def test_meta_pass_loop_records_into_meta_registry(ctx, tmp_path, monkeypatch):
+    """The meta pass records into the dedicated meta registry tagged
+    repo_id="meta", not the default/lead-repo registry — so meta runs
+    show on the meta board's runs drawer rather than the main board."""
+    from types import SimpleNamespace
+
+    import robotsix_mill.meta.runner as meta_runner
+    from robotsix_mill.runtime.run_registry import RunRegistry
+    from robotsix_mill.runtime.worker import Worker
+
+    mill_reg = RunRegistry(tmp_path / "mill.json")
+    meta_reg = RunRegistry(tmp_path / "meta.json")
+    w = Worker(
+        ctx,
+        mill_reg,
+        run_registries={"robotsix-mill": mill_reg, Worker._META_BOARD: meta_reg},
+    )
+
+    def _fake_run_meta_pass(*, session_id):
+        return SimpleNamespace(
+            extraction_drafts_created=[{"id": "x1"}],
+            alignment_drafts_created=[],
+        )
+
+    monkeypatch.setattr(meta_runner, "run_meta_pass", _fake_run_meta_pass)
+    monkeypatch.setattr(w, "_initial_delay", lambda *a, **kw: 0.0)
+
+    task = asyncio.create_task(w._meta_pass_loop())
+    try:
+        for _ in range(500):
+            entries = meta_reg.list_all()
+            if entries and entries[0]["status"] == "ok":
+                break
+            await asyncio.sleep(0.01)
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    entries = meta_reg.list_all()
+    assert len(entries) == 1
+    assert entries[0]["kind"] == "meta"
+    assert entries[0]["repo_id"] == "meta"
+    assert entries[0]["status"] == "ok"
+    # Nothing leaked into the default/lead-repo registry.
+    assert mill_reg.list_all() == []
+
+
 # --- epic re-evaluation helpers (extracted from _run_epic_reeval) ---
 
 

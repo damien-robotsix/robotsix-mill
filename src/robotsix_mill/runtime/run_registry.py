@@ -37,6 +37,7 @@ class RunEntry:
         "epic-breakdown",
         "health",
         "langfuse-cleanup",
+        "meta",
         "module_curator",
         "proposed-action",
         "proposed_action",

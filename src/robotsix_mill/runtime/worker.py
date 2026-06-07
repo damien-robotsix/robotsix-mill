@@ -1753,10 +1753,15 @@ class Worker:
         while True:
             run_id = None
             session_id = tracing.make_session_id("meta")
+            # Record into the dedicated meta-board registry (tagged
+            # repo_id="meta") so the run shows on the meta board's runs
+            # drawer, not the lead repo's. Falls back to the default
+            # registry if the meta registry is somehow absent.
+            registry = self.run_registries.get(self._META_BOARD) or self.run_registry
             try:
                 log.info("Starting periodic meta pass")
-                if self.run_registry:
-                    run_id = self.run_registry.start("meta")
+                if registry:
+                    run_id = registry.start("meta", repo_id=self._META_BOARD)
                 with tracing.start_ticket_root_span(
                     session_id, "meta", repo_config=None
                 ):
@@ -1773,7 +1778,7 @@ class Worker:
                     len(result.alignment_drafts_created),
                     total_drafts,
                 )
-                if self.run_registry and run_id:
+                if registry and run_id:
                     extraction_ids = [
                         d["id"] for d in result.extraction_drafts_created[:3]
                     ]
@@ -1788,11 +1793,11 @@ class Worker:
                     summary = "; ".join(parts) if parts else "No drafts created"
                     if total_drafts > 6:
                         summary += " …"
-                    self.run_registry.finish_ok(run_id, summary)
+                    registry.finish_ok(run_id, summary)
             except Exception as e:  # noqa: BLE001 — never let the poll die
                 log.exception("Meta pass failed")
-                if self.run_registry and run_id:
-                    self.run_registry.finish_error(run_id, str(e))
+                if registry and run_id:
+                    registry.finish_error(run_id, str(e))
             await asyncio.sleep(interval)
 
     async def _run_health_pass_loop(self) -> None:

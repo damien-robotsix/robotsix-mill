@@ -40,6 +40,18 @@ class TestRunRegistry:
         assert e["finished_at"] is None
         assert e["error"] is None
 
+    def test_start_meta_kind_with_repo_id(self, tmp_path: Path):
+        """The meta-agent records with kind="meta" and repo_id="meta"
+        (kind now type-valid in the RunEntry Literal)."""
+        registry = RunRegistry(tmp_path / "runs.json")
+        run_id = registry.start("meta", repo_id="meta")
+        entries = registry.list_all()
+        assert len(entries) == 1
+        e = entries[0]
+        assert e["id"] == run_id
+        assert e["kind"] == "meta"
+        assert e["repo_id"] == "meta"
+
     def test_start_persists_to_file(self, tmp_path: Path):
         path = tmp_path / "runs.json"
         registry = RunRegistry(path)
