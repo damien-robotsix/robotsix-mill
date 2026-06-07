@@ -160,8 +160,21 @@ def _build_prior_context(ticket, ctx, ws) -> str | None:
 
     Returns ``None`` when neither source has content (first review round)."""
     from ..agents.prompt_blocks import section
+    from ..core.text_utils import tail_keep
 
     parts: list[str] = []
+
+    # Bound each prior-context component independently with a tail-keep
+    # (most-recent content survives) so multi-round reviews don't re-pay
+    # for the entire accumulated comment history + full rebuttal each
+    # round. Apply per-component (not to the combined block) so we never
+    # cut through a ``section`` fence marker. 0 = no cap.
+    max_chars = ctx.settings.review_prior_context_max_chars
+
+    def _cap(text: str, label: str) -> str:
+        if max_chars and len(text) > max_chars:
+            return tail_keep(text, max_chars, label=label)
+        return text
 
     prior_comments = ctx.service.list_comments(ticket.id)
     if prior_comments:
@@ -187,14 +200,22 @@ def _build_prior_context(ticket, ctx, ws) -> str | None:
             if c.id not in excluded_ids and c.parent_id not in excluded_ids
         )
         if formatted:
-            parts.append(section("prior-review-comments", formatted))
+            parts.append(
+                section(
+                    "prior-review-comments",
+                    _cap(formatted, "prior-review-comments"),
+                )
+            )
 
     implement_md = ws.artifacts_dir / "implement.md"
     if implement_md.exists():
         parts.append(
             section(
                 "implement-rebuttal",
-                implement_md.read_text(encoding="utf-8"),
+                _cap(
+                    implement_md.read_text(encoding="utf-8"),
+                    "implement-rebuttal",
+                ),
             )
         )
 

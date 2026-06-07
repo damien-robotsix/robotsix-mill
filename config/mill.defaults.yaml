@@ -149,6 +149,14 @@ gates:
   scope_triage_enabled: true               # cheap scope-violation triage (EXPAND/REJECT/ESCALATE)
 
 # ---------------------------------------------------------------------------
+#  stages — per-stage tuning
+# ---------------------------------------------------------------------------
+
+stages:
+  review:
+    prior_context_max_chars: 8000          # max chars of re-review prior-context (comments + rebuttal); 0 = no cap
+
+# ---------------------------------------------------------------------------
 #  ci — CI retry ceiling for flake-storm prevention
 # ---------------------------------------------------------------------------
 

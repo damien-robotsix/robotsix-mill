@@ -55,3 +55,34 @@ def truncate_at_boundary(text: str, max_chars: int) -> str:
     truncated = text[:best].rstrip()
     omitted = len(text) - len(truncated)
     return f"{truncated}\n\n[... description truncated; {omitted} chars omitted]"
+
+
+def tail_keep(text: str, max_chars: int, *, label: str = "content") -> str:
+    """Keep the most-recent tail of *text*, dropping the oldest content.
+
+    If ``len(text) <= max_chars`` the string is returned unchanged.
+    Otherwise the last *max_chars* characters are kept, advanced forward
+    to the next newline boundary so the first kept line is complete, and
+    a ``[... <label> truncated: N chars omitted]`` note is prepended.
+
+    This is the correct primitive for chronological logs / append-only
+    ledgers where the newest content matters most — unlike
+    :func:`truncate_at_boundary`, which keeps the HEAD.
+
+    Returns:
+        The (possibly tail-truncated) string.
+    """
+    if max_chars >= len(text):
+        return text
+
+    original_size = len(text)
+    # Find the cut point (keep the last max_chars), then advance to the
+    # next newline so the first kept line is a complete line.
+    cut_point = original_size - max_chars
+    nl_idx = text.find("\n", cut_point)
+    if nl_idx != -1:
+        kept = text[nl_idx + 1 :]  # start after the newline
+    else:
+        kept = text[cut_point:]  # fallback (no newline found)
+    omitted = original_size - len(kept)
+    return f"[... {label} truncated: {omitted} chars omitted]\n\n{kept}"

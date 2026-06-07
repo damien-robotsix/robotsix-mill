@@ -740,3 +740,66 @@ def test_out_of_scope_ask_uses_explicit_title(ctx_factory, monkeypatch):
     children = _spawned_children(ctx, t.id)
     assert len(children) == 1
     assert children[0].title == "Add __pycache__ to .gitignore"
+
+
+# --- prior-context input cap -------------------------------------------
+
+
+def test_prior_context_caps_oversized(ctx_factory):
+    """When prior comments + the implement rebuttal exceed the cap,
+    each component is tail-kept: the most-recent content survives, a
+    truncation note is present, and the assembled block is far smaller
+    than the uncapped size."""
+    from robotsix_mill.stages.review import _build_prior_context
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL="file:///dummy",
+        review_enabled="true",
+        review_prior_context_max_chars="300",
+    )
+    t = ctx.service.create("Cap test", "body")
+    ws = ctx.service.workspace(t)
+    ws.artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    # Many prior comments, oldest → newest.
+    for i in range(60):
+        ctx.service.add_comment(
+            t.id, f"comment-{i:03d} some review feedback text", author="review"
+        )
+    # A large implement rebuttal.
+    rebuttal = "\n".join(
+        f"rebuttal-{i:03d} the implementer's response line" for i in range(60)
+    )
+    (ws.artifacts_dir / "implement.md").write_text(rebuttal, encoding="utf-8")
+
+    block = _build_prior_context(t, ctx, ws)
+    assert block is not None
+    # (a) truncation notes present for both capped components
+    assert "prior-review-comments truncated:" in block
+    assert "implement-rebuttal truncated:" in block
+    # (b) most-recent tail retained, oldest dropped
+    assert "comment-059" in block
+    assert "comment-000" not in block
+    assert "rebuttal-059" in block
+    assert "rebuttal-000" not in block
+    # (c) within the expected size bound (uncapped would be ~5KB).
+    assert len(block) < 2000
+
+
+def test_prior_context_under_cap_verbatim(ctx_factory):
+    """Content shorter than the cap is returned verbatim — no note."""
+    from robotsix_mill.stages.review import _build_prior_context
+
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = ctx.service.create("Small", "body")
+    ws = ctx.service.workspace(t)
+    ws.artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    ctx.service.add_comment(t.id, "short feedback", author="review")
+    (ws.artifacts_dir / "implement.md").write_text("brief rebuttal", encoding="utf-8")
+
+    block = _build_prior_context(t, ctx, ws)
+    assert block is not None
+    assert "truncated:" not in block
+    assert "short feedback" in block
+    assert "brief rebuttal" in block
