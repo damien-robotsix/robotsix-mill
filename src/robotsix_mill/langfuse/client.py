@@ -15,7 +15,7 @@ import logging
 import re
 import time
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from ..config import RepoConfig, Settings, get_secrets
 
@@ -567,8 +567,10 @@ def _fetch_traces_time_window(
     contains no traces.
     """
     from_timestamp = (
-        datetime.utcnow() - timedelta(hours=lookback_hours)
-    ).isoformat() + "Z"
+        (datetime.now(timezone.utc) - timedelta(hours=lookback_hours))
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
     PAGE_SIZE = 100
     all_traces: list[dict] = []
@@ -781,13 +783,15 @@ def aggregate_cost_trend(
         num_buckets = int(lookback_hours)  # ceil handled by range
         if lookback_hours != int(lookback_hours):
             num_buckets = int(lookback_hours) + 1
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         bucket_starts = [
             (now - timedelta(hours=lookback_hours)) + bucket_delta * i
             for i in range(num_buckets)
         ]
         ts_fmt = lambda dt: (
-            dt.replace(minute=0, second=0, microsecond=0).isoformat() + "Z"
+            dt.replace(minute=0, second=0, microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z")
         )
     else:
         # Daily buckets
@@ -795,7 +799,7 @@ def aggregate_cost_trend(
         num_days = int(lookback_hours / 24)
         if lookback_hours % 24 != 0:
             num_days += 1
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         start = now - timedelta(hours=lookback_hours)
         bucket_starts = [
             (start + bucket_delta * i).replace(
@@ -803,7 +807,7 @@ def aggregate_cost_trend(
             )
             for i in range(num_days)
         ]
-        ts_fmt = lambda dt: dt.isoformat() + "Z"
+        ts_fmt = lambda dt: dt.isoformat().replace("+00:00", "Z")
 
     # Initialize buckets
     buckets: dict[str, dict] = {}

@@ -66,13 +66,13 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = ["--strict-markers", "--strict-config"]
 xfail_strict = true
-# filterwarnings = ["error"] is intentionally NOT enabled yet: a local
-# `pytest -W error` run surfaces hundreds of pre-existing warnings (mostly
-# PytestCollectionWarning / PytestUnraisableExceptionWarning, plus some
-# upstream DeprecationWarnings) that must be triaged and pinned behind
-# narrowly-scoped, documented `ignore::` entries first. That promotion is a
-# follow-up; the strict-markers/strict-config/xfail_strict guards above are
-# zero-risk for the already-passing suite and land now.
+filterwarnings = [
+    "error",
+    # Python 3.14 upstream: inspect.getfile() can trigger ResourceWarning
+    # for an unclosed sqlite3.Connection held internally by the
+    # interpreter.  Not actionable in our code.
+    "ignore::ResourceWarning",
+]
 
 [tool.coverage.report]
 precision = 2
@@ -180,11 +180,7 @@ max-complexity = 10
 # because they're throwaway scripts, not library code.
 "dev/migrate-env-to-yaml.py" = ["C901", "E402"]
 "scripts/verify_repos_config.py" = ["C901"]
-# Langfuse trace fixtures pre-date the timezone-aware migration;
-# converting them to ``datetime.now(timezone.utc)`` triggers a much
-# wider refactor of the response-shape fixtures. Allow the legacy
-# call here while the rest of the codebase already moved off it.
-"tests/langfuse/test_langfuse_client.py" = ["DTZ003"]
+
 # --- src/ flake8-bandit (S) legacy hot spots --------------------------------
 # Pre-existing findings inherent to a git/subprocess-automation tool and
 # its best-effort cleanup paths (try-except-pass/continue, subprocess
