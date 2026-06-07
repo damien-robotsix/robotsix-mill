@@ -131,6 +131,9 @@ class TestGapPassResult:
     proposed_actions: list[dict] = field(default_factory=list)
 
 
+TestGapPassResult.__test__ = False
+
+
 @dataclass
 class BoardCleanupPassResult:
     """Result of running a board-cleanup pass."""

@@ -372,13 +372,13 @@ def test_aggregate_cost_trend_sums_correctly(monkeypatch):
     s = _langfuse_settings()
 
     # We'll mock _langfuse_api_get directly via httpx.Client
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     # Create three traces: two in the same hour, one in the next hour
-    t1_ts = (now - timedelta(hours=2)).isoformat() + "Z"
-    t2_ts = (now - timedelta(hours=2, minutes=30)).isoformat() + "Z"
-    t3_ts = (now - timedelta(hours=1)).isoformat() + "Z"
+    t1_ts = (now - timedelta(hours=2)).isoformat().replace("+00:00", "Z")
+    t2_ts = (now - timedelta(hours=2, minutes=30)).isoformat().replace("+00:00", "Z")
+    t3_ts = (now - timedelta(hours=1)).isoformat().replace("+00:00", "Z")
 
     fake_page_1 = {
         "data": [
@@ -453,14 +453,14 @@ def test_aggregate_cost_trend_produces_contiguous_buckets(monkeypatch):
 def test_aggregate_cost_trend_buckets_daily(monkeypatch):
     """lookback_hours > 24 → daily buckets at midnight boundaries."""
     from robotsix_mill.langfuse.client import aggregate_cost_trend
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
     s = _langfuse_settings()
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     # Two traces: one ~60h ago (bucket 1 of 3), one ~20h ago (bucket 2 of 3)
-    t1_ts = (now - timedelta(hours=60)).isoformat() + "Z"
-    t2_ts = (now - timedelta(hours=20)).isoformat() + "Z"
+    t1_ts = (now - timedelta(hours=60)).isoformat().replace("+00:00", "Z")
+    t2_ts = (now - timedelta(hours=20)).isoformat().replace("+00:00", "Z")
 
     fake_page = {
         "data": [
@@ -539,11 +539,11 @@ def test_aggregate_cost_by_name_multi_page(monkeypatch):
     """600 traces across 6 pages: 200 * 'refine' at $0.01, 400 *
     'implement' at $0.02. Verify all 600 are counted (the old
     EXAMINE_CAP=500 would silently drop 100 traces)."""
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
     from robotsix_mill.langfuse.client import aggregate_cost_by_name
 
     s = _langfuse_settings()
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     TOTAL_PAGES = 6
     PER_PAGE = 100
@@ -557,7 +557,7 @@ def test_aggregate_cost_by_name_multi_page(monkeypatch):
         page_traces = []
         for _ in range(PER_PAGE):
             seq += 1
-            ts = (now - timedelta(hours=seq * 0.01)).isoformat() + "Z"
+            ts = (now - timedelta(hours=seq * 0.01)).isoformat().replace("+00:00", "Z")
             if pg <= 2:
                 page_traces.append(
                     {
@@ -603,11 +603,11 @@ def test_aggregate_cost_by_name_multi_page(monkeypatch):
 def test_aggregate_cost_trend_multi_page(monkeypatch):
     """600 traces across 6 pages in a 3-hour window. Verify all 600 are
     accounted for in the bucket totals."""
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
     from robotsix_mill.langfuse.client import aggregate_cost_trend
 
     s = _langfuse_settings()
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     TOTAL_PAGES = 6
     PER_PAGE = 100
@@ -620,7 +620,7 @@ def test_aggregate_cost_trend_multi_page(monkeypatch):
             seq += 1
             # Spread traces across the lookback window
             offset_hours = (seq % 30) / 10.0  # 0.0 – 2.9 hours ago
-            ts = (now - timedelta(hours=offset_hours)).isoformat() + "Z"
+            ts = (now - timedelta(hours=offset_hours)).isoformat().replace("+00:00", "Z")
             page_traces.append(
                 {"id": f"t{seq}", "name": "test", "timestamp": ts, "totalCost": 0.001}
             )
