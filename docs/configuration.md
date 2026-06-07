@@ -387,6 +387,12 @@ Every setting below shows:
 | `pipeline.prune_clone_on_close` | `MILL_PRUNE_CLONE_ON_CLOSE` | `true` | Delete workspace repo clone on ticket close |
 | `pipeline.max_archived_tickets` | `MILL_MAX_ARCHIVED_TICKETS` | `100` | Max terminal-state tickets retained (0 = no purge) |
 
+### 11.2 Stages tuning
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| `stages.review.prior_context_max_chars` | `MILL_REVIEW_PRIOR_CONTEXT_MAX_CHARS` | `8000` | Max characters of the re-review prior-context block (prior review comments + the implement rebuttal) fed to the review agent. Each component is tail-kept (most-recent content survives) so multi-round reviews don't re-pay for the entire accumulated history. Set to `0` to disable the cap. |
+
 ### 12. Periodic agents
 
 Each periodic agent shares this pattern:
