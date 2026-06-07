@@ -124,6 +124,7 @@ modules:
       - tests/runtime/test_api.py
       - tests/runtime/test_routes.py
       - tests/runtime/test_worker.py
+      - tests/runtime/test_stale_branch_cleanup.py
       - tests/runtime/test_tracing.py
       - tests/runtime/test_run_registry.py
       - tests/runtime/test_ci_monitor.py

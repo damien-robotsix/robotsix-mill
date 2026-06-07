@@ -291,6 +291,31 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "3600",
         3600,
     ),
+    # --- stale branch cleanup ---
+    (
+        "stale_branch_cleanup_periodic",
+        "MILL_STALE_BRANCH_CLEANUP_PERIODIC",
+        "1",
+        True,
+    ),
+    (
+        "stale_branch_cleanup_interval_seconds",
+        "MILL_STALE_BRANCH_CLEANUP_INTERVAL_SECONDS",
+        "7200",
+        7200,
+    ),
+    (
+        "stale_branch_max_age_days",
+        "MILL_STALE_BRANCH_MAX_AGE_DAYS",
+        "14",
+        14,
+    ),
+    (
+        "stale_branch_cleanup_prefix_only",
+        "MILL_STALE_BRANCH_CLEANUP_PREFIX_ONLY",
+        "0",
+        False,
+    ),
     # --- test gap ---
     ("test_gap_model", "MILL_TEST_GAP_MODEL", "tg/model", "tg/model"),
     ("test_gap_periodic", "MILL_TEST_GAP_PERIODIC", "1", True),

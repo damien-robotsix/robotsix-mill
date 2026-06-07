@@ -19,7 +19,7 @@ import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from ..config import RepoConfig, get_repos_config
 from ..langfuse.client import effective_cost, session_cost
@@ -32,6 +32,9 @@ from .tracing import langfuse_trace_url
 from .run_registry import RunRegistry
 
 log = logging.getLogger("robotsix_mill.worker")
+
+if TYPE_CHECKING:
+    from ..forge.base import BranchInfo
 
 
 def _post_trace_event(
@@ -850,6 +853,33 @@ def _run_epic_reprocess(epic_id: str, comment_body: str, settings) -> None:
         log.exception("epic %s: re-processing failed", epic_id)
 
 
+def _branch_is_stale(
+    b: "BranchInfo",
+    *,
+    now: "datetime",
+    max_age_days: int,
+    target_branch: str,
+    open_pr: "set[str]",
+    prefix_only: bool,
+    branch_prefix: str,
+) -> bool:
+    """Return True when *b* is eligible for deletion under all guards."""
+    from datetime import timedelta
+
+    if b.name == target_branch:
+        return False
+    if b.is_protected:
+        return False
+    if b.name in open_pr:
+        return False
+    cutoff = now - timedelta(days=max_age_days)
+    if b.last_commit_at >= cutoff:
+        return False
+    if prefix_only and not b.name.startswith(branch_prefix):
+        return False
+    return True
+
+
 class Worker:
     """In-process queue + consumer task, owned by the API service."""
 
@@ -947,6 +977,7 @@ class Worker:
         self._meta_task: asyncio.Task | None = None
         self._cost_analyst_task: asyncio.Task | None = None
         self._run_health_task: asyncio.Task | None = None
+        self._stale_branch_task: asyncio.Task | None = None
         # board_id -> per-repo bespoke supervisor task. The supervisor
         # itself owns each repo's per-bespoke child tasks; cancelling
         # the supervisor cancels its children.
@@ -1848,6 +1879,61 @@ class Worker:
                     self.run_registry.finish_error(run_id, str(e))
             await asyncio.sleep(interval)
 
+    async def _stale_branch_cleanup_loop(self) -> None:
+        """Periodic stale-branch cleanup loop. Only runs when
+        ``MILL_STALE_BRANCH_CLEANUP_PERIODIC=true``.
+
+        Per-repo: iterates every registered repo, lists remote branches
+        and open-PR branches, then deletes old unprotected branches that
+        have no open PR and match the prefix/age guards.
+        """
+        from datetime import datetime, timezone
+
+        from ..forge import get_forge
+
+        settings = self.ctx.settings
+        interval = max(3600, settings.stale_branch_cleanup_interval_seconds)
+        initial = self._initial_delay("stale-branch-cleanup", interval)
+        await asyncio.sleep(initial)
+        while True:
+            repos = get_repos_config()
+            for repo_config in list(repos.repos.values()):
+                repo_label = repo_config.repo_id
+                try:
+                    forge = get_forge(settings, repo_config)
+                    branches = forge.list_branches()
+                    open_pr = forge.list_open_pr_branches()
+                    now = datetime.now(timezone.utc)
+                    deleted = 0
+                    for b in branches:
+                        if _branch_is_stale(
+                            b,
+                            now=now,
+                            max_age_days=settings.stale_branch_max_age_days,
+                            target_branch=settings.forge_target_branch,
+                            open_pr=open_pr,
+                            prefix_only=settings.stale_branch_cleanup_prefix_only,
+                            branch_prefix=settings.branch_prefix,
+                        ):
+                            if forge.delete_branch(branch=b.name):
+                                log.info(
+                                    "stale-branch cleanup: deleted %s on repo %s",
+                                    b.name,
+                                    repo_label,
+                                )
+                                deleted += 1
+                    log.info(
+                        "stale-branch cleanup: repo %s — %d branch(es) deleted",
+                        repo_label,
+                        deleted,
+                    )
+                except Exception:
+                    log.exception(
+                        "stale-branch cleanup failed for repo %s",
+                        repo_label,
+                    )
+            await asyncio.sleep(interval)
+
     async def _cost_analyst_pass_loop(self) -> None:
         """Global cost-analyst loop — fires once per interval (not per-repo).
 
@@ -2736,6 +2822,13 @@ class Worker:
             log_msg="Periodic run-health enabled: interval %ds",
             log_args=(self.ctx.settings.run_health_interval_seconds,),
         )
+        self._start_poll_loop_pass(
+            "stale-branch-cleanup",
+            self._stale_branch_cleanup_loop,
+            "_stale_branch_task",
+            log_msg="Periodic stale-branch cleanup enabled: interval %ds",
+            log_args=(self.ctx.settings.stale_branch_cleanup_interval_seconds,),
+        )
 
         # --- CI monitor (unique: checks repo config, not just settings) ---
         if self._ci_monitor_task is None:
@@ -2811,6 +2904,7 @@ class Worker:
             "_meta_task",
             "_cost_analyst_task",
             "_run_health_task",
+            "_stale_branch_task",
         ):
             t = getattr(self, attr)
             if t is not None:
