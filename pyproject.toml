@@ -205,6 +205,7 @@ max-complexity = 10
 # ``git grep`` over the repo clones (fixed argv, no shell, no untrusted
 # input) — same safe git-subprocess pattern as git_ops above.
 "src/robotsix_mill/meta/agent.py" = ["S603", "S607"]
+"src/robotsix_mill/meta/todo_scan.py" = ["S603", "S607"]
 
 [tool.deptry]
 known_first_party = ["robotsix_mill"]

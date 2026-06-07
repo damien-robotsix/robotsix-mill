@@ -434,10 +434,12 @@ modules:
     paths:
       - src/robotsix_mill/meta/__init__.py
       - src/robotsix_mill/meta/agent.py
+      - src/robotsix_mill/meta/todo_scan.py
       - src/robotsix_mill/meta/triage.py
       - src/robotsix_mill/meta/runner.py
       - src/robotsix_mill/meta/workspace.py
       - tests/meta/test_agent_build.py
+      - tests/meta/test_todo_scan.py
       - tests/meta/test_triage.py
       - tests/meta/test_runner.py
       - tests/meta/test_workspace.py

@@ -14,7 +14,6 @@ from pathlib import Path
 from robotsix_mill.meta.agent import (
     _cross_repo_adoption,
     _has_buildout_placeholder,
-    _outstanding_todos,
     _robotsix_deps_of,
 )
 
@@ -30,38 +29,6 @@ def _git_repo(path: Path, files: dict[str, str]) -> Path:
         f.write_text(content, encoding="utf-8")
     subprocess.run(["git", "-C", str(path), "add", "-A"], check=True)
     return path
-
-
-def test_outstanding_todos_finds_markers_outside_src(tmp_path):
-    """The regression that motivated this: a TODO in a periodic yaml
-    (outside ``src/``) must be surfaced — the old src-only sweep missed it."""
-    repo = _git_repo(
-        tmp_path / "llmio",
-        {
-            ".robotsix-mill/periodic/langfuse_cleanup.yaml": "# TODO: clean up langfuse data\n",
-            "src/pkg/mod.py": "x = 1  # FIXME: handle None\n",
-            "README.md": "Just docs, nothing actionable.\n",
-        },
-    )
-    out = _outstanding_todos({"robotsix-llmio": repo})
-    assert ".robotsix-mill/periodic/langfuse_cleanup.yaml:1" in out
-    assert "src/pkg/mod.py:1" in out
-    # repo id prefixes every line so target_repo_id is unambiguous
-    assert out.startswith("robotsix-llmio ")
-
-
-def test_outstanding_todos_empty_when_no_markers(tmp_path):
-    repo = _git_repo(tmp_path / "clean", {"src/a.py": "x = 1\n"})
-    out = _outstanding_todos({"clean": repo})
-    assert "no todo" in out.lower()
-
-
-def test_outstanding_todos_caps_and_notes_truncation(tmp_path):
-    body = "".join(f"# TODO item {i}\n" for i in range(10))
-    repo = _git_repo(tmp_path / "many", {"notes.txt": body})
-    out = _outstanding_todos({"many": repo}, cap=3)
-    assert len([ln for ln in out.splitlines() if ln.startswith("many ")]) == 3
-    assert "+7 more" in out
 
 
 def test_has_buildout_placeholder_exact_marker_only(tmp_path):

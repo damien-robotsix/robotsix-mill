@@ -127,8 +127,6 @@ def _available_periodic_catalog() -> str:
 # discovery the LLM skips into judgement it can't avoid.
 # ---------------------------------------------------------------------------
 
-_TODO_MARKER_RE = r"TODO|FIXME|XXX|HACK"
-
 
 def _git_grep(clone: Path, args: list[str], *, timeout: int = 60) -> str:
     """Run ``git -C <clone> grep <args>`` and return stdout.
@@ -148,42 +146,6 @@ def _git_grep(clone: Path, args: list[str], *, timeout: int = 60) -> str:
     except Exception:  # noqa: BLE001 — best-effort; never crash the pass
         return ""
     return proc.stdout
-
-
-def _outstanding_todos(repo_clones: dict[str, Path], *, cap: int = 200) -> str:
-    """Deterministic ``<outstanding-todos>`` block.
-
-    Greps **every tracked file** (not just ``src/``) in every clone for
-    ``TODO``/``FIXME``/``XXX``/``HACK`` markers via ``git grep`` (tracked
-    files only → respects ``.gitignore``, skips ``.git``/build dirs).
-    One line per hit: ``<repo_id> <file>:<line>  <text>``. Capped with a
-    truncation note so a marker-heavy repo can't blow the prompt.
-
-    The agent only *judges* this list — it no longer has to discover the
-    markers itself (the prior LLM-driven sweep only ever looked at
-    ``src/`` and missed e.g. a TODO in ``.robotsix-mill/periodic/*.yaml``).
-    """
-    lines: list[str] = []
-    overflow = 0
-    for repo_id in sorted(repo_clones):
-        for raw in _git_grep(
-            repo_clones[repo_id], ["-nIE", _TODO_MARKER_RE]
-        ).splitlines():
-            parts = raw.split(":", 2)
-            if len(parts) < 3:
-                continue
-            fpath, lineno, text = parts
-            entry = f"{repo_id} {fpath}:{lineno}  {text.strip()[:200]}"
-            if len(lines) < cap:
-                lines.append(entry)
-            else:
-                overflow += 1
-    if not lines:
-        return "(no TODO/FIXME/XXX/HACK markers found in any clone)"
-    out = "\n".join(lines)
-    if overflow:
-        out += f"\n… (+{overflow} more markers truncated)"
-    return out
 
 
 def _has_buildout_placeholder(clone: Path) -> bool:
@@ -380,6 +342,7 @@ def run_meta_agent(
     # Construct the prompt
     # ------------------------------------------------------------------
     from ..agents.prompt_blocks import section
+    from .todo_scan import format_outstanding_todos, scan_outstanding_todos
 
     clone_lines = [
         f"- `{repo_id}` → `{clone_path}`" for repo_id, clone_path in repo_clones.items()
@@ -394,7 +357,10 @@ def run_meta_agent(
     prompt += section("available-periodic-workflows", _available_periodic_catalog())
     # Deterministic ground-truth blocks: discovery the agent reliably skips,
     # pre-computed so it only has to judge (see the helpers' docstrings).
-    prompt += section("outstanding-todos", _outstanding_todos(repo_clones))
+    prompt += section(
+        "outstanding-todos",
+        format_outstanding_todos(scan_outstanding_todos(repo_clones)),
+    )
     prompt += section("cross-repo-adoption", _cross_repo_adoption(repo_clones))
     prompt += "\n\nPerform the cross-repo analysis and return your result."
 
