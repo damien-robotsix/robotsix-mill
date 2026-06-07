@@ -1,4 +1,4 @@
-"""Forge abstraction: Forge base class, GitHub adapter, GitLab stub, and auth module."""
+"""Forge abstraction: Forge base class, GitHub adapter, GitLab adapter, and auth module."""
 
 from .base import Forge, get_forge, NotConfiguredError, RepoInfo
 
