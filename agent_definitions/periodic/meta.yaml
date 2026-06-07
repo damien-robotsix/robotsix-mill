@@ -19,7 +19,7 @@ tools:
   - read_file
   - list_dir
 
-web: false
+web_knowledge: false
 report_issue: false
 read_ticket: true
 reply_to_thread: false
