@@ -539,6 +539,7 @@ def test_inject_agent_md_can_be_false():
 _VALID_TOOL_NAMES = frozenset(
     {
         "explore",
+        "parallel_explore",
         "read_file",
         "write_file",
         "edit_file",
