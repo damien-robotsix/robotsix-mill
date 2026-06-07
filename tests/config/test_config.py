@@ -137,6 +137,7 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ),
     # --- memory / reference files ---
     ("max_memory_chars", "MILL_MAX_MEMORY_CHARS", "16000", 16000),
+    ("retrospect_log_max_chars", "MILL_RETROSPECT_LOG_MAX_CHARS", "15000", 15000),
     ("reference_files_max_count", "MILL_REFERENCE_FILES_MAX_COUNT", "10", 10),
     (
         "reference_files_max_total_lines",

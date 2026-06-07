@@ -2506,3 +2506,130 @@ def test_memory_board_id_prefers_repo_config(settings, repo_config):
     t = svc.create("repo thing")
     ctx = StageContext(settings=settings, service=svc, repo_config=repo_config)
     assert ctx.memory_board_id(t) == repo_config.board_id
+
+
+# ------------------------------------------------------------------
+# Unbounded-input capping (memory / history / comments)
+# ------------------------------------------------------------------
+
+
+def test_inputs_capped_keep_recent_content(ctx_factory, monkeypatch):
+    """Oversized memory, history, and comments fed to the retrospect
+    agent are each capped to their configured limit, keeping the
+    most-recent content (omission note present, newest entry kept,
+    oldest dropped)."""
+    from robotsix_mill.langfuse import client as langfuse_client
+    from robotsix_mill.runners import pass_runner
+
+    ctx = ctx_factory(max_memory_chars="300", retrospect_log_max_chars="300")
+
+    captured: dict = {}
+
+    def _capture(**kwargs):
+        captured.update(kwargs)
+        return _result(findings="capped", conclusion="done")
+
+    monkeypatch.setattr(retrospecting, "run_retrospect_agent", _capture)
+    monkeypatch.setattr(
+        langfuse_client,
+        "fetch_session_summary",
+        lambda settings, session_id: "summary",
+    )
+    monkeypatch.setattr(
+        langfuse_client,
+        "_langfuse_api_get",
+        lambda settings, path, params=None, repo_config=None: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "sess-abc",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
+    )
+    monkeypatch.setattr(
+        pass_runner,
+        "_verify_prior_proposals",
+        lambda service, settings, source_label: {},
+    )
+
+    t = _ticket(ctx)
+
+    # Oversized memory ledger — oldest line OLD_MEMORY, newest NEW_MEMORY.
+    memory_file = ctx.settings.memory_file_for("retrospect", ctx.memory_board_id(t))
+    memory_file.parent.mkdir(parents=True, exist_ok=True)
+    memory_lines = ["OLD_MEMORY_ENTRY"] + [f"mem filler line {i}" for i in range(200)]
+    memory_lines.append("NEW_MEMORY_ENTRY")
+    memory_file.write_text("\n".join(memory_lines), encoding="utf-8")
+
+    # Many comments — oldest OLD_COMMENT, newest NEW_COMMENT.
+    ctx.service.add_comment(t.id, "OLD_COMMENT_BODY")
+    for i in range(200):
+        ctx.service.add_comment(t.id, f"comment filler {i}")
+    ctx.service.add_comment(t.id, "NEW_COMMENT_BODY")
+
+    out = RetrospectStage().run(t, ctx)
+    assert out.next_state is State.CLOSED
+
+    # Memory: capped, oldest dropped, newest kept, truncation marker.
+    memory = captured["memory"]
+    assert len(memory) <= 400  # cap + short omission prefix
+    assert "memory truncated" in memory
+    assert "NEW_MEMORY_ENTRY" in memory
+    assert "OLD_MEMORY_ENTRY" not in memory
+
+    # Comments: capped, oldest dropped, newest kept, omission marker.
+    comments = captured["comments_text"]
+    assert len(comments) <= 400
+    assert "earlier lines omitted" in comments
+    assert "NEW_COMMENT_BODY" in comments
+    assert "OLD_COMMENT_BODY" not in comments
+
+
+def test_retrospect_log_cap_zero_disables(ctx_factory, monkeypatch):
+    """A retrospect_log_max_chars of 0 leaves history/comments uncapped."""
+    from robotsix_mill.langfuse import client as langfuse_client
+    from robotsix_mill.runners import pass_runner
+
+    ctx = ctx_factory(retrospect_log_max_chars="0")
+
+    captured: dict = {}
+
+    def _capture(**kwargs):
+        captured.update(kwargs)
+        return _result(findings="ok", conclusion="done")
+
+    monkeypatch.setattr(retrospecting, "run_retrospect_agent", _capture)
+    monkeypatch.setattr(
+        langfuse_client,
+        "fetch_session_summary",
+        lambda settings, session_id: "summary",
+    )
+    monkeypatch.setattr(
+        langfuse_client,
+        "_langfuse_api_get",
+        lambda settings, path, params=None, repo_config=None: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "sess-abc",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
+    )
+    monkeypatch.setattr(
+        pass_runner,
+        "_verify_prior_proposals",
+        lambda service, settings, source_label: {},
+    )
+
+    t = _ticket(ctx)
+    for i in range(50):
+        ctx.service.add_comment(t.id, f"comment filler {i}")
+
+    out = RetrospectStage().run(t, ctx)
+    assert out.next_state is State.CLOSED
+    assert "earlier lines omitted" not in captured["comments_text"]
+    assert "earlier lines omitted" not in captured["history_text"]

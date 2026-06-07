@@ -325,6 +325,10 @@ class Settings(BaseSettings):
     # only — persist_memory is unchanged).  Applies to all memory ledgers
     # (refine, audit, health, agent-check, etc.).
     max_memory_chars: int = Field(default=8000, ge=0)
+    # Maximum characters of the retrospect stage's history + comments
+    # logs fed to the agent. These are chronological, so the most-recent
+    # tail is kept and older lines dropped. 0 disables capping.
+    retrospect_log_max_chars: int = Field(default=12000, ge=0)
     # Maximum number of files whose full content the refine stage stores
     # as reference_files.json for the implement coordinator to pre-load.
     reference_files_max_count: int = Field(default=5)
