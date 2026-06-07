@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import pydantic_ai
 import pydantic_ai.providers.openrouter as orp
+import pytest
 
 from robotsix_mill.agents import openrouter_cost as oc
 from robotsix_mill.agents.prompt_tool_consistency import (
@@ -93,6 +94,50 @@ def test_known_tools_filter_suppresses_non_tool_calls():
     )
     # Without the catalog, the parens pattern alone would flag it.
     assert unregistered_call_directives(prompt, resolved_tools=set()) == {"cast"}
+
+
+# ── build_agent wiring: the guard fires at construction time ──────────
+
+
+def test_build_agent_raises_on_call_directive_to_absent_tool(tmp_path, monkeypatch):
+    """``build_agent`` invokes the consistency check before constructing
+    the pydantic-ai Agent: a prompt that tells the agent to *call* a
+    known mill tool it wasn't wired with raises ``ValueError`` at build
+    time (not at runtime)."""
+    from robotsix_mill.agents.base import build_agent
+    from robotsix_mill.agents.close_thread import make_close_thread_tool
+
+    s = _settings(tmp_path)
+    # Ensure ``close_thread`` is in the registry catalog (registration
+    # happens when the factory runs), then build an agent that omits it.
+    make_close_thread_tool(s, "x")
+
+    with pytest.raises(ValueError, match="close_thread"):
+        build_agent(
+            s,
+            system_prompt="For each comment, call `close_thread(comment_id)`.",
+            close_thread=False,
+        )
+
+
+def test_build_agent_allows_disclaimer_mention(tmp_path, monkeypatch):
+    """A bare backtick mention (not a call directive) for a tool the
+    agent lacks does NOT trip the guard — build proceeds past the
+    check to the backend construction."""
+    from robotsix_mill.agents import base
+
+    s = _settings(tmp_path)
+    # Stop right after the guard so we don't need a real backend.
+    sentinel = object()
+    monkeypatch.setattr(base, "_build_deepseek_handle", lambda *a, **k: sentinel)
+    monkeypatch.setattr(base, "_use_claude_sdk", lambda *a, **k: False)
+
+    handle = base.build_agent(
+        s,
+        system_prompt="You do not have a `close_thread` tool.",
+        close_thread=False,
+    )
+    assert handle is sentinel
 
 
 # ── Capture harness for the real agent build paths ────────────────────

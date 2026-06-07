@@ -18,7 +18,9 @@ import weakref
 from typing import Any
 
 from ..config import Settings, get_secrets
+from .prompt_tool_consistency import unregistered_call_directives
 from .report_issue import make_report_issue_tool
+from .tool_registry import ToolRegistry
 
 # Defensive char cap on the inlined ``## Module Map`` block so the static
 # prompt can't grow unbounded as ``docs/modules.yaml`` grows. A hardcoded
@@ -471,6 +473,25 @@ def build_agent(
         skills=skills,
         modules=modules,
     )
+    # Deterministic build-time guard (PR #755, PR #780): the prompt must
+    # not instruct the agent to *call* a tool absent from its resolved
+    # set. ``known_tools`` is the real mill-tool catalog, so an unrelated
+    # parenthesised backtick span in the prompt can't trip a false
+    # positive — only a call directive naming an actual mill tool the
+    # agent lacks is flagged.
+    resolved_tool_names = {
+        getattr(t, "name", None) or getattr(t, "__name__", "") for t in all_tools
+    }
+    unreg = unregistered_call_directives(
+        composed_system,
+        resolved_tools=resolved_tool_names,
+        known_tools={t.name for t in ToolRegistry.list_tools()},
+    )
+    if unreg:
+        raise ValueError(
+            f"Prompt contains call directives to unavailable tools: "
+            f"{', '.join(sorted(unreg))}"
+        )
     effective_model = model_name or _model_name(settings)
     # llmio Tier convention: agent definitions may set `model: cheap` /
     # `model: default` (or `normal`) instead of a provider-specific model id,
