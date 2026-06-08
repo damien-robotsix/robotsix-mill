@@ -13,7 +13,7 @@ from robotsix_mill.stages.maintenance import MaintenanceStage
 def _inject_mock_maintenance_agent():
     """Inject a mock ``robotsix_mill.agents.maintenance`` module into
     ``sys.modules`` so the lazy import inside ``MaintenanceStage.run()``
-    resolves. The real module is created in a follow-up ticket."""
+    resolves. Mock the real module so unit tests don't require an LLM."""
     mock_agent_mod = ModuleType("robotsix_mill.agents.maintenance")
     mock_agent_mod.run_maintenance_agent = MagicMock()
     sys.modules["robotsix_mill.agents.maintenance"] = mock_agent_mod
