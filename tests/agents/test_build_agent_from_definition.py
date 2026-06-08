@@ -301,7 +301,17 @@ def test_refine_yaml_end_to_end_tool_injection(monkeypatch):
     _reset_secrets()
     _cfg._secrets = Secrets(openrouter_api_key="sk-fake")
     settings = Settings(OPENROUTER_API_KEY="sk-fake")
-    agent = build_agent_from_definition(settings, definition, tools=[])
+    # Use a minimal system prompt to avoid the prompt→tool consistency
+    # check. The real refine.yaml prompt references `` `parallel_explore( ``,
+    # which triggers a build-time error when tools=[] because other tests
+    # may have registered ``parallel_explore`` in the global ToolRegistry.
+    # This test validates tool *injection*, not prompt validation.
+    agent = build_agent_from_definition(
+        settings,
+        definition,
+        tools=[],
+        system_prompt="Refine tickets using the available tools.",
+    )
 
     # Inspect the agent's toolset to verify tool injection.
     toolset = agent._agent._function_toolset

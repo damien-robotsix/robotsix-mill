@@ -161,7 +161,7 @@ def run_periodic_agent(
     # ------------------------------------------------------------------
     tools: list = []
     if repo_dir is not None:
-        from .explore import make_explore_tool
+        from .explore import make_explore_tool, make_parallel_explore_tool
         from .fs_tools import build_fs_tools
 
         fs_filter: set[str] = {"read_file", "list_dir"}
@@ -177,7 +177,10 @@ def run_periodic_agent(
             )
             if t.__name__ in fs_filter
         ]
-        tools = [make_explore_tool(settings, repo_dir)]
+        tools = [
+            make_explore_tool(settings, repo_dir),
+            make_parallel_explore_tool(settings, repo_dir),
+        ]
 
         if include_jscpd:
             from .jscpd_tool import make_jscpd_tool
