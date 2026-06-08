@@ -210,6 +210,31 @@ def _verify_branch_merged(repo_dir: Path | None, ticket: Ticket) -> bool:
         if local_check.returncode == 0:
             return True  # local branch is merged
         if local_check.returncode == 1:
+            # Squash-merge detection: search main for a commit
+            # referencing this ticket.
+            grep = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(repo_dir),
+                    "log",
+                    "origin/main",
+                    "--oneline",
+                    "--fixed-strings",
+                    f"--grep={ticket.id}",
+                ],
+                capture_output=True,
+                text=True,
+            )
+            if grep.returncode == 0 and grep.stdout.strip():
+                log.info(
+                    "%s: local branch '%s' is not an ancestor of "
+                    "origin/main, but a commit referencing this ticket "
+                    "was found on origin/main — treating as squash-merged",
+                    ticket.id,
+                    branch,
+                )
+                return True
             log.info(
                 "%s: local branch '%s' is NOT an ancestor of origin/main "
                 "— implementation unmerged",
@@ -243,6 +268,31 @@ def _verify_branch_merged(repo_dir: Path | None, ticket: Ticket) -> bool:
     if result.returncode == 0:
         return True  # branch is merged
     if result.returncode == 1:
+        # Squash-merge detection: search main for a commit
+        # referencing this ticket.
+        grep = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_dir),
+                "log",
+                "origin/main",
+                "--oneline",
+                "--fixed-strings",
+                f"--grep={ticket.id}",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if grep.returncode == 0 and grep.stdout.strip():
+            log.info(
+                "%s: branch '%s' is not an ancestor of origin/main, "
+                "but a commit referencing this ticket was found on "
+                "origin/main — treating as squash-merged",
+                ticket.id,
+                branch,
+            )
+            return True
         log.info(
             "%s: branch '%s' is NOT an ancestor of main — implementation unmerged",
             ticket.id,
