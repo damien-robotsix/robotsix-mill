@@ -229,11 +229,7 @@ def run_maintenance_agent(
         from .fs_tools import build_fs_tools
 
         fs_all = build_fs_tools(repo_dir, settings)
-        ro_tools = [
-            t
-            for t in fs_all
-            if t.__name__ in ("read_file", "list_dir")
-        ]
+        ro_tools = [t for t in fs_all if t.__name__ in ("read_file", "list_dir")]
         tools.extend(ro_tools)
 
     # Action tools: post_comment (real) + stubs

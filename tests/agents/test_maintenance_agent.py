@@ -134,9 +134,7 @@ class TestStubTools:
 
         # investigate
         r3 = asyncio.run(
-            make_investigate_tool(s)(
-                question="q", repo_url="https://example.com/r"
-            )
+            make_investigate_tool(s)(question="q", repo_url="https://example.com/r")
         )
         assert "not yet implemented" in r3
 
@@ -219,9 +217,9 @@ class TestAgentConstruction:
                 cap["kw"] = kw
 
             def run_sync(self, prompt, *, usage_limits=None, **kw):
-                return type("R", (), {"output": MaintenanceResult(
-                    success=True, note="test ok"
-                )})()
+                return type(
+                    "R", (), {"output": MaintenanceResult(success=True, note="test ok")}
+                )()
 
         monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
         monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
@@ -273,9 +271,15 @@ class TestAgentConstruction:
                 pass
 
             def run_sync(self, prompt, *, usage_limits=None, **kw):
-                return type("R", (), {"output": MaintenanceResult(
-                    success=False, note="fork failed: rate limited"
-                )})()
+                return type(
+                    "R",
+                    (),
+                    {
+                        "output": MaintenanceResult(
+                            success=False, note="fork failed: rate limited"
+                        )
+                    },
+                )()
 
         monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
         monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
