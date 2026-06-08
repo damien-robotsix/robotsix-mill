@@ -26,6 +26,12 @@ from pydantic import BaseModel, Field, model_validator
 from ..config import Settings
 from .prompt_blocks import section
 
+# Strips the ``## Tool: `explore``` section (through to the next
+# ``## `` heading) from the triage system prompt when no repo clone
+# is available, so the prompt-tool-consistency guard doesn't raise
+# ValueError for an advertised-but-absent tool.
+_STRIP_EXPLORE_SECTION_RE = re.compile(r"## Tool: `explore`.*?\n(?=## )", re.DOTALL)
+
 log = logging.getLogger(__name__)
 
 
@@ -293,10 +299,18 @@ def triage_refine(
 
         tools = [make_explore_tool(settings, repo_dir, extra_roots=extra_roots)]
 
+    system_prompt = definition.system_prompt
+    if repo_dir is None:
+        # Strip the ``## Tool: `explore``` section so the build-time
+        # prompt-tool-consistency guard doesn't raise ValueError when
+        # the explore tool is absent from the resolved tool set.
+        system_prompt = _STRIP_EXPLORE_SECTION_RE.sub("", system_prompt)
+
     agent = build_agent_from_definition(
         settings,
         definition,
         tools=tools,
+        system_prompt=system_prompt,
         model_name=definition.model or settings.triage_model,
     )
 
