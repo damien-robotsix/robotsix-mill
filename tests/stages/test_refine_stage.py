@@ -2613,8 +2613,10 @@ def test_maintenance_triage_feature_flag_off_falls_through(ctx_factory, monkeypa
     monkeypatch.setattr(
         refining,
         "triage_maintenance",
-        lambda **kw: triage_called.append(1)
-        or MaintenanceTriageResult(decision="MAINTENANCE", reason="unreachable"),
+        lambda **kw: (
+            triage_called.append(1)
+            or MaintenanceTriageResult(decision="MAINTENANCE", reason="unreachable")
+        ),
     )
     monkeypatch.setattr(
         refining,

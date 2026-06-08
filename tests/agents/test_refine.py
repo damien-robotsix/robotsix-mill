@@ -4610,9 +4610,7 @@ class TestMaintenanceTriage:
         monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
 
         s = Settings(data_dir=str(tmp_path), triage_model="test/triage-model")
-        result = triage_maintenance(
-            settings=s, title="Test", draft="do x in foo.py"
-        )
+        result = triage_maintenance(settings=s, title="Test", draft="do x in foo.py")
 
         assert result.decision == "CODE_CHANGE"
         assert seen_kwargs["tools"] == []

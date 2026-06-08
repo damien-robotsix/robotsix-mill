@@ -1120,8 +1120,7 @@ class RefineStage(Stage):
                     )
             except Exception:
                 log.warning(
-                    "%s: maintenance triage failed, falling through to "
-                    "normal refine",
+                    "%s: maintenance triage failed, falling through to normal refine",
                     ticket.id,
                     exc_info=True,
                 )
