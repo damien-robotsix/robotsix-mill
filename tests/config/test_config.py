@@ -919,6 +919,63 @@ class TestLoadReposYaml:
         assert "explicit-repo" in result
         assert "env-repo" not in result
 
+    def test_top_level_meta_block_not_surfaced_as_repo(self, tmp_path):
+        """A sibling ``meta:`` block is NOT returned as a repo entry."""
+        from robotsix_mill.config_loader import load_repos_yaml
+
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text(
+            "repos:\n"
+            "  my-repo:\n"
+            "    board_id: my-board\n"
+            "meta:\n"
+            "  langfuse:\n"
+            "    public_key: pk-meta\n"
+            "    secret_key: sk-meta\n"
+        )
+        result = load_repos_yaml(str(repos_file))
+        assert "my-repo" in result
+        assert "meta" not in result
+
+
+class TestLoadMetaYaml:
+    """Tests for ``config_loader.load_meta_yaml``."""
+
+    def test_missing_file_returns_empty(self):
+        from robotsix_mill.config_loader import load_meta_yaml
+
+        assert load_meta_yaml("/nonexistent/repos.yaml") == {}
+
+    def test_returns_meta_block(self, tmp_path):
+        from robotsix_mill.config_loader import load_meta_yaml
+
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text(
+            "repos:\n"
+            "  my-repo:\n"
+            "    board_id: my-board\n"
+            "meta:\n"
+            "  langfuse:\n"
+            "    project_name: robotsix-meta\n"
+            "    public_key: pk-meta\n"
+            "    secret_key: sk-meta\n"
+        )
+        meta = load_meta_yaml(str(repos_file))
+        assert meta == {
+            "langfuse": {
+                "project_name": "robotsix-meta",
+                "public_key": "pk-meta",
+                "secret_key": "sk-meta",
+            }
+        }
+
+    def test_no_meta_block_returns_empty(self, tmp_path):
+        from robotsix_mill.config_loader import load_meta_yaml
+
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text("repos:\n  my-repo:\n    board_id: my-board\n")
+        assert load_meta_yaml(str(repos_file)) == {}
+
 
 class TestRepoConfig:
     """Tests for the ``RepoConfig`` model."""
@@ -1139,6 +1196,77 @@ class TestLoadReposConfig:
         rc = rr.repos["repo-a"]
         assert rc.ci_monitor_enabled is False
         assert rc.ci_monitor_interval_seconds == 7200
+
+    def test_meta_block_builds_dedicated_repo_config(self, tmp_path):
+        """A top-level ``meta:`` block with langfuse keys → ``rr.meta`` is a
+        RepoConfig for the synthetic meta board, kept OUT of ``repos``."""
+        from robotsix_mill.config import load_repos_config
+
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text(
+            "repos:\n"
+            "  repo-a:\n"
+            "    board_id: board-a\n"
+            "    langfuse:\n"
+            "      project_name: proj-a\n"
+            "      public_key: pk-a\n"
+            "      secret_key: sk-a\n"
+            "meta:\n"
+            "  langfuse:\n"
+            "    project_name: robotsix-meta\n"
+            "    public_key: pk-meta\n"
+            "    secret_key: sk-meta\n"
+            "    base_url: https://lf.example.net\n"
+        )
+        rr = load_repos_config(str(repos_file))
+        # meta is NOT a repo
+        assert "meta" not in rr.repos
+        assert rr.meta is not None
+        assert rr.meta.repo_id == "meta"
+        assert rr.meta.board_id == "meta"
+        assert rr.meta.langfuse_project_name == "robotsix-meta"
+        assert rr.meta.langfuse_public_key == "pk-meta"
+        assert rr.meta.langfuse_secret_key == "sk-meta"
+        assert rr.meta.langfuse_base_url == "https://lf.example.net"
+
+    def test_meta_absent_yields_none(self, tmp_path):
+        """No ``meta:`` block → ``rr.meta`` is None (meta runs untraced)."""
+        from robotsix_mill.config import load_repos_config
+
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text(
+            "repos:\n"
+            "  repo-a:\n"
+            "    board_id: board-a\n"
+            "    langfuse:\n"
+            "      project_name: proj-a\n"
+            "      public_key: pk-a\n"
+            "      secret_key: sk-a\n"
+        )
+        rr = load_repos_config(str(repos_file))
+        assert rr.meta is None
+
+    def test_meta_without_keys_yields_none(self, tmp_path):
+        """A ``meta:`` block missing the secret key → ``rr.meta`` is None
+        (incomplete creds are ignored, not half-applied)."""
+        from robotsix_mill.config import load_repos_config
+
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text(
+            "repos:\n"
+            "  repo-a:\n"
+            "    board_id: board-a\n"
+            "    langfuse:\n"
+            "      project_name: proj-a\n"
+            "      public_key: pk-a\n"
+            "      secret_key: sk-a\n"
+            "meta:\n"
+            "  langfuse:\n"
+            "    project_name: robotsix-meta\n"
+            "    public_key: pk-meta\n"
+        )
+        rr = load_repos_config(str(repos_file))
+        assert rr.meta is None
 
     def test_yaml_ci_monitor_defaults_when_absent(self, tmp_path):
         """When ``ci_monitor`` is absent, fields default to True / 86400."""

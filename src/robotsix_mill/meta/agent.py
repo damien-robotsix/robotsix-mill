@@ -227,7 +227,10 @@ def _cross_repo_adoption(repo_clones: dict[str, Path]) -> str:
         cons = consumers.get(lib, set())
         non = sorted(all_repos - {lib} - cons)
         skel = (
-            " [SKELETON: still ships build-out placeholders]"
+            " [SKELETON: still ships build-out placeholders — needs BUILD-OUT"
+            " before any consumer can migrate; file a build-out draft on this"
+            " lib to port in the real implementation from whichever repo still"
+            " owns it]"
             if _has_buildout_placeholder(repo_clones[lib])
             else ""
         )

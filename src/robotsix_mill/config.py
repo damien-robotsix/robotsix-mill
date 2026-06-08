@@ -1665,6 +1665,12 @@ class ReposRegistry(BaseModel):
     """Container holding all :class:`RepoConfig` entries keyed by repo ID."""
 
     repos: dict[str, RepoConfig]
+    # Optional Langfuse config for the synthetic cross-repo *meta* board.
+    # The meta-agent is not a registered repo (no clone/forge), so it is
+    # kept OUT of ``repos`` — but it gets its own dedicated Langfuse
+    # project here so its passes trace just like the per-repo pipelines.
+    # ``None`` when no ``meta:`` block is configured → meta runs untraced.
+    meta: RepoConfig | None = None
 
     @model_validator(mode="after")
     def _validate_keys_match_repo_ids(self) -> "ReposRegistry":
@@ -1684,7 +1690,7 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
     constructs a :class:`RepoConfig` for each entry, validates, and
     returns a :class:`ReposRegistry`.
     """
-    from .config_loader import load_repos_yaml
+    from .config_loader import load_meta_yaml, load_repos_yaml
 
     raw = load_repos_yaml(config_file)
     repos: dict[str, RepoConfig] = {}
@@ -1718,7 +1724,26 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             if isinstance(repo_data, dict)
             else 1,
         )
-    return ReposRegistry(repos=repos)
+
+    # Optional dedicated Langfuse project for the synthetic cross-repo
+    # meta board. Built only when a ``meta:`` block supplies usable
+    # credentials (public + secret key); otherwise the meta-agent traces
+    # nowhere, exactly as before this block existed.
+    meta_raw = load_meta_yaml(config_file)
+    meta_langfuse = meta_raw.get("langfuse", {}) if isinstance(meta_raw, dict) else {}
+    meta_config: RepoConfig | None = None
+    if meta_langfuse.get("public_key") and meta_langfuse.get("secret_key"):
+        meta_config = RepoConfig(
+            repo_id="meta",
+            board_id="meta",
+            langfuse_project_name=meta_langfuse.get("project_name", "meta"),
+            langfuse_public_key=meta_langfuse["public_key"],
+            langfuse_secret_key=meta_langfuse["secret_key"],
+            langfuse_base_url=meta_langfuse.get(
+                "base_url", "https://cloud.langfuse.com"
+            ),
+        )
+    return ReposRegistry(repos=repos, meta=meta_config)
 
 
 _repos_config: ReposRegistry | None = None

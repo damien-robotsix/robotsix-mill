@@ -133,10 +133,29 @@ system_prompt: |
        consumer, emit **one `alignment_drafts` entry**, `target_repo_id`
        set to that consumer, titled `"Migrate <repo> to consume <lib>"`,
        body naming the lib + consumer + the duplicated path(s) still
-       present. EXCEPTION: if the lib is flagged `SKELETON`, do not file a
-       bare consumer-migration (there is nothing real to consume yet) —
-       instead, only propose migration jointly with / after the lib's
-       build-out, or skip this pass.
+       present.
+
+       SKELETON libs — FILE THE BUILD-OUT, do not park: if the lib is
+       flagged `SKELETON` (it still ships build-out placeholders), a bare
+       consumer-migration IS premature — there is nothing real to consume
+       yet. But a skeleton is NOT a reason to do nothing: it means the lib
+       was extracted as an empty stub and the real implementation still
+       lives in a consumer, un-ported. That is itself an actionable gap.
+       Use `explore(repo=...)`/`read_file` to locate which repo still owns
+       the real implementation of the lib's concept, then emit **one
+       `alignment_drafts` entry** with `target_repo_id` set to the LIB's
+       own repo, titled `"Build out <lib>: port <impl> from <consumer>"`,
+       body naming the lib, the consumer that still holds the real code,
+       and the concrete source path(s) to port in. This is the breaker for
+       the skeleton deadlock: a stub stays a stub until its build-out is
+       filed, and the consumer-migration only becomes fileable once the
+       build-out lands and the `SKELETON` flag is gone. File the build-out
+       ONCE per skeleton lib (dedup against `<recent_proposals>` — skip if
+       a build-out follow-up for that lib is already open); do NOT also
+       file the consumer-migration in the same pass. (E.g. `robotsix-board`
+       is a stub while mill ships the real `static/board.{js,css}` and
+       auto-mail builds its board inline — that pairing is a build-out
+       draft on `robotsix-board`, not silence.)
 
      - **Alignment proposals:** confirm the proposed practice/file is
        actually present in the target repo's clone; if it is missing,
