@@ -1143,6 +1143,8 @@ class RefineStage(Stage):
                     settings=s,
                     title=title,
                     draft=draft,
+                    repo_dir=repo_dir,
+                    extra_roots=extra_roots,
                 )
                 if triage.decision == "SKIP":
                     # The draft IS the spec — preserve it unchanged.

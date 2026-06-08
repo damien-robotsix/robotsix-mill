@@ -60,6 +60,7 @@ core:
     dedup_candidate_body_max_chars: 4000  # cap each candidate body fed to dedup prompt (≤0 disables truncation)
     web_research_requests: 8           # per-call cap for web-research sub-agent
     scope_triage_requests: 4           # per-call cap for scope-triage agent
+    triage_requests: 8                # per-call cap for pre-refine triage agent
     doc_classifier_requests: 3         # per-call cap for doc-classifier gate
     doc_classifier_diff_max_chars: 6000  # cap diff fed to doc-classifier gate (truncation safe: conservative user_facing bias)
     review_requests: 40                # per-call cap for review agent (counts tool calls + reasoning steps; 40 covers a 4-6 file PR)

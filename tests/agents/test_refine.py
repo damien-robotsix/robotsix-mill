@@ -2982,7 +2982,7 @@ def test_triage_skip_skips_full_refine(ctx, service, monkeypatch):
 
     refine_called = False
 
-    def fake_triage(*, settings, title, draft):
+    def fake_triage(*, settings, title, draft, repo_dir=None, extra_roots=None):
         return TriageResult(
             decision="SKIP", reason="doc-only change, no exploration needed"
         )
@@ -3051,7 +3051,7 @@ def test_triage_refine_calls_full_refine(ctx, service, monkeypatch):
 
     refine_called = False
 
-    def fake_triage(*, settings, title, draft):
+    def fake_triage(*, settings, title, draft, repo_dir=None, extra_roots=None):
         return TriageResult(
             decision="REFINE", reason="ambiguous scope, needs exploration"
         )
@@ -3093,7 +3093,7 @@ def test_triage_feature_flag_off_calls_full_refine(
     refine_called = False
     triage_called = False
 
-    def fake_triage(*, settings, title, draft):
+    def fake_triage(*, settings, title, draft, repo_dir=None, extra_roots=None):
         nonlocal triage_called
         triage_called = True
         from robotsix_mill.agents.refining import TriageResult
@@ -3148,7 +3148,7 @@ def test_triage_sendback_always_refines(ctx, service, monkeypatch):
     refine_called = False
     triage_called = False
 
-    def fake_triage(*, settings, title, draft):
+    def fake_triage(*, settings, title, draft, repo_dir=None, extra_roots=None):
         nonlocal triage_called
         triage_called = True
         return TriageResult(decision="SKIP", reason="should not be reached")
