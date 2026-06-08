@@ -2394,3 +2394,57 @@ def test_verify_branch_merged_unresolvable_branch_returns_true(tmp_path):
     )
 
     assert refine_module._verify_branch_merged(repo, ticket) is True
+
+
+# ---------------------------------------------------------------------------
+# prepare hook integration tests
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_hook_failure_blocks_before_freshness_gate(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When ``run_prepare_hook`` returns an error, refine short-circuits
+    to BLOCKED with that error BEFORE the freshness gate runs."""
+    ctx = ctx_factory(require_approval="false")
+    t = _ticket(ctx, body="Fix the thing")
+
+    freshness_called = []
+
+    def _spy_freshness(*args, **kwargs):
+        freshness_called.append(1)
+        return None
+
+    monkeypatch.setattr(
+        refine_module.RefineStage,
+        "_run_freshness_gate",
+        _spy_freshness,
+    )
+    # Force a clone to exist so the prepare hook runs (when there's no
+    # FORGE_REMOTE_URL, _clone_or_resume returns None and the hook is
+    # skipped — by design, tickets with no remote have nothing to clone).
+    monkeypatch.setattr(
+        refine_module.RefineStage,
+        "_clone_or_resume",
+        lambda ctx, ticket, ws: tmp_path / "repo",
+    )
+    # Ensure the fake repo dir exists.
+    (tmp_path / "repo").mkdir(exist_ok=True)
+
+    from robotsix_mill import hooks as hooks_mod
+
+    monkeypatch.setattr(
+        hooks_mod,
+        "run_prepare_hook",
+        lambda repo_dir, ticket_id, workspace_dir: (
+            "prepare hook exited 1: install failed"
+        ),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert "prepare hook exited 1" in out.note
+    assert "install failed" in out.note
+    # Freshness gate must NOT have been called — the hook blocked first.
+    assert len(freshness_called) == 0

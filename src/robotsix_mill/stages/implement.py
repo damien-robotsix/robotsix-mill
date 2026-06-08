@@ -243,6 +243,15 @@ class ImplementStage(Stage):
                 return result
             repo_dir, branch, resuming = result
 
+        # --- prepare hook: let the repo run custom setup after clone,
+        # before any agent executes ---
+        ws = ctx.service.workspace(ticket)
+        from ..hooks import run_prepare_hook
+
+        hook_error = run_prepare_hook(repo_dir, ticket.id, ws.dir)
+        if hook_error is not None:
+            return Outcome(State.BLOCKED, hook_error)
+
         # --- prerequisite gate: cheapest pre-agent check, so it runs
         # first. Verify that external symbol/import prerequisites the
         # spec declares are satisfiable in the cloned repo's environment

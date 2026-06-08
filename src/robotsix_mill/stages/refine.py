@@ -435,6 +435,15 @@ class RefineStage(Stage):
                 return result
             repo_dir = result
 
+        # --- prepare hook: let the repo run custom setup after clone,
+        # before any agent executes ---
+        if repo_dir is not None:
+            from ..hooks import run_prepare_hook
+
+            hook_error = run_prepare_hook(repo_dir, ticket.id, ws.dir)
+            if hook_error is not None:
+                return Outcome(State.BLOCKED, hook_error)
+
         # Phase 2: freshness gate — verify cited evidence against HEAD
         # before spending any LLM budget on refine.  Runs before the
         # dedup guard because it is deterministic (no LLM call).
