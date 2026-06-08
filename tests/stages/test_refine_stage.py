@@ -2397,6 +2397,128 @@ def test_verify_branch_merged_unresolvable_branch_returns_true(tmp_path):
     assert refine_module._verify_branch_merged(repo, ticket) is True
 
 
+def test_verify_branch_merged_squash_merge_detected_returns_true(tmp_path):
+    """A feature branch that is NOT an ancestor of origin/main but whose
+    ticket ID appears in a commit message on origin/main (e.g. a
+    squash-merge commit) returns ``True`` — the squash-merge fallback
+    recognises the work has landed on main via a non-ancestor commit."""
+    from robotsix_mill.core.models import Ticket
+
+    repo = _build_repo_with_origin(tmp_path)
+    ticket_id = "t-squash-merged"
+
+    # Create a local-only feature branch with the ticket ID in the
+    # commit message (as implement would write it).
+    _git(repo, "checkout", "-b", "mill/feature-squashed")
+    (repo / "feature.py").write_text("feature work\n", encoding="utf-8")
+    _git(repo, "add", "feature.py")
+    _git(
+        repo,
+        "commit",
+        "-m",
+        f"mill: Add squashed feature ({ticket_id})",
+    )
+    # Grab the feature tip hash.
+    feature_tip = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+    # Simulate a squash merge: create a new commit directly on main
+    # whose message contains the ticket ID but whose hash differs.
+    _git(repo, "checkout", "main")
+    (repo / "squash-commit.txt").write_text("squash marker\n", encoding="utf-8")
+    _git(repo, "add", "squash-commit.txt")
+    _git(
+        repo,
+        "commit",
+        "-m",
+        f"mill: Add squashed feature ({ticket_id}) (#42)",
+    )
+    squash_hash = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+    # Sanity: the two hashes differ (true squash merge).
+    assert feature_tip != squash_hash
+    # Sanity: feature_tip is NOT an ancestor of main (it was never
+    # merged — main got the squash commit instead).
+    ancestor = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "merge-base",
+            "--is-ancestor",
+            feature_tip,
+            "refs/heads/main",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert ancestor.returncode == 1
+
+    # Push main to origin so origin/main is current.
+    _git(repo, "push", "origin", "main")
+    _git(repo, "fetch", "origin")
+
+    ticket = Ticket(
+        id=ticket_id,
+        title="t",
+        workspace_path="x",
+        branch="mill/feature-squashed",
+    )
+
+    assert refine_module._verify_branch_merged(repo, ticket) is True
+
+
+def test_verify_branch_merged_unmerged_no_grep_match_returns_false(tmp_path):
+    """A branch that is NOT an ancestor of origin/main AND whose ticket
+    ID does NOT appear in any origin/main commit message returns
+    ``False`` — the squash-merge fallback correctly falls through when
+    there is genuinely no evidence of the work on main."""
+    from robotsix_mill.core.models import Ticket
+
+    repo = _build_repo_with_origin(tmp_path)
+    ticket_id = "t-genuinely-unmerged"
+
+    # Create a local-only feature branch with the ticket ID in the
+    # commit message.
+    _git(repo, "checkout", "-b", "mill/unmerged-feature")
+    (repo / "unmerged.py").write_text("wip work\n", encoding="utf-8")
+    _git(repo, "add", "unmerged.py")
+    _git(
+        repo,
+        "commit",
+        "-m",
+        f"mill: Unmerged feature ({ticket_id})",
+    )
+
+    # Main has NO commit referencing this ticket ID.
+    _git(repo, "checkout", "main")
+    (repo / "other.txt").write_text("unrelated\n", encoding="utf-8")
+    _git(repo, "add", "other.txt")
+    _git(repo, "commit", "-m", "mill: Some unrelated change (t-other)")
+
+    # Push main to origin so origin/main is current.
+    _git(repo, "push", "origin", "main")
+    _git(repo, "fetch", "origin")
+
+    ticket = Ticket(
+        id=ticket_id,
+        title="t",
+        workspace_path="x",
+        branch="mill/unmerged-feature",
+    )
+
+    assert refine_module._verify_branch_merged(repo, ticket) is False
+
+
 # ---------------------------------------------------------------------------
 # prepare hook integration tests
 # ---------------------------------------------------------------------------
