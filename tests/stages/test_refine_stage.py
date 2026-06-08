@@ -1264,6 +1264,60 @@ def test_split_child_empty_description_blocks(ctx_factory, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# 20b. split child with open reviewer comments falls through to refine agent
+# ---------------------------------------------------------------------------
+
+
+def test_split_child_with_reviewer_comments_runs_full_refine(ctx_factory, monkeypatch):
+    """A split-child draft with an open human reviewer comment must fall
+    through to the full refine agent (with reviewer_comments populated)
+    rather than the fast-path that would ignore the feedback."""
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
+
+    from datetime import datetime, timezone
+    from robotsix_mill.core.db import session as db_session
+    from robotsix_mill.core.models import TicketEvent
+
+    child = ctx.service.create("Split child ticket", "## Problem\nAlready refined spec")
+
+    # Stamp the child's own history with a "split from" note so
+    # is_split_child detection triggers via the own-history fallback.
+    with db_session(ctx.settings, "test-board") as sess:
+        evt = TicketEvent(
+            ticket_id=child.id,
+            state=State.READY.value,
+            note="split from parent-ticket-xyz",
+            at=datetime.now(timezone.utc),
+        )
+        sess.add(evt)
+        sess.commit()
+
+    # Add an open reviewer comment — this is what the fast-path must
+    # NOT ignore.
+    ctx.service.add_comment(
+        child.id,
+        "Please tighten the spec — this is too vague.",
+        author="user",
+    )
+
+    captured: dict = {}
+
+    def _capture(*, settings, title, draft, reviewer_comments=None, **kw):
+        captured["reviewer_comments"] = reviewer_comments
+        captured["called"] = True
+        return RefineResult(spec_markdown="## Problem\nRevised spec")
+
+    _apply_default_mocks(monkeypatch, run_refine_agent=_capture)
+
+    out = RefineStage().run(child, ctx)
+
+    assert captured.get("called"), "refine agent should have been called"
+    assert captured["reviewer_comments"] is not None
+    assert "too vague" in captured["reviewer_comments"]
+    assert "split child — spec already refined" not in out.note
+
+
+# ---------------------------------------------------------------------------
 # 21. successful split → creates children and closes parent
 # ---------------------------------------------------------------------------
 
