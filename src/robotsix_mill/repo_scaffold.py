@@ -1,18 +1,16 @@
-"""Workflow that acts on meta-board ``new-repo`` extraction proposals.
+"""Workflow that scaffolds brand-new repositories created via the
+maintenance agent's ``create_repo`` tool.
 
-When the implement stage encounters a ticket with ``source=META`` and a
-``<!-- meta-extraction-kind: new-repo ... -->`` marker in its
-description, it routes to this module instead of the normal implement
-loop.  This module calls :meth:`Forge.create_repo`, scaffolds an initial
+The maintenance agent calls :func:`run_repo_scaffold` with the creation
+params and the raw ticket description.  This module scaffolds an initial
 commit, appends a ``RepoConfig`` entry to ``config/repos.yaml``, and
-transitions the ticket to ``DONE``.
+files a build-out ticket on the new repo's board.
 """
 
 from __future__ import annotations
 
 import logging
 import os
-import re as _re
 import shutil
 import tempfile
 from pathlib import Path
@@ -31,105 +29,23 @@ from .vcs import git_ops
 
 log = logging.getLogger("robotsix_mill.repo_scaffold")
 
-MARKER_KIND = "new-repo"
-
-_MARKER_RE = _re.compile(
-    r"<!--\s*(meta-extraction-kind:\s*new-repo.*?)-->",
-    _re.DOTALL,
-)
-
 # ---------------------------------------------------------------------------
 #  Public API
 # ---------------------------------------------------------------------------
 
 
-def parse_new_repo_params(description: str) -> dict | None:
-    """Scan *description* for a ``new-repo`` extraction marker block.
-
-    Returns a dict with keys ``name``, ``owner``, ``private``,
-    ``description``, and ``language`` when the marker is present and
-    parseable; ``None`` otherwise.  ``private`` defaults to ``False``,
-    ``language`` defaults to ``"python"``.
-    """
-    m = _MARKER_RE.search(description)
-    if not m:
-        return None
-
-    yaml_body = m.group(1)
-    # The first line inside the comment is ``meta-extraction-kind: new-repo``
-    # (the marker kind itself).  The remaining indented lines are the
-    # YAML payload.  Strip that header line and parse the rest.
-    lines = yaml_body.splitlines()
-    if not lines:
-        return None
-    first = lines[0].strip()
-    if not first.startswith("meta-extraction-kind:") or "new-repo" not in first:
-        return None
-
-    payload = "\n".join(lines[1:])
-    if not payload.strip():
-        log.warning("new-repo marker has no payload fields")
-        return None
-
-    try:
-        data = yaml.safe_load(payload)
-    except yaml.YAMLError:
-        log.warning("Failed to parse new-repo marker YAML in ticket description")
-        return None
-
-    if not isinstance(data, dict):
-        return None
-
-    name = data.get("name")
-    if not name or not isinstance(name, str):
-        log.warning("new-repo marker missing required 'name' field")
-        return None
-
-    return {
-        "name": name.strip(),
-        "owner": str(data.get("owner", "")).strip(),
-        "private": bool(data.get("private", False)),
-        "description": str(data.get("description", "")).strip(),
-        "language": str(data.get("language", "python")).strip().lower(),
-    }
-
-
-def build_new_repo_marker(
-    name: str,
-    *,
-    owner: str = "",
-    private: bool = False,
-    description: str = "",
-    language: str = "python",
-) -> str:
-    """Build the canonical ``new-repo`` extraction marker block.
-
-    The single source of truth for the marker FORMAT (the counterpart to
-    :func:`parse_new_repo_params`, which reads it back). Producers — e.g.
-    the refine ``request_new_repo`` tool — call this so the marker is
-    always valid YAML regardless of how the agent phrased its request.
-    Round-trips: ``parse_new_repo_params(build_new_repo_marker(x)) == x``.
-    """
-    data = {
-        "name": name,
-        "owner": owner,
-        "private": bool(private),
-        "description": description,
-        "language": language,
-    }
-    payload = yaml.safe_dump(data, default_flow_style=False, sort_keys=False).strip()
-    indented = "\n".join(f"  {line}" for line in payload.splitlines())
-    return f"<!-- meta-extraction-kind: new-repo\n{indented}\n-->"
-
-
-def run_repo_scaffold(settings, ticket, forge, ctx) -> Outcome:
+def run_repo_scaffold(
+    settings, forge, ctx, params: dict, ticket_description: str = ""
+) -> Outcome:
     """Execute the repo-scaffold workflow for a ``new-repo`` extraction ticket.
 
     Parameters:
         settings: Mill :class:`~robotsix_mill.config.Settings`.
-        ticket: The meta-board :class:`~robotsix_mill.core.models.Ticket`.
         forge: A :class:`~robotsix_mill.forge.base.Forge` instance.
         ctx: The :class:`~robotsix_mill.stages.base.StageContext`.
+        params: Dict with keys ``name``, ``owner``, ``private``,
+            ``description``, ``language``.
+        ticket_description: The raw ticket body (no marker).
 
     Returns:
         :class:`Outcome` — ``DONE`` on success, ``BLOCKED`` when repo
@@ -137,14 +53,6 @@ def run_repo_scaffold(settings, ticket, forge, ctx) -> Outcome:
         on unexpected failures.
     """
     from .stages.base import Outcome
-
-    description = ctx.service.workspace(ticket).read_description()
-    params = parse_new_repo_params(description)
-    if params is None:
-        return Outcome(
-            State.ERRORED,
-            note="Could not parse new-repo params from ticket description",
-        )
 
     try:
         repo_info = forge.create_repo(
@@ -154,33 +62,10 @@ def run_repo_scaffold(settings, ticket, forge, ctx) -> Outcome:
             description=params["description"],
         )
     except NotConfiguredError:
-        _post_blocked_comment(
-            ctx,
-            ticket,
-            f"## Repo creation is not configured\n\n"
-            f"The meta-agent proposed creating a new repository "
-            f"**{params['name']}** (owner: `{params['owner'] or '(not specified)'}`), "
-            f"but repo creation is currently disabled.\n\n"
-            f"### Manual steps\n"
-            f"1. Create the repo `{params['name']}` under `{params['owner'] or 'your user/org'}` "
-            f"on the forge.\n"
-            f"2. Add an entry for `{params['name']}` to `config/repos.yaml`.\n"
-            f"3. Close this ticket manually.",
-        )
         return Outcome(State.BLOCKED, note="Repo creation not configured")
 
     except RuntimeError as exc:
         if "already exists" in str(exc).lower():
-            _post_blocked_comment(
-                ctx,
-                ticket,
-                f"## Repo already exists\n\n"
-                f"The repository **{params['name']}** already exists on the forge. "
-                f"This ticket cannot be fulfilled automatically.\n\n"
-                f"### Next steps\n"
-                f"Either choose a different name or close this ticket if the repo "
-                f"was created manually.",
-            )
             return Outcome(
                 State.BLOCKED, note=f"Repo {params['name']!r} already exists"
             )
@@ -203,7 +88,7 @@ def run_repo_scaffold(settings, ticket, forge, ctx) -> Outcome:
     # implement) populates it with its actual purpose. Best-effort: a failure
     # here doesn't undo the (succeeded) repo creation + registration.
     followup_id = _file_implementation_followup(
-        settings, repo_info, params, description
+        settings, repo_info, params, ticket_description
     )
     note = (
         f"created + registered {repo_info.name}; filed build-out ticket {followup_id}"
@@ -236,7 +121,7 @@ def _file_implementation_followup(
     name = repo_info.name
     board_id = _sanitize_repo_id(name)
     # Purpose = the scaffold ticket body with the marker stripped out.
-    purpose = _MARKER_RE.sub("", scaffold_description or "").strip()
+    purpose = (scaffold_description or "").strip()
     if not purpose:
         purpose = params.get("description", "") or f"Build out the {name} library."
 

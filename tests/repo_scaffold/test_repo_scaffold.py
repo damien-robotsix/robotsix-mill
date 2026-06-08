@@ -1,8 +1,7 @@
-"""Tests for ``robotsix_mill.repo_scaffold`` and the implement-stage guard clause."""
+"""Tests for ``robotsix_mill.repo_scaffold``."""
 
 from __future__ import annotations
 
-import logging
 from unittest.mock import MagicMock
 
 import pytest
@@ -20,15 +19,12 @@ from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.forge.base import NotConfiguredError, RepoInfo
 from robotsix_mill.repo_scaffold import (
-    MARKER_KIND,
     _append_repo_config,
     _sanitize_repo_id,
     _write_periodic_presence_files,
-    parse_new_repo_params,
     run_repo_scaffold,
 )
-from robotsix_mill.stages.base import Outcome, StageContext
-from robotsix_mill.stages.implement import ImplementStage
+from robotsix_mill.stages.base import StageContext
 
 
 # ---------------------------------------------------------------------------
@@ -62,8 +58,9 @@ def _make_settings(tmp_path, **overrides):
     return Settings(**overrides)
 
 
-def _new_repo_marker(**fields) -> str:
-    """Build a ``new-repo`` extraction marker block for a ticket description."""
+def _make_params(**fields) -> dict:
+    """Build a params dict for run_repo_scaffold (the replacement for
+    the old marker-based approach)."""
     defaults = {
         "name": "my-new-repo",
         "owner": "my-org",
@@ -72,14 +69,7 @@ def _new_repo_marker(**fields) -> str:
         "language": "python",
     }
     defaults.update(fields)
-    lines = ["<!-- meta-extraction-kind: new-repo"]
-    for key in ("name", "owner", "private", "description", "language"):
-        val = defaults[key]
-        if isinstance(val, bool):
-            val = str(val).lower()
-        lines.append(f"  {key}: {val}")
-    lines.append("-->")
-    return "\n".join(lines)
+    return defaults
 
 
 def _make_ticket(
@@ -106,73 +96,6 @@ def _stage_context(
 ) -> StageContext:
     svc = TicketService(settings, board_id=board_id)
     return StageContext(settings=settings, service=svc)
-
-
-# ---------------------------------------------------------------------------
-# parse_new_repo_params
-# ---------------------------------------------------------------------------
-
-
-class TestParseNewRepoParams:
-    def test_present_all_fields(self):
-        desc = _new_repo_marker()
-        params = parse_new_repo_params(desc)
-        assert params is not None
-        assert params["name"] == "my-new-repo"
-        assert params["owner"] == "my-org"
-        assert params["private"] is False
-        assert params["description"] == "A test repo"
-        assert params["language"] == "python"
-
-    def test_present_minimal_fields(self):
-        desc = """<!-- meta-extraction-kind: new-repo
-  name: minimal-repo
--->"""
-        params = parse_new_repo_params(desc)
-        assert params is not None
-        assert params["name"] == "minimal-repo"
-        assert params["owner"] == ""
-        assert params["private"] is False
-        assert params["description"] == ""
-        assert params["language"] == "python"  # default
-
-    def test_private_defaults_false_when_absent(self):
-        desc = """<!-- meta-extraction-kind: new-repo
-  name: my-repo
-  owner: someone
--->"""
-        params = parse_new_repo_params(desc)
-        assert params is not None
-        assert params["private"] is False
-
-    def test_missing_marker(self):
-        desc = "Just a regular ticket description"
-        params = parse_new_repo_params(desc)
-        assert params is None
-
-    def test_malformed_yaml(self, caplog):
-        desc = """<!-- meta-extraction-kind: new-repo
-  name: [unclosed
--->"""
-        with caplog.at_level(logging.WARNING):
-            params = parse_new_repo_params(desc)
-        assert params is None
-        assert any("Failed to parse" in m for m in caplog.messages)
-
-    def test_missing_name_field(self, caplog):
-        desc = """<!-- meta-extraction-kind: new-repo
-  owner: someone
--->"""
-        with caplog.at_level(logging.WARNING):
-            params = parse_new_repo_params(desc)
-        assert params is None
-        assert any("missing required 'name'" in m for m in caplog.messages)
-
-    def test_partial_match_not_full_marker(self):
-        """Marker kind pattern must be on the opening comment line."""
-        desc = "<!-- some other comment -->\nname: x"
-        params = parse_new_repo_params(desc)
-        assert params is None
 
 
 # ---------------------------------------------------------------------------
@@ -234,8 +157,7 @@ class TestAppendRepoConfig:
             clone_url="https://github.com/my-org/my-new-repo.git",
             html_url="https://github.com/my-org/my-new-repo",
         )
-        params = parse_new_repo_params(_new_repo_marker())
-        assert params is not None
+        params = _make_params()
 
         _append_repo_config(repo_info, params, settings)
 
@@ -291,8 +213,7 @@ class TestAppendRepoConfig:
             clone_url="https://github.com/x/new-repo.git",
             html_url="https://github.com/x/new-repo",
         )
-        params = parse_new_repo_params(_new_repo_marker(name="new-repo"))
-        assert params is not None
+        params = _make_params(name="new-repo")
 
         _append_repo_config(repo_info, params, settings)
 
@@ -343,8 +264,7 @@ class TestAppendRepoConfig:
             clone_url="https://github.com/x/second-repo.git",
             html_url="https://github.com/x/second-repo",
         )
-        params = parse_new_repo_params(_new_repo_marker(name="second-repo"))
-        assert params is not None
+        params = _make_params(name="second-repo")
 
         _append_repo_config(repo_info, params, settings)
 
@@ -368,8 +288,7 @@ class TestAppendRepoConfig:
             clone_url="https://example.com/x.git",
             html_url="https://example.com/x",
         )
-        params = parse_new_repo_params(_new_repo_marker(name="x"))
-        assert params is not None
+        params = _make_params(name="x")
 
         # Should not raise
         _append_repo_config(repo_info, params, settings)
@@ -399,12 +318,14 @@ class TestRunRepoScaffold:
         repos_file = tmp_path / "repos.yaml"
         monkeypatch.setenv("MILL_REPOS_FILE", str(repos_file))
 
-        # Create ticket with new-repo marker
+        # Create a params dict directly (no marker parsing)
+        params = _make_params(name="my-repo")
+
         svc = TicketService(settings, board_id="meta")
         ticket = _make_ticket(
             svc,
             title="Create new-repo my-repo",
-            description=_new_repo_marker(name="my-repo"),
+            description="Extract my-repo as a standalone library.",
         )
         ctx = _stage_context(settings, ticket)
 
@@ -452,7 +373,13 @@ class TestRunRepoScaffold:
             lambda path, ignore_errors=False: None,
         )
 
-        outcome = run_repo_scaffold(settings, ticket, forge, ctx)
+        outcome = run_repo_scaffold(
+            settings,
+            forge,
+            ctx,
+            params,
+            ticket_description="Extract my-repo as a standalone library.",
+        )
 
         assert outcome.next_state == State.DONE
         forge.create_repo.assert_called_once_with(
@@ -504,7 +431,7 @@ class TestRunRepoScaffold:
         db.reset_engine()
 
     def test_not_configured_error_fallback(self, tmp_path, monkeypatch):
-        """NotConfiguredError → BLOCKED with comment."""
+        """NotConfiguredError → BLOCKED."""
         settings = _make_settings(tmp_path)
         db.reset_engine()
         db.init_db(settings, board_id="meta")
@@ -513,35 +440,23 @@ class TestRunRepoScaffold:
         ticket = _make_ticket(
             svc,
             title="Create new-repo",
-            description=_new_repo_marker(name="my-repo"),
+            description="Create my-repo",
         )
         ctx = _stage_context(settings, ticket)
 
         forge = MagicMock()
         forge.create_repo.side_effect = NotConfiguredError("disabled")
 
-        # Capture add_comment calls
-        add_comment_calls = []
-
-        def _fake_add_comment(ticket_id, body, author="user", parent_id=None):
-            add_comment_calls.append(
-                {"ticket_id": ticket_id, "body": body, "author": author}
-            )
-
-        monkeypatch.setattr(ctx.service, "add_comment", _fake_add_comment)
-
-        outcome = run_repo_scaffold(settings, ticket, forge, ctx)
+        params = _make_params(name="my-repo")
+        outcome = run_repo_scaffold(settings, forge, ctx, params)
 
         assert outcome.next_state == State.BLOCKED
         assert outcome.note == "Repo creation not configured"
-        assert len(add_comment_calls) == 1
-        assert "Repo creation is not configured" in add_comment_calls[0]["body"]
-        assert "Manual steps" in add_comment_calls[0]["body"]
 
         db.reset_engine()
 
     def test_repo_already_exists_fallback(self, tmp_path, monkeypatch):
-        """RuntimeError('already exists') → BLOCKED with comment."""
+        """RuntimeError('already exists') → BLOCKED."""
         settings = _make_settings(tmp_path)
         db.reset_engine()
         db.init_db(settings, board_id="meta")
@@ -550,28 +465,18 @@ class TestRunRepoScaffold:
         ticket = _make_ticket(
             svc,
             title="Create new-repo",
-            description=_new_repo_marker(name="my-repo"),
+            description="Create my-repo",
         )
         ctx = _stage_context(settings, ticket)
 
         forge = MagicMock()
         forge.create_repo.side_effect = RuntimeError("Repository already exists")
 
-        add_comment_calls = []
-
-        def _fake_add_comment(ticket_id, body, author="user", parent_id=None):
-            add_comment_calls.append(
-                {"ticket_id": ticket_id, "body": body, "author": author}
-            )
-
-        monkeypatch.setattr(ctx.service, "add_comment", _fake_add_comment)
-
-        outcome = run_repo_scaffold(settings, ticket, forge, ctx)
+        params = _make_params(name="my-repo")
+        outcome = run_repo_scaffold(settings, forge, ctx, params)
 
         assert outcome.next_state == State.BLOCKED
         assert outcome.note == "Repo 'my-repo' already exists"
-        assert len(add_comment_calls) == 1
-        assert "already exists" in add_comment_calls[0]["body"].lower()
 
         db.reset_engine()
 
@@ -585,125 +490,18 @@ class TestRunRepoScaffold:
         ticket = _make_ticket(
             svc,
             title="Create new-repo",
-            description=_new_repo_marker(name="my-repo"),
+            description="Create my-repo",
         )
         ctx = _stage_context(settings, ticket)
 
         forge = MagicMock()
         forge.create_repo.side_effect = RuntimeError("Some other error")
 
+        params = _make_params(name="my-repo")
         with pytest.raises(RuntimeError, match="Some other error"):
-            run_repo_scaffold(settings, ticket, forge, ctx)
+            run_repo_scaffold(settings, forge, ctx, params)
 
         db.reset_engine()
-
-
-# ---------------------------------------------------------------------------
-# ImplementStage guard clause
-# ---------------------------------------------------------------------------
-
-
-class TestGuardClause:
-    def test_meta_ticket_with_marker_routes_to_scaffold(self, tmp_path, monkeypatch):
-        """A meta-source ticket with new-repo marker triggers scaffold workflow."""
-        settings = _make_settings(tmp_path)
-        db.reset_engine()
-        db.init_db(settings, board_id="meta")
-
-        svc = TicketService(settings, board_id="meta")
-        ticket = _make_ticket(
-            svc,
-            title="Extract new repo",
-            description=_new_repo_marker(name="extracted-lib"),
-        )
-        ctx = _stage_context(settings, ticket)
-
-        # Mock the scaffold workflow so we can verify it was called
-        scaffold_outcomes = []
-
-        def _fake_run_scaffold(s, t, forge, ctx_):
-            scaffold_outcomes.append({"ticket_id": t.id, "params": True})
-            return Outcome(State.DONE)
-
-        monkeypatch.setattr(
-            "robotsix_mill.stages.implement.ImplementStage._run_repo_scaffold",
-            lambda ctx_, t, s_, p: _fake_run_scaffold(s_, t, None, ctx_),
-        )
-
-        stage = ImplementStage()
-        outcome = stage.run(ticket, ctx)
-
-        assert len(scaffold_outcomes) == 1
-        assert scaffold_outcomes[0]["ticket_id"] == ticket.id
-        assert outcome.next_state == State.DONE
-
-        db.reset_engine()
-
-    def test_non_meta_ticket_skips_guard(self, tmp_path, monkeypatch):
-        """A non-META ticket passes through to normal implement."""
-        settings = _make_settings(tmp_path)
-        db.reset_engine()
-        db.init_db(settings, board_id="test-board")
-
-        svc = TicketService(settings, board_id="test-board")
-        ticket = _make_ticket(
-            svc,
-            title="Normal ticket",
-            description=_new_repo_marker(name="some-repo"),
-            source=SourceKind.USER,
-        )
-        ctx = _stage_context(settings, ticket, board_id="test-board")
-
-        # Should hit the remote_url check (BLOCKED since no forge remote url)
-        stage = ImplementStage()
-        outcome = stage.run(ticket, ctx)
-
-        # Not DONE (would be if scaffold ran) — it's BLOCKED due to no forge url
-        assert outcome.next_state == State.BLOCKED
-        assert "FORGE_REMOTE_URL" in (outcome.note or "")
-
-        db.reset_engine()
-
-    def test_meta_ticket_without_marker_enters_cross_repo_path(
-        self, tmp_path, monkeypatch
-    ):
-        """A META ticket without the new-repo marker is NOT scaffolded;
-        it enters the cross-repo meta workspace path. When triage fails
-        (no LLM in unit tests), it BLOCKs with a clear note."""
-        settings = _make_settings(tmp_path)
-        db.reset_engine()
-        db.init_db(settings, board_id="meta")
-
-        svc = TicketService(settings, board_id="meta")
-        ticket = _make_ticket(
-            svc,
-            title="Some other meta ticket",
-            description="Just a normal ticket description, no marker",
-            source=SourceKind.META,
-        )
-        ctx = _stage_context(settings, ticket, board_id="meta")
-
-        stage = ImplementStage()
-        outcome = stage.run(ticket, ctx)
-
-        # Not scaffolded — reached the cross-repo meta workspace gate.
-        # Without a real LLM the triage may fail or return no repos;
-        # either path BLOCKs.
-        assert outcome.next_state == State.BLOCKED
-        assert "meta repo-triage failed" in (
-            outcome.note or ""
-        ) or "no repos could be cloned" in (outcome.note or "")
-
-        db.reset_engine()
-
-
-# ---------------------------------------------------------------------------
-# MARKER_KIND constant
-# ---------------------------------------------------------------------------
-
-
-def test_marker_kind_constant():
-    assert MARKER_KIND == "new-repo"
 
 
 # ---------------------------------------------------------------------------
@@ -733,7 +531,8 @@ def test_write_periodic_presence_files(tmp_path):
 def test_file_implementation_followup_creates_buildout_ticket(tmp_path, monkeypatch):
     """After scaffolding an EMPTY repo, a build-out ticket is filed on the
     new repo's own board so the normal pipeline populates it. The spec is
-    derived from the scaffold ticket's purpose (description minus marker)."""
+    derived from the scaffold ticket's purpose (description — no marker to
+    strip since markers are gone)."""
     from robotsix_mill.core import db
     from robotsix_mill.core.models import SourceKind
     from robotsix_mill.core.service import TicketService
@@ -751,10 +550,7 @@ def test_file_implementation_followup_creates_buildout_ticket(tmp_path, monkeypa
         clone_url="https://github.com/x/robotsix-modules.git",
         html_url="https://github.com/x/robotsix-modules",
     )
-    scaffold_desc = (
-        "Extract the module-taxonomy schema into a standalone library.\n\n"
-        "<!-- meta-extraction-kind: new-repo\n  name: robotsix-modules\n-->"
-    )
+    scaffold_desc = "Extract the module-taxonomy schema into a standalone library.\n\n"
     fid = _file_implementation_followup(
         settings, repo_info, {"description": ""}, scaffold_desc
     )
@@ -767,40 +563,3 @@ def test_file_implementation_followup_creates_buildout_ticket(tmp_path, monkeypa
     assert "robotsix-modules" in t.title
     body = svc.workspace(t).read_description()
     assert "module-taxonomy schema" in body
-    assert "meta-extraction-kind" not in body
-
-
-# ---------------------------------------------------------------------------
-# build_new_repo_marker (the producer-side format owner)
-# ---------------------------------------------------------------------------
-
-
-def test_build_new_repo_marker_roundtrips():
-    """build_new_repo_marker → parse_new_repo_params is an exact round-trip,
-    including values that need YAML quoting (e.g. a colon in description)."""
-    from robotsix_mill.repo_scaffold import build_new_repo_marker
-
-    marker = build_new_repo_marker(
-        "robotsix-modules",
-        owner="damien-robotsix",
-        private=False,
-        description="Taxonomy validation: shared schema",
-        language="python",
-    )
-    parsed = parse_new_repo_params("Spec body.\n\n" + marker)
-    assert parsed == {
-        "name": "robotsix-modules",
-        "owner": "damien-robotsix",
-        "private": False,
-        "description": "Taxonomy validation: shared schema",
-        "language": "python",
-    }
-
-
-def test_build_new_repo_marker_defaults_roundtrip():
-    from robotsix_mill.repo_scaffold import build_new_repo_marker
-
-    parsed = parse_new_repo_params(build_new_repo_marker("robotsix-foo"))
-    assert parsed["name"] == "robotsix-foo"
-    assert parsed["private"] is False
-    assert parsed["language"] == "python"
