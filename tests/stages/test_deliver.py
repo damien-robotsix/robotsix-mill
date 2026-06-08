@@ -8,7 +8,7 @@ from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
-from robotsix_mill.forge import github
+from robotsix_mill.forge import github, gitlab
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.deliver import DeliverStage
 from robotsix_mill.vcs import git_ops
@@ -79,6 +79,13 @@ def _ticket_with_branch(ctx, remote):
     git_ops.commit_all(repo, "impl")
     ctx.service.set_branch(t.id, branch)
     return ctx.service.get(t.id), branch
+
+
+def _gl(tmp_path, **extra):
+    extra.setdefault("FORGE_KIND", "gitlab")
+    extra.setdefault("FORGE_TOKEN", "glpat-token")
+    extra.setdefault("FORGE_REMOTE_URL", "https://gitlab.com/ns/project.git")
+    return _ctx(tmp_path, **extra)
 
 
 # --- owner/repo parsing -------------------------------------------------
@@ -828,3 +835,64 @@ def test_missing_branch_in_touched_repo_is_blocked_resumable(tmp_path, monkeypat
     assert "re-run implement" in out.note.lower()
     assert "repo-a" in out.note
     assert not pr_called
+
+
+# ============================================================
+# GitLab variants (same Forge ABC contract, different adapter)
+# ============================================================
+
+
+def test_success_pushes_and_opens_mr_gitlab(tmp_path, monkeypatch):
+    """GitLab: push + open MR → IMPLEMENT_COMPLETE."""
+    remote, bare = _bare(tmp_path)
+    ctx = _gl(tmp_path, FORGE_REMOTE_URL=remote)
+    seen = {}
+
+    def fake_mr(self, *, source_branch, title, body):
+        seen.update(source_branch=source_branch, title=title)
+        return "https://gitlab.com/ns/project/-/merge_requests/42"
+
+    monkeypatch.setattr(gitlab.GitLabForge, "open_merge_request", fake_mr)
+    t, branch = _ticket_with_branch(ctx, remote)
+
+    out = DeliverStage().run(t, ctx)
+
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert "https://gitlab.com/ns/project/-/merge_requests/42" in out.note
+    assert seen["source_branch"] == branch
+    assert t.id in seen["title"]
+    # Branch pushed to bare remote.
+    refs = subprocess.run(
+        ["git", "ls-remote", "--heads", str(bare)],
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert branch in refs
+    assert (ctx.service.workspace(t).artifacts_dir / "deliver.md").exists()
+
+
+def test_mr_api_error_blocks_resumable_gitlab(tmp_path, monkeypatch):
+    """GitLab: MR create failure → BLOCKED resumable."""
+    remote, _ = _bare(tmp_path)
+    ctx = _gl(tmp_path, FORGE_REMOTE_URL=remote)
+
+    def boom(self, *, source_branch, title, body):
+        raise RuntimeError("GitLab MR create failed: 403")
+
+    monkeypatch.setattr(gitlab.GitLabForge, "open_merge_request", boom)
+    t, _ = _ticket_with_branch(ctx, remote)
+
+    out = DeliverStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "resumable" in out.note and "403" in out.note
+
+
+def test_blocked_without_token_gitlab(tmp_path):
+    """GitLab: no FORGE_TOKEN → BLOCKED."""
+    remote, _ = _bare(tmp_path)
+    ctx = _ctx(tmp_path, FORGE_KIND="gitlab", FORGE_REMOTE_URL=remote)
+    t = ctx.service.create("x", "y")
+    ctx.service.transition(t.id, State.READY)
+    ctx.service.transition(t.id, State.DELIVERABLE)
+    out = DeliverStage().run(ctx.service.get(t.id), ctx)
+    assert out.next_state is State.BLOCKED and "FORGE_TOKEN" in out.note

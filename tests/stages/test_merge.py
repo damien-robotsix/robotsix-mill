@@ -8,7 +8,7 @@ from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
-from robotsix_mill.forge import github
+from robotsix_mill.forge import github, gitlab
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.merge import MergeStage, _read_counter, _write_counter
 
@@ -76,6 +76,16 @@ def _gh(tmp_path, **extra):
         FORGE_KIND="github",
         FORGE_TOKEN="t",
         FORGE_REMOTE_URL="https://github.com/o/r.git",
+        **extra,
+    )
+
+
+def _gl(tmp_path, **extra):
+    return _ctx(
+        tmp_path,
+        FORGE_KIND="gitlab",
+        FORGE_TOKEN="glpat-token",
+        FORGE_REMOTE_URL="https://gitlab.com/ns/project.git",
         **extra,
     )
 
@@ -3496,3 +3506,127 @@ def test_blocked_closed_unmerged_does_not_delete_branch(tmp_path, monkeypatch):
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.BLOCKED
     assert calls == []
+
+
+# ============================================================
+# GitLab variants (same Forge ABC contract, different adapter)
+# ============================================================
+
+
+def test_implement_complete_ci_green_mergeable_gitlab(tmp_path, monkeypatch):
+    """GitLab: CI green + MR mergeable → HUMAN_MR_APPROVAL."""
+    ctx = _gl(tmp_path)
+    monkeypatch.setattr(
+        gitlab.GitLabForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "opened",
+            "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        gitlab.GitLabForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    t = _implement_complete(ctx)
+    cycle_path = ctx.service.workspace(t).artifacts_dir / "ci_fix_cycles.txt"
+    cycle_path.parent.mkdir(parents=True, exist_ok=True)
+    cycle_path.write_text("2", encoding="utf-8")
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert "mergeable" in out.note
+    assert cycle_path.read_text().strip() == "0"
+
+
+def test_implement_complete_ci_failing_gitlab(tmp_path, monkeypatch):
+    """GitLab: CI failing → FIXING_CI."""
+    ctx = _gl(tmp_path)
+    monkeypatch.setattr(
+        gitlab.GitLabForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "opened",
+            "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        gitlab.GitLabForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "lint", "summary": None, "text": None, "annotations": []}
+            ],
+        },
+    )
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.FIXING_CI
+
+
+def test_blocked_when_forge_unconfigured_gitlab(tmp_path):
+    """GitLab: no FORGE_KIND → BLOCKED."""
+    ctx = _ctx(tmp_path)
+    out = MergeStage().run(_human_mr_approval(ctx), ctx)
+    assert out.next_state is State.BLOCKED and "forge not configured" in out.note
+
+
+def test_merged_to_done_gitlab(tmp_path, monkeypatch):
+    """GitLab: MR merged → DONE."""
+    ctx = _gl(tmp_path)
+    monkeypatch.setattr(
+        gitlab.GitLabForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": True,
+            "state": "merged",
+            "url": "https://gitlab.com/ns/project/-/merge_requests/3",
+        },
+    )
+    t = _human_mr_approval(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+    assert "merge_requests/3" in out.note
+    assert (ctx.service.workspace(t).artifacts_dir / "merge.md").exists()
+
+
+def test_auto_merge_fires_gitlab(tmp_path, monkeypatch):
+    """GitLab: mergeable + CI green + review eligible → auto-merge → DONE."""
+    ctx = _gl(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    monkeypatch.setattr(
+        gitlab.GitLabForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "opened",
+            "url": "https://gitlab.com/ns/project/-/merge_requests/1",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        gitlab.GitLabForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    monkeypatch.setattr(
+        gitlab.GitLabForge,
+        "merge_pr",
+        lambda self, *, source_branch: {"merged": True, "reason": "merged"},
+    )
+
+    t = _human_mr_approval(ctx)
+    art_dir = ctx.service.workspace(t).artifacts_dir
+    art_dir.mkdir(parents=True, exist_ok=True)
+    (art_dir / "review.md").write_text(
+        "verdict: APPROVE\nauto_merge_eligible: true\n", encoding="utf-8"
+    )
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+    assert "auto-merged" in out.note
