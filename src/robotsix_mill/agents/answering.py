@@ -52,7 +52,7 @@ def run_answer_agent(
         tools = [make_explore_tool(settings, repo_dir), *ro]
 
     # Langfuse read tools — always available
-    langfuse_tools = _build_langfuse_tools(settings)
+    langfuse_tools = _build_langfuse_tools(settings, repo_config=repo_config)
     tools.extend(langfuse_tools)
 
     agent = build_agent_from_definition(

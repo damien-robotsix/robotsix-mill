@@ -21,22 +21,33 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-def _make_session_cost_tool(settings: Settings):
-    """Create the ``langfuse_session_cost`` tool closure."""
+def _make_session_cost_tool(settings: Settings, repo_config=None):
+    """Create the ``langfuse_session_cost`` tool closure.
+
+    When *repo_config* is not ``None``, its Langfuse credentials are
+    forwarded to the client call.
+    """
 
     def langfuse_session_cost(session_id: str) -> str:
         """Fetch the total USD cost for a Langfuse session by its ID.
         Returns the cost as a dollar string (e.g. "$1.2345")."""
         from ..langfuse.client import session_cost
 
-        cost = session_cost(settings, session_id)
+        kwargs: dict = {}
+        if repo_config is not None:
+            kwargs["repo_config"] = repo_config
+        cost = session_cost(settings, session_id, **kwargs)
         return f"${cost:.4f}"
 
     return langfuse_session_cost
 
 
-def _make_session_summary_tool(settings: Settings):
-    """Create the ``langfuse_session_summary`` tool closure."""
+def _make_session_summary_tool(settings: Settings, repo_config=None):
+    """Create the ``langfuse_session_summary`` tool closure.
+
+    When *repo_config* is not ``None``, its Langfuse credentials are
+    forwarded to the client call.
+    """
 
     def langfuse_session_summary(session_id: str) -> str:
         """Fetch a structured summary of all traces in a Langfuse
@@ -44,7 +55,10 @@ def _make_session_summary_tool(settings: Settings):
         warnings/errors. Returns a Markdown text block."""
         from ..langfuse.client import fetch_session_summary
 
-        summary = fetch_session_summary(settings, session_id)
+        kwargs: dict = {}
+        if repo_config is not None:
+            kwargs["repo_config"] = repo_config
+        summary = fetch_session_summary(settings, session_id, **kwargs)
         if summary is None:
             return (
                 f"No Langfuse data found for session {session_id} "
@@ -55,18 +69,26 @@ def _make_session_summary_tool(settings: Settings):
     return langfuse_session_summary
 
 
-def _make_list_traces_tool(settings: Settings):
-    """Create the ``langfuse_list_traces`` tool closure."""
+def _make_list_traces_tool(settings: Settings, repo_config=None):
+    """Create the ``langfuse_list_traces`` tool closure.
+
+    When *repo_config* is not ``None``, its Langfuse credentials are
+    forwarded to the client call.
+    """
 
     def langfuse_list_traces(session_id: str) -> str:
         """List all trace IDs for a Langfuse session. Returns one trace
         per line with its name, timestamp, and cost."""
         from ..langfuse.client import _langfuse_api_get
 
+        kwargs: dict = {}
+        if repo_config is not None:
+            kwargs["repo_config"] = repo_config
         data = _langfuse_api_get(
             settings,
             "/api/public/traces",
             params={"sessionId": session_id, "limit": 100},
+            **kwargs,
         )
         if data is None:
             return "Langfuse unavailable or tracing not configured"
@@ -85,15 +107,22 @@ def _make_list_traces_tool(settings: Settings):
     return langfuse_list_traces
 
 
-def _make_trace_detail_tool(settings: Settings):
-    """Create the ``langfuse_trace_detail`` tool closure."""
+def _make_trace_detail_tool(settings: Settings, repo_config=None):
+    """Create the ``langfuse_trace_detail`` tool closure.
+
+    When *repo_config* is not ``None``, its Langfuse credentials are
+    forwarded to the client call.
+    """
 
     def langfuse_trace_detail(trace_id: str) -> str:
         """Fetch the full detail of a single Langfuse trace by its ID.
         Returns a JSON-like summary of the trace's observations."""
         from ..langfuse.client import fetch_trace_detail
 
-        detail = fetch_trace_detail(settings, trace_id)
+        kwargs: dict = {}
+        if repo_config is not None:
+            kwargs["repo_config"] = repo_config
+        detail = fetch_trace_detail(settings, trace_id, **kwargs)
         if detail is None:
             return f"No trace found for ID {trace_id}"
         obs = detail.get("observations") or []
@@ -115,8 +144,13 @@ def _make_trace_detail_tool(settings: Settings):
     return langfuse_trace_detail
 
 
-def _build_langfuse_tools(settings: Settings):
-    """Create Langfuse read-only tools as closures capturing settings.
+def _build_langfuse_tools(settings: Settings, repo_config=None):
+    """Create Langfuse read-only tools as closures capturing settings
+    and an optional per-repo *repo_config*.
+
+    When *repo_config* is not ``None`` its Langfuse credentials are
+    used; otherwise the global :class:`Secrets` singleton fallback is
+    used.
 
     Returns four callable closures with the same signatures and behaviour
     as the original ``answering.py:_build_langfuse_tools``.  The tool
@@ -124,10 +158,10 @@ def _build_langfuse_tools(settings: Settings):
     ``langfuse_list_traces``, and ``langfuse_trace_detail``.
     """
     return [
-        _make_session_cost_tool(settings),
-        _make_session_summary_tool(settings),
-        _make_list_traces_tool(settings),
-        _make_trace_detail_tool(settings),
+        _make_session_cost_tool(settings, repo_config=repo_config),
+        _make_session_summary_tool(settings, repo_config=repo_config),
+        _make_list_traces_tool(settings, repo_config=repo_config),
+        _make_trace_detail_tool(settings, repo_config=repo_config),
     ]
 
 
