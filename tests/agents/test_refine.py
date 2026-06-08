@@ -1859,7 +1859,9 @@ def test_run_command_absent_when_repo_dir_is_none(monkeypatch, tmp_path):
     assert result.spec_markdown == "## Problem\nok\n"
     # No fs tools when no repo — but Langfuse tools are always present.
     for fs_tool in ("run_command", "read_file", "list_dir", "explore"):
-        assert fs_tool not in seen_tools, f"{fs_tool} should not be present without repo_dir"
+        assert fs_tool not in seen_tools, (
+            f"{fs_tool} should not be present without repo_dir"
+        )
     assert "langfuse_session_cost" in seen_tools
     assert "langfuse_session_summary" in seen_tools
     assert "langfuse_list_traces" in seen_tools
@@ -1927,9 +1929,7 @@ def test_langfuse_tools_present_when_repo_dir_given(tmp_path, monkeypatch):
         lambda settings, tid: None,
     )
 
-    run_refine_agent(
-        settings=settings, title="x", draft="y", repo_dir=repo
-    )
+    run_refine_agent(settings=settings, title="x", draft="y", repo_dir=repo)
 
     names = [getattr(t, "__name__", "") for t in captured["tools"]]
     # Four simple langfuse tools always present
@@ -1941,9 +1941,7 @@ def test_langfuse_tools_present_when_repo_dir_given(tmp_path, monkeypatch):
     assert "langfuse_inspect_trace" in names
 
 
-def test_langfuse_inspect_trace_absent_when_repo_dir_none(
-    tmp_path, monkeypatch
-):
+def test_langfuse_inspect_trace_absent_when_repo_dir_none(tmp_path, monkeypatch):
     """When repo_dir is None, the four simple Langfuse tools are still
     injected but langfuse_inspect_trace is excluded."""
     import robotsix_mill.config as _cfg
@@ -1997,9 +1995,7 @@ def test_langfuse_inspect_trace_absent_when_repo_dir_none(
         lambda settings, tid: None,
     )
 
-    run_refine_agent(
-        settings=settings, title="x", draft="y", repo_dir=None
-    )
+    run_refine_agent(settings=settings, title="x", draft="y", repo_dir=None)
 
     names = [getattr(t, "__name__", "") for t in captured["tools"]]
     # Four simple langfuse tools always present

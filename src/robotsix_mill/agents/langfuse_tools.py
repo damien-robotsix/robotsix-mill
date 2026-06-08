@@ -21,14 +21,8 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-def _build_langfuse_tools(settings: Settings):
-    """Create Langfuse read-only tools as closures capturing settings.
-
-    Returns four callable closures with the same signatures and behaviour
-    as the original ``answering.py:_build_langfuse_tools``.  The tool
-    names are ``langfuse_session_cost``, ``langfuse_session_summary``,
-    ``langfuse_list_traces``, and ``langfuse_trace_detail``.
-    """
+def _make_session_cost_tool(settings: Settings):
+    """Create the ``langfuse_session_cost`` tool closure."""
 
     def langfuse_session_cost(session_id: str) -> str:
         """Fetch the total USD cost for a Langfuse session by its ID.
@@ -37,6 +31,12 @@ def _build_langfuse_tools(settings: Settings):
 
         cost = session_cost(settings, session_id)
         return f"${cost:.4f}"
+
+    return langfuse_session_cost
+
+
+def _make_session_summary_tool(settings: Settings):
+    """Create the ``langfuse_session_summary`` tool closure."""
 
     def langfuse_session_summary(session_id: str) -> str:
         """Fetch a structured summary of all traces in a Langfuse
@@ -51,6 +51,12 @@ def _build_langfuse_tools(settings: Settings):
                 f"(tracing may be unconfigured)"
             )
         return summary
+
+    return langfuse_session_summary
+
+
+def _make_list_traces_tool(settings: Settings):
+    """Create the ``langfuse_list_traces`` tool closure."""
 
     def langfuse_list_traces(session_id: str) -> str:
         """List all trace IDs for a Langfuse session. Returns one trace
@@ -76,6 +82,12 @@ def _build_langfuse_tools(settings: Settings):
             )
         return "\n".join(lines)
 
+    return langfuse_list_traces
+
+
+def _make_trace_detail_tool(settings: Settings):
+    """Create the ``langfuse_trace_detail`` tool closure."""
+
     def langfuse_trace_detail(trace_id: str) -> str:
         """Fetch the full detail of a single Langfuse trace by its ID.
         Returns a JSON-like summary of the trace's observations."""
@@ -100,17 +112,26 @@ def _build_langfuse_tools(settings: Settings):
         ]
         return "\n".join(lines)
 
+    return langfuse_trace_detail
+
+
+def _build_langfuse_tools(settings: Settings):
+    """Create Langfuse read-only tools as closures capturing settings.
+
+    Returns four callable closures with the same signatures and behaviour
+    as the original ``answering.py:_build_langfuse_tools``.  The tool
+    names are ``langfuse_session_cost``, ``langfuse_session_summary``,
+    ``langfuse_list_traces``, and ``langfuse_trace_detail``.
+    """
     return [
-        langfuse_session_cost,
-        langfuse_session_summary,
-        langfuse_list_traces,
-        langfuse_trace_detail,
+        _make_session_cost_tool(settings),
+        _make_session_summary_tool(settings),
+        _make_list_traces_tool(settings),
+        _make_trace_detail_tool(settings),
     ]
 
 
-def make_langfuse_inspect_tool(
-    settings: Settings, repo_dir: Path | None = None
-):
+def make_langfuse_inspect_tool(settings: Settings, repo_dir: Path | None = None):
     """Build the ``langfuse_inspect_trace`` tool closure.
 
     When *repo_dir* is provided, the trace-inspector sub-agent gets

@@ -1,7 +1,5 @@
 """Tests for the shared langfuse_tools module."""
 
-from pathlib import Path
-
 from robotsix_mill.agents.langfuse_tools import (
     _build_langfuse_tools,
     make_langfuse_inspect_tool,
@@ -210,9 +208,7 @@ def test_make_langfuse_inspect_tool_returns_callable(tmp_path):
     assert tool.__name__ == "langfuse_inspect_trace"
 
 
-def test_langfuse_inspect_trace_degradation_trace_unavailable(
-    tmp_path, monkeypatch
-):
+def test_langfuse_inspect_trace_degradation_trace_unavailable(tmp_path, monkeypatch):
     """When fetch_trace_detail returns None, the tool returns a
     degradation message."""
     s = _settings(tmp_path)
@@ -225,9 +221,7 @@ def test_langfuse_inspect_trace_degradation_trace_unavailable(
     assert "trace missing-trace unavailable" in output
 
 
-def test_langfuse_inspect_trace_delegates_to_run_trace_inspector(
-    tmp_path, monkeypatch
-):
+def test_langfuse_inspect_trace_delegates_to_run_trace_inspector(tmp_path, monkeypatch):
     """The tool fetches the trace and delegates to run_trace_inspector,
     returning its formatted output."""
     s = _settings(tmp_path, OPENROUTER_API_KEY="k")
@@ -240,7 +234,6 @@ def test_langfuse_inspect_trace_delegates_to_run_trace_inspector(
     from robotsix_mill.agents.trace_inspector import (
         TraceFinding,
         TraceInspectResult,
-        run_trace_inspector as original_run,
     )
 
     captured_kwargs = {}
@@ -276,9 +269,7 @@ def test_langfuse_inspect_trace_delegates_to_run_trace_inspector(
     assert "trace_data" in captured_kwargs
 
 
-def test_langfuse_inspect_trace_passes_repo_dir(
-    tmp_path, monkeypatch
-):
+def test_langfuse_inspect_trace_passes_repo_dir(tmp_path, monkeypatch):
     """When repo_dir is given to the factory, it is passed through to
     run_trace_inspector."""
     s = _settings(tmp_path, OPENROUTER_API_KEY="k")
@@ -359,9 +350,7 @@ def test_langfuse_inspect_trace_clean_no_issues(tmp_path, monkeypatch):
     assert "### Tool Errors" not in output
 
 
-def test_langfuse_inspect_trace_surfaces_inspector_error(
-    tmp_path, monkeypatch
-):
+def test_langfuse_inspect_trace_surfaces_inspector_error(tmp_path, monkeypatch):
     """When run_trace_inspector returns an error, it is surfaced."""
     s = _settings(tmp_path, OPENROUTER_API_KEY="k")
 
