@@ -758,7 +758,7 @@ def _build_refine_overrides(
     return overrides
 
 
-def run_refine_agent(
+def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota checks add branches; tightly-coupled control flow
     *,
     settings: Settings,
     title: str,
@@ -905,24 +905,43 @@ def run_refine_agent(
 
         # Guard: if the agent hit the iteration limit while the model
         # was still requesting tool calls, the last response has
-        # finish_reason == "tool_call" and result.output is empty.
+        # finish_reason == "tool_call" and result.output may be empty.
         # Synthesise a final answer with a single continuation call
         # that includes the full message history for context.
         finish_reason = getattr(
             getattr(result, "response", None), "finish_reason", None
         )
         if finish_reason == "tool_call":
-            continuation_result = run_agent(
-                agent,
-                lambda h: h.run_sync(
-                    "Please synthesise a final answer based on the tool results above.",
-                    message_history=result.all_messages(),
-                    usage_limits=limits,
-                ),
-                settings=settings,
-                what="refine (continuation after tool_calls stop)",
-            )
-            result = continuation_result
+            # Pre-output guard: if the agent already produced a valid
+            # RefineResult (e.g. a complete spec landed in an earlier
+            # turn before a verification loop), skip the continuation
+            # to avoid burning quota on redundant tool calls.
+            if isinstance(result.output, RefineResult) and (
+                result.output.spec_markdown
+                or result.output.epic_body
+                or result.output.children
+            ):
+                pass  # Already have a good result; skip continuation
+            else:
+                # Pre-turn quota check: refuse to start a continuation
+                # when there are ≤ 5 requests remaining — the call
+                # would likely fail mid-turn and burn quota without
+                # producing a usable result.
+                remaining = limits.request_limit - result.usage.requests
+                if remaining <= 5:
+                    pass  # Not enough quota; return what we have
+                else:
+                    continuation_result = run_agent(
+                        agent,
+                        lambda h: h.run_sync(
+                            "Please synthesise a final answer based on the tool results above.",
+                            message_history=result.all_messages(),
+                            usage_limits=limits,
+                        ),
+                        settings=settings,
+                        what="refine (continuation after tool_calls stop)",
+                    )
+                    result = continuation_result
 
         output: RefineResult = _coerce_refine_output(result.output)
 

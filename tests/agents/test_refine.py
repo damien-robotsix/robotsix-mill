@@ -3964,6 +3964,7 @@ class _FakeRunResult:
         all_messages,
         all_messages_json=b"[]",
         new_messages_json=b"[]",
+        usage=None,
     ):
         self._output = output
         self._all_messages = all_messages
@@ -3972,6 +3973,7 @@ class _FakeRunResult:
         self.response = (
             _FakeResponse(finish_reason) if finish_reason is not None else None
         )
+        self.usage = usage if usage is not None else _FakeUsage()
 
     @property
     def output(self):
@@ -3985,6 +3987,13 @@ class _FakeRunResult:
 
     def new_messages_json(self):
         return self._new_messages_json
+
+
+class _FakeUsage:
+    """Minimal fake for pydantic_ai.usage.RunUsage."""
+
+    def __init__(self, requests: int = 0):
+        self.requests = requests
 
 
 class _FakeResponse:
@@ -4147,6 +4156,97 @@ def test_continuation_guard_skipped_when_response_missing(monkeypatch, settings)
     # Guard skipped — exactly one call
     assert len(run_sync_calls) == 1
     assert output.spec_markdown == "## Problem\nok\n"
+
+
+def test_continuation_guard_skipped_when_already_valid_output(monkeypatch, settings):
+    """When finish_reason == 'tool_call' but the agent already produced a
+    valid RefineResult in an earlier turn, skip the continuation to avoid
+    burning quota on verification loops."""
+    import robotsix_mill.agents.retry as retry_module
+    import robotsix_mill.agents.base as base_module
+
+    # A RefineResult with real content — spec_markdown is non-empty.
+    valid_output = RefineResult(split=False, spec_markdown="## Problem\ndone\n")
+    run_sync_calls = []
+
+    class _MockAgent:
+        def run_sync(self, user_prompt, *, message_history=None, usage_limits=None):
+            run_sync_calls.append(user_prompt)
+            return _FakeRunResult(
+                output=valid_output,
+                finish_reason="tool_call",
+                all_messages=[{"role": "tool", "content": "verify"}],
+            )
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        retry_module,
+        "run_agent",
+        lambda agent, make_run, *, settings, what="model call", sleep=None: make_run(
+            agent
+        ),
+    )
+    monkeypatch.setattr(
+        base_module, "build_agent_from_definition", lambda *a, **kw: _MockAgent()
+    )
+
+    output = refining.run_refine_agent(
+        settings=settings,
+        title="Test ticket",
+        draft="draft",
+    )
+
+    # Pre-output guard fires: continuation skipped, only one call
+    assert len(run_sync_calls) == 1
+    assert output.spec_markdown == "## Problem\ndone\n"
+
+
+def test_continuation_guard_skipped_when_low_remaining_quota(monkeypatch, settings):
+    """When finish_reason == 'tool_call' but remaining requests ≤ 5,
+    skip the continuation to avoid failing mid-turn."""
+    import robotsix_mill.agents.retry as retry_module
+    import robotsix_mill.agents.base as base_module
+
+    empty_output = RefineResult(split=False, spec_markdown="")
+    run_sync_calls = []
+
+    class _MockAgent:
+        def run_sync(self, user_prompt, *, message_history=None, usage_limits=None):
+            run_sync_calls.append(user_prompt)
+            return _FakeRunResult(
+                output=empty_output,
+                finish_reason="tool_call",
+                all_messages=[{"role": "tool", "content": "verify"}],
+                # Simulate 57 requests already used out of 60 → 3 remaining
+                usage=_FakeUsage(requests=57),
+            )
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        retry_module,
+        "run_agent",
+        lambda agent, make_run, *, settings, what="model call", sleep=None: make_run(
+            agent
+        ),
+    )
+    monkeypatch.setattr(
+        base_module, "build_agent_from_definition", lambda *a, **kw: _MockAgent()
+    )
+
+    output = refining.run_refine_agent(
+        settings=settings,
+        title="Test ticket",
+        draft="draft",
+    )
+
+    # Quota guard fires: continuation skipped, only one call
+    assert len(run_sync_calls) == 1
+    # Empty spec_markdown — the raw output (coerced to RefineResult)
+    assert output.spec_markdown == ""
 
 
 # ---------------------------------------------------------------------------
