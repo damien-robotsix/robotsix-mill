@@ -82,6 +82,17 @@ def _mint_installation_token(
     return data["token"], time.time() + 50 * 60
 
 
+def gitlab_token() -> str:
+    """Return the GitLab PAT from secrets.
+
+    Raises ``RuntimeError`` when ``FORGE_TOKEN`` is not configured.
+    """
+    token = get_secrets().forge_token
+    if not token:
+        raise RuntimeError("FORGE_TOKEN not set")
+    return token
+
+
 def github_token(settings: Settings, repo_config: RepoConfig | None = None) -> str:
     """Return a forge auth token: either a static FORGE_TOKEN from secrets or a short-lived GitHub App installation token."""
     if settings.forge_auth != "app":
