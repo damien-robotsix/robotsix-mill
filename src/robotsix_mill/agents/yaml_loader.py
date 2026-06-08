@@ -52,6 +52,7 @@ class AgentDefinition(BaseModel):
     read_ticket: bool = False
     reply_to_thread: bool = True
     close_thread: bool = True
+    list_threads: bool = True
     ask_user: bool = True
     output_type: str | None = None
     retries: int = 2

@@ -182,6 +182,7 @@ def test_all_tools_registered(tmp_path, monkeypatch):
         "edit_file",
         "delete_file",
         "list_dir",
+        "list_threads",
         "run_command",
         "explore",
         "run_tests",
