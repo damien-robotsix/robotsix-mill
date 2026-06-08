@@ -15,6 +15,7 @@ from robotsix_mill.agents.fs_tools import (
     _PRUNED_PLACEHOLDER,
     _safe,
     build_fs_tools,
+    build_preseed_history,
 )
 from robotsix_mill import sandbox
 
@@ -1808,3 +1809,73 @@ class TestReadFilePDF:
         tools = _build(root, settings)
         result = tools["read_file"](path="DOC.PDF")
         assert "Case test" in result
+
+
+class TestBuildPreseedHistoryPDF:
+    """``build_preseed_history`` extracts text from ``.pdf`` files via
+    ``_extract_pdf_text``, matching the behaviour of ``_read_cached``."""
+
+    def test_valid_pdf_returns_extracted_text(self, tmp_path):
+        """``build_preseed_history`` with a valid ``.pdf`` returns
+        extracted text, not raw binary mojibake."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_text_pdf(str(root / "spec.pdf"), "Hello PDF world")
+
+        history = build_preseed_history(root, ["spec.pdf"])
+        # history is [ModelResponse(calls), ModelRequest(returns)]
+        assert len(history) == 2
+
+        calls_msg, returns_msg = history
+        assert isinstance(calls_msg, ModelResponse)
+        assert isinstance(returns_msg, ModelRequest)
+
+        # The ToolReturnPart content should be the extracted text.
+        return_content = returns_msg.parts[0].content
+        assert "Hello PDF world" in return_content
+        # Must NOT be raw PDF binary mojibake.
+        assert "%PDF" not in return_content
+
+    def test_corrupted_pdf_returns_error_string(self, tmp_path):
+        """A file with ``.pdf`` extension that is not a valid PDF
+        returns the error string from ``_extract_pdf_text``."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_corrupted_pdf(str(root / "bad.pdf"))
+
+        history = build_preseed_history(root, ["bad.pdf"])
+        assert len(history) == 2
+        _, returns_msg = history
+        return_content = returns_msg.parts[0].content
+        assert isinstance(return_content, str)
+        assert return_content.startswith("error reading PDF")
+
+    def test_non_pdf_files_unchanged(self, tmp_path):
+        """Non-``.pdf`` files are read via ``read_text`` exactly as
+        before — no regression."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "hello.txt", "world\n")
+
+        history = build_preseed_history(root, ["hello.txt"])
+        assert len(history) == 2
+        _, returns_msg = history
+        assert returns_msg.parts[0].content == "world\n"
+
+    def test_mixed_pdf_and_text_files(self, tmp_path):
+        """A mix of ``.pdf`` and text files: each gets the correct
+        reader (``_extract_pdf_text`` vs ``read_text``)."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_text_pdf(str(root / "a.pdf"), "PDF content")
+        _make_file(root, "b.txt", "text content\n")
+
+        history = build_preseed_history(root, ["a.pdf", "b.txt"])
+        assert len(history) == 2
+        _, returns_msg = history
+
+        parts = returns_msg.parts
+        assert len(parts) == 2
+        contents = {p.content for p in parts}
+        assert "PDF content" in contents
+        assert "text content\n" in contents
