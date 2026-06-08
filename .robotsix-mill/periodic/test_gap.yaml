@@ -1,0 +1,6 @@
+# Per-repo periodic workflow: presence enables test_gap for this repo.
+# Identifies modules with zero dedicated test coverage, prioritizes by
+# complexity and I/O surface, and files draft tickets. Name-only →
+# inherits the built-in test_gap definition
+# (robotsix-mill: agent_definitions/periodic/test_gap.yaml).
+name: test_gap
