@@ -1119,64 +1119,6 @@ class RefineStage(Stage):
         persistence, spec review, single-scope and multi-scope split
         outcomes.
         """
-        # --- skip re-refinement for split children ---
-        # A child ticket created from a split already has a refined
-        # spec in its description.md.  Detect this by checking whether
-        # the parent is CLOSED with a "split into" note — the canonical
-        # signal that this ticket's description is already the refined
-        # output.  When children are reparented to an umbrella epic
-        # the direct parent is no longer CLOSED, so also check the
-        # ticket's own history for a "split from" transition note.
-        # We must NOT short-circuit for retrospect-spawned drafts
-        # (whose parent is also CLOSED but for a different reason and
-        # whose description is a raw draft, not a spec).
-        is_split_child = False
-        if ticket.parent_id is not None:
-            parent = ctx.service.get(ticket.parent_id)
-            if parent is not None and parent.state == State.CLOSED:
-                # Only short-circuit if the parent was closed by a
-                # split — otherwise (e.g. retrospect spawn) the
-                # draft still needs refinement.
-                parent_history = ctx.service.history(parent.id)
-                is_split_child = any(
-                    ev.state == State.CLOSED
-                    and ev.note
-                    and ev.note.startswith("split into")
-                    for ev in parent_history
-                )
-        if not is_split_child:
-            # Fallback: check the ticket's own history for a
-            # "split from" note (children reparented to an epic).
-            own_history = ctx.service.history(ticket.id)
-            is_split_child = any(
-                ev.note and ev.note.startswith("split from") for ev in own_history
-            )
-        if is_split_child:
-            spec = draft
-            if not spec.strip():
-                return Outcome(State.BLOCKED, "split child has empty description")
-            # Preserve the raw draft if not already preserved.
-            draft_original = ws.artifacts_dir / "draft-original.md"
-            if not draft_original.exists():
-                draft_original.write_text(
-                    "(split child — spec written by parent's refine agent)",
-                    encoding="utf-8",
-                )
-            # Split children skip the refine agent — but implement still
-            # demands a file_map.json. Write an empty one so the
-            # downstream gate treats this as scope-free mode rather
-            # than "refine broken" → BLOCKED.
-            file_map_path = ws.artifacts_dir / "file_map.json"
-            if not file_map_path.exists():
-                file_map_path.write_text("[]", encoding="utf-8")
-            next_state, auto_note = _resolve_next_state(
-                ctx, spec, ticket.id, source=ticket.source
-            )
-            note = "split child — spec already refined"
-            if auto_note:
-                note += f" | {auto_note}"
-            return Outcome(next_state, note)
-
         # --- gather reviewer comments (sendback guard) ---
         # ``mill`` and ``system`` author comments (trace-link auto-posts
         # from runtime.worker._post_trace_comment; timeout-escalation
@@ -1212,6 +1154,68 @@ class RefineStage(Stage):
                         reviewer_comments = None
         except Exception:
             log.warning("%s: list_comments failed, proceeding without", ticket.id)
+        # --- end gather reviewer comments ---
+
+        # --- skip re-refinement for split children ---
+        # A child ticket created from a split already has a refined
+        # spec in its description.md.  Detect this by checking whether
+        # the parent is CLOSED with a "split into" note — the canonical
+        # signal that this ticket's description is already the refined
+        # output.  When children are reparented to an umbrella epic
+        # the direct parent is no longer CLOSED, so also check the
+        # ticket's own history for a "split from" transition note.
+        # We must NOT short-circuit for retrospect-spawned drafts
+        # (whose parent is also CLOSED but for a different reason and
+        # whose description is a raw draft, not a spec).
+        # IMPORTANT: even split children must fall through to the full
+        # refine agent when there are open reviewer comments — the
+        # human requested changes that the spec must address.
+        is_split_child = False
+        if ticket.parent_id is not None:
+            parent = ctx.service.get(ticket.parent_id)
+            if parent is not None and parent.state == State.CLOSED:
+                # Only short-circuit if the parent was closed by a
+                # split — otherwise (e.g. retrospect spawn) the
+                # draft still needs refinement.
+                parent_history = ctx.service.history(parent.id)
+                is_split_child = any(
+                    ev.state == State.CLOSED
+                    and ev.note
+                    and ev.note.startswith("split into")
+                    for ev in parent_history
+                )
+        if not is_split_child:
+            # Fallback: check the ticket's own history for a
+            # "split from" note (children reparented to an epic).
+            own_history = ctx.service.history(ticket.id)
+            is_split_child = any(
+                ev.note and ev.note.startswith("split from") for ev in own_history
+            )
+        if is_split_child and not reviewer_comments:
+            spec = draft
+            if not spec.strip():
+                return Outcome(State.BLOCKED, "split child has empty description")
+            # Preserve the raw draft if not already preserved.
+            draft_original = ws.artifacts_dir / "draft-original.md"
+            if not draft_original.exists():
+                draft_original.write_text(
+                    "(split child — spec written by parent's refine agent)",
+                    encoding="utf-8",
+                )
+            # Split children skip the refine agent — but implement still
+            # demands a file_map.json. Write an empty one so the
+            # downstream gate treats this as scope-free mode rather
+            # than "refine broken" → BLOCKED.
+            file_map_path = ws.artifacts_dir / "file_map.json"
+            if not file_map_path.exists():
+                file_map_path.write_text("[]", encoding="utf-8")
+            next_state, auto_note = _resolve_next_state(
+                ctx, spec, ticket.id, source=ticket.source
+            )
+            note = "split child — spec already refined"
+            if auto_note:
+                note += f" | {auto_note}"
+            return Outcome(next_state, note)
 
         # --- triage phase 1: LLM classifier (3-way: SKIP / MAINTENANCE / REFINE) ---
         # A single cheap LLM call classifies the draft.  If it's
