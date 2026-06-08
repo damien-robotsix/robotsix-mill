@@ -357,6 +357,25 @@ def test_blocked_when_forge_unconfigured(tmp_path):
     assert out.next_state is State.BLOCKED and "forge not configured" in out.note
 
 
+def test_auto_forge_kind_bypasses_none_guard(tmp_path):
+    """forge_kind=auto with a valid remote_url bypasses the
+    forge_kind=none guard and does not block with 'forge not configured'."""
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="auto",
+        FORGE_TOKEN="t",
+        FORGE_REMOTE_URL="https://github.com/o/r.git",
+    )
+    out = MergeStage().run(_human_mr_approval(ctx), ctx)
+    # Should NOT block due to forge_kind=none. May fail for other
+    # reasons (e.g. no PR found, forge unreachable), but the note must
+    # not contain the "forge not configured" sentinel (and the state
+    # must not be BLOCKED for that reason).
+    assert out.next_state is not State.BLOCKED or (
+        out.note is not None and "forge not configured" not in out.note
+    )
+
+
 def test_merged_to_done(tmp_path, monkeypatch):
     ctx = _gh(tmp_path)
     monkeypatch.setattr(

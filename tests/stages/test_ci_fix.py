@@ -700,6 +700,22 @@ def test_forge_not_configured_blocks(tmp_path):
     assert "forge not configured" in out.note
 
 
+def test_auto_forge_kind_bypasses_none_guard(tmp_path):
+    """forge_kind=auto with a valid remote_url bypasses the
+    forge_kind=none guard and does not block with 'forge not configured'."""
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="auto",
+        FORGE_TOKEN="t",
+        FORGE_REMOTE_URL="https://github.com/o/r.git",
+    )
+    out = CIFixStage().run(_fixing_ci(ctx), ctx)
+    # Should NOT block due to forge_kind=none. May fail for other
+    # reasons (e.g. no workspace clone), but the note must not contain
+    # the "forge not configured" sentinel.
+    assert "forge not configured" not in out.note
+
+
 # --- Force-push refspec is ticket branch only ---
 
 
