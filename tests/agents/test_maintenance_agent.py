@@ -51,10 +51,10 @@ def _clear_registry():
 
 class TestMaintenanceResult:
     def test_defaults(self):
-        """Defaults are success=False, note=''."""
-        r = MaintenanceResult()
+        """success is required; note defaults to None."""
+        r = MaintenanceResult(success=False)
         assert r.success is False
-        assert r.note == ""
+        assert r.note is None
 
     def test_explicit(self):
         """Can be constructed with success=True and a note."""
@@ -77,65 +77,46 @@ class TestMaintenanceResult:
 
 
 class TestStubTools:
-    def test_create_repo_stub_returns_error(self, tmp_path):
-        """The stub returns a 'not yet implemented' error."""
+    def test_create_repo_tool_returns_error_when_no_forge(self, tmp_path):
+        """Without a configured forge, create_repo returns an error string."""
         s = _settings(tmp_path)
         fn = make_create_repo_tool(s)
-        # Stub closures are async, but the factory returns a coroutine
-        # function.  We can call it with await in an async test, or
-        # check that it's an async function returning the expected
-        # string.
-        import asyncio
+        result = fn(name="my-repo", owner="owner", private=False, description="")
+        assert "create_repo:" in result
 
-        result = asyncio.run(fn("my-repo"))
-        assert "not yet implemented" in result
-        assert "create_repo" in result
-
-    def test_fork_repo_stub_returns_error(self, tmp_path):
-        """The stub returns a 'not yet implemented' error."""
+    def test_fork_repo_tool_returns_error_when_no_forge(self, tmp_path):
+        """Without a configured forge, fork_repo returns an error string."""
         s = _settings(tmp_path)
         fn = make_fork_repo_tool(s)
-        import asyncio
-
-        result = asyncio.run(fn("alice", "my-repo"))
-        assert "not yet implemented" in result
-        assert "fork_repo" in result
+        result = fn(source_owner="alice", source_repo="my-repo")
+        assert "fork_repo:" in result
 
     def test_investigate_stub_returns_error(self, tmp_path):
         """The stub returns a 'not yet implemented' error."""
         s = _settings(tmp_path)
         fn = make_investigate_tool(s)
-        import asyncio
-
-        result = asyncio.run(fn("what is X?", "https://example.com/repo"))
+        result = fn("what is X?", "https://example.com/repo")
         assert "not yet implemented" in result
         assert "investigate" in result
 
     def test_stubs_accept_kwargs(self, tmp_path):
         """Stubs accept all documented parameters without error."""
         s = _settings(tmp_path)
-        import asyncio
 
         # create_repo with all params
-        r1 = asyncio.run(
-            make_create_repo_tool(s)(
-                name="x", owner="org", private=True, description="desc"
-            )
+        r1 = make_create_repo_tool(s)(
+            name="x", owner="org", private=True, description="desc"
         )
-        assert "not yet implemented" in r1
+        assert "create_repo:" in r1
 
         # fork_repo with target_namespace
-        r2 = asyncio.run(
-            make_fork_repo_tool(s)(
-                source_owner="a", source_repo="b", target_namespace="org"
-            )
+        r2 = make_fork_repo_tool(s)(
+            source_owner="a", source_repo="b", target_namespace="org"
         )
-        assert "not yet implemented" in r2
+        assert "fork_repo:" in r2
 
         # investigate
-        r3 = asyncio.run(
-            make_investigate_tool(s)(question="q", repo_url="https://example.com/r")
-        )
+        r3 = make_investigate_tool(s)(question="q", repo_url="https://example.com/r")
         assert "not yet implemented" in r3
 
 
@@ -152,18 +133,16 @@ class TestToolRegistryEntries:
         make_fork_repo_tool(s)
         make_investigate_tool(s)
 
-        # Also register post_comment by calling its factory (it's
-        # already imported via the module, but we call it explicitly
-        # for isolation).
-        from robotsix_mill.agents.post_comment import make_post_comment_tool
+        # Also register post_findings by calling its factory
+        from robotsix_mill.agents.maintenance import make_post_findings_tool
 
-        make_post_comment_tool(s, agent_name="test")
+        make_post_findings_tool(s, agent_name="test")
 
         names = {t.name for t in ToolRegistry.list_tools()}
         assert "create_repo" in names
         assert "fork_repo" in names
         assert "investigate" in names
-        assert "post_comment" in names
+        assert "post_findings" in names
 
 
 # ── YAML definition ──────────────────────────────────────────────────
@@ -183,9 +162,7 @@ class TestYamlDefinition:
         assert definition.module == "maintenance"
         assert definition.reply_to_thread is False
         assert definition.close_thread is False
-        assert definition.read_ticket is True
-        assert definition.web_knowledge is True
-        assert definition.ask_user is True
+        assert definition.ask_user is False
         assert definition.report_issue is True
         assert definition.retries == 2
         assert definition.output_type == "MaintenanceResult"
@@ -232,14 +209,16 @@ class TestAgentConstruction:
         ticket = MagicMock()
         ticket.id = "test-ticket-1"
         ticket.board_id = "test-board"
+        ticket.title = "Test ticket"
 
         ctx = MagicMock()
         ctx.settings = s
         ctx.repo_config = None
 
-        # No workspace — repo_dir will be None
+        # Mock workspace
         ws_mock = MagicMock()
         ws_mock.dir = tmp_path / "nonexistent"
+        ws_mock.read_description.return_value = "Test draft"
         ctx.service.workspace.return_value = ws_mock
 
         result = run_maintenance_agent(ticket, ctx)
@@ -251,11 +230,11 @@ class TestAgentConstruction:
         # Verify the agent was built with the expected tools
         built_tools = cap["kw"].get("tools", [])
         tool_names = {getattr(t, "__name__", None) or str(t) for t in built_tools}
-        # Stub tools should be present
+        # Expected tools should be present
         assert "create_repo" in tool_names
         assert "fork_repo" in tool_names
         assert "investigate" in tool_names
-        assert "post_comment" in tool_names
+        assert "post_findings" in tool_names
 
     def test_run_maintenance_agent_stage_contract(self, tmp_path, monkeypatch):
         """The returned object satisfies the MaintenanceStage.run()
@@ -291,12 +270,14 @@ class TestAgentConstruction:
         ticket = MagicMock()
         ticket.id = "t2"
         ticket.board_id = "b2"
+        ticket.title = "Test ticket"
 
         ctx = MagicMock()
         ctx.settings = s
         ctx.repo_config = None
         ws_mock = MagicMock()
         ws_mock.dir = tmp_path / "nonexistent"
+        ws_mock.read_description.return_value = "Test draft"
         ctx.service.workspace.return_value = ws_mock
 
         result = run_maintenance_agent(ticket, ctx)

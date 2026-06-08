@@ -1,150 +1,187 @@
 """Maintenance agent — performs operational actions (create repo,
-fork repo, cross-repo investigation) directly, skipping the
-code-implement stage.
+fork repo, cross-repo investigation) directly, bypassing the
+implement pipeline.
 
-Exports:
-    :class:`MaintenanceResult` — the structured output model
-    :func:`run_maintenance_agent` — entry point called by
-        :class:`~robotsix_mill.stages.maintenance.MaintenanceStage`.
-
-Tool stubs (``create_repo``, ``fork_repo``, ``investigate``) return
-clear error messages so the LLM can see the tools exist but are
-unavailable without crashing the agent loop.  Real implementations
-are separate tickets (3–5 in the epic).
+The agent module provides the ``MaintenanceResult`` model, tool
+builders for forge operations and reporting, and the
+``run_maintenance_agent`` entry point called by
+:class:`~robotsix_mill.stages.maintenance.MaintenanceStage`.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any, Callable
 
 from pydantic import BaseModel
 
 from ..config import Settings
-
-if TYPE_CHECKING:
-    from ..core.models import Ticket
-    from ..stages.base import StageContext
+from ..core.models import Ticket
+from ..stages.base import StageContext
 
 log = logging.getLogger(__name__)
 
 
-# ── Output model ─────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Result model
+# ---------------------------------------------------------------------------
 
 
 class MaintenanceResult(BaseModel):
-    """Structured output from one maintenance-agent run.
+    """Structured output from the maintenance agent."""
 
-    Mirrors the contract expected by
-    :meth:`MaintenanceStage.run() <robotsix_mill.stages.maintenance.MaintenanceStage.run>`.
+    success: bool
+    note: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Tool builders
+# ---------------------------------------------------------------------------
+
+
+def make_create_repo_tool(settings: Settings) -> Callable[..., str]:
+    """Return the ``create_repo`` closure bound to *settings*.
+
+    The tool calls :meth:`Forge.create_repo` and returns structured
+    metadata (id, name, clone_url, html_url) as a JSON string, or
+    an error message prefixed with ``create_repo:`` on failure.
     """
 
-    success: bool = False
-    note: str = ""
-
-
-# ── Tool stub factories ──────────────────────────────────────────────
-
-
-def make_create_repo_tool(settings: Settings) -> Any:
-    """Return an async ``create_repo`` stub bound to *settings*.
-
-    The stub returns a clear "not yet implemented" error so the agent
-    loop doesn't crash before the real implementation is migrated.
-    """
-
-    async def create_repo(
+    def create_repo(
         name: str,
-        owner: str | None = None,
-        private: bool = False,
-        description: str = "",
+        owner: str,
+        private: bool,
+        description: str,
     ) -> str:
-        """Create a new repository on the configured forge.
-
-        (stub — actual implementation migrated in a separate ticket)
+        """Create a new repository under *owner* and return its metadata.
 
         Args:
             name: Repository name.
-            owner: Owner or organisation (``None`` = authenticated user).
+            owner: Owner (user or organization).
             private: Whether the repo is private.
             description: Short description.
 
         Returns:
-            Status string.
+            JSON string with id, name, clone_url, html_url, or an
+            error message starting with ``create_repo:``.
         """
-        return "create_repo: not yet implemented — pending migration ticket"
+        from ..forge import get_forge, NotConfiguredError
+
+        try:
+            forge = get_forge(settings)
+            info = forge.create_repo(
+                name=name,
+                owner=owner,
+                private=private,
+                description=description,
+            )
+        except NotConfiguredError:
+            return "create_repo: repo creation is not configured"
+        except Exception as exc:
+            return f"create_repo: {exc!r}"
+        return json.dumps(
+            {
+                "id": info.id,
+                "name": info.name,
+                "clone_url": info.clone_url,
+                "html_url": info.html_url,
+            }
+        )
 
     from .tool_registry import ToolInfo, ToolRegistry
 
     ToolRegistry.register(
         ToolInfo(
             name="create_repo",
-            description="Create a new repository on the configured forge (stub).",
+            description="Create a new repository and return its metadata.",
             category="reporting",
             parameters={
                 "name": "str",
-                "owner": "str | None",
+                "owner": "str",
                 "private": "bool",
                 "description": "str",
             },
         )
     )
-
     return create_repo
 
 
-def make_fork_repo_tool(settings: Settings) -> Any:
-    """Return an async ``fork_repo`` stub bound to *settings*."""
+def make_fork_repo_tool(settings: Settings) -> Callable[..., str]:
+    """Return the ``fork_repo`` closure bound to *settings*.
 
-    async def fork_repo(
+    The tool calls :meth:`Forge.fork_repo` and returns structured
+    metadata (id, name, clone_url, html_url) as a JSON string, or
+    an error message prefixed with ``fork_repo:`` on failure.
+    """
+
+    def fork_repo(
         source_owner: str,
         source_repo: str,
         target_namespace: str | None = None,
     ) -> str:
-        """Fork a repository on the configured forge.
-
-        (stub — actual implementation migrated in a separate ticket)
+        """Fork *source_owner/source_repo* and return the new fork's metadata.
 
         Args:
             source_owner: Owner of the source repository.
             source_repo: Name of the source repository.
-            target_namespace: Organisation/namespace to fork into
-                (``None`` = authenticated user's account).
+            target_namespace: Optional organization/namespace to fork
+                into (defaults to the authenticated user).
 
         Returns:
-            Status string.
+            JSON string with id, name, clone_url, html_url, or an
+            error message starting with ``fork_repo:``.
         """
-        return "fork_repo: not yet implemented — pending migration ticket"
+        from ..forge import get_forge, NotConfiguredError
+
+        try:
+            forge = get_forge(settings)
+            info = forge.fork_repo(
+                source_owner=source_owner,
+                source_repo=source_repo,
+                target_namespace=target_namespace,
+            )
+        except NotConfiguredError:
+            return "fork_repo: repo forking is not configured"
+        except Exception as exc:
+            return f"fork_repo: {exc!r}"
+        return json.dumps(
+            {
+                "id": info.id,
+                "name": info.name,
+                "clone_url": info.clone_url,
+                "html_url": info.html_url,
+            }
+        )
 
     from .tool_registry import ToolInfo, ToolRegistry
 
     ToolRegistry.register(
         ToolInfo(
             name="fork_repo",
-            description="Fork a repository on the configured forge (stub).",
+            description="Fork a repository and return the new fork's metadata.",
             category="reporting",
             parameters={
                 "source_owner": "str",
                 "source_repo": "str",
-                "target_namespace": "str | None",
+                "target_namespace": "str (optional)",
             },
         )
     )
-
     return fork_repo
 
 
-def make_investigate_tool(settings: Settings) -> Any:
-    """Return an async ``investigate`` stub bound to *settings*."""
+def make_investigate_tool(settings: Settings) -> Callable[..., str]:
+    """Return the ``investigate`` stub bound to *settings*.
 
-    async def investigate(
-        question: str,
-        repo_url: str,
-    ) -> str:
-        """Investigate a question across repositories.
+    The stub returns a clear "not yet implemented" error so the agent
+    loop doesn't crash before the real cross-repo investigation is
+    implemented.
+    """
 
-        (stub — actual implementation migrated in a separate ticket)
+    def investigate(question: str, repo_url: str) -> str:
+        """Investigate a question across repositories (stub).
 
         Args:
             question: The investigation question.
@@ -168,111 +205,113 @@ def make_investigate_tool(settings: Settings) -> Any:
             },
         )
     )
-
     return investigate
 
 
-# ── Entry point ─────────────────────────────────────────────────────
+def make_post_findings_tool(settings: Settings, agent_name: str) -> Callable[..., str]:
+    """Return the ``post_findings`` closure — a thin wrapper around
+    ``post_comment`` with a domain-appropriate name for the
+    maintenance agent.
+
+    The underlying ``post_comment`` tool is idempotent on (ticket, body)
+    so a retrying agent doesn't spam duplicates.
+    """
+
+    from .post_comment import make_post_comment_tool
+
+    _post_comment: Callable[[str], str] = make_post_comment_tool(settings, agent_name)
+
+    def post_findings(body: str) -> str:
+        """Post your findings as a Markdown comment on the current ticket.
+
+        This is your primary output channel — use it to report what
+        action was taken, what was created, URLs, metadata, and any
+        errors encountered.
+
+        Args:
+            body: Markdown report body.
+
+        Returns:
+            A status string with the comment id, or an error message.
+        """
+        return _post_comment(body)
+
+    from .tool_registry import ToolInfo, ToolRegistry
+
+    ToolRegistry.register(
+        ToolInfo(
+            name="post_findings",
+            description=(
+                "Post findings as a Markdown comment on the current "
+                "ticket. Use to report operational results: created "
+                "repo URLs, fork metadata, investigation conclusions."
+            ),
+            category="reporting",
+            parameters={"body": "str (Markdown report)"},
+        )
+    )
+
+    return post_findings
 
 
-def run_maintenance_agent(
-    ticket: Ticket,
-    ctx: StageContext,
-) -> MaintenanceResult:
-    """Run one maintenance-agent pass for *ticket* with *ctx*.
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
 
-    Builds a pydantic-ai agent from the ``maintenance.yaml``
-    definition, assembles the tool palette (exploration, read-only FS,
-    action stubs + ``post_comment``), and runs the prompt synchronously.
 
-    Returns a :class:`MaintenanceResult` whose ``.success`` and
-    ``.note`` fields satisfy the
-    :meth:`~robotsix_mill.stages.maintenance.MaintenanceStage.run`
-    contract.
+def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResult:
+    """Load the maintenance agent definition, build its tool set, run the
+    agent loop, and return a structured :class:`MaintenanceResult`.
+
+    Called by :meth:`MaintenanceStage.run`.
     """
     from .base import build_agent_from_definition, _safe_close
-    from .post_comment import make_post_comment_tool
-    from .prompt_blocks import section
     from .retry import run_agent
     from .yaml_loader import load_agent_definition
 
-    settings: Settings = ctx.settings
-
-    # --- load YAML definition ----------------------------------------
+    # 1. Load the YAML definition
     definition = load_agent_definition(
         Path(__file__).parent.parent.parent.parent
         / "agent_definitions"
         / "maintenance.yaml"
     )
 
-    # --- determine repo_dir (optional) -------------------------------
-    repo_dir: Path | None = None
-    try:
-        ws = ctx.service.workspace(ticket)
-        candidate = ws.dir / "repo"
-        if candidate.exists():
-            repo_dir = candidate
-    except Exception:
-        log.debug("No workspace clone available for %s", ticket.id)
-
-    # --- assemble tool palette ---------------------------------------
+    # 2. Build the tool list
     tools: list[Any] = []
+    tools.append(make_create_repo_tool(ctx.settings))
+    tools.append(make_fork_repo_tool(ctx.settings))
+    tools.append(make_investigate_tool(ctx.settings))
+    tools.append(make_post_findings_tool(ctx.settings, "maintenance"))
 
-    # Exploration tool (only when a repo clone is available)
-    if repo_dir is not None:
-        from .explore import make_explore_tool
-
-        tools.append(make_explore_tool(settings, repo_dir))
-
-    # Read-only FS tools: read_file, list_dir (no write/edit/run)
-    if repo_dir is not None:
-        from .fs_tools import build_fs_tools
-
-        fs_all = build_fs_tools(repo_dir, settings)
-        ro_tools = [t for t in fs_all if t.__name__ in ("read_file", "list_dir")]
-        tools.extend(ro_tools)
-
-    # Action tools: post_comment (real) + stubs
-    tools.append(make_post_comment_tool(settings, agent_name="maintenance"))
-    tools.append(make_create_repo_tool(settings))
-    tools.append(make_fork_repo_tool(settings))
-    tools.append(make_investigate_tool(settings))
-
-    # --- build agent -------------------------------------------------
-    overrides: dict[str, str] = {}
-    if not definition.model:
-        overrides["model_name"] = settings.model
-
+    # 3. Build the agent
     agent = build_agent_from_definition(
-        settings,
+        ctx.settings,
         definition,
         tools=tools,
-        repo_dir=repo_dir,
-        **overrides,
     )
 
-    # --- assemble user prompt ----------------------------------------
-    forge_url = settings.forge_remote_url or "(none)"
-    prompt = (
-        section("ticket-id", ticket.id)
-        + "\n\n"
-        + section("forge-remote-url", forge_url)
-        + "\n\n"
-        + section("memory", "(empty — memory plumbing pending)")
-        + "\n"
-        + "Perform the requested maintenance action and return your result."
-    )
+    # 4. Build the user prompt from the ticket
+    ws = ctx.service.workspace(ticket)
+    draft = ws.read_description().strip()
+    user_prompt = f"# Title\n{ticket.title}\n\n# Draft\n{draft}"
 
-    # --- run ---------------------------------------------------------
+    # 5. Run the agent
     try:
         result = run_agent(
             agent,
-            lambda h: h.run_sync(prompt),
-            settings=settings,
+            lambda h: h.run_sync(user_prompt),
+            settings=ctx.settings,
             what="maintenance",
         )
     finally:
         _safe_close(agent)
 
-    out: MaintenanceResult = result.output
-    return out
+    # 6. Coerce the output
+    if isinstance(result.output, MaintenanceResult):
+        return result.output
+    if isinstance(result.output, dict):
+        return MaintenanceResult(**result.output)
+    return MaintenanceResult(
+        success=False,
+        note="Agent produced no structured output",
+    )
