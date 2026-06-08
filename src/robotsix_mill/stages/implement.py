@@ -1055,7 +1055,13 @@ class ImplementStage(Stage):
                     "necessary but didn't escalate via the result "
                     "schema; (2) the agent loaded a stale "
                     "conversation_state from a sibling stage and "
-                    "treated it as already-completed work.",
+                    "treated it as already-completed work; "
+                    "(3) the proposed change was already in place "
+                    "before the agent ran (a config entry, hook, tool, "
+                    "or feature that the spec asks to add already "
+                    "exists). If this cause matches, verify against "
+                    "the spec and — if confirmed — close the ticket as "
+                    "already-done.",
                     ok=False,
                     reference_files=ref_files,
                     extra_roots=extra_roots,
