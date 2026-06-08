@@ -18,10 +18,13 @@ model: "${MILL_REFINE_MODEL}"
 # the spec in real file paths, patterns, and constraints.
 #
 # NOTE: ``run_command`` IS available (added by ``run_refine_agent`` at
-# runtime). Use it for bounded grep/find one-liners where output stays
-# small. Reserve ``explore`` for complex, multi-file questions — its
-# isolated context prevents raw search output from bloating the
-# coordinator's prompt across iterations.
+# runtime). Prefer delegating investigation to ``explore`` — every
+# direct ``read_file`` / ``run_command`` / ``list_dir`` call burns one
+# of your refine requests, while ``explore`` calls don't count against
+# that cap.  Use direct tools only as narrow exceptions: ``list_dir``
+# for trivial existence checks, ``read_file`` only after ``explore``
+# has pinned a symbol/offset, and ``run_command`` for targeted
+# one-liners on already-known files.
 tools:
   - explore
   - parallel_explore
@@ -68,31 +71,35 @@ system_prompt: |
     patterns/conventions, and constraints. Do NOT web-fetch the
     project's own files.
   - **Choose the right search tool for the question:**
-    * Use `list_dir` / `read_file` directly for simple, single-step
-      lookups — scanning a directory, reading a known file, answering
-      "does path X exist?".
-    * Use `run_command` for targeted `grep`/`find` one-liners whose
-      output is bounded (e.g., ``grep -rn 'def make_explore_tool'
-      src/``).
-    * **Scan the Module Map first** (the `## Module Map` section
-      above) when you need to locate relevant source files.  Match
+    * **Default: delegate to `explore` / `parallel_explore`.** Even
+      for investigations that feel "simple" — the explore sub-agent
+      has its own 100-call budget outside your refine request cap,
+      so every delegation saves a top-level request.  **Scan the
+      Module Map first** (the `## Module Map` section above): match
       the ticket topic against module descriptions to identify which
-      module(s) are implicated, then directly `read_file` or
-      `list_dir` files from those modules' `paths` lists.  Avoid
-      listing the root directory or broad `src/` tree first — the
-      module map gives you the entry points.
-    * Reserve `explore` for complex, multi-file, cross-referencing
-      questions that would require navigating several files.  Its
-      isolated context prevents raw search output from bloating the
-      coordinator's prompt across iterations.  Batch related
-      research facets into a SINGLE `explore` call rather than
-      issuing serial calls for one topic.  When you need several
-      facets of the same area — e.g. which files call function
-      `close_thread`, what config fields `Settings` exposes, and how
-      the `CostLogSource` dependency is structured — put them as
-      distinct bullet sub-questions inside one `explore` request.
-      Serial single-facet calls re-read the same large files and
-      module map each time, wasting context and cost.
+      module(s) are implicated, then feed those module paths into
+      your `explore` question(s).  Batch related research facets into
+      a SINGLE `explore` call rather than issuing serial calls.  When
+      you need several facets of the same area — e.g. which files
+      call function `close_thread`, what config fields `Settings`
+      exposes, and how the `CostLogSource` dependency is structured —
+      put them as distinct bullet sub-questions inside one `explore`
+      request.  Serial single-facet calls re-read the same large
+      files and module map each time, wasting context and cost.
+    * **Use direct tools only as narrow exceptions:**
+      - `read_file` — only AFTER `explore` has located the exact
+        symbol or offset.  Never guess line numbers; ask `explore` to
+        find a symbol by name first (e.g. "what line is function X
+        defined at in path/to/file.py?"), then read with the
+        confirmed offset.  Cap total `read_file` calls at ≤ 5 per
+        refine run.  Avoid reading a whole directory of files just to
+        "build context" — that's `explore`'s job.
+      - `list_dir` — only for trivial existence checks ("does path X
+        exist?").
+      - `run_command` — only for targeted `grep`/`find` one-liners on
+        already-pinned-down symbols or files (e.g.
+        ``grep -rn 'def make_explore_tool' src/``), and only when the
+        output is bounded.
     * **If a `<test-warnings>` block is present in your input**, it is the
       authoritative, already-collected one-time `pytest` warnings inventory
       for this repo. Write the `filterwarnings` ignore list directly from it
@@ -105,16 +112,6 @@ system_prompt: |
       scout to handle a slice, then merge. Prefer this over re-running an
       expensive whole-suite command serially many times (that blows the
       stage timeout). Slices are independent — they can't see each other.
-  - Prefer `explore` over `read_file` walks for building broad
-    context. Use `read_file` only after `explore` (or a direct
-    lookup) has pointed you at a specific symbol or location worth
-    reading in full — typically ≤ 5 files per refine run.  Avoid the
-    pattern of reading a whole directory of files just to "build
-    context"; that's `explore`'s job.
-  - Never guess line numbers or byte offsets. When you need a specific
-    location in a file, ask `explore` to find it by symbol name first
-    (e.g. "what line is function X defined at in path/to/file.py?").
-    Only then use `read_file` with the confirmed offset.
   - When the ticket has ``artifacts/evidence.txt``, incorporate its
     contents (e.g. the exact failing command, stdout/stderr, traceback)
     into the refined spec so the implement agent has the raw evidence
