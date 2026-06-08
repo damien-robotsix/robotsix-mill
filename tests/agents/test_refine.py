@@ -2939,6 +2939,7 @@ def test_triage_refine_agent_config(monkeypatch, tmp_path):
         report_issue,
         model_name,
         name,
+        ask_user,
         **kwargs,
     ):
         seen_kwargs.update(
@@ -2947,6 +2948,7 @@ def test_triage_refine_agent_config(monkeypatch, tmp_path):
             report_issue=report_issue,
             model_name=model_name,
             name=name,
+            ask_user=ask_user,
         )
 
         class FakeAgent:
@@ -2970,6 +2972,7 @@ def test_triage_refine_agent_config(monkeypatch, tmp_path):
     assert seen_kwargs["report_issue"] is False
     assert seen_kwargs["model_name"] == "test/triage-model"
     assert seen_kwargs["name"] == "triage"
+    assert seen_kwargs["ask_user"] is False
 
 
 def test_triage_skip_skips_full_refine(ctx, service, monkeypatch):
