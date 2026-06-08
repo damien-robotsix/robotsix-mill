@@ -1094,6 +1094,39 @@ class RefineStage(Stage):
                 note += f" | {auto_note}"
             return Outcome(next_state, note)
 
+        # --- maintenance triage: route operational requests to the
+        # maintenance agent, bypassing refine + implement ---
+        if s.maintenance_triage_enabled:
+            # Phase A — deterministic keyword check (cheap, no LLM)
+            kw_match = refining._check_maintenance_keywords(title, draft)
+            if kw_match:
+                return Outcome(
+                    State.MAINTENANCE,
+                    f"maintenance triage: {kw_match}",
+                )
+            # Phase B — LLM triage for drafts without explicit keywords
+            try:
+                triage = refining.triage_maintenance(
+                    settings=s,
+                    title=title,
+                    draft=draft,
+                    repo_dir=repo_dir,
+                    extra_roots=extra_roots,
+                )
+                if triage.decision == "MAINTENANCE":
+                    return Outcome(
+                        State.MAINTENANCE,
+                        f"maintenance triage: {triage.reason}",
+                    )
+            except Exception:
+                log.warning(
+                    "%s: maintenance triage failed, falling through to "
+                    "normal refine",
+                    ticket.id,
+                    exc_info=True,
+                )
+        # --- end maintenance triage ---
+
         # --- gather reviewer comments (sendback guard) ---
         # ``mill`` and ``system`` author comments (trace-link auto-posts
         # from runtime.worker._post_trace_comment; timeout-escalation

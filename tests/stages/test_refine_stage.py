@@ -20,6 +20,7 @@ from robotsix_mill.agents import refining
 from robotsix_mill.agents.refining import (
     AutoApproveResult,
     ChildSpec,
+    MaintenanceTriageResult,
     RefineResult,
     SpecReviewResult,
     TriageResult,
@@ -2448,3 +2449,241 @@ def test_prepare_hook_failure_blocks_before_freshness_gate(
     assert "install failed" in out.note
     # Freshness gate must NOT have been called — the hook blocked first.
     assert len(freshness_called) == 0
+
+
+# ---------------------------------------------------------------------------
+# Maintenance triage stage tests
+# ---------------------------------------------------------------------------
+
+
+def test_maintenance_triage_keyword_routes_to_maintenance(ctx_factory, monkeypatch):
+    """Draft with 'create repo' → keyword match → MAINTENANCE state."""
+    ctx = ctx_factory(require_approval="false", maintenance_triage_enabled="true")
+    t = _ticket(
+        ctx,
+        title="Create repo robotsix-foo",
+        body="make a new private repo under the robotsix org for shared utilities",
+    )
+
+    # We still need the dedup guard as a no-op.
+    monkeypatch.setattr(
+        dedup,
+        "run_dedup_check",
+        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"),
+    )
+    monkeypatch.setattr(
+        refine_module, "load_memory", lambda memory_file, max_chars=None: ""
+    )
+    monkeypatch.setattr(refine_module, "persist_memory", lambda memory_file, text: None)
+    # Patch _resolve_remote_url so we get a repo_dir (needed for the
+    # code path to reach _run_refine_agent at all).
+    monkeypatch.setattr(
+        refine_module,
+        "_resolve_remote_url",
+        lambda *a, **k: None,
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.MAINTENANCE
+    assert "maintenance triage" in out.note
+    assert "create repo" in out.note
+
+
+def test_maintenance_triage_llm_routes_to_maintenance(ctx_factory, monkeypatch):
+    """Keyword check returns None, but LLM returns MAINTENANCE → routes."""
+    ctx = ctx_factory(require_approval="false", maintenance_triage_enabled="true")
+    t = _ticket(
+        ctx,
+        title="Provision a shared utilities library",
+        body="We need a standalone package with the shared helper functions extracted",
+    )
+
+    monkeypatch.setattr(
+        dedup,
+        "run_dedup_check",
+        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"),
+    )
+    monkeypatch.setattr(
+        refine_module, "load_memory", lambda memory_file, max_chars=None: ""
+    )
+    monkeypatch.setattr(refine_module, "persist_memory", lambda memory_file, text: None)
+    monkeypatch.setattr(
+        refine_module,
+        "_resolve_remote_url",
+        lambda *a, **k: None,
+    )
+    # Patch triage_maintenance to return MAINTENANCE
+    monkeypatch.setattr(
+        refining,
+        "triage_maintenance",
+        lambda **kw: MaintenanceTriageResult(
+            decision="MAINTENANCE",
+            reason="draft language signals a new repo request",
+        ),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.MAINTENANCE
+    assert "maintenance triage" in out.note
+    assert "draft language signals" in out.note
+
+
+def test_maintenance_triage_code_change_falls_through(ctx_factory, monkeypatch):
+    """Keyword check returns None + LLM returns CODE_CHANGE → refine proceeds
+    normally (through to READY via the existing path)."""
+    ctx = ctx_factory(require_approval="false", maintenance_triage_enabled="true")
+    t = _ticket(
+        ctx,
+        title="Add sorting to list endpoint",
+        body="edit src/api/routes.py to add sort parameter to GET /items",
+    )
+
+    refine_called = []
+    monkeypatch.setattr(
+        dedup,
+        "run_dedup_check",
+        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"),
+    )
+    monkeypatch.setattr(
+        refine_module, "load_memory", lambda memory_file, max_chars=None: ""
+    )
+    monkeypatch.setattr(refine_module, "persist_memory", lambda memory_file, text: None)
+    monkeypatch.setattr(
+        refine_module,
+        "_resolve_remote_url",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        refining,
+        "triage_maintenance",
+        lambda **kw: MaintenanceTriageResult(
+            decision="CODE_CHANGE",
+            reason="normal code change with concrete file path",
+        ),
+    )
+    # Patch triage_refine and run_refine_agent to ensure fallthrough
+    monkeypatch.setattr(
+        refining,
+        "triage_refine",
+        _mock_triage_refine(decision="REFINE", reason="needs exploration"),
+    )
+    monkeypatch.setattr(
+        refining,
+        "run_refine_agent",
+        lambda *a, **k: (
+            refine_called.append(1),
+            RefineResult(spec_markdown="## Problem\nAdd sorting"),
+        )[-1],
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert len(refine_called) == 1
+    assert "refined" in out.note
+
+
+def test_maintenance_triage_feature_flag_off_falls_through(ctx_factory, monkeypatch):
+    """maintenance_triage_enabled=False → neither check runs, refine proceeds."""
+    ctx = ctx_factory(require_approval="false", maintenance_triage_enabled="false")
+    t = _ticket(
+        ctx,
+        title="Create repo robotsix-foo",
+        body="make a new private repo under the robotsix org",
+    )
+
+    triage_called = []
+    refine_called = []
+    monkeypatch.setattr(
+        dedup,
+        "run_dedup_check",
+        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"),
+    )
+    monkeypatch.setattr(
+        refine_module, "load_memory", lambda memory_file, max_chars=None: ""
+    )
+    monkeypatch.setattr(refine_module, "persist_memory", lambda memory_file, text: None)
+    monkeypatch.setattr(
+        refine_module,
+        "_resolve_remote_url",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        refining,
+        "triage_maintenance",
+        lambda **kw: triage_called.append(1)
+        or MaintenanceTriageResult(decision="MAINTENANCE", reason="unreachable"),
+    )
+    monkeypatch.setattr(
+        refining,
+        "triage_refine",
+        _mock_triage_refine(decision="REFINE", reason="normal refine"),
+    )
+    monkeypatch.setattr(
+        refining,
+        "run_refine_agent",
+        lambda *a, **k: (
+            refine_called.append(1),
+            RefineResult(spec_markdown="## Problem\nDone"),
+        )[-1],
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    # Feature flag off → maintenance triage never called, refine proceeds.
+    assert len(triage_called) == 0
+    assert len(refine_called) == 1
+    assert out.next_state is State.READY
+
+
+def test_maintenance_triage_exception_falls_through(ctx_factory, monkeypatch):
+    """triage_maintenance raises → refine proceeds normally (warning logged)."""
+    ctx = ctx_factory(require_approval="false", maintenance_triage_enabled="true")
+    t = _ticket(
+        ctx,
+        title="Provision a shared utilities library",
+        body="extract shared helpers into a standalone package",
+    )
+
+    refine_called = []
+    monkeypatch.setattr(
+        dedup,
+        "run_dedup_check",
+        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"),
+    )
+    monkeypatch.setattr(
+        refine_module, "load_memory", lambda memory_file, max_chars=None: ""
+    )
+    monkeypatch.setattr(refine_module, "persist_memory", lambda memory_file, text: None)
+    monkeypatch.setattr(
+        refine_module,
+        "_resolve_remote_url",
+        lambda *a, **k: None,
+    )
+    # Keyword check will return None (no exact keyword hit) → falls to LLM.
+    # Make the LLM triage raise.
+    monkeypatch.setattr(
+        refining,
+        "triage_maintenance",
+        lambda **kw: (_ for _ in ()).throw(Exception("timeout")),
+    )
+    monkeypatch.setattr(
+        refining,
+        "triage_refine",
+        _mock_triage_refine(decision="REFINE", reason="normal refine"),
+    )
+    monkeypatch.setattr(
+        refining,
+        "run_refine_agent",
+        lambda *a, **k: (
+            refine_called.append(1),
+            RefineResult(spec_markdown="## Problem\nDone"),
+        )[-1],
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert len(refine_called) == 1
