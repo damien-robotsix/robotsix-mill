@@ -1187,7 +1187,7 @@ class TicketService:
                     valid_stmt = (
                         select(Comment)
                         .where(Comment.ticket_id == ticket_id)
-                        .where(Comment.parent_id == None)
+                        .where(Comment.parent_id.is_(None))
                     )
                     valid_threads = [c.id for c in s.exec(valid_stmt).all()]
                     raise ValueError(

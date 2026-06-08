@@ -1,6 +1,5 @@
 """Dedicated tests for the list_threads tool-maker module."""
 
-from unittest.mock import MagicMock
 
 import pytest
 from robotsix_mill.agents.list_threads import make_list_threads_tool

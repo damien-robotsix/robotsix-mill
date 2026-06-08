@@ -387,7 +387,7 @@ def _build_deepseek_handle(
     return AgentHandle(agent, http_client)
 
 
-def build_agent(
+def build_agent(  # noqa: C901
     settings: Settings,
     *,
     system_prompt: str,
