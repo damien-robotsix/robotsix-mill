@@ -20,7 +20,6 @@ from robotsix_mill.agents import refining
 from robotsix_mill.agents.refining import (
     AutoApproveResult,
     ChildSpec,
-    MaintenanceTriageResult,
     RefineResult,
     SpecReviewResult,
     TriageResult,
@@ -2578,27 +2577,64 @@ def test_prepare_hook_failure_blocks_before_freshness_gate(
 # ---------------------------------------------------------------------------
 
 
-def test_maintenance_triage_keyword_routes_to_maintenance(ctx_factory, monkeypatch):
-    """Draft with 'create repo' → keyword match → MAINTENANCE state."""
+# ---------------------------------------------------------------------------
+# Maintenance triage (unified 3-way: REFINE / SKIP / MAINTENANCE)
+# ---------------------------------------------------------------------------
+
+
+# -- Phase 0: keyword classifier tests --
+
+
+def test_maintenance_triage_create_repo_routes_to_maintenance(ctx_factory, monkeypatch):
+    """Phase 0: title 'Create repo for project foo' → MAINTENANCE, no clone."""
     ctx = ctx_factory(require_approval="false", maintenance_triage_enabled="true")
     t = _ticket(
         ctx,
-        title="Create repo robotsix-foo",
-        body="make a new private repo under the robotsix org for shared utilities",
+        title="Create repo for project foo",
+        body="We need a new repository for the foo project infrastructure",
     )
 
-    # We still need the dedup guard as a no-op.
+    # Phase 0 runs before workspace clone — it should never reach
+    # the dedup guard or the clone logic.  But we patch these anyway
+    # so we can assert they were NOT called.
+    dedup_called = []
     monkeypatch.setattr(
         dedup,
         "run_dedup_check",
-        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"),
+        lambda **kw: dedup_called.append(1) or {
+            "duplicate_of": None,
+            "already_done": None,
+            "reason": "no match",
+        },
     )
+    # Patch _resolve_remote_url — phase 0 short-circuits before clone,
+    # so it should never be called.
+    remote_called = []
     monkeypatch.setattr(
-        refine_module, "load_memory", lambda memory_file, max_chars=None: ""
+        refine_module,
+        "_resolve_remote_url",
+        lambda *a, **k: remote_called.append(1) or None,
     )
-    monkeypatch.setattr(refine_module, "persist_memory", lambda memory_file, text: None)
-    # Patch _resolve_remote_url so we get a repo_dir (needed for the
-    # code path to reach _run_refine_agent at all).
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.MAINTENANCE
+    assert "maintenance triage" in out.note
+    assert "action=create_repo" in out.note
+    # Phase 0 skips clone and dedup — neither should be called.
+    assert len(dedup_called) == 0
+    assert len(remote_called) == 0
+
+
+def test_maintenance_triage_fork_repo_routes_to_maintenance(ctx_factory, monkeypatch):
+    """Phase 0: title 'Fork repo bar' → MAINTENANCE, label maintenance:fork_repo."""
+    ctx = ctx_factory(require_approval="false", maintenance_triage_enabled="true")
+    t = _ticket(
+        ctx,
+        title="Fork repo bar",
+        body="fork the upstream bar repo into our org",
+    )
+
     monkeypatch.setattr(
         refine_module,
         "_resolve_remote_url",
@@ -2608,61 +2644,62 @@ def test_maintenance_triage_keyword_routes_to_maintenance(ctx_factory, monkeypat
     out = RefineStage().run(t, ctx)
 
     assert out.next_state is State.MAINTENANCE
-    assert "maintenance triage" in out.note
-    assert "create repo" in out.note
+    assert "action=fork_repo" in out.note
 
 
-def test_maintenance_triage_llm_routes_to_maintenance(ctx_factory, monkeypatch):
-    """Keyword check returns None, but LLM returns MAINTENANCE → routes."""
+def test_maintenance_triage_investigate_routes_to_maintenance(ctx_factory, monkeypatch):
+    """Phase 0: title 'Investigate cross-repo dependency' → MAINTENANCE."""
     ctx = ctx_factory(require_approval="false", maintenance_triage_enabled="true")
     t = _ticket(
         ctx,
-        title="Provision a shared utilities library",
-        body="We need a standalone package with the shared helper functions extracted",
+        title="Investigate cross-repo dependency between X and Y",
+        body="check whether the shared lib version is compatible across repos",
     )
 
-    monkeypatch.setattr(
-        dedup,
-        "run_dedup_check",
-        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"),
-    )
-    monkeypatch.setattr(
-        refine_module, "load_memory", lambda memory_file, max_chars=None: ""
-    )
-    monkeypatch.setattr(refine_module, "persist_memory", lambda memory_file, text: None)
     monkeypatch.setattr(
         refine_module,
         "_resolve_remote_url",
         lambda *a, **k: None,
-    )
-    # Patch triage_maintenance to return MAINTENANCE
-    monkeypatch.setattr(
-        refining,
-        "triage_maintenance",
-        lambda **kw: MaintenanceTriageResult(
-            decision="MAINTENANCE",
-            reason="draft language signals a new repo request",
-        ),
     )
 
     out = RefineStage().run(t, ctx)
 
     assert out.next_state is State.MAINTENANCE
-    assert "maintenance triage" in out.note
-    assert "draft language signals" in out.note
+    assert "action=investigate" in out.note
 
 
-def test_maintenance_triage_code_change_falls_through(ctx_factory, monkeypatch):
-    """Keyword check returns None + LLM returns CODE_CHANGE → refine proceeds
-    normally (through to READY via the existing path)."""
+def test_maintenance_triage_body_match_routes_to_maintenance(ctx_factory, monkeypatch):
+    """Phase 0: generic title but body contains 'create repo' → MAINTENANCE."""
     ctx = ctx_factory(require_approval="false", maintenance_triage_enabled="true")
     t = _ticket(
         ctx,
-        title="Add sorting to list endpoint",
-        body="edit src/api/routes.py to add sort parameter to GET /items",
+        title="Set up project",
+        body="We should create repo for the new service infrastructure",
     )
 
-    refine_called = []
+    monkeypatch.setattr(
+        refine_module,
+        "_resolve_remote_url",
+        lambda *a, **k: None,
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.MAINTENANCE
+    assert "action=create_repo" in out.note
+
+
+def test_maintenance_triage_investigate_body_only_does_not_match(
+    ctx_factory, monkeypatch
+):
+    """Phase 0: 'investigate' in body only → does NOT match (title-only keyword)."""
+    ctx = ctx_factory(require_approval="false", maintenance_triage_enabled="true")
+    t = _ticket(
+        ctx,
+        title="Fix login",
+        body="We need to investigate the root cause of the login timeout",
+    )
+
     monkeypatch.setattr(
         dedup,
         "run_dedup_check",
@@ -2677,15 +2714,6 @@ def test_maintenance_triage_code_change_falls_through(ctx_factory, monkeypatch):
         "_resolve_remote_url",
         lambda *a, **k: None,
     )
-    monkeypatch.setattr(
-        refining,
-        "triage_maintenance",
-        lambda **kw: MaintenanceTriageResult(
-            decision="CODE_CHANGE",
-            reason="normal code change with concrete file path",
-        ),
-    )
-    # Patch triage_refine and run_refine_agent to ensure fallthrough
     monkeypatch.setattr(
         refining,
         "triage_refine",
@@ -2694,30 +2722,27 @@ def test_maintenance_triage_code_change_falls_through(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         refining,
         "run_refine_agent",
-        lambda *a, **k: (
-            refine_called.append(1),
-            RefineResult(spec_markdown="## Problem\nAdd sorting"),
-        )[-1],
+        _mock_refine_ok(spec_markdown="## Problem\nFix login timeout"),
     )
 
     out = RefineStage().run(t, ctx)
 
+    # Should NOT route to maintenance — 'investigate' matches title only.
+    assert out.next_state is not State.MAINTENANCE
     assert out.next_state is State.READY
-    assert len(refine_called) == 1
-    assert "refined" in out.note
 
 
-def test_maintenance_triage_feature_flag_off_falls_through(ctx_factory, monkeypatch):
-    """maintenance_triage_enabled=False → neither check runs, refine proceeds."""
+def test_maintenance_triage_gate_disabled_proceeds_to_refine(
+    ctx_factory, monkeypatch
+):
+    """Phase 0: maintenance_triage_enabled=False → keyword check skipped."""
     ctx = ctx_factory(require_approval="false", maintenance_triage_enabled="false")
     t = _ticket(
         ctx,
-        title="Create repo robotsix-foo",
-        body="make a new private repo under the robotsix org",
+        title="Create repo for project foo",
+        body="make a new repo",
     )
 
-    triage_called = []
-    refine_called = []
     monkeypatch.setattr(
         dedup,
         "run_dedup_check",
@@ -2734,41 +2759,105 @@ def test_maintenance_triage_feature_flag_off_falls_through(ctx_factory, monkeypa
     )
     monkeypatch.setattr(
         refining,
-        "triage_maintenance",
-        lambda **kw: (
-            triage_called.append(1)
-            or MaintenanceTriageResult(decision="MAINTENANCE", reason="unreachable")
-        ),
-    )
-    monkeypatch.setattr(
-        refining,
         "triage_refine",
         _mock_triage_refine(decision="REFINE", reason="normal refine"),
     )
     monkeypatch.setattr(
         refining,
         "run_refine_agent",
-        lambda *a, **k: (
-            refine_called.append(1),
-            RefineResult(spec_markdown="## Problem\nDone"),
-        )[-1],
+        _mock_refine_ok(spec_markdown="## Problem\nDone"),
     )
 
     out = RefineStage().run(t, ctx)
 
-    # Feature flag off → maintenance triage never called, refine proceeds.
-    assert len(triage_called) == 0
-    assert len(refine_called) == 1
+    # Feature flag off → maintenance triage never runs, refine proceeds.
     assert out.next_state is State.READY
 
 
-def test_maintenance_triage_exception_falls_through(ctx_factory, monkeypatch):
-    """triage_maintenance raises → refine proceeds normally (warning logged)."""
+def test_maintenance_triage_set_labels_failure_still_transitions(
+    ctx_factory, monkeypatch
+):
+    """Phase 0: set_labels raises → ticket still transitions to MAINTENANCE."""
     ctx = ctx_factory(require_approval="false", maintenance_triage_enabled="true")
     t = _ticket(
         ctx,
-        title="Provision a shared utilities library",
-        body="extract shared helpers into a standalone package",
+        title="Create repo for project foo",
+        body="make a new repo",
+    )
+
+    monkeypatch.setattr(
+        refine_module,
+        "_resolve_remote_url",
+        lambda *a, **k: None,
+    )
+    # Make set_labels raise.
+    monkeypatch.setattr(
+        ctx.service,
+        "set_labels",
+        lambda ticket_id, labels: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    # Best-effort labeling — the ticket still transitions.
+    assert out.next_state is State.MAINTENANCE
+    assert "maintenance triage" in out.note
+
+
+# -- Phase 1: LLM triage tests --
+
+
+def test_llm_triage_maintenance_routes_to_maintenance(ctx_factory, monkeypatch):
+    """Phase 1: triage_refine returns MAINTENANCE → routes to MAINTENANCE."""
+    ctx = ctx_factory(
+        require_approval="false",
+        maintenance_triage_enabled="true",
+        refine_triage_enabled="true",
+    )
+    t = _ticket(
+        ctx,
+        title="Set up project infrastructure",
+        body="We need to fork the upstream library and maintain our own copy",
+    )
+
+    monkeypatch.setattr(
+        dedup,
+        "run_dedup_check",
+        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"),
+    )
+    monkeypatch.setattr(
+        refine_module, "load_memory", lambda memory_file, max_chars=None: ""
+    )
+    monkeypatch.setattr(refine_module, "persist_memory", lambda memory_file, text: None)
+    monkeypatch.setattr(
+        refine_module,
+        "_resolve_remote_url",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        refining,
+        "triage_refine",
+        _mock_triage_refine(decision="MAINTENANCE", reason="fork request detected"),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.MAINTENANCE
+    assert "maintenance triage (LLM)" in out.note
+    assert "fork request detected" in out.note
+
+
+def test_llm_triage_maintenance_gated_by_flag(ctx_factory, monkeypatch):
+    """Phase 1: triage_refine returns MAINTENANCE but gate is off → falls through."""
+    ctx = ctx_factory(
+        require_approval="false",
+        maintenance_triage_enabled="false",
+        refine_triage_enabled="true",
+    )
+    t = _ticket(
+        ctx,
+        title="Set up project infrastructure",
+        body="We need to fork the upstream library",
     )
 
     refine_called = []
@@ -2786,17 +2875,10 @@ def test_maintenance_triage_exception_falls_through(ctx_factory, monkeypatch):
         "_resolve_remote_url",
         lambda *a, **k: None,
     )
-    # Keyword check will return None (no exact keyword hit) → falls to LLM.
-    # Make the LLM triage raise.
-    monkeypatch.setattr(
-        refining,
-        "triage_maintenance",
-        lambda **kw: (_ for _ in ()).throw(Exception("timeout")),
-    )
     monkeypatch.setattr(
         refining,
         "triage_refine",
-        _mock_triage_refine(decision="REFINE", reason="normal refine"),
+        _mock_triage_refine(decision="MAINTENANCE", reason="fork request"),
     )
     monkeypatch.setattr(
         refining,
@@ -2809,5 +2891,53 @@ def test_maintenance_triage_exception_falls_through(ctx_factory, monkeypatch):
 
     out = RefineStage().run(t, ctx)
 
+    # MAINTENANCE decision ignored — falls through to full refine.
     assert out.next_state is State.READY
     assert len(refine_called) == 1
+
+
+def test_maintenance_triage_normal_draft_proceeds_to_refine(
+    ctx_factory, monkeypatch
+):
+    """Normal code-change draft → no maintenance match, proceeds through refine."""
+    ctx = ctx_factory(
+        require_approval="false",
+        maintenance_triage_enabled="true",
+        refine_triage_enabled="true",
+    )
+    t = _ticket(
+        ctx,
+        title="Fix login button",
+        body="The login button on the home page is not clickable in Safari",
+    )
+
+    monkeypatch.setattr(
+        dedup,
+        "run_dedup_check",
+        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"),
+    )
+    monkeypatch.setattr(
+        refine_module, "load_memory", lambda memory_file, max_chars=None: ""
+    )
+    monkeypatch.setattr(refine_module, "persist_memory", lambda memory_file, text: None)
+    monkeypatch.setattr(
+        refine_module,
+        "_resolve_remote_url",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        refining,
+        "triage_refine",
+        _mock_triage_refine(decision="REFINE", reason="needs exploration"),
+    )
+    monkeypatch.setattr(
+        refining,
+        "run_refine_agent",
+        _mock_refine_ok(spec_markdown="## Problem\nFix login button in Safari"),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert "refined" in out.note
+

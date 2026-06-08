@@ -114,37 +114,8 @@ SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt
 class TriageResult(BaseModel):
     """Triage agent output — a single cheap classification call."""
 
-    decision: Literal["REFINE", "SKIP"]
+    decision: Literal["REFINE", "SKIP", "MAINTENANCE"]
     reason: str
-
-
-class MaintenanceTriageResult(BaseModel):
-    """Maintenance-triage agent output — classifies a draft as needing
-    an operational action (MAINTENANCE) vs a normal code change
-    (CODE_CHANGE)."""
-
-    decision: Literal["MAINTENANCE", "CODE_CHANGE"]
-    reason: str
-
-
-# Module-level frozenset of lowercase keyword phrases that signal a
-# maintenance (operational-action) request — cheap deterministic check
-# before the LLM triage.  See _check_maintenance_keywords().
-MAINTENANCE_KEYWORDS: frozenset[str] = frozenset(
-    {
-        "create repo",
-        "fork repo",
-        "new repo",
-        "new repository",
-        "create repository",
-        "fork repository",
-        "investigate",
-        "cross-repo",
-        "cross repo",
-        "maintenance",
-        "operational action",
-    }
-)
 
 
 class AutoApproveResult(BaseModel):
@@ -359,83 +330,23 @@ def triage_refine(
     return result.output
 
 
-def _check_maintenance_keywords(title: str, draft: str) -> str | None:
-    """Return a match reason string if the draft hits a maintenance
-    keyword, or None otherwise.  Case-insensitive substring match
-    against the combined title + draft text."""
-    combined = f"{title}\n{draft}".lower()
-    for kw in MAINTENANCE_KEYWORDS:
-        if kw in combined:
-            return f"keyword match: '{kw}'"
-    return None
+def _classify_maintenance_draft(title: str, draft: str) -> str | None:
+    """Return an action-type string if *title* / *draft* signals a
+    maintenance request, or ``None`` otherwise.
 
-
-def triage_maintenance(
-    *,
-    settings: Settings,
-    title: str,
-    draft: str,
-    repo_dir: Path | None = None,
-    extra_roots: list[Path] | None = None,
-) -> MaintenanceTriageResult:
-    """Return a ``MaintenanceTriageResult`` from a single cheap LLM call.
-
-    Classifies a draft as MAINTENANCE (operational action — create/fork
-    repo, cross-repo investigation) vs CODE_CHANGE (normal code/doc/config
-    change requiring implement + review + merge).
-
-    When ``repo_dir`` is given the agent receives the ``explore`` tool
-    (only) so it can delegate quick verification questions to a scout
-    sub-agent.  Without ``repo_dir`` the agent runs with no tools.
+    Deterministic keyword heuristic — no LLM call.  Case-insensitive.
+    Called in phase 0 of the unified triage (before workspace clone).
     """
+    title_lower = title.lower()
+    draft_lower = draft.lower()
 
-    from pydantic_ai.usage import UsageLimits
-
-    from .yaml_loader import load_agent_definition
-    from .base import build_agent_from_definition, _safe_close
-    from .retry import run_agent
-
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "maintenance_triage.yaml"
-    )
-
-    tools: list = []
-    if repo_dir is not None:
-        from .explore import make_explore_tool
-
-        tools = [make_explore_tool(settings, repo_dir, extra_roots=extra_roots)]
-
-    system_prompt = definition.system_prompt
-    if repo_dir is None:
-        # Strip the ``## Tool: `explore``` section so the build-time
-        # prompt-tool-consistency guard doesn't raise ValueError when
-        # the explore tool is absent from the resolved tool set.
-        system_prompt = _STRIP_EXPLORE_SECTION_RE.sub("", system_prompt)
-
-    agent = build_agent_from_definition(
-        settings,
-        definition,
-        tools=tools,
-        system_prompt=system_prompt,
-        model_name=definition.model or settings.triage_model,
-    )
-
-    user_prompt = section("title", title) + "\n" + section("draft", draft)
-
-    limits = UsageLimits(request_limit=settings.triage_request_limit)
-
-    try:
-        result = run_agent(
-            agent,
-            lambda h: h.run_sync(user_prompt, usage_limits=limits),
-            settings=settings,
-            what="maintenance triage",
-        )
-    finally:
-        _safe_close(agent)
-    return result.output
+    if "create repo" in title_lower or "create repo" in draft_lower:
+        return "create_repo"
+    if "fork repo" in title_lower or "fork repo" in draft_lower:
+        return "fork_repo"
+    if "investigate" in title_lower:
+        return "investigate"
+    return None
 
 
 def triage_auto_approve(
