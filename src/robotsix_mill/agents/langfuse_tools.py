@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..config import Settings
+    from .trace_inspector import TraceFinding
 
 log = logging.getLogger(__name__)
 
@@ -165,6 +166,43 @@ def _build_langfuse_tools(settings: Settings, repo_config=None):
     ]
 
 
+def render_trace_findings(
+    findings: list[TraceFinding],
+    trace_id: str,
+    error: str | None = None,
+) -> str:
+    """Render a list of TraceFinding objects as a Markdown inspection report."""
+    parts: list[str] = [f"## trace {trace_id} inspection"]
+    if error:
+        parts.append(f"\n_inspector error: {error[:200]}_")
+        return "\n".join(parts)
+    by_cat: dict[str, list[TraceFinding]] = {
+        "tool_error": [],
+        "agent_limitation": [],
+        "optimization": [],
+    }
+    for f in findings:
+        by_cat.setdefault(f.category, []).append(f)
+    section_titles = {
+        "tool_error": "Tool Errors",
+        "agent_limitation": "Agent Limitations",
+        "optimization": "Optimizations",
+    }
+    for cat, title in section_titles.items():
+        items = by_cat.get(cat, [])
+        if not items:
+            continue
+        parts.append(f"\n### {title}")
+        for f in items:
+            line = f"- {f.symptom}"
+            if f.proposed_solution:
+                line += f"  _(fix: {f.proposed_solution[:200]})_"
+            parts.append(line)
+    if not findings:
+        parts.append("\n(no issues found in this trace)")
+    return "\n".join(parts)
+
+
 def make_langfuse_inspect_tool(settings: Settings, repo_dir: Path | None = None):
     """Build the ``langfuse_inspect_trace`` tool closure.
 
@@ -189,7 +227,7 @@ def make_langfuse_inspect_tool(settings: Settings, repo_dir: Path | None = None)
         cause, not just the symptom.
         """
         from ..langfuse.client import fetch_trace_detail
-        from .trace_inspector import run_trace_inspector, TraceFinding
+        from .trace_inspector import run_trace_inspector
 
         detail = fetch_trace_detail(settings, trace_id)
         if detail is None:
@@ -202,39 +240,6 @@ def make_langfuse_inspect_tool(settings: Settings, repo_dir: Path | None = None)
             repo_dir=repo_dir,
         )
 
-        parts: list[str] = [f"## trace {trace_id} inspection"]
-        if result.error:
-            parts.append(f"\n_inspector error: {result.error[:200]}_")
-            return "\n".join(parts)
-
-        # Group findings by category (same format as
-        # make_trace_inspect_tool in trace_inspector.py).
-        by_cat: dict[str, list[TraceFinding]] = {
-            "tool_error": [],
-            "agent_limitation": [],
-            "optimization": [],
-        }
-        for f in result.findings:
-            by_cat.setdefault(f.category, []).append(f)
-
-        section_titles = {
-            "tool_error": "Tool Errors",
-            "agent_limitation": "Agent Limitations",
-            "optimization": "Optimizations",
-        }
-        for cat, title in section_titles.items():
-            items = by_cat.get(cat, [])
-            if not items:
-                continue
-            parts.append(f"\n### {title}")
-            for f in items:
-                line = f"- {f.symptom}"
-                if f.proposed_solution:
-                    line += f"  _(fix: {f.proposed_solution[:200]})_"
-                parts.append(line)
-
-        if not result.findings:
-            parts.append("\n(no issues found in this trace)")
-        return "\n".join(parts)
+        return render_trace_findings(result.findings, trace_id, result.error or None)
 
     return langfuse_inspect_trace
