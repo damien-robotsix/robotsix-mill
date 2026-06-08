@@ -291,9 +291,7 @@ class TicketService:
             return t.board_id or self.board_id or ""
         if self.board_id:
             return self.board_id
-        raise ValueError(
-            f"Ticket {ticket_id} not found in any configured board"
-        )
+        raise ValueError(f"Ticket {ticket_id} not found in any configured board")
 
     def _resolve_board_id(self, ticket: Ticket) -> None:
         """Assign *ticket* a ``board_id`` when it is missing (legacy rows).
@@ -1258,9 +1256,7 @@ class TicketService:
                     return board_id
         if self.board_id:
             return self.board_id
-        raise ValueError(
-            f"Comment {comment_id} not found in any configured board"
-        )
+        raise ValueError(f"Comment {comment_id} not found in any configured board")
 
     def close_thread(
         self,
