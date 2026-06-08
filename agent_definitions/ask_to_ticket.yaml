@@ -17,6 +17,7 @@ tools:
   - run_command
 
 web_knowledge: true
+report_issue: false
 # output_type absent → AskToTicketResult supplied programmatically by runner
 retries: 2
 module: ask_to_ticket
