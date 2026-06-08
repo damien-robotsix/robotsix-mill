@@ -80,7 +80,10 @@ class TestStubTools:
     def test_create_repo_tool_returns_error_when_no_forge(self, tmp_path):
         """Without a configured forge, create_repo returns an error string."""
         s = _settings(tmp_path)
-        fn = make_create_repo_tool(s)
+        # build a minimal StageContext mock
+        ctx = MagicMock()
+        ctx.settings = s
+        fn = make_create_repo_tool(s, ctx, ticket_description="Test draft")
         result = fn(name="my-repo", owner="owner", private=False, description="")
         assert "create_repo:" in result
 
@@ -102,10 +105,12 @@ class TestStubTools:
     def test_stubs_accept_kwargs(self, tmp_path):
         """Stubs accept all documented parameters without error."""
         s = _settings(tmp_path)
+        ctx = MagicMock()
+        ctx.settings = s
 
-        # create_repo with all params
-        r1 = make_create_repo_tool(s)(
-            name="x", owner="org", private=True, description="desc"
+        # create_repo with all params including language
+        r1 = make_create_repo_tool(s, ctx, "draft")(
+            name="x", owner="org", private=True, description="desc", language="python"
         )
         assert "create_repo:" in r1
 
@@ -119,6 +124,56 @@ class TestStubTools:
         r3 = make_investigate_tool(s)(question="q", repo_url="https://example.com/r")
         assert "not yet implemented" in r3
 
+    def test_create_repo_tool_success(self, tmp_path, monkeypatch):
+        """With a mocked forge + scaffold, create_repo returns success JSON."""
+        import json
+
+        from robotsix_mill.forge.base import RepoInfo
+        from robotsix_mill.core.states import State
+        from robotsix_mill.stages.base import Outcome
+
+        s = _settings(tmp_path)
+        ctx = MagicMock()
+        ctx.settings = s
+
+        # Mock get_forge to return a fake forge (lazy-imported inside the closure)
+        fake_forge = MagicMock()
+        fake_forge.create_repo.return_value = RepoInfo(
+            id=42,
+            name="my-repo",
+            clone_url="https://github.com/owner/my-repo.git",
+            html_url="https://github.com/owner/my-repo",
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.forge.get_forge",
+            lambda settings, repo_config=None: fake_forge,
+        )
+
+        # Mock run_repo_scaffold to return DONE
+        def _fake_scaffold(settings, forge, ctx_, params, ticket_description):
+            return Outcome(State.DONE, note="created + registered my-repo")
+
+        monkeypatch.setattr(
+            "robotsix_mill.repo_scaffold.run_repo_scaffold",
+            _fake_scaffold,
+        )
+
+        fn = make_create_repo_tool(s, ctx, ticket_description="Create my-repo")
+        result = fn(
+            name="my-repo",
+            owner="owner",
+            private=False,
+            description="A new repo",
+            language="python",
+        )
+        parsed = json.loads(result)
+        assert parsed["success"] is True
+        assert parsed["id"] == 42
+        assert parsed["name"] == "my-repo"
+        assert "github.com" in parsed["clone_url"]
+        assert "github.com" in parsed["html_url"]
+        assert "my-repo" in parsed["note"]
+
 
 # ── Tool registry entries ────────────────────────────────────────────
 
@@ -128,8 +183,10 @@ class TestToolRegistryEntries:
         """After importing maintenance.py and calling the factories,
         ToolRegistry includes the maintenance tools."""
         s = _settings(tmp_path)
+        ctx = MagicMock()
+        ctx.settings = s
         # The factories register on call, so we must call them.
-        make_create_repo_tool(s)
+        make_create_repo_tool(s, ctx, ticket_description="draft")
         make_fork_repo_tool(s)
         make_investigate_tool(s)
 

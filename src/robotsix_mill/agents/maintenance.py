@@ -41,12 +41,17 @@ class MaintenanceResult(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def make_create_repo_tool(settings: Settings) -> Callable[..., str]:
-    """Return the ``create_repo`` closure bound to *settings*.
+def make_create_repo_tool(
+    settings: Settings, ctx: StageContext, ticket_description: str
+) -> Callable[..., str]:
+    """Return the ``create_repo`` closure bound to *settings*, *ctx*, and
+    *ticket_description*.
 
-    The tool calls :meth:`Forge.create_repo` and returns structured
-    metadata (id, name, clone_url, html_url) as a JSON string, or
-    an error message prefixed with ``create_repo:`` on failure.
+    The tool calls :meth:`Forge.create_repo`, then
+    :func:`~robotsix_mill.repo_scaffold.run_repo_scaffold` to scaffold an
+    initial commit, register the repo in ``config/repos.yaml``, and file a
+    build-out ticket.  Returns structured metadata as a JSON string, or an
+    error message prefixed with ``create_repo:`` on failure.
     """
 
     def create_repo(
@@ -54,6 +59,7 @@ def make_create_repo_tool(settings: Settings) -> Callable[..., str]:
         owner: str,
         private: bool,
         description: str,
+        language: str = "python",
     ) -> str:
         """Create a new repository under *owner* and return its metadata.
 
@@ -62,31 +68,59 @@ def make_create_repo_tool(settings: Settings) -> Callable[..., str]:
             owner: Owner (user or organization).
             private: Whether the repo is private.
             description: Short description.
+            language: Project language (default ``"python"``).
 
         Returns:
-            JSON string with id, name, clone_url, html_url, or an
-            error message starting with ``create_repo:``.
+            JSON string with success, id, name, clone_url, html_url,
+            and note, or an error message starting with ``create_repo:``.
         """
         from ..forge import get_forge, NotConfiguredError
+        from ..repo_scaffold import run_repo_scaffold
+        from ..core.states import State
 
         try:
             forge = get_forge(settings)
-            info = forge.create_repo(
+        except NotConfiguredError:
+            return "create_repo: repo creation is not configured"
+        except Exception as exc:
+            return f"create_repo: {exc!r}"
+
+        params = {
+            "name": name,
+            "owner": owner,
+            "private": private,
+            "description": description,
+            "language": language,
+        }
+
+        try:
+            repo_info = forge.create_repo(
                 name=name,
                 owner=owner,
                 private=private,
                 description=description,
             )
-        except NotConfiguredError:
-            return "create_repo: repo creation is not configured"
         except Exception as exc:
             return f"create_repo: {exc!r}"
+
+        try:
+            outcome = run_repo_scaffold(
+                settings, forge, ctx, params, ticket_description
+            )
+        except Exception as exc:
+            return f"create_repo: scaffold failed: {exc!r}"
+
+        if outcome.next_state != State.DONE:
+            return f"create_repo: scaffold returned {outcome.next_state.value}: {outcome.note}"
+
         return json.dumps(
             {
-                "id": info.id,
-                "name": info.name,
-                "clone_url": info.clone_url,
-                "html_url": info.html_url,
+                "success": True,
+                "id": repo_info.id,
+                "name": repo_info.name,
+                "clone_url": repo_info.clone_url,
+                "html_url": repo_info.html_url,
+                "note": outcome.note,
             }
         )
 
@@ -95,13 +129,14 @@ def make_create_repo_tool(settings: Settings) -> Callable[..., str]:
     ToolRegistry.register(
         ToolInfo(
             name="create_repo",
-            description="Create a new repository and return its metadata.",
+            description="Create a new repository, scaffold it, and return its metadata.",
             category="reporting",
             parameters={
                 "name": "str",
                 "owner": "str",
                 "private": "bool",
                 "description": "str",
+                "language": "str (optional, default 'python')",
             },
         )
     )
@@ -276,26 +311,28 @@ def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResul
         / "maintenance.yaml"
     )
 
-    # 2. Build the tool list
+    # 2. Read the ticket draft (needed for tool + prompt)
+    ws = ctx.service.workspace(ticket)
+    draft = ws.read_description().strip()
+
+    # 3. Build the tool list
     tools: list[Any] = []
-    tools.append(make_create_repo_tool(ctx.settings))
+    tools.append(make_create_repo_tool(ctx.settings, ctx, draft))
     tools.append(make_fork_repo_tool(ctx.settings))
     tools.append(make_investigate_tool(ctx.settings))
     tools.append(make_post_findings_tool(ctx.settings, "maintenance"))
 
-    # 3. Build the agent
+    # 4. Build the agent
     agent = build_agent_from_definition(
         ctx.settings,
         definition,
         tools=tools,
     )
 
-    # 4. Build the user prompt from the ticket
-    ws = ctx.service.workspace(ticket)
-    draft = ws.read_description().strip()
+    # 5. Build the user prompt from the ticket
     user_prompt = f"# Title\n{ticket.title}\n\n# Draft\n{draft}"
 
-    # 5. Run the agent
+    # 6. Run the agent
     try:
         result = run_agent(
             agent,
@@ -306,7 +343,7 @@ def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResul
     finally:
         _safe_close(agent)
 
-    # 6. Coerce the output
+    # 7. Coerce the output
     if isinstance(result.output, MaintenanceResult):
         return result.output
     if isinstance(result.output, dict):
