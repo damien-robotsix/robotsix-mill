@@ -3,6 +3,7 @@ import json
 import pytest
 
 from robotsix_mill.core.service import (
+    TicketService,
     TransitionError,
     _event_hash,
     _prev_hash_for,
@@ -1555,3 +1556,41 @@ def test_unblocks_not_fired_on_non_terminal_transition(service):
     service.transition(solver.id, State.READY)  # not a completion state
 
     assert service.get(target.id).state is State.BLOCKED  # still blocked
+
+
+# -- _board_for / _board_for_comment error paths ----------------------------
+
+
+def test_board_for_raises_on_not_found_and_empty_board_id(settings):
+    """When self.board_id is empty and the ticket doesn't exist in any
+    board, _board_for raises a clear ValueError instead of returning "".
+    """
+    svc = TicketService(settings)  # no board_id → board_id=""
+    with pytest.raises(ValueError, match="Ticket nonexistent-id not found"):
+        svc._board_for("nonexistent-id")
+
+
+def test_board_for_comment_raises_on_not_found_and_empty_board_id(settings):
+    """When ticket_id is None, no board contains the comment, and
+    self.board_id is empty, _board_for_comment raises ValueError.
+    """
+    svc = TicketService(settings)  # no board_id → board_id=""
+    with pytest.raises(ValueError, match="Comment 999 not found"):
+        svc._board_for_comment(999, ticket_id=None)
+
+
+def test_board_for_returns_bound_board_when_ticket_found_locally(service):
+    """When the service is bound to a board and the ticket exists there,
+    _board_for returns that board_id directly (no fanout)."""
+    t = service.create("board-for-local-test")
+    result = service._board_for(t.id)
+    assert result == "test-board"
+
+
+def test_board_for_comment_returns_bound_board_when_ticket_id_given(service):
+    """When ticket_id is provided, _board_for_comment delegates to
+    _board_for and returns the ticket's board."""
+    t = service.create("board-for-comment-test")
+    # _board_for_comment with ticket_id → delegates to _board_for
+    result = service._board_for_comment(1, ticket_id=t.id)
+    assert result == "test-board"
