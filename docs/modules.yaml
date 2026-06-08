@@ -351,6 +351,7 @@ modules:
       - src/robotsix_mill/agents/coding.py
       - src/robotsix_mill/agents/testing.py
       - src/robotsix_mill/agents/reviewing.py
+      - src/robotsix_mill/agents/ask_to_ticket.py
       - src/robotsix_mill/agents/auditing.py
       - src/robotsix_mill/agents/refining.py
       - src/robotsix_mill/agents/documenting.py
@@ -392,6 +393,7 @@ modules:
       - tests/agents/test_review_revision.py
       - tests/agents/test_coding.py
       - tests/agents/test_reviewing.py
+      - tests/agents/test_ask_to_ticket.py
       - tests/agents/test_audit.py
       - tests/agents/test_refine.py
       - tests/agents/test_dedup.py
