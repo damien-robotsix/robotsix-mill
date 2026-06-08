@@ -304,12 +304,13 @@ class Settings(BaseSettings):
     # Per-call cap for the refine agent's tool loop. The refine agent
     # delegates deep search to the cheap ``explore`` sub-agent (which
     # has its own 100-call budget), so the top-level refine loop should
-    # rarely exceed a few dozen tool calls.  60 sits well below the old
-    # implicit pydantic-ai default of 50 — but broad scaffolding and
-    # maintenance tickets (forge integration, agent-definition build-out)
-    # empirically need more top-level calls even with good delegation;
-    # per-run cost is negligible (~$0.03–0.09), and the ticket-level
-    # spend cap is the real backstop.
+    # rarely exceed a few dozen tool calls.  60 sits above the old
+    # implicit pydantic-ai default of 50 — intentionally, because broad
+    # scaffolding and maintenance tickets (forge integration,
+    # agent-definition build-out) empirically need more top-level calls
+    # even with good delegation; per-run cost is negligible
+    # (~$0.03–0.09), and the ticket-level spend cap is the real
+    # backstop.
     # Note: ``review_request_limit`` stays at 40 — the two limits
     # intentionally diverge.
     refine_request_limit: int = Field(default=60, ge=1)
