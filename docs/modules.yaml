@@ -251,7 +251,7 @@ modules:
       - tests/stages/test_multi_repo.py
       - src/robotsix_mill/stages/_implemented_repos.py
       - tests/stages/test_implemented_repos.py
-    dependencies: [config, core, forge, vcs, agents, runners, langfuse, runtime]
+    dependencies: [config, core, forge, vcs, agents, runners, langfuse, runtime, hooks]
 
   # -------------------------------------------------------------------
   # Agents
@@ -490,6 +490,16 @@ modules:
       - src/robotsix_mill/cli.py
       - tests/cli/test_cli.py
     dependencies: [config, core]
+
+  - id: hooks
+    description: >-
+      Per-repo prepare hook runner.  Runs ``.robotsix-mill/prepare``
+      scripts after clone and before agent execution in refine and
+      implement stages, with controlled timeout and error handling.
+    paths:
+      - src/robotsix_mill/hooks.py
+      - tests/hooks/test_hooks.py
+    dependencies: []
 
   - id: langfuse
     description: >-
