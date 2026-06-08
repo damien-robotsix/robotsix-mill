@@ -257,9 +257,9 @@ def _detect_forge_kind(remote_url: str) -> str:
     # Strip an optional "https://" prefix and any trailing "/" + ".git".
     cleaned = remote_url.strip()
     if cleaned.startswith("https://"):
-        cleaned = cleaned[len("https://"):]
+        cleaned = cleaned[len("https://") :]
     elif cleaned.startswith("http://"):
-        cleaned = cleaned[len("http://"):]
+        cleaned = cleaned[len("http://") :]
 
     # "git@<host>:<path>.git" → extract "<host>"
     if cleaned.startswith("git@"):
@@ -275,7 +275,7 @@ def _detect_forge_kind(remote_url: str) -> str:
 
     # Strip optional port — we only detect by hostname.
     host = host.split("@")[-1]  # "user@host" safety (unlikely but safe)
-    host = host.split(":")[0]   # "host:port"
+    host = host.split(":")[0]  # "host:port"
 
     if host == "github.com":
         return "github"
