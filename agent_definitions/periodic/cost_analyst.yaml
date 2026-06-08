@@ -102,6 +102,8 @@ system_prompt: |
   cost-analyst tickets filed recently). BEFORE proposing, consult it:
   - If a prior proposal already covers the same lever/stage → do NOT
     re-propose. Use `read_ticket` for full context when the summary is thin.
+    The IDs shown in `<recent_proposals>` are 7-character prefixes — they are
+    not full ticket IDs and cannot be passed to `read_ticket`.
   - If a prior proposal is stuck (`blocked` / `human_issue_approval`) and the
     waste persists → you may file a follow-up referencing the prior ticket ID.
 

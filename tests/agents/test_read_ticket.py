@@ -100,9 +100,9 @@ def test_ticket_without_comments_shows_placeholder(settings, service):
 
 def test_nonexistent_ticket_returns_error(settings):
     tool = make_read_ticket_tool(settings)
-    result = tool("nonexistent-id")
+    result = tool("20250331T142315Z-nonexistent-ticket-3a1f")
     assert "no ticket found" in result
-    assert "nonexistent-id" in result
+    assert "20250331T142315Z-nonexistent-ticket-3a1f" in result
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +123,27 @@ def test_whitespace_only_ticket_id_returns_error(settings):
 
 
 # ---------------------------------------------------------------------------
+# AC 2 — Format validation rejects truncated/malformed IDs
+# ---------------------------------------------------------------------------
+
+
+def test_truncated_ticket_id_returns_error(settings):
+    tool = make_read_ticket_tool(settings)
+
+    # 7-char truncated prefix
+    result = tool("2026060")
+    assert "invalid ticket_id format" in result
+
+    # completely bogus
+    result = tool("not-a-ticket")
+    assert "invalid ticket_id format" in result
+
+    # valid ID — must NOT hit the format guard (no "invalid ticket_id format")
+    result = tool("20250331T142315Z-foo-3a1f")
+    assert "invalid ticket_id format" not in result
+
+
+# ---------------------------------------------------------------------------
 # AC 5 — No write paths reachable
 # ---------------------------------------------------------------------------
 
@@ -138,7 +159,7 @@ def test_no_write_paths_reachable(settings, monkeypatch):
     called_methods: set[str] = set()
 
     mock_ticket = Ticket(
-        id="ticket-1",
+        id="20250331T142315Z-test-ticket-3a1f",
         title="Test Ticket",
         state=State.DRAFT,
         kind="task",
@@ -153,7 +174,7 @@ def test_no_write_paths_reachable(settings, monkeypatch):
 
         def get(self, ticket_id):
             called_methods.add("get")
-            if ticket_id == "ticket-1":
+            if ticket_id == "20250331T142315Z-test-ticket-3a1f":
                 return mock_ticket
             return None
 
@@ -175,7 +196,7 @@ def test_no_write_paths_reachable(settings, monkeypatch):
     )
 
     tool = make_read_ticket_tool(settings)
-    result = tool("ticket-1")
+    result = tool("20250331T142315Z-test-ticket-3a1f")
 
     assert "Test Ticket" in result
 
@@ -321,6 +342,6 @@ def test_never_raises_on_failure(settings, monkeypatch):
         lambda _s: (_ for _ in ()).throw(RuntimeError("db down")),
     )
 
-    result = tool("any-id")
+    result = tool("20250331T142315Z-any-test-id-3a1f")
     assert result.startswith("read_ticket: error reading ticket")
     assert "db down" in result.lower() or "RuntimeError" in result
