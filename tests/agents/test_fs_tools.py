@@ -1553,9 +1553,7 @@ def _make_text_pdf(path: str, text: str) -> None:
 
     page[NameObject("/Resources")] = DictionaryObject(
         {
-            NameObject("/Font"): DictionaryObject(
-                {NameObject("/F1"): font_ref}
-            ),
+            NameObject("/Font"): DictionaryObject({NameObject("/F1"): font_ref}),
         }
     )
     page[NameObject("/Contents")] = writer._add_object(content_stream)
@@ -1593,9 +1591,7 @@ def _make_multipage_text_pdf(path: str, texts: list[str]) -> None:
         content_stream = ContentStream(stm, writer)
         page[NameObject("/Resources")] = DictionaryObject(
             {
-                NameObject("/Font"): DictionaryObject(
-                    {NameObject("/F1"): font_ref}
-                ),
+                NameObject("/Font"): DictionaryObject({NameObject("/F1"): font_ref}),
             }
         )
         page[NameObject("/Contents")] = writer._add_object(content_stream)
@@ -1632,7 +1628,7 @@ def _make_corrupted_pdf(path: str) -> None:
     """Write arbitrary non-PDF bytes to a ``.pdf`` file."""
     from pathlib import Path
 
-    Path(path).write_bytes(b"this is not a PDF\x00\xFF\xFE\xFD")
+    Path(path).write_bytes(b"this is not a PDF\x00\xff\xfe\xfd")
 
 
 class TestReadFilePDF:
@@ -1802,9 +1798,7 @@ class TestReadFilePDF:
         # Reading a .pdf triggers the lazy import.
         _make_text_pdf(str(root / "doc.pdf"), "Trigger import")
         tools["read_file"](path="doc.pdf")
-        assert "pypdf" in sys.modules, (
-            "pypdf should be imported after reading a .pdf"
-        )
+        assert "pypdf" in sys.modules, "pypdf should be imported after reading a .pdf"
 
     def test_pdf_extension_case_insensitive(self, tmp_path, settings):
         """``.PDF`` (upper-case) is handled the same as ``.pdf``."""
