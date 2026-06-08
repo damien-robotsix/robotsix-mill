@@ -53,6 +53,7 @@ core:
     explore_requests: 100              # per-call cap for explore sub-agent
     explore_max_tokens: 2048              # output token cap for explore sub-agent responses
     refine_requests: 60                # per-call request cap for the refine agent
+    audit_requests: 80                 # per-call request cap for the periodic audit agent
     dedup_requests: 4                  # per-call cap for dedup check
     dedup_max_candidates: 8               # max candidates passed to dedup LLM (similarity pre-filter cap)
     dedup_skip_on_no_overlap: true        # skip dedup LLM call when draft shares no token overlap with any candidate

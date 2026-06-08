@@ -320,6 +320,12 @@ class Settings(BaseSettings):
     # cited files to verify the gap, so allow a slightly larger budget
     # than the dedup check.
     obsolescence_request_limit: int = Field(default=6, ge=1)
+    # Per-call cap for the periodic audit agent's tool loop. The audit
+    # agent does broad work (license scan, pip-audit, coverage
+    # introspection) and can saturate 50 calls on a genuine run —
+    # 80 gives headroom; per-run cost ~$0.29 stays well under the
+    # per-ticket $ backstop.
+    audit_request_limit: int = Field(default=80, ge=1)
     doc_request_limit: int = Field(default=8)
     # Cheap classifier gate that runs *before* the full doc agent.
     doc_classifier_model: str = Field(default="deepseek/deepseek-v4-flash")
