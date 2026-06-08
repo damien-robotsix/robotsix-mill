@@ -21,7 +21,8 @@ def _settings(tmp_path, **env):
 def test_fetch_session_cost_formats_dollar_string(tmp_path, monkeypatch):
     s = _settings(tmp_path)
     monkeypatch.setattr(
-        "robotsix_mill.langfuse.client.session_cost", lambda settings, sid, repo_config=None: 1.2345
+        "robotsix_mill.langfuse.client.session_cost",
+        lambda settings, sid, repo_config=None: 1.2345,
     )
     tools = _build_langfuse_tools(s)
     fetch = tools[0]
@@ -31,7 +32,8 @@ def test_fetch_session_cost_formats_dollar_string(tmp_path, monkeypatch):
 def test_fetch_session_cost_handles_zero(tmp_path, monkeypatch):
     s = _settings(tmp_path)
     monkeypatch.setattr(
-        "robotsix_mill.langfuse.client.session_cost", lambda settings, sid, repo_config=None: 0.0
+        "robotsix_mill.langfuse.client.session_cost",
+        lambda settings, sid, repo_config=None: 0.0,
     )
     tools = _build_langfuse_tools(s)
     fetch = tools[0]
@@ -174,9 +176,7 @@ def test_repo_config_forwarded_to_client(tmp_path, monkeypatch):
         captured["repo_config"] = repo_config
         return 1.0
 
-    monkeypatch.setattr(
-        "robotsix_mill.langfuse.client.session_cost", _spy_session_cost
-    )
+    monkeypatch.setattr("robotsix_mill.langfuse.client.session_cost", _spy_session_cost)
 
     s = _settings(tmp_path)
     tools = _build_langfuse_tools(s, repo_config=rc)
@@ -221,7 +221,8 @@ def test_run_answer_agent_without_repo_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(rmod, "run_agent", fake_retry)
     # Stub langfuse tools to avoid real imports
     monkeypatch.setattr(
-        "robotsix_mill.langfuse.client.session_cost", lambda settings, sid, repo_config=None: 0.0
+        "robotsix_mill.langfuse.client.session_cost",
+        lambda settings, sid, repo_config=None: 0.0,
     )
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client.fetch_session_summary",
@@ -281,7 +282,8 @@ def test_run_answer_agent_with_repo_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(rmod, "run_agent", fake_retry)
     # Stub langfuse tools
     monkeypatch.setattr(
-        "robotsix_mill.langfuse.client.session_cost", lambda settings, sid, repo_config=None: 0.0
+        "robotsix_mill.langfuse.client.session_cost",
+        lambda settings, sid, repo_config=None: 0.0,
     )
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client.fetch_session_summary",
@@ -325,7 +327,8 @@ def test_run_answer_agent_runtime_error_on_missing_api_key(tmp_path, monkeypatch
 
     monkeypatch.setattr(bmod, "build_agent_from_definition", fake_build_agent)
     monkeypatch.setattr(
-        "robotsix_mill.langfuse.client.session_cost", lambda settings, sid, repo_config=None: 0.0
+        "robotsix_mill.langfuse.client.session_cost",
+        lambda settings, sid, repo_config=None: 0.0,
     )
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client.fetch_session_summary",

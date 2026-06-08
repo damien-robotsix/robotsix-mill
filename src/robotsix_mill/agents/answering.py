@@ -12,9 +12,7 @@ from pathlib import Path
 from ..config import RepoConfig, Settings
 
 
-def _build_langfuse_tools(
-    settings: Settings, repo_config: RepoConfig | None = None
-):
+def _build_langfuse_tools(settings: Settings, repo_config: RepoConfig | None = None):
     """Create Langfuse read-only tools as closures capturing settings
     and an optional per-repo *repo_config*. When *repo_config* is not
     ``None`` its Langfuse credentials are used; otherwise the global

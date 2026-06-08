@@ -290,7 +290,9 @@ def test_whitespace_only_answer_blocks(ctx_factory, monkeypatch):
         lambda s, rc: None,
     )
 
-    def _whitespace_agent(*, settings, title, question, repo_dir=None, repo_config=None):
+    def _whitespace_agent(
+        *, settings, title, question, repo_dir=None, repo_config=None
+    ):
         return "   \n  "
 
     monkeypatch.setattr(
@@ -323,7 +325,9 @@ def test_epic_context_enrichment(ctx_factory, monkeypatch):
 
     received_question = []
 
-    def _capture_question(*, settings, title, question, repo_dir=None, repo_config=None):
+    def _capture_question(
+        *, settings, title, question, repo_dir=None, repo_config=None
+    ):
         received_question.append(question)
         return "Answer."
 
