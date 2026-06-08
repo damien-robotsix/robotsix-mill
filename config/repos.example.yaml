@@ -45,15 +45,22 @@ repos:
     # bc_check, completeness_check, copy_paste, survey, test_gap, agent_check,
     # config_sync, cost_reconciliation, langfuse_cleanup.
 
-  # Meta board — synthetic board for cross-repo proposals.
-  # Uncomment and copy into config/repos.yaml to enable the meta-agent.
-  # Uses the SAME Langfuse project as robotsix-mill itself (not a
-  # per-repo project), so copy your mill Langfuse keys here.
-  #
-  # meta:
-  #   board_id: "meta"
-  #   langfuse:
-  #     project_name: "robotsix-mill"
-  #     public_key: "pk-lf-..."     # <-- copy robotsix-mill public key
-  #     secret_key: "sk-lf-..."     # <-- copy robotsix-mill secret key
-  #     base_url: "https://cloud.langfuse.com"  # <-- same as mill
+# Meta board — dedicated Langfuse project for the cross-repo meta-agent.
+#
+# This is a TOP-LEVEL block (sibling of `repos:`, NOT a repo entry): the
+# meta board is synthetic — it has no clone and no forge remote — so it
+# lives outside the repos mapping. When present with valid keys, the
+# meta-agent's periodic passes trace to THIS project exactly like the
+# per-repo pipelines trace to theirs. Omit the block (or leave the keys
+# blank) and the meta-agent runs untraced, as before.
+#
+# Create a dedicated "meta" project in your Langfuse instance and paste
+# its keys here (do NOT reuse a per-repo project — keeping it separate
+# keeps meta's cross-repo cost out of any single repo's totals):
+#
+# meta:
+#   langfuse:
+#     project_name: "robotsix-meta"
+#     public_key: "pk-lf-..."     # <-- the dedicated meta project's public key
+#     secret_key: "sk-lf-..."     # <-- the dedicated meta project's secret key
+#     base_url: "https://cloud.langfuse.com"

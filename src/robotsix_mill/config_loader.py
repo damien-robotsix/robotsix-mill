@@ -126,18 +126,13 @@ def load_secrets_yaml(secrets_file: str | None = None) -> dict:
     return dict(data)
 
 
-def load_repos_yaml(file_path: str | None = None) -> dict:
-    """Read ``config/repos.yaml`` (or ``MILL_REPOS_FILE`` if set).
+def _load_repos_document(file_path: str | None = None) -> dict:
+    """Read and parse the full ``config/repos.yaml`` document.
 
-    Returns a dict keyed by repo ID with nested ``board_id`` and
-    ``langfuse`` sub-dicts
-    (e.g. ``{"my-repo": {"board_id": "...", "langfuse": {...}}, ...}``).
-
-    Missing file → returns an empty dict (not an error — repos config is
-    optional).
-
-    Malformed YAML → raises ``ConfigError`` with the file path and
-    parse error details.
+    Shared by :func:`load_repos_yaml` (which extracts the ``repos``
+    mapping) and :func:`load_meta_yaml` (which extracts the optional
+    cross-repo ``meta`` block). Returns the raw top-level mapping, or
+    ``{}`` for a missing file / explicit ``""`` (no-file) path.
     """
     # Determine the path: explicit arg > env var > default.
     # An explicit empty string means "no file" (used by the test suite).
@@ -159,16 +154,51 @@ def load_repos_yaml(file_path: str | None = None) -> dict:
         data = read_yaml_file(path)
     except YamlConfigError as exc:
         raise ConfigError(str(exc)) from exc
+    return data if isinstance(data, dict) else {}
+
+
+def load_meta_yaml(file_path: str | None = None) -> dict:
+    """Return the optional top-level ``meta`` block from ``repos.yaml``.
+
+    The synthetic cross-repo *meta* board is not a registered repo, so it
+    lives outside the ``repos`` mapping. Operators give it its own
+    Langfuse project by adding a sibling ``meta:`` block (with a
+    ``langfuse`` sub-dict), parsed here. Returns ``{}`` when absent.
+    """
+    data = _load_repos_document(file_path)
+    meta = data.get("meta")
+    return dict(meta) if isinstance(meta, dict) else {}
+
+
+def load_repos_yaml(file_path: str | None = None) -> dict:
+    """Read ``config/repos.yaml`` (or ``MILL_REPOS_FILE`` if set).
+
+    Returns a dict keyed by repo ID with nested ``board_id`` and
+    ``langfuse`` sub-dicts
+    (e.g. ``{"my-repo": {"board_id": "...", "langfuse": {...}}, ...}``).
+
+    Missing file → returns an empty dict (not an error — repos config is
+    optional).
+
+    Malformed YAML → raises ``ConfigError`` with the file path and
+    parse error details.
+    """
+    data = _load_repos_document(file_path)
+    if not data:
+        return {}
     # Extract the ``repos`` key if present (standard format).
     if "repos" in data:
         repos_data = data["repos"]
         if not isinstance(repos_data, dict):
             raise ConfigError(
-                f"Expected a mapping under 'repos' key in {path}, "
+                f"Expected a mapping under 'repos' key in repos.yaml, "
                 f"got {type(repos_data).__name__}"
             )
         return dict(repos_data)
-    return dict(data)
+    # Legacy flat format: the document IS the repo mapping. The sibling
+    # ``meta`` block (cross-repo board Langfuse config — see
+    # load_meta_yaml) is not a repo, so never surface it as one.
+    return {k: v for k, v in data.items() if k != "meta"}
 
 
 # ---------------------------------------------------------------------------

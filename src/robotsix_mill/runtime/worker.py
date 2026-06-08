@@ -1789,12 +1789,17 @@ class Worker:
             # drawer, not the lead repo's. Falls back to the default
             # registry if the meta registry is somehow absent.
             registry = self.run_registries.get(self._META_BOARD) or self.run_registry
+            # Route the trace to the meta board's dedicated Langfuse project
+            # (config/repos.yaml ``meta:`` block) so meta passes are observable
+            # just like per-repo pipelines. ``None`` when unconfigured → meta
+            # traces nowhere, same as before (no regression).
+            meta_repo_config = get_repos_config().meta
             try:
                 log.info("Starting periodic meta pass")
                 if registry:
                     run_id = registry.start("meta", repo_id=self._META_BOARD)
                 with tracing.start_ticket_root_span(
-                    session_id, "meta", repo_config=None
+                    session_id, "meta", repo_config=meta_repo_config
                 ):
                     result: MetaPassResult = await self._tracked_to_thread(
                         run_meta_pass,
