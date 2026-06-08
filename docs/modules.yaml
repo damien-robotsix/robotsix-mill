@@ -90,6 +90,7 @@ modules:
       - src/robotsix_mill/forge/auth.py
       - src/robotsix_mill/forge/github.py
       - src/robotsix_mill/forge/gitlab.py
+      - src/robotsix_mill/forge/_http.py
       - tests/forge/test_forge_auth.py
       - tests/forge/test_github.py
       - tests/forge/test_gitlab.py
