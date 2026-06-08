@@ -172,6 +172,42 @@ def make_fork_repo_tool(settings: Settings) -> Callable[..., str]:
     return fork_repo
 
 
+def make_investigate_tool(settings: Settings) -> Callable[..., str]:
+    """Return the ``investigate`` stub bound to *settings*.
+
+    The stub returns a clear "not yet implemented" error so the agent
+    loop doesn't crash before the real cross-repo investigation is
+    implemented.
+    """
+
+    def investigate(question: str, repo_url: str) -> str:
+        """Investigate a question across repositories (stub).
+
+        Args:
+            question: The investigation question.
+            repo_url: URL of the repository to investigate.
+
+        Returns:
+            Status string.
+        """
+        return "investigate: not yet implemented — pending migration ticket"
+
+    from .tool_registry import ToolInfo, ToolRegistry
+
+    ToolRegistry.register(
+        ToolInfo(
+            name="investigate",
+            description="Investigate a question across repositories (stub).",
+            category="reporting",
+            parameters={
+                "question": "str",
+                "repo_url": "str",
+            },
+        )
+    )
+    return investigate
+
+
 def make_post_findings_tool(settings: Settings, agent_name: str) -> Callable[..., str]:
     """Return the ``post_findings`` closure — a thin wrapper around
     ``post_comment`` with a domain-appropriate name for the
@@ -244,6 +280,7 @@ def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResul
     tools: list[Any] = []
     tools.append(make_create_repo_tool(ctx.settings))
     tools.append(make_fork_repo_tool(ctx.settings))
+    tools.append(make_investigate_tool(ctx.settings))
     tools.append(make_post_findings_tool(ctx.settings, "maintenance"))
 
     # 3. Build the agent
