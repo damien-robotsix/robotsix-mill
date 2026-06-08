@@ -166,7 +166,7 @@ class CIFixStage(Stage):
         s = ctx.settings
 
         # Guard: forge configured.
-        if s.forge_kind == "none" or not s.forge_remote_url:
+        if s.forge_kind == "none":
             return Outcome(State.BLOCKED, "forge not configured")
         try:
             github_token(s)  # surfaces a clear config error early

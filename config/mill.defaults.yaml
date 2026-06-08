@@ -92,7 +92,7 @@ core:
 # ---------------------------------------------------------------------------
 
 forge:
-  kind: none                              # github | gitlab | none
+  kind: none                              # github | gitlab | auto | none
   remote_url: null                        # remote URL for clone + push
   target_branch: main                     # target branch for PRs
   auth_mode: token                        # token (PAT) | app (GitHub App)

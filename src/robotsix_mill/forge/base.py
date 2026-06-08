@@ -243,6 +243,51 @@ class Forge(ABC):
         return set()
 
 
+def _detect_forge_kind(remote_url: str) -> str:
+    """Inspect a remote URL and return ``"github"`` or ``"gitlab"``.
+
+    Heuristics:
+    - ``github.com`` host → ``"github"`` (covers https + git@ scp-style)
+    - ``gitlab.com`` host → ``"gitlab"``
+
+    Custom domains (GHE, self-hosted GitLab, etc.) raise ``RuntimeError``
+    because they are ambiguous — the operator must set ``FORGE_KIND``
+    explicitly.
+    """
+    # Strip an optional "https://" prefix and any trailing "/" + ".git".
+    cleaned = remote_url.strip()
+    if cleaned.startswith("https://"):
+        cleaned = cleaned[len("https://"):]
+    elif cleaned.startswith("http://"):
+        cleaned = cleaned[len("http://"):]
+
+    # "git@<host>:<path>.git" → extract "<host>"
+    if cleaned.startswith("git@"):
+        # "git@host:path" → split on ":" after stripping "git@"
+        colon = cleaned.find(":")
+        if colon == -1:
+            host = cleaned[4:]
+        else:
+            host = cleaned[4:colon]
+    else:
+        # https://host/... → split on "/"
+        host = cleaned.split("/")[0]
+
+    # Strip optional port — we only detect by hostname.
+    host = host.split("@")[-1]  # "user@host" safety (unlikely but safe)
+    host = host.split(":")[0]   # "host:port"
+
+    if host == "github.com":
+        return "github"
+    if host == "gitlab.com":
+        return "gitlab"
+
+    raise RuntimeError(
+        f"cannot auto-detect forge kind from {remote_url!r}; "
+        "set FORGE_KIND explicitly (github or gitlab)"
+    )
+
+
 def get_forge(settings: Settings, repo_config: RepoConfig | None = None) -> Forge:
     """Resolve the configured forge adapter.
 
@@ -250,8 +295,19 @@ def get_forge(settings: Settings, repo_config: RepoConfig | None = None) -> Forg
     that repo's remote URL so push/PR/merge operations target the
     correct repository.  The adapter itself receives the repo_config
     for token minting and remote resolution.
+
+    When ``forge_kind == "auto"``, the effective forge kind is detected
+    from the remote URL (per-repo ``forge_remote_url`` if provided,
+    else the global ``settings.forge_remote_url``).
     """
     kind = settings.forge_kind
+    if kind == "auto":
+        remote_url = (
+            (repo_config.forge_remote_url if repo_config is not None else None)
+            or settings.forge_remote_url
+            or ""
+        )
+        kind = _detect_forge_kind(remote_url)
     if kind == "github":
         from .github import GitHubForge
 

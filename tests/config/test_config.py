@@ -1444,6 +1444,14 @@ class TestValidationValid:
         )
         assert s.forge_kind == "github"
 
+    def test_forge_kind_auto_with_remote_url_passes(self):
+        """``forge_kind=auto`` with ``forge_remote_url`` passes validation."""
+        s = Settings(
+            FORGE_KIND="auto",
+            FORGE_REMOTE_URL="https://github.com/o/r.git",
+        )
+        assert s.forge_kind == "auto"
+
 
 class TestValidationInvalid:
     """Invalid Settings constructions that must raise ``ValidationError``."""
@@ -1486,6 +1494,13 @@ class TestValidationInvalid:
             ValidationError, match="forge_kind=github requires forge_remote_url"
         ):
             Settings(FORGE_KIND="github")
+
+    def test_forge_kind_auto_without_remote_url_raises(self):
+        """``forge_kind=auto`` without ``forge_remote_url`` raises."""
+        with pytest.raises(
+            ValidationError, match="forge_kind=auto requires forge_remote_url"
+        ):
+            Settings(FORGE_KIND="auto")
 
     def test_fallback_model_without_retries_raises(self):
         """``rate_limit_fallback_model`` set but retries=0 raises."""

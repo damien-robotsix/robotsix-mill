@@ -388,7 +388,7 @@ class Settings(BaseSettings):
     api_url: str = Field(default="http://127.0.0.1:8077", pattern=r"^https?://")
 
     # --- forge delivery (only used by the deliver stage) ---
-    forge_kind: Literal["github", "gitlab", "none"] = Field(
+    forge_kind: Literal["github", "gitlab", "none", "auto"] = Field(
         default="none", alias="FORGE_KIND"
     )
     forge_remote_url: str | None = Field(default=None, alias="FORGE_REMOTE_URL")
@@ -1457,8 +1457,8 @@ class Settings(BaseSettings):
                     "or github_app_private_key_path to be set"
                 )
 
-        # forge_kind needs forge_remote_url
-        if self.forge_kind in ("github", "gitlab"):
+        # forge_kind needs forge_remote_url (auto-detection also needs a URL)
+        if self.forge_kind in ("github", "gitlab", "auto"):
             if not self.forge_remote_url:
                 raise ValueError(
                     f"forge_kind={self.forge_kind} requires forge_remote_url to be set"

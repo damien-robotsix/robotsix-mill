@@ -160,6 +160,27 @@ def test_blocked_without_forge_kind(tmp_path):
     assert out.next_state is State.BLOCKED and "FORGE_KIND" in out.note
 
 
+def test_auto_forge_kind_bypasses_none_guard(tmp_path):
+    """forge_kind=auto with a valid remote_url bypasses the
+    FORGE_KIND=none guard — it should NOT block with "FORGE_KIND"."""
+    remote, _ = _bare(tmp_path)
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="auto",
+        FORGE_REMOTE_URL=f"https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    t = ctx.service.create("x", "y")
+    ctx.service.transition(t.id, State.READY)
+    ctx.service.transition(t.id, State.DELIVERABLE)
+    out = DeliverStage().run(ctx.service.get(t.id), ctx)
+    # Should NOT be blocked due to FORGE_KIND — the "auto" value is
+    # allowed through. It may block elsewhere (e.g. no workspace
+    # branch), but the note must not contain the "FORGE_KIND not
+    # configured" sentinel.
+    assert "FORGE_KIND not configured" not in out.note
+
+
 def test_blocked_without_token(tmp_path):
     remote, _ = _bare(tmp_path)
     ctx = _ctx(tmp_path, FORGE_KIND="github", FORGE_REMOTE_URL=remote)
