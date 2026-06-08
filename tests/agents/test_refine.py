@@ -4607,181 +4607,97 @@ def test_test_warnings_block_empty_output(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-class TestMaintenanceTriage:
-    """Tests for the maintenance-triage keyword checker and LLM classifier."""
+class TestClassifyMaintenanceDraft:
+    """Unit tests for ``_classify_maintenance_draft`` — deterministic
+    keyword heuristic (phase 0 of the unified triage)."""
 
-    def test_check_maintenance_keywords_matches_create_repo(self):
-        """Title 'Create repo robotsix-foo' → keyword match."""
-        reason = refining._check_maintenance_keywords(
-            "Create repo robotsix-foo", "make a new private repository under robotsix"
-        )
-        assert reason is not None
-        assert "keyword match:" in reason
-        # The match should be 'create repo' (in title), but the body
-        # also contains 'new repository'.  Either is a valid match.
-        # Just verify the reason is a keyword-match string.
+    # -- create repo --
 
-    def test_check_maintenance_keywords_matches_fork_repo(self):
-        """Draft containing 'fork repo' → keyword match."""
-        reason = refining._check_maintenance_keywords(
-            "Need a fork",
-            "please fork repo robotsix/foo into my-namespace",
-        )
-        assert reason is not None
-        assert "keyword match:" in reason
-
-    def test_check_maintenance_keywords_matches_investigate(self):
-        """Title 'Investigate cross-repo thing' → keyword match."""
-        reason = refining._check_maintenance_keywords(
-            "Investigate: why is CI slow on merge?",
-            "look into CI performance",
-        )
-        assert reason is not None
-        assert "keyword match:" in reason
-
-    def test_check_maintenance_keywords_no_match_code_change(self):
-        """Normal code change → no keyword match."""
-        reason = refining._check_maintenance_keywords(
-            "Add sorting to list endpoint",
-            "edit src/api/routes.py to add sort parameter to GET /items",
-        )
-        assert reason is None
-
-    def test_check_maintenance_keywords_case_insensitive(self):
-        """'CREATE REPO' (upper case) → matches (case-insensitive)."""
-        reason = refining._check_maintenance_keywords(
-            "CREATE REPO robotsix-foo", "please provision this"
-        )
-        assert reason is not None
-        # The match reason includes the matched keyword (case-insensitive
-        # substring match).  It may match 'create repo' or another
-        # keyword from MAINTENANCE_KEYWORDS; the key property is that
-        # a match is found when an all-caps variant is present.
-        assert "keyword match:" in reason
-
-    def test_triage_maintenance_agent_config(self, monkeypatch, tmp_path):
-        """triage_maintenance builds an agent with correct model, tools,
-        and output type — mirrors test_triage_refine_agent_config."""
-        from robotsix_mill.agents import base as base_mod
-        from robotsix_mill.agents.refining import (
-            triage_maintenance,
-            MaintenanceTriageResult,
-        )
-
-        seen_kwargs: dict = {}
-
-        def fake_build_agent(
-            settings,
-            system_prompt,
-            output_type,
-            tools,
-            web_knowledge,
-            report_issue,
-            model_name,
-            name,
-            ask_user,
-            **kwargs,
-        ):
-            seen_kwargs.update(
-                tools=tools,
-                web_knowledge=web_knowledge,
-                report_issue=report_issue,
-                model_name=model_name,
-                name=name,
-                ask_user=ask_user,
+    def test_create_repo_in_title(self):
+        """Exact 'create repo' in title → 'create_repo'."""
+        assert (
+            refining._classify_maintenance_draft(
+                "Create repo for project foo", "some body text"
             )
-
-            class FakeAgent:
-                def run_sync(
-                    self, msg, message_history=None, board_id="", usage_limits=None
-                ):
-                    return type(
-                        "R",
-                        (),
-                        {
-                            "output": MaintenanceTriageResult(
-                                decision="CODE_CHANGE", reason="test"
-                            )
-                        },
-                    )()
-
-            return FakeAgent()
-
-        monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
-
-        s = Settings(data_dir=str(tmp_path), triage_model="test/triage-model")
-        result = triage_maintenance(settings=s, title="Test", draft="do x in foo.py")
-
-        assert result.decision == "CODE_CHANGE"
-        assert seen_kwargs["tools"] == []
-        assert seen_kwargs["web_knowledge"] is False
-        assert seen_kwargs["report_issue"] is False
-        assert seen_kwargs["model_name"] == "test/triage-model"
-        assert seen_kwargs["name"] == "maintenance_triage"
-        assert seen_kwargs["ask_user"] is False
-
-    def test_triage_maintenance_returns_maintenance(self, monkeypatch, tmp_path):
-        """triage_maintenance returns MAINTENANCE when the agent decides so."""
-        from robotsix_mill.agents import base as base_mod
-        from robotsix_mill.agents.refining import (
-            triage_maintenance,
-            MaintenanceTriageResult,
+            == "create_repo"
         )
 
-        class FakeAgent:
-            def run_sync(
-                self, msg, message_history=None, board_id="", usage_limits=None
-            ):
-                return type(
-                    "R",
-                    (),
-                    {
-                        "output": MaintenanceTriageResult(
-                            decision="MAINTENANCE",
-                            reason="create repo request",
-                        )
-                    },
-                )()
-
-        monkeypatch.setattr(base_mod, "build_agent", lambda settings, **kw: FakeAgent())
-
-        s = Settings(data_dir=str(tmp_path), triage_model="test/triage-model")
-        result = triage_maintenance(
-            settings=s, title="Create repo", draft="set up a new repo"
+    def test_create_repo_in_body(self):
+        """'create repo' in body only → 'create_repo'."""
+        assert (
+            refining._classify_maintenance_draft(
+                "Set up project", "we should create repo for the new service"
+            )
+            == "create_repo"
         )
 
-        assert result.decision == "MAINTENANCE"
-        assert "create repo" in result.reason
-
-    def test_triage_maintenance_returns_code_change(self, monkeypatch, tmp_path):
-        """triage_maintenance returns CODE_CHANGE when the agent decides so."""
-        from robotsix_mill.agents import base as base_mod
-        from robotsix_mill.agents.refining import (
-            triage_maintenance,
-            MaintenanceTriageResult,
+    def test_create_repo_case_insensitive(self):
+        """'CREATE REPO' (upper case) → 'create_repo'."""
+        assert (
+            refining._classify_maintenance_draft("CREATE REPO for project foo", "body")
+            == "create_repo"
         )
 
-        class FakeAgent:
-            def run_sync(
-                self, msg, message_history=None, board_id="", usage_limits=None
-            ):
-                return type(
-                    "R",
-                    (),
-                    {
-                        "output": MaintenanceTriageResult(
-                            decision="CODE_CHANGE",
-                            reason="normal code change",
-                        )
-                    },
-                )()
+    # -- fork repo --
 
-        monkeypatch.setattr(base_mod, "build_agent", lambda settings, **kw: FakeAgent())
-
-        s = Settings(data_dir=str(tmp_path), triage_model="test/triage-model")
-        result = triage_maintenance(
-            settings=s, title="Add feature", draft="edit src/foo.py"
+    def test_fork_repo_in_title(self):
+        """'Fork repo' in title → 'fork_repo'."""
+        assert (
+            refining._classify_maintenance_draft(
+                "Fork repo bar", "need a fork of upstream"
+            )
+            == "fork_repo"
         )
 
-        assert result.decision == "CODE_CHANGE"
-        assert "normal code change" in result.reason
+    def test_fork_repo_in_body(self):
+        """'fork repo' in body only → 'fork_repo'."""
+        assert (
+            refining._classify_maintenance_draft(
+                "Infrastructure setup", "please fork repo robotsix/mill upstream"
+            )
+            == "fork_repo"
+        )
+
+    # -- investigate (title-only) --
+
+    def test_investigate_in_title(self):
+        """'Investigate' in title → 'investigate'."""
+        assert (
+            refining._classify_maintenance_draft(
+                "Investigate cross-repo dependency", "check version compatibility"
+            )
+            == "investigate"
+        )
+
+    def test_investigate_body_only_no_match(self):
+        """'investigate' in body only → None (title-only keyword)."""
+        assert (
+            refining._classify_maintenance_draft(
+                "Fix login bug", "we need to investigate the root cause"
+            )
+            is None
+        )
+
+    # -- no-match cases --
+
+    def test_normal_code_change_no_match(self):
+        """Normal code-change draft → None."""
+        assert (
+            refining._classify_maintenance_draft(
+                "Fix login button", "edit src/ui/login.py to fix the click handler"
+            )
+            is None
+        )
+
+    def test_add_maintenance_mode_no_match(self):
+        """'Add maintenance mode' → None (not an operational request)."""
+        assert (
+            refining._classify_maintenance_draft(
+                "Add maintenance mode", "add a toggle for site maintenance"
+            )
+            is None
+        )
+
+    def test_empty_draft(self):
+        """Empty title and draft → None."""
+        assert refining._classify_maintenance_draft("", "") is None

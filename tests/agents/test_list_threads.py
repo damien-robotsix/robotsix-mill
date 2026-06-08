@@ -1,6 +1,5 @@
 """Dedicated tests for the list_threads tool-maker module."""
 
-
 import pytest
 from robotsix_mill.agents.list_threads import make_list_threads_tool
 from robotsix_mill.agents.tool_registry import ToolRegistry
@@ -33,9 +32,21 @@ def test_happy_path_lists_threads(settings, monkeypatch):
     )
 
     comments = [
-        FakeComment(id=3, parent_id=None, body="Please review the dependency updates\nDetailed notes here.", closed_at=None),
-        FakeComment(id=5, parent_id=3, body="Will do!", closed_at=None),  # child — should be filtered out
-        FakeComment(id=7, parent_id=None, body="Initial design question about...", closed_at="2025-01-01T00:00:00Z"),
+        FakeComment(
+            id=3,
+            parent_id=None,
+            body="Please review the dependency updates\nDetailed notes here.",
+            closed_at=None,
+        ),
+        FakeComment(
+            id=5, parent_id=3, body="Will do!", closed_at=None
+        ),  # child — should be filtered out
+        FakeComment(
+            id=7,
+            parent_id=None,
+            body="Initial design question about...",
+            closed_at="2025-01-01T00:00:00Z",
+        ),
     ]
 
     monkeypatch.setattr(

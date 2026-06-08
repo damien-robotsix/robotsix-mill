@@ -465,6 +465,39 @@ class RefineStage(Stage):
 
         s = ctx.settings
 
+        # --- triage phase 0: maintenance keyword check (before clone) ---
+        # Deterministic, no LLM, no workspace.  When the draft requests
+        # a create-repo, fork-repo, or cross-repo investigation, route
+        # directly to MAINTENANCE — skip the clone + full triage.
+        if s.maintenance_triage_enabled:
+            action = refining._classify_maintenance_draft(title, draft)
+            if action is not None:
+                # Preserve the original draft as an artifact for
+                # traceability (mirrors the triage-SKIP and normal-refine
+                # paths).
+                (ws.artifacts_dir / "draft-original.md").write_text(
+                    draft if draft else "(title-only ticket, no body provided)",
+                    encoding="utf-8",
+                )
+                # Tag the ticket with a maintenance:$action label so the
+                # maintenance stage can optionally dispatch on action type
+                # without re-parsing the draft.
+                try:
+                    ctx.service.set_labels(ticket.id, [f"maintenance:{action}"])
+                except Exception:
+                    log.warning(
+                        "%s: set_labels failed for maintenance triage — "
+                        "continuing anyway",
+                        ticket.id,
+                        exc_info=True,
+                    )
+                return Outcome(
+                    State.MAINTENANCE,
+                    f"maintenance triage: routed to MAINTENANCE "
+                    f"(action={action}) — {title}",
+                )
+        # --- end triage phase 0 ---
+
         # Phase 1: build the workspace. A meta-board ticket is cross-repo:
         # a triage agent picks the required registered repos and we clone
         # those into a multi-repo workspace (repo_dir = first, extra_roots =
@@ -1144,38 +1177,6 @@ class RefineStage(Stage):
                 note += f" | {auto_note}"
             return Outcome(next_state, note)
 
-        # --- maintenance triage: route operational requests to the
-        # maintenance agent, bypassing refine + implement ---
-        if s.maintenance_triage_enabled:
-            # Phase A — deterministic keyword check (cheap, no LLM)
-            kw_match = refining._check_maintenance_keywords(title, draft)
-            if kw_match:
-                return Outcome(
-                    State.MAINTENANCE,
-                    f"maintenance triage: {kw_match}",
-                )
-            # Phase B — LLM triage for drafts without explicit keywords
-            try:
-                triage = refining.triage_maintenance(
-                    settings=s,
-                    title=title,
-                    draft=draft,
-                    repo_dir=repo_dir,
-                    extra_roots=extra_roots,
-                )
-                if triage.decision == "MAINTENANCE":
-                    return Outcome(
-                        State.MAINTENANCE,
-                        f"maintenance triage: {triage.reason}",
-                    )
-            except Exception:
-                log.warning(
-                    "%s: maintenance triage failed, falling through to normal refine",
-                    ticket.id,
-                    exc_info=True,
-                )
-        # --- end maintenance triage ---
-
         # --- gather reviewer comments (sendback guard) ---
         # ``mill`` and ``system`` author comments (trace-link auto-posts
         # from runtime.worker._post_trace_comment; timeout-escalation
@@ -1212,13 +1213,14 @@ class RefineStage(Stage):
         except Exception:
             log.warning("%s: list_comments failed, proceeding without", ticket.id)
 
-        # --- triage: skip full refine for already-precise drafts ---
+        # --- triage phase 1: LLM classifier (3-way: SKIP / MAINTENANCE / REFINE) ---
         # A single cheap LLM call classifies the draft.  If it's
         # already a precise, implementation-ready spec, skip the
-        # expensive refine agent entirely.  ONLY skip when:
+        # expensive refine agent entirely.  If it's a maintenance
+        # (operational) request the keyword classifier missed, route
+        # to MAINTENANCE.  ONLY run when:
         # - the feature flag is enabled, AND
-        # - no reviewer sendback (human-flagged changes always refine), AND
-        # - the triage model says SKIP.
+        # - no reviewer sendback (human-flagged changes always refine).
         if s.refine_triage_enabled and not reviewer_comments:
             try:
                 triage = refining.triage_refine(
@@ -1228,6 +1230,18 @@ class RefineStage(Stage):
                     repo_dir=repo_dir,
                     extra_roots=extra_roots,
                 )
+                if triage.decision == "MAINTENANCE" and s.maintenance_triage_enabled:
+                    # LLM detected a maintenance request the keyword
+                    # classifier missed.  Route to MAINTENANCE without
+                    # running the full refine agent.
+                    (ws.artifacts_dir / "draft-original.md").write_text(
+                        draft if draft else "(title-only ticket, no body provided)",
+                        encoding="utf-8",
+                    )
+                    return Outcome(
+                        State.MAINTENANCE,
+                        f"maintenance triage (LLM): {triage.reason} — {title}",
+                    )
                 if triage.decision == "SKIP":
                     # The draft IS the spec — preserve it unchanged.
                     (ws.artifacts_dir / "draft-original.md").write_text(
