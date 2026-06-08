@@ -28,6 +28,7 @@ log = logging.getLogger(__name__)
 # Result model
 # ---------------------------------------------------------------------------
 
+
 class MaintenanceResult(BaseModel):
     """Structured output from the maintenance agent."""
 
@@ -38,6 +39,7 @@ class MaintenanceResult(BaseModel):
 # ---------------------------------------------------------------------------
 # Tool builders
 # ---------------------------------------------------------------------------
+
 
 def make_create_repo_tool(settings: Settings) -> Callable[..., str]:
     """Return the ``create_repo`` closure bound to *settings*.
@@ -79,12 +81,14 @@ def make_create_repo_tool(settings: Settings) -> Callable[..., str]:
             return "create_repo: repo creation is not configured"
         except Exception as exc:
             return f"create_repo: {exc!r}"
-        return json.dumps({
-            "id": info.id,
-            "name": info.name,
-            "clone_url": info.clone_url,
-            "html_url": info.html_url,
-        })
+        return json.dumps(
+            {
+                "id": info.id,
+                "name": info.name,
+                "clone_url": info.clone_url,
+                "html_url": info.html_url,
+            }
+        )
 
     from .tool_registry import ToolInfo, ToolRegistry
 
@@ -142,12 +146,14 @@ def make_fork_repo_tool(settings: Settings) -> Callable[..., str]:
             return "fork_repo: repo forking is not configured"
         except Exception as exc:
             return f"fork_repo: {exc!r}"
-        return json.dumps({
-            "id": info.id,
-            "name": info.name,
-            "clone_url": info.clone_url,
-            "html_url": info.html_url,
-        })
+        return json.dumps(
+            {
+                "id": info.id,
+                "name": info.name,
+                "clone_url": info.clone_url,
+                "html_url": info.html_url,
+            }
+        )
 
     from .tool_registry import ToolInfo, ToolRegistry
 
@@ -215,6 +221,7 @@ def make_post_findings_tool(settings: Settings, agent_name: str) -> Callable[...
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
 
 def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResult:
     """Load the maintenance agent definition, build its tool set, run the
