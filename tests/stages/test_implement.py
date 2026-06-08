@@ -3842,3 +3842,64 @@ def test_prereq_gate_best_effort_on_error(ctx_factory, tmp_path, monkeypatch):
 
     out = ImplementStage().run(t, ctx)
     assert out.next_state is State.DOCUMENTING
+
+
+# ---------------------------------------------------------------------------
+# prepare hook integration tests
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_hook_failure_blocks_before_prerequisite_gate(
+    ctx_factory,
+    tmp_path,
+    monkeypatch,
+):
+    """When ``run_prepare_hook`` returns an error, implement short-circuits
+    to BLOCKED with that error BEFORE the prerequisite gate runs."""
+    from robotsix_mill.agents import prerequisite
+
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        prerequisite_gate_enabled="true",
+    )
+
+    prereq_called = []
+
+    def _spy_prereq(*args, **kwargs):
+        prereq_called.append(1)
+        return None
+
+    monkeypatch.setattr(
+        prerequisite,
+        "run_prerequisite_check",
+        _spy_prereq,
+    )
+    monkeypatch.setattr(
+        ImplementStage,
+        "_run_prerequisite_gate",
+        _spy_prereq,
+    )
+
+    from robotsix_mill import hooks as hooks_mod
+
+    monkeypatch.setattr(
+        hooks_mod,
+        "run_prepare_hook",
+        lambda repo_dir, ticket_id, workspace_dir: (
+            "prepare hook exited 2: setup failed"
+        ),
+    )
+
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "dummy.txt")
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert "prepare hook exited 2" in out.note
+    assert "setup failed" in out.note
+    # Prerequisite gate must NOT have been called — the hook blocked first.
+    assert len(prereq_called) == 0
