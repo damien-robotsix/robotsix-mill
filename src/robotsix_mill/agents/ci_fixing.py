@@ -59,16 +59,8 @@ def run_ci_fix_agent(
     if not get_secrets().openrouter_api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
 
-    from .yaml_loader import load_agent_definition
-    from .base import build_agent_from_definition, _safe_close
+    from .yaml_loader import load_and_run_agent
     from .fs_tools import build_fs_tools
-
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "ci_fix.yaml"
-    )
-
-    # Build tools confined to the ticket's own clone.
-    tools = build_fs_tools(Path(repo_dir), settings)
 
     # --- load structured pattern memory ---
     from .ci_patterns import (
@@ -94,20 +86,8 @@ def run_ci_fix_agent(
     else:
         patterns_text = "(no prior patterns for this failure)"
 
-    system_prompt = definition.system_prompt.format(
-        repo_dir=repo_dir,
-        branch=branch,
-        patterns=patterns_text,
-    )
-
-    agent = build_agent_from_definition(
-        settings,
-        definition,
-        repo_dir=Path(repo_dir),  # confine SDK built-in edit tools to the clone
-        board_id=board_id,  # so report_issue can file a blocker on the board
-        tools=tools,
-        system_prompt=system_prompt,
-    )
+    # Build tools confined to the ticket's own clone.
+    tools = build_fs_tools(Path(repo_dir), settings)
 
     user_prompt = (
         f"CI is failing on branch '{branch}' in {repo_dir}. "
@@ -118,23 +98,20 @@ def run_ci_fix_agent(
         + "Follow the system prompt exactly."
     )
 
-    # Invoke via run_agent (not a bare agent.run_sync) so the Claude→DeepSeek
-    # FallbackAgentHandle actually falls back: the fallback is driven by
-    # run_agent, never by FallbackAgentHandle.run_sync. A bare run_sync here
-    # meant a Claude outage (e.g. exhausted credit) hard-failed ci_fix and
-    # blocked the ticket after its attempts, instead of falling back like every
-    # other stage (refine/implement/review/document all use run_agent).
-    from .retry import run_agent
-
-    try:
-        result = run_agent(
-            agent,
-            lambda h: h.run_sync(user_prompt),
-            settings=settings,
-            what="ci_fix",
-        )
-    finally:
-        _safe_close(agent)
+    result = load_and_run_agent(
+        settings=settings,
+        definition_name="ci_fix",
+        tools=tools,
+        prompt=user_prompt,
+        what="ci_fix",
+        repo_dir=Path(repo_dir),
+        board_id=board_id,
+        system_prompt_format_kwargs={
+            "repo_dir": repo_dir,
+            "branch": branch,
+            "patterns": patterns_text,
+        },
+    )
 
     # --- persist structured pattern entry ---
     output = result.output

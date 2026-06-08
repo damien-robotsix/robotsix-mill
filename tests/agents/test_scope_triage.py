@@ -41,13 +41,35 @@ def test_scope_triage_verdict_model_expand_files_defaults_empty():
 # ---------------------------------------------------------------------------
 
 
+def _install_mocks(monkeypatch):
+    """Install shared mocks for load_agent_definition, run_agent, and
+    _safe_close.  Returns the base module for further patching."""
+    from unittest.mock import MagicMock
+    import robotsix_mill.agents.yaml_loader as yaml_loader_mod
+    import robotsix_mill.agents.retry as retry_mod
+    import robotsix_mill.agents.base as base_mod
+
+    monkeypatch.setattr(
+        yaml_loader_mod,
+        "load_agent_definition",
+        MagicMock(return_value=type("D", (), {"model": None})()),
+    )
+    monkeypatch.setattr(
+        retry_mod,
+        "run_agent",
+        lambda agent, make_run, **kw: make_run(agent),
+    )
+    monkeypatch.setattr(base_mod, "_safe_close", lambda agent: None)
+    return base_mod
+
+
 def test_expand_for_new_test_file(monkeypatch):
     """A dif that adds a new test file → EXPAND with expand_files populated."""
     from robotsix_mill.config import Settings
-    import robotsix_mill.agents.scope_triage as scope_triage
-    import robotsix_mill.agents.base as base_mod
 
-    def fake_build_agent(settings, definition, tools, model_name):
+    base_mod = _install_mocks(monkeypatch)
+
+    def fake_build_agent(settings, definition, tools, model_name, repo_dir=None, **kw):
         class FakeAgent:
             def run_sync(self, msg):
                 assert "````ticket-spec" in msg
@@ -69,12 +91,6 @@ def test_expand_for_new_test_file(monkeypatch):
         return FakeAgent()
 
     monkeypatch.setattr(base_mod, "build_agent_from_definition", fake_build_agent)
-    from unittest.mock import MagicMock
-
-    scope_triage.load_agent_definition = MagicMock(
-        return_value=type("D", (), {"model": None})()
-    )
-    scope_triage.run_agent = lambda agent, make_run, **kw: make_run(agent)
 
     result = run_scope_triage_agent(
         settings=Settings(data_dir="/tmp", scope_triage_model="test/model"),
@@ -90,10 +106,10 @@ def test_expand_for_new_test_file(monkeypatch):
 def test_reject_for_unrelated_module(monkeypatch):
     """A diff touching an unrelated module → REJECT."""
     from robotsix_mill.config import Settings
-    import robotsix_mill.agents.scope_triage as scope_triage
-    import robotsix_mill.agents.base as base_mod
 
-    def fake_build_agent(settings, definition, tools, model_name):
+    base_mod = _install_mocks(monkeypatch)
+
+    def fake_build_agent(settings, definition, tools, model_name, repo_dir=None, **kw):
         class FakeAgent:
             def run_sync(self, msg):
                 return type(
@@ -110,12 +126,6 @@ def test_reject_for_unrelated_module(monkeypatch):
         return FakeAgent()
 
     monkeypatch.setattr(base_mod, "build_agent_from_definition", fake_build_agent)
-    from unittest.mock import MagicMock
-
-    scope_triage.load_agent_definition = MagicMock(
-        return_value=type("D", (), {"model": None})()
-    )
-    scope_triage.run_agent = lambda agent, make_run, **kw: make_run(agent)
 
     result = run_scope_triage_agent(
         settings=Settings(data_dir="/tmp", scope_triage_model="test/model"),
@@ -130,10 +140,10 @@ def test_reject_for_unrelated_module(monkeypatch):
 def test_escalate_for_ambiguous(monkeypatch):
     """A vague spec with an adjacent out-of-scope file → ESCALATE."""
     from robotsix_mill.config import Settings
-    import robotsix_mill.agents.scope_triage as scope_triage
-    import robotsix_mill.agents.base as base_mod
 
-    def fake_build_agent(settings, definition, tools, model_name):
+    base_mod = _install_mocks(monkeypatch)
+
+    def fake_build_agent(settings, definition, tools, model_name, repo_dir=None, **kw):
         class FakeAgent:
             def run_sync(self, msg):
                 return type(
@@ -150,12 +160,6 @@ def test_escalate_for_ambiguous(monkeypatch):
         return FakeAgent()
 
     monkeypatch.setattr(base_mod, "build_agent_from_definition", fake_build_agent)
-    from unittest.mock import MagicMock
-
-    scope_triage.load_agent_definition = MagicMock(
-        return_value=type("D", (), {"model": None})()
-    )
-    scope_triage.run_agent = lambda agent, make_run, **kw: make_run(agent)
 
     result = run_scope_triage_agent(
         settings=Settings(data_dir="/tmp", scope_triage_model="test/model"),
@@ -170,12 +174,11 @@ def test_escalate_for_ambiguous(monkeypatch):
 def test_prompt_includes_all_sections(monkeypatch):
     """The user prompt contains all four required XML sections."""
     from robotsix_mill.config import Settings
-    import robotsix_mill.agents.scope_triage as scope_triage
-    import robotsix_mill.agents.base as base_mod
 
+    base_mod = _install_mocks(monkeypatch)
     captured_msg: list[str] = []
 
-    def fake_build_agent(settings, definition, tools, model_name):
+    def fake_build_agent(settings, definition, tools, model_name, repo_dir=None, **kw):
         class FakeAgent:
             def run_sync(self, msg):
                 captured_msg.append(msg)
@@ -193,12 +196,6 @@ def test_prompt_includes_all_sections(monkeypatch):
         return FakeAgent()
 
     monkeypatch.setattr(base_mod, "build_agent_from_definition", fake_build_agent)
-    from unittest.mock import MagicMock
-
-    scope_triage.load_agent_definition = MagicMock(
-        return_value=type("D", (), {"model": None})()
-    )
-    scope_triage.run_agent = lambda agent, make_run, **kw: make_run(agent)
 
     run_scope_triage_agent(
         settings=Settings(data_dir="/tmp", scope_triage_model="test/model"),

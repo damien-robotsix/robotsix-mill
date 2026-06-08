@@ -56,22 +56,8 @@ def run_epic_breakdown_agent(
     Execution is wrapped in :func:`~.retry.call_with_retry` for
     transient/rate-limit resilience.
     """
-    from .yaml_loader import load_agent_definition
-    from .base import build_agent_from_definition, _safe_close
-    from .retry import run_agent
+    from .yaml_loader import load_and_run_agent
 
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "epic_breakdown.yaml"
-    )
-
-    agent = build_agent_from_definition(
-        settings,
-        definition,
-        tools=[],
-        model_name=definition.model or settings.audit_model,
-    )
     prompt = (
         section("epic-title", epic_title)
         + "\n\n"
@@ -80,13 +66,12 @@ def run_epic_breakdown_agent(
     if comments:
         prompt += "\n\n" + section("operator-comments", comments)
     prompt += "\n\nBreak this epic into well-scoped child tickets."
-    try:
-        result = run_agent(
-            agent,
-            lambda h: h.run_sync(prompt),
-            settings=settings,
-            what="epic-breakdown",
-        )
-    finally:
-        _safe_close(agent)
+    result = load_and_run_agent(
+        settings=settings,
+        definition_name="epic_breakdown",
+        tools=[],
+        model_name=settings.audit_model,
+        prompt=prompt,
+        what="epic-breakdown",
+    )
     return result.output

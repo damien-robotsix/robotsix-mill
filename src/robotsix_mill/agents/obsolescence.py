@@ -62,17 +62,9 @@ def run_obsolescence_check(
     with a failure reason — the gate is best-effort and never blocks
     the pipeline.
     """
-    from .base import build_agent_from_definition, _safe_close
+    from .yaml_loader import load_and_run_agent
+
     from pydantic_ai.usage import UsageLimits
-
-    from .yaml_loader import load_agent_definition
-    from .retry import run_agent
-
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "obsolescence.yaml"
-    )
 
     # Build filesystem tools when a repo_dir is available; the
     # obsolescence agent is read-only — only read_file and list_dir are
@@ -85,25 +77,22 @@ def run_obsolescence_check(
         fs = build_fs_tools(repo_dir, settings)
         tools = [t for t in fs if t.__name__ in ("read_file", "list_dir")]
 
-    agent = build_agent_from_definition(
-        settings,
-        definition,
-        tools=tools,
-        model_name=definition.model or settings.obsolescence_model,
-    )
-    limits = UsageLimits(request_limit=settings.obsolescence_request_limit)
     try:
-        result = run_agent(
-            agent,
-            lambda h: h.run_sync(
-                _build_prompt(
-                    draft_title=draft_title,
-                    draft_body=draft_body,
-                ),
-                usage_limits=limits,
-            ),
+        result = load_and_run_agent(
             settings=settings,
+            definition_name="obsolescence",
+            tools=tools,
+            model_name=settings.obsolescence_model,
+            prompt=_build_prompt(
+                draft_title=draft_title,
+                draft_body=draft_body,
+            ),
             what="obsolescence check",
+            run_kwargs={
+                "usage_limits": UsageLimits(
+                    request_limit=settings.obsolescence_request_limit
+                )
+            },
         )
         output = result.output
         if not isinstance(output, ObsolescenceResult):
@@ -125,5 +114,3 @@ def run_obsolescence_check(
             "obsolete": False,
             "reason": "obsolescence check failed",
         }
-    finally:
-        _safe_close(agent)

@@ -16,10 +16,14 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from ..core.duration import parse_duration
+
+if TYPE_CHECKING:
+    from ..config import Settings
 
 
 class AgentDefinition(BaseModel):
@@ -165,3 +169,85 @@ def load_periodic_agent_definition(
         / f"{name}.yaml"
     )
     return load_agent_definition(builtin)
+
+
+_ROOT = Path(__file__).parent.parent.parent.parent
+
+
+def load_and_run_agent(
+    *,
+    settings: "Settings",
+    definition_name: str,
+    tools: list | None = None,
+    model_name: str | None = None,
+    prompt: str,
+    what: str,
+    repo_dir: Path | None = None,
+    run_kwargs: dict | None = None,
+    system_prompt_format_kwargs: dict | None = None,
+    **build_overrides,
+):
+    """Load a YAML agent definition, build the agent, run it, and return output.
+
+    This is the single shared helper for the canonical pattern repeated
+    across ~11+ non-periodic agent files:
+
+    1. ``load_agent_definition`` from ``agent_definitions/<definition_name>.yaml``
+    2. ``build_agent_from_definition`` with *tools*, *model_name*, *repo_dir*,
+       and any ``**build_overrides``
+    3. ``run_agent`` with *prompt* and any ``**run_kwargs``
+    4. ``_safe_close`` in a ``finally`` block
+
+    Args:
+        settings: Application configuration.
+        definition_name: YAML file name under ``agent_definitions/``,
+            e.g. ``"scope_triage"`` or ``"periodic/module_curator"``.
+        tools: Tool list for the agent (default ``[]``).
+        model_name: Override model name (default ``definition.model``).
+        prompt: The user prompt passed to ``h.run_sync(prompt, **run_kwargs)``.
+        what: Human-readable label for retry log messages.
+        repo_dir: Optional repo clone directory (passed through to
+            ``build_agent_from_definition``).
+        run_kwargs: Extra keyword arguments forwarded to
+            ``h.run_sync(prompt, **run_kwargs)`` (e.g. ``usage_limits``,
+            ``message_history``).
+        system_prompt_format_kwargs: When set, ``definition.system_prompt``
+            is formatted with these kwargs (via ``str.format(**kwargs)``)
+            and passed as ``system_prompt`` to ``build_agent_from_definition``.
+            Ignored when ``system_prompt`` is already in ``**build_overrides``.
+        **build_overrides: Extra keyword arguments forwarded to
+            ``build_agent_from_definition``
+            (e.g. ``system_prompt``, ``board_id``).
+    """
+    from .base import build_agent_from_definition, _safe_close
+    from .retry import run_agent
+
+    definition = load_agent_definition(
+        _ROOT / "agent_definitions" / f"{definition_name}.yaml"
+    )
+    # Allow callers to format the definition's system_prompt template with
+    # runtime values (e.g. repo_dir, branch, target) without loading the
+    # definition themselves.  ``system_prompt`` in build_overrides wins
+    # over this auto-formatting when both are provided.
+    if system_prompt_format_kwargs and "system_prompt" not in build_overrides:
+        build_overrides["system_prompt"] = definition.system_prompt.format(
+            **system_prompt_format_kwargs
+        )
+    agent = build_agent_from_definition(
+        settings,
+        definition,
+        tools=tools or [],
+        model_name=model_name or definition.model,
+        repo_dir=repo_dir,
+        **build_overrides,
+    )
+    try:
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(prompt, **(run_kwargs or {})),
+            settings=settings,
+            what=what,
+        )
+    finally:
+        _safe_close(agent)
+    return result

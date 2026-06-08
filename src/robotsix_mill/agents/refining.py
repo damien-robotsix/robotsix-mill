@@ -367,34 +367,18 @@ def triage_auto_approve(
     structured classification.
     """
 
-    from .yaml_loader import load_agent_definition
-    from .base import build_agent_from_definition, _safe_close
-    from .retry import run_agent
-
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "auto-approve.yaml"
-    )
-
-    agent = build_agent_from_definition(
-        settings,
-        definition,
-        tools=[],
-        model_name=definition.model or settings.auto_approve_model,
-    )
+    from .yaml_loader import load_and_run_agent
 
     user_prompt = section("spec", spec)
 
-    try:
-        result = run_agent(
-            agent,
-            lambda h: h.run_sync(user_prompt),
-            settings=settings,
-            what="auto-approve triage",
-        )
-    finally:
-        _safe_close(agent)
+    result = load_and_run_agent(
+        settings=settings,
+        definition_name="auto-approve",
+        tools=[],
+        model_name=settings.auto_approve_model,
+        prompt=user_prompt,
+        what="auto-approve triage",
+    )
     return result.output
 
 
@@ -413,34 +397,18 @@ def review_spec_for_conciseness(
     NO tools, NO web, NO explore — classification/transformation only.
     """
 
-    from .yaml_loader import load_agent_definition
-    from .base import build_agent_from_definition, _safe_close
-    from .retry import run_agent
-
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "spec-review.yaml"
-    )
-
-    agent = build_agent_from_definition(
-        settings,
-        definition,
-        tools=[],
-        model_name=definition.model or settings.triage_model,
-    )
+    from .yaml_loader import load_and_run_agent
 
     user_prompt = section("spec", spec_markdown)
 
-    try:
-        result = run_agent(
-            agent,
-            lambda h: h.run_sync(user_prompt),
-            settings=settings,
-            what="spec review",
-        )
-    finally:
-        _safe_close(agent)
+    result = load_and_run_agent(
+        settings=settings,
+        definition_name="spec-review",
+        tools=[],
+        model_name=settings.triage_model,
+        prompt=user_prompt,
+        what="spec review",
+    )
     return result.output
 
 
