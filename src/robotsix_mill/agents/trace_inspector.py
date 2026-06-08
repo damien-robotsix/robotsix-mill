@@ -22,6 +22,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from ..config import Settings, get_secrets
+from .langfuse_tools import render_trace_findings
 from .prompt_blocks import section
 
 log = logging.getLogger("robotsix_mill.trace_inspector")
@@ -364,42 +365,6 @@ def make_trace_inspect_tool(settings: Settings):
         trace_data = json.dumps(detail, default=str)
         result = run_trace_inspector(settings=settings, trace_data=trace_data)
 
-        parts: list[str] = [f"## trace {trace_id} inspection"]
-        if result.error:
-            parts.append(f"\n_inspector error: {result.error[:200]}_")
-            return "\n".join(parts)
-
-        # Group findings by category so the rendered output mirrors the
-        # legacy three-section format retrospect's prompt was written
-        # for. Each finding renders its symptom; if a proposed_solution
-        # exists we tack it on as a parenthetical, keeping per-line
-        # density readable.
-        by_cat: dict[str, list[TraceFinding]] = {
-            "tool_error": [],
-            "agent_limitation": [],
-            "optimization": [],
-        }
-        for f in result.findings:
-            by_cat.setdefault(f.category, []).append(f)
-
-        section_titles = {
-            "tool_error": "Tool Errors",
-            "agent_limitation": "Agent Limitations",
-            "optimization": "Optimizations",
-        }
-        for cat, title in section_titles.items():
-            items = by_cat.get(cat, [])
-            if not items:
-                continue
-            parts.append(f"\n### {title}")
-            for f in items:
-                line = f"- {f.symptom}"
-                if f.proposed_solution:
-                    line += f"  _(fix: {f.proposed_solution[:200]})_"
-                parts.append(line)
-
-        if not result.findings:
-            parts.append("\n(no issues found in this trace)")
-        return "\n".join(parts)
+        return render_trace_findings(result.findings, trace_id, result.error or None)
 
     return trace_inspect
