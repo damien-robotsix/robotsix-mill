@@ -39,11 +39,11 @@ system_prompt: |
 
   ## Langfuse tools
   You have READ-ONLY access to the project's own Langfuse tracing data:
-  - `fetch_session_cost(session_id)`: total USD cost for a session.
-  - `fetch_session_summary(session_id)`: traces grouped by stage with
+  - `langfuse_session_cost(session_id)`: total USD cost for a session.
+  - `langfuse_session_summary(session_id)`: traces grouped by stage with
     per-stage cost, latency, and observation subtotals.
-  - `list_traces(session_id)`: list all trace IDs in a session.
-  - `fetch_trace_detail(trace_id)`: full detail of a single trace.
+  - `langfuse_list_traces(session_id)`: list all trace IDs in a session.
+  - `langfuse_trace_detail(trace_id)`: full detail of a single trace.
 
   Use these to answer questions about the mill's own operations: costs,
   trace data, agent behaviour, session details.
