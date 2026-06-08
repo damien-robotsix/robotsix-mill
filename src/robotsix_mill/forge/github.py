@@ -323,9 +323,7 @@ class GitHubForge(Forge):
                     # push). If the existing repo is EMPTY (no commits), reuse
                     # it so the scaffold's force-push completes the job; only a
                     # repo with real content is treated as a genuine conflict.
-                    existing = self._reuse_if_empty(
-                        c, api, custom_headers, owner, name
-                    )
+                    existing = self._reuse_if_empty(c, api, custom_headers, owner, name)
                     if existing is not None:
                         return existing
                     raise RuntimeError(
@@ -689,9 +687,7 @@ class GitHubForge(Forge):
     # --- HTTP seam (monkeypatched in tests) ---
     def _delete_branch(self, *, owner: str, repo: str, branch: str) -> bool:
         try:
-            r = self._http.delete(
-                f"/repos/{owner}/{repo}/git/refs/heads/{branch}"
-            )
+            r = self._http.delete(f"/repos/{owner}/{repo}/git/refs/heads/{branch}")
             # 204 = deleted; 404/422 = ref does not exist (already gone,
             # e.g. by GitHub auto-delete) — the branch is gone either way,
             # which is the desired end state.

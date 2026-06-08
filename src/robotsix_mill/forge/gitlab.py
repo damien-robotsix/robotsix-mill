@@ -623,9 +623,7 @@ class GitLabForge(Forge):
                 ) from exc
             if existing:
                 return existing["web_url"]
-        raise RuntimeError(
-            f"GitLab MR create failed: {r.status_code} {r.text[:300]}"
-        )
+        raise RuntimeError(f"GitLab MR create failed: {r.status_code} {r.text[:300]}")
 
     def _mr_changes(
         self,
