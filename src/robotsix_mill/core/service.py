@@ -279,16 +279,19 @@ class TicketService:
 
         Returns ``self.board_id`` when the bound DB has the row, else
         fans out via ``_get_anywhere`` and returns the discovered
-        board. Falls back to ``self.board_id`` (which may be empty)
-        when the ticket is not found anywhere — callers then operate
-        on the default DB and the row will simply not exist there.
+        board.  Raises ``ValueError`` when the ticket cannot be found
+        in any configured board and ``self.board_id`` is empty.
         """
         if self.board_id:
             with db.session(self.settings, self.board_id) as s:
                 if s.get(Ticket, ticket_id) is not None:
                     return self.board_id
         t = self._get_anywhere(ticket_id)
-        return (t.board_id if t and t.board_id else self.board_id) or ""
+        if t is not None:
+            return t.board_id or self.board_id or ""
+        if self.board_id:
+            return self.board_id
+        raise ValueError(f"Ticket {ticket_id} not found in any configured board")
 
     def _resolve_board_id(self, ticket: Ticket) -> None:
         """Assign *ticket* a ``board_id`` when it is missing (legacy rows).
@@ -1223,13 +1226,16 @@ class TicketService:
         been threaded through yet. The fanout picks the first board
         whose DB contains a matching id — wrong on collisions, but
         no worse than the prior behaviour.
+
+        Raises ``ValueError`` when no matching comment is found and
+        ``self.board_id`` is empty.
         """
         if ticket_id is not None:
             return self._board_for(ticket_id)
 
         from ..config import get_repos_config
 
-        candidates: list[str] = [self.board_id]
+        candidates: list[str] = [self.board_id] if self.board_id else []
 
         try:
             for rc in get_repos_config().repos.values():
@@ -1248,7 +1254,9 @@ class TicketService:
             with db.session(self.settings, board_id) as s:
                 if s.get(Comment, comment_id) is not None:
                     return board_id
-        return self.board_id
+        if self.board_id:
+            return self.board_id
+        raise ValueError(f"Comment {comment_id} not found in any configured board")
 
     def close_thread(
         self,
