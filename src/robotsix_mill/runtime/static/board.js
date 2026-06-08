@@ -38,6 +38,7 @@ const AGENT_COLORS={
  completeness_check:'#84cc16',
  cost_reconciliation:'#6366f1',
  cost_analyst:'#4f46e5',
+ run_health:'#3b82f6',
  config_sync:'#6366f1',
  roadmap_sync:'#9333ea',
  trace_review:'#0ea5e9',
@@ -1191,6 +1192,21 @@ async function runCostAnalyst(){
    alert("Cost-analyst failed to start: "+e);
  } finally {
    btn.disabled=false; btn.textContent='Cost Analyst';
+ }
+}
+
+async function runRunHealth(){
+ const btn=event.target;
+ btn.disabled=true; btn.textContent='Running...';
+ try {
+   const r=await jpost("/run-health");
+   if(!r.ok){throw new Error(await r.text())}
+   alert("Run-health started — it analyzes recent run outcomes and files health drafts to the mill board.");
+   setTimeout(refresh,4000);
+ } catch(e) {
+   alert("Run-health failed to start: "+e);
+ } finally {
+   btn.disabled=false; btn.textContent='Run Health';
  }
 }
 
