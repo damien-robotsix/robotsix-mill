@@ -7,7 +7,7 @@ from robotsix_mill.core import db
 from robotsix_mill.core.models import SourceKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
-from robotsix_mill.forge import github
+from robotsix_mill.forge import github, gitlab
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.ci_fix import (
     CIFixStage,
@@ -67,6 +67,13 @@ def _gh(tmp_path, **extra):
         FORGE_REMOTE_URL="https://github.com/o/r.git",
         **extra,
     )
+
+
+def _gl(tmp_path, **extra):
+    extra.setdefault("FORGE_KIND", "gitlab")
+    extra.setdefault("FORGE_TOKEN", "glpat-token")
+    extra.setdefault("FORGE_REMOTE_URL", "https://gitlab.com/ns/project.git")
+    return _ctx(tmp_path, **extra)
 
 
 def _setup_repo(ctx, ticket):
@@ -1179,3 +1186,59 @@ def test_in_scope_done_still_pushes_no_fix_ticket(tmp_path, monkeypatch):
     assert out.next_state is State.IMPLEMENT_COMPLETE
     assert push_calls == [1]
     assert ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY) == []
+
+
+# ============================================================
+# GitLab variants (same Forge ABC contract, different adapter)
+# ============================================================
+
+
+def test_fix_success_push_success_gitlab(tmp_path, monkeypatch):
+    """GitLab: CI fix success + push success → IMPLEMENT_COMPLETE."""
+    ctx = _gl(tmp_path)
+    monkeypatch.setattr(
+        gitlab.GitLabForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "lint", "summary": "err", "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        gitlab.GitLabForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(status="DONE", summary="ok"),
+    )
+    push_seen = {}
+
+    def fake_push(repo, branch, remote_url, token):
+        push_seen.update(branch=branch, token=token)
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        fake_push,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert push_seen["branch"] == f"mill/{t.id}"
+
+    counter = ctx.service.workspace(t).artifacts_dir / "ci_fix_attempts.txt"
+    assert _read_counter(counter) == 0
+
+
+def test_forge_not_configured_gitlab(tmp_path):
+    """GitLab: forge not configured → BLOCKED."""
+    ctx = _ctx(tmp_path)
+    out = CIFixStage().run(_fixing_ci(ctx), ctx)
+    assert out.next_state is State.BLOCKED
+    assert "forge not configured" in out.note
