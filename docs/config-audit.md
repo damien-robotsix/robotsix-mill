@@ -118,7 +118,7 @@ other code depends on.
 
 | Env var | Field | Default | Type | Source | Sensitivity | YAML | Docs | Consumers | Notes |
 |---|---|---|---|---|---|---|---|---|---|
-| `FORGE_KIND` | `forge_kind` | `none` | `Literal["github","gitlab","none"]` | Settings | non-sensitive | default | Non-prefixed | `forge/base.py`, all `forge/*.py` | |
+| `FORGE_KIND` | `forge_kind` | `none` | `Literal["github","gitlab","auto","none"]` | Settings | non-sensitive | default | Non-prefixed | `forge/base.py`, all `forge/*.py` | `auto` detects forge kind from remote URL hostname |
 | `FORGE_REMOTE_URL` | `forge_remote_url` | `None` | `str\|None` | Settings | identifying | absent | Non-prefixed | `forge/base.py`, all `forge/*.py` | |
 | `FORGE_TARGET_BRANCH` | `forge_target_branch` | `main` | `str` | Settings | non-sensitive | default | Non-prefixed | `forge/base.py` | |
 | `FORGE_AUTH` | `forge_auth` | `token` | `Literal["token","app"]` | Settings | non-sensitive | default | Non-prefixed | `forge/auth.py` | |

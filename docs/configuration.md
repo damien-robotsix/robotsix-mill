@@ -334,7 +334,7 @@ Every setting below shows:
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `forge.kind` | `FORGE_KIND` | `none` | Forge platform: `github`, `gitlab`, or `none` |
+| `forge.kind` | `FORGE_KIND` | `none` | Forge platform: `github`, `gitlab`, `auto`, or `none`. `auto` detects the kind from the remote URL hostname (`github.com` → GitHub, `gitlab.com` → GitLab); custom domains raise an error and require an explicit setting. |
 | `forge.remote_url` | `FORGE_REMOTE_URL` | `None` | Remote URL for clone + push |
 | `forge.target_branch` | `FORGE_TARGET_BRANCH` | `main` | Target branch for PRs |
 | `forge.auth_mode` | `FORGE_AUTH` | `token` | Auth mode: `token` (PAT) or `app` (GitHub App) |

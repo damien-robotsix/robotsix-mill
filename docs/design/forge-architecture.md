@@ -81,6 +81,13 @@ override them when the forge supports the capability.
 ```python
 def get_forge(settings: Settings, repo_config: RepoConfig | None = None) -> Forge:
     kind = settings.forge_kind
+    if kind == "auto":
+        remote_url = (
+            (repo_config.forge_remote_url if repo_config is not None else None)
+            or settings.forge_remote_url
+            or ""
+        )
+        kind = _detect_forge_kind(remote_url)
     if kind == "github":
         return GitHubForge(settings, repo_config=repo_config)
     if kind == "gitlab":
@@ -91,6 +98,10 @@ def get_forge(settings: Settings, repo_config: RepoConfig | None = None) -> Forg
 When `repo_config` is provided, the adapter uses its
 `forge_remote_url` instead of the global `Settings.forge_remote_url`,
 so different repos under the same forge can target different remotes.
+
+When `forge_kind` is `"auto"`, the effective forge kind is detected
+from the remote URL (per-repo `forge_remote_url` takes precedence over
+the global setting). See §5.3 for the auto-detection heuristics.
 
 ### 1.4 `NotConfiguredError`
 
@@ -388,7 +399,7 @@ All fields are in `src/robotsix_mill/config.py`, class `Settings`.
 
 | Field | Type | Default | Env/YAML alias | Purpose |
 |-------|------|---------|----------------|---------|
-| `forge_kind` | `Literal["github","gitlab","none"]` | `"none"` | `FORGE_KIND` | Which forge adapter to use. `"none"` disables forge delivery entirely. |
+| `forge_kind` | `Literal["github","gitlab","auto","none"]` | `"none"` | `FORGE_KIND` | Which forge adapter to use. `"none"` disables forge delivery entirely. `"auto"` detects the forge kind from the remote URL hostname (see §5.3). |
 | `forge_remote_url` | `str \| None` | `None` | `FORGE_REMOTE_URL` | Remote URL of the target repository (used for clone, push, and API calls). |
 | `forge_target_branch` | `str` | `"main"` | `FORGE_TARGET_BRANCH` | Target branch for PRs/MRs. |
 | `forge_auth` | `Literal["token","app"]` | `"token"` | `FORGE_AUTH` | Auth mode: `"token"` for static PAT, `"app"` for GitHub App JWT flow. |
@@ -420,19 +431,42 @@ Singleton, accessed via `get_secrets()`.
 | `github_app_private_key` | `str \| None` | `None` | GitHub App private key PEM text. |
 | `github_app_private_key_path` | `str \| None` | `None` | Path to the private key `.pem` file (may be in secrets or YAML). |
 
-### 5.3 `RepoConfig` field
+### 5.3 Auto-detection (`auto` mode)
+
+When `forge_kind` is `"auto"`, the system inspects the remote URL
+hostname to decide which forge adapter to use.
+
+**Resolution order:**
+1. If a per-repo `forge_remote_url` is set on the `RepoConfig`, use that URL.
+2. Otherwise, fall back to the global `Settings.forge_remote_url`.
+3. If neither is set, the empty string is passed to `_detect_forge_kind()`,
+   which raises `RuntimeError`.
+
+**Heuristics** (in `_detect_forge_kind()`):
+- Host `github.com` → `"github"` (covers `https://github.com/...` and `git@github.com:...`)
+- Host `gitlab.com` → `"gitlab"` (covers `https://gitlab.com/...` and `git@gitlab.com:...`)
+- Any other host (GitHub Enterprise Server, self-hosted GitLab, etc.) → raises
+  `RuntimeError` with a message instructing the operator to set `FORGE_KIND`
+  explicitly.
+
+**Error case:** Custom domains are ambiguous — there is no way to
+distinguish a GitHub Enterprise Server instance from a self-hosted
+GitLab instance by hostname alone. The operator must set
+`FORGE_KIND=github` or `FORGE_KIND=gitlab` explicitly.
+
+### 5.4 `RepoConfig` field
 
 | Field | Type | Default | Purpose |
 |-------|------|---------|---------|
 | `forge_remote_url` | `str \| None` | `None` | Per-repo override of `Settings.forge_remote_url`. When set, the forge adapter targets this repo's remote instead of the global one. |
 
-### 5.4 YAML defaults — `forge:` block
+### 5.5 YAML defaults — `forge:` block
 
 In `config/mill.defaults.yaml`:
 
 ```yaml
 forge:
-  kind: none                              # github | gitlab | none
+  kind: none                              # github | gitlab | auto | none
   remote_url: null                        # remote URL for clone + push
   target_branch: main                     # target branch for PRs
   auth_mode: token                        # token (PAT) | app (GitHub App)
