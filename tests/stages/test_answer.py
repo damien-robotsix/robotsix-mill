@@ -56,7 +56,7 @@ def test_happy_path_with_clone(ctx_factory, monkeypatch):
 
     fake_answer = "**42** — the ultimate answer."
 
-    def _fake_run_answer(*, settings, title, question, repo_dir=None):
+    def _fake_run_answer(*, settings, title, question, repo_dir=None, repo_config=None):
         return fake_answer
 
     monkeypatch.setattr(
@@ -106,7 +106,7 @@ def test_happy_path_with_existing_clone(ctx_factory, monkeypatch):
 
     fake_answer = "Cached answer."
 
-    def _fake_run_answer(*, settings, title, question, repo_dir=None):
+    def _fake_run_answer(*, settings, title, question, repo_dir=None, repo_config=None):
         return fake_answer
 
     monkeypatch.setattr(
@@ -129,7 +129,7 @@ def test_happy_path_with_existing_clone(ctx_factory, monkeypatch):
     # repo_dir should be passed to agent.
     imported_calls = []
 
-    def _capture(*, settings, title, question, repo_dir=None):
+    def _capture(*, settings, title, question, repo_dir=None, repo_config=None):
         imported_calls.append(repo_dir)
         return fake_answer
 
@@ -164,7 +164,7 @@ def test_happy_path_without_remote(ctx_factory, monkeypatch):
 
     agent_called = []
 
-    def _fake_run_answer(*, settings, title, question, repo_dir=None):
+    def _fake_run_answer(*, settings, title, question, repo_dir=None, repo_config=None):
         agent_called.append(repo_dir)
         return "Answer without repo."
 
@@ -204,7 +204,7 @@ def test_clone_failure_agent_still_runs(ctx_factory, monkeypatch):
 
     agent_called = []
 
-    def _fake_run_answer(*, settings, title, question, repo_dir=None):
+    def _fake_run_answer(*, settings, title, question, repo_dir=None, repo_config=None):
         agent_called.append(repo_dir)
         return "Answer even without clone."
 
@@ -243,7 +243,7 @@ def test_runtime_error_from_agent_blocks(ctx_factory, monkeypatch):
         lambda s, rc: None,
     )
 
-    def _failing_agent(*, settings, title, question, repo_dir=None):
+    def _failing_agent(*, settings, title, question, repo_dir=None, repo_config=None):
         raise RuntimeError("OPENROUTER_API_KEY not set")
 
     monkeypatch.setattr(
@@ -268,7 +268,7 @@ def test_empty_answer_blocks(ctx_factory, monkeypatch):
         lambda s, rc: None,
     )
 
-    def _empty_agent(*, settings, title, question, repo_dir=None):
+    def _empty_agent(*, settings, title, question, repo_dir=None, repo_config=None):
         return ""
 
     monkeypatch.setattr(
@@ -290,7 +290,7 @@ def test_whitespace_only_answer_blocks(ctx_factory, monkeypatch):
         lambda s, rc: None,
     )
 
-    def _whitespace_agent(*, settings, title, question, repo_dir=None):
+    def _whitespace_agent(*, settings, title, question, repo_dir=None, repo_config=None):
         return "   \n  "
 
     monkeypatch.setattr(
@@ -323,7 +323,7 @@ def test_epic_context_enrichment(ctx_factory, monkeypatch):
 
     received_question = []
 
-    def _capture_question(*, settings, title, question, repo_dir=None):
+    def _capture_question(*, settings, title, question, repo_dir=None, repo_config=None):
         received_question.append(question)
         return "Answer."
 
@@ -350,7 +350,7 @@ def test_artifact_preservation(ctx_factory, monkeypatch):
         lambda s, rc: None,
     )
 
-    def _fake_agent(*, settings, title, question, repo_dir=None):
+    def _fake_agent(*, settings, title, question, repo_dir=None, repo_config=None):
         return "Answer."
 
     monkeypatch.setattr(
@@ -375,7 +375,7 @@ def test_artifact_preservation_title_only(ctx_factory, monkeypatch):
         lambda s, rc: None,
     )
 
-    def _fake_agent(*, settings, title, question, repo_dir=None):
+    def _fake_agent(*, settings, title, question, repo_dir=None, repo_config=None):
         return "Answer."
 
     monkeypatch.setattr(
@@ -409,7 +409,7 @@ def test_title_only_question_answered(ctx_factory, monkeypatch):
         lambda s, rc: None,
     )
 
-    def _fake_agent(*, settings, title, question, repo_dir=None):
+    def _fake_agent(*, settings, title, question, repo_dir=None, repo_config=None):
         return "Answered title-only."
 
     monkeypatch.setattr(
@@ -419,3 +419,30 @@ def test_title_only_question_answered(ctx_factory, monkeypatch):
 
     out = AnswerStage().run(t, ctx)
     assert out.next_state is State.ANSWERED
+
+
+def test_stage_passes_repo_config_to_agent(ctx_factory, monkeypatch):
+    """The answer stage forwards ctx.repo_config to run_answer_agent."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.answer._resolve_remote_url",
+        lambda s, rc: None,
+    )
+
+    captured = {}
+
+    def _capture(*, settings, title, question, repo_dir=None, repo_config=None):
+        captured["repo_config"] = repo_config
+        return "ok"
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.answer.answering.run_answer_agent",
+        _capture,
+    )
+
+    out = AnswerStage().run(t, ctx)
+    assert out.next_state is State.ANSWERED
+    assert captured["repo_config"] is ctx.repo_config
+    assert captured["repo_config"].langfuse_public_key == "pk-test"
