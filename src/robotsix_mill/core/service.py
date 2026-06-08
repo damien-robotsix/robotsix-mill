@@ -1181,8 +1181,18 @@ class TicketService:
                 if parent is None:
                     raise ValueError(f"parent comment {parent_id} not found")
                 if parent.ticket_id != ticket_id:
+                    # List valid thread IDs for this ticket so the error
+                    # is self-diagnosing — callers can discover the
+                    # correct IDs without a separate round-trip.
+                    valid_stmt = (
+                        select(Comment)
+                        .where(Comment.ticket_id == ticket_id)
+                        .where(Comment.parent_id == None)
+                    )
+                    valid_threads = [c.id for c in s.exec(valid_stmt).all()]
                     raise ValueError(
-                        f"parent comment {parent_id} does not belong to ticket {ticket_id}"
+                        f"parent comment {parent_id} does not belong to ticket {ticket_id}. "
+                        f"Valid thread IDs for this ticket: {valid_threads}"
                     )
             comment = Comment(
                 ticket_id=ticket_id, body=body, author=author, parent_id=parent_id

@@ -93,6 +93,9 @@ system_prompt: |
   propose these regardless of your main `decision` (e.g. you can
   `keep_open` and also propose new children):
 
+  When you need to reply to a comment thread, call `list_threads` first
+  to discover the correct `thread_id`.  Never guess a numeric thread ID.
+
   - **`new_children`** — list of new child tickets to create.  Each must
     have a non-empty `title` and `body`.  Use this when the merged child
     reveals work that was not anticipated in the original breakdown.
