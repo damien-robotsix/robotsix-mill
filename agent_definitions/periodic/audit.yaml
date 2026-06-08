@@ -17,6 +17,7 @@ model: "${MILL_AUDIT_MODEL}"
 
 tools:
   - explore
+  - parallel_explore
   - read_file
   - list_dir
   - run_command
@@ -72,24 +73,52 @@ system_prompt: |
        (kind/source pseudo-enums) duplicated across modules with no
        shared constant, or settings keys that must appear together in
        config.py, .env, .env.example and docs.
-     Use `detect_duplication` to get deterministic clone-pair data
+     `detect_duplication` provides deterministic clone-pair data
      (file paths, line ranges, duplicated line/token counts) for
      copy-paste detection — do not rely on visual inspection alone.
-     Use `list_dir` to assess layout and root clutter, `explore` to
-     find the largest/longest modules and functions, `read_file`
-     sparingly to confirm.
+     See the tool-selection guidance below for when to use
+     `list_dir`, `explore`, `read_file`, and `detect_duplication`.
 
   B. TOOLING / SECURITY COVERAGE (use `ask_web_knowledge` for EXTERNAL
      best-practice lookups). Gaps in CI, linting, type-checking,
      security scanning, supply-chain, dependency hygiene, etc.
-     Use `run_command` to run local tooling (linters, scanners,
-     dependency checkers) and gather empirical evidence before
-     proposing gaps.
+     For running local tooling (linters, scanners, dependency
+     checkers) see the tool-selection guidance below — gather
+     empirical evidence before proposing gaps.
 
   `ask_web_knowledge` is for EXTERNAL best-practice lookups ONLY — never use
   it to read this project's own files. When a local clone is available,
-  inspect the ACTUAL repository with `explore`, `read_file`, and
-  `list_dir`. (With no clone, reason from the forge_remote_url + memory.)
+  inspect the ACTUAL repository using the tools in the guidance below.
+  (With no clone, reason from the forge_remote_url + memory.)
+
+  - **Choose the right investigation tool:**
+    * **Default: delegate to `explore` / `parallel_explore`.** Even
+      for investigations that feel "simple" — the explore sub-agent
+      has its own 100-call budget outside your audit request cap,
+      so every delegation saves a top-level request.  When you need
+      to investigate several facets of the repo (e.g. which files
+      are the largest, what licence headers are missing, how test
+      coverage varies across modules), batch them into a SINGLE
+      `explore` call as distinct bullet sub-questions.  Serial
+      single-facet `explore` calls re-read the same large files each
+      time, wasting context and cost.  For genuinely independent
+      slices (e.g. scanning separate directories concurrently), use
+      `parallel_explore(questions=[...])` — it runs one scout per
+      slice concurrently.
+    * **Use direct tools only as narrow exceptions:**
+      - `read_file` — only AFTER `explore` has located the exact
+        file or symbol.  Never guess line numbers; ask `explore` to
+        find a symbol by name first (e.g. "which file defines
+        `Settings` and at what line?"), then read with the confirmed
+        offset.  Avoid reading a whole directory of files just to
+        "build context" — that's `explore`'s job.
+      - `list_dir` — only for trivial existence checks ("does path
+        X exist?") and top-level layout assessment.
+      - `run_command` — only for targeted one-liners on
+        already-pinned-down symbols or files (e.g. running a linter,
+        scanner, or dependency checker whose scope is already known).
+      - `detect_duplication` — call ONCE per pass; its output feeds
+        into lens-A analysis.  Do not re-run it.
 
   CONSULTING PRIOR PROPOSALS:
 

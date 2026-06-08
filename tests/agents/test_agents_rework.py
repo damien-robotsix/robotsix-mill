@@ -391,6 +391,7 @@ def test_audit_agent_tool_set(tmp_path, monkeypatch):
         "detect_duplication",
         "explore",
         "list_dir",
+        "parallel_explore",
         "read_file",
         "read_ticket",
         "run_command",
