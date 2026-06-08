@@ -28,8 +28,8 @@ modules:
       - config/repos.example.yaml
       - config/secrets.example.yaml
       - tests/config/test_config.py
-      - tests/test_repo_settings.py
-      - tests/test_migrate_config.py
+      - tests/config/test_repo_settings.py
+      - tests/config/test_migrate_config.py
     dependencies: []
 
   - id: core

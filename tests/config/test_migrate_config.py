@@ -14,7 +14,7 @@ import pytest
 
 from tests.script_loader import load_script
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _SCRIPT_PATH = _REPO_ROOT / "scripts" / "migrate-config"
 
 
