@@ -21,7 +21,8 @@ def _settings(tmp_path, **env):
 def test_fetch_session_cost_formats_dollar_string(tmp_path, monkeypatch):
     s = _settings(tmp_path)
     monkeypatch.setattr(
-        "robotsix_mill.langfuse.client.session_cost", lambda settings, sid: 1.2345
+        "robotsix_mill.langfuse.client.session_cost",
+        lambda settings, sid, repo_config=None: 1.2345,
     )
     tools = _build_langfuse_tools(s)
     fetch = tools[0]
@@ -31,7 +32,8 @@ def test_fetch_session_cost_formats_dollar_string(tmp_path, monkeypatch):
 def test_fetch_session_cost_handles_zero(tmp_path, monkeypatch):
     s = _settings(tmp_path)
     monkeypatch.setattr(
-        "robotsix_mill.langfuse.client.session_cost", lambda settings, sid: 0.0
+        "robotsix_mill.langfuse.client.session_cost",
+        lambda settings, sid, repo_config=None: 0.0,
     )
     tools = _build_langfuse_tools(s)
     fetch = tools[0]
@@ -42,7 +44,7 @@ def test_fetch_session_summary_returns_summary(tmp_path, monkeypatch):
     s = _settings(tmp_path)
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client.fetch_session_summary",
-        lambda settings, sid: "## Session summary",
+        lambda settings, sid, repo_config=None: "## Session summary",
     )
     tools = _build_langfuse_tools(s)
     summary_fn = tools[1]
@@ -53,7 +55,7 @@ def test_fetch_session_summary_handles_none(tmp_path, monkeypatch):
     s = _settings(tmp_path)
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client.fetch_session_summary",
-        lambda settings, sid: None,
+        lambda settings, sid, repo_config=None: None,
     )
     tools = _build_langfuse_tools(s)
     summary_fn = tools[1]
@@ -66,7 +68,7 @@ def test_list_traces_returns_formatted_lines(tmp_path, monkeypatch):
     s = _settings(tmp_path)
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client._langfuse_api_get",
-        lambda settings, path, params: {
+        lambda settings, path, params, repo_config=None: {
             "data": [
                 {
                     "id": "trace-1",
@@ -94,7 +96,7 @@ def test_list_traces_handles_none_data(tmp_path, monkeypatch):
     s = _settings(tmp_path)
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client._langfuse_api_get",
-        lambda settings, path, params: None,
+        lambda settings, path, params, repo_config=None: None,
     )
     tools = _build_langfuse_tools(s)
     list_fn = tools[2]
@@ -105,7 +107,7 @@ def test_list_traces_handles_empty_data(tmp_path, monkeypatch):
     s = _settings(tmp_path)
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client._langfuse_api_get",
-        lambda settings, path, params: {"data": []},
+        lambda settings, path, params, repo_config=None: {"data": []},
     )
     tools = _build_langfuse_tools(s)
     list_fn = tools[2]
@@ -118,7 +120,7 @@ def test_fetch_trace_detail_returns_summary(tmp_path, monkeypatch):
     s = _settings(tmp_path)
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client.fetch_trace_detail",
-        lambda settings, tid: {
+        lambda settings, tid, repo_config=None: {
             "name": "my-trace",
             "id": "trace-1",
             "timestamp": "2025-01-01T00:00:00Z",
@@ -147,13 +149,41 @@ def test_fetch_trace_detail_handles_none(tmp_path, monkeypatch):
     s = _settings(tmp_path)
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client.fetch_trace_detail",
-        lambda settings, tid: None,
+        lambda settings, tid, repo_config=None: None,
     )
     tools = _build_langfuse_tools(s)
     detail_fn = tools[3]
     result = detail_fn("t1")
     assert "No trace found" in result
     assert "t1" in result
+
+
+def test_repo_config_forwarded_to_client(tmp_path, monkeypatch):
+    """_build_langfuse_tools forwards repo_config to the client functions."""
+    from robotsix_mill.config import RepoConfig
+
+    rc = RepoConfig(
+        repo_id="my-repo",
+        board_id="b1",
+        langfuse_project_name="proj",
+        langfuse_public_key="pk-rc",
+        langfuse_secret_key="sk-rc",
+    )
+
+    captured = {}
+
+    def _spy_session_cost(settings, session_id, repo_config=None):
+        captured["repo_config"] = repo_config
+        return 1.0
+
+    monkeypatch.setattr("robotsix_mill.langfuse.client.session_cost", _spy_session_cost)
+
+    s = _settings(tmp_path)
+    tools = _build_langfuse_tools(s, repo_config=rc)
+    fetch = tools[0]
+    result = fetch("s1")
+    assert result == "$1.0000"
+    assert captured["repo_config"] is rc
 
 
 # ── run_answer_agent tests ───────────────────────────────────────────
@@ -191,19 +221,20 @@ def test_run_answer_agent_without_repo_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(rmod, "run_agent", fake_retry)
     # Stub langfuse tools to avoid real imports
     monkeypatch.setattr(
-        "robotsix_mill.langfuse.client.session_cost", lambda settings, sid: 0.0
+        "robotsix_mill.langfuse.client.session_cost",
+        lambda settings, sid, repo_config=None: 0.0,
     )
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client.fetch_session_summary",
-        lambda settings, sid: "summary",
+        lambda settings, sid, repo_config=None: "summary",
     )
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client._langfuse_api_get",
-        lambda settings, path, params: {"data": []},
+        lambda settings, path, params, repo_config=None: {"data": []},
     )
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client.fetch_trace_detail",
-        lambda settings, tid: None,
+        lambda settings, tid, repo_config=None: None,
     )
 
     result = run_answer_agent(settings=s, title="T", question="Q")
@@ -251,19 +282,20 @@ def test_run_answer_agent_with_repo_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(rmod, "run_agent", fake_retry)
     # Stub langfuse tools
     monkeypatch.setattr(
-        "robotsix_mill.langfuse.client.session_cost", lambda settings, sid: 0.0
+        "robotsix_mill.langfuse.client.session_cost",
+        lambda settings, sid, repo_config=None: 0.0,
     )
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client.fetch_session_summary",
-        lambda settings, sid: "summary",
+        lambda settings, sid, repo_config=None: "summary",
     )
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client._langfuse_api_get",
-        lambda settings, path, params: {"data": []},
+        lambda settings, path, params, repo_config=None: {"data": []},
     )
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client.fetch_trace_detail",
-        lambda settings, tid: None,
+        lambda settings, tid, repo_config=None: None,
     )
 
     result = run_answer_agent(settings=s, title="T", question="Q", repo_dir=tmp_path)
@@ -295,19 +327,20 @@ def test_run_answer_agent_runtime_error_on_missing_api_key(tmp_path, monkeypatch
 
     monkeypatch.setattr(bmod, "build_agent_from_definition", fake_build_agent)
     monkeypatch.setattr(
-        "robotsix_mill.langfuse.client.session_cost", lambda settings, sid: 0.0
+        "robotsix_mill.langfuse.client.session_cost",
+        lambda settings, sid, repo_config=None: 0.0,
     )
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client.fetch_session_summary",
-        lambda settings, sid: "summary",
+        lambda settings, sid, repo_config=None: "summary",
     )
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client._langfuse_api_get",
-        lambda settings, path, params: {"data": []},
+        lambda settings, path, params, repo_config=None: {"data": []},
     )
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client.fetch_trace_detail",
-        lambda settings, tid: None,
+        lambda settings, tid, repo_config=None: None,
     )
 
     import pytest

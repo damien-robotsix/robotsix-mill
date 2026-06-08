@@ -9,18 +9,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..config import Settings
+from ..config import RepoConfig, Settings
 
 
-def _build_langfuse_tools(settings: Settings):
-    """Create Langfuse read-only tools as closures capturing settings."""
+def _build_langfuse_tools(settings: Settings, repo_config: RepoConfig | None = None):
+    """Create Langfuse read-only tools as closures capturing settings
+    and an optional per-repo *repo_config*. When *repo_config* is not
+    ``None`` its Langfuse credentials are used; otherwise the global
+    :class:`Secrets` singleton fallback is used."""
 
     def fetch_session_cost(session_id: str) -> str:
         """Fetch the total USD cost for a Langfuse session by its ID.
         Returns the cost as a dollar string (e.g. "$1.2345")."""
         from ..langfuse.client import session_cost
 
-        cost = session_cost(settings, session_id)
+        cost = session_cost(settings, session_id, repo_config=repo_config)
         return f"${cost:.4f}"
 
     def fetch_session_summary(session_id: str) -> str:
@@ -29,7 +32,7 @@ def _build_langfuse_tools(settings: Settings):
         warnings/errors. Returns a Markdown text block."""
         from ..langfuse.client import fetch_session_summary
 
-        summary = fetch_session_summary(settings, session_id)
+        summary = fetch_session_summary(settings, session_id, repo_config=repo_config)
         if summary is None:
             return f"No Langfuse data found for session {session_id} (tracing may be unconfigured)"
         return summary
@@ -43,6 +46,7 @@ def _build_langfuse_tools(settings: Settings):
             settings,
             "/api/public/traces",
             params={"sessionId": session_id, "limit": 100},
+            repo_config=repo_config,
         )
         if data is None:
             return "Langfuse unavailable or tracing not configured"
@@ -63,7 +67,7 @@ def _build_langfuse_tools(settings: Settings):
         Returns a JSON-like summary of the trace's observations."""
         from ..langfuse.client import fetch_trace_detail
 
-        detail = fetch_trace_detail(settings, trace_id)
+        detail = fetch_trace_detail(settings, trace_id, repo_config=repo_config)
         if detail is None:
             return f"No trace found for ID {trace_id}"
         # Return a compact but useful subset: name, timestamp, cost,
@@ -97,12 +101,17 @@ def run_answer_agent(
     title: str,
     question: str,
     repo_dir: Path | None = None,
+    repo_config: RepoConfig | None = None,
 ) -> str:
     """Return a free-form Markdown answer string. When *repo_dir* is
     given the agent grounds its answer in that local clone via
     explore/read_file/list_dir/run_command. Always has web_research
     and Langfuse tools. Raises RuntimeError if no OpenRouter key is
     configured.
+
+    When *repo_config* is provided, its Langfuse credentials are
+    forwarded to the Langfuse tools so the agent queries the repo's
+    own Langfuse project instead of the global one.
     """
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
@@ -125,7 +134,7 @@ def run_answer_agent(
         tools = [make_explore_tool(settings, repo_dir), *ro]
 
     # Langfuse read tools — always available
-    langfuse_tools = _build_langfuse_tools(settings)
+    langfuse_tools = _build_langfuse_tools(settings, repo_config=repo_config)
     tools.extend(langfuse_tools)
 
     agent = build_agent_from_definition(

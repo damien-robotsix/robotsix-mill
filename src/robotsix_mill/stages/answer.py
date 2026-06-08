@@ -83,6 +83,7 @@ class AnswerStage(Stage):
                 title=ticket.title,
                 question=question,
                 repo_dir=repo_dir,
+                repo_config=ctx.repo_config,
             )
         except RuntimeError as e:  # e.g. OPENROUTER_API_KEY not set
             return Outcome(State.BLOCKED, str(e))
