@@ -74,8 +74,11 @@ def run_audit_agent(
         clipped to ``MAX_GAPS`` (5) entries, plus the updated memory
         ledger.
     """
+    from pydantic_ai.usage import UsageLimits
+
     from .periodic_base import run_periodic_agent
 
+    limits = UsageLimits(request_limit=settings.audit_request_limit)
     return run_periodic_agent(
         settings=settings,
         definition_name="audit",
@@ -90,4 +93,5 @@ def run_audit_agent(
         include_forge_url=True,
         include_jscpd=True,
         include_run_command=True,
+        usage_limits=limits,
     )
