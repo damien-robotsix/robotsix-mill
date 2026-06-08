@@ -105,6 +105,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Cost-analyst pass",
         "format": "memory_drafts",
     },
+    "run-health": {
+        "module": "runners.run_health_runner",
+        "function": "run_run_health_pass",
+        "label": "Run-health pass",
+        "format": "memory_notes",
+    },
     "survey": {
         "module": "runners.survey_runner",
         "function": "run_survey_pass",
@@ -784,6 +790,17 @@ def main(argv: list[str] | None = None) -> int:
         "copy-paste", help="run a copy-paste / code-duplication detection pass"
     )
     p_copy_paste.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
+    # --- run-health command ---
+    p_run_health = sub.add_parser(
+        "run-health",
+        help="run a health analysis pass over recent run outcomes",
+    )
+    p_run_health.add_argument(
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",
