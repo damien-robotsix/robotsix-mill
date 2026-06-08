@@ -7,7 +7,10 @@ from __future__ import annotations
 
 import re
 
+import httpx
+
 from ..config import get_secrets
+from ._http import _ApiClient
 from .base import BranchInfo, Forge, NotConfiguredError, RepoInfo
 from .github import (
     _ANSI_RE,
@@ -49,6 +52,12 @@ class GitLabForge(Forge):
     def __init__(self, settings, repo_config=None):
         super().__init__(settings)
         self._repo_config = repo_config
+        self._http = _ApiClient(
+            settings,
+            repo_config,
+            "gitlab_api_url",
+            lambda s, rc: _build_headers(get_secrets().forge_token or ""),
+        )
 
     @property
     def _remote_url(self) -> str:
@@ -274,47 +283,34 @@ class GitLabForge(Forge):
 
     def _resolve_project_id(self, project_path: str) -> int:
         """GET /projects/:encoded_path → project id."""
-        import httpx
-
         from urllib.parse import quote
 
-        s = self.settings
-        api = s.gitlab_api_url.rstrip("/")
-        headers = _build_headers(get_secrets().forge_token or "")
         encoded = quote(project_path, safe="")
-        with httpx.Client(timeout=30) as c:
-            r = c.get(f"{api}/projects/{encoded}", headers=headers)
-            if r.status_code == 200:
-                return r.json()["id"]
-            raise RuntimeError(
-                f"GitLab project lookup failed: {r.status_code} {r.text[:300]}"
-            )
+        r = self._http.get(f"/projects/{encoded}")
+        if r.status_code == 200:
+            return r.json()["id"]
+        raise RuntimeError(
+            f"GitLab project lookup failed: {r.status_code} {r.text[:300]}"
+        )
 
     def _find_mr(
         self, project_path: str, source_branch: str, state: str = "all"
     ) -> dict | None:
         """GET /projects/:id/merge_requests?source_branch=…&state=…&per_page=1."""
-        import httpx
-
-        s = self.settings
-        api = s.gitlab_api_url.rstrip("/")
-        headers = _build_headers(get_secrets().forge_token or "")
         pid = self._resolve_project_id(project_path)
-        with httpx.Client(timeout=30) as c:
-            r = c.get(
-                f"{api}/projects/{pid}/merge_requests",
-                headers=headers,
-                params={
-                    "source_branch": source_branch,
-                    "state": state,
-                    "per_page": 1,
-                },
-            )
-            r.raise_for_status()
-            items = r.json()
-            if not items:
-                return None
-            return items[0]
+        r = self._http.get(
+            f"/projects/{pid}/merge_requests",
+            params={
+                "source_branch": source_branch,
+                "state": state,
+                "per_page": 1,
+            },
+        )
+        r.raise_for_status()
+        items = r.json()
+        if not items:
+            return None
+        return items[0]
 
     def _get_mr_by_iid(self, *, project_path: str, mr_iid: int) -> dict | None:
         """GET /projects/:id/merge_requests/:iid → MR dict (by IID).
@@ -322,56 +318,35 @@ class GitLabForge(Forge):
         Resolves a recorded MR web url to its current status independent
         of whether the source branch still exists, mirroring the GitHub
         ``_get_pr_by_number`` seam."""
-        import httpx
-
-        s = self.settings
-        api = s.gitlab_api_url.rstrip("/")
-        headers = _build_headers(get_secrets().forge_token or "")
         pid = self._resolve_project_id(project_path)
-        with httpx.Client(timeout=30) as c:
-            r = c.get(
-                f"{api}/projects/{pid}/merge_requests/{mr_iid}",
-                headers=headers,
-            )
-            r.raise_for_status()
-            return r.json()
+        r = self._http.get(
+            f"/projects/{pid}/merge_requests/{mr_iid}",
+        )
+        r.raise_for_status()
+        return r.json()
 
     def _get_latest_pipeline(self, project_path: str, mr_iid: int) -> dict | None:
         """GET /projects/:id/merge_requests/:iid/pipelines?per_page=1."""
-        import httpx
-
-        s = self.settings
-        api = s.gitlab_api_url.rstrip("/")
-        headers = _build_headers(get_secrets().forge_token or "")
         pid = self._resolve_project_id(project_path)
-        with httpx.Client(timeout=30) as c:
-            r = c.get(
-                f"{api}/projects/{pid}/merge_requests/{mr_iid}/pipelines",
-                headers=headers,
-                params={"per_page": 1},
-            )
-            r.raise_for_status()
-            items = r.json()
-            if not items:
-                return None
-            return items[0]
+        r = self._http.get(
+            f"/projects/{pid}/merge_requests/{mr_iid}/pipelines",
+            params={"per_page": 1},
+        )
+        r.raise_for_status()
+        items = r.json()
+        if not items:
+            return None
+        return items[0]
 
     def _get_failed_jobs(self, project_path: str, pipeline_id: int) -> list[dict]:
         """GET /projects/:id/pipelines/:pipeline_id/jobs?scope=failed&per_page=20."""
-        import httpx
-
-        s = self.settings
-        api = s.gitlab_api_url.rstrip("/")
-        headers = _build_headers(get_secrets().forge_token or "")
         pid = self._resolve_project_id(project_path)
-        with httpx.Client(timeout=30) as c:
-            r = c.get(
-                f"{api}/projects/{pid}/pipelines/{pipeline_id}/jobs",
-                headers=headers,
-                params={"scope": "failed", "per_page": 20},
-            )
-            r.raise_for_status()
-            jobs = r.json()
+        r = self._http.get(
+            f"/projects/{pid}/pipelines/{pipeline_id}/jobs",
+            params={"scope": "failed", "per_page": 20},
+        )
+        r.raise_for_status()
+        jobs = r.json()
         return [
             {
                 "name": j.get("name", ""),
@@ -384,20 +359,13 @@ class GitLabForge(Forge):
 
     def _mr_notes(self, *, project_path: str, mr_iid: int) -> list[dict]:
         """GET /projects/:id/merge_requests/:iid/notes?per_page=100."""
-        import httpx
-
-        s = self.settings
-        api = s.gitlab_api_url.rstrip("/")
-        headers = _build_headers(get_secrets().forge_token or "")
         pid = self._resolve_project_id(project_path)
-        with httpx.Client(timeout=30) as c:
-            r = c.get(
-                f"{api}/projects/{pid}/merge_requests/{mr_iid}/notes",
-                headers=headers,
-                params={"per_page": 100},
-            )
-            r.raise_for_status()
-            return r.json()
+        r = self._http.get(
+            f"/projects/{pid}/merge_requests/{mr_iid}/notes",
+            params={"per_page": 100},
+        )
+        r.raise_for_status()
+        return r.json()
 
     def _pr_review_status(self, *, project_path: str, mr_iid: int) -> dict:
         """Aggregate review state from MR approvals + general/inline notes.
@@ -406,14 +374,9 @@ class GitLabForge(Forge):
         the MR approvals object reports ``approved``, ``"COMMENTED"`` when any
         non-system notes exist, else ``"PENDING"``.
         """
-        import httpx
-
-        s = self.settings
-        api = s.gitlab_api_url.rstrip("/")
-        headers = _build_headers(get_secrets().forge_token or "")
         pid = self._resolve_project_id(project_path)
 
-        with httpx.Client(timeout=30) as c:
+        with self._http.client() as (c, api, headers):
             r = c.get(
                 f"{api}/projects/{pid}/merge_requests/{mr_iid}/approvals",
                 headers=headers,
@@ -459,11 +422,6 @@ class GitLabForge(Forge):
         head_sha: str | None,
     ) -> list[dict]:
         """GET /projects/:id/pipelines?ref=…&sha=…&per_page=30."""
-        import httpx
-
-        s = self.settings
-        api = s.gitlab_api_url.rstrip("/")
-        headers = _build_headers(get_secrets().forge_token or "")
         pid = self._resolve_project_id(project_path)
         params: dict = {"per_page": 30}
         if branch is not None:
@@ -471,14 +429,12 @@ class GitLabForge(Forge):
         if head_sha is not None:
             params["sha"] = head_sha
 
-        with httpx.Client(timeout=30) as c:
-            r = c.get(
-                f"{api}/projects/{pid}/pipelines",
-                headers=headers,
-                params=params,
-            )
-            r.raise_for_status()
-            raw = r.json()
+        r = self._http.get(
+            f"/projects/{pid}/pipelines",
+            params=params,
+        )
+        r.raise_for_status()
+        raw = r.json()
         return [
             {
                 "id": p["id"],
@@ -498,14 +454,10 @@ class GitLabForge(Forge):
         pipeline.  *run_id* is a GitLab pipeline id.  Returns ``""`` when there
         are no failed jobs.
         """
-        import httpx
-
         s = self.settings
-        api = s.gitlab_api_url.rstrip("/")
-        headers = _build_headers(get_secrets().forge_token or "")
         pid = self._resolve_project_id(project_path)
 
-        with httpx.Client(timeout=30) as c:
+        with self._http.client() as (c, api, headers):
             jobs_resp = c.get(
                 f"{api}/projects/{pid}/pipelines/{run_id}/jobs",
                 headers=headers,
@@ -521,7 +473,7 @@ class GitLabForge(Forge):
         parts: list[str] = []
         log_max = s.ci_log_max_bytes
 
-        with httpx.Client(timeout=30) as c:
+        with self._http.client() as (c, api, headers):
             for j in failed_jobs:
                 job_id = j["id"]
                 job_name = j.get("name", f"job-{job_id}")
@@ -558,20 +510,15 @@ class GitLabForge(Forge):
         description: str,
     ) -> RepoInfo:
         """POST /projects → RepoInfo. Resolves *owner* to a namespace id."""
-        import httpx
-
         from urllib.parse import quote
 
-        s = self.settings
-        api = s.gitlab_api_url.rstrip("/")
-        headers = _build_headers(get_secrets().forge_token or "")
         payload: dict = {
             "name": name,
             "visibility": "private" if private else "public",
             "description": description,
         }
 
-        with httpx.Client(timeout=30) as c:
+        with self._http.client() as (c, api, headers):
             if owner:
                 ns = c.get(
                     f"{api}/namespaces/{quote(owner, safe='')}",
@@ -613,37 +560,30 @@ class GitLabForge(Forge):
         target_namespace: str | None = None,
     ) -> RepoInfo:
         """POST /projects/:id/fork → RepoInfo."""
-        import httpx
-
-        s = self.settings
-        api = s.gitlab_api_url.rstrip("/")
-        headers = _build_headers(get_secrets().forge_token or "")
         source_path = f"{source_owner}/{source_repo}"
         pid = self._resolve_project_id(source_path)
-        url = f"{api}/projects/{pid}/fork"
         payload: dict = {}
         if target_namespace is not None:
             payload["namespace"] = target_namespace
 
-        with httpx.Client(timeout=30) as c:
-            r = c.post(url, headers=headers, json=payload)
-            if r.status_code == 201:
-                data = r.json()
-                return RepoInfo(
-                    id=data["id"],
-                    name=data["path"] or data["name"],
-                    clone_url=data["http_url_to_repo"],
-                    html_url=data["web_url"],
-                )
-            if r.status_code == 409 and (
-                "already been taken" in (r.text or "").lower()
-                or "already exists" in (r.text or "").lower()
-            ):
-                raise RuntimeError(
-                    f"GitLab fork failed: a fork of '{source_path}' already "
-                    f"exists in the target namespace: {r.text[:300]}"
-                )
-            raise RuntimeError(f"GitLab fork failed: {r.status_code} {r.text[:300]}")
+        r = self._http.post(f"/projects/{pid}/fork", json=payload)
+        if r.status_code == 201:
+            data = r.json()
+            return RepoInfo(
+                id=data["id"],
+                name=data["path"] or data["name"],
+                clone_url=data["http_url_to_repo"],
+                html_url=data["web_url"],
+            )
+        if r.status_code == 409 and (
+            "already been taken" in (r.text or "").lower()
+            or "already exists" in (r.text or "").lower()
+        ):
+            raise RuntimeError(
+                f"GitLab fork failed: a fork of '{source_path}' already "
+                f"exists in the target namespace: {r.text[:300]}"
+            )
+        raise RuntimeError(f"GitLab fork failed: {r.status_code} {r.text[:300]}")
 
     def _create_mr(
         self,
@@ -655,11 +595,6 @@ class GitLabForge(Forge):
         description: str,
     ) -> str:
         """POST /projects/:id/merge_requests → web_url. Falls back on 409."""
-        import httpx
-
-        s = self.settings
-        api = s.gitlab_api_url.rstrip("/")
-        headers = _build_headers(get_secrets().forge_token or "")
         pid = self._resolve_project_id(project_path)
         payload = {
             "source_branch": source_branch,
@@ -667,32 +602,30 @@ class GitLabForge(Forge):
             "title": title,
             "description": description,
         }
-        with httpx.Client(timeout=30) as c:
-            r = c.post(
-                f"{api}/projects/{pid}/merge_requests",
-                headers=headers,
-                json=payload,
-            )
-            if r.status_code == 201:
-                return r.json()["web_url"]
-            if r.status_code == 409:
-                # MR already exists — find it and return its web_url
-                try:
-                    existing = self._find_mr(
-                        project_path=project_path,
-                        source_branch=source_branch,
-                        state="opened",
-                    )
-                except Exception as exc:
-                    raise RuntimeError(
-                        f"GitLab MR create failed: 409 (conflict); "
-                        f"lookup for existing MR also failed: {exc}"
-                    ) from exc
-                if existing:
-                    return existing["web_url"]
-            raise RuntimeError(
-                f"GitLab MR create failed: {r.status_code} {r.text[:300]}"
-            )
+        r = self._http.post(
+            f"/projects/{pid}/merge_requests",
+            json=payload,
+        )
+        if r.status_code == 201:
+            return r.json()["web_url"]
+        if r.status_code == 409:
+            # MR already exists — find it and return its web_url
+            try:
+                existing = self._find_mr(
+                    project_path=project_path,
+                    source_branch=source_branch,
+                    state="opened",
+                )
+            except Exception as exc:
+                raise RuntimeError(
+                    f"GitLab MR create failed: 409 (conflict); "
+                    f"lookup for existing MR also failed: {exc}"
+                ) from exc
+            if existing:
+                return existing["web_url"]
+        raise RuntimeError(
+            f"GitLab MR create failed: {r.status_code} {r.text[:300]}"
+        )
 
     def _mr_changes(
         self,
@@ -700,20 +633,13 @@ class GitLabForge(Forge):
         mr_iid: int,
     ) -> list[dict]:
         """GET /projects/:id/merge_requests/:iid/changes → normalized file list."""
-        import httpx
-
-        s = self.settings
-        api = s.gitlab_api_url.rstrip("/")
-        headers = _build_headers(get_secrets().forge_token or "")
         pid = self._resolve_project_id(project_path)
         try:
-            with httpx.Client(timeout=30) as c:
-                r = c.get(
-                    f"{api}/projects/{pid}/merge_requests/{mr_iid}/changes",
-                    headers=headers,
-                )
-                r.raise_for_status()
-                changes = r.json().get("changes", [])
+            r = self._http.get(
+                f"/projects/{pid}/merge_requests/{mr_iid}/changes",
+            )
+            r.raise_for_status()
+            changes = r.json().get("changes", [])
         except Exception:
             return []
 
@@ -751,11 +677,6 @@ class GitLabForge(Forge):
 
     def _merge_mr(self, project_path: str, mr_iid: int) -> dict:
         """PUT /projects/:id/merge_requests/:iid/merge with MWPS + squash."""
-        import httpx
-
-        s = self.settings
-        api = s.gitlab_api_url.rstrip("/")
-        headers = _build_headers(get_secrets().forge_token or "")
         pid = self._resolve_project_id(project_path)
         payload = {
             "merge_when_pipeline_succeeds": True,
@@ -763,69 +684,55 @@ class GitLabForge(Forge):
             "should_remove_source_branch": False,
         }
         try:
-            with httpx.Client(timeout=30) as c:
-                r = c.put(
-                    f"{api}/projects/{pid}/merge_requests/{mr_iid}/merge",
-                    headers=headers,
-                    json=payload,
-                )
-                if r.status_code == 200:
-                    data = r.json()
-                    if data.get("state") == "merged":
-                        return {"merged": True, "reason": "merged"}
-                    return {
-                        "merged": False,
-                        "reason": "merge_when_pipeline_succeeds set; awaiting pipeline",
-                    }
-                if r.status_code == 405:
-                    return {
-                        "merged": False,
-                        "reason": "merge not allowed (branch protection?)",
-                    }
-                if r.status_code == 409:
-                    return {"merged": False, "reason": "MR is not mergeable"}
+            r = self._http.put(
+                f"/projects/{pid}/merge_requests/{mr_iid}/merge",
+                json=payload,
+            )
+            if r.status_code == 200:
+                data = r.json()
+                if data.get("state") == "merged":
+                    return {"merged": True, "reason": "merged"}
                 return {
                     "merged": False,
-                    "reason": f"HTTP {r.status_code}: {r.text[:200]}",
+                    "reason": "merge_when_pipeline_succeeds set; awaiting pipeline",
                 }
+            if r.status_code == 405:
+                return {
+                    "merged": False,
+                    "reason": "merge not allowed (branch protection?)",
+                }
+            if r.status_code == 409:
+                return {"merged": False, "reason": "MR is not mergeable"}
+            return {
+                "merged": False,
+                "reason": f"HTTP {r.status_code}: {r.text[:200]}",
+            }
         except Exception as e:
             return {"merged": False, "reason": str(e)}
 
     def _delete_branch(self, project_path: str, branch: str) -> bool:
         """DELETE /projects/:id/repository/branches/:branch."""
-        import httpx
-
         from urllib.parse import quote
 
-        s = self.settings
-        api = s.gitlab_api_url.rstrip("/")
-        headers = _build_headers(get_secrets().forge_token or "")
         try:
             pid = self._resolve_project_id(project_path)
             encoded = quote(branch, safe="")
-            with httpx.Client(timeout=30) as c:
-                r = c.delete(
-                    f"{api}/projects/{pid}/repository/branches/{encoded}",
-                    headers=headers,
-                )
-                # 204 = deleted; 404 = branch already gone — desired end state.
-                if r.status_code in (204, 404):
-                    return True
-                return False
+            r = self._http.delete(
+                f"/projects/{pid}/repository/branches/{encoded}",
+            )
+            # 204 = deleted; 404 = branch already gone — desired end state.
+            if r.status_code in (204, 404):
+                return True
+            return False
         except Exception:
             return False
 
     def _list_branches(self, project_path: str) -> list[BranchInfo]:
         """GET /projects/:id/repository/branches?per_page=100 (paginated)."""
-        import httpx
-
-        s = self.settings
-        api = s.gitlab_api_url.rstrip("/")
-        headers = _build_headers(get_secrets().forge_token or "")
         out: list[BranchInfo] = []
         try:
             pid = self._resolve_project_id(project_path)
-            with httpx.Client(timeout=30) as c:
+            with self._http.client() as (c, api, headers):
                 page = 1
                 while True:
                     r = c.get(
@@ -853,15 +760,10 @@ class GitLabForge(Forge):
 
     def _list_open_pr_branches(self, project_path: str) -> set[str]:
         """GET /projects/:id/merge_requests?state=opened (paginated)."""
-        import httpx
-
-        s = self.settings
-        api = s.gitlab_api_url.rstrip("/")
-        headers = _build_headers(get_secrets().forge_token or "")
         out: set[str] = set()
         try:
             pid = self._resolve_project_id(project_path)
-            with httpx.Client(timeout=30) as c:
+            with self._http.client() as (c, api, headers):
                 page = 1
                 while True:
                     r = c.get(
