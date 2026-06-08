@@ -12,6 +12,7 @@ model: "${MILL_AUTO_APPROVE_MODEL}"
 
 tools: []
 
+ask_user: false
 report_issue: false
 output_type: AutoApproveResult
 retries: 2
