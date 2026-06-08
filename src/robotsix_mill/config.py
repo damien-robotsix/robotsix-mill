@@ -1435,6 +1435,15 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_cross_field(self) -> "Settings":
+        # forge_auth=app is GitHub-only — reject for GitLab early so
+        # the error message is specific, not a misleading GitHub App
+        # credential complaint.
+        if self.forge_auth == "app" and self.forge_kind == "gitlab":
+            raise ValueError(
+                "FORGE_AUTH=app is not supported with FORGE_KIND=gitlab; "
+                "use FORGE_AUTH=token and set FORGE_TOKEN to a GitLab PAT"
+            )
+
         # forge_auth=app requires GitHub App credentials
         if self.forge_auth == "app":
             if not self.github_app_id and not self.github_app_private_key_path:

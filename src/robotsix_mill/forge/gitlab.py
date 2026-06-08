@@ -9,8 +9,8 @@ import re
 
 import httpx
 
-from ..config import get_secrets
 from ._http import _ApiClient
+from .auth import gitlab_token
 from .base import BranchInfo, Forge, NotConfiguredError, RepoInfo
 from .github import (
     _ANSI_RE,
@@ -56,7 +56,7 @@ class GitLabForge(Forge):
             settings,
             repo_config,
             "gitlab_api_url",
-            lambda s, rc: _build_headers(get_secrets().forge_token or ""),
+            lambda s, rc: _build_headers(gitlab_token()),
         )
 
     @property
@@ -512,17 +512,25 @@ class GitLabForge(Forge):
         """POST /projects → RepoInfo. Resolves *owner* to a namespace id."""
         from urllib.parse import quote
 
+        from ..config import get_secrets
+
+        # Prefer a dedicated repo-creation token when configured; fall
+        # back to the normal forge token otherwise.  Mirrors the GitHub
+        # pattern where App installation tokens cannot create repos.
+        token = get_secrets().forge_repo_create_token or gitlab_token()
+        custom_headers = _build_headers(token)
+
         payload: dict = {
             "name": name,
             "visibility": "private" if private else "public",
             "description": description,
         }
 
-        with self._http.client() as (c, api, headers):
+        with self._http.client() as (c, api, _headers):
             if owner:
                 ns = c.get(
                     f"{api}/namespaces/{quote(owner, safe='')}",
-                    headers=headers,
+                    headers=custom_headers,
                 )
                 if ns.status_code != 200:
                     raise RuntimeError(
@@ -531,7 +539,7 @@ class GitLabForge(Forge):
                     )
                 payload["namespace_id"] = ns.json()["id"]
 
-            r = c.post(f"{api}/projects", headers=headers, json=payload)
+            r = c.post(f"{api}/projects", headers=custom_headers, json=payload)
             if r.status_code == 201:
                 data = r.json()
                 return RepoInfo(
@@ -560,30 +568,42 @@ class GitLabForge(Forge):
         target_namespace: str | None = None,
     ) -> RepoInfo:
         """POST /projects/:id/fork → RepoInfo."""
+        from ..config import get_secrets
+
+        # Prefer a dedicated repo-creation token when configured; fall
+        # back to the normal forge token otherwise.
+        token = get_secrets().forge_repo_create_token or gitlab_token()
+        custom_headers = _build_headers(token)
+
         source_path = f"{source_owner}/{source_repo}"
         pid = self._resolve_project_id(source_path)
         payload: dict = {}
         if target_namespace is not None:
             payload["namespace"] = target_namespace
 
-        r = self._http.post(f"/projects/{pid}/fork", json=payload)
-        if r.status_code == 201:
-            data = r.json()
-            return RepoInfo(
-                id=data["id"],
-                name=data["path"] or data["name"],
-                clone_url=data["http_url_to_repo"],
-                html_url=data["web_url"],
+        with self._http.client() as (c, api, _headers):
+            r = c.post(
+                f"{api}/projects/{pid}/fork",
+                headers=custom_headers,
+                json=payload,
             )
-        if r.status_code == 409 and (
-            "already been taken" in (r.text or "").lower()
-            or "already exists" in (r.text or "").lower()
-        ):
-            raise RuntimeError(
-                f"GitLab fork failed: a fork of '{source_path}' already "
-                f"exists in the target namespace: {r.text[:300]}"
-            )
-        raise RuntimeError(f"GitLab fork failed: {r.status_code} {r.text[:300]}")
+            if r.status_code == 201:
+                data = r.json()
+                return RepoInfo(
+                    id=data["id"],
+                    name=data["path"] or data["name"],
+                    clone_url=data["http_url_to_repo"],
+                    html_url=data["web_url"],
+                )
+            if r.status_code == 409 and (
+                "already been taken" in (r.text or "").lower()
+                or "already exists" in (r.text or "").lower()
+            ):
+                raise RuntimeError(
+                    f"GitLab fork failed: a fork of '{source_path}' already "
+                    f"exists in the target namespace: {r.text[:300]}"
+                )
+            raise RuntimeError(f"GitLab fork failed: {r.status_code} {r.text[:300]}")
 
     def _create_mr(
         self,

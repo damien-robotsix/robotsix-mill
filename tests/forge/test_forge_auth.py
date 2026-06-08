@@ -78,3 +78,22 @@ def test_private_key_from_path(tmp_path):
     p.write_text("-----BEGIN-----\nabc\n-----END-----\n")
     S(tmp_path, GITHUB_APP_PRIVATE_KEY_PATH=str(p))
     assert "abc" in auth._private_key()
+
+
+# ---------------------------------------------------------------------------
+# gitlab_token
+# ---------------------------------------------------------------------------
+
+
+def test_gitlab_token_returns_pat(tmp_path):
+    """gitlab_token() returns the PAT from secrets when configured."""
+    S(tmp_path, FORGE_TOKEN="glpat-mytoken")
+    assert auth.gitlab_token() == "glpat-mytoken"
+
+
+def test_gitlab_token_raises_when_not_set(tmp_path):
+    """gitlab_token() raises RuntimeError when FORGE_TOKEN is not set."""
+    # No FORGE_TOKEN → Secrets.forge_token is None
+    S(tmp_path)
+    with pytest.raises(RuntimeError, match="FORGE_TOKEN not set"):
+        auth.gitlab_token()
