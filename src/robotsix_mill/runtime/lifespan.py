@@ -42,8 +42,11 @@ def setup_logging() -> None:
         if any(getattr(h, "_mill", False) for h in lg.handlers):
             continue
         h = logging.StreamHandler(sys.stdout)
+        h.addFilter(tracing.OTelTraceFilter())
         h.setFormatter(
-            logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+            logging.Formatter(
+                "%(asctime)s %(levelname)s [%(trace_id)s] %(name)s: %(message)s"
+            )
         )
         h._mill = True  # marker for idempotency
         lg.addHandler(h)

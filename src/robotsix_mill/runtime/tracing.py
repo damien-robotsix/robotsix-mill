@@ -360,6 +360,39 @@ class _NoopRootIO:
         pass
 
 
+class OTelTraceFilter(logging.Filter):
+    """Inject current OTel ``trace_id`` + ``span_id`` into every log record.
+
+    Attach to a handler (not a logger) so it applies to all log records
+    passing through that handler regardless of logger hierarchy.
+
+    When the ``opentelemetry`` package is not installed, or when there
+    is no active span, logs render ``[N/A]`` for both fields — never
+    crash.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            from opentelemetry.trace import (
+                format_span_id,
+                format_trace_id,
+                get_current_span,
+            )
+        except ImportError:
+            record.trace_id = "N/A"
+            record.span_id = "N/A"
+            return True
+        span = get_current_span()
+        ctx = span.get_span_context()
+        if ctx.is_valid:
+            record.trace_id = format_trace_id(ctx.trace_id)
+            record.span_id = format_span_id(ctx.span_id)
+        else:
+            record.trace_id = "N/A"
+            record.span_id = "N/A"
+        return True
+
+
 @contextmanager
 def start_ticket_root_span(
     ticket_id: str,
