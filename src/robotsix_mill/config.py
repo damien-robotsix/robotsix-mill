@@ -592,6 +592,11 @@ class Settings(BaseSettings):
     # implementation-ready skip the full refine — saving cost & latency.
     # Set False to force full refine for all tickets without a deploy.
     refine_triage_enabled: bool = Field(default=True)
+    # When True (default), a maintenance-triage check runs during refine
+    # to detect operational-action drafts (create repo, fork repo,
+    # investigate) and route them directly to the MAINTENANCE state,
+    # bypassing the full refine→implement pipeline.
+    maintenance_triage_enabled: bool = Field(default=True)
     # When True, a deterministic pre-refine gate verifies that file paths
     # and line ranges cited in the ticket draft still exist on the
     # working branch's HEAD.  When the cited evidence has gone stale
