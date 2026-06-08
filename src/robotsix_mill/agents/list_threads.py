@@ -52,7 +52,7 @@ def make_list_threads_tool(settings: Settings, agent_name: str):
             first_line = (c.body or "").split("\n", 1)[0].strip()
             if len(first_line) > 80:
                 first_line = first_line[:77] + "..."
-            lines.append(f"id={c.id:<4} {status:<8} \"{first_line}\"")
+            lines.append(f'id={c.id:<4} {status:<8} "{first_line}"')
 
         return "\n".join(lines)
 

@@ -2601,11 +2601,14 @@ def test_maintenance_triage_create_repo_routes_to_maintenance(ctx_factory, monke
     monkeypatch.setattr(
         dedup,
         "run_dedup_check",
-        lambda **kw: dedup_called.append(1) or {
-            "duplicate_of": None,
-            "already_done": None,
-            "reason": "no match",
-        },
+        lambda **kw: (
+            dedup_called.append(1)
+            or {
+                "duplicate_of": None,
+                "already_done": None,
+                "reason": "no match",
+            }
+        ),
     )
     # Patch _resolve_remote_url — phase 0 short-circuits before clone,
     # so it should never be called.
@@ -2732,9 +2735,7 @@ def test_maintenance_triage_investigate_body_only_does_not_match(
     assert out.next_state is State.READY
 
 
-def test_maintenance_triage_gate_disabled_proceeds_to_refine(
-    ctx_factory, monkeypatch
-):
+def test_maintenance_triage_gate_disabled_proceeds_to_refine(ctx_factory, monkeypatch):
     """Phase 0: maintenance_triage_enabled=False → keyword check skipped."""
     ctx = ctx_factory(require_approval="false", maintenance_triage_enabled="false")
     t = _ticket(
@@ -2896,9 +2897,7 @@ def test_llm_triage_maintenance_gated_by_flag(ctx_factory, monkeypatch):
     assert len(refine_called) == 1
 
 
-def test_maintenance_triage_normal_draft_proceeds_to_refine(
-    ctx_factory, monkeypatch
-):
+def test_maintenance_triage_normal_draft_proceeds_to_refine(ctx_factory, monkeypatch):
     """Normal code-change draft → no maintenance match, proceeds through refine."""
     ctx = ctx_factory(
         require_approval="false",
@@ -2940,4 +2939,3 @@ def test_maintenance_triage_normal_draft_proceeds_to_refine(
 
     assert out.next_state is State.READY
     assert "refined" in out.note
-

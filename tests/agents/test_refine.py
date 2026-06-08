@@ -4634,9 +4634,7 @@ class TestClassifyMaintenanceDraft:
     def test_create_repo_case_insensitive(self):
         """'CREATE REPO' (upper case) → 'create_repo'."""
         assert (
-            refining._classify_maintenance_draft(
-                "CREATE REPO for project foo", "body"
-            )
+            refining._classify_maintenance_draft("CREATE REPO for project foo", "body")
             == "create_repo"
         )
 
