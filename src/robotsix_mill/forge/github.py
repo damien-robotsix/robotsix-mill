@@ -8,6 +8,9 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 
+import httpx
+
+from ._http import _ApiClient
 from .base import BranchInfo, Forge, NotConfiguredError, RepoInfo
 
 # Regex for stripping ANSI escape sequences (CSI / SGR).
@@ -177,6 +180,14 @@ class GitHubForge(Forge):
     def __init__(self, settings, repo_config=None):
         super().__init__(settings)
         self._repo_config = repo_config
+        from .auth import github_token  # lazy: avoid import cycle with auth.py
+
+        self._http = _ApiClient(
+            settings,
+            repo_config,
+            "github_api_url",
+            lambda s, rc: _build_headers(github_token(s, repo_config=rc)),
+        )
 
     @property
     def _remote_url(self) -> str:
@@ -214,15 +225,8 @@ class GitHubForge(Forge):
         title: str,
         body: str,
     ) -> str:
-        import httpx
         import time
 
-        from .auth import github_token  # lazy: avoid import cycle
-
-        s = self.settings
-        api = s.github_api_url.rstrip("/")
-        url = f"{api}/repos/{owner}/{repo}/pulls"
-        headers = _build_headers(github_token(s, repo_config=self._repo_config))
         payload = {"title": title, "head": head, "base": base, "body": body}
         # GitHub sometimes takes a few seconds to index a freshly-
         # pushed ref before the pulls API can resolve it — the
@@ -230,7 +234,8 @@ class GitHubForge(Forge):
         # though the branch is visible via git/refs. Retry the
         # create call a few times before giving up; existing-PR
         # detection runs each round so we don't double-open.
-        with httpx.Client(timeout=30) as c:
+        with self._http.client() as (c, api, headers):
+            url = f"{api}/repos/{owner}/{repo}/pulls"
             for attempt in range(4):
                 r = c.post(url, headers=headers, json=payload)
                 if r.status_code == 201:
@@ -273,22 +278,19 @@ class GitHubForge(Forge):
         private: bool,
         description: str,
     ) -> RepoInfo:
-        import httpx
+        from ..config import get_secrets
 
         from .auth import github_token  # lazy: avoid import cycle
 
         s = self.settings
-        api = s.github_api_url.rstrip("/")
         # Repo creation needs a token that can create repos. GitHub App
         # installation tokens cannot create repositories under a personal
         # account, so prefer a dedicated repo-creation PAT when configured;
         # fall back to the normal (App or token) auth otherwise.
-        from ..config import get_secrets
-
         token = get_secrets().forge_repo_create_token or github_token(
             s, repo_config=self._repo_config
         )
-        headers = _build_headers(token)
+        custom_headers = _build_headers(token)
         payload = {
             "name": name,
             "private": private,
@@ -298,16 +300,16 @@ class GitHubForge(Forge):
             "auto_init": False,
         }
 
-        with httpx.Client(timeout=30) as c:
+        with self._http.client() as (c, api, _headers):
             # Primary: create under org
             org_url = f"{api}/orgs/{owner}/repos"
-            r = c.post(org_url, headers=headers, json=payload)
+            r = c.post(org_url, headers=custom_headers, json=payload)
             if r.status_code == 201:
                 return _parse_repo_info(r.json())
             # Fallback on 403/404: create under user
             if r.status_code in (403, 404):
                 user_url = f"{api}/user/repos"
-                r2 = c.post(user_url, headers=headers, json=payload)
+                r2 = c.post(user_url, headers=custom_headers, json=payload)
                 if r2.status_code == 201:
                     return _parse_repo_info(r2.json())
                 # If the fallback also fails, surface that error instead
@@ -321,7 +323,7 @@ class GitHubForge(Forge):
                     # push). If the existing repo is EMPTY (no commits), reuse
                     # it so the scaffold's force-push completes the job; only a
                     # repo with real content is treated as a genuine conflict.
-                    existing = self._reuse_if_empty(c, api, headers, owner, name)
+                    existing = self._reuse_if_empty(c, api, custom_headers, owner, name)
                     if existing is not None:
                         return existing
                     raise RuntimeError(
@@ -384,24 +386,22 @@ class GitHubForge(Forge):
         source_repo: str,
         target_namespace: str | None = None,
     ) -> RepoInfo:
-        import httpx
-
-        from .auth import github_token  # lazy: avoid import cycle
         from ..config import get_secrets
 
+        from .auth import github_token  # lazy: avoid import cycle
+
         s = self.settings
-        api = s.github_api_url.rstrip("/")
         token = get_secrets().forge_repo_create_token or github_token(
             s, repo_config=self._repo_config
         )
-        headers = _build_headers(token)
-        url = f"{api}/repos/{source_owner}/{source_repo}/forks"
+        custom_headers = _build_headers(token)
+        url = f"/repos/{source_owner}/{source_repo}/forks"
         payload: dict = {}
         if target_namespace is not None:
             payload["organization"] = target_namespace
 
-        with httpx.Client(timeout=30) as c:
-            r = c.post(url, headers=headers, json=payload)
+        with self._http.client() as (c, api, _headers):
+            r = c.post(f"{api}{url}", headers=custom_headers, json=payload)
             if r.status_code in (200, 201, 202):
                 return _parse_repo_info(r.json())
             if (
@@ -501,31 +501,22 @@ class GitHubForge(Forge):
 
     def list_code_scanning_alerts(self, *, source_branch: str) -> list[dict]:
         owner, repo = self._owner_repo
-        import httpx
-
-        from .auth import github_token
-
-        s = self.settings
-        api = s.github_api_url.rstrip("/")
-        headers = _build_headers(github_token(s, repo_config=self._repo_config))
         try:
-            with httpx.Client(timeout=30) as c:
-                r = c.get(
-                    f"{api}/repos/{owner}/{repo}/code-scanning/alerts",
-                    headers=headers,
-                    params={
-                        "ref": f"refs/heads/{source_branch}",
-                        "state": "open",
-                        "per_page": 50,
-                    },
-                )
-                # 404 = code-scanning not enabled / no alerts endpoint; 403 =
-                # token lacks the security-events scope. Either way: no signal,
-                # not an error — degrade to "no alerts".
-                if r.status_code in (403, 404):
-                    return []
-                r.raise_for_status()
-                raw = r.json()
+            r = self._http.get(
+                f"/repos/{owner}/{repo}/code-scanning/alerts",
+                params={
+                    "ref": f"refs/heads/{source_branch}",
+                    "state": "open",
+                    "per_page": 50,
+                },
+            )
+            # 404 = code-scanning not enabled / no alerts endpoint; 403 =
+            # token lacks the security-events scope. Either way: no signal,
+            # not an error — degrade to "no alerts".
+            if r.status_code in (403, 404):
+                return []
+            r.raise_for_status()
+            raw = r.json()
         except Exception:  # noqa: BLE001 — best-effort enrichment, never fatal
             return []
         out: list[dict] = []
@@ -606,14 +597,7 @@ class GitHubForge(Forge):
 
     # --- HTTP seamm (monkeypatched in tests) ---
     def _get_pr(self, *, owner: str, repo: str, head: str) -> dict | None:
-        import httpx
-
-        from .auth import github_token  # lazy: avoid import cycle
-
-        s = self.settings
-        api = s.github_api_url.rstrip("/")
-        headers = _build_headers(github_token(s, repo_config=self._repo_config))
-        with httpx.Client(timeout=30) as c:
+        with self._http.client() as (c, api, headers):
             lst = c.get(
                 f"{api}/repos/{owner}/{repo}/pulls",
                 headers=headers,
@@ -639,17 +623,9 @@ class GitHubForge(Forge):
         ``pr_status_by_url`` to resolve a recorded PR url even after the
         head branch was auto-deleted on merge (which makes the
         branch-keyed ``_get_pr`` list come back empty)."""
-        import httpx
-
-        from .auth import github_token  # lazy: avoid import cycle
-
-        s = self.settings
-        api = s.github_api_url.rstrip("/")
-        headers = _build_headers(github_token(s, repo_config=self._repo_config))
-        with httpx.Client(timeout=30) as c:
-            d = c.get(f"{api}/repos/{owner}/{repo}/pulls/{number}", headers=headers)
-            d.raise_for_status()
-            pr = d.json()
+        r = self._http.get(f"/repos/{owner}/{repo}/pulls/{number}")
+        r.raise_for_status()
+        pr = r.json()
         return _parse_pr_detail(pr)
 
     # --- HTTP seam (monkeypatched in tests) ---
@@ -660,23 +636,13 @@ class GitHubForge(Forge):
         repo: str,
         pull_number: int,
     ) -> list[dict]:
-        import httpx
-
-        from .auth import github_token  # lazy: avoid import cycle
-
-        s = self.settings
-        api = s.github_api_url.rstrip("/")
-        headers = _build_headers(github_token(s, repo_config=self._repo_config))
-        url = f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/files"
         try:
-            with httpx.Client(timeout=30) as c:
-                r = c.get(
-                    url,
-                    headers=headers,
-                    params={"per_page": 100},
-                )
-                r.raise_for_status()
-                items = r.json()
+            r = self._http.get(
+                f"/repos/{owner}/{repo}/pulls/{pull_number}/files",
+                params={"per_page": 100},
+            )
+            r.raise_for_status()
+            items = r.json()
         except Exception:
             return []
         return [
@@ -697,68 +663,46 @@ class GitHubForge(Forge):
         repo: str,
         pull_number: int,
     ) -> dict:
-        import httpx
-
-        from .auth import github_token  # lazy: avoid import cycle
-
-        s = self.settings
-        api = s.github_api_url.rstrip("/")
-        headers = _build_headers(github_token(s, repo_config=self._repo_config))
-        url = f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/merge"
         try:
-            with httpx.Client(timeout=30) as c:
-                r = c.put(url, headers=headers, json={"merge_method": "squash"})
-                if r.status_code == 200:
-                    return {"merged": True, "reason": "merged"}
-                if r.status_code == 405:
-                    return {
-                        "merged": False,
-                        "reason": "merge not allowed (branch protection?)",
-                    }
-                if r.status_code == 409:
-                    return {"merged": False, "reason": "PR is not mergeable"}
+            r = self._http.put(
+                f"/repos/{owner}/{repo}/pulls/{pull_number}/merge",
+                json={"merge_method": "squash"},
+            )
+            if r.status_code == 200:
+                return {"merged": True, "reason": "merged"}
+            if r.status_code == 405:
                 return {
                     "merged": False,
-                    "reason": f"HTTP {r.status_code}: {r.text[:200]}",
+                    "reason": "merge not allowed (branch protection?)",
                 }
+            if r.status_code == 409:
+                return {"merged": False, "reason": "PR is not mergeable"}
+            return {
+                "merged": False,
+                "reason": f"HTTP {r.status_code}: {r.text[:200]}",
+            }
         except Exception as e:
             return {"merged": False, "reason": str(e)}
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _delete_branch(self, *, owner: str, repo: str, branch: str) -> bool:
-        import httpx
-
-        from .auth import github_token  # lazy: avoid import cycle
-
-        s = self.settings
-        api = s.github_api_url.rstrip("/")
-        headers = _build_headers(github_token(s, repo_config=self._repo_config))
-        url = f"{api}/repos/{owner}/{repo}/git/refs/heads/{branch}"
         try:
-            with httpx.Client(timeout=30) as c:
-                r = c.delete(url, headers=headers)
-                # 204 = deleted; 404/422 = ref does not exist (already gone,
-                # e.g. by GitHub auto-delete) — the branch is gone either way,
-                # which is the desired end state.
-                if r.status_code in (204, 404, 422):
-                    return True
-                return False
+            r = self._http.delete(f"/repos/{owner}/{repo}/git/refs/heads/{branch}")
+            # 204 = deleted; 404/422 = ref does not exist (already gone,
+            # e.g. by GitHub auto-delete) — the branch is gone either way,
+            # which is the desired end state.
+            if r.status_code in (204, 404, 422):
+                return True
+            return False
         except Exception:
             return False
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _list_branches(self, *, owner: str, repo: str) -> list[BranchInfo]:
-        import httpx
-
-        from .auth import github_token  # lazy: avoid import cycle
-
-        s = self.settings
-        api = s.github_api_url.rstrip("/")
-        headers = _build_headers(github_token(s, repo_config=self._repo_config))
-        url = f"{api}/repos/{owner}/{repo}/branches"
         out: list[BranchInfo] = []
         try:
-            with httpx.Client(timeout=30) as c:
+            with self._http.client() as (c, api, headers):
+                url = f"{api}/repos/{owner}/{repo}/branches"
                 page = 1
                 while True:
                     r = c.get(
@@ -791,17 +735,10 @@ class GitHubForge(Forge):
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _list_open_pr_branches(self, *, owner: str, repo: str) -> set[str]:
-        import httpx
-
-        from .auth import github_token  # lazy: avoid import cycle
-
-        s = self.settings
-        api = s.github_api_url.rstrip("/")
-        headers = _build_headers(github_token(s, repo_config=self._repo_config))
-        url = f"{api}/repos/{owner}/{repo}/pulls"
         out: set[str] = set()
         try:
-            with httpx.Client(timeout=30) as c:
+            with self._http.client() as (c, api, headers):
+                url = f"{api}/repos/{owner}/{repo}/pulls"
                 page = 1
                 while True:
                     r = c.get(
@@ -830,18 +767,12 @@ class GitHubForge(Forge):
         repo: str,
         pull_number: int,
     ) -> list[dict]:
-        import httpx
-
-        from .auth import github_token  # lazy: avoid import cycle
-
-        s = self.settings
-        api = s.github_api_url.rstrip("/")
-        headers = _build_headers(github_token(s, repo_config=self._repo_config))
-        url = f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/reviews"
-        with httpx.Client(timeout=30) as c:
-            r = c.get(url, headers=headers, params={"per_page": 100})
-            r.raise_for_status()
-            items = r.json()
+        r = self._http.get(
+            f"/repos/{owner}/{repo}/pulls/{pull_number}/reviews",
+            params={"per_page": 100},
+        )
+        r.raise_for_status()
+        items = r.json()
         return [
             {
                 "id": item["id"],
@@ -860,18 +791,12 @@ class GitHubForge(Forge):
         repo: str,
         pull_number: int,
     ) -> list[dict]:
-        import httpx
-
-        from .auth import github_token  # lazy: avoid import cycle
-
-        s = self.settings
-        api = s.github_api_url.rstrip("/")
-        headers = _build_headers(github_token(s, repo_config=self._repo_config))
-        url = f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/comments"
-        with httpx.Client(timeout=30) as c:
-            r = c.get(url, headers=headers, params={"per_page": 100})
-            r.raise_for_status()
-            items = r.json()
+        r = self._http.get(
+            f"/repos/{owner}/{repo}/pulls/{pull_number}/comments",
+            params={"per_page": 100},
+        )
+        r.raise_for_status()
+        items = r.json()
         return [
             {
                 "id": item["id"],
@@ -893,15 +818,7 @@ class GitHubForge(Forge):
         repo: str,
         pull_number: int,
     ) -> dict:
-        import httpx
-
-        from .auth import github_token  # lazy: avoid import cycle
-
-        s = self.settings
-        api = s.github_api_url.rstrip("/")
-        headers = _build_headers(github_token(s, repo_config=self._repo_config))
-
-        with httpx.Client(timeout=30) as c:
+        with self._http.client() as (c, api, headers):
             # 1. Fetch reviews (includes state field that list_pr_reviews drops).
             r = c.get(
                 f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/reviews",
@@ -978,14 +895,6 @@ class GitHubForge(Forge):
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _check_status(self, *, owner: str, repo: str, head: str) -> dict | None:
-        import httpx
-
-        from .auth import github_token  # lazy: avoid import cycle
-
-        s = self.settings
-        api = s.github_api_url.rstrip("/")
-        headers = _build_headers(github_token(s, repo_config=self._repo_config))
-
         pr = self._get_pr(owner=owner, repo=repo, head=head)
         if pr is None:
             return None
@@ -994,7 +903,7 @@ class GitHubForge(Forge):
         if not sha:
             return None
 
-        with httpx.Client(timeout=30) as c:
+        with self._http.client() as (c, api, headers):
             # 1. Fetch check runs (any status — completed, in_progress,
             # queued — so a brand-new SHA with a workflow that's been
             # queued but not started is correctly classified "pending"
@@ -1049,27 +958,18 @@ class GitHubForge(Forge):
         branch: str | None,
         head_sha: str | None,
     ) -> list[dict]:
-        import httpx
-
-        from .auth import github_token
-
-        s = self.settings
-        api = s.github_api_url.rstrip("/")
-        headers = _build_headers(github_token(s, repo_config=self._repo_config))
         params: dict = {"status": "completed", "per_page": 30}
         if branch is not None:
             params["branch"] = branch
         if head_sha is not None:
             params["head_sha"] = head_sha
 
-        with httpx.Client(timeout=30) as c:
-            r = c.get(
-                f"{api}/repos/{owner}/{repo}/actions/runs",
-                headers=headers,
-                params=params,
-            )
-            r.raise_for_status()
-            raw = r.json().get("workflow_runs", [])
+        r = self._http.get(
+            f"/repos/{owner}/{repo}/actions/runs",
+            params=params,
+        )
+        r.raise_for_status()
+        raw = r.json().get("workflow_runs", [])
         return [
             {
                 "id": run["id"],
@@ -1091,15 +991,9 @@ class GitHubForge(Forge):
         repo: str,
         run_id: int,
     ) -> str:
-        import httpx
-
-        from .auth import github_token
-
         s = self.settings
-        api = s.github_api_url.rstrip("/")
-        headers = _build_headers(github_token(s, repo_config=self._repo_config))
 
-        with httpx.Client(timeout=30) as c:
+        with self._http.client() as (c, api, headers):
             # 1. List jobs for the run.
             jobs_resp = c.get(
                 f"{api}/repos/{owner}/{repo}/actions/runs/{run_id}/jobs",
@@ -1128,7 +1022,7 @@ class GitHubForge(Forge):
         parts: list[str] = []
         log_max = s.ci_log_max_bytes
 
-        with httpx.Client(timeout=30) as c:
+        with self._http.client() as (c, api, headers):
             for j in failed_jobs:
                 job_id = j["id"]
                 job_name = j.get("name", f"job-{job_id}")
