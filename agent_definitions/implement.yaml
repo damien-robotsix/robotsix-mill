@@ -21,6 +21,7 @@ tools:
 # Cached library knowledge sub-agent. Prefer over raw web_research
 # for library API questions; the cache amortises across tickets.
 report_issue: true
+read_ticket: true
 web_knowledge: true
 output_type: ImplementResult
 retries: 2
