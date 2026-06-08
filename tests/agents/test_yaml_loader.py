@@ -546,6 +546,11 @@ _VALID_TOOL_NAMES = frozenset(
         "delete_file",
         "list_dir",
         "run_command",
+        "langfuse_session_summary",
+        "langfuse_list_traces",
+        "langfuse_trace_detail",
+        "langfuse_session_cost",
+        "langfuse_inspect_trace",
     }
 )
 

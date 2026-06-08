@@ -26,6 +26,7 @@ def test_fetch_session_cost_formats_dollar_string(tmp_path, monkeypatch):
     )
     tools = _build_langfuse_tools(s)
     fetch = tools[0]
+    assert fetch.__name__ == "langfuse_session_cost"
     assert fetch("s1") == "$1.2345"
 
 
@@ -243,10 +244,10 @@ def test_run_answer_agent_without_repo_dir(tmp_path, monkeypatch):
     assert "explore" not in cap["tools"]
     assert "read_file" not in cap["tools"]
     # Langfuse tools are present
-    assert "fetch_session_cost" in cap["tools"]
-    assert "fetch_session_summary" in cap["tools"]
-    assert "list_traces" in cap["tools"]
-    assert "fetch_trace_detail" in cap["tools"]
+    assert "langfuse_session_cost" in cap["tools"]
+    assert "langfuse_session_summary" in cap["tools"]
+    assert "langfuse_list_traces" in cap["tools"]
+    assert "langfuse_trace_detail" in cap["tools"]
 
 
 def test_run_answer_agent_with_repo_dir(tmp_path, monkeypatch):
@@ -309,10 +310,10 @@ def test_run_answer_agent_with_repo_dir(tmp_path, monkeypatch):
     for banned in ("edit_file", "write_file", "delete_file"):
         assert banned not in cap["tools"], f"{banned} should not be in answer tools"
     # Langfuse tools present
-    assert "fetch_session_cost" in cap["tools"]
-    assert "fetch_session_summary" in cap["tools"]
-    assert "list_traces" in cap["tools"]
-    assert "fetch_trace_detail" in cap["tools"]
+    assert "langfuse_session_cost" in cap["tools"]
+    assert "langfuse_session_summary" in cap["tools"]
+    assert "langfuse_list_traces" in cap["tools"]
+    assert "langfuse_trace_detail" in cap["tools"]
 
 
 def test_run_answer_agent_runtime_error_on_missing_api_key(tmp_path, monkeypatch):

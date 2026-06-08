@@ -791,6 +791,18 @@ def run_refine_agent(
             *ro,
         ]
 
+    # Langfuse read tools — always available (four simple closures).
+    from .langfuse_tools import _build_langfuse_tools
+
+    tools.extend(_build_langfuse_tools(settings))
+
+    # Langfuse trace-inspect sub-agent — only when repo_dir is provided,
+    # since its value is grounding findings in the actual source code.
+    if repo_dir is not None:
+        from .langfuse_tools import make_langfuse_inspect_tool
+
+        tools.append(make_langfuse_inspect_tool(settings, repo_dir))
+
     # Meta refine can declare an extraction targets a brand-new repo. The
     # tool records the request; the marker is stamped onto the spec below
     # (deterministic format, not model-authored). No repo_dir needed.

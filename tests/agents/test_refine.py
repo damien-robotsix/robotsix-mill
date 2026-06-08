@@ -1857,7 +1857,158 @@ def test_run_command_absent_when_repo_dir_is_none(monkeypatch, tmp_path):
 
     assert result.split is False
     assert result.spec_markdown == "## Problem\nok\n"
-    assert seen_tools == []  # no fs tools when no repo
+    # No fs tools when no repo — but Langfuse tools are always present.
+    for fs_tool in ("run_command", "read_file", "list_dir", "explore"):
+        assert fs_tool not in seen_tools, f"{fs_tool} should not be present without repo_dir"
+    assert "langfuse_session_cost" in seen_tools
+    assert "langfuse_session_summary" in seen_tools
+    assert "langfuse_list_traces" in seen_tools
+    assert "langfuse_trace_detail" in seen_tools
+    # langfuse_inspect_trace is only injected when repo_dir is given
+    assert "langfuse_inspect_trace" not in seen_tools
+
+
+def test_langfuse_tools_present_when_repo_dir_given(tmp_path, monkeypatch):
+    """When repo_dir is provided, Langfuse tools are injected into the
+    agent's tool list — both the four simple closures and the
+    langfuse_inspect_trace sub-agent tool."""
+    import robotsix_mill.config as _cfg
+    from robotsix_mill.agents import base as _base
+    from robotsix_mill.agents.refining import run_refine_agent
+    from robotsix_mill.config import Secrets
+
+    _cfg._reset_secrets()
+    _cfg._secrets = Secrets(openrouter_api_key="k")
+    settings = Settings(data_dir=str(tmp_path), OPENROUTER_API_KEY="k")
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    captured: dict = {}
+
+    class _FakeResult:
+        output = RefineResult(spec_markdown="ok")
+
+        def all_messages_json(self):
+            return b"[]"
+
+        def new_messages_json(self):
+            return b"[]"
+
+    class _FakeHandle:
+        def run_sync(self, *a, **k):
+            return _FakeResult()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        _base,
+        "build_agent_from_definition",
+        lambda settings, definition, *, tools=None, **kw: (
+            captured.update(tools=tools or []) or _FakeHandle()
+        ),
+    )
+    # Stub langfuse client functions so the closures don't hit the network
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_cost",
+        lambda settings, sid: 0.0,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.fetch_session_summary",
+        lambda settings, sid: "summary",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client._langfuse_api_get",
+        lambda settings, path, params: {"data": []},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.fetch_trace_detail",
+        lambda settings, tid: None,
+    )
+
+    run_refine_agent(
+        settings=settings, title="x", draft="y", repo_dir=repo
+    )
+
+    names = [getattr(t, "__name__", "") for t in captured["tools"]]
+    # Four simple langfuse tools always present
+    assert "langfuse_session_cost" in names
+    assert "langfuse_session_summary" in names
+    assert "langfuse_list_traces" in names
+    assert "langfuse_trace_detail" in names
+    # Trace-inspect sub-agent present only when repo_dir is given
+    assert "langfuse_inspect_trace" in names
+
+
+def test_langfuse_inspect_trace_absent_when_repo_dir_none(
+    tmp_path, monkeypatch
+):
+    """When repo_dir is None, the four simple Langfuse tools are still
+    injected but langfuse_inspect_trace is excluded."""
+    import robotsix_mill.config as _cfg
+    from robotsix_mill.agents import base as _base
+    from robotsix_mill.agents.refining import run_refine_agent
+    from robotsix_mill.config import Secrets
+
+    _cfg._reset_secrets()
+    _cfg._secrets = Secrets(openrouter_api_key="k")
+    settings = Settings(data_dir=str(tmp_path), OPENROUTER_API_KEY="k")
+
+    captured: dict = {}
+
+    class _FakeResult:
+        output = RefineResult(spec_markdown="ok")
+
+        def all_messages_json(self):
+            return b"[]"
+
+        def new_messages_json(self):
+            return b"[]"
+
+    class _FakeHandle:
+        def run_sync(self, *a, **k):
+            return _FakeResult()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        _base,
+        "build_agent_from_definition",
+        lambda settings, definition, *, tools=None, **kw: (
+            captured.update(tools=tools or []) or _FakeHandle()
+        ),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_cost",
+        lambda settings, sid: 0.0,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.fetch_session_summary",
+        lambda settings, sid: "summary",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client._langfuse_api_get",
+        lambda settings, path, params: {"data": []},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.fetch_trace_detail",
+        lambda settings, tid: None,
+    )
+
+    run_refine_agent(
+        settings=settings, title="x", draft="y", repo_dir=None
+    )
+
+    names = [getattr(t, "__name__", "") for t in captured["tools"]]
+    # Four simple langfuse tools always present
+    assert "langfuse_session_cost" in names
+    assert "langfuse_session_summary" in names
+    assert "langfuse_list_traces" in names
+    assert "langfuse_trace_detail" in names
+    # Trace-inspect sub-agent NOT present when repo_dir is None
+    assert "langfuse_inspect_trace" not in names
 
 
 # --- split detection tests ---
