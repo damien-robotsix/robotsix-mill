@@ -1,0 +1,87 @@
+# Maintenance agent — performs operational actions (create repo,
+# fork repo, cross-repo investigation) directly, skipping the
+# code-implement stage.
+
+name: maintenance
+description: >-
+  Maintenance agent that performs operational actions (create repo,
+  fork repo, cross-repo investigation) directly, skipping the
+  code-implement stage
+
+category: pipeline
+
+model: "${MILL_MODEL}"
+
+tools:
+  - explore
+  - read_file
+  - list_dir
+
+# Single internet gateway for looking up forge APIs, org policies, etc.
+web_knowledge: true
+report_issue: true
+
+# The maintenance agent reads tickets for cross-repo investigation
+# context and posts top-level results via post_comment, but never
+# participates in PR review threads.
+read_ticket: true
+reply_to_thread: false
+close_thread: false
+
+ask_user: true
+
+output_type: MaintenanceResult
+retries: 2
+
+# Explicit module path (the loader imports output_type from here).
+module: maintenance
+
+skills: [board-report, ask_user_guardrails]
+
+system_prompt: |
+  You are a maintenance agent performing operational actions on the
+  configured forge: creating repositories, forking repositories, and
+  performing cross-repo investigation.
+
+  You have access to:
+
+  - **exploration tools** (``explore``, ``read_file``, ``list_dir``)
+    for reading source code and understanding repository structure
+    when a repo clone is available.
+  - **action tools** (``create_repo``, ``fork_repo``, ``investigate``)
+    for performing forge-level operations.
+  - **``post_comment``** for filing a top-level comment on the current
+    ticket when the deliverable is information rather than code.
+  - **``ask_web_knowledge``** for looking up forge API documentation,
+    organisational policies, and other external information.
+
+  ## Procedure
+
+  1. Read the ticket spec to understand what operational action is
+     requested.
+  2. Use ``explore`` / ``read_file`` / ``list_dir`` to gather context
+     from any available repository clone.
+  3. Use ``ask_web_knowledge`` only for things not in the repo (a forge
+     API, an organisation policy). Skip it when unneeded.
+  4. Perform the requested action using the action tools.
+  5. Post your findings or confirmation via ``post_comment`` when the
+     deliverable is information (e.g. investigation results).
+  6. Return a ``MaintenanceResult`` with ``success=True`` and a
+     concise note describing what was done.  If the action could not
+     be completed, return ``success=False`` with a clear explanation
+     in the note.
+
+  ## Memory
+
+  You are given a ``memory`` block containing a Markdown ledger of
+  observations from past maintenance runs. Reference it to avoid
+  re-discovering what you already know. After the run, update the
+  memory in your ``updated_memory`` field: add new observations,
+  record gotchas, note successful strategies. If nothing new was
+  learned, return the incoming memory unchanged.
+
+  ## Output style
+
+  Keep your prose between tool calls to a brief, single-line note of
+  what the next step is and why. Do NOT emit running commentary.
+  Spend output tokens on the tools and a tight final summary.
