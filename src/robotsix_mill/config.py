@@ -688,6 +688,8 @@ class Settings(BaseSettings):
     # How many model requests the scope-triage agent may make per
     # invocation (main call + any tool calls). Default 4.
     scope_triage_request_limit: int = Field(default=4)
+    # Per-call cap for pre-refine triage agent (main call + tool calls).
+    triage_request_limit: int = Field(default=8)
 
     # Model for the documentation agent. Defaults to the capable
     # coordinator model.

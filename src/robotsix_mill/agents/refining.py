@@ -261,13 +261,23 @@ def triage_refine(
     settings: Settings,
     title: str,
     draft: str,
+    repo_dir: Path | None = None,
+    extra_roots: list[Path] | None = None,
 ) -> TriageResult:
     """Return a ``TriageResult`` from a single cheap LLM call.
 
-    NO tools, NO web, NO explore — just a tiny prompt and a
-    structured classification.  Conservative bias: when uncertain,
-    choose REFINE (the only real risk is a wrong SKIP).
+    When ``repo_dir`` is given the agent receives the ``explore`` tool
+    (only) so it can delegate quick verification questions to a scout
+    sub-agent.  The scout has its own independent request budget; the
+    triage classifier's own cap (``triage_request_limit``) only needs
+    to cover classification + delegation calls.
+
+    Without ``repo_dir`` the agent runs with no tools — the original
+    draft-only classification path (e.g. for meta-board tickets with
+    no repo clone).
     """
+
+    from pydantic_ai.usage import UsageLimits
 
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
@@ -277,19 +287,27 @@ def triage_refine(
         Path(__file__).parent.parent.parent.parent / "agent_definitions" / "triage.yaml"
     )
 
+    tools: list = []
+    if repo_dir is not None:
+        from .explore import make_explore_tool
+
+        tools = [make_explore_tool(settings, repo_dir, extra_roots=extra_roots)]
+
     agent = build_agent_from_definition(
         settings,
         definition,
-        tools=[],
+        tools=tools,
         model_name=definition.model or settings.triage_model,
     )
 
     user_prompt = section("title", title) + "\n" + section("draft", draft)
 
+    limits = UsageLimits(request_limit=settings.triage_request_limit)
+
     try:
         result = run_agent(
             agent,
-            lambda h: h.run_sync(user_prompt),
+            lambda h: h.run_sync(user_prompt, usage_limits=limits),
             settings=settings,
             what="triage",
         )
