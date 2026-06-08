@@ -14,7 +14,15 @@ closure has no access to write methods.
 
 from __future__ import annotations
 
+import re
+
 from ..config import Settings
+
+# Ticket ID format: YYYYMMDDTHHMMSSZ-slug-hex4
+# timestamp (16 chars), dash, 1+ segments of [a-z0-9-], dash, 4 hex chars.
+_TICKET_ID_RE = re.compile(
+    r"^\d{8}T\d{6}Z-[a-z0-9]+(?:-[a-z0-9]+)*-[a-f0-9]{4}$"
+)
 
 # Output budgets (chars). The description is capped individually; the whole
 # rendered Markdown is capped again at the end so a long history/comment run
@@ -124,6 +132,12 @@ def make_read_ticket_tool(settings: Settings):
         ticket_id = (ticket_id or "").strip()
         if not ticket_id:
             return "read_ticket: a non-empty ticket_id is required"
+
+        if _TICKET_ID_RE.match(ticket_id) is None:
+            return (
+                "read_ticket: invalid ticket_id format — ID may be truncated; "
+                "full IDs look like '20250331T142315Z-add-billing-endpoint-3a1f'"
+            )
 
         try:
             from ..core.service import TicketService
