@@ -96,10 +96,13 @@ def build_preseed_history(
             break
         file_path = repo_dir / path
         try:
-            content = file_path.read_text(
-                encoding="utf-8",
-                errors="replace",
-            )
+            if file_path.suffix.lower() == ".pdf":
+                content = _extract_pdf_text(file_path)
+            else:
+                content = file_path.read_text(
+                    encoding="utf-8",
+                    errors="replace",
+                )
         except OSError:
             log.warning(
                 "build_preseed_history: %s not found on disk, skipping",
