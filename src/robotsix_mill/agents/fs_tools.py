@@ -167,6 +167,34 @@ def _safe(root: Path, rel: str, *, extra_roots: list[Path] | None = None) -> Pat
     return p
 
 
+def _extract_pdf_text(p: Path) -> str:
+    """Extract the text layer from a PDF file using ``pypdf``.
+
+    The import is lazy — ``pypdf`` is not loaded until the first
+    ``.pdf`` file is actually read.
+    """
+    import pypdf
+
+    try:
+        reader = pypdf.PdfReader(str(p))
+    except Exception as e:
+        return f"error reading PDF {p}: {e}"
+
+    if reader.is_encrypted:
+        return "error: PDF is encrypted — cannot extract text without a password"
+
+    texts: list[str] = []
+    try:
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                texts.append(page_text)
+    except Exception as e:
+        return f"error reading PDF {p}: {e}"
+
+    return "\n".join(texts)
+
+
 def build_fs_tools(
     root: Path,
     settings: Settings,
@@ -191,7 +219,10 @@ def build_fs_tools(
         key = p.resolve()
         if key in _file_cache:
             return _file_cache[key]
-        text = p.read_text(encoding="utf-8", errors="replace")
+        if p.suffix.lower() == ".pdf":
+            text = _extract_pdf_text(p)
+        else:
+            text = p.read_text(encoding="utf-8", errors="replace")
         _file_cache[key] = text
         return text
 
@@ -355,6 +386,11 @@ def build_fs_tools(
           what's available.
         - If ``offset`` is past the last line, returns a note with
           the actual line count.
+
+        ``.pdf`` files are supported: text is extracted from the
+        PDF's text layer via ``pypdf``.  Encrypted PDFs return an
+        error string.  Scanned PDFs with no text layer return an
+        empty string.
         """
         try:
             p = _safe(root, path, extra_roots=extra_roots)

@@ -1510,3 +1510,301 @@ class TestPartialReadRefusalWhenAlreadyLoaded:
 
         result = tools["read_file"](path="A.txt", offset=2, limit=1)
         assert result == "l2\n"
+
+
+# ===================================================================
+# read_file — PDF support
+# ===================================================================
+
+
+def _make_text_pdf(path: str, text: str) -> None:
+    """Create a minimal single-page PDF with extractable *text*.
+
+    Uses ``pypdf`` to build a page with a content stream that draws
+    *text* via standard PDF text-showing operators.
+    """
+    from pypdf import PdfWriter
+    from pypdf.generic import (
+        NameObject,
+        DictionaryObject,
+        ContentStream,
+        StreamObject,
+    )
+
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=612, height=792)
+
+    escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    stream_data = f"BT /F1 12 Tf 100 700 Td ({escaped}) Tj ET"
+
+    # Wrap the raw bytes in a StreamObject so ContentStream can read them.
+    stm = StreamObject()
+    stm.set_data(stream_data.encode("latin-1"))
+    content_stream = ContentStream(stm, writer)
+
+    font = DictionaryObject(
+        {
+            NameObject("/Type"): NameObject("/Font"),
+            NameObject("/Subtype"): NameObject("/Type1"),
+            NameObject("/BaseFont"): NameObject("/Helvetica"),
+        }
+    )
+    font_ref = writer._add_object(font)
+
+    page[NameObject("/Resources")] = DictionaryObject(
+        {
+            NameObject("/Font"): DictionaryObject({NameObject("/F1"): font_ref}),
+        }
+    )
+    page[NameObject("/Contents")] = writer._add_object(content_stream)
+
+    with open(path, "wb") as f:
+        writer.write(f)
+
+
+def _make_multipage_text_pdf(path: str, texts: list[str]) -> None:
+    """Create a multi-page PDF where each page draws one text string."""
+    from pypdf import PdfWriter
+    from pypdf.generic import (
+        NameObject,
+        DictionaryObject,
+        ContentStream,
+        StreamObject,
+    )
+
+    writer = PdfWriter()
+    font = DictionaryObject(
+        {
+            NameObject("/Type"): NameObject("/Font"),
+            NameObject("/Subtype"): NameObject("/Type1"),
+            NameObject("/BaseFont"): NameObject("/Helvetica"),
+        }
+    )
+    font_ref = writer._add_object(font)
+
+    for text in texts:
+        page = writer.add_blank_page(width=612, height=792)
+        escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+        stream_data = f"BT /F1 12 Tf 100 700 Td ({escaped}) Tj ET"
+        stm = StreamObject()
+        stm.set_data(stream_data.encode("latin-1"))
+        content_stream = ContentStream(stm, writer)
+        page[NameObject("/Resources")] = DictionaryObject(
+            {
+                NameObject("/Font"): DictionaryObject({NameObject("/F1"): font_ref}),
+            }
+        )
+        page[NameObject("/Contents")] = writer._add_object(content_stream)
+
+    with open(path, "wb") as f:
+        writer.write(f)
+
+
+def _make_empty_pdf(path: str) -> None:
+    """Create a minimal PDF with no text layer (blank page only)."""
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    writer.add_blank_page(width=612, height=792)
+    with open(path, "wb") as f:
+        writer.write(f)
+
+
+def _make_encrypted_pdf(path: str, password: str = "secret123") -> None:
+    """Create a password-protected PDF with extractable text."""
+    _make_text_pdf(path, "secret content")
+    from pypdf import PdfReader, PdfWriter
+
+    reader = PdfReader(path)
+    writer = PdfWriter()
+    for page in reader.pages:
+        writer.add_page(page)
+    writer.encrypt(password)
+    with open(path, "wb") as f:
+        writer.write(f)
+
+
+def _make_corrupted_pdf(path: str) -> None:
+    """Write arbitrary non-PDF bytes to a ``.pdf`` file."""
+    from pathlib import Path
+
+    Path(path).write_bytes(b"this is not a PDF\x00\xff\xfe\xfd")
+
+
+class TestReadFilePDF:
+    """``read_file`` behaviour on ``.pdf`` files: text extraction via
+    ``pypdf``, encrypted detection, error handling, and integration
+    with offset/limit / caching."""
+
+    def test_extracts_text_from_valid_pdf(self, tmp_path, settings):
+        """``read_file`` on a valid .pdf returns the extracted text
+        from the PDF's text layer."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_text_pdf(str(root / "doc.pdf"), "Hello PDF world")
+        tools = _build(root, settings)
+        result = tools["read_file"](path="doc.pdf")
+        assert "Hello PDF world" in result
+
+    def test_empty_pdf_no_text_layer(self, tmp_path, settings):
+        """A PDF with no text layer (blank page) returns an empty string."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_empty_pdf(str(root / "blank.pdf"))
+        tools = _build(root, settings)
+        result = tools["read_file"](path="blank.pdf")
+        assert result == ""
+
+    def test_encrypted_pdf_returns_error(self, tmp_path, settings):
+        """An encrypted PDF returns an error string starting with the
+        prescribed prefix."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_encrypted_pdf(str(root / "locked.pdf"), "secret123")
+        tools = _build(root, settings)
+        result = tools["read_file"](path="locked.pdf")
+        assert isinstance(result, str)
+        assert result.startswith("error: PDF is encrypted")
+
+    def test_corrupted_pdf_returns_error(self, tmp_path, settings):
+        """A file with ``.pdf`` extension that is not a valid PDF returns
+        an error string."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_corrupted_pdf(str(root / "bad.pdf"))
+        tools = _build(root, settings)
+        result = tools["read_file"](path="bad.pdf")
+        assert isinstance(result, str)
+        assert result.startswith("error reading PDF")
+
+    def test_non_pdf_files_unchanged(self, tmp_path, settings):
+        """Non-.pdf files are read via ``read_text`` exactly as before —
+        no regression."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "hello.txt", "world\n")
+        tools = _build(root, settings)
+        result = tools["read_file"](path="hello.txt")
+        assert result == "world\n"
+
+    def test_offset_limit_on_pdf(self, tmp_path, settings):
+        """``offset`` and ``limit`` slice the extracted PDF text by
+        lines, just like a text file."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        # Create a multi-page PDF — each page draws one distinct line.
+        _make_multipage_text_pdf(
+            str(root / "multi.pdf"),
+            ["First page text", "Second page text", "Third page text"],
+        )
+        tools = _build(root, settings)
+
+        # Full read should contain all three texts (each on its own line).
+        full = tools["read_file"](path="multi.pdf")
+        assert "First page text" in full
+        assert "Second page text" in full
+        assert "Third page text" in full
+
+        # offset=2, limit=1 → only the second line.
+        sliced = tools["read_file"](path="multi.pdf", offset=2, limit=1)
+        lines = sliced.strip().split("\n")
+        assert len(lines) == 1
+        assert "Second page text" in sliced
+        assert "First page text" not in sliced
+        assert "Third page text" not in sliced
+
+    def test_pdf_caching(self, tmp_path, settings):
+        """Two consecutive ``read_file`` calls on the same .pdf return
+        the same extracted text (cache hit)."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_text_pdf(str(root / "doc.pdf"), "Cache me")
+        tools = _build(root, settings)
+
+        first = tools["read_file"](path="doc.pdf")
+        second = tools["read_file"](path="doc.pdf")
+        assert first == second
+        assert "Cache me" in first
+
+    def test_pdf_caching_equivalent_paths(self, tmp_path, settings):
+        """Different path strings that resolve to the same PDF hit the
+        same cache entry."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        (root / "sub").mkdir()
+        _make_text_pdf(str(root / "sub" / "doc.pdf"), "Cached PDF")
+        tools = _build(root, settings)
+
+        first = tools["read_file"](path="./sub/doc.pdf")
+        second = tools["read_file"](path="sub/doc.pdf")
+        # Same cache entry → same extracted text (not re-extracted).
+        assert first == second
+        assert "Cached PDF" in first
+
+    def test_pdf_cache_invalidated_by_write(self, tmp_path, settings):
+        """After ``write_file`` overwrites a ``.pdf``, ``read_file``
+        re-reads from disk: the cache is invalidated, and the fresh
+        read reflects whatever is on disk now (even if it's no longer
+        a valid PDF)."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_text_pdf(str(root / "doc.pdf"), "Old PDF")
+        tools = _build(root, settings)
+
+        assert "Old PDF" in tools["read_file"](path="doc.pdf")
+
+        # Overwrite via write_file — this invalidates the cache.
+        tools["write_file"]("doc.pdf", "plain text, not a PDF")
+
+        # Re-read: the cache was cleared, so _read_cached hits the disk,
+        # sees a .pdf extension, and _extract_pdf_text fails to parse the
+        # plain-text content as a PDF.
+        result = tools["read_file"](path="doc.pdf")
+        assert "error reading PDF" in result
+        assert "not a PDF" not in result  # it's a parse error, not the raw text
+
+    def test_pdf_cache_invalidated_by_edit(self, tmp_path, settings):
+        """After ``edit_file`` on a ``.pdf``, the cache is cleared and a
+        subsequent ``read_file`` returns the fresh file contents."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        # write_file can create a .pdf but we need a valid PDF to read
+        # it.  Use a plain .txt file for the edit→cache test — the
+        # cache-invalidation path is shared across all file types.
+        _make_file(root, "f.txt", "hello world\n")
+        tools = _build(root, settings)
+
+        assert tools["read_file"](path="f.txt") == "hello world\n"
+        tools["edit_file"]("f.txt", "hello", "HELLO")
+        assert tools["read_file"](path="f.txt") == "HELLO world\n"
+
+    def test_pdf_lazy_import(self, tmp_path, settings):
+        """``pypdf`` is not imported until a ``.pdf`` path is actually
+        read — importing ``fs_tools`` and calling ``build_fs_tools``
+        leaves ``pypdf`` out of ``sys.modules``."""
+        import sys
+
+        # Ensure pypdf is not already loaded from prior tests.
+        sys.modules.pop("pypdf", None)
+
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+
+        assert "pypdf" not in sys.modules, (
+            "pypdf should not be imported until a .pdf is read"
+        )
+
+        # Reading a .pdf triggers the lazy import.
+        _make_text_pdf(str(root / "doc.pdf"), "Trigger import")
+        tools["read_file"](path="doc.pdf")
+        assert "pypdf" in sys.modules, "pypdf should be imported after reading a .pdf"
+
+    def test_pdf_extension_case_insensitive(self, tmp_path, settings):
+        """``.PDF`` (upper-case) is handled the same as ``.pdf``."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_text_pdf(str(root / "DOC.PDF"), "Case test")
+        tools = _build(root, settings)
+        result = tools["read_file"](path="DOC.PDF")
+        assert "Case test" in result
