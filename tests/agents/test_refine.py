@@ -4660,13 +4660,22 @@ class TestClassifyMaintenanceDraft:
 
     # -- investigate (title-only) --
 
-    def test_investigate_in_title(self):
-        """'Investigate' in title → 'investigate'."""
+    def test_investigate_in_title_no_match(self):
+        """'Investigate' in title → None (keyword removed; LLM triage handles routing)."""
         assert (
             refining._classify_maintenance_draft(
                 "Investigate cross-repo dependency", "check version compatibility"
             )
-            == "investigate"
+            is None
+        )
+
+    def test_investigate_code_change_no_match(self):
+        """'Investigate and fix' code-change title → None (not a maintenance request)."""
+        assert (
+            refining._classify_maintenance_draft(
+                "Investigate and fix memory leak", "edit src/foo.py to fix the leak"
+            )
+            is None
         )
 
     def test_investigate_body_only_no_match(self):

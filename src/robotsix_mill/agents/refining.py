@@ -344,8 +344,6 @@ def _classify_maintenance_draft(title: str, draft: str) -> str | None:
         return "create_repo"
     if "fork repo" in title_lower or "fork repo" in draft_lower:
         return "fork_repo"
-    if "investigate" in title_lower:
-        return "investigate"
     return None
 
 
