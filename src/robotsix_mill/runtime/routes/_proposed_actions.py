@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ...core.models import ProposedAction, ProposedActionStatus
 from ..deps import get_service, get_settings
+from ._repo_helpers import _resolve_board_id
 
 log = logging.getLogger(__name__)
 
@@ -34,18 +35,8 @@ def list_proposed_actions(
 
     repos = request.app.state.repos
     if repo_id and repo_id != "all":
-        if repo_id == "meta":
-            services = [_TicketService(settings, board_id="meta")]
-        elif repo_id not in repos.repos:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unknown repo: '{repo_id}'. Known repos: "
-                f"{sorted(repos.repos.keys())}",
-            )
-        else:
-            services = [
-                _TicketService(settings, board_id=repos.repos[repo_id].board_id)
-            ]
+        board_id = _resolve_board_id(repo_id, repos)
+        services = [_TicketService(settings, board_id=board_id)]
     else:
         services = [
             _TicketService(settings, board_id=rc.board_id)

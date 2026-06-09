@@ -27,6 +27,7 @@ from ..deps import (
     get_worker,
     maybe_enqueue,
 )
+from ._repo_helpers import _resolve_board_id
 
 log = logging.getLogger(__name__)
 
@@ -56,33 +57,7 @@ def create_ticket(
     settings=Depends(get_settings),
 ) -> TicketRead:
     repos = request.app.state.repos
-    board_id = ""
-    if body.repo_id == "meta":
-        # The synthetic cross-repo meta board is selectable in the UI
-        # and queryable via ?repo_id=meta, but it is not a registered
-        # repo. Accept it here so creating a ticket on the meta board
-        # works instead of 400-ing as an "unknown repo".
-        board_id = "meta"
-    elif body.repo_id:
-        # Explicit repo_id provided — look up its board_id.
-        if body.repo_id not in repos.repos:
-            sorted_keys = sorted(repos.repos.keys())
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unknown repo: '{body.repo_id}'. Known repos: {sorted_keys}",
-            )
-        board_id = repos.repos[body.repo_id].board_id
-    elif len(repos.repos) == 1:
-        # Single-repo mode: default to the sole repo.
-        board_id = next(iter(repos.repos.values())).board_id
-    else:
-        # Multi-repo mode with no repo_id: require it.
-        sorted_keys = sorted(repos.repos.keys())
-        raise HTTPException(
-            status_code=400,
-            detail=f"repo_id is required when multiple repos are configured. "
-            f"Available repos: {sorted_keys}",
-        )
+    board_id = _resolve_board_id(body.repo_id, repos)
 
     try:
         ticket = svc.create(
@@ -137,20 +112,8 @@ def list_tickets(
 
     repos = request.app.state.repos
     if repo_id and repo_id != "all":
-        # "meta" is the synthetic cross-repo meta-agent board (not a
-        # registered repo — see meta/runner.py / GET /repos).
-        if repo_id == "meta":
-            services = [_TicketService(settings, board_id="meta")]
-        elif repo_id not in repos.repos:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unknown repo: '{repo_id}'. Known repos: "
-                f"{sorted(repos.repos.keys())}",
-            )
-        else:
-            services = [
-                _TicketService(settings, board_id=repos.repos[repo_id].board_id)
-            ]
+        board_id = _resolve_board_id(repo_id, repos)
+        services = [_TicketService(settings, board_id=board_id)]
     else:
         services = [
             _TicketService(settings, board_id=rc.board_id)
