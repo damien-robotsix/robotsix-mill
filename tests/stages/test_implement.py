@@ -2806,6 +2806,64 @@ def test_baseline_check_blocks_on_failure(ctx_factory, tmp_path, monkeypatch):
     assert "BLOCKED" in content
 
 
+def test_baseline_check_skipped_for_baseline_fix_ticket(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """Regression: a baseline-fix ticket (source=IMPLEMENT_BASELINE_DEPENDENCY)
+    must NOT re-run the baseline gate.
+
+    Such a ticket exists to repair the red base, so it has to implement
+    AGAINST that still-red base. Re-running the gate on it would spawn yet
+    another baseline fix, which dedups to the ticket itself
+    ("Ticket cannot depend on itself" -> Fatal), deadlocking the ticket and
+    every ticket parked behind it (board-wide deadlock).
+    """
+    from robotsix_mill.core.models import SourceKind
+
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+
+    # Spy: the baseline gate must never be entered for this source. If the
+    # guard regresses, this records a call and the assertion below fails.
+    baseline_calls: list[int] = []
+    monkeypatch.setattr(
+        ImplementStage,
+        "_run_baseline_check",
+        staticmethod(lambda *a, **kw: baseline_calls.append(1)),
+    )
+
+    agent_called: list[int] = []
+
+    def _fake_agent_run(*, settings, repo_dir, **_kwargs):
+        del settings
+        agent_called.append(1)
+        (Path(repo_dir) / "feature.txt").write_text("done")
+        return ("done", ["feature.txt"], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _fake_agent_run)
+
+    t = ctx.service.create(
+        "baseline: pre-existing test failures — main abc1234",
+        "Repair the red base.",
+        source=SourceKind.IMPLEMENT_BASELINE_DEPENDENCY,
+    )
+    ctx.service.transition(t.id, State.READY)
+    t = ctx.service.get(t.id)
+    _write_file_map(ctx, t, "feature.txt")
+
+    out = ImplementStage().run(t, ctx)
+
+    # The baseline gate was skipped for the baseline-fix ticket ...
+    assert baseline_calls == []
+    # ... and the implement loop ran normally against the (red) base.
+    assert len(agent_called) == 1
+    assert out.next_state is State.DOCUMENTING
+
+
 def test_baseline_checks_out_remote_base_sha_not_local_branch(
     ctx_factory, tmp_path, monkeypatch
 ):

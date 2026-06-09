@@ -263,16 +263,23 @@ class ImplementStage(Stage):
 
         # --- test-baseline check: detect pre-existing failures BEFORE
         # the agent loop so we don't waste cycles on an unfixable base.
-        baseline_outcome = ImplementStage._run_baseline_check(
-            ctx,
-            ticket,
-            repo_dir,
-            branch,
-            resuming,
-            s,
-        )
-        if baseline_outcome is not None:
-            return baseline_outcome
+        # EXEMPT baseline-fix tickets: a ticket spawned to repair the red
+        # base (source=IMPLEMENT_BASELINE_DEPENDENCY) must implement AGAINST
+        # that still-red base — that is its whole job. Re-running the gate
+        # on it would spawn yet another baseline fix, which dedups to the
+        # ticket itself ("Ticket cannot depend on itself" → Fatal), wedging
+        # the ticket and everything parked behind it (board-wide deadlock).
+        if ticket.source != SourceKind.IMPLEMENT_BASELINE_DEPENDENCY:
+            baseline_outcome = ImplementStage._run_baseline_check(
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                resuming,
+                s,
+            )
+            if baseline_outcome is not None:
+                return baseline_outcome
 
         # Phase 2: deterministic, stage-owned implement loop.
         return ImplementStage._implement_loop(
