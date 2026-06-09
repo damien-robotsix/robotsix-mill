@@ -538,6 +538,7 @@ def test_inject_agent_md_can_be_false():
 # Known-valid tool names (mirrors ToolRegistry + fs_tools).
 _VALID_TOOL_NAMES = frozenset(
     {
+        "clone_repo",
         "explore",
         "parallel_explore",
         "read_file",
