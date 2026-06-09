@@ -26,6 +26,84 @@ log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Command allowlist for the maintenance agent's run_command
+# ---------------------------------------------------------------------------
+
+# Commands the maintenance agent is allowed to run via run_command.
+# Compound commands (&&, ||, |, ;) are split into segments; every
+# segment's first word must be in this set or the whole command is
+# rejected BEFORE reaching the sandbox.
+_MAINTENANCE_SAFE_COMMANDS: frozenset[str] = frozenset(
+    {
+        "git",
+        "grep",
+        "ls",
+        "find",
+        "cat",
+        "head",
+        "tail",
+        "wc",
+        "sort",
+        "uniq",
+        "diff",
+        "sed",
+        "awk",
+        "cut",
+        "tr",
+        "xargs",
+        "echo",
+        "dirname",
+        "basename",
+        "realpath",
+        "readlink",
+        "stat",
+        "file",
+        "du",
+        "tree",
+        "cd",
+    }
+)
+
+
+def _validate_command(command: str) -> str | None:
+    """Return an error string if *command* contains a non-allowlisted
+    executable, or ``None`` if every segment passes.
+
+    Splits on ``&&``, ``||``, ``|``, ``;`` and checks the first
+    whitespace-delimited word of each segment against
+    ``_MAINTENANCE_SAFE_COMMANDS``.  Segments that are pure ``cd``
+    (with or without a directory argument) are skipped — this lets the
+    agent navigate between repo subdirectories via ``cd <dir> && ...``
+    or ``cd <dir> || ...`` chains.
+    """
+    import re
+
+    # Split on shell separators (capturing parens keep the separators
+    # in the result list, but we only examine every other element —
+    # the actual command segments).
+    segments = re.split(r"(&&|\|\||\||;)", command)
+    for i in range(0, len(segments), 2):
+        segment = segments[i].strip()
+        if not segment:
+            continue
+        # A pure "cd" segment (with or without target dir) is always
+        # allowed — it just changes the working directory.
+        if segment == "cd" or segment.startswith("cd "):
+            continue
+        # Extract the first word (the executable)
+        first_word = segment.split()[0] if segment.split() else ""
+        if not first_word:
+            continue
+        if first_word not in _MAINTENANCE_SAFE_COMMANDS:
+            return (
+                f"command rejected: '{first_word}' is not in the "
+                f"maintenance agent's safe-command allowlist. "
+                f"Allowed commands: {', '.join(sorted(_MAINTENANCE_SAFE_COMMANDS))}"
+            )
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Result model
 # ---------------------------------------------------------------------------
 
@@ -395,20 +473,57 @@ def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResul
         tools.append(make_clone_repo_tool(ctx.settings, tmpdir))
         tools.append(make_post_findings_tool(ctx.settings, "maintenance"))
 
-        # Filesystem tools (read-only subset used by the agent; write
-        # tools are harmless — the system prompt says "read-only")
+        # Determine the effective root for investigation tools.
+        # When investigation_workspace is set, tools are scoped to
+        # that pre-populated directory; otherwise fall back to the
+        # ticket's own workspace repo dir.
+        investigation_root = (
+            ctx.settings.investigation_workspace
+            if ctx.settings.investigation_workspace is not None
+            else ws.repo_dir
+        )
+
+        # Read-only filesystem tools (read_file, list_dir, run_command)
         from .fs_tools import build_fs_tools
+
+        all_fs = build_fs_tools(investigation_root, ctx.settings)
+        ro_fs = {
+            t.__name__: t
+            for t in all_fs
+            if t.__name__ in ("read_file", "list_dir", "run_command")
+        }
+        tools.append(ro_fs["read_file"])
+        tools.append(ro_fs["list_dir"])
+
+        # Wrap run_command with the maintenance allowlist
+        _sandbox_run = ro_fs["run_command"]
+
+        def run_command(command: str) -> str:
+            """Run a sandboxed read-only shell command in the investigation workspace.
+
+            Only safe, read-only commands are allowed (git, grep, ls, find,
+            cat, head, tail, wc, sort, uniq, diff, ...).  Write-capable or
+            destructive commands are rejected before execution.
+            """
+            err = _validate_command(command)
+            if err is not None:
+                return err
+            return _sandbox_run(command)
+
+        tools.append(run_command)
+
+        # Explore / parallel_explore tools scoped to investigation_root
         from .explore import make_explore_tool, make_parallel_explore_tool
 
-        tools.extend(build_fs_tools(clone_dir, ctx.settings))
-        tools.append(make_explore_tool(ctx.settings, clone_dir))
-        tools.append(make_parallel_explore_tool(ctx.settings, clone_dir))
+        tools.append(make_explore_tool(ctx.settings, investigation_root))
+        tools.append(make_parallel_explore_tool(ctx.settings, investigation_root))
 
         # 5. Build the agent
         agent = build_agent_from_definition(
             ctx.settings,
             definition,
             tools=tools,
+            repo_dir=investigation_root,
         )
 
         # 6. Build the user prompt from the ticket

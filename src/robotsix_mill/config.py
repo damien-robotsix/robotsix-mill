@@ -375,6 +375,17 @@ class Settings(BaseSettings):
     # always uses the absolute path. Tests override via tmp_path.
     data_dir: Path = Field(default=Path(".data"))
 
+    # Path to a directory containing clones of registered repos for
+    # cross-repo investigation by the maintenance agent.  When set, the
+    # agent's read-only tools (read_file, list_dir, run_command, explore,
+    # parallel_explore) are scoped to this directory.  When None, the
+    # agent falls back to the ticket's own workspace repo_dir.
+    # Configurable via MILL_INVESTIGATION_WORKSPACE env var or
+    # config/mill.local.yaml.
+    investigation_workspace: Path | None = Field(
+        default=None, alias="MILL_INVESTIGATION_WORKSPACE"
+    )
+
     # Default repo ID for legacy tickets that lack a board_id.
     # Set in config/mill.local.yaml.  When empty (default), accessing
     # a legacy ticket without a board_id raises an error telling the

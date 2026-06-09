@@ -13,6 +13,7 @@ import pytest
 
 from robotsix_mill.agents.maintenance import (
     MaintenanceResult,
+    _validate_command,
     make_clone_repo_tool,
     make_create_repo_tool,
     make_fork_repo_tool,
@@ -234,11 +235,101 @@ class TestToolRegistryEntries:
 
         make_post_findings_tool(s, agent_name="test")
 
+        # Register fs tools and explore tools
+        from robotsix_mill.agents.fs_tools import build_fs_tools
+        from robotsix_mill.agents.explore import make_explore_tool
+
+        build_fs_tools(tmp_path, s)
+        make_explore_tool(s, tmp_path)
+
         names = {t.name for t in ToolRegistry.list_tools()}
         assert "create_repo" in names
         assert "fork_repo" in names
         assert "clone_repo" in names
         assert "post_findings" in names
+        assert "explore" in names
+        assert "read_file" in names
+        assert "list_dir" in names
+        assert "run_command" in names
+
+
+# ── Command allowlist ────────────────────────────────────────────────
+
+
+class TestCommandAllowlist:
+    """Tests for _validate_command and the run_command allowlist wrapper."""
+
+    def test_allows_safe_commands(self):
+        """Safe commands pass validation and return None."""
+        assert _validate_command("git log") is None
+        assert _validate_command("grep -r 'TODO'") is None
+        assert _validate_command("ls -la") is None
+        assert _validate_command("find . -name '*.py'") is None
+        assert _validate_command("cat README.md") is None
+        assert _validate_command("head -20 file.txt") is None
+        assert _validate_command("tail -5 file.txt") is None
+        assert _validate_command("wc -l *.py") is None
+        assert _validate_command("sort file.txt") is None
+        assert _validate_command("uniq -c") is None
+        assert _validate_command("diff a.txt b.txt") is None
+        assert _validate_command("sed 's/foo/bar/' file") is None
+        assert _validate_command("awk '{print $1}'") is None
+        assert _validate_command("cut -d: -f1") is None
+        assert _validate_command("tr 'a-z' 'A-Z'") is None
+        assert _validate_command("xargs echo") is None
+        assert _validate_command("echo hello") is None
+        assert _validate_command("dirname /a/b/c") is None
+        assert _validate_command("basename /a/b/c.txt") is None
+        assert _validate_command("realpath .") is None
+        assert _validate_command("readlink -f .") is None
+        assert _validate_command("stat file.txt") is None
+        assert _validate_command("file README.md") is None
+        assert _validate_command("du -sh .") is None
+        assert _validate_command("tree -L 2") is None
+
+    def test_rejects_destructive_commands(self):
+        """Destructive / write-capable commands are rejected."""
+        assert _validate_command("rm -rf /") is not None
+        assert _validate_command("make") is not None
+        assert _validate_command("curl http://example.com") is not None
+        assert _validate_command("chmod 777 file") is not None
+        assert _validate_command("pip install x") is not None
+        assert _validate_command("python -c '...'") is not None
+        assert _validate_command("npm install") is not None
+        assert _validate_command("wget http://x") is not None
+        assert _validate_command("mv a b") is not None
+        assert _validate_command("cp a b") is not None
+        assert _validate_command("touch file") is not None
+        assert _validate_command("mkdir dir") is not None
+
+    def test_allows_compound_commands(self):
+        """Compound commands with cd prefixes are allowed when every
+        segment's executable is in the allowlist."""
+        assert _validate_command("cd subdir && git log --oneline -5") is None
+        assert _validate_command("cd /some/path || ls") is None
+        assert _validate_command("cd a && cd b && grep -r pattern") is None
+        assert _validate_command("ls -la | head -20") is None
+        assert _validate_command("grep -r foo . | sort | uniq -c") is None
+        assert _validate_command("find . -name '*.py' | xargs grep TODO") is None
+
+    def test_rejects_compound_with_destructive_segment(self):
+        """A compound command where any segment is destructive is rejected."""
+        assert _validate_command("cd subdir && rm file") is not None
+        assert _validate_command("ls | curl http://x") is not None
+        assert _validate_command("grep foo . ; make install") is not None
+
+    def test_allows_pure_cd(self):
+        """A pure cd command (no following command) is allowed."""
+        assert _validate_command("cd subdir") is None
+        assert _validate_command("cd /some/path") is None
+
+    def test_rejects_command_with_rejection_message(self):
+        """The rejection message names the rejected command and lists
+        allowed commands."""
+        err = _validate_command("rm -rf /")
+        assert err is not None
+        assert "rm" in err
+        assert "git" in err  # allowed commands are listed
 
 
 # ── YAML definition ──────────────────────────────────────────────────
@@ -315,6 +406,7 @@ class TestAgentConstruction:
         # Mock workspace
         ws_mock = MagicMock()
         ws_mock.dir = tmp_path / "nonexistent"
+        ws_mock.repo_dir = tmp_path / "nonexistent" / "repo"
         ws_mock.read_description.return_value = "Test draft"
         ctx.service.workspace.return_value = ws_mock
 
@@ -336,6 +428,10 @@ class TestAgentConstruction:
         assert "read_file" in tool_names
         assert "list_dir" in tool_names
         assert "run_command" in tool_names
+        # Write tools should NOT be present (read-only enforcement)
+        assert "write_file" not in tool_names
+        assert "edit_file" not in tool_names
+        assert "delete_file" not in tool_names
 
     def test_run_maintenance_agent_stage_contract(self, tmp_path, monkeypatch):
         """The returned object satisfies the MaintenanceStage.run()
@@ -378,6 +474,7 @@ class TestAgentConstruction:
         ctx.repo_config = None
         ws_mock = MagicMock()
         ws_mock.dir = tmp_path / "nonexistent"
+        ws_mock.repo_dir = tmp_path / "nonexistent" / "repo"
         ws_mock.read_description.return_value = "Test draft"
         ctx.service.workspace.return_value = ws_mock
 
