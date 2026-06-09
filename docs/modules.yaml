@@ -118,6 +118,7 @@ modules:
       - src/robotsix_mill/runtime/tracing.py
       - src/robotsix_mill/runtime/transient_errors.py
       - src/robotsix_mill/runtime/board_html.py
+      - src/robotsix_mill/runtime/board_adapter.py
       - src/robotsix_mill/runtime/broadcaster.py
       - src/robotsix_mill/runtime/cost_warm.py
       - src/robotsix_mill/runtime/run_registry.py

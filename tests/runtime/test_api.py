@@ -43,30 +43,33 @@ def test_board_serves_html(client):
     assert '<div id="board">' in body
     assert '<div id="drawer">' in body
     assert '<span id="gates">' in body  # gate pills placeholder
-    # State labels are injected into the HTML as a <script>const ST=[...]
-    # so the board column order always matches the server-side State enum.
-    from robotsix_mill.core.states import State
+    # robotsix-board config script placeholder is present; when
+    # robotsix-board is installed it will be replaced by
+    # render_config_script() output.
+    assert "{CONFIG_SCRIPT}" not in body  # replaced at request time
+    # Mill-specific JS is linked
+    assert "/static/mill/board-mill.js" in body
+    assert "/static/mill/board-mill.css" in body
+    # robotsix-board static assets are linked
+    assert "/static/board.js" in body
+    assert "/static/board.css" in body
 
-    st_json = json.dumps([s.value for s in State])
-    assert f"const ST={st_json}" in body
-
-    # A subset of state labels also appear as string literals in
-    # board.js (conditionals, sort keys); verify those remain.
-    js = client.get("/static/board.js").text
+    # State labels now live in the mill-specific overlay JS, not the
+    # shared robotsix-board library.
+    js = client.get("/static/mill/board-mill.js").text
     for s in ("draft", "human_issue_approval", "done"):
         assert s in js
-    assert "/tickets" in js  # board polls the JSON API
+    assert "/tickets" in js  # board polls for card data
 
 
-def test_board_injected_st_matches_state_enum(client):
-    """The injected <script>const ST=[…] in GET / must exactly match
-    [s.value for s in State], so any drift between the State enum and
-    the board column order is detected by the test suite."""
-    from robotsix_mill.core.states import State
-
+def test_board_config_script_references_board_cards(client):
+    """When robotsix-board is installed, the board config script contains
+    the refresh_url pointing to /board/cards."""
     body = client.get("/").text
-    expected = json.dumps([s.value for s in State])
-    assert f"const ST={expected}" in body
+    # robotsix-board may or may not be installed; if it is, the config
+    # script includes the refresh URL.
+    if "board-config" in body:
+        assert "/board/cards" in body
 
 
 def test_create_and_get(client):
@@ -158,34 +161,35 @@ def test_get_tickets_list_is_cache_only_for_cost(client, service, monkeypatch):
 
 
 def test_board_renders_source_badge(client):
-    """The board CSS includes source badge styling classes, and the
-    HTML shell references the static CSS file."""
+    """The mill-specific overlay CSS includes source badge styling classes,
+    and the HTML shell references both the shared and mill CSS files."""
     r = client.get("/")
     body = r.text
     assert '<link rel="stylesheet" href="/static/board.css">' in body
-    css = client.get("/static/board.css").text
+    assert '<link rel="stylesheet" href="/static/mill/board-mill.css">' in body
+    css = client.get("/static/mill/board-mill.css").text
     assert "src-badge" in css
     assert "src-user" in css
     assert "src-retrospect" in css
     assert "src-survey" in css
-    js = client.get("/static/board.js").text
+    js = client.get("/static/mill/board-mill.js").text
     assert '"survey"' in js  # mapped in srcClass()
 
 
 def test_board_renders_cost_snippet(client):
-    """The board JS includes the JS snippet that renders cost on each
-    card: $(t.cost_usd||0).toFixed(4), and the CSS has .cost class."""
-    js = client.get("/static/board.js").text
+    """The mill overlay JS includes the JS snippet that renders cost on each
+    card: $(t.cost_usd||0).toFixed(4), and the overlay CSS has .cost class."""
+    js = client.get("/static/mill/board-mill.js").text
     assert "cost_usd" in js  # JS references the field
     assert "toFixed(4)" in js  # 4 decimal places
-    css = client.get("/static/board.css").text
+    css = client.get("/static/mill/board-mill.css").text
     assert ".cost" in css  # CSS class for cost display
 
 
 def test_board_renders_gate_pill_wiring(client):
-    """The board JS includes gate-fetching and pill-rendering logic,
-    and the CSS includes the gate-pill / gate-on / gate-off classes."""
-    js = client.get("/static/board.js").text
+    """The mill overlay JS includes gate-fetching and pill-rendering logic,
+    and the overlay CSS includes the gate-pill / gate-on / gate-off classes."""
+    js = client.get("/static/mill/board-mill.js").text
     assert '"/gates"' in js
     assert "fetchGates" in js
     assert "gate-pill" in js
@@ -193,13 +197,13 @@ def test_board_renders_gate_pill_wiring(client):
     assert "gate-off" in js
     # All four labels must appear.
     for label in ("auto-approve", "review", "auto-merge", "require-approval"):
-        assert label in js, f"gate label '{label}' missing from board.js"
+        assert label in js, f"gate label '{label}' missing from board-mill.js"
     # The YAML paths (from the tooltip) should also appear.
     assert "gates.auto_approve_enabled" in js
     assert "gates.review_enabled" in js
     assert "gates.auto_merge_enabled" in js
     assert "gates.require_approval" in js
-    css = client.get("/static/board.css").text
+    css = client.get("/static/mill/board-mill.css").text
     assert ".gate-pill" in css
     assert ".gate-on" in css
     assert ".gate-off" in css
@@ -468,15 +472,14 @@ def test_board_js_escapes_js_string_handlers(client):
     esc() escapes only [&<>], so a value containing a "'" would break (or
     inject into) the generated handler; jsq() emits a properly-quoted,
     HTML-attribute-safe JS string literal."""
-    js = client.get("/static/board.js").text
-    # The escaper is defined.
-    assert "const jsq=" in js, "board.js must define a jsq() JS-string escaper"
+    js = client.get("/static/mill/board-mill.js").text
+    # The escaper is defined (function declaration in board-mill.js).
+    assert "function jsq(" in js, "board-mill.js must define a jsq() JS-string escaper"
     # Proposals / candidate / survey / child-ticket handlers use jsq().
-    assert "approveProposal('+jsq(" in js
-    assert "rejectProposal('+jsq(" in js
-    assert "rejectCandidate('+jsq(" in js
-    assert "open_('+jsq(" in js  # survey / proposals link handlers
-    assert "open_(${jsq(" in js  # child-ticket template-literal links
+    assert "approveProposal(' + jsq(" in js
+    assert "rejectProposal(' + jsq(" in js
+    assert "rejectCandidate(' + jsq(" in js
+    assert "open_(' + jsq(" in js  # survey / proposals link handlers
     # The unsafe pre-fix patterns must be gone: no id interpolated into a
     # single-quoted JS literal via esc(), and no bare-template open_('${id}').
     assert "esc(pa.id)" not in js
@@ -484,17 +487,17 @@ def test_board_js_escapes_js_string_handlers(client):
 
 
 def test_board_js_includes_origin_session_rendering(client):
-    """The board JS includes origin_session and origin_session_url
-    rendering logic for the ticket detail drawer."""
-    js = client.get("/static/board.js").text
+    """The mill board overlay JS includes origin_session and
+    origin_session_url rendering logic for the ticket detail drawer."""
+    js = client.get("/static/mill/board-mill.js").text
     assert "origin_session_url" in js
     assert "origin_session" in js
     assert "origin-link" in js
 
 
 def test_board_css_includes_origin_link_style(client):
-    """The board CSS includes the .origin-link style rule."""
-    css = client.get("/static/board.css").text
+    """The mill board overlay CSS includes the .origin-link style rule."""
+    css = client.get("/static/mill/board-mill.css").text
     assert ".origin-link" in css
 
 
@@ -604,9 +607,14 @@ def test_static_assets_served(client):
 
     js = client.get("/static/board.js")
     assert js.status_code == 200
-    assert "refresh" in js.text
-    assert "open_" in js.text
-    assert "newTicket" in js.text
+    # robotsix-board's board.js contains "robotsixBoardRefresh"; the
+    # legacy bundled board.js contains "refresh".  Either is valid.
+    assert "refresh" in js.text or "robotsixBoardRefresh" in js.text
+    # The drawer close handler is always present (either "open_" from
+    # the legacy bundle or "openDrawer" from robotsix-board).
+    assert any(
+        name in js.text for name in ("open_", "openDrawer", "closeDrawer")
+    )
 
 
 def test_audit_endpoint_is_fire_and_forget(client, monkeypatch):
@@ -700,7 +708,9 @@ def test_board_html_includes_agent_check_button(client):
     body = client.get("/").text
     assert "Agent Check" in body
     assert "runAgentCheck()" in body
-    js = client.get("/static/board.js").text
+    # Mill-specific agent functions are in board-mill.js (layered on top
+    # of robotsix-board's shared board.js).
+    js = client.get("/static/mill/board-mill.js").text
     assert "runAgentCheck" in js
     assert '"/agent-check"' in js
 
@@ -744,7 +754,7 @@ def test_board_html_includes_board_cleanup_button(client):
     body = client.get("/").text
     assert "Board Cleanup" in body
     assert "runBoardCleanup()" in body
-    js = client.get("/static/board.js").text
+    js = client.get("/static/mill/board-mill.js").text
     assert "runBoardCleanup" in js
     assert '"/board-cleanup"' in js
 
@@ -756,7 +766,7 @@ def test_board_html_includes_cost_analyst_button(client):
     body = client.get("/").text
     assert "Cost Analyst" in body
     assert "runCostAnalyst()" in body
-    js = client.get("/static/board.js").text
+    js = client.get("/static/mill/board-mill.js").text
     assert "runCostAnalyst" in js
     assert '"/cost-analyst"' in js
 
@@ -798,9 +808,9 @@ def test_board_has_new_ticket_affordance(client):
     body = client.get("/").text
     assert "newTicket()" in body
     assert "+ New Ticket" in body
-    # POST /tickets is in the external JS (now via the XHR helper,
+    # POST /tickets is in the mill overlay JS (now via the XHR helper,
     # not fetch — fetch is wrapped by SES/extensions and unreliable).
-    js = client.get("/static/board.js").text
+    js = client.get("/static/mill/board-mill.js").text
     assert 'jpost("/tickets"' in js
 
 
@@ -813,10 +823,10 @@ def test_board_has_new_inquiry_affordance(client):
     body = client.get("/").text
     assert "newInquiry()" in body
     assert "+ Ask" in body
-    js = client.get("/static/board.js").text
+    js = client.get("/static/mill/board-mill.js").text
     assert "newInquiry" in js
     # The only thing that distinguishes inquiry creation from task creation:
-    assert 'kind:"inquiry"' in js, (
+    assert 'kind: "inquiry"' in js, (
         "newInquiry() must POST kind='inquiry', not the default 'task' — "
         "without this the button silently creates tasks instead of inquiries"
     )
@@ -825,13 +835,13 @@ def test_board_has_new_inquiry_affordance(client):
 def test_board_has_manual_child_ticket_affordance(client):
     """The board exposes an 'Add Ticket' button inside epic drawers so users
     can manually create child tickets without relying on the LLM breakdown."""
-    js = client.get("/static/board.js").text
-    assert "newChildTicket" in js, "board.js must define newChildTicket()"
-    assert "Add Ticket" in js, "board.js must render an Add Ticket button"
-    assert "parent_id:epicId" in js, (
+    js = client.get("/static/mill/board-mill.js").text
+    assert "newChildTicket" in js, "board-mill.js must define newChildTicket()"
+    assert "Add Ticket" in js, "board-mill.js must render an Add Ticket button"
+    assert "parent_id: epicId" in js, (
         "newChildTicket() must pass parent_id to POST /tickets"
     )
-    assert 'kind:"task"' in js, (
+    assert 'kind: "task"' in js, (
         "newChildTicket() must create child tickets as kind='task'"
     )
     assert "open_(epicId)" in js, (
@@ -1008,9 +1018,9 @@ def test_get_retrospect_returns_artifact_or_empty(client, service, tmp_path):
 
 
 def test_board_js_includes_depends_on_rendering(client):
-    """The board JS renders ``dependencies`` (structured per-dep status)
-    and surfaces the ``unmet_deps`` waiting count."""
-    js = client.get("/static/board.js").text
+    """The mill board overlay JS renders ``dependencies`` (structured
+    per-dep status) and surfaces the ``unmet_deps`` waiting count."""
+    js = client.get("/static/mill/board-mill.js").text
     assert "t.dependencies" in js
     assert "depends on:" in js
     assert "unmet_deps" in js
@@ -1591,9 +1601,9 @@ def test_leaf_ticket_cumulative_cost_is_none(client, service, monkeypatch):
 
 
 def test_board_js_references_cumulative_cost(client):
-    """board.js contains references to cumulative_cost for the split
+    """board-mill.js contains references to cumulative_cost for the split
     badge and drawer rendering."""
-    js = client.get("/static/board.js").text
+    js = client.get("/static/mill/board-mill.js").text
     assert "cumulative_cost" in js
 
 

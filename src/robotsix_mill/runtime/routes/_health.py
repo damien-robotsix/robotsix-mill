@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json as _json
 import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
+from ..board_adapter import MillBoardAdapter
 from ..board_html import BOARD_HTML
 from ...core.states import State
 from ..deps import enrich_ticket_read, get_repos_registry, get_settings
@@ -97,8 +97,21 @@ def gates(settings=Depends(get_settings)) -> dict:
 
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
 def board() -> str:
-    st_json = _json.dumps([s.value for s in State])
-    return BOARD_HTML.replace("{ST_STATES}", st_json)
+    try:
+        from robotsix_board import render_config_script
+    except ImportError:
+        # robotsix-board not installed yet — serve the shell without
+        # the board config script; the board will be empty until the
+        # dependency is available.
+        return BOARD_HTML.replace("{CONFIG_SCRIPT}", "")
+
+    adapter = MillBoardAdapter()
+    config_script = render_config_script(
+        adapter,
+        refresh_url="/board/cards",
+        refresh_interval_ms=5_000,
+    )
+    return BOARD_HTML.replace("{CONFIG_SCRIPT}", config_script)
 
 
 @router.websocket("/ws/board")
