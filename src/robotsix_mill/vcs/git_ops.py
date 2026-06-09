@@ -7,8 +7,22 @@ the container only needs the git binary (already in the image).
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
+
+_CREDENTIAL_IN_URL = re.compile(r"://[^@/\s']+@")
+
+
+def redact_credentials(text: str) -> str:
+    """Strip ``user:token@`` userinfo from any URL embedded in *text*.
+
+    Error paths that repr a failed git command (``CalledProcessError``
+    includes the full argv) would otherwise echo the tokenized remote —
+    ``https://oauth2:ghs_…@github.com/…`` — into ticket notes and
+    Langfuse traces. Run every git-command error string through this
+    before it leaves the process."""
+    return _CREDENTIAL_IN_URL.sub("://***@", text)
 
 
 def _authed_url(url: str, token: str | None) -> str:
@@ -30,22 +44,34 @@ def _git(repo: Path, *args: str) -> str:
 
 
 def clone(remote_url: str, dest: Path, branch: str, token: str | None = None) -> None:
-    """Single-branch clone of ``branch`` into ``dest`` (fresh per ticket)."""
-    subprocess.run(
-        [
-            "git",
-            "clone",
-            "--quiet",
-            "--single-branch",
-            "--branch",
-            branch,
-            _authed_url(remote_url, token),
-            str(dest),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    """Single-branch clone of ``branch`` into ``dest`` (fresh per ticket).
+
+    On failure raises :class:`subprocess.CalledProcessError` with the
+    tokenized URL redacted from ``cmd`` and ``stderr`` — the repr of this
+    error routinely ends up in ticket notes and traces."""
+    try:
+        subprocess.run(
+            [
+                "git",
+                "clone",
+                "--quiet",
+                "--single-branch",
+                "--branch",
+                branch,
+                _authed_url(remote_url, token),
+                str(dest),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise subprocess.CalledProcessError(
+            exc.returncode,
+            [redact_credentials(str(a)) for a in exc.cmd],
+            output=redact_credentials(exc.output or ""),
+            stderr=redact_credentials(exc.stderr or ""),
+        ) from None
     _git(dest, "config", "user.email", "mill@robotsix.local")
     _git(dest, "config", "user.name", "robotsix-mill")
 
@@ -375,6 +401,29 @@ def changed_files(repo: Path, target_branch: str) -> list[str]:
                 seen_set.add(f)
                 seen.append(f)
     return seen
+
+
+def ignored_existing_paths(repo: Path, paths: list[str]) -> list[str]:
+    """Of *paths* (repo-relative), return those that exist on disk but are
+    gitignored — i.e. invisible to ``status``/``diff``/``ls-files``.
+
+    This is the "edits landed but git can't see them" detector: a manifest
+    board (e.g. a ROS 2 workspace repo whose ``.gitignore`` carries
+    ``/src/*`` for vcs-imported sub-repos) lets an agent write real files
+    that never reach a diff, which otherwise surfaces only as an opaque
+    "no changes produced" block."""
+    hits: list[str] = []
+    for p in paths:
+        rel = p.lstrip("/")
+        if not rel or not (repo / rel).exists():
+            continue
+        rc = subprocess.run(
+            ["git", "-C", str(repo), "check-ignore", "--quiet", "--", rel],
+            capture_output=True,
+        ).returncode
+        if rc == 0:
+            hits.append(rel)
+    return hits
 
 
 def diff_base(

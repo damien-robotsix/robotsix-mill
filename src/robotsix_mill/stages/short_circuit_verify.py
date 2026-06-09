@@ -84,14 +84,15 @@ def run_invoked_edit_tools(new_messages: bytes | str | None) -> list[str]:
     return found
 
 
-def _claimed_path_from_part(part: object) -> str | None:
-    """Return the edit-target basename of a tool-call *part*, else ``None``.
+def _claimed_rawpath_from_part(part: object) -> str | None:
+    """Return the edit-target path of a tool-call *part* verbatim, else
+    ``None``.
 
-    Encapsulates the per-part filtering and path extraction so
-    :func:`run_claimed_edited_paths` stays a flat scan. A part qualifies only
-    when it is an ``_EDIT_TOOL_NAMES`` tool-call carrying a non-empty string
-    path under ``args["path"]`` (mill fs tools) or ``args["file_path"]``
-    (Claude SDK editors). Anything else fails open to ``None``.
+    Encapsulates the per-part filtering and path extraction so the path
+    scanners stay flat scans. A part qualifies only when it is an
+    ``_EDIT_TOOL_NAMES`` tool-call carrying a non-empty string path under
+    ``args["path"]`` (mill fs tools) or ``args["file_path"]`` (Claude SDK
+    editors). Anything else fails open to ``None``.
     """
     if not isinstance(part, dict):
         return None
@@ -109,7 +110,48 @@ def _claimed_path_from_part(part: object) -> str | None:
         raw_path = args.get("file_path")
     if not isinstance(raw_path, str) or not raw_path:
         return None
+    return raw_path
+
+
+def _claimed_path_from_part(part: object) -> str | None:
+    """Return the edit-target basename of a tool-call *part*, else ``None``."""
+    raw_path = _claimed_rawpath_from_part(part)
+    if raw_path is None:
+        return None
     return os.path.basename(raw_path) or None
+
+
+def run_claimed_edited_rawpaths(new_messages: bytes | str | None) -> list[str]:
+    """Return the de-duplicated VERBATIM paths edit tool-calls targeted.
+
+    Same scan as :func:`run_claimed_edited_paths` but keeps the full path
+    exactly as the tool-call carried it (repo-relative for mill fs tools,
+    absolute for the Claude SDK editors) instead of reducing to a basename.
+    Used by the gitignored-edit detector, which needs the real location to
+    ask ``git check-ignore``. Fail-open on malformed input, like every
+    scanner here."""
+    if not new_messages:
+        return []
+    try:
+        messages = json.loads(new_messages)
+    except json.JSONDecodeError, TypeError, ValueError:
+        log.warning(
+            "run_claimed_edited_rawpaths: invalid messages JSON; assuming no edits"
+        )
+        return []
+    if not isinstance(messages, list):
+        return []
+    found: list[str] = []
+    seen: set[str] = set()
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        for part in msg.get("parts", []) or []:
+            raw = _claimed_rawpath_from_part(part)
+            if raw and raw not in seen:
+                seen.add(raw)
+                found.append(raw)
+    return found
 
 
 def run_claimed_edited_paths(new_messages: bytes | str | None) -> list[str]:

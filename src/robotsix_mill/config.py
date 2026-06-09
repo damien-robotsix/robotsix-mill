@@ -248,15 +248,16 @@ class Settings(BaseSettings):
     subtask_request_limit: int = Field(default=30)
     # The test agent inspects failing output, reads the relevant
     # sources, and distills the cause — exploration-heavy work that
-    # easily exceeds 8 calls on a non-trivial failure. 50 leaves ample
-    # headroom (flash is cheap; cost-bounded by ticket-level cap).
-    # Aligned with config/mill.defaults.yaml's core.limits.test_requests (8).
-    # Pre-alignment the field default was 50 (legacy from before the
-    # test agent flipped to a cheap flash model that doesn't need
-    # nearly as many tool calls). The yaml value wins at runtime via
-    # _YAML_PATH_TO_ALIAS; this just stops the dry-Settings() default
-    # from contradicting it on machines without a yaml override.
-    test_request_limit: int = Field(default=8, ge=1)
+    # easily exceeds 8 calls on a non-trivial failure (live case: the
+    # a74b baseline distill burned 2 of its 8 requests on a wrong
+    # tool-arg and a wrong-cwd guess, then died mid-diagnosis with
+    # "exceed the request_limit of 8"). 16 gives a real diagnosis budget
+    # while flash stays cheap; cost-bounded by the ticket-level cap.
+    # Aligned with config/mill.defaults.yaml's core.limits.test_requests
+    # (16). The yaml value wins at runtime via _YAML_PATH_TO_ALIAS; this
+    # just stops the dry-Settings() default from contradicting it on
+    # machines without a yaml override.
+    test_request_limit: int = Field(default=16, ge=1)
     # Max implement→test fix iterations before BLOCKing. Complex
     # tickets may need several correction rounds.
     max_fix_iterations: int = Field(default=8, ge=0)
@@ -304,16 +305,24 @@ class Settings(BaseSettings):
     # Per-call cap for the refine agent's tool loop. The refine agent
     # delegates deep search to the cheap ``explore`` sub-agent (which
     # has its own 100-call budget), so the top-level refine loop should
-    # rarely exceed a few dozen tool calls.  60 sits above the old
+    # rarely exceed a few dozen tool calls.  80 sits above the old
     # implicit pydantic-ai default of 50 — intentionally, because broad
     # scaffolding and maintenance tickets (forge integration,
     # agent-definition build-out) empirically need more top-level calls
-    # even with good delegation; per-run cost is negligible
-    # (~$0.03–0.09), and the ticket-level spend cap is the real
-    # backstop.
+    # even with good delegation (refine runs saturated 40, then 60 —
+    # ticket 5353 — despite the delegate-to-explore prompt bias);
+    # per-run cost is negligible (~$0.03–0.09), and the ticket-level
+    # spend cap is the real backstop.
     # Note: ``review_request_limit`` stays at 40 — the two limits
     # intentionally diverge.
-    refine_request_limit: int = Field(default=60, ge=1)
+    refine_request_limit: int = Field(default=80, ge=1)
+    # Per-call cap for the maintenance agent's tool loop. Maintenance
+    # tickets are operational one-offs (clone + inspect + post
+    # findings); like refine, deep search is delegated to explore. An
+    # EXPLICIT cap so exhaustion is a documented knob, not the implicit
+    # pydantic-ai default of 50 that blocked the data-dir audit tickets
+    # with an opaque "Fatal: UsageLimitExceeded: … request_limit of 50".
+    maintenance_request_limit: int = Field(default=60, ge=1)
     # Per-call cap for the dedup check — one cheap call, so keep it tight.
     dedup_request_limit: int = Field(default=4, ge=1)
     # Per-call cap for the obsolescence gate — the agent reads a few
@@ -702,8 +711,12 @@ class Settings(BaseSettings):
     # disables the cap.
     review_prior_context_max_chars: int = Field(default=8000, ge=0)
     # How many model requests the scope-triage agent may make per
-    # invocation (main call + any tool calls). Default 4.
-    scope_triage_request_limit: int = Field(default=4)
+    # invocation (main call + any tool calls). Default 8: the agent is
+    # tool-less, but structured-output retries (schema mismatch, output
+    # retry) consume requests too — at 4 a single bad generation run
+    # left zero headroom and the resulting "agent error" auto-escalated
+    # tickets to humans (live case: ticket ff7f).
+    scope_triage_request_limit: int = Field(default=8)
     # Per-call cap for pre-refine triage agent (main call + tool calls).
     triage_request_limit: int = Field(default=8)
 

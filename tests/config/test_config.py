@@ -118,6 +118,7 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("coordinator_request_limit", "MILL_COORDINATOR_REQUEST_LIMIT", "42", 42),
     ("refine_request_limit", "MILL_REFINE_REQUEST_LIMIT", "42", 42),
     ("test_request_limit", "MILL_TEST_REQUEST_LIMIT", "15", 15),
+    ("maintenance_request_limit", "MILL_MAINTENANCE_REQUEST_LIMIT", "33", 33),
     ("max_fix_iterations", "MILL_MAX_FIX_ITERATIONS", "6", 6),
     ("model_request_timeout", "MILL_MODEL_REQUEST_TIMEOUT", "123.5", 123.5),
     # --- retry / backoff ---

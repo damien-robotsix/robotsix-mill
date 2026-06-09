@@ -369,7 +369,13 @@ def make_clone_repo_tool(
         try:
             git_clone(url, target, branch, token=token)
         except Exception as exc:
-            return f"clone_repo: {exc!r}"
+            # Redact defensively even though git_ops.clone already
+            # sanitizes its own CalledProcessError: any OTHER exception
+            # repr that embeds the authed URL must not reach the model
+            # transcript / Langfuse.
+            from ..vcs.git_ops import redact_credentials
+
+            return f"clone_repo: {redact_credentials(repr(exc))}"
 
         return f"Cloned {url} (branch={branch}) into {target}"
 
@@ -523,22 +529,44 @@ def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResul
         tools.append(make_explore_tool(ctx.settings, investigation_root))
         tools.append(make_parallel_explore_tool(ctx.settings, investigation_root))
 
-        # 5. Build the agent
+        # 5. Build the agent. board_id wires the report_issue tool to the
+        # ticket's own board — without it the tool dies with "board_id is
+        # required" the moment the agent tries to file a blocking issue
+        # (post-board-migration regression seen live on ticket 590c).
         agent = build_agent_from_definition(
             ctx.settings,
             definition,
             tools=tools,
             repo_dir=investigation_root,
+            board_id=ticket.board_id,
         )
 
-        # 6. Build the user prompt from the ticket
-        user_prompt = f"# Title\n{ticket.title}\n\n# Draft\n{draft}"
+        # 6. Build the user prompt from the ticket. Include the board and
+        # the repo's REAL clone URL — without it the agent guesses the
+        # remote from the draft text (live case: guessed
+        # ``robotsix/mill.git`` for damien-robotsix/robotsix-mill, watched
+        # three clones fail, and misdiagnosed "network unavailable").
+        from ..forge.auth import _resolve_remote_url
 
-        # 7. Run the agent
+        remote_url = _resolve_remote_url(ctx.settings, ctx.repo_config)
+        repo_context = f"# Board\n{ticket.board_id}\n"
+        if remote_url:
+            repo_context += (
+                f"\n# Repository clone URL\n{remote_url}\n"
+                "(pass this EXACT url to clone_repo — do not guess remotes)\n"
+            )
+        user_prompt = f"{repo_context}\n# Title\n{ticket.title}\n\n# Draft\n{draft}"
+
+        # 7. Run the agent — with an explicit request cap (the implicit
+        # pydantic-ai default of 50 is what blocked the data-dir audit
+        # tickets with an opaque "Fatal: UsageLimitExceeded").
+        from pydantic_ai.usage import UsageLimits
+
+        limits = UsageLimits(request_limit=ctx.settings.maintenance_request_limit)
         try:
             result = run_agent(
                 agent,
-                lambda h: h.run_sync(user_prompt),
+                lambda h: h.run_sync(user_prompt, usage_limits=limits),
                 settings=ctx.settings,
                 what="maintenance",
             )

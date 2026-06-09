@@ -275,3 +275,50 @@ def test_missing_output_deduped_and_sorted():
         summary="Edited zeta.py and alpha.py as required.",
     )
     assert missing == ["alpha.py", "zeta.py"]
+
+
+# --- run_claimed_edited_rawpaths ---------------------------------------------
+
+
+def _msgs_with_paths(*specs: tuple[str, dict]) -> bytes:
+    """Payload with one tool-call part per (tool_name, args) spec."""
+    parts: list[dict] = []
+    for name, args in specs:
+        parts.append(
+            {
+                "part_kind": "tool-call",
+                "tool_name": name,
+                "args": args,
+                "tool_call_id": f"call_{name}_{len(parts)}",
+            }
+        )
+    return json.dumps([{"parts": parts}]).encode()
+
+
+def test_rawpaths_keeps_full_relative_path():
+    payload = _msgs_with_paths(("write_file", {"path": "src/pkg/msg/Status.msg"}))
+    assert scv.run_claimed_edited_rawpaths(payload) == ["src/pkg/msg/Status.msg"]
+
+
+def test_rawpaths_keeps_absolute_claude_sdk_path():
+    payload = _msgs_with_paths(("Write", {"file_path": "/ws/repo/src/a.py"}))
+    assert scv.run_claimed_edited_rawpaths(payload) == ["/ws/repo/src/a.py"]
+
+
+def test_rawpaths_dedup_and_order():
+    payload = _msgs_with_paths(
+        ("write_file", {"path": "a/b.py"}),
+        ("edit_file", {"path": "a/b.py"}),
+        ("write_file", {"path": "c/d.py"}),
+    )
+    assert scv.run_claimed_edited_rawpaths(payload) == ["a/b.py", "c/d.py"]
+
+
+def test_rawpaths_ignores_non_edit_tools():
+    payload = _msgs_with_paths(("read_file", {"path": "a.py"}))
+    assert scv.run_claimed_edited_rawpaths(payload) == []
+
+
+def test_rawpaths_fail_open_on_malformed_json():
+    assert scv.run_claimed_edited_rawpaths(b"{not json") == []
+    assert scv.run_claimed_edited_rawpaths(None) == []

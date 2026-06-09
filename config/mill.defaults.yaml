@@ -45,21 +45,22 @@ core:
     doc_classifier: *cheap_model                          # doc-diff classifier gate (fast + cheap)
     rate_limit_fallback: ""                               # empty = disabled; switch when rate-limit exhausted
 
-  # -- request caps, concurrency, retry, and timeouts (18 fields) -----------
+  # -- request caps, concurrency, retry, and timeouts (19 fields) -----------
   limits:
     coordinator_requests: 200          # per-ticket request cap for implement (coordinator)
-    test_requests: 8                   # per-call cap for test-distillation sub-agent
+    test_requests: 16                  # per-call cap for test-distillation sub-agent
     consult_requests: 15               # per-call cap for domain-expert consultation sub-agent
     explore_requests: 100              # per-call cap for explore sub-agent
     explore_max_tokens: 2048              # output token cap for explore sub-agent responses
-    refine_requests: 60                # per-call request cap for the refine agent
+    refine_requests: 80                # per-call request cap for the refine agent
+    maintenance_requests: 60           # per-call request cap for the maintenance agent
     audit_requests: 80                 # per-call request cap for the periodic audit agent
     dedup_requests: 4                  # per-call cap for dedup check
     dedup_max_candidates: 8               # max candidates passed to dedup LLM (similarity pre-filter cap)
     dedup_skip_on_no_overlap: true        # skip dedup LLM call when draft shares no token overlap with any candidate
     dedup_candidate_body_max_chars: 4000  # cap each candidate body fed to dedup prompt (≤0 disables truncation)
     web_research_requests: 8           # per-call cap for web-research sub-agent
-    scope_triage_requests: 4           # per-call cap for scope-triage agent
+    scope_triage_requests: 8           # per-call cap for scope-triage agent
     triage_requests: 8                # per-call cap for pre-refine triage agent
     doc_classifier_requests: 3         # per-call cap for doc-classifier gate
     doc_classifier_diff_max_chars: 6000  # cap diff fed to doc-classifier gate (truncation safe: conservative user_facing bias)

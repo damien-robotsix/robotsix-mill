@@ -623,3 +623,88 @@ class TestDiffBase:
         git_ops.commit_all(dest, "feature commit")
         diff = git_ops.diff_base(dest, "main")
         assert "diff --git" in diff
+
+
+# ===========================================================================
+# redact_credentials + clone error sanitization
+# ===========================================================================
+
+
+class TestRedactCredentials:
+    def test_strips_userinfo_from_embedded_url(self):
+        text = (
+            "CalledProcessError(128, ['git', 'clone', "
+            "'https://oauth2:ghs_supersecret@github.com/x/y.git', '/tmp/d'])"
+        )
+        out = git_ops.redact_credentials(text)
+        assert "ghs_supersecret" not in out
+        assert "://***@github.com" in out
+
+    def test_plain_url_unchanged(self):
+        text = "git clone https://github.com/x/y.git failed"
+        assert git_ops.redact_credentials(text) == text
+
+    def test_non_url_text_unchanged(self):
+        assert git_ops.redact_credentials("no urls here") == "no urls here"
+
+
+class TestCloneErrorRedaction:
+    def test_clone_failure_never_leaks_token(self, tmp_path):
+        """A failed authed clone re-raises CalledProcessError with the
+        token scrubbed from cmd/output/stderr — its repr lands in ticket
+        notes and Langfuse traces (live leak: maintenance clone_repo)."""
+        # Nothing listens on port 9 → fails fast, fully offline.
+        with pytest.raises(subprocess.CalledProcessError) as ei:
+            git_ops.clone(
+                "https://127.0.0.1:9/none.git",
+                tmp_path / "dest",
+                "main",
+                token="sekret-token-123",
+            )
+        exposed = repr(ei.value) + str(ei.value.cmd) + str(ei.value.stderr)
+        assert "sekret-token-123" not in exposed
+        assert "://***@" in str(ei.value.cmd)
+
+    def test_clone_success_unaffected(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        assert (dest / "README.md").exists()
+
+
+# ===========================================================================
+# ignored_existing_paths — the "edits landed but git can't see them" detector
+# ===========================================================================
+
+
+class TestIgnoredExistingPaths:
+    def _repo_with_ignored_subtree(self, tmp_path):
+        """Mimics a manifest board: ``/src/*`` gitignored for vcs-imported
+        sub-repos (the robotsix-mill-ros2 layout)."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        (dest / ".gitignore").write_text("/src/*\n!/src/.gitkeep\n")
+        git_ops.commit_all(dest, "add gitignore")
+        return dest
+
+    def test_detects_existing_ignored_write(self, tmp_path):
+        dest = self._repo_with_ignored_subtree(tmp_path)
+        target = dest / "src" / "pkg" / "msg"
+        target.mkdir(parents=True)
+        (target / "Status.msg").write_text("int32 code\n")
+        hits = git_ops.ignored_existing_paths(dest, ["src/pkg/msg/Status.msg"])
+        assert hits == ["src/pkg/msg/Status.msg"]
+
+    def test_tracked_path_not_flagged(self, tmp_path):
+        dest = self._repo_with_ignored_subtree(tmp_path)
+        (dest / "tracked.txt").write_text("x\n")
+        assert git_ops.ignored_existing_paths(dest, ["tracked.txt"]) == []
+
+    def test_missing_file_not_flagged(self, tmp_path):
+        dest = self._repo_with_ignored_subtree(tmp_path)
+        assert git_ops.ignored_existing_paths(dest, ["src/pkg/gone.txt"]) == []
+
+    def test_empty_input(self, tmp_path):
+        dest = self._repo_with_ignored_subtree(tmp_path)
+        assert git_ops.ignored_existing_paths(dest, []) == []

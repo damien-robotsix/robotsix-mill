@@ -518,3 +518,113 @@ class TestStageIntegration:
         mod = sys.modules["robotsix_mill.agents.maintenance"]
         # Should be the real module, not a mock
         assert not isinstance(mod, ModuleType) or hasattr(mod, "MaintenanceResult")
+
+
+# ── Repo context, request cap, and board wiring (regressions from the
+#    blocked-tickets investigation: guessed clone URLs, implicit
+#    pydantic-ai request cap of 50, report_issue "board_id is required") ──
+
+
+class TestAgentRunWiring:
+    def _fake_model_stack(self, monkeypatch, cap):
+        class FakeModel:
+            def __init__(self, name, **kw):
+                pass
+
+        class FakeAgent:
+            def __init__(self, **kw):
+                cap["agent_kw"] = kw
+
+            def run_sync(self, prompt, *, usage_limits=None, **kw):
+                cap["prompt"] = prompt
+                cap["usage_limits"] = usage_limits
+                return type(
+                    "R", (), {"output": MaintenanceResult(success=True, note="ok")}
+                )()
+
+        monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+        monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+        monkeypatch.setattr(
+            "robotsix_mill.agents.openrouter_cost.CostInstrumentedOpenRouterModel",
+            FakeModel,
+        )
+
+    def _ticket_ctx(self, tmp_path, s):
+        ticket = MagicMock()
+        ticket.id = "t-wiring"
+        ticket.board_id = "board-x"
+        ticket.title = "Wiring test"
+        ctx = MagicMock()
+        ctx.settings = s
+        ctx.repo_config = None
+        ws_mock = MagicMock()
+        ws_mock.dir = tmp_path / "nonexistent"
+        ws_mock.repo_dir = tmp_path / "nonexistent" / "repo"
+        ws_mock.read_description.return_value = "Test draft"
+        ctx.service.workspace.return_value = ws_mock
+        return ticket, ctx
+
+    def test_prompt_carries_board_and_real_clone_url(self, tmp_path, monkeypatch):
+        """The agent must never have to GUESS the remote (live failure:
+        guessed robotsix/mill.git, watched 3 clones die, misdiagnosed
+        'network unavailable')."""
+        s = _settings(tmp_path)
+        cap: dict = {}
+        self._fake_model_stack(monkeypatch, cap)
+        monkeypatch.setattr(
+            "robotsix_mill.forge.auth._resolve_remote_url",
+            lambda settings, repo_config: "https://github.com/o/real-repo.git",
+        )
+        ticket, ctx = self._ticket_ctx(tmp_path, s)
+        run_maintenance_agent(ticket, ctx)
+        assert "# Board\nboard-x" in cap["prompt"]
+        assert "https://github.com/o/real-repo.git" in cap["prompt"]
+        assert "do not guess" in cap["prompt"]
+
+    def test_prompt_without_resolvable_url_still_carries_board(
+        self, tmp_path, monkeypatch
+    ):
+        s = _settings(tmp_path)
+        cap: dict = {}
+        self._fake_model_stack(monkeypatch, cap)
+        monkeypatch.setattr(
+            "robotsix_mill.forge.auth._resolve_remote_url",
+            lambda settings, repo_config: None,
+        )
+        ticket, ctx = self._ticket_ctx(tmp_path, s)
+        run_maintenance_agent(ticket, ctx)
+        assert "# Board\nboard-x" in cap["prompt"]
+        assert "clone URL" not in cap["prompt"]
+
+    def test_explicit_request_limit_from_settings(self, tmp_path, monkeypatch):
+        """The run carries an explicit UsageLimits bound to
+        settings.maintenance_request_limit — not the implicit pydantic-ai
+        default of 50 that produced opaque UsageLimitExceeded blocks."""
+        s = _settings(tmp_path, maintenance_request_limit=7)
+        cap: dict = {}
+        self._fake_model_stack(monkeypatch, cap)
+        ticket, ctx = self._ticket_ctx(tmp_path, s)
+        run_maintenance_agent(ticket, ctx)
+        assert cap["usage_limits"] is not None
+        assert cap["usage_limits"].request_limit == 7
+
+    def test_board_id_forwarded_to_agent_build(self, tmp_path, monkeypatch):
+        """board_id reaches build_agent_from_definition so the report_issue
+        tool binds to the ticket's board (post-migration regression:
+        'db._db_path: board_id is required')."""
+        from robotsix_mill.agents import base as agents_base
+
+        s = _settings(tmp_path)
+        cap: dict = {}
+        self._fake_model_stack(monkeypatch, cap)
+        seen: dict = {}
+        real_build = agents_base.build_agent_from_definition
+
+        def _spy(settings, definition, **kw):
+            seen.update(kw)
+            return real_build(settings, definition, **kw)
+
+        monkeypatch.setattr(agents_base, "build_agent_from_definition", _spy)
+        ticket, ctx = self._ticket_ctx(tmp_path, s)
+        run_maintenance_agent(ticket, ctx)
+        assert seen.get("board_id") == "board-x"
