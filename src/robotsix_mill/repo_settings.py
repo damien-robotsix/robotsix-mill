@@ -105,6 +105,26 @@ def load_repo_languages(repo_dir: Path | None) -> list[str]:
     return []
 
 
+def load_extra_sandbox_packages(repo_dir: Path | None) -> list[str]:
+    """Return the extra sandbox packages the repo declares in
+    ``.robotsix-mill/config.yaml``, or ``[]``.
+
+    Accepts ``extra_sandbox_packages: [colcon, ros-humble-ros-core]``
+    (a list). Strips whitespace from each entry and filters out
+    empty/whitespace-only strings. Non-string items are coerced via
+    ``str(x).strip()`` (matching ``load_repo_languages``). Never raises
+    — a malformed value or missing file yields ``[]``."""
+    raw = _load_repo_config_dict(repo_dir)
+    if raw is None:
+        return []
+    val = raw.get("extra_sandbox_packages")
+    if isinstance(val, list):
+        return [str(x).strip() for x in val if str(x).strip()]
+    if "extra_sandbox_packages" in raw:
+        log.warning("repo settings: 'extra_sandbox_packages' must be a list — ignoring")
+    return []
+
+
 def _load_language_snippet(settings, repo_dir: Path | None, lang: str) -> str:
     """Resolve the instruction snippet for one language, repo override
     first then the mill's built-in library. Returns ``""`` if neither
