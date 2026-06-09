@@ -359,7 +359,7 @@ Every setting below shows:
 | `gates.auto_approve_enabled` | `MILL_AUTO_APPROVE_ENABLED` | `false` | Enable conservative auto-approve triage |
 | `gates.auto_approve_model` | `MILL_AUTO_APPROVE_MODEL` | `openai/gpt-4o-mini` | Model for auto-approve triage (fast + cheap) |
 | `gates.review_enabled` | `MILL_REVIEW_ENABLED` | `false` | Enable dual-model code review stage before deliver |
-| `gates.review_model` | `MILL_REVIEW_MODEL` | `deepseek/deepseek-v4-pro` | Review agent model |
+| `gates.review_model` | `MILL_REVIEW_MODEL` | `deepseek/deepseek-v4-flash` | Review agent model |
 | `gates.review_max_rounds` | `MILL_REVIEW_MAX_ROUNDS` | `3` | Max CODE_REVIEW round-trips before escalate |
 | `gates.refine_triage_enabled` | `MILL_REFINE_TRIAGE_ENABLED` | `true` | Cheap triage before full refine (skip if precise) |
 | `gates.freshness_gate_enabled` | `MILL_FRESHNESS_GATE_ENABLED` | `false` | Pre-refine freshness check: verify cited evidence paths exist on HEAD |
