@@ -614,12 +614,13 @@ def _build_refine_overrides(
     settings: Settings,
     reviewer_comments: str | None,
     language_instructions: str,
+    deployed_log_summary: str = "",
 ) -> dict:
     """Assemble the ``build_agent_from_definition`` overrides for refine:
     the reviewer-sendback prompt + thread flags when handling feedback, the
-    refine model when the definition doesn't pin one, and the per-language
-    ``## Language conventions`` block appended to whichever base prompt
-    applies."""
+    refine model when the definition doesn't pin one, the per-language
+    ``## Language conventions`` block, and the ``## Deployed system logs``
+    block (when configured)."""
     overrides: dict = {}
     if reviewer_comments:
         overrides["system_prompt"] = REVIEWER_SENDBACK_PROMPT
@@ -631,6 +632,11 @@ def _build_refine_overrides(
         base_prompt = overrides.get("system_prompt", definition.system_prompt)
         overrides["system_prompt"] = (
             base_prompt + "\n\n## Language conventions\n\n" + language_instructions
+        )
+    if deployed_log_summary:
+        base_prompt = overrides.get("system_prompt", definition.system_prompt)
+        overrides["system_prompt"] = (
+            base_prompt + "\n\n## Deployed system logs\n\n" + deployed_log_summary
         )
     return overrides
 
@@ -648,6 +654,7 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
     message_history: list | None = None,
     board_id: str = "",
     language_instructions: str = "",
+    deployed_log_summary: str = "",
 ) -> RefineResult:
     """Return a structured ``RefineResult``. When ``repo_dir`` is given
     the agent grounds the spec in that local clone via explore/
@@ -733,7 +740,8 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
         tools.append(make_cost_inspect_tool(settings, repo_dir))
 
     overrides = _build_refine_overrides(
-        definition, settings, reviewer_comments, language_instructions
+        definition, settings, reviewer_comments, language_instructions,
+        deployed_log_summary,
     )
 
     agent = build_agent_from_definition(
