@@ -45,6 +45,7 @@ def find_prior_matching_ticket(
     exclude_ids: Collection[str] = (),
     require_scope_for_single_path: bool = False,
     target_concern_tokens: set[str] | None = None,
+    concern_min_overlap: int = 1,
 ) -> Ticket | None:
     """Look up recent tickets on *board_id* and return the first one
     that matches the given fix signal.
@@ -77,13 +78,15 @@ def find_prior_matching_ticket(
     When *target_concern_tokens* is a non-empty set, a path match is
     suppressed when the candidate's backtick-enclosed concern tokens
     (extracted from its title and declared-scope body sections) are also
-    non-empty and share no token with *target_concern_tokens* — i.e. the
-    two tickets touch the same file but name completely different
-    symbols/concerns.  When either side has no concern tokens, the path
-    match is still flagged for multi-segment paths (absence of symbols
-    is not evidence of difference), but is suppressed for single-segment
-    (bare filename) paths — a lone filename like ``server.py`` is too
-    common to flag without corroborating concern overlap.
+    non-empty and share fewer than *concern_min_overlap* tokens with
+    *target_concern_tokens* — i.e. the two tickets touch the same file
+    but name completely different symbols/concerns.  When either side has
+    no concern tokens and *concern_min_overlap* > 1, the path match is
+    also suppressed (absence of symbols is not evidence of sameness when
+    the caller requires multiple substantive tokens).  When
+    *concern_min_overlap* is 1 (the default), the legacy conservative
+    rule applies: a path match is suppressed only when both sides have
+    concern tokens AND none overlap.
 
     Returns ``None`` when no match is found.
     """
@@ -125,47 +128,43 @@ def find_prior_matching_ticket(
                     ticket.id,
                 ).read_description()
                 matched = [p for p in target_files if p and p in body]
-                if len(matched) >= 2:
-                    # ≥2 distinct shared paths is strong corroboration —
-                    # flag regardless of the strict-scope flag.
-                    return ticket
-                if len(matched) == 1:
-                    if not require_scope_for_single_path:
-                        return ticket
-                    if matched[0] in _scope_paths(body):
-                        # The candidate declares this path as modified.
-                        # Before flagging on a lone declared path: when
-                        # *target_concern_tokens* is supplied, check that
-                        # the concern is shared — i.e., the two tickets
-                        # name at least one overlapping code symbol.  If
-                        # both sides have concern tokens and none overlap,
-                        # the tickets touch the same file but for unrelated
-                        # reasons; suppress the path match and fall through
-                        # to the fingerprint check.
-                        is_single_segment = "/" not in matched[0]
-                        if target_concern_tokens:
+                if matched:
+                    # Decide whether the path match is strong enough on
+                    # its own to proceed to the concern-token gate.
+                    if len(matched) >= 2:
+                        paths_strong = True  # ≥2 distinct shared paths
+                    elif not require_scope_for_single_path:
+                        paths_strong = True  # permissive prose-mention rule
+                    elif matched[0] in _scope_paths(body):
+                        paths_strong = True  # candidate declares this path
+                    else:
+                        paths_strong = False  # lone prose-only path
+
+                    if paths_strong:
+                        if target_concern_tokens is not None:
                             cand_concern = _extract_concern_tokens(
                                 ticket.title + "\n" + body
                             )
                             if target_concern_tokens and cand_concern:
-                                if target_concern_tokens & cand_concern:
+                                overlap = target_concern_tokens & cand_concern
+                                if len(overlap) >= concern_min_overlap:
                                     return ticket
-                                # Disjoint concern tokens — different
+                                # Concern tokens present on both sides
+                                # but insufficient overlap — different
                                 # concerns; fall through to fingerprint.
-                            elif not is_single_segment:
-                                # Multi-segment: flag despite absent
-                                # concern tokens on the candidate side.
+                            elif concern_min_overlap > 1:
+                                # One or both sides have no concern
+                                # tokens, and the caller requires
+                                # multiple substantive tokens — fall
+                                # through to fingerprint.
+                                pass
+                            else:
+                                # At least one side has no concern
+                                # tokens — cannot determine difference;
+                                # flag conservatively.
                                 return ticket
-                            # else: single-segment with no candidate
-                            # concern tokens — fall through.
-                        elif not is_single_segment:
-                            # Multi-segment: flag despite absent concern
-                            # tokens on the draft side.
+                        else:
                             return ticket
-                        # else: single-segment with no concern tokens on
-                        # either side — fall through.
-                    # else: lone prose-only path — fall through to the
-                    # fingerprint check rather than flagging on prose.
 
             # Fingerprint check (normalized title).
             if fingerprint and fingerprint in normalize(ticket.title):
@@ -199,16 +198,30 @@ _PATH_TOKEN_RE = re.compile(
 # false positive.
 _BACKTICK_RE = re.compile(r"`([^`]+)`")
 
+# Punctuation-only token — e.g. `` ``, ``, `` `-` ``, `` `_` ``, `` `...` `` —
+# carries no semantic signal and must not drive concern-token overlap decisions.
+_PUNCT_ONLY_RE = re.compile(r"^[\W_]+$")
+
 
 def _extract_concern_tokens(text: str) -> set[str]:
     """Return the set of backtick-enclosed code tokens in *text*.
 
-    Each token is stripped of surrounding whitespace.  An empty set is
-    returned when *text* contains no backtick-enclosed spans — this is a
-    meaningful signal: the author did not name a specific symbol, so we
-    cannot determine whether concerns differ.
+    Each token is stripped of surrounding whitespace.  Tokens that are
+    punctuation-only (matching :data:`_PUNCT_ONLY_RE`) or that look like
+    file paths (matching :data:`_PATH_TOKEN_RE`) are excluded — they
+    carry no signal about what *concern* within the file is being
+    addressed.
+
+    An empty set is returned when *text* contains no backtick-enclosed
+    spans — this is a meaningful signal: the author did not name a
+    specific symbol, so we cannot determine whether concerns differ.
     """
-    return {m.group(1).strip() for m in _BACKTICK_RE.finditer(text or "")}
+    return {
+        m.group(1).strip()
+        for m in _BACKTICK_RE.finditer(text or "")
+        if not _PUNCT_ONLY_RE.match(m.group(1).strip())
+        and not _PATH_TOKEN_RE.fullmatch(m.group(1).strip())
+    }
 
 
 def _extract_paths(text: str) -> list[str]:
@@ -403,6 +416,7 @@ def find_inflight_overlap(
             exclude_ids={ticket_id},
             require_scope_for_single_path=True,
             target_concern_tokens=concern_tokens,
+            concern_min_overlap=3,
         )
         if prior is None:
             return None

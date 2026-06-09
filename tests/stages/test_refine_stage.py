@@ -543,7 +543,10 @@ def test_inflight_advisory_flags_concurrent_ready_draft(ctx_factory, monkeypatch
         "rework login validation",
         # The candidate declares the shared path under ``## Scope`` so a
         # lone shared path still flags under the strict-scope rule.
-        "## Scope\n\nchanges src/robotsix_mill/auth.py to validate the login form",
+        # Include ≥3 concern tokens so the concern_min_overlap=3 gate
+        # (tightened in the 2026-06-09 false-positive fix) is satisfied.
+        "## Scope\n\nchanges src/robotsix_mill/auth.py for "
+        "`validate_input`, `sanitize`, and `normalize` in the login form",
     )
     ctx.service.transition(prior.id, State.READY, note="refined")
 
@@ -552,7 +555,8 @@ def test_inflight_advisory_flags_concurrent_ready_draft(ctx_factory, monkeypatch
         title="fix login form validation",
         body=(
             "Fix the login form. This also edits "
-            "src/robotsix_mill/auth.py to validate input, padded well past "
+            "src/robotsix_mill/auth.py for `validate_input`, `sanitize`, "
+            "and `normalize`, padded well past "
             "the 100-char trivial-draft threshold so the advisory runs."
         ),
     )

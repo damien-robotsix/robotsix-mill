@@ -404,7 +404,10 @@ def test_inflight_overlap_flags_concurrent_ready_ticket(settings):
         title="rework the login form",
         # The candidate declares the shared path under ``## Scope`` so a
         # lone shared path still flags under the strict-scope rule.
-        body=f"## Scope\n\nchanges {_TARGET_PATH} to validate input",
+        body=(
+            f"## Scope\n\nchanges {_TARGET_PATH} to `validate_input`, "
+            "`sanitize`, and `normalize`"
+        ),
     )
     # In-flight, NOT terminal: the dedup guard would reject this.
     svc.transition(prior.id, State.READY, note="refined")
@@ -413,7 +416,10 @@ def test_inflight_overlap_flags_concurrent_ready_ticket(settings):
         _svc(settings),
         "NEW-DRAFT",
         "fix the login form validation",
-        f"also edits {_TARGET_PATH} for validation",
+        (
+            f"also edits {_TARGET_PATH} for `validate_input`, "
+            "`sanitize`, and `normalize`"
+        ),
         settings,
         _now(),
     )
@@ -507,10 +513,11 @@ def test_inflight_overlap_unflagged_on_prose_only_bare_filename(settings):
     assert note is None
 
 
-def test_inflight_overlap_flags_two_shared_prose_paths(settings):
-    """Corroboration rule: ≥2 distinct shared paths still flag even when
-    they appear only in prose (the strict-scope rule stays permissive at
-    two or more matches)."""
+def test_inflight_overlap_unflagged_on_two_shared_prose_paths(settings):
+    """Corroboration rule relaxed: ≥2 distinct shared paths no longer
+    flag unconditionally — the concern-token gate now applies.  Two
+    tickets that merely mention the same two files in prose, with no
+    backtick-enclosed concern tokens on either side, must NOT flag."""
     svc, prior = _seed(
         settings,
         title="rework the login form",
@@ -526,8 +533,7 @@ def test_inflight_overlap_flags_two_shared_prose_paths(settings):
         settings,
         _now(),
     )
-    assert note is not None
-    assert prior.id in note
+    assert note is None
 
 
 def test_inflight_overlap_unflagged_on_same_path_disjoint_concerns(settings):
@@ -554,32 +560,85 @@ def test_inflight_overlap_unflagged_on_same_path_disjoint_concerns(settings):
 
 
 def test_inflight_overlap_flags_on_same_path_shared_concern(settings):
-    """Mode 2: two tickets that declare the same file AND share a
-    concern token (both name `new_model()`) must still flag."""
+    """Mode 2: two tickets that declare the same file AND share at least
+    3 concern tokens must still flag."""
     svc, prior = _seed(
         settings,
-        title="add tests for `OpenRouterProvider.new_model()`",
-        body=f"## Scope\n\nAdd test cases in {_TARGET_PATH} for `new_model()`.",
+        title="add tests for `new_model()`, `validate()`, and `sanitize()`",
+        body=(
+            f"## Scope\n\nAdd test cases in {_TARGET_PATH} for "
+            "`new_model()`, `validate()`, and `sanitize()`."
+        ),
     )
     svc.transition(prior.id, State.READY, note="refined")
 
     note = find_inflight_overlap(
         _svc(settings),
         "NEW-DRAFT",
-        "refactor `new_model()` to use async",
-        f"## Scope\n\nRefactor `new_model()` in {_TARGET_PATH}.",
+        "refactor `new_model()`, `validate()`, and `sanitize()` to use async",
+        (
+            f"## Scope\n\nRefactor `new_model()`, `validate()`, "
+            f"and `sanitize()` in {_TARGET_PATH}."
+        ),
         settings,
         _now(),
     )
     assert note is not None
     assert prior.id in note
-    assert "`new_model()`" in note or "new_model()" in note
+    assert "new_model()" in note or "`new_model()`" in note
 
 
-def test_inflight_overlap_flags_on_same_path_no_concern_tokens_on_one_side(settings):
-    """Mode 2: when one side has concern tokens but the other does not,
-    the path match still flags — absence of symbols is not evidence of
-    difference."""
+def test_inflight_overlap_unflagged_on_punctuation_concern_token(settings):
+    """Regression: a lone shared punctuation backtick token (`` ``, ``)
+    does NOT trigger a dedup warning — it's filtered as non-substantive
+    (the 20260609T154505Z false-positive class)."""
+    svc, prior = _seed(
+        settings,
+        title="rename the `,` helper to `separator`",
+        body=f"## Scope\n\nEdit {_TARGET_PATH}: rename `,` to `separator`.",
+    )
+    svc.transition(prior.id, State.READY, note="refined")
+
+    note = find_inflight_overlap(
+        _svc(settings),
+        "NEW-DRAFT",
+        "use `,` as a delimiter",
+        f"## Scope\n\nCall `,` in {_TARGET_PATH} for delimited output.",
+        settings,
+        _now(),
+    )
+    assert note is None
+
+
+def test_inflight_overlap_unflagged_on_two_paths_disjoint_concerns(settings):
+    """Regression: two tickets that share two file paths but have
+    completely disjoint concern tokens (different symbols within those
+    files) do NOT flag — the 20260609T150007Z false-positive class
+    (``board.js`` / ``board.css`` as routine frontend paths)."""
+    svc, prior = _seed(
+        settings,
+        title="enable `copy_paste` periodic workflow",
+        body="## Scope\n\nAdd `copy_paste` to board.js and board.css.",
+    )
+    svc.transition(prior.id, State.READY, note="refined")
+
+    note = find_inflight_overlap(
+        _svc(settings),
+        "NEW-DRAFT",
+        "fix CSS rules for `dark_mode`",
+        body="## Scope\n\nTweak board.js and board.css for `dark_mode`.",
+        settings=settings,
+        now=_now(),
+    )
+    assert note is None
+
+
+def test_inflight_overlap_unflagged_on_same_path_no_concern_tokens_on_one_side(
+    settings,
+):
+    """Mode 2 tightened: when one side has concern tokens but the other
+    does not, the path match is suppressed — absence of symbols on one
+    side means the overlap is 0 < concern_min_overlap (3)."""
     svc, prior = _seed(
         settings,
         title="rework the login form",
@@ -595,16 +654,15 @@ def test_inflight_overlap_flags_on_same_path_no_concern_tokens_on_one_side(setti
         settings,
         _now(),
     )
-    assert note is not None
-    assert prior.id in note
+    assert note is None
 
 
-def test_inflight_overlap_flags_on_same_path_no_concern_tokens_either_side(
+def test_inflight_overlap_unflagged_on_same_path_no_concern_tokens_either_side(
     settings,
 ):
-    """Mode 2: when neither side has concern tokens, a declared-path
-    match still flags (the pre-existing behaviour — we cannot determine
-    that concerns differ)."""
+    """Mode 2 tightened: when neither side has concern tokens, the path
+    match is suppressed — 0 < concern_min_overlap (3), so the overlap
+    is insufficient."""
     svc, prior = _seed(
         settings,
         title="rework the login form",
@@ -620,8 +678,7 @@ def test_inflight_overlap_flags_on_same_path_no_concern_tokens_either_side(
         settings,
         _now(),
     )
-    assert note is not None
-    assert prior.id in note
+    assert note is None
 
 
 # ---------------------------------------------------------------------------
@@ -651,9 +708,10 @@ def test_inflight_overlap_unflagged_on_single_segment_disjoint_concerns(settings
     assert note is None
 
 
-def test_inflight_overlap_flags_on_single_segment_shared_concern(settings):
-    """Single-segment path `server.py`, shared concern token `new_model`
-    → match (concern overlap corroborates the weak path signal)."""
+def test_inflight_overlap_unflagged_on_single_segment_shared_concern(settings):
+    """Single-segment path `server.py`, single shared concern token
+    `new_model` → no match (1 < concern_min_overlap=3 — single-segment
+    bare filenames need multiple corroborating concerns to flag)."""
     svc, prior = _seed(
         settings,
         title="add `new_model` endpoint",
@@ -669,9 +727,7 @@ def test_inflight_overlap_flags_on_single_segment_shared_concern(settings):
         settings,
         _now(),
     )
-    assert note is not None
-    assert prior.id in note
-    assert "server.py" in note
+    assert note is None
 
 
 def test_inflight_overlap_unflagged_on_single_segment_draft_concern_only(settings):
@@ -935,6 +991,30 @@ def test_extract_concern_tokens_dotted():
     assert _extract_concern_tokens("fix `.secrets.baseline` auth") == {
         ".secrets.baseline"
     }
+
+
+def test_extract_concern_tokens_filters_punctuation_only():
+    """Punctuation-only backtick tokens — e.g. `` ``, ``, `` `-` ``,
+    `` `...` `` — are excluded because they carry no semantic signal."""
+    assert _extract_concern_tokens("use `,` as a separator and `-` for flags") == set()
+
+
+def test_extract_concern_tokens_filters_path_like():
+    """Backtick-enclosed file paths — e.g. `` `board.js` ``,
+    `` `src/foo.py` `` — are excluded: they restate the file, not the
+    concern within it."""
+    assert _extract_concern_tokens(
+        "edit `board.js` and `board.css` to add `copy_paste` support"
+    ) == {"copy_paste"}
+
+
+def test_extract_concern_tokens_keeps_code_symbols_alongside_paths():
+    """Code symbols survive filtering even when file-path-like tokens
+    appear in the same text."""
+    tokens = _extract_concern_tokens(
+        "refactor `src/robotsix_board/__init__.py` to export `render_board`"
+    )
+    assert tokens == {"render_board"}
 
 
 # ---------------------------------------------------------------------------
