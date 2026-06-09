@@ -190,7 +190,7 @@ other code depends on.
 |---|---|---|---|---|---|---|---|---|---|
 | `MILL_CI_LOG_MAX_BYTES` | `ci_log_max_bytes` | `65536` | `int` | Settings | non-sensitive | default | §20 | CI monitor / CI-fix agent | global operational cap |
 | `—` | *ci_monitor_enabled* | `True` | `bool` | RepoConfig | non-sensitive | repos.yaml | — | `runtime/worker.py` | per-repo field in `config/repos.yaml` |
-| `—` | *ci_monitor_interval_seconds* | `86400` | `int` | RepoConfig | non-sensitive | repos.yaml | — | `runtime/worker.py` | per-repo field in `config/repos.yaml` |
+| `—` | *ci_monitor_interval_seconds* | `900` | `int` | RepoConfig | non-sensitive | repos.yaml | — | `runtime/worker.py` | per-repo field in `config/repos.yaml` |
 
 ### 1.14  Periodic agents — audit
 

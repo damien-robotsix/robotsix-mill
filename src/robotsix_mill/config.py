@@ -1647,7 +1647,10 @@ class RepoConfig(BaseModel):
     openrouter_api_key: str | None = None
     forge_remote_url: str | None = None
     ci_monitor_enabled: bool = True
-    ci_monitor_interval_seconds: int = 86400
+    # Default 900s (15 min): main-branch CI breaks should be turned into
+    # tickets within minutes, not a day. A repo may override via the
+    # ``ci_monitor.interval_seconds`` field in repos.yaml. Min 60 enforced.
+    ci_monitor_interval_seconds: int = 900
     # Number of tickets from THIS repo the worker will process in
     # parallel. Per-repo isolation: each repo gets its own consumer
     # pool, so a busy repo can't starve another. Default 1 keeps the
@@ -1744,9 +1747,9 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             ci_monitor_enabled=ci_monitor.get("enabled", True)
             if isinstance(ci_monitor, dict)
             else True,
-            ci_monitor_interval_seconds=ci_monitor.get("interval_seconds", 86400)
+            ci_monitor_interval_seconds=ci_monitor.get("interval_seconds", 900)
             if isinstance(ci_monitor, dict)
-            else 86400,
+            else 900,
             max_concurrency=repo_data.get("max_concurrency", 1)
             if isinstance(repo_data, dict)
             else 1,

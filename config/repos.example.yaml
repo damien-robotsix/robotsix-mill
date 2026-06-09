@@ -23,7 +23,7 @@ repos:
       base_url: "https://cloud.langfuse.com"  # optional — defaults to cloud
     # ci_monitor:                 # optional — per-repo CI failure monitoring
     #   enabled: true             #   default: true
-    #   interval_seconds: 86400   #   default: 86400 (24h)
+    #   interval_seconds: 900     #   default: 900 (15 min)
     # max_concurrency: 1          # optional — tickets from THIS repo
     #                             #   processed in parallel.  Default 1.
     #                             #   Per-repo isolation: each repo
