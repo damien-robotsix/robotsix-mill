@@ -13,9 +13,9 @@ import pytest
 
 from robotsix_mill.agents.maintenance import (
     MaintenanceResult,
+    make_clone_repo_tool,
     make_create_repo_tool,
     make_fork_repo_tool,
-    make_investigate_tool,
     run_maintenance_agent,
 )
 from robotsix_mill.agents.tool_registry import ToolRegistry
@@ -145,14 +145,6 @@ class TestStubTools:
         result = fn(source_owner="alice", source_repo="my-repo")
         assert "fork_repo:" in result
 
-    def test_investigate_stub_returns_error(self, tmp_path):
-        """The stub returns a 'not yet implemented' error."""
-        s = _settings(tmp_path)
-        fn = make_investigate_tool(s)
-        result = fn("what is X?", "https://example.com/repo")
-        assert "not yet implemented" in result
-        assert "investigate" in result
-
     def test_stubs_accept_kwargs(self, tmp_path):
         """Stubs accept all documented parameters without error."""
         s = _settings(tmp_path)
@@ -170,10 +162,6 @@ class TestStubTools:
             source_owner="a", source_repo="b", target_namespace="org"
         )
         assert "fork_repo:" in r2
-
-        # investigate
-        r3 = make_investigate_tool(s)(question="q", repo_url="https://example.com/r")
-        assert "not yet implemented" in r3
 
     def test_create_repo_tool_success(self, tmp_path, monkeypatch):
         """With a mocked forge + scaffold, create_repo returns success JSON."""
@@ -239,7 +227,7 @@ class TestToolRegistryEntries:
         # The factories register on call, so we must call them.
         make_create_repo_tool(s, ctx, ticket_description="draft")
         make_fork_repo_tool(s)
-        make_investigate_tool(s)
+        make_clone_repo_tool(s, tmp_path)
 
         # Also register post_findings by calling its factory
         from robotsix_mill.agents.maintenance import make_post_findings_tool
@@ -249,7 +237,7 @@ class TestToolRegistryEntries:
         names = {t.name for t in ToolRegistry.list_tools()}
         assert "create_repo" in names
         assert "fork_repo" in names
-        assert "investigate" in names
+        assert "clone_repo" in names
         assert "post_findings" in names
 
 
@@ -274,6 +262,7 @@ class TestYamlDefinition:
         assert definition.report_issue is True
         assert definition.retries == 2
         assert definition.output_type == "MaintenanceResult"
+        assert "clone_repo" in definition.tools
         assert "explore" in definition.tools
         assert "read_file" in definition.tools
         assert "list_dir" in definition.tools
@@ -341,8 +330,12 @@ class TestAgentConstruction:
         # Expected tools should be present
         assert "create_repo" in tool_names
         assert "fork_repo" in tool_names
-        assert "investigate" in tool_names
+        assert "clone_repo" in tool_names
         assert "post_findings" in tool_names
+        assert "explore" in tool_names
+        assert "read_file" in tool_names
+        assert "list_dir" in tool_names
+        assert "run_command" in tool_names
 
     def test_run_maintenance_agent_stage_contract(self, tmp_path, monkeypatch):
         """The returned object satisfies the MaintenanceStage.run()

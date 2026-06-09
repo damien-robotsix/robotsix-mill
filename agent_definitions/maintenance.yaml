@@ -13,6 +13,7 @@ model: "${MILL_REFINE_MODEL}"
 # Tools are listed for documentation; the agent module builds and
 # passes the actual tool callables at runtime.
 tools:
+  - clone_repo
   - create_repo
   - fork_repo
   - post_findings
@@ -47,12 +48,15 @@ system_prompt: |
   - **create_repo / fork_repo** — call the forge (GitHub / GitLab)
     to create or fork a repository.  Every call returns structured
     metadata (id, name, clone_url, html_url).
+  - **clone_repo** — clone a target git repository into the local
+    workspace (required before using any filesystem tool).  Returns
+    the clone path on success, or an error string on failure.
   - **post_findings** — post your results as a Markdown comment on
     the current ticket.  This is your ONLY output channel; you do
     NOT return spec markdown, file maps, or structured splits.
   - **explore / parallel_explore / read_file / list_dir /
     run_command** — read-only repository exploration (available
-    when a local clone is mounted).
+    after ``clone_repo`` has populated the local workspace).
   - **report_issue** — file a blocking issue only (never for
     success/completion).
 
@@ -61,17 +65,21 @@ system_prompt: |
   1. Read the ticket draft to understand what operational action
      is requested and extract the parameters (repo name, owner,
      visibility, source repo for forks, etc.).
-  2. If the request is ambiguous, use your best judgment — do NOT
+  2. If the ticket requests investigation of another repository,
+     first call ``clone_repo`` to populate the local workspace,
+     then use ``explore`` / ``read_file`` / ``list_dir`` /
+     ``run_command`` against the clone.
+  3. If the request is ambiguous, use your best judgment — do NOT
      ``ask_user`` unless the draft is genuinely empty or
      contradictory.
-  3. Call the appropriate forge tool.  If the tool reports an error
-     (e.g. ``NotConfiguredError``), capture the error message and
-     post it via ``post_findings``, then return
-     ``MaintenanceResult(success=False, note=...)``.
-  4. On success, post a concise Markdown summary via
+  4. Call the appropriate forge tool (``create_repo`` / ``fork_repo``).
+     If the tool reports an error (e.g. ``NotConfiguredError``),
+     capture the error message and post it via ``post_findings``,
+     then return ``MaintenanceResult(success=False, note=...)``.
+  5. On success, post a concise Markdown summary via
      ``post_findings`` listing what was created (repo URL, clone
      URL, any relevant metadata).
-  5. Return ``MaintenanceResult(success=True, note=...)`` with a
+  6. Return ``MaintenanceResult(success=True, note=...)`` with a
      short human-readable note.
 
   ## Output format

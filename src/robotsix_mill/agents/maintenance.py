@@ -236,40 +236,76 @@ def make_fork_repo_tool(settings: Settings) -> Callable[..., str]:
     return fork_repo
 
 
-def make_investigate_tool(settings: Settings) -> Callable[..., str]:
-    """Return the ``investigate`` stub bound to *settings*.
+def make_clone_repo_tool(
+    settings: Settings, workspace_root: Path
+) -> Callable[..., str]:
+    """Return the ``clone_repo`` closure bound to *settings* and
+    *workspace_root*.
 
-    The stub returns a clear "not yet implemented" error so the agent
-    loop doesn't crash before the real cross-repo investigation is
-    implemented.
+    The closure clones a target git repository into the workspace so
+    the filesystem tools (read_file, list_dir, run_command, explore)
+    can inspect it locally.  Uses the existing
+    :func:`~robotsix_mill.vcs.git_ops.clone` utility.
     """
 
-    def investigate(question: str, repo_url: str) -> str:
-        """Investigate a question across repositories (stub).
+    def clone_repo(url: str, branch: str = "main") -> str:
+        """Clone a git repository into the local workspace.
+
+        Clones the given *url* into the workspace so the filesystem
+        tools (read_file, list_dir, run_command, explore) can inspect
+        it.  If a previous clone exists at the target path, it is
+        removed first.
 
         Args:
-            question: The investigation question.
-            repo_url: URL of the repository to investigate.
+            url: Git HTTPS/SSH URL of the repository to clone.
+            branch: Branch to clone (default ``"main"``).
 
         Returns:
-            Status string.
+            Status string with the local clone path on success, or
+            an error message starting with ``clone_repo:``.
         """
-        return "investigate: not yet implemented — pending migration ticket"
+        import shutil
+
+        from ..forge.auth import github_token
+        from ..vcs.git_ops import clone as git_clone
+
+        target = workspace_root / "repo"
+
+        # Remove previous clone if it exists (single-repo model)
+        if target.exists():
+            shutil.rmtree(target)
+
+        # Obtain auth token (same pattern as every production call site)
+        try:
+            token = github_token(settings)
+        except RuntimeError:
+            token = None
+
+        try:
+            git_clone(url, target, branch, token=token)
+        except Exception as exc:
+            return f"clone_repo: {exc!r}"
+
+        return f"Cloned {url} (branch={branch}) into {target}"
 
     from .tool_registry import ToolInfo, ToolRegistry
 
     ToolRegistry.register(
         ToolInfo(
-            name="investigate",
-            description="Investigate a question across repositories (stub).",
-            category="reporting",
+            name="clone_repo",
+            description=(
+                "Clone a target git repository into the local workspace "
+                "so the filesystem tools (read_file, list_dir, "
+                "run_command, explore) can inspect it."
+            ),
+            category="fs",
             parameters={
-                "question": "str",
-                "repo_url": "str",
+                "url": "str",
+                "branch": "str (optional, default 'main')",
             },
         )
     )
-    return investigate
+    return clone_repo
 
 
 def make_post_findings_tool(settings: Settings, agent_name: str) -> Callable[..., str]:
@@ -344,40 +380,57 @@ def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResul
     ws = ctx.service.workspace(ticket)
     draft = ws.read_description().strip()
 
-    # 3. Build the tool list
-    tools: list[Any] = []
-    tools.append(make_create_repo_tool(ctx.settings, ctx, draft))
-    tools.append(make_fork_repo_tool(ctx.settings))
-    tools.append(make_investigate_tool(ctx.settings))
-    tools.append(make_post_findings_tool(ctx.settings, "maintenance"))
+    # 3. Create a temporary workspace directory for the clone
+    import tempfile
 
-    # 4. Build the agent
-    agent = build_agent_from_definition(
-        ctx.settings,
-        definition,
-        tools=tools,
-    )
+    # 4. Build the tool list (must be inside the tempdir context so
+    #    clone_repo can populate the workspace)
+    with tempfile.TemporaryDirectory(prefix="maintenance_") as tmpdir_str:
+        tmpdir = Path(tmpdir_str)
+        clone_dir = tmpdir / "repo"
 
-    # 5. Build the user prompt from the ticket
-    user_prompt = f"# Title\n{ticket.title}\n\n# Draft\n{draft}"
+        tools: list[Any] = []
+        tools.append(make_create_repo_tool(ctx.settings, ctx, draft))
+        tools.append(make_fork_repo_tool(ctx.settings))
+        tools.append(make_clone_repo_tool(ctx.settings, tmpdir))
+        tools.append(make_post_findings_tool(ctx.settings, "maintenance"))
 
-    # 6. Run the agent
-    try:
-        result = run_agent(
-            agent,
-            lambda h: h.run_sync(user_prompt),
-            settings=ctx.settings,
-            what="maintenance",
+        # Filesystem tools (read-only subset used by the agent; write
+        # tools are harmless — the system prompt says "read-only")
+        from .fs_tools import build_fs_tools
+        from .explore import make_explore_tool, make_parallel_explore_tool
+
+        tools.extend(build_fs_tools(clone_dir, ctx.settings))
+        tools.append(make_explore_tool(ctx.settings, clone_dir))
+        tools.append(make_parallel_explore_tool(ctx.settings, clone_dir))
+
+        # 5. Build the agent
+        agent = build_agent_from_definition(
+            ctx.settings,
+            definition,
+            tools=tools,
         )
-    finally:
-        _safe_close(agent)
 
-    # 7. Coerce the output
-    if isinstance(result.output, MaintenanceResult):
-        return result.output
-    if isinstance(result.output, dict):
-        return MaintenanceResult(**result.output)
-    return MaintenanceResult(
-        success=False,
-        note="Agent produced no structured output",
-    )
+        # 6. Build the user prompt from the ticket
+        user_prompt = f"# Title\n{ticket.title}\n\n# Draft\n{draft}"
+
+        # 7. Run the agent
+        try:
+            result = run_agent(
+                agent,
+                lambda h: h.run_sync(user_prompt),
+                settings=ctx.settings,
+                what="maintenance",
+            )
+        finally:
+            _safe_close(agent)
+
+        # 8. Coerce the output
+        if isinstance(result.output, MaintenanceResult):
+            return result.output
+        if isinstance(result.output, dict):
+            return MaintenanceResult(**result.output)
+        return MaintenanceResult(
+            success=False,
+            note="Agent produced no structured output",
+        )
