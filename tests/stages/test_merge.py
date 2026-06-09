@@ -1,5 +1,6 @@
 import contextlib
 import json
+import subprocess
 
 import pytest
 
@@ -2407,6 +2408,7 @@ def test_waiting_auto_merge_to_done_on_ci_success(tmp_path, monkeypatch):
             "state": "open",
             "url": "u",
             "mergeable": True,
+            "sha": "abc1234",
         },
     )
     monkeypatch.setattr(
@@ -3540,3 +3542,315 @@ def test_blocked_closed_unmerged_does_not_delete_branch(tmp_path, monkeypatch):
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.BLOCKED
     assert calls == []
+
+
+# ============================================================
+# G. Git merge verification tests (new)
+# ============================================================
+
+
+def _git(repo, *args):
+    """Run a git command in *repo*, raising on failure."""
+    subprocess.run(
+        ["git", "-C", str(repo), *args],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _build_repo_with_origin(tmp_path):
+    """Build a work repo with an ``origin/main`` remote-tracking ref.
+
+    Creates a bare repo used as ``origin``, a work repo with an initial
+    commit on ``main`` pushed to it, and fetches so ``origin/main``
+    resolves locally.  Returns the work-repo ``Path``.
+    """
+    origin = tmp_path / "origin.git"
+    repo = tmp_path / "repo"
+    subprocess.run(
+        ["git", "init", "--bare", "-b", "main", str(origin)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "init", "-b", "main", str(repo)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    _git(repo, "config", "user.email", "test@example.com")
+    _git(repo, "config", "user.name", "Test")
+    (repo / "README.md").write_text("initial\n", encoding="utf-8")
+    _git(repo, "add", "README.md")
+    _git(repo, "commit", "-m", "initial commit on main")
+    _git(repo, "remote", "add", "origin", str(origin))
+    _git(repo, "push", "origin", "main")
+    _git(repo, "fetch", "origin")
+    return repo
+
+
+def _waiting_auto_merge_ticket(ctx, *, sha="abc1234"):
+    """Create a ticket in WAITING_AUTO_MERGE with auto-merge eligibility.
+
+    Returns the ticket and its branch name.
+    """
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="CI pending")
+    t = ctx.service.get(t.id)
+    branch = f"mill/{t.id}"
+    return t, branch
+
+
+def test_waiting_auto_merge_verify_ancestor_confirmed_goes_to_done(
+    tmp_path, monkeypatch
+):
+    """Feature branch tip is an ancestor of origin/main → verify passes → DONE."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+
+    # Set up a real git repo with a feature branch merged into main.
+    repo = _build_repo_with_origin(tmp_path)
+    branch = "mill/test123"
+    _git(repo, "checkout", "-b", branch)
+    (repo / "feature.txt").write_text("feature work\n", encoding="utf-8")
+    _git(repo, "add", "feature.txt")
+    _git(repo, "commit", "-m", "feature commit")
+    _git(repo, "push", "origin", branch)
+    # Merge the feature into main and push.
+    _git(repo, "checkout", "main")
+    _git(repo, "merge", "--no-ff", branch, "-m", "merge feature")
+    _git(repo, "push", "origin", "main")
+    _git(repo, "fetch", "origin")
+
+    feature_tip = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", branch],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    # Monkeypatch _workspace_repo_dir to return our real repo.
+    from robotsix_mill.stages import merge as merge_mod
+
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: str(repo))
+
+    # Monkeypatch the forge: PR already merged.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": True,
+            "state": "closed",
+            "url": "u",
+            "sha": feature_tip,
+        },
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="CI pending")
+    t = ctx.service.get(t.id)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+
+
+def test_waiting_auto_merge_verify_squash_merge_goes_to_done(tmp_path, monkeypatch):
+    """Feature tip NOT an ancestor of main, but a commit on main references
+    the ticket ID → squash-merge fallback → DONE."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+
+    # Create the ticket first so we have its id for the commit message.
+    t = _human_mr_approval(ctx)
+
+    repo = _build_repo_with_origin(tmp_path)
+    branch = "mill/test123"
+    _git(repo, "checkout", "-b", branch)
+    (repo / "feature.txt").write_text("feature work\n", encoding="utf-8")
+    _git(repo, "add", "feature.txt")
+    _git(repo, "commit", "-m", "feature commit")
+    # Do NOT merge the branch into main (so it's not an ancestor).
+    # Instead, create a squash-style commit on main that references the ticket.
+    _git(repo, "checkout", "main")
+    (repo / "other.txt").write_text("squash of feature\n", encoding="utf-8")
+    _git(repo, "add", "other.txt")
+    _git(repo, "commit", "-m", f"squash merge of {t.id}")
+    _git(repo, "push", "origin", "main")
+    _git(repo, "fetch", "origin")
+
+    feature_tip = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", branch],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    from robotsix_mill.stages import merge as merge_mod
+
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: str(repo))
+
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": True,
+            "state": "closed",
+            "url": "u",
+            "sha": feature_tip,
+        },
+    )
+
+    _write_review_artifact(ctx, t)
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="CI pending")
+    t = ctx.service.get(t.id)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+
+
+def test_waiting_auto_merge_verify_fails_goes_to_implement_complete(
+    tmp_path, monkeypatch
+):
+    """Feature branch tip is NOT an ancestor of main AND no squash-merge
+    evidence → IMPLEMENT_COMPLETE."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+
+    repo = _build_repo_with_origin(tmp_path)
+    branch = "mill/test123"
+    _git(repo, "checkout", "-b", branch)
+    (repo / "feature.txt").write_text("unmerged work\n", encoding="utf-8")
+    _git(repo, "add", "feature.txt")
+    _git(repo, "commit", "-m", "feature commit")
+    # Do NOT merge into main.
+    _git(repo, "checkout", "main")
+    _git(repo, "push", "origin", "main")
+    _git(repo, "fetch", "origin")
+
+    feature_tip = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", branch],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    from robotsix_mill.stages import merge as merge_mod
+
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: str(repo))
+
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": True,
+            "state": "closed",
+            "url": "u",
+            "sha": feature_tip,
+        },
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="CI pending")
+    t = ctx.service.get(t.id)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert "merge not confirmed" in out.note
+
+
+def test_waiting_auto_merge_merge_pr_success_verify_fails_goes_to_implement_complete(
+    tmp_path, monkeypatch
+):
+    """merge_pr returns {'merged': True} but the feature-tip is not an
+    ancestor of main and no squash-merge evidence → IMPLEMENT_COMPLETE."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+
+    repo = _build_repo_with_origin(tmp_path)
+    branch = "mill/test123"
+    _git(repo, "checkout", "-b", branch)
+    (repo / "feature.txt").write_text("unmerged work\n", encoding="utf-8")
+    _git(repo, "add", "feature.txt")
+    _git(repo, "commit", "-m", "feature commit")
+    _git(repo, "checkout", "main")
+    _git(repo, "push", "origin", "main")
+    _git(repo, "fetch", "origin")
+
+    feature_tip = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", branch],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    from robotsix_mill.stages import merge as merge_mod
+
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: str(repo))
+
+    # Path B: CI is green, eligibility holds, merge_pr returns success.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "sha": feature_tip,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: {"merged": True, "reason": "merged"},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="CI pending")
+    t = ctx.service.get(t.id)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert "merge not confirmed" in out.note
+
+
+def test_waiting_auto_merge_no_repo_proceeds_to_done(tmp_path, monkeypatch):
+    """No git repo in workspace → _verify_merge_ancestor returns True
+    (best-effort) → DONE as before."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "sha": "abc1234",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: {"merged": True, "reason": "merged"},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="CI pending")
+    t = ctx.service.get(t.id)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE

@@ -42,6 +42,7 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import subprocess
 from pathlib import Path
 
 from ..agents.ci_fixing import run_ci_fix_agent
@@ -146,6 +147,92 @@ def _workspace_repo_dir(ctx, ticket) -> str | None:
     if not (repo / ".git").exists():
         return None
     return str(repo)
+
+
+def _verify_merge_ancestor(repo_dir: str | None, sha: str, ticket_id: str) -> bool:
+    """Verify that commit *sha* is an ancestor of origin/main.
+
+    Fetches origin/main to ensure the local ref is current, then runs
+    ``git merge-base --is-ancestor <sha> origin/main``.  When the
+    direct ancestry check fails (exit 1), falls back to squash-merge
+    detection: greps the origin/main log for *ticket_id*.
+
+    Returns True when the merge is confirmed (ancestor or squash-
+    merge found).  Returns False only when the check runs and
+    confirms the commit is NOT on origin/main.  When the repo is
+    unavailable or a git error occurs, returns True (best-effort —
+    do not block the pipeline on transient tooling issues).
+    """
+    if repo_dir is None or not sha:
+        # Nothing to verify — best-effort allow.
+        return True
+    try:
+        subprocess.run(
+            ["git", "-C", repo_dir, "fetch", "origin", "main"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError:
+        log.warning(
+            "%s: git fetch origin main failed — allowing merge (best-effort)",
+            ticket_id,
+        )
+        return True
+
+    result = subprocess.run(
+        [
+            "git",
+            "-C",
+            repo_dir,
+            "merge-base",
+            "--is-ancestor",
+            sha,
+            "origin/main",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return True  # sha is an ancestor of origin/main
+    if result.returncode == 1:
+        # Not a direct ancestor — maybe it was a squash-merge.
+        grep = subprocess.run(
+            [
+                "git",
+                "-C",
+                repo_dir,
+                "log",
+                "origin/main",
+                "--oneline",
+                "--fixed-strings",
+                f"--grep={ticket_id}",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if grep.returncode == 0 and grep.stdout.strip():
+            log.info(
+                "%s: commit %s is not an ancestor of origin/main, "
+                "but a commit referencing this ticket was found on "
+                "origin/main — treating as squash-merged",
+                ticket_id,
+                sha[:8],
+            )
+            return True
+        log.info(
+            "%s: commit %s is NOT an ancestor of origin/main — merge not confirmed",
+            ticket_id,
+            sha[:8],
+        )
+        return False
+    # Any other exit code — git error, best-effort allow.
+    log.warning(
+        "%s: git merge-base --is-ancestor failed for %s — allowing merge (best-effort)",
+        ticket_id,
+        sha[:8],
+    )
+    return True
 
 
 class MergeStage(Stage):
@@ -859,12 +946,25 @@ class MergeStage(Stage):
         if pr is None:
             return Outcome(State.WAITING_AUTO_MERGE)
         if pr.get("merged"):
-            ctx.service.workspace(ticket).artifacts_dir.joinpath("merge.md").write_text(
-                f"merged: {pr.get('url', '')}\n", encoding="utf-8"
+            sha = pr.get("sha", "")
+            repo_dir = _workspace_repo_dir(ctx, ticket)
+            if _verify_merge_ancestor(repo_dir, sha, ticket.id):
+                ctx.service.workspace(ticket).artifacts_dir.joinpath(
+                    "merge.md"
+                ).write_text(f"merged: {pr.get('url', '')}\n", encoding="utf-8")
+                self._cleanup_branch_on_done(ticket, ctx, branch)
+                log.info("%s: PR merged → done", ticket.id)
+                return Outcome(State.DONE, f"merged: {pr.get('url', '')}")
+            log.warning(
+                "%s: PR reported merged but commit %s is not an ancestor of "
+                "origin/main — falling back to IMPLEMENT_COMPLETE for investigation",
+                ticket.id,
+                sha[:8] if sha else "(none)",
             )
-            self._cleanup_branch_on_done(ticket, ctx, branch)
-            log.info("%s: PR merged → done", ticket.id)
-            return Outcome(State.DONE, f"merged: {pr.get('url', '')}")
+            return Outcome(
+                State.IMPLEMENT_COMPLETE,
+                f"PR reported merged but merge not confirmed on origin/main: {pr.get('url', '')}",
+            )
         if pr.get("state") == "closed":
             return Outcome(
                 State.BLOCKED,
@@ -905,21 +1005,34 @@ class MergeStage(Stage):
 
         if conclusion == "success":
             # CI is green — attempt auto-merge.
+            feature_tip_sha = pr.get("sha", "")  # capture before merge
             result = get_forge(s, repo_config=ctx.repo_config).merge_pr(
                 source_branch=branch
             )
             if result.get("merged"):
-                ctx.service.workspace(ticket).artifacts_dir.joinpath(
-                    "merge.md"
-                ).write_text(
-                    f"auto-merged: {pr.get('url', '')}\n",
-                    encoding="utf-8",
+                repo_dir = _workspace_repo_dir(ctx, ticket)
+                if _verify_merge_ancestor(repo_dir, feature_tip_sha, ticket.id):
+                    ctx.service.workspace(ticket).artifacts_dir.joinpath(
+                        "merge.md"
+                    ).write_text(
+                        f"auto-merged: {pr.get('url', '')}\n",
+                        encoding="utf-8",
+                    )
+                    self._cleanup_branch_on_done(ticket, ctx, branch)
+                    log.info("%s: auto-merged → done", ticket.id)
+                    return Outcome(
+                        State.DONE,
+                        f"auto-merged: {pr.get('url', '')}",
+                    )
+                log.warning(
+                    "%s: auto-merge reported success but commit %s is not an "
+                    "ancestor of origin/main — falling back to IMPLEMENT_COMPLETE",
+                    ticket.id,
+                    feature_tip_sha[:8] if feature_tip_sha else "(none)",
                 )
-                self._cleanup_branch_on_done(ticket, ctx, branch)
-                log.info("%s: auto-merged → done", ticket.id)
                 return Outcome(
-                    State.DONE,
-                    f"auto-merged: {pr.get('url', '')}",
+                    State.IMPLEMENT_COMPLETE,
+                    f"auto-merge reported success but merge not confirmed on origin/main: {pr.get('url', '')}",
                 )
             # Forge rejected the merge.
             reason_text = f"forge merge failed: {result.get('reason', 'unknown')}"
