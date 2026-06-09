@@ -222,7 +222,7 @@ h1 {
      under the overflow-y scrollbar — unhoverable and visually clipped.
      16px ≈ scrollbar width, clearing it. The sticky close header uses
      top:-16px to cancel this padding so it still pins to the top. */
-  padding: 16px;
+  padding: 16px 16px 0 16px;
   transform: translateX(100%);
 }
 #drawer.open {
@@ -237,6 +237,9 @@ h1 {
   color: #7d828c;
   font-size: 18px;
   background: #11141b;
+}
+#d {
+  padding-bottom: 16px;
 }
 .drawer-close-row {
   text-align: right;
