@@ -72,7 +72,14 @@ def test_run_ask_to_ticket_agent_without_repo_dir(tmp_path, monkeypatch):
     assert isinstance(result, AskToTicketResult)
     assert result.title == "T"
     assert result.description == "D"
-    assert cap["output_type"] is AskToTicketResult
+    # The structured result must be wrapped in PromptedOutput (free-text
+    # JSON), NOT passed as a raw class: a raw BaseModel makes pydantic-ai
+    # force tool_choice, which DeepSeek-v4-pro's reasoning mode rejects
+    # with a 400 ("Thinking mode does not support this tool_choice").
+    from pydantic_ai import PromptedOutput
+
+    assert isinstance(cap["output_type"], PromptedOutput)
+    assert cap["output_type"].outputs is AskToTicketResult
     assert cap["model"] == s.ask_to_ticket_model
     assert cap["what"] == "ask_to_ticket"
     # No repo tools when repo_dir is None.

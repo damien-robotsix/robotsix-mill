@@ -37,6 +37,8 @@ def run_ask_to_ticket_agent(
     tools are attached. Raises RuntimeError if no OpenRouter key is
     configured.
     """
+    from pydantic_ai import PromptedOutput
+
     from .yaml_loader import load_and_run_agent
 
     # Repo tools (explore, read_file, list_dir, run_command) are only
@@ -74,6 +76,12 @@ def run_ask_to_ticket_agent(
         model_name=settings.ask_to_ticket_model,
         prompt=user_prompt,
         what="ask_to_ticket",
-        output_type=AskToTicketResult,
+        # Wrap in PromptedOutput (free-text JSON) rather than passing the
+        # raw class: a raw BaseModel makes pydantic-ai use ToolOutput, which
+        # forces tool_choice — and DeepSeek-v4-pro's reasoning ("xhigh")
+        # mode rejects forced tool_choice with a 400. The YAML-driven path
+        # in base.py wraps for the same reason; this runner-supplied
+        # override must wrap too.
+        output_type=PromptedOutput(AskToTicketResult),
     )
     return result.output
