@@ -395,3 +395,283 @@ def test_sandbox_no_pythonpath_without_src_layout(tmp_path, monkeypatch):
 
     a = seen["argv"]
     assert not any("PYTHONPATH" in str(x) for x in a)
+
+
+# ── extra sandbox packages ────────────────────────────────────────────
+
+
+def test_extra_packages_empty_list_no_prefix(tmp_path, monkeypatch):
+    """Empty list → --read-only present, no install prefix in final command."""
+    s = _settings(tmp_path, data_dir="/data", sandbox_proxy_url="")
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        sandbox, "_repo_mount", lambda repo_dir, settings: ["--mount", "x"]
+    )
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    monkeypatch.setattr(sandbox, "load_extra_sandbox_packages", lambda repo_dir: [])
+    sandbox.run("true", repo_dir="/data/work/repo", settings=s)
+
+    a = seen["argv"]
+    assert "--read-only" in a
+    assert a[-1] == "true"
+
+
+def test_extra_packages_pip_only_keeps_readonly(tmp_path, monkeypatch):
+    """Only pip: packages → --read-only PRESENT, pip install in prefix, no apt."""
+    s = _settings(tmp_path, data_dir="/data", sandbox_proxy_url="")
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        sandbox, "_repo_mount", lambda repo_dir, settings: ["--mount", "x"]
+    )
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sandbox, "load_extra_sandbox_packages", lambda repo_dir: ["pip:requests"]
+    )
+    sandbox.run("true", repo_dir="/data/work/repo", settings=s)
+
+    a = seen["argv"]
+    assert "--read-only" in a
+    cmd = a[-1]
+    assert "pip install --user" in cmd
+    assert "requests" in cmd
+    assert "apt-get" not in cmd
+
+
+def test_extra_packages_apt_drops_readonly(tmp_path, monkeypatch):
+    """Any apt package → --read-only ABSENT, tmpfs mounts for apt dirs added."""
+    s = _settings(tmp_path, data_dir="/data", sandbox_proxy_url="")
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        sandbox, "_repo_mount", lambda repo_dir, settings: ["--mount", "x"]
+    )
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sandbox, "load_extra_sandbox_packages", lambda repo_dir: ["colcon"]
+    )
+    sandbox.run("true", repo_dir="/data/work/repo", settings=s)
+
+    a = seen["argv"]
+    assert "--read-only" not in a
+    assert "--tmpfs" in a
+    assert "/var/cache/apt" in a
+    assert "/var/lib/apt/lists" in a
+    assert "/var/lib/dpkg" in a
+
+
+def test_extra_packages_apt_has_tmpfs_mounts(tmp_path, monkeypatch):
+    """Apt packages → exact tmpfs paths are present in argv."""
+    s = _settings(tmp_path, data_dir="/data", sandbox_proxy_url="")
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        sandbox, "_repo_mount", lambda repo_dir, settings: ["--mount", "x"]
+    )
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sandbox, "load_extra_sandbox_packages", lambda repo_dir: ["apt:curl"]
+    )
+    sandbox.run("true", repo_dir="/data/work/repo", settings=s)
+
+    a = seen["argv"]
+    # Each --tmpfs flag should be followed by its mount path
+    tmpfs_indices = [i for i, x in enumerate(a) if x == "--tmpfs"]
+    tmpfs_targets = {a[i + 1] for i in tmpfs_indices}
+    assert tmpfs_targets >= {
+        "/var/cache/apt",
+        "/var/lib/apt/lists",
+        "/var/lib/dpkg",
+    }
+
+
+def test_extra_packages_prefix_order(tmp_path, monkeypatch):
+    """Apt install block runs before pip block, both before user command."""
+    s = _settings(tmp_path, data_dir="/data", sandbox_proxy_url="")
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        sandbox, "_repo_mount", lambda repo_dir, settings: ["--mount", "x"]
+    )
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sandbox,
+        "load_extra_sandbox_packages",
+        lambda repo_dir: ["colcon", "pip:requests"],
+    )
+    sandbox.run("true", repo_dir="/data/work/repo", settings=s)
+
+    cmd = seen["argv"][-1]
+    apt_pos = cmd.find("apt-get")
+    pip_pos = cmd.find("pip install")
+    cmd_pos = cmd.rfind("true")
+    assert apt_pos != -1 and pip_pos != -1
+    assert apt_pos < pip_pos < cmd_pos, (
+        f"expected apt ({apt_pos}) < pip ({pip_pos}) < command ({cmd_pos}) in: {cmd}"
+    )
+
+
+def test_extra_packages_error_resilience(tmp_path, monkeypatch):
+    """Prefix uses || echo "WARNING:" guards for each package."""
+    s = _settings(tmp_path, data_dir="/data", sandbox_proxy_url="")
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        sandbox, "_repo_mount", lambda repo_dir, settings: ["--mount", "x"]
+    )
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sandbox,
+        "load_extra_sandbox_packages",
+        lambda repo_dir: ["colcon", "pip:requests"],
+    )
+    sandbox.run("true", repo_dir="/data/work/repo", settings=s)
+
+    cmd = seen["argv"][-1]
+    assert '|| echo "WARNING: failed to install apt package:' in cmd
+    assert '|| echo "WARNING: failed to install pip package:' in cmd
+
+
+def test_extra_packages_bare_name_defaults_to_apt(tmp_path, monkeypatch):
+    """Bare name colcon → treated as apt, not pip."""
+    s = _settings(tmp_path, data_dir="/data", sandbox_proxy_url="")
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        sandbox, "_repo_mount", lambda repo_dir, settings: ["--mount", "x"]
+    )
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sandbox, "load_extra_sandbox_packages", lambda repo_dir: ["colcon"]
+    )
+    sandbox.run("true", repo_dir="/data/work/repo", settings=s)
+
+    cmd = seen["argv"][-1]
+    assert "colcon" in cmd
+    assert "apt-get install" in cmd
+    assert "pip install" not in cmd
+
+
+def test_extra_packages_prefix_stripped(tmp_path, monkeypatch):
+    """pip:requests → pip install … requests (no 'pip:' in pkg name)."""
+    s = _settings(tmp_path, data_dir="/data", sandbox_proxy_url="")
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        sandbox, "_repo_mount", lambda repo_dir, settings: ["--mount", "x"]
+    )
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sandbox, "load_extra_sandbox_packages", lambda repo_dir: ["pip:requests"]
+    )
+    sandbox.run("true", repo_dir="/data/work/repo", settings=s)
+
+    cmd = seen["argv"][-1]
+    assert "requests" in cmd
+    assert "pip:requests" not in cmd
+
+
+def test_extra_packages_mixed_apt_and_pip(tmp_path, monkeypatch):
+    """Both apt and pip blocks present in prefix."""
+    s = _settings(tmp_path, data_dir="/data", sandbox_proxy_url="")
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        sandbox, "_repo_mount", lambda repo_dir, settings: ["--mount", "x"]
+    )
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sandbox,
+        "load_extra_sandbox_packages",
+        lambda repo_dir: ["colcon", "pip:requests"],
+    )
+    sandbox.run("true", repo_dir="/data/work/repo", settings=s)
+
+    cmd = seen["argv"][-1]
+    assert "apt-get" in cmd
+    assert "pip install" in cmd
+
+
+def test_extra_packages_missing_config_noop(tmp_path, monkeypatch):
+    """load_extra_sandbox_packages returns [] when no config → no prefix, --read-only kept."""
+    s = _settings(tmp_path, data_dir="/data", sandbox_proxy_url="")
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        sandbox, "_repo_mount", lambda repo_dir, settings: ["--mount", "x"]
+    )
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    monkeypatch.setattr(sandbox, "load_extra_sandbox_packages", lambda repo_dir: [])
+    sandbox.run("true", repo_dir="/data/work/repo", settings=s)
+
+    a = seen["argv"]
+    assert "--read-only" in a
+    assert a[-1] == "true"
+
+
+def test_extra_packages_integration_from_config_file(tmp_path, monkeypatch):
+    """End-to-end: config file → parser → prefix builder → argv."""
+    repo = tmp_path / "ticket"
+    config_dir = repo / ".robotsix-mill"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config.yaml").write_text(
+        "extra_sandbox_packages: [colcon, pip:requests]\n", encoding="utf-8"
+    )
+
+    s = _settings(tmp_path, data_dir=str(tmp_path), sandbox_proxy_url="")
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    sandbox.run("pytest -q", repo_dir=repo, settings=s)
+
+    cmd = seen["argv"][-1]
+    assert "apt-get update" in cmd
+    assert "colcon" in cmd
+    assert "pip install --user" in cmd
+    assert "requests" in cmd
+    assert cmd.endswith("pytest -q")

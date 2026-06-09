@@ -22,14 +22,18 @@ a ticket's tests/commands cannot read or corrupt the management plane.
 
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 import uuid
 from pathlib import Path
 
 from .config import Settings
+from .repo_settings import load_extra_sandbox_packages
 
 _OUT_CAP = 8000
+
+log = logging.getLogger("robotsix_mill.sandbox")
 
 
 class SandboxError(RuntimeError):
@@ -126,7 +130,61 @@ def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> s
     return "pip install --user --quiet --disable-pip-version-check . && " + command
 
 
-def run(
+def _build_extra_packages_prefix(extra_packages: list[str]) -> tuple[str, bool]:
+    """Build a shell command prefix that installs extra packages.
+
+    Each entry can be:
+    - ``pip:<name>`` → install via ``pip install --user``
+    - ``apt:<name>`` → install via ``apt-get install -y``
+    - bare ``<name>`` → defaults to apt (the sandbox is Debian-based)
+
+    Returns ``(shell_prefix, needs_write_access)``:
+    - *shell_prefix* is the semicolon-chained shell commands ending with
+      ``"; "``, or ``""`` when the list is empty.
+    - *needs_write_access* is ``True`` when any apt package is present
+      (apt must write to the root filesystem, so ``--read-only`` must be
+      dropped and tmpfs mounts added for apt state directories).
+    """
+    if not extra_packages:
+        return "", False
+
+    apt_packages: list[str] = []
+    pip_packages: list[str] = []
+
+    for pkg in extra_packages:
+        if pkg.startswith("pip:"):
+            pip_packages.append(pkg[4:])
+        elif pkg.startswith("apt:"):
+            apt_packages.append(pkg[4:])
+        else:
+            apt_packages.append(pkg)
+
+    parts: list[str] = []
+
+    if apt_packages:
+        parts.append("apt-get update -qq 2>/dev/null || true")
+        pkg_list = " ".join(apt_packages)
+        parts.append(
+            f'for pkg in {pkg_list}; do apt-get install -y -qq "$pkg" '
+            f'|| echo "WARNING: failed to install apt package: $pkg"; done'
+        )
+
+    if pip_packages:
+        for pkg in pip_packages:
+            parts.append(
+                f"pip install --user --quiet --disable-pip-version-check {pkg} "
+                f'|| echo "WARNING: failed to install pip package: {pkg}"'
+            )
+
+    if not parts:
+        return "", False
+
+    prefix = "; ".join(parts) + "; "
+    needs_write = bool(apt_packages)
+    return prefix, needs_write
+
+
+def run(  # noqa: C901 — extra-packages loading adds one branch; tightly-coupled argv construction
     command: str,
     *,
     repo_dir: Path,
@@ -150,6 +208,16 @@ def run(
     # an absolute path because Docker's `-w` rejects relative arguments
     # (see _repo_mount for the same reason).
     repo_dir = Path(repo_dir).resolve()
+    # Load extra sandbox packages declared in the repo's config.
+    extra_packages = load_extra_sandbox_packages(repo_dir)
+    extra_prefix, needs_write_access = _build_extra_packages_prefix(extra_packages)
+    if extra_prefix:
+        log.info("Installing extra sandbox packages: %s", extra_packages)
+        if needs_write_access:
+            log.info(
+                "Dropping --read-only and adding tmpfs mounts for apt "
+                "package installation"
+            )
     name = f"mill-sbx-{uuid.uuid4().hex[:12]}"
     argv = [
         "docker",
@@ -173,7 +241,18 @@ def run(
         "-w",
         str(repo_dir),
     ]
-    if settings.sandbox_readonly:
+    if needs_write_access:
+        # apt must write to the root filesystem — drop --read-only and
+        # add tmpfs mounts so apt state dirs don't dirty the overlay.
+        argv += [
+            "--tmpfs",
+            "/var/cache/apt",
+            "--tmpfs",
+            "/var/lib/apt/lists",
+            "--tmpfs",
+            "/var/lib/dpkg",
+        ]
+    elif settings.sandbox_readonly:
         argv.append("--read-only")
     # When the mounted repo has a src/ layout, put its source first on
     # PYTHONPATH so the command runs against the MOUNTED code — not a
@@ -208,11 +287,11 @@ def run(
         ]
     # Optionally prefix a dependency install so the gate runs against the
     # repo's DECLARED deps, not just the image's frozen ones.
-    effective_command = (
-        _maybe_install_prefix(command, repo_dir, settings)
-        if install_project
-        else command
-    )
+    # Extra packages are installed FIRST so they are available when the
+    # project build runs (and when the user command executes).
+    effective_command = extra_prefix + command
+    if install_project:
+        effective_command = _maybe_install_prefix(effective_command, repo_dir, settings)
 
     # Override the image ENTRYPOINT: images like robotsix/mill have one
     # (it starts the server) which would otherwise swallow our command.
