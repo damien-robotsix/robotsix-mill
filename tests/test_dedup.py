@@ -22,6 +22,7 @@ from robotsix_mill.core.states import State
 from robotsix_mill.core.workspace import Workspace
 from robotsix_mill.dedup import (
     _describe_recent_signal,
+    _extract_concern_tokens,
     _extract_paths,
     _scope_paths,
     annotate_child_body,
@@ -529,6 +530,100 @@ def test_inflight_overlap_flags_two_shared_prose_paths(settings):
     assert prior.id in note
 
 
+def test_inflight_overlap_unflagged_on_same_path_disjoint_concerns(settings):
+    """Mode 2: two tickets that both declare the same file under
+    ``## Scope`` but name completely different code symbols
+    (`` `new_model()` `` vs `` `.secrets.baseline` ``) must NOT flag —
+    the file-path overlap is a false positive when concerns differ."""
+    svc, prior = _seed(
+        settings,
+        title="add tests for `OpenRouterProvider.new_model()`",
+        body=f"## Scope\n\nAdd test cases in {_TARGET_PATH} for `new_model()`.",
+    )
+    svc.transition(prior.id, State.READY, note="refined")
+
+    note = find_inflight_overlap(
+        _svc(settings),
+        "NEW-DRAFT",
+        "fix `.secrets.baseline` auth",
+        f"## Scope\n\nFix `.secrets.baseline` handling in {_TARGET_PATH}.",
+        settings,
+        _now(),
+    )
+    assert note is None
+
+
+def test_inflight_overlap_flags_on_same_path_shared_concern(settings):
+    """Mode 2: two tickets that declare the same file AND share a
+    concern token (both name `new_model()`) must still flag."""
+    svc, prior = _seed(
+        settings,
+        title="add tests for `OpenRouterProvider.new_model()`",
+        body=f"## Scope\n\nAdd test cases in {_TARGET_PATH} for `new_model()`.",
+    )
+    svc.transition(prior.id, State.READY, note="refined")
+
+    note = find_inflight_overlap(
+        _svc(settings),
+        "NEW-DRAFT",
+        "refactor `new_model()` to use async",
+        f"## Scope\n\nRefactor `new_model()` in {_TARGET_PATH}.",
+        settings,
+        _now(),
+    )
+    assert note is not None
+    assert prior.id in note
+    assert "`new_model()`" in note or "new_model()" in note
+
+
+def test_inflight_overlap_flags_on_same_path_no_concern_tokens_on_one_side(settings):
+    """Mode 2: when one side has concern tokens but the other does not,
+    the path match still flags — absence of symbols is not evidence of
+    difference."""
+    svc, prior = _seed(
+        settings,
+        title="rework the login form",
+        body=f"## Scope\n\nchanges {_TARGET_PATH} to validate input",
+    )
+    svc.transition(prior.id, State.READY, note="refined")
+
+    note = find_inflight_overlap(
+        _svc(settings),
+        "NEW-DRAFT",
+        "fix `login_form` validation",
+        f"## Scope\n\nalso edits {_TARGET_PATH} for `login_form` validation",
+        settings,
+        _now(),
+    )
+    assert note is not None
+    assert prior.id in note
+
+
+def test_inflight_overlap_flags_on_same_path_no_concern_tokens_either_side(
+    settings,
+):
+    """Mode 2: when neither side has concern tokens, a declared-path
+    match still flags (the pre-existing behaviour — we cannot determine
+    that concerns differ)."""
+    svc, prior = _seed(
+        settings,
+        title="rework the login form",
+        body=f"## Scope\n\nchanges {_TARGET_PATH} to validate input",
+    )
+    svc.transition(prior.id, State.READY, note="refined")
+
+    note = find_inflight_overlap(
+        _svc(settings),
+        "NEW-DRAFT",
+        "fix the login form validation",
+        f"## Scope\n\nalso edits {_TARGET_PATH} for validation",
+        settings,
+        _now(),
+    )
+    assert note is not None
+    assert prior.id in note
+
+
 def test_scope_paths_extracts_only_declared_sections():
     """``_scope_paths`` returns paths under ``## Scope`` / ``## Acceptance``
     sections and ``file_map`` blocks, and excludes prose-only and
@@ -714,6 +809,39 @@ def test_extract_paths_keeps_real_paths_alongside_prose():
         "ci.yml",
         "CONTRIBUTING.md",
     ]
+
+
+# ---------------------------------------------------------------------------
+# _extract_concern_tokens
+# ---------------------------------------------------------------------------
+
+
+def test_extract_concern_tokens_backtick_enclosed():
+    assert _extract_concern_tokens(
+        "add tests for `OpenRouterProvider.new_model()`"
+    ) == {"OpenRouterProvider.new_model()"}
+
+
+def test_extract_concern_tokens_multiple():
+    tokens = _extract_concern_tokens(
+        "refactor `login()` to call `validate()` and `sanitize()`"
+    )
+    assert tokens == {"login()", "validate()", "sanitize()"}
+
+
+def test_extract_concern_tokens_no_backticks():
+    assert _extract_concern_tokens("rework the login form") == set()
+
+
+def test_extract_concern_tokens_empty():
+    assert _extract_concern_tokens("") == set()
+    assert _extract_concern_tokens(None) == set()
+
+
+def test_extract_concern_tokens_dotted():
+    assert _extract_concern_tokens("fix `.secrets.baseline` auth") == {
+        ".secrets.baseline"
+    }
 
 
 # ---------------------------------------------------------------------------

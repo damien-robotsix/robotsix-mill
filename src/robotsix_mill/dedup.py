@@ -44,6 +44,7 @@ def find_prior_matching_ticket(
     lookback_days: int = 7,
     exclude_ids: Collection[str] = (),
     require_scope_for_single_path: bool = False,
+    target_concern_tokens: set[str] | None = None,
 ) -> Ticket | None:
     """Look up recent tickets on *board_id* and return the first one
     that matches the given fix signal.
@@ -72,6 +73,15 @@ def find_prior_matching_ticket(
     Two or more distinct shared paths always corroborate regardless of
     the flag. Defaults to ``False`` (the permissive prose-mention rule)
     so the trace-review and AGENT.md-proposal callers are unaffected.
+
+    When *target_concern_tokens* is a non-empty set, a path match is
+    suppressed when the candidate's backtick-enclosed concern tokens
+    (extracted from its title and declared-scope body sections) are also
+    non-empty and share no token with *target_concern_tokens* — i.e. the
+    two tickets touch the same file but name completely different
+    symbols/concerns.  When either side has no concern tokens, the path
+    match is not suppressed (absence of symbols is not evidence of
+    difference).
 
     Returns ``None`` when no match is found.
     """
@@ -122,7 +132,29 @@ def find_prior_matching_ticket(
                         return ticket
                     if matched[0] in _scope_paths(body):
                         # The candidate declares this path as modified.
-                        return ticket
+                        # Before flagging on a lone declared path: when
+                        # *target_concern_tokens* is supplied, check that
+                        # the concern is shared — i.e., the two tickets
+                        # name at least one overlapping code symbol.  If
+                        # both sides have concern tokens and none overlap,
+                        # the tickets touch the same file but for unrelated
+                        # reasons; suppress the path match and fall through
+                        # to the fingerprint check.
+                        if target_concern_tokens:
+                            cand_concern = _extract_concern_tokens(
+                                ticket.title + "\n" + body
+                            )
+                            if target_concern_tokens and cand_concern:
+                                if target_concern_tokens & cand_concern:
+                                    return ticket
+                                # Disjoint concern tokens — different
+                                # concerns; fall through to fingerprint.
+                            else:
+                                # At least one side has no concern tokens —
+                                # cannot determine difference, so flag.
+                                return ticket
+                        else:
+                            return ticket
                     # else: lone prose-only path — fall through to the
                     # fingerprint check rather than flagging on prose.
 
@@ -150,6 +182,24 @@ _PATH_TOKEN_RE = re.compile(
     r"[\w.+-]+/[\w.+-]+(?:/[\w.+-]+)*\.[A-Za-z][A-Za-z0-9]{0,6}\b"
     rf"|[\w.+-]+\.(?:{_SOURCE_EXT})\b"
 )
+
+# Backtick-enclosed code tokens — e.g. `` `new_model()` ``, `` `.secrets.baseline` ``,
+# `` `OpenRouterProvider` ``.  These are high-signal concern indicators: when two
+# tickets share a file path but their backtick-enclosed tokens are disjoint, the
+# tickets are about unrelated concerns within that file and the path match is a
+# false positive.
+_BACKTICK_RE = re.compile(r"`([^`]+)`")
+
+
+def _extract_concern_tokens(text: str) -> set[str]:
+    """Return the set of backtick-enclosed code tokens in *text*.
+
+    Each token is stripped of surrounding whitespace.  An empty set is
+    returned when *text* contains no backtick-enclosed spans — this is a
+    meaningful signal: the author did not name a specific symbol, so we
+    cannot determine whether concerns differ.
+    """
+    return {m.group(1).strip() for m in _BACKTICK_RE.finditer(text or "")}
 
 
 def _extract_paths(text: str) -> list[str]:
@@ -225,6 +275,8 @@ def _describe_recent_signal(
     paths: list[str],
     settings: Settings,
     fallback_board_id: str,
+    *,
+    target_concern_tokens: set[str] | None = None,
 ) -> str:
     """Best-effort description of which signal matched *ticket*: a shared
     file path (preferred, matching ``find_prior_matching_ticket``'s order)
@@ -234,7 +286,15 @@ def _describe_recent_signal(
     is only reported as a ``file path`` when the candidate *declares* it
     (it is in :func:`_scope_paths`); ≥2 shared paths always count as a
     ``file path`` match. Otherwise the advisory reports ``title overlap``
-    so it never claims a path signal that did not drive the match."""
+    so it never claims a path signal that did not drive the match.
+
+    When *target_concern_tokens* is supplied and at least one token also
+    appears in the candidate's backtick-enclosed symbols, the description
+    includes the overlapping token(s) — e.g.
+    ``file path `src/foo.py` (symbol `new_model`)`` — so the advisory
+    notes *which* specific symbol/function/class overlaps rather than just
+    the file path.
+    """
     try:
         if paths:
             body = Workspace(
@@ -243,9 +303,23 @@ def _describe_recent_signal(
             ).read_description()
             matched = [p for p in paths if p and p in body]
             if len(matched) >= 2:
-                return f"file path `{matched[0]}`"
-            if len(matched) == 1 and matched[0] in _scope_paths(body):
-                return f"file path `{matched[0]}`"
+                desc = f"file path `{matched[0]}`"
+            elif len(matched) == 1 and matched[0] in _scope_paths(body):
+                desc = f"file path `{matched[0]}`"
+            else:
+                return "title overlap"
+
+            # Enrich with overlapping concern tokens when available.
+            if target_concern_tokens:
+                cand_concern = _extract_concern_tokens(ticket.title + "\n" + body)
+                overlap = target_concern_tokens & cand_concern
+                if overlap:
+                    symbols = sorted(overlap)
+                    quoted = "`, `".join(symbols[:3])
+                    if len(symbols) > 3:
+                        quoted += "`, …"
+                    desc += f" (symbol `{quoted}`)"
+            return desc
     except Exception:  # noqa: BLE001 — best-effort
         log.exception("dedup: _describe_recent_signal failed for %s", ticket.id)
     return "title overlap"
@@ -291,9 +365,15 @@ def find_inflight_overlap(
 
     Path-like tokens are extracted from *body* as ``target_files`` and
     *title* is the ``fingerprint_text``, exactly as
-    :func:`find_child_overlaps` does for epic children. Returns an
-    advisory note naming the matched ticket on a strong match, or
-    ``None`` when nothing overlaps.
+    :func:`find_child_overlaps` does for epic children.  Concern tokens
+    (backtick-enclosed code symbols) are extracted from *title* and
+    *body* and passed as ``target_concern_tokens`` so that a lone shared
+    file path is NOT flagged when the two tickets name completely
+    different symbols (e.g. `` `new_model()` `` vs `` `.secrets.baseline` ``
+    within the same test file).
+
+    Returns an advisory note naming the matched ticket on a strong
+    match, or ``None`` when nothing overlaps.
 
     Best-effort: any failure logs and returns ``None`` so refine still
     proceeds.
@@ -301,6 +381,7 @@ def find_inflight_overlap(
     try:
         board_id = service.board_id
         paths = _extract_paths(body)
+        concern_tokens = _extract_concern_tokens(title + "\n" + body)
         prior = find_prior_matching_ticket(
             service,
             board_id,
@@ -312,10 +393,13 @@ def find_inflight_overlap(
             lookback_days=settings.epic_dedup_lookback_days,
             exclude_ids={ticket_id},
             require_scope_for_single_path=True,
+            target_concern_tokens=concern_tokens,
         )
         if prior is None:
             return None
-        signal = _describe_recent_signal(prior, paths, settings, board_id)
+        signal = _describe_recent_signal(
+            prior, paths, settings, board_id, target_concern_tokens=concern_tokens
+        )
         return (
             f"Possible duplicate of {prior.id} ({prior.title!r}) — matched on {signal}"
         )
@@ -419,6 +503,7 @@ def find_child_overlaps(
         accepted: list[tuple[str, set[str]]] = []
         for i, (title, body) in enumerate(zip(child_titles, child_bodies)):
             paths = _extract_paths(body)
+            concern_tokens = _extract_concern_tokens(title + "\n" + body)
             note: str | None = None
 
             # 1. Recent shipped/in-flight ticket.
@@ -433,9 +518,16 @@ def find_child_overlaps(
                 lookback_days=settings.epic_dedup_lookback_days,
                 exclude_ids=exclude_ids,
                 require_scope_for_single_path=True,
+                target_concern_tokens=concern_tokens,
             )
             if prior is not None:
-                signal = _describe_recent_signal(prior, paths, settings, board_id)
+                signal = _describe_recent_signal(
+                    prior,
+                    paths,
+                    settings,
+                    board_id,
+                    target_concern_tokens=concern_tokens,
+                )
                 note = (
                     f"Possible duplicate of {prior.id} ({prior.title!r}) — "
                     f"matched on {signal}"
