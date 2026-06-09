@@ -13,6 +13,7 @@ import logging
 from types import SimpleNamespace
 
 from robotsix_mill.repo_settings import (
+    load_extra_sandbox_packages,
     load_repo_languages,
     load_repo_test_command,
     resolve_language_instructions,
@@ -146,3 +147,67 @@ def test_resolve_none_when_no_language(tmp_path):
     repo.mkdir()
     s = _settings_with_builtin(tmp_path)
     assert resolve_language_instructions(s, repo) == ""
+
+
+# --- extra_sandbox_packages ------------------------------------------------
+
+
+def test_extra_sandbox_packages_none_repo_dir_returns_empty():
+    assert load_extra_sandbox_packages(None) == []
+
+
+def test_extra_sandbox_packages_missing_file_returns_empty(tmp_path):
+    assert load_extra_sandbox_packages(tmp_path) == []
+
+
+def test_extra_sandbox_packages_missing_key_returns_empty(tmp_path):
+    _write_config(tmp_path, "test_command: pytest\n")
+    assert load_extra_sandbox_packages(tmp_path) == []
+
+
+def test_extra_sandbox_packages_list_of_strings(tmp_path):
+    _write_config(tmp_path, "extra_sandbox_packages:\n - colcon\n - ' ros-humble-ros-core '\n")
+    assert load_extra_sandbox_packages(tmp_path) == ["colcon", "ros-humble-ros-core"]
+
+
+def test_extra_sandbox_packages_empty_list(tmp_path):
+    _write_config(tmp_path, "extra_sandbox_packages: []\n")
+    assert load_extra_sandbox_packages(tmp_path) == []
+
+
+def test_extra_sandbox_packages_empty_strings_filtered(tmp_path):
+    _write_config(tmp_path, "extra_sandbox_packages:\n - ''\n - '  '\n - colcon\n")
+    assert load_extra_sandbox_packages(tmp_path) == ["colcon"]
+
+
+def test_extra_sandbox_packages_non_list_warns_and_returns_empty(tmp_path, caplog):
+    _write_config(tmp_path, "extra_sandbox_packages: colcon\n")
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+        assert load_extra_sandbox_packages(tmp_path) == []
+    assert any("must be a list" in r.message for r in caplog.records)
+
+
+def test_extra_sandbox_packages_non_list_int_warns(tmp_path, caplog):
+    _write_config(tmp_path, "extra_sandbox_packages: 42\n")
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+        assert load_extra_sandbox_packages(tmp_path) == []
+    assert any("must be a list" in r.message for r in caplog.records)
+
+
+def test_extra_sandbox_packages_non_string_coerced(tmp_path):
+    _write_config(tmp_path, "extra_sandbox_packages:\n - 42\n - colcon\n")
+    assert load_extra_sandbox_packages(tmp_path) == ["42", "colcon"]
+
+
+def test_extra_sandbox_packages_non_mapping_top_level_returns_empty(tmp_path, caplog):
+    _write_config(tmp_path, "- just\n- a\n- list\n")
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+        assert load_extra_sandbox_packages(tmp_path) == []
+    assert any("mapping" in r.message for r in caplog.records)
+
+
+def test_extra_sandbox_packages_malformed_yaml_returns_empty(tmp_path, caplog):
+    _write_config(tmp_path, "extra_sandbox_packages: [unterminated\n")
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+        assert load_extra_sandbox_packages(tmp_path) == []
+    assert any("read/parse error" in r.message for r in caplog.records)
