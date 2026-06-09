@@ -444,6 +444,7 @@ class CIFixStage(Stage):
                 source=SourceKind.CI_FIX_DEPENDENCY,
                 kind="task",
                 board_id=board_id,
+                priority=ticket.priority,
             )
             fix_id = fix.id
 
