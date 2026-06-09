@@ -166,7 +166,9 @@ def test_extra_sandbox_packages_missing_key_returns_empty(tmp_path):
 
 
 def test_extra_sandbox_packages_list_of_strings(tmp_path):
-    _write_config(tmp_path, "extra_sandbox_packages:\n - colcon\n - ' ros-humble-ros-core '\n")
+    _write_config(
+        tmp_path, "extra_sandbox_packages:\n - colcon\n - ' ros-humble-ros-core '\n"
+    )
     assert load_extra_sandbox_packages(tmp_path) == ["colcon", "ros-humble-ros-core"]
 
 

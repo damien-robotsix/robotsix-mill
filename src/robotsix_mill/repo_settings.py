@@ -121,9 +121,7 @@ def load_extra_sandbox_packages(repo_dir: Path | None) -> list[str]:
     if isinstance(val, list):
         return [str(x).strip() for x in val if str(x).strip()]
     if "extra_sandbox_packages" in raw:
-        log.warning(
-            "repo settings: 'extra_sandbox_packages' must be a list — ignoring"
-        )
+        log.warning("repo settings: 'extra_sandbox_packages' must be a list — ignoring")
     return []
 
 
