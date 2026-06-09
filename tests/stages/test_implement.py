@@ -1938,6 +1938,9 @@ def test_scope_triage_agent_error_escalates(ctx_factory, tmp_path, monkeypatch):
 
     assert out.next_state is State.BLOCKED
     assert "agent error" in out.note
+    # The note names the ACTUAL exception — a bare "agent error" reads
+    # like a scope verdict and sends the operator log-hunting.
+    assert "RuntimeError: model unavailable" in out.note
     # The "agent error" diagnostic lives in the transition note now
     # (v1 — scope-triage no longer comments).
     comments = ctx.service.list_comments(t.id)
@@ -2781,7 +2784,9 @@ def test_baseline_check_blocks_on_failure(ctx_factory, tmp_path, monkeypatch):
     monkeypatch.setattr(coding, "run_implement_agent", _fake_agent_run)
 
     # Force the baseline check to fail.
-    def _failing_test_agent(*, settings, repo_dir, repo_config=None):
+    def _failing_test_agent(
+        *, settings, repo_dir, repo_config=None, retry_on_failure=False
+    ):
         return False, "tests failed (rc=1); pre-existing failure"
 
     monkeypatch.setattr(
@@ -3029,7 +3034,9 @@ def test_baseline_check_cached_on_retry(ctx_factory, tmp_path, monkeypatch):
 
     call_count = [0]
 
-    def _counted_test_agent(*, settings, repo_dir, repo_config=None):
+    def _counted_test_agent(
+        *, settings, repo_dir, repo_config=None, retry_on_failure=False
+    ):
         call_count[0] += 1
         return False, "pre-existing failure"
 
@@ -3067,7 +3074,9 @@ def test_baseline_check_sha_invalidation(ctx_factory, tmp_path, monkeypatch):
     # First call fails, second call passes (simulating operator fix).
     results = [(False, "old failure"), (True, "all passed")]
 
-    def _counted_test_agent(*, settings, repo_dir, repo_config=None):
+    def _counted_test_agent(
+        *, settings, repo_dir, repo_config=None, retry_on_failure=False
+    ):
         idx = min(call_count[0], len(results) - 1)
         passed, diag = results[idx]
         call_count[0] += 1
@@ -3120,7 +3129,7 @@ def test_baseline_check_sandbox_unavailable(ctx_factory, tmp_path, monkeypatch):
         review_enabled="false",
     )
 
-    def _sandbox_error(*, settings, repo_dir, repo_config=None):
+    def _sandbox_error(*, settings, repo_dir, repo_config=None, retry_on_failure=False):
         return False, "sandbox unavailable: Docker daemon not running"
 
     monkeypatch.setattr("robotsix_mill.stages.implement.run_test_agent", _sandbox_error)
@@ -3961,3 +3970,67 @@ def test_prepare_hook_failure_blocks_before_prerequisite_gate(
     assert "setup failed" in out.note
     # Prerequisite gate must NOT have been called — the hook blocked first.
     assert len(prereq_called) == 0
+
+
+# ── gitignored-edit detection (manifest boards: writes git can't see) ──
+
+
+def test_claimed_gitignored_edits_detects_invisible_writes(tmp_path):
+    """Edit tool-calls that landed in a gitignored sub-tree (the
+    robotsix-mill-ros2 ``/src/*`` manifest layout) are named, so the
+    'no changes produced' block tells the operator WHAT happened."""
+    import json as _json
+
+    remote = make_bare_repo(tmp_path)
+    repo_dir = tmp_path / "clone"
+    git_ops.clone(remote, repo_dir, "main")
+    (repo_dir / ".gitignore").write_text("/src/*\n")
+    git_ops.commit_all(repo_dir, "ignore vendored sources")
+    target = repo_dir / "src" / "pkg" / "msg"
+    target.mkdir(parents=True)
+    (target / "Status.msg").write_text("int32 code\n")
+    (repo_dir / "tracked.txt").write_text("visible\n")
+
+    msgs = _json.dumps(
+        [
+            {
+                "parts": [
+                    {
+                        "part_kind": "tool-call",
+                        "tool_name": "write_file",
+                        "args": {"path": "src/pkg/msg/Status.msg"},
+                        "tool_call_id": "c1",
+                    },
+                    {
+                        "part_kind": "tool-call",
+                        "tool_name": "write_file",
+                        "args": {"path": "tracked.txt"},
+                        "tool_call_id": "c2",
+                    },
+                    {
+                        "part_kind": "tool-call",
+                        "tool_name": "Write",
+                        # absolute path INSIDE the clone (Claude SDK style)
+                        "args": {"file_path": str(target / "Status.msg")},
+                        "tool_call_id": "c3",
+                    },
+                    {
+                        "part_kind": "tool-call",
+                        "tool_name": "Write",
+                        # absolute path OUTSIDE the clone → skipped
+                        "args": {"file_path": "/etc/hosts"},
+                        "tool_call_id": "c4",
+                    },
+                ]
+            }
+        ]
+    ).encode()
+
+    hits = ImplementStage._claimed_gitignored_edits(repo_dir, msgs)
+    assert hits == ["src/pkg/msg/Status.msg"]
+
+
+def test_claimed_gitignored_edits_fail_open(tmp_path):
+    """Malformed input never raises — the detector only enriches notes."""
+    assert ImplementStage._claimed_gitignored_edits(tmp_path, b"{bad") == []
+    assert ImplementStage._claimed_gitignored_edits(tmp_path, None) == []

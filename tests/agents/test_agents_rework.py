@@ -144,6 +144,76 @@ def test_test_agent_rc5_with_real_failure_still_fails(tmp_path, monkeypatch):
     assert passed is False
 
 
+def test_test_agent_retry_on_failure_flaky_first_run_passes(tmp_path, monkeypatch):
+    """retry_on_failure: a red first run + green re-run is a PASS (flaky) —
+    the baseline gate must not fabricate "pre-existing test failures on
+    main" from one flaky test (live case: ticket a74b)."""
+    from robotsix_mill import sandbox
+
+    s = _settings(tmp_path, test_command="pytest")
+    calls: list[int] = []
+
+    def _flaky_run(cmd, *, repo_dir, settings, **kwargs):
+        calls.append(1)
+        return (1, "1 failed") if len(calls) == 1 else (0, "all green")
+
+    monkeypatch.setattr(sandbox, "run", _flaky_run)
+    passed, fb = testing.run_test_agent(
+        settings=s, repo_dir=tmp_path, retry_on_failure=True
+    )
+    assert passed is True
+    assert "flaky" in fb
+    assert len(calls) == 2
+
+
+def test_test_agent_retry_on_failure_still_red_distills_second_output(
+    tmp_path, monkeypatch
+):
+    """Both runs red → failure path runs on the SECOND run's output."""
+    from robotsix_mill import sandbox
+
+    s = _settings(tmp_path, test_command="pytest")
+    calls: list[int] = []
+
+    def _red_run(cmd, *, repo_dir, settings, **kwargs):
+        calls.append(1)
+        return (1, f"failure output run {len(calls)}")
+
+    monkeypatch.setattr(sandbox, "run", _red_run)
+    monkeypatch.setattr(
+        "robotsix_mill.agents.testing.get_secrets",
+        lambda: type("S", (), {"openrouter_api_key": ""})(),
+    )
+    passed, fb = testing.run_test_agent(
+        settings=s, repo_dir=tmp_path, retry_on_failure=True
+    )
+    assert passed is False
+    assert "failure output run 2" in fb
+    assert len(calls) == 2
+
+
+def test_test_agent_no_retry_by_default(tmp_path, monkeypatch):
+    """Without retry_on_failure the suite runs exactly once — the implement
+    fix loop must not pay a double suite run on every red gate."""
+    from robotsix_mill import sandbox
+
+    s = _settings(tmp_path, test_command="pytest")
+    calls: list[int] = []
+
+    def _red_run(cmd, *, repo_dir, settings, **kwargs):
+        calls.append(1)
+        return (1, "red")
+
+    monkeypatch.setattr(sandbox, "run", _red_run)
+    monkeypatch.setattr(
+        "robotsix_mill.agents.testing.get_secrets",
+        lambda: type("S", (), {"openrouter_api_key": ""})(),
+    )
+    passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
+    assert passed is False
+    assert len(calls) == 1
+
+
 def test_test_agent_repo_file_command_wins(tmp_path, monkeypatch):
     """The repo's own ``.robotsix-mill/config.yaml`` ``test_command`` is the
     highest-precedence source: it overrides ``settings.test_command`` (the

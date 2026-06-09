@@ -22,12 +22,23 @@ def run_test_agent(
     settings: Settings,
     repo_dir: Path,
     repo_config: RepoConfig | None = None,
+    retry_on_failure: bool = False,
 ) -> tuple[bool, str]:
     """Run the test command in the sandbox. Return ``(passed,
     feedback)``. On pass, feedback is a short confirmation; on fail it
     is a cheap-model distilled, actionable diagnosis (NOT the raw log).
     Sandbox infra failure -> ``(False, "<reason>")`` so the coordinator
     can react.
+
+    ``retry_on_failure``: re-run the suite ONCE before distilling a
+    failure; a green re-run is reported as passing (flaky first run).
+    The baseline gate sets this — one flaky test on main otherwise
+    fabricates "pre-existing test failures on main", blocks the ticket
+    AND spawns a bogus dependency-fix ticket (live case: a74b blocked on
+    a test that passed when the distill agent re-ran it minutes later).
+    The implement fix loop leaves it off: there the suite re-runs next
+    iteration anyway, and doubling every red gate run would be pure
+    cost.
 
     Test command resolution (highest precedence first): the per-repo
     ``.robotsix-mill/config.yaml`` ``test_command`` committed in the
@@ -62,6 +73,22 @@ def run_test_agent(
     # pytest no-tests signal as passing.
     if rc == 5 and "no tests ran" in out.lower():
         return True, "no tests collected (pytest rc=5) — treated as passing"
+
+    if retry_on_failure:
+        try:
+            rc2, out2 = sandbox.run(
+                cmd, repo_dir=repo_dir, settings=settings, install_project=True
+            )
+        except sandbox.SandboxError as e:
+            return False, f"sandbox unavailable on flake re-run: {e}"
+        if rc2 == 0:
+            return True, (
+                f"tests passed on re-run (first run failed rc={rc} — flaky); "
+                "treated as passing"
+            )
+        # Both runs red — distill the SECOND output (fresher, and the
+        # one a fix ticket will be written against).
+        rc, out = rc2, out2
 
     tail = out[-6000:]
     if not get_secrets().openrouter_api_key:

@@ -534,6 +534,7 @@ class ImplementStage(Stage):
 
         from robotsix_mill.agents import scope_triage as st
 
+        triage_error: str | None = None
         try:
             verdict = st.run_scope_triage_agent(
                 settings=settings,
@@ -544,6 +545,10 @@ class ImplementStage(Stage):
             )
         except Exception as exc:
             log.error("%s: scope-triage agent failed: %s", ticket.id, exc)
+            # Keep the WHAT for the operator-visible note — a bare
+            # "agent error" reads like a scope verdict and sends the
+            # human hunting through logs for a transient model failure.
+            triage_error = f"{type(exc).__name__}: {exc}"
             verdict = None  # fall through to ESCALATE
 
         if verdict is not None and verdict.action == "EXPAND":
@@ -667,7 +672,10 @@ class ImplementStage(Stage):
         reason = (
             f"scope-triage ESCALATE: {verdict.justification}"
             if verdict is not None
-            else "scope-triage agent error — escalated for human review"
+            else (
+                f"scope-triage agent error ({(triage_error or 'unknown')[:160]}) "
+                "— escalated for human review; resume-blocked re-runs the triage"
+            )
         )
         log.warning("%s: %s", ticket.id, reason)
         ImplementStage._finalize(
@@ -1050,6 +1058,26 @@ class ImplementStage(Stage):
                     "without explanation. Check artifacts/implement_messages.json "
                     "for the full transcript."
                 )
+                # Gitignored-edit detector: real writes into a gitignored
+                # path (e.g. a manifest board whose ``.gitignore`` carries
+                # ``/src/*`` for vcs-imported sub-repos) are invisible to
+                # ``git status`` and surface here as an opaque empty diff.
+                # Name the paths so the operator sees WHAT happened instead
+                # of guessing (live case: robotsix-mill-ros2 writes under
+                # ``src/ros2/…`` blocked as "no changes produced").
+                ignored_hits = ImplementStage._claimed_gitignored_edits(
+                    repo_dir, new_msgs
+                )
+                if ignored_hits:
+                    hit_list = ", ".join(f"`{p}`" for p in ignored_hits)
+                    no_change_summary = (
+                        f"edits landed in gitignored path(s): {hit_list} — the "
+                        "files exist on disk but git cannot see them, so this "
+                        "board cannot deliver them (vcs-imported / vendored "
+                        "sub-tree). The spec must target git-tracked files, or "
+                        "the board needs manifest-aware delivery for that "
+                        f"sub-tree.\n\n{no_change_summary}"
+                    )
                 ImplementStage._finalize(
                     ctx,
                     ticket,
@@ -1489,10 +1517,14 @@ class ImplementStage(Stage):
         # the remote branch is absent, fall back to the branch name.
         git_ops.checkout(repo_dir, remote_sha or settings.forge_target_branch)
         try:
+            # retry_on_failure: one flaky test on main must not fabricate
+            # "pre-existing test failures", block the ticket, and spawn a
+            # bogus dependency-fix ticket — re-run once before believing it.
             passed, diag = run_test_agent(
                 settings=settings,
                 repo_dir=repo_dir,
                 repo_config=ctx.repo_config,
+                retry_on_failure=True,
             )
         finally:
             git_ops.checkout(repo_dir, branch)
@@ -1681,6 +1713,43 @@ class ImplementStage(Stage):
                 ):
                     return True
         return False
+
+    @staticmethod
+    def _claimed_gitignored_edits(
+        repo_dir: Path, new_messages: bytes | str | None
+    ) -> list[str]:
+        """Repo-relative paths this run's edit tool-calls targeted that exist
+        on disk but are gitignored (so the diff stays empty).
+
+        Normalizes Claude-SDK absolute paths to repo-relative; paths outside
+        the clone are skipped (a different failure mode with its own guard).
+        Fail-open: errors yield ``[]`` — this only ENRICHES the blocked note,
+        it never decides the outcome.
+        """
+        try:
+            raw_paths = short_circuit_verify.run_claimed_edited_rawpaths(new_messages)
+            rels: list[str] = []
+            seen: set[str] = set()
+            for raw in raw_paths:
+                p = Path(raw)
+                if p.is_absolute():
+                    try:
+                        p = p.relative_to(repo_dir)
+                    except ValueError:
+                        continue  # outside the clone
+                rel = str(p)
+                # Dedupe AFTER normalization — the same file can be claimed
+                # both repo-relative (mill tools) and absolute (Claude SDK).
+                if rel not in seen:
+                    seen.add(rel)
+                    rels.append(rel)
+            return git_ops.ignored_existing_paths(repo_dir, rels)
+        except Exception:  # noqa: BLE001 — diagnostic enrichment only
+            log.warning(
+                "gitignored-edit detection failed; emitting plain note",
+                exc_info=True,
+            )
+            return []
 
     @staticmethod
     def _finalize(

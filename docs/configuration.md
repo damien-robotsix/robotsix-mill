@@ -288,11 +288,13 @@ Every setting below shows:
 | `core.limits.coordinator_requests` | `MILL_COORDINATOR_REQUEST_LIMIT` | `200` | Per-ticket request cap for the implement (coordinator) agent |
 | `core.limits.explore_requests` | `MILL_EXPLORE_REQUEST_LIMIT` | `100` | Per-call request cap for the explore sub-agent |
 | `core.limits.consult_requests` | `MILL_CONSULT_REQUEST_LIMIT` | `15` | Per-call request cap for the domain-expert consultation sub-agent |
-| `core.limits.test_requests` | `MILL_TEST_REQUEST_LIMIT` | `8` | Per-call request cap for the test sub-agent |
+| `core.limits.test_requests` | `MILL_TEST_REQUEST_LIMIT` | `16` | Per-call request cap for the test sub-agent |
 | `core.limits.web_research_requests` | `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `8` | Per-call request cap for the web-research sub-agent |
 | `core.limits.dedup_requests` | `MILL_DEDUP_REQUEST_LIMIT` | `4` | Per-call request cap for the dedup check |
 | `core.limits.obsolescence_requests` | `MILL_OBSOLESCENCE_REQUEST_LIMIT` | `6` | Per-call request cap for the obsolescence gate |
-| `core.limits.scope_triage_requests` | `MILL_SCOPE_TRIAGE_REQUEST_LIMIT` | `4` | Per-call request cap for the scope-triage agent |
+| `core.limits.scope_triage_requests` | `MILL_SCOPE_TRIAGE_REQUEST_LIMIT` | `8` | Per-call request cap for the scope-triage agent |
+| `core.limits.refine_requests` | `MILL_REFINE_REQUEST_LIMIT` | `80` | Per-call request cap for the refine agent |
+| `core.limits.maintenance_requests` | `MILL_MAINTENANCE_REQUEST_LIMIT` | `60` | Per-call request cap for the maintenance agent |
 | — (env-var only) | `MILL_DOC_REQUEST_LIMIT` | `4` | Per-run request cap for the document agent |
 | `core.limits.doc_classifier_requests` | `MILL_DOC_CLASSIFIER_REQUEST_LIMIT` | `3` | Per-call request cap for the doc-classifier gate |
 | — (env-var only) | `MILL_REVIEW_REQUEST_LIMIT` | `20` | Per-run request cap for the review agent |
