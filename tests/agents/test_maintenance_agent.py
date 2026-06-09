@@ -73,6 +73,57 @@ class TestMaintenanceResult:
         assert r.note == "fork failed"
 
 
+class TestMaintenanceResultRedirect:
+    """Tests for the redirect_to field on MaintenanceResult."""
+
+    def test_redirect_to_defaults_to_none(self):
+        """When not provided, redirect_to is None."""
+        r = MaintenanceResult(success=True)
+        assert r.redirect_to is None
+
+    def test_redirect_to_parses_ready_string(self):
+        """The raw string 'ready' is coerced to State.READY."""
+        from robotsix_mill.core.states import State
+
+        r = MaintenanceResult(**{"success": True, "redirect_to": "ready"})
+        assert r.redirect_to == State.READY
+
+    def test_redirect_to_parses_draft_string(self):
+        """The raw string 'draft' is coerced to State.DRAFT."""
+        from robotsix_mill.core.states import State
+
+        r = MaintenanceResult(**{"success": True, "redirect_to": "draft"})
+        assert r.redirect_to == State.DRAFT
+
+    def test_redirect_to_accepts_state_enum(self):
+        """Passing a State enum directly works."""
+        from robotsix_mill.core.states import State
+
+        r = MaintenanceResult(success=True, redirect_to=State.READY)
+        assert r.redirect_to == State.READY
+
+    def test_redirect_to_accepts_none_explicitly(self):
+        """Explicit None is accepted."""
+        r = MaintenanceResult(success=True, redirect_to=None)
+        assert r.redirect_to is None
+
+    def test_redirect_to_rejects_invalid_state(self):
+        """A non-ready/non-draft string raises ValidationError."""
+        import pytest
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            MaintenanceResult(success=True, redirect_to="implement")
+
+    def test_redirect_to_rejects_arbitrary_string(self):
+        """A non-state string like 'bogus' raises ValidationError."""
+        import pytest
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            MaintenanceResult(success=True, redirect_to="bogus")
+
+
 # ── Stub tools ───────────────────────────────────────────────────────
 
 

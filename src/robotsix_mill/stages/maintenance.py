@@ -41,6 +41,12 @@ class MaintenanceStage(Stage):
         log.info("Running maintenance agent for %s", ticket.id)
         result = run_maintenance_agent(ticket, ctx)
 
+        # Redirect takes precedence — an investigation may conclude the
+        # ticket actually needs code implementation, not an operational
+        # action.  Hand the ticket to the implement pipeline.
+        if result.redirect_to is not None:
+            return Outcome(result.redirect_to, note=result.note)
+
         if result.success:
             return Outcome(State.DONE, note=result.note)
         else:
