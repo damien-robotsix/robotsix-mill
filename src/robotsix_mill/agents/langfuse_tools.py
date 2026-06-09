@@ -40,6 +40,20 @@ def _make_session_cost_tool(settings: Settings, repo_config=None):
         cost = session_cost(settings, session_id, **kwargs)
         return f"${cost:.4f}"
 
+    from .tool_registry import ToolInfo, ToolRegistry
+
+    ToolRegistry.register(
+        ToolInfo(
+            name="langfuse_session_cost",
+            description=(
+                "Fetch the total USD cost for a Langfuse session by its ID. "
+                'Returns the cost as a dollar string (e.g. "$1.2345").'
+            ),
+            category="reporting",
+            parameters={"session_id": "str"},
+        )
+    )
+
     return langfuse_session_cost
 
 
@@ -66,6 +80,21 @@ def _make_session_summary_tool(settings: Settings, repo_config=None):
                 f"(tracing may be unconfigured)"
             )
         return summary
+
+    from .tool_registry import ToolInfo, ToolRegistry
+
+    ToolRegistry.register(
+        ToolInfo(
+            name="langfuse_session_summary",
+            description=(
+                "Fetch a structured summary of all traces in a Langfuse "
+                "session: per-stage cost, latency, observation counts, plus "
+                "any warnings/errors. Returns a Markdown text block."
+            ),
+            category="reporting",
+            parameters={"session_id": "str"},
+        )
+    )
 
     return langfuse_session_summary
 
@@ -105,6 +134,20 @@ def _make_list_traces_tool(settings: Settings, repo_config=None):
             )
         return "\n".join(lines)
 
+    from .tool_registry import ToolInfo, ToolRegistry
+
+    ToolRegistry.register(
+        ToolInfo(
+            name="langfuse_list_traces",
+            description=(
+                "List all trace IDs for a Langfuse session. Returns one "
+                "trace per line with its name, timestamp, and cost."
+            ),
+            category="reporting",
+            parameters={"session_id": "str"},
+        )
+    )
+
     return langfuse_list_traces
 
 
@@ -141,6 +184,20 @@ def _make_trace_detail_tool(settings: Settings, repo_config=None):
             f"({', '.join(f'{k}={v}' for k, v in sorted(obs_summary.items()))})",
         ]
         return "\n".join(lines)
+
+    from .tool_registry import ToolInfo, ToolRegistry
+
+    ToolRegistry.register(
+        ToolInfo(
+            name="langfuse_trace_detail",
+            description=(
+                "Fetch the full detail of a single Langfuse trace by its ID. "
+                "Returns a JSON-like summary of the trace's observations."
+            ),
+            category="reporting",
+            parameters={"trace_id": "str"},
+        )
+    )
 
     return langfuse_trace_detail
 
@@ -330,5 +387,21 @@ def make_langfuse_inspect_tool(settings: Settings, repo_dir: Path | None = None)
         )
 
         return render_trace_findings(result.findings, trace_id, result.error or None)
+
+    from .tool_registry import ToolInfo, ToolRegistry
+
+    ToolRegistry.register(
+        ToolInfo(
+            name="langfuse_inspect_trace",
+            description=(
+                "Deep-inspect a single Langfuse trace by ID. Fetches the "
+                "full observation tree and delegates to a trace-inspector "
+                "sub-agent that analyses tool errors, agent limitations, "
+                "and optimisation opportunities."
+            ),
+            category="reporting",
+            parameters={"trace_id": "str"},
+        )
+    )
 
     return langfuse_inspect_trace
