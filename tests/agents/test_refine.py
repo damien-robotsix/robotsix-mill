@@ -4223,8 +4223,8 @@ def test_continuation_guard_skipped_when_low_remaining_quota(monkeypatch, settin
                 output=empty_output,
                 finish_reason="tool_call",
                 all_messages=[{"role": "tool", "content": "verify"}],
-                # Simulate 57 requests already used out of 60 → 3 remaining
-                usage=_FakeUsage(requests=57),
+                # Simulate all-but-3 requests already used → 3 remaining
+                usage=_FakeUsage(requests=settings.refine_request_limit - 3),
             )
 
         def close(self):
