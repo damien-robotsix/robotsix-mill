@@ -150,9 +150,7 @@ def load_deployed_log_folder(repo_dir: Path | None) -> str | None:
         return None
     value = raw["deployed_log_folder"]
     if not isinstance(value, str):
-        log.warning(
-            "repo settings: 'deployed_log_folder' must be a string — ignoring"
-        )
+        log.warning("repo settings: 'deployed_log_folder' must be a string — ignoring")
         return None
     stripped = value.strip()
     return stripped or None

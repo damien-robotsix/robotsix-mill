@@ -740,7 +740,10 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
         tools.append(make_cost_inspect_tool(settings, repo_dir))
 
     overrides = _build_refine_overrides(
-        definition, settings, reviewer_comments, language_instructions,
+        definition,
+        settings,
+        reviewer_comments,
+        language_instructions,
         deployed_log_summary,
     )
 
