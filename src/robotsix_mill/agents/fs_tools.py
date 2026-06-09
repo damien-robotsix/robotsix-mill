@@ -418,7 +418,7 @@ def build_fs_tools(
             try:
                 _text = _read_cached(p)
                 line_count: int | str = _text.count("\n")
-            except (ValueError, OSError):
+            except ValueError, OSError:
                 line_count = "?"
             return (
                 f"refused: {path} ({line_count} lines) is already loaded in full "
