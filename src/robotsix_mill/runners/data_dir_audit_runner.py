@@ -30,8 +30,10 @@ import json
 import logging
 import os
 import re
+import shutil
 from collections import defaultdict
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlmodel import select
@@ -49,6 +51,12 @@ log = logging.getLogger("robotsix_mill.data_dir_audit")
 # obviously non-ticket directories (``.gitkeep``, ``artifacts``, …)
 # are still filtered out.
 _TICKET_ID_PREFIX_RE = re.compile(r"^\d{8}T\d{6}Z-")
+
+# Captures the leading timestamp of a ticket ID (``YYYYmmddTHHMMSSZ``)
+# so an orphan's age can be derived from its directory name. The ID
+# timestamp is the ticket's creation time and is immutable, making it a
+# safer age signal than directory mtime (which a scan or read can bump).
+_TICKET_ID_TS_RE = re.compile(r"^(\d{8}T\d{6}Z)-")
 
 # Maximum number of ticket IDs per ``SELECT … WHERE id IN (…)`` batch.
 # Keeps the IN-clause small enough for SQLite while still avoiding the
@@ -678,6 +686,105 @@ def find_orphan_workspaces(
 
 
 # ---------------------------------------------------------------------------
+# Orphan-workspace GC (opt-in deletion)
+# ---------------------------------------------------------------------------
+
+
+def _orphan_age_hours(ticket_id: str, now: datetime) -> float | None:
+    """Return the age in hours of *ticket_id* relative to *now*.
+
+    Age is derived from the ticket-ID timestamp prefix
+    (``YYYYmmddTHHMMSSZ-…``), interpreted as UTC. Returns ``None`` when
+    the prefix is absent or unparseable — callers treat that as
+    "age unknown" and keep the directory rather than risk deleting it.
+    """
+    m = _TICKET_ID_TS_RE.match(ticket_id)
+    if not m:
+        return None
+    try:
+        created = datetime.strptime(m.group(1), "%Y%m%dT%H%M%SZ").replace(
+            tzinfo=timezone.utc
+        )
+    except ValueError:
+        return None
+    return (now - created).total_seconds() / 3600.0
+
+
+def _prune_orphan_workspaces(
+    settings: Settings,
+    orphans_by_board: dict[str, list[OrphanWorkspace]],
+) -> tuple[list[OrphanWorkspace], int, dict[str, list[OrphanWorkspace]]]:
+    """Delete orphan workspace directories when GC is enabled.
+
+    Returns ``(pruned, reclaimed_bytes, remaining_by_board)``:
+
+    - ``pruned`` — the orphans whose directories were removed.
+    - ``reclaimed_bytes`` — sum of ``dir_size_bytes`` over ``pruned``.
+    - ``remaining_by_board`` — orphans NOT deleted (GC disabled, too
+      young, age unknown, or ``rmtree`` failed). These flow on to the
+      filing path so they are still surfaced as findings.
+
+    When ``settings.data_dir_audit_prune_orphans`` is False this is a
+    no-op that returns ``([], 0, orphans_by_board)`` — the caller's
+    existing report-only behaviour is preserved unchanged.
+
+    Only orphans at least ``data_dir_audit_orphan_min_age_hours`` old
+    (by ticket-ID timestamp) are eligible, so a workspace dir that
+    momentarily precedes its DB row's commit is never deleted.
+    """
+    if not settings.data_dir_audit_prune_orphans:
+        return [], 0, orphans_by_board
+
+    min_age = settings.data_dir_audit_orphan_min_age_hours
+    now = datetime.now(timezone.utc)
+    pruned: list[OrphanWorkspace] = []
+    reclaimed = 0
+    remaining: dict[str, list[OrphanWorkspace]] = {}
+
+    for board_id, items in orphans_by_board.items():
+        keep: list[OrphanWorkspace] = []
+        for o in items:
+            age = _orphan_age_hours(o.ticket_id, now)
+            if age is None or age < min_age:
+                keep.append(o)
+                continue
+            try:
+                shutil.rmtree(o.path)
+            except OSError:
+                log.warning(
+                    "data_dir_audit: failed to prune orphan workspace "
+                    "board=%r ticket=%s path=%s",
+                    board_id,
+                    o.ticket_id,
+                    o.path,
+                    exc_info=True,
+                )
+                keep.append(o)
+                continue
+            pruned.append(o)
+            reclaimed += o.dir_size_bytes
+            log.info(
+                "data_dir_audit: pruned orphan workspace board=%r ticket=%s "
+                "path=%s size=%dB age=%.1fh",
+                board_id,
+                o.ticket_id,
+                o.path,
+                o.dir_size_bytes,
+                age,
+            )
+        if keep:
+            remaining[board_id] = keep
+
+    if pruned:
+        log.info(
+            "data_dir_audit: pruned %d orphan workspace(s), reclaimed %s",
+            len(pruned),
+            _human_bytes(reclaimed),
+        )
+    return pruned, reclaimed, remaining
+
+
+# ---------------------------------------------------------------------------
 # Filing logic (ticket 6)
 # ---------------------------------------------------------------------------
 
@@ -1020,19 +1127,30 @@ def _build_summary(
     orphans_by_board: dict[str, list[OrphanWorkspace]],
     total_orphans: int,
     drafts_created: list[dict],
+    pruned_orphans: list[OrphanWorkspace] | None = None,
+    reclaimed_bytes: int = 0,
 ) -> str:
     """Render a multi-line summary for the runs panel.
 
     Header is always ``"Scanned <bytes> in N files."``. When every
-    check produced zero results, returns the single-line short-circuit
-    ``"Scanned <bytes> in N files. No issues found."``. Otherwise each
-    non-empty category contributes one line (oversized → growth →
-    unbounded), the orphan line is always appended, and a final
-    ``"Filed N draft(s)."`` line is added when drafts were created.
+    check produced zero results AND no orphans were pruned, returns the
+    single-line short-circuit ``"Scanned <bytes> in N files. No issues
+    found."``. Otherwise each non-empty category contributes one line
+    (oversized → growth → unbounded), the orphan line is always
+    appended, a ``"Pruned N orphan workspace(s) …"`` line is added when
+    GC deleted any, and a final ``"Filed N draft(s)."`` line is added
+    when drafts were created.
     """
+    pruned_orphans = pruned_orphans or []
     header = f"Scanned {_human_bytes(total_bytes)} in {total_files:,} files."
 
-    if not oversized and not all_growth_flags and not findings and total_orphans == 0:
+    if (
+        not oversized
+        and not all_growth_flags
+        and not findings
+        and total_orphans == 0
+        and not pruned_orphans
+    ):
         return header + " No issues found."
 
     lines: list[str] = [header]
@@ -1076,6 +1194,13 @@ def _build_summary(
             )
             orphan_line += f" (largest: {path}, {_human_bytes(biggest.dir_size_bytes)})"
     lines.append(orphan_line)
+
+    if pruned_orphans:
+        n = len(pruned_orphans)
+        word = "workspace" if n == 1 else "workspaces"
+        lines.append(
+            f"Pruned {n} orphan {word} (reclaimed {_human_bytes(reclaimed_bytes)})."
+        )
 
     if drafts_created:
         n = len(drafts_created)
@@ -1142,6 +1267,14 @@ def run_data_dir_audit_pass(
     # via the memory-ledger dedup path).
     orphans_by_board, total_orphans = _scan_orphan_workspaces(settings)
 
+    # Orphan-workspace GC: when enabled, delete eligible orphan dirs and
+    # carry only the remaining (un-deleted) orphans forward to filing and
+    # the summary. Report-only when the toggle is off (default).
+    pruned_orphans, reclaimed_bytes, orphans_by_board = _prune_orphan_workspaces(
+        settings, orphans_by_board
+    )
+    total_orphans = sum(len(v) for v in orphans_by_board.values())
+
     # Growth-delta detection (ticket 3 of the epic).
     all_growth_flags, _boards_with_flags = _scan_growth_deltas(settings)
 
@@ -1173,6 +1306,8 @@ def run_data_dir_audit_pass(
         orphans_by_board,
         total_orphans,
         drafts_created,
+        pruned_orphans,
+        reclaimed_bytes,
     )
 
     log.info("data-dir audit pass done: %s", summary)
