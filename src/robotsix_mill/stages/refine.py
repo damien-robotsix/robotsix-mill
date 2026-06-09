@@ -22,6 +22,7 @@ import json
 import logging
 import re
 import subprocess
+from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -97,6 +98,185 @@ _PLACEHOLDER_SPEC_PHRASES = (
     "tbd",
     "todo",
 )
+
+
+# File extensions that are safe to preview as text (last 100 lines).
+_TEXT_SAFE_EXTENSIONS = frozenset(
+    {
+        ".log",
+        ".txt",
+        ".json",
+        ".csv",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".xml",
+        ".md",
+        ".env",
+        ".cfg",
+        ".conf",
+        ".ini",
+    }
+)
+
+# File extensions that are likely binary — preview with caution.
+_BINARY_EXTENSIONS = frozenset(
+    {
+        ".gz",
+        ".zip",
+        ".tar",
+        ".bz2",
+        ".xz",
+        ".7z",
+        ".rar",
+        ".pkl",
+        ".pickle",
+        ".db",
+        ".sqlite",
+        ".sqlite3",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".bmp",
+        ".svg",
+        ".ico",
+        ".pdf",
+        ".doc",
+        ".docx",
+        ".xls",
+        ".xlsx",
+        ".ppt",
+        ".pptx",
+        ".mp3",
+        ".mp4",
+        ".wav",
+        ".avi",
+        ".mov",
+        ".pyc",
+        ".pyo",
+        ".so",
+        ".dll",
+        ".exe",
+        ".bin",
+        ".dat",
+        ".elf",
+    }
+)
+
+_MAX_SUMMARY_ENTRIES = 20
+_PREVIEW_MAX_FILE_SIZE = 512 * 1024  # 512 KB
+_TAIL_LINES_FULL = 100
+_TAIL_LINES_HINT = 5
+
+
+def _build_deployed_log_summary(path: Path, config_path: str) -> str:
+    """Build a Markdown summary of the deployed log folder at *path*.
+
+    Best-effort: any OSError during listing or reading is caught and the
+    summary is still emitted with whatever was successfully collected
+    (never blocks refine).
+
+    *config_path* is the original string from the repo config, shown in
+    the header so the agent knows where the logs came from.
+    """
+    header = (
+        f"The repo's `.robotsix-mill/config.yaml` points to a deployed "
+        f"log folder at `{config_path}`. These logs are from a live "
+        f"deployment of this application — use them to help diagnose "
+        f"issues. Use `list_dir` on the path to enumerate files and "
+        f"`read_file` to read them.\n"
+    )
+    try:
+        entries = sorted(path.iterdir(), key=lambda p: (p.is_file(), p.name))
+    except OSError:
+        return header + "\n*(folder could not be listed)*"
+    if not entries:
+        return header + "\n*(folder is empty)*"
+
+    lines: list[str] = [header, ""]
+    count = 0
+    for entry in entries:
+        if count >= _MAX_SUMMARY_ENTRIES:
+            lines.append(
+                f"… and {len(entries) - _MAX_SUMMARY_ENTRIES} more entries "
+                f"(use `list_dir` to see them all)"
+            )
+            break
+        count += 1
+        try:
+            stat = entry.stat()
+            mtime = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat()
+            size = _human_size(stat.st_size)
+        except OSError:
+            mtime = "unknown"
+            size = "unknown"
+
+        if entry.is_dir():
+            lines.append(f"- `{entry.name}/` (directory, {size}, {mtime})")
+            continue
+
+        # Regular file
+        suffix = entry.suffix.lower()
+        if suffix in _BINARY_EXTENSIONS:
+            lines.append(
+                f"- `{entry.name}` ({size}, {mtime}) — "
+                f"binary file, use `read_file` for raw content"
+            )
+            continue
+
+        if suffix not in _TEXT_SAFE_EXTENSIONS and suffix != "":
+            lines.append(
+                f"- `{entry.name}` ({size}, {mtime}) — "
+                f"non-standard extension, use `read_file` to inspect"
+            )
+            continue
+
+        # Text-safe (including no-extension files)
+        if stat.st_size > _PREVIEW_MAX_FILE_SIZE:
+            lines.append(
+                f"- `{entry.name}` ({size}, {mtime}) — "
+                f"file too large for preview, use `read_file` to inspect"
+            )
+            tail = _tail_file(entry, _TAIL_LINES_HINT)
+            if tail:
+                lines.append(f"\n  ```\n{tail}\n  ```")
+            continue
+
+        # Full preview (last 100 lines)
+        tail = _tail_file(entry, _TAIL_LINES_FULL)
+        lines.append(f"- `{entry.name}` ({size}, {mtime})")
+        if tail:
+            lines.append(f"\n  ```\n{tail}\n  ```")
+        else:
+            lines.append("  *(empty file)*")
+
+    return "\n".join(lines)
+
+
+def _human_size(num_bytes: int) -> str:
+    """Return a human-readable file size string (e.g. '45 KB')."""
+    if num_bytes < 1024:
+        return f"{num_bytes} B"
+    for unit in ("KB", "MB", "GB", "TB"):
+        num_bytes /= 1024.0
+        if num_bytes < 1024 or unit == "TB":
+            return f"{num_bytes:.1f} {unit}"
+    return f"{num_bytes:.1f} TB"  # unreachable but satisfies type checkers
+
+
+def _tail_file(filepath: Path, max_lines: int) -> str:
+    """Return the last *max_lines* of *filepath* as a string, or '' on error.
+
+    Uses ``collections.deque`` for memory-efficient tail reading.
+    Never raises — best-effort only.
+    """
+    try:
+        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+            tail = deque(f, maxlen=max_lines)
+        return "".join(tail).rstrip("\n")
+    except OSError:
+        return ""
 
 
 def _spec_is_degenerate(spec: str | None) -> bool:
@@ -1343,9 +1523,47 @@ class RefineStage(Stage):
                     len(saved_state),
                 )
 
-        from ..repo_settings import resolve_language_instructions
+        from ..repo_settings import (
+            resolve_language_instructions,
+            load_deployed_log_folder,
+        )
 
         language_instructions = resolve_language_instructions(s, repo_dir)
+
+        # --- deployed log folder (refine-only) ---
+        deployed_log_folder_str = load_deployed_log_folder(repo_dir)
+        deployed_log_summary = ""
+        if deployed_log_folder_str is not None:
+            log_path = Path(deployed_log_folder_str)
+            if not log_path.is_absolute():
+                log.warning(
+                    "%s: deployed_log_folder '%s' is relative — "
+                    "resolving against repo_dir (absolute path is canonical)",
+                    ticket.id,
+                    deployed_log_folder_str,
+                )
+                log_path = (repo_dir / log_path).resolve()
+            else:
+                log_path = log_path.resolve()
+            if log_path.is_dir():
+                # Append to extra_roots so the agent's filesystem tools
+                # can access files under the deployed log folder.
+                if extra_roots is None:
+                    extra_roots = [log_path]
+                else:
+                    extra_roots = list(extra_roots) + [log_path]
+                deployed_log_summary = _build_deployed_log_summary(
+                    log_path, deployed_log_folder_str
+                )
+            else:
+                log.warning(
+                    "%s: deployed_log_folder '%s' (resolved to '%s') "
+                    "does not exist or is not a directory — skipping",
+                    ticket.id,
+                    deployed_log_folder_str,
+                    log_path,
+                )
+
         try:
             result = refining.run_refine_agent(
                 settings=s,
@@ -1359,6 +1577,7 @@ class RefineStage(Stage):
                 message_history=resume_history,
                 board_id=memory_board_id,
                 language_instructions=language_instructions,
+                deployed_log_summary=deployed_log_summary,
             )
         except RuntimeError as e:  # e.g. OPENROUTER_API_KEY not set
             # ModelHTTPError subclasses RuntimeError, so a transient model

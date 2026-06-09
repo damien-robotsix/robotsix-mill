@@ -125,6 +125,37 @@ def load_extra_sandbox_packages(repo_dir: Path | None) -> list[str]:
     return []
 
 
+def load_deployed_log_folder(repo_dir: Path | None) -> str | None:
+    """Return the ``deployed_log_folder`` path from
+    ``<repo_dir>/.robotsix-mill/config.yaml``, or ``None``.
+
+    Returns the raw stripped string when the key is present and is a
+    non-empty string; otherwise returns ``None``.  The returned path
+    is expected to be absolute (relative paths are a warning-level
+    fallback handled by the caller). Never raises — a missing or
+    malformed file is treated as "not set":
+
+    * ``repo_dir is None`` → ``None``.
+    * file absent → ``None`` (silent no-op).
+    * unreadable / invalid YAML → ``None`` (already warned by
+      ``_load_repo_config_dict``).
+    * top-level not a mapping → ``None`` (already warned).
+    * ``deployed_log_folder`` value not a string → ``log.warning``
+      + ``None`` (clear type mismatch).
+    * key absent, or value empty/whitespace-only → ``None`` (plain
+      absence, no warning).
+    """
+    raw = _load_repo_config_dict(repo_dir)
+    if raw is None or "deployed_log_folder" not in raw:
+        return None
+    value = raw["deployed_log_folder"]
+    if not isinstance(value, str):
+        log.warning("repo settings: 'deployed_log_folder' must be a string — ignoring")
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
 def _load_language_snippet(settings, repo_dir: Path | None, lang: str) -> str:
     """Resolve the instruction snippet for one language, repo override
     first then the mill's built-in library. Returns ``""`` if neither
