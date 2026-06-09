@@ -39,8 +39,14 @@ def test_board_serves_html(client):
     body = r.text
     assert "robotsix-mill" in body
     assert "cdn.jsdelivr.net/npm/marked" in body
-    assert '<div id="board">' in body
+    assert '<div id="board"' in body
     assert '<div id="drawer">' in body
+    # The column skeleton must be rendered server-side: board.js
+    # (JSON_HYDRATION) only diffs cards into pre-existing columns, so an
+    # empty #board would show no tickets at all.
+    assert "{BOARD_SKELETON}" not in body  # replaced at request time
+    assert 'class="board-column" data-status="draft"' in body
+    assert 'class="board-column-cards"' in body
     assert '<span id="gates">' in body  # gate pills placeholder
     # robotsix-board config script placeholder is present; when
     # robotsix-board is installed it will be replaced by

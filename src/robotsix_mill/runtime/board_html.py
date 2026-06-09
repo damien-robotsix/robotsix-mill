@@ -6,8 +6,45 @@ HTML skeleton that links to robotsix-board's static assets and to
 mill-specific JS/CSS layered on top.
 
 The ``{CONFIG_SCRIPT}`` placeholder is replaced at request time by
-``render_config_script()`` from robotsix-board.
+``render_config_script()`` from robotsix-board.  The ``{BOARD_SKELETON}``
+placeholder is replaced by :func:`build_board_skeleton` — robotsix-board's
+``board.js`` only diffs cards into *pre-existing* ``.board-column``
+containers in JSON_HYDRATION mode, so the empty column skeleton must be
+rendered server-side.
 """
+
+from __future__ import annotations
+
+import html as _html
+
+
+def build_board_skeleton(columns: list[tuple[str, str]]) -> str:
+    """Render the empty ``#board`` column skeleton expected by ``board.js``.
+
+    robotsix-board's ``board.js`` in JSON_HYDRATION mode only diffs
+    cards into existing ``.board-column > .board-column-cards``
+    containers (see ``applyCardDiff``/``findColumnByStatus``); it never
+    creates the columns itself.  The mill therefore renders the column
+    skeleton here and lets ``board.js``'s refresh loop fill the cards in
+    from ``/board/cards``.
+
+    *columns* is the ordered ``(status_key, label)`` list from
+    :meth:`MillBoardAdapter.columns`.
+    """
+    parts: list[str] = ['<div id="board" class="board">']
+    for status_key, label in columns:
+        key = _html.escape(status_key, quote=True)
+        lbl = _html.escape(label, quote=True)
+        parts.append(f'<div class="board-column" data-status="{key}">')
+        parts.append('<div class="board-column-header">')
+        parts.append(f'<h2 class="board-column-label">{lbl}</h2>')
+        parts.append('<span class="board-column-count">0</span>')
+        parts.append("</div>")  # .board-column-header
+        parts.append('<div class="board-column-cards"></div>')
+        parts.append("</div>")  # .board-column
+    parts.append("</div>")  # #board
+    return "".join(parts)
+
 
 BOARD_HTML = """<!doctype html><html><head><meta charset="utf-8">
 <title>robotsix-mill</title><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -83,7 +120,7 @@ margin-left:4px">
 </button>
 </header>
 <div id="lf-status" style="display:none;background:#3a2418;border-bottom:1px solid #6b3320;color:#e8b08a;padding:6px 12px;font-size:12px"></div>
-<div id="board"></div>
+{BOARD_SKELETON}
 <div id="drawer"><div id="d"><div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/lib/marked.umd.js"></script>
 {CONFIG_SCRIPT}

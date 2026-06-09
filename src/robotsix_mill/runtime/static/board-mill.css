@@ -6,6 +6,29 @@
 :root { color-scheme: dark; }
 
 /* ============================================================
+   Page layout: header on top, board fills the rest and scrolls
+   horizontally within the viewport.
+
+   robotsix-board's board.css gives #board `min-height: 100vh`. With
+   the mill header above it, that makes the document taller than the
+   viewport, so #board's horizontal scrollbar lands below the fold and
+   the board appears unscrollable. Constrain the body to a flex column
+   and let #board fill the remaining height (min-height:0) so its
+   overflow-x scrollbar is visible and the columns scroll left-right.
+   ============================================================ */
+html, body { height: 100%; }
+body {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#board {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ============================================================
    Header
    ============================================================ */
 header {
@@ -177,6 +200,48 @@ h1 {
 }
 .card:hover .del-btn { opacity: 1; }
 .del-btn:hover { background: #7f1d1d; color: #fff; }
+
+/* ============================================================
+   Drawer visibility + chrome (mill uses the `.open` class)
+
+   robotsix-board's board.css renders #drawer as a narrow (420px),
+   fixed panel that is visible by default and hidden only via `.hidden`.
+   The mill drawer is driven entirely by open_()/close_() toggling the
+   `.open` class, and packs far more content (history, threads, cost,
+   merge info) so it needs to be much wider. These rules restore the
+   pre-migration mill drawer: hidden by default, slid in when `.open`,
+   wide, with the mill's darker chrome and close-button styling.
+   board-mill.css loads after board.css so these win.
+   ============================================================ */
+#drawer {
+  width: min(1200px, 95vw);
+  background: #11141b;
+  border-left: 1px solid #2a2e37;
+  /* Inner padding (robotsix-board only pads .drawer-content, but the
+     mill renders into #d). Without it the right-aligned close × sits
+     under the overflow-y scrollbar — unhoverable and visually clipped.
+     16px ≈ scrollbar width, clearing it. The sticky close header uses
+     top:-16px to cancel this padding so it still pins to the top. */
+  padding: 16px;
+  transform: translateX(100%);
+}
+#drawer.open {
+  transform: translateX(0);
+}
+#drawer h3 {
+  margin: 0.2em 0;
+  color: #fff;
+}
+#drawer .x {
+  cursor: pointer;
+  color: #7d828c;
+  font-size: 18px;
+  background: #11141b;
+}
+.drawer-close-row {
+  text-align: right;
+  margin-bottom: 4px;
+}
 
 /* ============================================================
    Drawer sticky header (content chrome inside the drawer)
