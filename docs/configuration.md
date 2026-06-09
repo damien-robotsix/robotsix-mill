@@ -158,6 +158,46 @@ present, otherwise the mill's built-in
 the language is silently skipped. The language source itself falls back
 to `repos.yaml`'s per-repo `language` when the repo file declares none.
 
+### Extra sandbox packages
+
+A repo can declare extra OS/pip packages that the sandbox should install
+before running any command (test gate, implement `run_command`, etc.):
+
+```yaml
+# .robotsix-mill/config.yaml
+extra_sandbox_packages:
+  - colcon              # ROS2 build tool (defaults to apt)
+  - pip:my-test-lib     # Python-only dep via pip
+  - apt:tree            # explicit apt for clarity
+```
+
+**Entry formats.** Each string in the list is parsed with this
+prefix convention:
+
+| Format | Install method | Example |
+|--------|---------------|---------|
+| `apt:<name>` | `apt-get install -y` | `apt:colcon` |
+| `pip:<name>` | `pip install --user` | `pip:my-test-lib` |
+| bare `<name>` | defaults to **apt** (the sandbox is Debian-based) | `colcon` |
+
+**Trade-offs.**
+
+* **Apt packages** cause the sandbox to drop `--read-only` mode and add
+  tmpfs mounts for apt state directories (`/var/cache/apt`,
+  `/var/lib/apt/lists`, `/var/lib/dpkg`). The container is slightly
+  larger and the first-run setup is slower (`apt-get update` +
+  `apt-get install`).
+* **Pip-only packages** are lighter: they keep `--read-only` and install
+  into the user site (`~/.local` via `--user`), so only a writable
+  `/tmp` tmpfs is needed.
+* Each extra package adds to the per-ticket sandbox startup time — prefer
+  baking common dependencies into the sandbox image when latency matters.
+
+**Resilience.** Installation failures are soft-warnings: the sandbox
+still starts and the command still runs. Malformed values (not a list,
+or non-string items) silently yield an empty package list — a managed
+repo cannot break mill by committing a broken config file.
+
 Then run:
 
 ```sh
