@@ -2704,25 +2704,20 @@ def test_maintenance_triage_fork_repo_routes_to_maintenance(ctx_factory, monkeyp
     assert "action=fork_repo" in out.note
 
 
-def test_maintenance_triage_investigate_routes_to_maintenance(ctx_factory, monkeypatch):
-    """Phase 0: title 'Investigate cross-repo dependency' → MAINTENANCE."""
-    ctx = ctx_factory(require_approval="false", maintenance_triage_enabled="true")
-    t = _ticket(
-        ctx,
-        title="Investigate cross-repo dependency between X and Y",
-        body="check whether the shared lib version is compatible across repos",
+def test_maintenance_triage_investigate_no_longer_routes_to_maintenance(
+    ctx_factory, monkeypatch
+):
+    """Phase 0: 'Investigate' title no longer routes to MAINTENANCE
+    (keyword removed; LLM triage now owns investigate routing)."""
+    # Direct unit test of the keyword classifier — the stage-level
+    # path no longer short-circuits on "investigate" in the title.
+    assert (
+        refining._classify_maintenance_draft(
+            "Investigate cross-repo dependency between X and Y",
+            "check whether the shared lib version is compatible across repos",
+        )
+        is None
     )
-
-    monkeypatch.setattr(
-        refine_module,
-        "_resolve_remote_url",
-        lambda *a, **k: None,
-    )
-
-    out = RefineStage().run(t, ctx)
-
-    assert out.next_state is State.MAINTENANCE
-    assert "action=investigate" in out.note
 
 
 def test_maintenance_triage_body_match_routes_to_maintenance(ctx_factory, monkeypatch):
