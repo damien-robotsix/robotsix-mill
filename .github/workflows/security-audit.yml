@@ -30,7 +30,7 @@ jobs:
         run: .venv/bin/pip install ".[tracing]"
 
       - name: Install pip-audit
-        run: .venv/bin/pip install "pip-audit>=2.5.6"
+        run: .venv/bin/pip install "pip-audit[cyclonedx]>=2.5.6"
 
       - name: Audit installed packages
         run: |
@@ -62,6 +62,22 @@ jobs:
           # Advisory has since been withdrawn from the OSV database
           # (2026); retained for documentation.
           GHA_PIP_AUDIT_INTERNAL_BE_CAREFUL_ALLOW_FAILURE: false
+
+      - name: Generate SBOM (CycloneDX)
+        if: always()
+        run: |
+          .venv/bin/pip-audit \
+            --path . \
+            --format cyclonedx-json \
+            --output sbom.json || true
+
+      - name: Upload SBOM artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.json
+          if-no-files-found: error
 
   license-audit:
     runs-on: ubuntu-latest
