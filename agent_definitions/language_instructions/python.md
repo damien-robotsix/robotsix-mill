@@ -49,3 +49,12 @@ ruff check . && ruff format .
 ```bash
 mypy .
 ```
+
+## Redundant checks
+
+- Never run `mypy`, `ruff`, or `pytest` twice against unchanged
+  code — re-running is pure waste.
+- Never wrap checks in `git stash`/`git stash pop` when the tree
+  is clean (`git status --porcelain` is empty).
+- Use `git diff --name-only HEAD` to see what changed before
+  deciding whether to re-check.
