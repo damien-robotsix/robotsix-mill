@@ -44,6 +44,7 @@ class TestMaintenanceStage:
             mock_result = MagicMock()
             mock_result.success = True
             mock_result.note = "repo created"
+            mock_result.redirect_to = None
             mock_run.return_value = mock_result
 
             outcome = stage.run(ticket, ctx)
@@ -66,11 +67,99 @@ class TestMaintenanceStage:
             mock_result = MagicMock()
             mock_result.success = False
             mock_result.note = "fork failed: rate limited"
+            mock_result.redirect_to = None
             mock_run.return_value = mock_result
 
             outcome = stage.run(ticket, ctx)
 
             assert outcome.next_state == State.BLOCKED
             assert "rate limited" in outcome.note
+        finally:
+            _remove_mock_maintenance_agent()
+
+    def test_run_redirect_to_ready(self):
+        """When the agent sets redirect_to=READY, the stage returns
+        Outcome(State.READY) regardless of success."""
+        stage = MaintenanceStage()
+        ticket = MagicMock()
+        ctx = MagicMock()
+
+        mock_run = _inject_mock_maintenance_agent()
+        try:
+            mock_result = MagicMock()
+            mock_result.success = True
+            mock_result.note = "Needs code fix in repo X"
+            mock_result.redirect_to = State.READY
+            mock_run.return_value = mock_result
+
+            outcome = stage.run(ticket, ctx)
+
+            assert outcome.next_state == State.READY
+            assert outcome.note == "Needs code fix in repo X"
+        finally:
+            _remove_mock_maintenance_agent()
+
+    def test_run_redirect_overrides_failure(self):
+        """Even when success=False, redirect_to takes precedence and
+        returns the redirect target."""
+        stage = MaintenanceStage()
+        ticket = MagicMock()
+        ctx = MagicMock()
+
+        mock_run = _inject_mock_maintenance_agent()
+        try:
+            mock_result = MagicMock()
+            mock_result.success = False
+            mock_result.note = "Investigation: not operational, needs code"
+            mock_result.redirect_to = State.READY
+            mock_run.return_value = mock_result
+
+            outcome = stage.run(ticket, ctx)
+
+            assert outcome.next_state == State.READY
+            assert outcome.note == "Investigation: not operational, needs code"
+        finally:
+            _remove_mock_maintenance_agent()
+
+    def test_run_redirect_to_draft(self):
+        """redirect_to=DRAFT is also supported."""
+        stage = MaintenanceStage()
+        ticket = MagicMock()
+        ctx = MagicMock()
+
+        mock_run = _inject_mock_maintenance_agent()
+        try:
+            mock_result = MagicMock()
+            mock_result.success = True
+            mock_result.note = "Needs re-drafting"
+            mock_result.redirect_to = State.DRAFT
+            mock_run.return_value = mock_result
+
+            outcome = stage.run(ticket, ctx)
+
+            assert outcome.next_state == State.DRAFT
+            assert outcome.note == "Needs re-drafting"
+        finally:
+            _remove_mock_maintenance_agent()
+
+    def test_run_no_redirect_still_returns_done_on_success(self):
+        """When redirect_to is None (not set), existing behavior is
+        unchanged: success → DONE."""
+        stage = MaintenanceStage()
+        ticket = MagicMock()
+        ctx = MagicMock()
+
+        mock_run = _inject_mock_maintenance_agent()
+        try:
+            mock_result = MagicMock()
+            mock_result.success = True
+            mock_result.note = "repo created"
+            mock_result.redirect_to = None
+            mock_run.return_value = mock_result
+
+            outcome = stage.run(ticket, ctx)
+
+            assert outcome.next_state == State.DONE
+            assert outcome.note == "repo created"
         finally:
             _remove_mock_maintenance_agent()

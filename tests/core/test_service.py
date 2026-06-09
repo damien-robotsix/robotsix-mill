@@ -92,8 +92,10 @@ def test_state_machine_edges():
     assert can_transition(State.MAINTENANCE, State.BLOCKED)
     assert can_transition(State.MAINTENANCE, State.ERRORED)
     assert can_transition(State.MAINTENANCE, State.AWAITING_USER_REPLY)
-    # negative: MAINTENANCE cannot go back to DRAFT
-    assert not can_transition(State.MAINTENANCE, State.DRAFT)
+    # MAINTENANCE can also redirect to DRAFT or READY when investigation
+    # reveals the ticket actually needs code implementation.
+    assert can_transition(State.MAINTENANCE, State.DRAFT)
+    assert can_transition(State.MAINTENANCE, State.READY)
 
 
 # --- BLOCKED resume path ---

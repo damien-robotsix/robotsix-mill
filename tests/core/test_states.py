@@ -247,11 +247,13 @@ def test_maintenance_to_awaiting_user_reply():
 
 
 def test_maintenance_not_to_draft():
-    assert can_transition(State.MAINTENANCE, State.DRAFT) is False
+    """MAINTENANCE → DRAFT is now allowed (redirect escape hatch)."""
+    assert can_transition(State.MAINTENANCE, State.DRAFT) is True
 
 
 def test_maintenance_not_to_ready():
-    assert can_transition(State.MAINTENANCE, State.READY) is False
+    """MAINTENANCE → READY is now allowed (redirect escape hatch)."""
+    assert can_transition(State.MAINTENANCE, State.READY) is True
 
 
 def test_draft_to_maintenance():
@@ -267,6 +269,16 @@ def test_blocked_resume_to_maintenance():
         can_transition(State.BLOCKED, State.MAINTENANCE, blocked_from=State.MAINTENANCE)
         is True
     )
+
+
+def test_maintenance_to_ready():
+    """Explicit positive test: MAINTENANCE → READY is allowed."""
+    assert can_transition(State.MAINTENANCE, State.READY) is True
+
+
+def test_maintenance_to_draft():
+    """Explicit positive test: MAINTENANCE → DRAFT is allowed."""
+    assert can_transition(State.MAINTENANCE, State.DRAFT) is True
 
 
 # --- HUMAN_MR_APPROVAL transitions (updated for silent fallback) ---

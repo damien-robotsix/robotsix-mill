@@ -15,10 +15,11 @@ import logging
 from pathlib import Path
 from typing import Any, Callable
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from ..config import Settings
 from ..core.models import Ticket
+from ..core.states import State
 from ..stages.base import StageContext
 
 log = logging.getLogger(__name__)
@@ -34,6 +35,34 @@ class MaintenanceResult(BaseModel):
 
     success: bool
     note: str | None = None
+    redirect_to: State | None = None
+
+    @field_validator("redirect_to", mode="before")
+    @classmethod
+    def _coerce_redirect_to(cls, v: str | State | None) -> State | None:
+        """Coerce the raw string ``"ready"`` or ``"draft"`` into the
+        corresponding :class:`State` enum member, and reject anything
+        else that isn't already a valid ``State`` or ``None``.
+
+        While ``State`` is a ``StrEnum`` and Pydantic v2 auto-coerces
+        in most cases, the explicit before-validator guards against
+        edge cases where the agent returns a raw ``dict`` with
+        ``"redirect_to": "ready"``.
+        """
+        if v is None:
+            return None
+        if isinstance(v, State):
+            return v
+        if not isinstance(v, str):
+            raise ValueError(
+                f"redirect_to must be a string or State, got {type(v).__name__}"
+            )
+        try:
+            return State(v)
+        except ValueError:
+            raise ValueError(
+                f"redirect_to must be 'ready' or 'draft', not {v!r}"
+            ) from None
 
 
 # ---------------------------------------------------------------------------

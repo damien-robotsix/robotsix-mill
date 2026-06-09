@@ -85,3 +85,18 @@ system_prompt: |
   ```json
   {"success": false, "note": "fork_repo: source repo not found"}
   ```
+
+  ### Redirect to implement
+
+  If you determine the ticket actually requires code implementation
+  (not an operational action like create/fork/investigate), set
+  ``redirect_to: "ready"`` to hand it off to the implement pipeline.
+  Include a ``note`` explaining why.
+
+  ```json
+  {"success": true, "redirect_to": "ready", "note": "Investigation found this needs a code fix in repo X, not an operational action"}
+  ```
+
+  You may also set ``redirect_to: "draft"`` to send the ticket back to
+  the refine stage for re-drafting.  Only ``"ready"`` and ``"draft"``
+  are valid redirect targets — never use other states.

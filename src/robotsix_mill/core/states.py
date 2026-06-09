@@ -217,11 +217,15 @@ TRANSITIONS: dict[State, set[State]] = {
     # maintenance: operational action (create/fork repo, investigation).
     # On success → done; on failure → blocked; on crash → errored;
     # can pause mid-execution → awaiting_user_reply.
+    # Can also redirect to the implement stage (ready/draft) when the
+    # agent discovers the ticket actually requires code changes.
     State.MAINTENANCE: {
         State.DONE,
         State.BLOCKED,
         State.ERRORED,
         State.AWAITING_USER_REPLY,
+        State.READY,
+        State.DRAFT,
     },
     # done = merged: retrospect analyses it -> reviewed
     State.DONE: {State.CLOSED, State.ERRORED, State.BLOCKED, State.AWAITING_USER_REPLY},
