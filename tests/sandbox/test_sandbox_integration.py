@@ -24,10 +24,8 @@ from robotsix_mill.config import Settings
 # ---------------------------------------------------------------------------
 
 try:
-    subprocess.run(
-        ["docker", "info"], capture_output=True, check=True, timeout=10
-    )
-except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+    subprocess.run(["docker", "info"], capture_output=True, check=True, timeout=10)
+except FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired:
     pytest.skip("Docker daemon not available", allow_module_level=True)
 
 
@@ -85,9 +83,7 @@ def test_extra_packages_tree_installed_and_usable(tmp_path: Path) -> None:
     _make_config(repo_dir, extra_packages=["tree"])
 
     s = _settings(tmp_path)
-    exit_code, output = sandbox.run(
-        "tree --version", repo_dir=repo_dir, settings=s
-    )
+    exit_code, output = sandbox.run("tree --version", repo_dir=repo_dir, settings=s)
 
     assert exit_code == 0, f"tree --version failed:\n{output}"
     assert "tree" in output.lower(), (
@@ -104,9 +100,7 @@ def test_no_extra_packages_tree_not_installed(tmp_path: Path) -> None:
     _make_config(repo_dir, extra_packages=None)
 
     s = _settings(tmp_path)
-    exit_code, output = sandbox.run(
-        "tree --version", repo_dir=repo_dir, settings=s
-    )
+    exit_code, output = sandbox.run("tree --version", repo_dir=repo_dir, settings=s)
 
     assert exit_code != 0, (
         f"tree --version should have failed (not installed), "
