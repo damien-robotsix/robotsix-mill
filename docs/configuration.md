@@ -276,10 +276,10 @@ Every setting below shows:
 | `core.models.completeness_check` | `MILL_COMPLETENESS_CHECK_MODEL` | `deepseek/deepseek-v4-pro` | Completeness-check agent — feature-wiring completeness scanner |
 | `core.models.rate_limit_fallback` | `MILL_RATE_LIMIT_FALLBACK_MODEL` | `""` (disabled) | Fallback model when rate-limit retries exhausted |
 | `core.models.doc` | `MILL_DOC_MODEL` | `deepseek/deepseek-v4-pro` | Documentation agent |
-| `core.models.doc_classifier` | `MILL_DOC_CLASSIFIER_MODEL` | `openai/gpt-4o-mini` | Doc-diff classifier gate — cheap pre-check before full doc agent |
-| `core.models.triage` | `MILL_TRIAGE_MODEL` | `openai/gpt-4o-mini` | Pre-refine triage — fast/cheap classification |
-| `core.models.auto_approve` | `MILL_AUTO_APPROVE_MODEL` | `openai/gpt-4o-mini` | Model for the auto-approve triage call (must be fast and cheap) |
-| `core.models.scope_triage` | `MILL_SCOPE_TRIAGE_MODEL` | `openai/gpt-4o-mini` | Scope-triage model — classifies out-of-scope changes as EXPAND/REJECT/ESCALATE |
+| `core.models.doc_classifier` | `MILL_DOC_CLASSIFIER_MODEL` | `deepseek/deepseek-v4-flash` | Doc-diff classifier gate — cheap pre-check before full doc agent |
+| `core.models.triage` | `MILL_TRIAGE_MODEL` | `deepseek/deepseek-v4-flash` | Pre-refine triage — fast/cheap classification |
+| `core.models.auto_approve` | `MILL_AUTO_APPROVE_MODEL` | `deepseek/deepseek-v4-flash` | Model for the auto-approve triage call (must be fast and cheap) |
+| `core.models.scope_triage` | `MILL_SCOPE_TRIAGE_MODEL` | `deepseek/deepseek-v4-flash` | Scope-triage model — classifies out-of-scope changes as EXPAND/REJECT/ESCALATE |
 
 ### 2. Request limits
 
