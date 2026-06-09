@@ -397,6 +397,24 @@
       badge.innerHTML = '<span class="live-spinner"></span> ' + label;
       card.appendChild(badge);
     });
+    hideEmptyColumns();
+  }
+
+  // Hide board columns that currently hold no cards. robotsix-board's
+  // board.js renders every configured column (22 of them) whether or
+  // not it has tickets; the mill only wants populated columns visible.
+  // Uses an inline display toggle so it composes with board.js's
+  // "Show closed" control (which hides via the .hidden class):
+  // style.display="" on a non-empty column lets that class still hide
+  // it, while style.display="none" wins for empty columns.
+  function hideEmptyColumns() {
+    var cols = document.querySelectorAll('#board .board-column');
+    for (var i = 0; i < cols.length; i++) {
+      var n = cols[i].querySelectorAll(
+        '.board-column-cards > .board-card'
+      ).length;
+      cols[i].style.display = n === 0 ? 'none' : '';
+    }
   }
 
   // =========================================================================
@@ -2194,6 +2212,7 @@
 
     // 1s tick: refresh drawer content when open, also periodically refresh active labels
     setInterval(function() {
+      hideEmptyColumns();
       if (runsOpen) renderRuns();
       else if (proposalsOpen) renderProposals();
       else if (sel) refreshDetail(sel);
