@@ -245,9 +245,12 @@ def run(  # noqa: C901 — extra-packages loading adds one branch; tightly-coupl
         # apt must write to the root filesystem — drop --read-only and
         # add tmpfs mounts so apt state dirs don't dirty the overlay.
         argv += [
-            "--tmpfs", "/var/cache/apt",
-            "--tmpfs", "/var/lib/apt/lists",
-            "--tmpfs", "/var/lib/dpkg",
+            "--tmpfs",
+            "/var/cache/apt",
+            "--tmpfs",
+            "/var/lib/apt/lists",
+            "--tmpfs",
+            "/var/lib/dpkg",
         ]
     elif settings.sandbox_readonly:
         argv.append("--read-only")

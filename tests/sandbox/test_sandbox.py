@@ -413,9 +413,7 @@ def test_extra_packages_empty_list_no_prefix(tmp_path, monkeypatch):
         sandbox, "_repo_mount", lambda repo_dir, settings: ["--mount", "x"]
     )
     monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
-    monkeypatch.setattr(
-        sandbox, "load_extra_sandbox_packages", lambda repo_dir: []
-    )
+    monkeypatch.setattr(sandbox, "load_extra_sandbox_packages", lambda repo_dir: [])
     sandbox.run("true", repo_dir="/data/work/repo", settings=s)
 
     a = seen["argv"]
@@ -644,9 +642,7 @@ def test_extra_packages_missing_config_noop(tmp_path, monkeypatch):
         sandbox, "_repo_mount", lambda repo_dir, settings: ["--mount", "x"]
     )
     monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
-    monkeypatch.setattr(
-        sandbox, "load_extra_sandbox_packages", lambda repo_dir: []
-    )
+    monkeypatch.setattr(sandbox, "load_extra_sandbox_packages", lambda repo_dir: [])
     sandbox.run("true", repo_dir="/data/work/repo", settings=s)
 
     a = seen["argv"]
