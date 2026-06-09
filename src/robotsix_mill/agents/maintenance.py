@@ -465,8 +465,6 @@ def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResul
     #    clone_repo can populate the workspace)
     with tempfile.TemporaryDirectory(prefix="maintenance_") as tmpdir_str:
         tmpdir = Path(tmpdir_str)
-        clone_dir = tmpdir / "repo"
-
         tools: list[Any] = []
         tools.append(make_create_repo_tool(ctx.settings, ctx, draft))
         tools.append(make_fork_repo_tool(ctx.settings))
