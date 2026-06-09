@@ -46,6 +46,23 @@ def _resolve_cost_repo(repo_id: str | None, request: Request):
     return repos.repos[repo_id]
 
 
+def _normalize_cost_params(
+    lookback_hours: float,
+    max_tickets: int | None,
+    repo_id: str | None,
+    request: Request,
+):
+    """Normalize and clamp cost query parameters shared across cost endpoints.
+
+    Returns ``(lookback_hours, max_tickets, repo_config_or_list)``.
+    """
+    lookback_hours = max(1.0, min(lookback_hours, 168.0))
+    if max_tickets is not None:
+        max_tickets = max(1, min(max_tickets, 1000))
+    repo_config = _resolve_cost_repo(repo_id, request)
+    return lookback_hours, max_tickets, repo_config
+
+
 @router.get("/costs/trend")
 def cost_trend(
     lookback_hours: float = 24,
@@ -66,10 +83,9 @@ def cost_trend(
     """
     from ...langfuse.client import aggregate_cost_trend
 
-    lookback_hours = max(1.0, min(lookback_hours, 168.0))
-    if max_tickets is not None:
-        max_tickets = max(1, min(max_tickets, 1000))
-    repo_config = _resolve_cost_repo(repo_id, request)
+    lookback_hours, max_tickets, repo_config = _normalize_cost_params(
+        lookback_hours, max_tickets, repo_id, request
+    )
     if isinstance(repo_config, list):
         # "all" — aggregate across repos
         all_buckets: dict[str, dict] = {}
@@ -116,10 +132,9 @@ def cost_by_agent(
     """
     from ...langfuse.client import aggregate_cost_by_name
 
-    lookback_hours = max(1.0, min(lookback_hours, 168.0))
-    if max_tickets is not None:
-        max_tickets = max(1, min(max_tickets, 1000))
-    repo_config = _resolve_cost_repo(repo_id, request)
+    lookback_hours, max_tickets, repo_config = _normalize_cost_params(
+        lookback_hours, max_tickets, repo_id, request
+    )
     if isinstance(repo_config, list):
         # "all" — aggregate across repos
         agg: dict[str, dict] = {}
@@ -169,10 +184,9 @@ def most_expensive_ticket_endpoint(
     """
     from ...langfuse.client import most_expensive_ticket
 
-    lookback_hours = max(1.0, min(lookback_hours, 168.0))
-    if max_tickets is not None:
-        max_tickets = max(1, min(max_tickets, 1000))
-    repo_config = _resolve_cost_repo(repo_id, request)
+    lookback_hours, max_tickets, repo_config = _normalize_cost_params(
+        lookback_hours, max_tickets, repo_id, request
+    )
     if isinstance(repo_config, list):
         # "all" — find the most expensive across all repos
         best: dict | None = None
@@ -229,10 +243,9 @@ def most_expensive_trace_endpoint(
     """
     from ...langfuse.client import most_expensive_trace
 
-    lookback_hours = max(1.0, min(lookback_hours, 168.0))
-    if max_tickets is not None:
-        max_tickets = max(1, min(max_tickets, 1000))
-    repo_config = _resolve_cost_repo(repo_id, request)
+    lookback_hours, max_tickets, repo_config = _normalize_cost_params(
+        lookback_hours, max_tickets, repo_id, request
+    )
     if isinstance(repo_config, list):
         best: dict | None = None
         for rc in repo_config:
