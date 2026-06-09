@@ -166,6 +166,7 @@ def _spawn_dependency_tickets(
             "\n".join(body_lines),
             source="review",
             board_id=parent.board_id or None,
+            priority=parent.priority,
         )
         ids.append(child.id)
     return ids

@@ -157,12 +157,19 @@ def make_report_issue_tool(
             # Step 4: build body
             full_body = _build_body(body, cat, agent_name)
 
-            # Step 5: create ticket
+            # Step 5: create ticket — inherit priority from originating ticket
+            origin_session = _tracing.current_session()
+            origin_priority = False
+            if origin_session:
+                origin = service.get(origin_session)
+                if origin is not None:
+                    origin_priority = origin.priority
             ticket = service.create(
                 title,
                 full_body,
                 source=SourceKind.AGENT,
-                origin_session=_tracing.current_session(),
+                origin_session=origin_session,
+                priority=origin_priority,
             )
 
             # Step 6: attach evidence (if any)
