@@ -47,6 +47,7 @@ class SourceKind(StrEnum):
     RUN_HEALTH = "run-health"
     BOARD_CLEANUP = "board_cleanup"
     CI_FIX_DEPENDENCY = "ci_fix_dependency"
+    IMPLEMENT_BASELINE_DEPENDENCY = "implement_baseline_dependency"
 
 
 class ActionType(StrEnum):

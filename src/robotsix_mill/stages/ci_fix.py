@@ -24,6 +24,7 @@ from ..forge.auth import _resolve_remote_url, github_token
 from ..runners.pass_runner import load_memory, persist_memory
 from ..runtime import tracing
 from ..vcs import git_ops
+from . import dependency_fix
 from .base import Outcome, Stage, StageContext
 
 log = logging.getLogger("robotsix_mill.stages.ci_fix")
@@ -401,75 +402,32 @@ class CIFixStage(Stage):
     ) -> Outcome:
         """Route an out-of-scope CI failure to a dedicated fix ticket.
 
-        Instead of churning the ci-fix loop on repo debt this ticket never
-        introduced (then blocking a ticket that is actually fine), spawn
-        (or reuse) a fix ticket, wire a dependency both ways, and park THIS
-        ticket to BLOCKED. The service's ``_fire_unblocks`` path moves it
-        ``BLOCKED -> DRAFT`` once the fix ticket reaches DONE, re-running the
-        full pipeline rebased on the now-fixed main.
-
-        Scoped to ci_fix per the operator's ask. The same
-        park-on-out-of-scope-dependency pattern could generalize to the
-        verify / review / merge stages later, but is intentionally NOT
-        applied there here.
+        Delegates the spawn-or-reuse + wire + park logic to
+        :func:`~.dependency_fix.spawn_dependency_fix`, which is shared
+        with the implement-stage baseline check (and, later, verify /
+        review / merge).
         """
-        board_id = ctx.repo_config.board_id if ctx.repo_config else None
-
         # Deterministic title so the spawn is idempotent across cycles.
         title = (
             f"ci_fix: out-of-scope CI failure — "
             f"{result.failing_check} in {result.required_change_area}"
         )
+        description = (
+            f"## Out-of-scope CI failure routed from {ticket.id}\n\n"
+            f"**Failing check:** {result.failing_check}\n\n"
+            f"**Required change area:** {result.required_change_area}\n\n"
+            f"**Why out of scope:** {result.out_of_scope_reason}\n"
+        )
+        block_reason = "CI failure is out of scope for this ticket"
 
-        # Dedup: reuse a still-open fix ticket with this exact title rather
-        # than create a second one on a later out-of-scope cycle.
-        fix_id: str | None = None
-        for cand in ctx.service.recent_proposals_for(
-            SourceKind.CI_FIX_DEPENDENCY, limit=100
-        ):
-            if cand.title == title and cand.state not in (State.CLOSED, State.DONE):
-                fix_id = cand.id
-                break
-
-        if fix_id is None:
-            description = (
-                f"## Out-of-scope CI failure routed from {ticket.id}\n\n"
-                f"**Failing check:** {result.failing_check}\n\n"
-                f"**Required change area:** {result.required_change_area}\n\n"
-                f"**Why out of scope:** {result.out_of_scope_reason}\n"
-            )
-            fix = ctx.service.create(
-                title=title,
-                description=description,
-                source=SourceKind.CI_FIX_DEPENDENCY,
-                kind="task",
-                board_id=board_id,
-                priority=ticket.priority,
-            )
-            fix_id = fix.id
-
-        # Wire both directions: the original depends on the fix; the fix
-        # auto-unblocks the original when it completes.
-        ctx.service.set_depends_on(ticket.id, [fix_id])
-        ctx.service.set_unblocks(fix_id, [ticket.id])
-
-        # Link the two tickets via history notes (best-effort, like
-        # _enforce_cycle_ceiling's failure note).
-        try:
-            ctx.service.add_history_note(
-                ticket.id,
-                f"parked pending out-of-scope CI fix {fix_id}: {result.failing_check}",
-            )
-        except Exception:  # noqa: BLE001 — history note is best-effort
-            log.warning("%s: failed to record out-of-scope park note", ticket.id)
-        try:
-            ctx.service.add_history_note(
-                fix_id,
-                f"spawned by {ticket.id} for out-of-scope CI failure: "
-                f"{result.out_of_scope_reason}",
-            )
-        except Exception:  # noqa: BLE001 — history note is best-effort
-            log.warning("%s: failed to record out-of-scope spawn note", fix_id)
+        outcome = dependency_fix.spawn_dependency_fix(
+            ticket,
+            ctx,
+            title=title,
+            description=description,
+            source_kind=SourceKind.CI_FIX_DEPENDENCY,
+            block_reason_prefix=block_reason,
+        )
 
         # Reset the per-ticket ci_fix counters so a later re-entry (after
         # auto-unblock + a fresh pipeline pass) starts clean.
@@ -477,11 +435,7 @@ class CIFixStage(Stage):
         for counter in (_CI_FIX_COUNTER, _CI_NO_CHANGE_COUNTER, _CI_FIX_CYCLE_COUNTER):
             _write_counter(artifacts_dir / counter, 0)
 
-        return Outcome(
-            State.BLOCKED,
-            f"CI failure is out of scope for this ticket; parked pending fix "
-            f"ticket {fix_id}. Auto-resumes when that fix reaches DONE.",
-        )
+        return outcome
 
     def _finalize_success(
         self,

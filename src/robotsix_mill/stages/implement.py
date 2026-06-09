@@ -34,12 +34,13 @@ from ..agents import prerequisite
 from ..agents.coding import AgentBudgetError, AgentRunError
 from ..agents.coordinating import ValidationResult
 from ..agents.testing import run_test_agent
-from ..core.models import Ticket
+from ..core.models import SourceKind, Ticket
 from ..core.states import State
 from ..forge.auth import _resolve_remote_url, github_token
 from ..runners.pass_runner import load_memory, persist_memory
 from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
+from . import dependency_fix
 from . import short_circuit_verify
 from .pause import (
     check_for_pause,
@@ -1462,10 +1463,8 @@ class ImplementStage(Stage):
                     if cached_passed:
                         return None
                     diag = cache.get("diagnosis", "pre-existing test failures")
-                    return Outcome(
-                        State.BLOCKED,
-                        f"pre-existing test failures on {settings.forge_target_branch} "
-                        f"({base_sha[:8]}): {diag[:400]}",
+                    return ImplementStage._spawn_baseline_fix(
+                        ctx, ticket, diag, base_sha, settings
                     )
                 if cached_passed:
                     # Base advanced but cached result was passing — a
@@ -1513,10 +1512,43 @@ class ImplementStage(Stage):
             ok=False,
             extra_roots=None,
         )
-        return Outcome(
-            State.BLOCKED,
+        return ImplementStage._spawn_baseline_fix(ctx, ticket, diag, base_sha, settings)
+
+    @staticmethod
+    def _spawn_baseline_fix(
+        ctx: StageContext,
+        ticket: Ticket,
+        diag: str,
+        base_sha: str,
+        settings,
+    ) -> Outcome:
+        """Spawn (or reuse) a fix ticket for pre-existing baseline failures.
+
+        Uses the shared :func:`~.dependency_fix.spawn_dependency_fix`
+        helper so the current ticket auto-resumes when the fix reaches
+        DONE instead of dead-ending on ``BLOCKED``.
+        """
+        block_reason = (
             f"pre-existing test failures on {settings.forge_target_branch} "
-            f"({base_sha[:8]}): {diag[:400]}",
+            f"({base_sha[:8]}): {diag[:400]}"
+        )
+        title = (
+            f"baseline: pre-existing test failures — "
+            f"{settings.forge_target_branch} {base_sha[:8]}"
+        )
+        description = (
+            f"## Pre-existing test failures on {settings.forge_target_branch}\n\n"
+            f"**Base SHA:** {base_sha}\n\n"
+            f"**Diagnosis:** {diag}\n\n"
+            f"**Detected by:** implement baseline check for {ticket.id}\n"
+        )
+        return dependency_fix.spawn_dependency_fix(
+            ticket,
+            ctx,
+            title=title,
+            description=description,
+            source_kind=SourceKind.IMPLEMENT_BASELINE_DEPENDENCY,
+            block_reason_prefix=block_reason,
         )
 
     @staticmethod
