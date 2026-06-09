@@ -31,13 +31,7 @@ def run_answer_agent(
     forwarded to the Langfuse tools so the agent queries the repo's
     own Langfuse project instead of the global one.
     """
-    from .yaml_loader import load_agent_definition
-    from .base import build_agent_from_definition, _safe_close
-    from .retry import run_agent
-
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "answer.yaml"
-    )
+    from .yaml_loader import load_and_run_agent
 
     tools: list = []
     if repo_dir is not None:
@@ -55,22 +49,14 @@ def run_answer_agent(
     langfuse_tools = _build_langfuse_tools(settings, repo_config=repo_config)
     tools.extend(langfuse_tools)
 
-    agent = build_agent_from_definition(
-        settings,
-        definition,
-        tools=tools,
-        model_name=definition.model or settings.answer_model,
-    )
-
     user_prompt = f"<title>{title}</title>\n<question>\n{question}\n</question>\n\nAnswer the question above. Cite all sources."
 
-    try:
-        result = run_agent(
-            agent,
-            lambda h: h.run_sync(user_prompt),
-            settings=settings,
-            what="answer",
-        )
-    finally:
-        _safe_close(agent)
+    result = load_and_run_agent(
+        settings=settings,
+        definition_name="answer",
+        tools=tools,
+        model_name=settings.answer_model,
+        prompt=user_prompt,
+        what="answer",
+    )
     return str(result.output).strip()

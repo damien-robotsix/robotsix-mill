@@ -10,7 +10,6 @@ Pydantic output.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel
@@ -33,21 +32,7 @@ def run_scope_triage_agent(
     out_of_scope_files: list[str],
     diff_summaries: dict[str, str],
 ) -> ScopeTriageVerdict:
-    from .yaml_loader import load_agent_definition
-    from .base import build_agent_from_definition, _safe_close
-    from .retry import run_agent
-
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "scope_triage.yaml",
-    )
-    agent = build_agent_from_definition(
-        settings,
-        definition,
-        tools=[],
-        model_name=definition.model or settings.scope_triage_model,
-    )
+    from .yaml_loader import load_and_run_agent
 
     file_map_body = "\n".join(f"- {f}" for f in file_map)
     out_of_scope_body = "\n".join(f"- {f}" for f in out_of_scope_files)
@@ -64,14 +49,12 @@ def run_scope_triage_agent(
         + section("diff-summaries", diff_body)
     )
 
-    try:
-        result = run_agent(
-            agent,
-            lambda h: h.run_sync(user_prompt),
-            settings=settings,
-            what="scope triage",
-        )
-    finally:
-        _safe_close(agent)
-
+    result = load_and_run_agent(
+        settings=settings,
+        definition_name="scope_triage",
+        tools=[],
+        model_name=settings.scope_triage_model,
+        prompt=user_prompt,
+        what="scope triage",
+    )
     return result.output

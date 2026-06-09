@@ -37,15 +37,7 @@ def run_ask_to_ticket_agent(
     tools are attached. Raises RuntimeError if no OpenRouter key is
     configured.
     """
-    from .yaml_loader import load_agent_definition
-    from .base import build_agent_from_definition, _safe_close
-    from .retry import run_agent
-
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "ask_to_ticket.yaml"
-    )
+    from .yaml_loader import load_and_run_agent
 
     # Repo tools (explore, read_file, list_dir, run_command) are only
     # attached when grounded in a local clone.  The web route passes
@@ -63,14 +55,6 @@ def run_ask_to_ticket_agent(
         ]
         tools = [make_explore_tool(settings, repo_dir), *ro]
 
-    agent = build_agent_from_definition(
-        settings,
-        definition,
-        tools=tools,
-        model_name=definition.model or settings.ask_to_ticket_model,
-        output_type=AskToTicketResult,
-    )
-
     # Format the Q&A + comment as XML-delimited blocks so the model can
     # unambiguously separate the three inputs without relying on ad-hoc
     # separators that might appear in the text itself.
@@ -83,15 +67,13 @@ def run_ask_to_ticket_agent(
         "imperative title and a self-contained Markdown body."
     )
 
-    try:
-        result = run_agent(
-            agent,
-            lambda h: h.run_sync(user_prompt),
-            settings=settings,
-            what="ask_to_ticket",
-        )
-    finally:
-        # Always close the transport connection, even on failure, so
-        # the underlying HTTP/SSE session is released and does not leak.
-        _safe_close(agent)
+    result = load_and_run_agent(
+        settings=settings,
+        definition_name="ask_to_ticket",
+        tools=tools,
+        model_name=settings.ask_to_ticket_model,
+        prompt=user_prompt,
+        what="ask_to_ticket",
+        output_type=AskToTicketResult,
+    )
     return result.output

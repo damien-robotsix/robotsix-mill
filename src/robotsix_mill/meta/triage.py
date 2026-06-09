@@ -58,34 +58,19 @@ def required_repos_for(*, settings: Settings, spec: str) -> list[str]:
     if not clonable:
         return []
 
-    from ..agents.base import _safe_close, build_agent_from_definition
-    from ..agents.retry import run_agent
-    from ..agents.yaml_loader import load_agent_definition
+    from ..agents.yaml_loader import load_and_run_agent
 
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "pipeline"
-        / "meta_triage.yaml"
-    )
-    agent = build_agent_from_definition(
-        settings,
-        definition,
-        tools=[],
-        model_name=definition.model or settings.module_curator_model,
-    )
     prompt = section("registered-repos", _registered_repos_block()) + section(
         "proposal", spec
     )
-    try:
-        result = run_agent(
-            agent,
-            lambda h: h.run_sync(prompt),
-            settings=settings,
-            what="meta-triage",
-        )
-    finally:
-        _safe_close(agent)
+    result = load_and_run_agent(
+        settings=settings,
+        definition_name="pipeline/meta_triage",
+        tools=[],
+        model_name=settings.module_curator_model,
+        prompt=prompt,
+        what="meta-triage",
+    )
 
     out: RequiredReposResult = result.output
     # Validate against the registry; keep order, drop unknowns/dups.

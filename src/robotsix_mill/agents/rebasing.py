@@ -50,30 +50,11 @@ def run_rebase_agent(
     if not get_secrets().openrouter_api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
 
-    from .yaml_loader import load_agent_definition
-    from .base import build_agent_from_definition, _safe_close
     from .fs_tools import build_fs_tools
-
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "rebase.yaml"
-    )
+    from .yaml_loader import load_and_run_agent
 
     # Build tools confined to the ticket's own clone.
     tools = build_fs_tools(Path(repo_dir), settings)
-
-    system_prompt = definition.system_prompt.format(
-        repo_dir=repo_dir,
-        target=target,
-        branch=branch,
-    )
-
-    agent = build_agent_from_definition(
-        settings,
-        definition,
-        repo_dir=Path(repo_dir),  # confine SDK built-in edit tools to the clone
-        tools=tools,
-        system_prompt=system_prompt,
-    )
 
     user_prompt = (
         f"Rebase branch '{branch}' onto origin/{target} in {repo_dir}. "
@@ -81,21 +62,18 @@ def run_rebase_agent(
         + section("memory", memory or "(empty — start a new ledger)")
     )
 
-    # Invoke via run_agent (not a bare agent.run_sync) so the Claude→DeepSeek
-    # FallbackAgentHandle actually falls back: the fallback is driven by
-    # run_agent, never by FallbackAgentHandle.run_sync. A bare run_sync here
-    # meant a Claude outage (e.g. exhausted credit) hard-failed the rebase and
-    # blocked the ticket instead of falling back like every other stage.
-    from .retry import run_agent
-
-    try:
-        result = run_agent(
-            agent,
-            lambda h: h.run_sync(user_prompt),
-            settings=settings,
-            what="rebase",
-        )
-    finally:
-        _safe_close(agent)
+    result = load_and_run_agent(
+        settings=settings,
+        definition_name="rebase",
+        tools=tools,
+        prompt=user_prompt,
+        what="rebase",
+        repo_dir=Path(repo_dir),
+        system_prompt_format_kwargs={
+            "repo_dir": repo_dir,
+            "target": target,
+            "branch": branch,
+        },
+    )
 
     return result.output

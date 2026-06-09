@@ -190,16 +190,32 @@ def test_repo_config_forwarded_to_client(tmp_path, monkeypatch):
 # ── run_answer_agent tests ───────────────────────────────────────────
 
 
+def _install_mocks(monkeypatch):
+    """Install shared mocks for load_agent_definition, run_agent, and
+    _safe_close.  Returns (base_mod, retry_mod) for further patching."""
+    from unittest.mock import MagicMock
+    import robotsix_mill.agents.yaml_loader as yaml_loader_mod
+    import robotsix_mill.agents.retry as retry_mod
+    import robotsix_mill.agents.base as base_mod
+
+    monkeypatch.setattr(
+        yaml_loader_mod,
+        "load_agent_definition",
+        MagicMock(return_value=type("D", (), {"model": None})()),
+    )
+    monkeypatch.setattr(base_mod, "_safe_close", lambda agent: None)
+    return base_mod, retry_mod
+
+
 def test_run_answer_agent_without_repo_dir(tmp_path, monkeypatch):
     """Without repo_dir: no explore/fs tools, but langfuse tools still present."""
-    from robotsix_mill.agents import base as bmod
-    from robotsix_mill.agents import retry as rmod
+    bmod, rmod = _install_mocks(monkeypatch)
 
     s = _settings(tmp_path, OPENROUTER_API_KEY="k")
 
     cap = {}
 
-    def fake_build_agent(settings, definition, tools, model_name):
+    def fake_build_agent(settings, definition, tools, model_name, repo_dir=None, **kw):
         cap["tools"] = sorted(t.__name__ for t in tools)
         cap["model"] = model_name
 
@@ -209,9 +225,6 @@ def test_run_answer_agent_without_repo_dir(tmp_path, monkeypatch):
                     output = "the answer"
 
                 return R()
-
-            def close(self):
-                pass
 
         return FakeAgent()
 
@@ -252,15 +265,14 @@ def test_run_answer_agent_without_repo_dir(tmp_path, monkeypatch):
 
 def test_run_answer_agent_with_repo_dir(tmp_path, monkeypatch):
     """With repo_dir: explore + fs read-only tools + langfuse tools."""
-    from robotsix_mill.agents import base as bmod
-    from robotsix_mill.agents import retry as rmod
+    bmod, rmod = _install_mocks(monkeypatch)
 
     (tmp_path / "a.txt").write_text("hi")
     s = _settings(tmp_path, OPENROUTER_API_KEY="k")
 
     cap = {}
 
-    def fake_build_agent(settings, definition, tools, model_name):
+    def fake_build_agent(settings, definition, tools, model_name, repo_dir=None, **kw):
         cap["tools"] = sorted(t.__name__ for t in tools)
         cap["model"] = model_name
 
@@ -270,9 +282,6 @@ def test_run_answer_agent_with_repo_dir(tmp_path, monkeypatch):
                     output = "the answer"
 
                 return R()
-
-            def close(self):
-                pass
 
         return FakeAgent()
 
@@ -318,15 +327,14 @@ def test_run_answer_agent_with_repo_dir(tmp_path, monkeypatch):
 
 def test_run_answer_agent_runtime_error_on_missing_api_key(tmp_path, monkeypatch):
     """Missing OpenRouter API key propagates as RuntimeError."""
-    from robotsix_mill.agents import base as bmod
+    import robotsix_mill.agents.yaml_loader as yaml_loader_mod
 
     s = _settings(tmp_path, OPENROUTER_API_KEY="")
 
-    def fake_build_agent(settings, definition, tools, model_name):
-        # Simulate what build_agent does: raises RuntimeError when key is missing
+    def fake_load_and_run(**kw):
         raise RuntimeError("OPENROUTER_API_KEY is required")
 
-    monkeypatch.setattr(bmod, "build_agent_from_definition", fake_build_agent)
+    monkeypatch.setattr(yaml_loader_mod, "load_and_run_agent", fake_load_and_run)
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client.session_cost",
         lambda settings, sid, repo_config=None: 0.0,
