@@ -12,7 +12,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ...core.service import TransitionError
 from ..board_adapter import MillBoardAdapter
-from ..deps import enrich_ticket_read, get_service, get_settings, get_worker, maybe_enqueue
+from ..deps import (
+    enrich_ticket_read,
+    get_service,
+    get_settings,
+    get_worker,
+    maybe_enqueue,
+)
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -81,6 +87,7 @@ def board_cards(
         try:
             tickets = s.list()
         except Exception:
+            log.warning("Failed to list tickets from board service", exc_info=True)
             continue
         for t in tickets:
             cards.append(_ticket_to_card(t, settings, s))

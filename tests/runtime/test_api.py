@@ -1,4 +1,3 @@
-import json
 import pytest
 from fastapi.testclient import TestClient
 
@@ -612,9 +611,7 @@ def test_static_assets_served(client):
     assert "refresh" in js.text or "robotsixBoardRefresh" in js.text
     # The drawer close handler is always present (either "open_" from
     # the legacy bundle or "openDrawer" from robotsix-board).
-    assert any(
-        name in js.text for name in ("open_", "openDrawer", "closeDrawer")
-    )
+    assert any(name in js.text for name in ("open_", "openDrawer", "closeDrawer"))
 
 
 def test_audit_endpoint_is_fire_and_forget(client, monkeypatch):
