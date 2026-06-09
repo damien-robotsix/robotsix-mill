@@ -1939,6 +1939,8 @@ def test_langfuse_tools_present_when_repo_dir_given(tmp_path, monkeypatch):
     assert "langfuse_trace_detail" in names
     # Trace-inspect sub-agent present only when repo_dir is given
     assert "langfuse_inspect_trace" in names
+    # Cost-inspect tool present only when repo_dir is given
+    assert "inspect_cost" in names
 
 
 def test_langfuse_inspect_trace_absent_when_repo_dir_none(tmp_path, monkeypatch):
@@ -2005,6 +2007,8 @@ def test_langfuse_inspect_trace_absent_when_repo_dir_none(tmp_path, monkeypatch)
     assert "langfuse_trace_detail" in names
     # Trace-inspect sub-agent NOT present when repo_dir is None
     assert "langfuse_inspect_trace" not in names
+    # Cost-inspect tool NOT present when repo_dir is None
+    assert "inspect_cost" not in names
 
 
 # --- split detection tests ---
