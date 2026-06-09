@@ -781,11 +781,18 @@ class MergeStage(Stage):
         if "auto_merge_eligible: true" not in review_text:
             # Try to read the verdict line for context.
             verdict_note = ""
+            comment_note = ""
             for line in review_text.splitlines():
                 if line.startswith("verdict:"):
                     verdict_note = " (" + line[len("verdict:") :].strip()[:200] + ")"
-                    break
-            return False, "reviewer marked not auto-merge eligible" + verdict_note
+                elif line.startswith("comment:"):
+                    raw = line[len("comment:") :].strip()
+                    if raw and raw != "(no details)":
+                        comment_note = " — " + raw[:300]
+            return (
+                False,
+                "reviewer marked not auto-merge eligible" + verdict_note + comment_note,
+            )
 
         return True, "eligible"
 

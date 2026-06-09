@@ -328,6 +328,7 @@ def test_writes_review_artifact_on_approve(ctx_factory, monkeypatch):
     text = artifact.read_text(encoding="utf-8")
     assert "verdict: APPROVE" in text
     assert "auto_merge_eligible: true" in text
+    assert "comment: lgtm" in text
 
 
 def test_writes_review_artifact_on_request_changes(ctx_factory, monkeypatch):
@@ -360,6 +361,103 @@ def test_writes_review_artifact_on_request_changes(ctx_factory, monkeypatch):
     text = artifact.read_text(encoding="utf-8")
     assert "verdict: REQUEST_CHANGES" in text
     assert "auto_merge_eligible: false" in text
+    assert "comment: fix X" in text
+
+
+def test_comment_multiline_collapse(ctx_factory, monkeypatch):
+    """Multiline reviewer comments are collapsed with ' / ' in the artifact."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+
+    def _fake_review(
+        *,
+        settings,
+        diff,
+        spec,
+        model_name=None,
+        prior_context=None,
+        repo_dir=None,
+        reference_files=None,
+    ):
+        del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
+        return ReviewVerdict(
+            verdict="APPROVE",
+            comments="Line one\nLine two",
+        )
+
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
+
+    ReviewStage().run(t, ctx)
+    artifact = ctx.service.workspace(t).artifacts_dir / "review.md"
+    text = artifact.read_text(encoding="utf-8")
+    assert "comment: Line one / Line two" in text
+
+
+def test_comment_truncation(ctx_factory, monkeypatch):
+    """Comments longer than 300 chars are truncated with '…'."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+
+    long_comment = "x" * 350
+
+    def _fake_review(
+        *,
+        settings,
+        diff,
+        spec,
+        model_name=None,
+        prior_context=None,
+        repo_dir=None,
+        reference_files=None,
+    ):
+        del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
+        return ReviewVerdict(
+            verdict="APPROVE",
+            comments=long_comment,
+        )
+
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
+
+    ReviewStage().run(t, ctx)
+    artifact = ctx.service.workspace(t).artifacts_dir / "review.md"
+    text = artifact.read_text(encoding="utf-8")
+    for line in text.splitlines():
+        if line.startswith("comment:"):
+            value = line[len("comment:") :].strip()
+            assert value.endswith("…")
+            assert len(value) <= 303  # 300 + "…"
+            break
+    else:
+        pytest.fail("comment: line not found in review.md")
+
+
+def test_comment_empty_returns_no_details(ctx_factory, monkeypatch):
+    """Empty comments → 'comment: (no details)'."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+
+    def _fake_review(
+        *,
+        settings,
+        diff,
+        spec,
+        model_name=None,
+        prior_context=None,
+        repo_dir=None,
+        reference_files=None,
+    ):
+        del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
+        return ReviewVerdict(
+            verdict="APPROVE",
+            comments="",
+        )
+
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
+
+    ReviewStage().run(t, ctx)
+    artifact = ctx.service.workspace(t).artifacts_dir / "review.md"
+    text = artifact.read_text(encoding="utf-8")
+    assert "comment: (no details)" in text
 
 
 def test_auto_merge_eligible_defaults_false(ctx_factory, monkeypatch):
