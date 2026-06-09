@@ -14,7 +14,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from ..config import RepoConfig, ReposRegistry, Settings
+from ..config import RepoConfig, Settings
 from ..core.models import Ticket
 from ..core.service import TicketService
 from ..core.states import State
@@ -52,30 +52,6 @@ class StageContext:
             or self.service.board_id
             or ticket.board_id
         )
-
-
-def stage_context_for(
-    settings: Settings,
-    board_id: str,
-    repos: ReposRegistry,
-) -> StageContext:
-    """Build a :class:`StageContext` for the repo matching *board_id*.
-
-    The ``repo_config`` is resolved by matching the ticket's
-    ``board_id`` against the ``ReposRegistry``.  When no match is
-    found, ``repo_config`` is ``None`` (backward compat for legacy
-    tickets).  A fresh :class:`TicketService` is created with the
-    correct ``board_id`` so new child tickets are stamped correctly.
-    """
-    from ..core.service import TicketService
-
-    repo_config: RepoConfig | None = None
-    for rc in repos.repos.values():
-        if rc.board_id == board_id:
-            repo_config = rc
-            break
-    service = TicketService(settings, board_id=board_id)
-    return StageContext(settings=settings, service=service, repo_config=repo_config)
 
 
 @dataclass
