@@ -727,9 +727,10 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
     # Langfuse trace-inspect sub-agent — only when repo_dir is provided,
     # since its value is grounding findings in the actual source code.
     if repo_dir is not None:
-        from .langfuse_tools import make_langfuse_inspect_tool
+        from .langfuse_tools import make_langfuse_inspect_tool, make_cost_inspect_tool
 
         tools.append(make_langfuse_inspect_tool(settings, repo_dir))
+        tools.append(make_cost_inspect_tool(settings, repo_dir))
 
     overrides = _build_refine_overrides(
         definition, settings, reviewer_comments, language_instructions

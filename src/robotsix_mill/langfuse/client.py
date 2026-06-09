@@ -114,7 +114,12 @@ def session_traces(
     repo_config: RepoConfig | None = None,
 ) -> list[dict] | None:
     """Return Langfuse traces for *session_id* as a list of
-    ``{name, cost, at, trace_id}`` dicts ordered by timestamp ascending.
+    ``{name, cost, at, trace_id, model}`` dicts ordered by timestamp
+    ascending.
+
+    ``model`` carries the trace-level model / provider tag when the
+    Langfuse API provides it (e.g. ``"openai/gpt-4o"``); absent keys
+    default to ``""``.
 
     ``None`` is returned when Langfuse is unconfigured / unreachable so
     the caller can degrade rather than show ``$0`` and pretend that's
@@ -148,6 +153,7 @@ def session_traces(
                 "at": t.get("timestamp") or "",
                 "trace_id": t.get("id") or "",
                 "latency": _num(t.get("latency")),
+                "model": t.get("model") or "",
             }
         )
     out.sort(key=lambda r: r["at"])

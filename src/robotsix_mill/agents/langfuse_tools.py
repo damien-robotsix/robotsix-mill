@@ -166,6 +166,95 @@ def _build_langfuse_tools(settings: Settings, repo_config=None):
     ]
 
 
+def make_cost_inspect_tool(settings: Settings, repo_dir: Path | None = None):
+    """Build the ``inspect_cost`` tool closure.
+
+    When *repo_dir* is provided the tool is registered (repo-scoped,
+    same gate as ``langfuse_inspect_trace``).  The tool returns a
+    compact per-trace cost breakdown with provider attribution so the
+    refine agent can surface discrepancies like "openrouter traces
+    show $0 while the session total is non-zero" without guessing
+    from source code alone.
+    """
+
+    def inspect_cost(session_id: str) -> str:
+        """Inspect the per-trace cost breakdown for a ticket/session.
+
+        Returns a compact structured summary:
+        - Session total cost
+        - Per-trace list with name, cost, model/provider tag, and
+          timestamp
+        - Sum of per-trace costs (for cross-checking against total)
+        - Flag when a discrepancy is detected (e.g. session total
+          non-zero but individual traces report $0)
+
+        Use sparingly — each call hits Langfuse and counts against
+        your refine request cap.
+        """
+        from ..langfuse.client import session_cost, session_traces
+
+        total = session_cost(settings, session_id)
+        traces = session_traces(settings, session_id)
+
+        if traces is None:
+            return (
+                f"Langfuse unavailable or tracing not configured "
+                f"for session {session_id}"
+            )
+
+        lines = [
+            f"## cost breakdown for {session_id}",
+            f"session total: ${total:.4f}",
+            f"trace count: {len(traces)}",
+            "",
+        ]
+
+        if not traces:
+            if total > 0:
+                lines.append(
+                    "⚠️  DISCREPANCY: session total is non-zero "
+                    "but no traces were returned — provider "
+                    "attribution is unavailable."
+                )
+            else:
+                lines.append("(no traces — session cost is $0.00)")
+            return "\n".join(lines)
+
+        trace_sum = 0.0
+        lines.append("| name | cost | model | timestamp | trace_id |")
+        lines.append("|------|------|-------|-----------|----------|")
+        for t in traces:
+            trace_sum += t["cost"]
+            model = t.get("model") or "?"
+            lines.append(
+                f"| {t['name']} | ${t['cost']:.4f} | {model} "
+                f"| {t['at']} | {t['trace_id']} |"
+            )
+
+        lines.append("")
+        lines.append(f"sum of per-trace costs: ${trace_sum:.4f}")
+        lines.append(f"session total:         ${total:.4f}")
+
+        if abs(total - trace_sum) > 0.0001:
+            lines.append(
+                f"⚠️  DISCREPANCY: per-trace sum (${trace_sum:.4f}) "
+                f"≠ session total (${total:.4f}) — "
+                f"diff ${total - trace_sum:+.4f}"
+            )
+
+        zero_cost_traces = [t for t in traces if t["cost"] == 0.0]
+        if zero_cost_traces and total > 0:
+            names = ", ".join(t["name"] for t in zero_cost_traces)
+            lines.append(
+                f"⚠️  {len(zero_cost_traces)} trace(s) with $0.00 cost "
+                f"despite non-zero session total: {names}"
+            )
+
+        return "\n".join(lines)
+
+    return inspect_cost
+
+
 def render_trace_findings(
     findings: list[TraceFinding],
     trace_id: str,

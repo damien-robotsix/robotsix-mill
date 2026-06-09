@@ -3,6 +3,7 @@
 from robotsix_mill.agents.langfuse_tools import (
     _build_langfuse_tools,
     make_langfuse_inspect_tool,
+    make_cost_inspect_tool,
 )
 from robotsix_mill.config import Settings, Secrets, _reset_secrets
 
@@ -369,3 +370,188 @@ def test_langfuse_inspect_trace_surfaces_inspector_error(tmp_path, monkeypatch):
     tool = make_langfuse_inspect_tool(s)
     output = tool("trace-1")
     assert "_inspector error: context length exceeded_" in output
+
+
+# ── make_cost_inspect_tool tests ─────────────────────────────────────
+
+
+def test_make_cost_inspect_tool_returns_callable(tmp_path):
+    """make_cost_inspect_tool returns a callable closure."""
+    s = _settings(tmp_path)
+    tool = make_cost_inspect_tool(s)
+    assert callable(tool)
+    assert tool.__name__ == "inspect_cost"
+
+
+def test_inspect_cost_no_traces_zero_total(tmp_path, monkeypatch):
+    """When there are no traces and session cost is 0, a simple
+    message is returned."""
+    s = _settings(tmp_path)
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_cost",
+        lambda settings, sid: 0.0,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_traces",
+        lambda settings, sid: [],
+    )
+    tool = make_cost_inspect_tool(s)
+    output = tool("s1")
+    assert "session total: $0.0000" in output
+    assert "trace count: 0" in output
+    assert "no traces" in output
+
+
+def test_inspect_cost_no_traces_nonzero_total(tmp_path, monkeypatch):
+    """When session total is non-zero but no traces are returned,
+    a discrepancy is flagged."""
+    s = _settings(tmp_path)
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_cost",
+        lambda settings, sid: 5.0,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_traces",
+        lambda settings, sid: [],
+    )
+    tool = make_cost_inspect_tool(s)
+    output = tool("s1")
+    assert "session total: $5.0000" in output
+    assert "DISCREPANCY" in output
+    assert "provider attribution is unavailable" in output
+
+
+def test_inspect_cost_traces_unavailable(tmp_path, monkeypatch):
+    """When Langfuse is unreachable (traces returns None), a
+    degradation message is returned."""
+    s = _settings(tmp_path)
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_cost",
+        lambda settings, sid: 0.0,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_traces",
+        lambda settings, sid: None,
+    )
+    tool = make_cost_inspect_tool(s)
+    output = tool("s1")
+    assert "unavailable" in output
+    assert "s1" in output
+
+
+def test_inspect_cost_balanced(tmp_path, monkeypatch):
+    """When per-trace costs sum to the session total, no discrepancy
+    is flagged."""
+    s = _settings(tmp_path)
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_cost",
+        lambda settings, sid: 2.5,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_traces",
+        lambda settings, sid: [
+            {
+                "name": "trace-a",
+                "cost": 1.0,
+                "at": "2025-01-01T00:00:00Z",
+                "trace_id": "t1",
+                "latency": 1.0,
+                "model": "openai/gpt-4o",
+            },
+            {
+                "name": "trace-b",
+                "cost": 1.5,
+                "at": "2025-01-01T00:01:00Z",
+                "trace_id": "t2",
+                "latency": 2.0,
+                "model": "openrouter/anthropic/claude-sonnet",
+            },
+        ],
+    )
+    tool = make_cost_inspect_tool(s)
+    output = tool("s1")
+    assert "session total: $2.5000" in output
+    assert "sum of per-trace costs: $2.5000" in output
+    assert "trace-a" in output
+    assert "trace-b" in output
+    assert "openai/gpt-4o" in output
+    assert "openrouter/anthropic/claude-sonnet" in output
+    assert "DISCREPANCY" not in output
+
+
+def test_inspect_cost_discrepancy_sum_vs_total(tmp_path, monkeypatch):
+    """When per-trace sum ≠ session total, a discrepancy is flagged."""
+    s = _settings(tmp_path)
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_cost",
+        lambda settings, sid: 10.0,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_traces",
+        lambda settings, sid: [
+            {
+                "name": "trace-a",
+                "cost": 3.0,
+                "at": "2025-01-01T00:00:00Z",
+                "trace_id": "t1",
+                "latency": 1.0,
+                "model": "",
+            },
+        ],
+    )
+    tool = make_cost_inspect_tool(s)
+    output = tool("s1")
+    assert "session total: $10.0000" in output
+    assert "sum of per-trace costs: $3.0000" in output
+    assert "DISCREPANCY" in output
+    assert "diff $+7.0000" in output
+
+
+def test_inspect_cost_zero_cost_traces_flag(tmp_path, monkeypatch):
+    """Traces with $0.00 cost are flagged when the session total is
+    non-zero."""
+    s = _settings(tmp_path)
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_cost",
+        lambda settings, sid: 5.0,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_traces",
+        lambda settings, sid: [
+            {
+                "name": "openrouter-trace",
+                "cost": 0.0,
+                "at": "2025-01-01T00:00:00Z",
+                "trace_id": "t1",
+                "latency": 1.0,
+                "model": "openrouter/openai/gpt-4o",
+            },
+        ],
+    )
+    tool = make_cost_inspect_tool(s)
+    output = tool("s1")
+    assert "session total: $5.0000" in output
+    assert "sum of per-trace costs: $0.0000" in output
+    assert "DISCREPANCY" in output
+    assert "trace(s) with $0.00 cost" in output
+    assert "openrouter-trace" in output
+
+
+def test_inspect_cost_passes_repo_dir(tmp_path, monkeypatch):
+    """When repo_dir is given to the factory, the tool still works
+    (repo_dir is a gate, not forwarded to client calls currently)."""
+    s = _settings(tmp_path)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_cost",
+        lambda settings, sid: 0.0,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_traces",
+        lambda settings, sid: [],
+    )
+    tool = make_cost_inspect_tool(s, repo_dir=repo)
+    assert callable(tool)
+    output = tool("s1")
+    assert "session total: $0.0000" in output

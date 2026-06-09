@@ -25,6 +25,11 @@ model: "${MILL_REFINE_MODEL}"
 # for trivial existence checks, ``read_file`` only after ``explore``
 # has pinned a symbol/offset, and ``run_command`` for targeted
 # one-liners on already-known files.
+#
+# Langfuse tools (``langfuse_*``, ``inspect_cost``) are read-only and
+# hit the Langfuse API — each call counts against your refine request
+# cap, so use them sparingly and only when the ticket directly concerns
+# trace data or cost attribution.
 tools:
   - explore
   - parallel_explore
@@ -36,6 +41,7 @@ tools:
   - langfuse_trace_detail
   - langfuse_session_cost
   - langfuse_inspect_trace
+  - inspect_cost
 
 # Single internet gateway: the web_knowledge sub-agent owns the
 # mill-global Markdown knowledge base at <data_dir>/web_knowledge/
