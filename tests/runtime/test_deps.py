@@ -2,14 +2,10 @@
 
 from unittest.mock import MagicMock
 
-import pytest
-from fastapi import HTTPException
-
 from robotsix_mill.core.models import Ticket, TicketRead
 from robotsix_mill.core.states import STAGE_FOR_STATE, State
 from robotsix_mill.runtime.deps import (
     enrich_ticket_read,
-    get_repo_config_for,
     get_run_registry,
     get_service,
     get_settings,
@@ -103,32 +99,6 @@ def test_get_run_registry_synthetic_meta_board_resolves():
     req.app.state.repos.repos = {}
     result = get_run_registry(req, repo_id="meta")
     assert result is meta_registry
-
-
-# ---------------------------------------------------------------------------
-# get_repo_config_for
-# ---------------------------------------------------------------------------
-
-
-def test_get_repo_config_for_none_repo_id_returns_none():
-    assert get_repo_config_for(repo_id=None) is None
-
-
-def test_get_repo_config_for_known_repo():
-    repos = MagicMock()
-    repo_config = MagicMock()
-    repos.repos = {"test-repo": repo_config}
-    result = get_repo_config_for(repo_id="test-repo", repos=repos)
-    assert result is repo_config
-
-
-def test_get_repo_config_for_unknown_repo_raises_400():
-    repos = MagicMock()
-    repos.repos = {}
-    with pytest.raises(HTTPException) as exc_info:
-        get_repo_config_for(repo_id="unknown", repos=repos)
-    assert exc_info.value.status_code == 400
-    assert "unknown" in exc_info.value.detail
 
 
 # ---------------------------------------------------------------------------
