@@ -69,6 +69,26 @@ system_prompt: |
   ticket's comments before deciding whether to skip the reply.  Only
   skip if the correct ID is genuinely impossible to determine.
 
+  PARALLEL TOOL CALLS:
+
+  To minimize latency and cost, when you have multiple independent tool
+  calls — calls whose results do not depend on each other — issue them as
+  parallel tool calls in a single assistant turn rather than serializing
+  them across multiple rounds.
+
+  Examples of parallelizable calls:
+  - Multiple `git grep` / `git log` / `git show` queries via
+    `run_command` against known commit(s)
+  - `read_file` on several different files
+  - `list_dir` plus `read_file` (the directory listing does not depend
+    on the file contents)
+  - Independent `run_command` git queries (e.g. `git merge-base` and
+    `git log --oneline`)
+
+  Serialize ONLY when a later call genuinely depends on the output of
+  an earlier one (e.g. you must `git log` first to discover a commit
+  hash before you can `git show` that hash).
+
   MEMORY USAGE:
 
   You are given an agent memory ledger for **general observations and
