@@ -1592,14 +1592,16 @@ def test_root_span_only_on_first_rebase_attempt(tmp_path, monkeypatch):
 # ============================================================
 
 
-def _write_review_artifact(ctx, ticket, *, verdict="APPROVE", eligible=True):
+def _write_review_artifact(
+    ctx, ticket, *, verdict="APPROVE", eligible=True, comment=""
+):
     """Helper: write a review.md artifact for auto-merge tests."""
     art_dir = ctx.service.workspace(ticket).artifacts_dir
     art_dir.mkdir(parents=True, exist_ok=True)
-    (art_dir / "review.md").write_text(
-        f"verdict: {verdict}\nauto_merge_eligible: {str(eligible).lower()}\n",
-        encoding="utf-8",
-    )
+    text = f"verdict: {verdict}\nauto_merge_eligible: {str(eligible).lower()}\n"
+    if comment:
+        text += f"comment: {comment}\n"
+    (art_dir / "review.md").write_text(text, encoding="utf-8")
 
 
 def test_auto_merge_fires_when_all_conditions_met(tmp_path, monkeypatch):
@@ -2182,7 +2184,7 @@ def test_not_eligible_flagged_false_stays_human_mr_approval_with_comment(
     )
 
     t = _human_mr_approval(ctx)
-    _write_review_artifact(ctx, t, eligible=False)
+    _write_review_artifact(ctx, t, eligible=False, comment="risky migration")
 
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.HUMAN_MR_APPROVAL
@@ -2193,7 +2195,49 @@ def test_not_eligible_flagged_false_stays_human_mr_approval_with_comment(
 
     assert len(merge_events) == 1
 
-    assert "not auto-merge eligible" in (merge_events[0].note or "")
+    note = merge_events[0].note or ""
+    assert "not auto-merge eligible" in note
+    assert "risky migration" in note
+    assert " — " in note  # separator between verdict and comment
+
+
+def test_not_eligible_flagged_false_no_comment_line_backward_compat(
+    tmp_path, monkeypatch
+):
+    """When review.md has no comment: line (pre-existing artifact),
+    the reason is unchanged — no comment suffix, no ' — ' separator."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t, eligible=False)  # no comment
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+
+    merge_events = [
+        e for e in ctx.service.history(t.id) if (e.note or "").startswith("merge:")
+    ]
+
+    assert len(merge_events) == 1
+
+    note = merge_events[0].note or ""
+    assert "not auto-merge eligible" in note
+    assert " — " not in note  # no comment separator when no comment
 
 
 def test_comment_dedup_same_reason_no_duplicate(tmp_path, monkeypatch):

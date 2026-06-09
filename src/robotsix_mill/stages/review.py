@@ -22,6 +22,23 @@ from .base import Outcome, Stage, StageContext
 log = logging.getLogger("robotsix_mill.stages.review")
 
 
+def _collapse_comments(comments: str) -> str:
+    """Collapse and truncate reviewer comments for the ``review.md`` artifact.
+
+    Rules:
+    - Replace internal newlines with ``" / "``.
+    - Strip leading/trailing whitespace.
+    - Truncate to 300 chars; append ``"…"`` when truncated.
+    - When empty/whitespace-only, return ``"(no details)"``.
+    """
+    collapsed = comments.replace("\n", " / ").strip()
+    if not collapsed:
+        return "(no details)"
+    if len(collapsed) > 300:
+        return collapsed[:300] + "…"
+    return collapsed
+
+
 def _paths_from_diff(diff: str) -> list[str]:
     """Extract modified file paths from a unified git diff.
 
@@ -307,7 +324,8 @@ class ReviewStage(Stage):
         # Persist review artifact for downstream consumers (e.g. auto-merge).
         ws.artifacts_dir.joinpath("review.md").write_text(
             f"verdict: {verdict.verdict}\n"
-            f"auto_merge_eligible: {str(verdict.auto_merge_eligible).lower()}\n",
+            f"auto_merge_eligible: {str(verdict.auto_merge_eligible).lower()}\n"
+            f"comment: {_collapse_comments(verdict.comments)}\n",
             encoding="utf-8",
         )
 
