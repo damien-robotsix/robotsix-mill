@@ -1549,6 +1549,7 @@ class ImplementStage(Stage):
             description=description,
             source_kind=SourceKind.IMPLEMENT_BASELINE_DEPENDENCY,
             block_reason_prefix=block_reason,
+            priority=ticket.priority,
         )
 
     @staticmethod

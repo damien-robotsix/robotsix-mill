@@ -427,6 +427,7 @@ class CIFixStage(Stage):
             description=description,
             source_kind=SourceKind.CI_FIX_DEPENDENCY,
             block_reason_prefix=block_reason,
+            priority=ticket.priority,
         )
 
         # Reset the per-ticket ci_fix counters so a later re-entry (after

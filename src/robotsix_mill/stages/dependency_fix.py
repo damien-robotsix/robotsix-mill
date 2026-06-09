@@ -25,6 +25,7 @@ def spawn_dependency_fix(
     description: str,
     source_kind: SourceKind,
     block_reason_prefix: str,
+    priority: bool = False,
 ) -> Outcome:
     """Spawn (or reuse) a dependency fix ticket, wire both ways, park BLOCKED.
 
@@ -51,6 +52,7 @@ def spawn_dependency_fix(
             source=source_kind,
             kind="task",
             board_id=board_id,
+            priority=priority,
         )
         fix_id = fix.id
 
