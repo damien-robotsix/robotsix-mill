@@ -41,6 +41,28 @@ def test_list_filters_by_state(service):
     assert len(service.list()) == 2
 
 
+def test_reset_engine_disposes_cached_engines(settings):
+    """``reset_engine`` must dispose cached engines, not just drop them.
+
+    Leaking undisposed SQLite engines leaks their pooled file
+    descriptors; across a full suite run that accumulation eventually
+    trips an "unable to open database file" error on a later test.
+    """
+    from robotsix_mill.core import db
+
+    engine = db.get_engine(settings, board_id="test-board")
+    disposed = {"called": False}
+    orig_dispose = engine.dispose
+
+    def _spy_dispose(*args, **kwargs):
+        disposed["called"] = True
+        return orig_dispose(*args, **kwargs)
+
+    engine.dispose = _spy_dispose  # type: ignore[method-assign]
+    db.reset_engine()
+    assert disposed["called"] is True
+
+
 def test_transition_records_history(service):
     t = service.create("x")
     service.transition(t.id, State.READY, note="refined")
