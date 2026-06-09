@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import subprocess
 from collections import deque
@@ -102,21 +101,68 @@ _PLACEHOLDER_SPEC_PHRASES = (
 
 
 # File extensions that are safe to preview as text (last 100 lines).
-_TEXT_SAFE_EXTENSIONS = frozenset({
-    ".log", ".txt", ".json", ".csv", ".yaml", ".yml", ".toml", ".xml",
-    ".md", ".env", ".cfg", ".conf", ".ini",
-})
+_TEXT_SAFE_EXTENSIONS = frozenset(
+    {
+        ".log",
+        ".txt",
+        ".json",
+        ".csv",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".xml",
+        ".md",
+        ".env",
+        ".cfg",
+        ".conf",
+        ".ini",
+    }
+)
 
 # File extensions that are likely binary — preview with caution.
-_BINARY_EXTENSIONS = frozenset({
-    ".gz", ".zip", ".tar", ".bz2", ".xz", ".7z", ".rar",
-    ".pkl", ".pickle", ".db", ".sqlite", ".sqlite3",
-    ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".svg", ".ico",
-    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
-    ".mp3", ".mp4", ".wav", ".avi", ".mov",
-    ".pyc", ".pyo", ".so", ".dll", ".exe",
-    ".bin", ".dat", ".elf",
-})
+_BINARY_EXTENSIONS = frozenset(
+    {
+        ".gz",
+        ".zip",
+        ".tar",
+        ".bz2",
+        ".xz",
+        ".7z",
+        ".rar",
+        ".pkl",
+        ".pickle",
+        ".db",
+        ".sqlite",
+        ".sqlite3",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".bmp",
+        ".svg",
+        ".ico",
+        ".pdf",
+        ".doc",
+        ".docx",
+        ".xls",
+        ".xlsx",
+        ".ppt",
+        ".pptx",
+        ".mp3",
+        ".mp4",
+        ".wav",
+        ".avi",
+        ".mov",
+        ".pyc",
+        ".pyo",
+        ".so",
+        ".dll",
+        ".exe",
+        ".bin",
+        ".dat",
+        ".elf",
+    }
+)
 
 _MAX_SUMMARY_ENTRIES = 20
 _PREVIEW_MAX_FILE_SIZE = 512 * 1024  # 512 KB
@@ -1477,7 +1523,10 @@ class RefineStage(Stage):
                     len(saved_state),
                 )
 
-        from ..repo_settings import resolve_language_instructions, load_deployed_log_folder
+        from ..repo_settings import (
+            resolve_language_instructions,
+            load_deployed_log_folder,
+        )
 
         language_instructions = resolve_language_instructions(s, repo_dir)
 
