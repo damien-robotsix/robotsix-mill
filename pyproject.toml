@@ -49,7 +49,7 @@ tracing = [
 # Python import in mill. CI/dev-only, so it stays in the dev extra (out of the
 # pip-based audit install and the runtime image).
 dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "bandit[toml]>=1.8", "mypy>=1.15", "ruff==0.15.15", "deptry>=0.25", "robotsix-modules @ git+https://github.com/damien-robotsix/robotsix-modules@main"]
-docs = ["mkdocs-material>=9"]
+docs = ["mkdocs-material>=9", "mkdocstrings[python]>=0.27"]
 
 [project.scripts]
 robotsix-mill = "robotsix_mill.cli:main"
@@ -219,6 +219,7 @@ DEP002 = [
     "ruff",
     "deptry",
     "mkdocs-material",
+    "mkdocstrings",
     "langfuse",
     "robotsix-modules",
 ]

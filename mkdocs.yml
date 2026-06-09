@@ -31,6 +31,23 @@ nav:
       - Notifications: notifications.md
       - Ticket provenance: ticket-provenance.md
       - Workspace cleanup: workspace-cleanup.md
+  - API Reference:
+      - Agents: reference/agents.md
+      - Core: reference/core.md
+      - Runtime: reference/runtime.md
+      - Stages: reference/stages.md
+
+plugins:
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_root_heading: true
+            separate_signature: true
+            members_order: source
+            signature_crossrefs: true
+            filters: ["!^_"]
+            show_source: false
 
 markdown_extensions:
   - admonition
