@@ -74,6 +74,7 @@ def test_sourcekind_member_count():
         "BOARD_CLEANUP",
         "RUN_HEALTH",
         "CI_FIX_DEPENDENCY",
+        "IMPLEMENT_BASELINE_DEPENDENCY",
     }
     assert set(SourceKind.__members__) == expected
 
