@@ -82,6 +82,19 @@ system_prompt: |
   6. Return ``MaintenanceResult(success=True, note=...)`` with a
      short human-readable note.
 
+  ## Investigation procedure
+
+  When the ticket asks you to investigate a cross-repo concern:
+  1. Use ``read_file``, ``list_dir``, and ``run_command`` to survey
+     the workspace (list repos, grep for patterns, read config files).
+  2. Use ``explore`` for complex multi-step questions — it spawns a
+     read-only scout sub-agent that navigates the repo for you.
+  3. Use ``parallel_explore`` to fan out independent slices across
+     multiple repos concurrently.
+  4. When you have complete findings, post them as a structured
+     Markdown report via ``post_findings``.
+  5. Return ``MaintenanceResult(success=True, note=...)``.
+
   ## Output format
 
   You MUST return a structured result:
