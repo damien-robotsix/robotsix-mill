@@ -1056,7 +1056,7 @@ class TestRepoConfig:
     # -- ci_monitor fields --
 
     def test_ci_monitor_defaults(self):
-        """ci_monitor_enabled defaults to True, interval defaults to 86400."""
+        """ci_monitor_enabled defaults to True, interval defaults to 900."""
         from robotsix_mill.config import RepoConfig
 
         rc = RepoConfig(
@@ -1067,7 +1067,7 @@ class TestRepoConfig:
             langfuse_secret_key="sk",
         )
         assert rc.ci_monitor_enabled is True
-        assert rc.ci_monitor_interval_seconds == 86400
+        assert rc.ci_monitor_interval_seconds == 900
 
     def test_ci_monitor_interval_minimum(self):
         """ci_monitor_interval_seconds < 60 raises ValidationError."""
@@ -1269,7 +1269,7 @@ class TestLoadReposConfig:
         assert rr.meta is None
 
     def test_yaml_ci_monitor_defaults_when_absent(self, tmp_path):
-        """When ``ci_monitor`` is absent, fields default to True / 86400."""
+        """When ``ci_monitor`` is absent, fields default to True / 900."""
         from robotsix_mill.config import load_repos_config
 
         repos_file = tmp_path / "repos.yaml"
@@ -1285,7 +1285,7 @@ class TestLoadReposConfig:
         rr = load_repos_config(str(repos_file))
         rc = rr.repos["repo-a"]
         assert rc.ci_monitor_enabled is True
-        assert rc.ci_monitor_interval_seconds == 86400
+        assert rc.ci_monitor_interval_seconds == 900
 
     def test_langfuse_base_url_default_in_loaded_config(self, tmp_path):
         """Omitting ``langfuse.base_url`` in YAML defaults to cloud."""

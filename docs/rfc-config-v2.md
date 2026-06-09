@@ -325,7 +325,7 @@ marked `→ secrets` are loaded from `config/secrets.yaml` into a separate
 | Env var | YAML key | Default | Note |
 |---|---|---|---|
 | `MILL_CI_LOG_MAX_BYTES` | `periodic.ci_monitor.log_max_bytes` | `65536` | global operational cap |
-| — | (per-repo in `repos.yaml`) | `True` / `86400` | `ci_monitor.enabled` and `ci_monitor.interval_seconds` are RepoConfig fields |
+| — | (per-repo in `repos.yaml`) | `True` / `900` | `ci_monitor.enabled` and `ci_monitor.interval_seconds` are RepoConfig fields |
 
 #### service
 
