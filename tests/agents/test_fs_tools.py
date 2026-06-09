@@ -204,7 +204,9 @@ class TestReadFile:
         tools = _build(root, settings)
         result = tools["read_file"](path="nope.txt")
         assert isinstance(result, str)
-        assert result == "error: 'nope.txt' is not a file"
+        assert "does not exist" in result
+        assert "nope.txt" in result
+        assert "list_dir" in result
 
     def test_read_directory(self, tmp_path, settings):
         root = tmp_path / "repo"
@@ -213,7 +215,8 @@ class TestReadFile:
         tools = _build(root, settings)
         result = tools["read_file"](path="subdir")
         assert isinstance(result, str)
-        assert result == "error: 'subdir' is not a file"
+        assert "is a directory" in result
+        assert "subdir" in result
 
     def test_read_outside_root(self, tmp_path, settings):
         root = tmp_path / "repo"

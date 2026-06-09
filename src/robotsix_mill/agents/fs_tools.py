@@ -369,6 +369,13 @@ def build_fs_tools(
         ``reference_files`` preload block at conversation start),
         scroll back and quote from it. Re-asking wastes a round-trip.
 
+        **Verify the path exists before calling.** If you are guessing a
+        path (e.g. you think a file lives under ``docs/`` but are not
+        certain), call ``list_dir`` on the parent directory first to
+        confirm.  A ``read_file`` call on a non-existent path wastes a
+        round-trip — the tool returns an error string, and you must
+        retry.
+
         **Partial slices of fully-loaded files are REFUSED.** The
         ``reference_files`` block at conversation start preloads every
         listed file in full — asking for a slice of one of those is
@@ -399,7 +406,20 @@ def build_fs_tools(
             return f"error: {e}"
 
         if not p.is_file():
-            return f"error: {path!r} is not a file"
+            if p.exists():
+                # Path exists but is a directory.
+                return f"error: {path!r} is a directory, not a file"
+            # Path does not exist at all.
+            parent = p.parent
+            try:
+                parent_hint = str(parent.relative_to(root))
+            except ValueError:
+                parent_hint = str(parent)
+            return (
+                f"error: {path!r} does not exist — "
+                f"try list_dir('{parent_hint}') "
+                f"to find the correct path"
+            )
 
         # Normalize offset (offset ≤ 0 is treated as 1).
         _offset = offset if offset >= 1 else 1
