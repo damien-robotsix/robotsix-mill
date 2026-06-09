@@ -146,9 +146,7 @@ class MaintenanceResult(BaseModel):
                 f"redirect_to must be 'ready' or 'draft', not {v!r}"
             ) from None
         if result not in (State.READY, State.DRAFT):
-            raise ValueError(
-                f"redirect_to must be 'ready' or 'draft', not {v!r}"
-            )
+            raise ValueError(f"redirect_to must be 'ready' or 'draft', not {v!r}")
         return result
 
 
