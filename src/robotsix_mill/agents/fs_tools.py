@@ -363,22 +363,20 @@ def build_fs_tools(
         offset: int = 1,
         limit: int | None = None,
     ) -> str:
-        """Return the text content of a file in the repository.
+        """⚠️  **BEFORE YOU CALL:** Check your conversation history
+        first — if a full copy of *path*'s content is already visible
+        (from a prior ``read_file`` return, or from the
+        ``reference_files`` preload block at conversation start),
+        scroll back and quote from it. Re-asking wastes a round-trip.
 
-        **CHECK YOUR CONVERSATION HISTORY FIRST.** If a prior
-        ``read_file`` return (or a preload at the top of the
-        conversation) for this path is still visible — its content
-        is already in your context. Do NOT call ``read_file`` again
-        on the same path; scroll back and quote from that existing
-        return instead. Re-asking just wastes tokens with no new
-        information.
+        **Partial slices of fully-loaded files are REFUSED.** The
+        ``reference_files`` block at conversation start preloads every
+        listed file in full — asking for a slice of one of those is
+        always wrong. Similarly, any file you read in full earlier in
+        the session already sits in context; requesting a slice will
+        fail. Use the content you already have.
 
-        Partial slices (``offset`` / ``limit``) are REFUSED for files
-        whose content is already present in your history as a full
-        read. The pre-loaded reference files at the start of an
-        implement run already cover every preloaded path in full —
-        asking for a slice of one is always wrong; use the full
-        content already in context.
+        Return the text content of a file in the repository.
 
         Optionally narrow to a line range with ``offset`` and
         ``limit`` (both 1-indexed):
@@ -413,10 +411,19 @@ def build_fs_tools(
         # on top of a still-present preload (which doubles the token
         # cost of that file for every later iteration).
         if ctx is not None and not is_full_read and _file_already_in_history(ctx, p):
+            # Read the file from disk (cached) to report its line count
+            # so the agent knows how much content it already holds.
+            # The file is guaranteed to exist at this point (p.is_file()
+            # guard above).
+            try:
+                _text = _read_cached(p)
+                line_count: int | str = _text.count("\n")
+            except (ValueError, OSError):
+                line_count = "?"
             return (
-                f"refused: {path} is already loaded in full earlier in this "
-                f"conversation (preload section, or a prior full read_file). "
-                f"Use the existing content instead of re-reading a slice."
+                f"refused: {path} ({line_count} lines) is already loaded in full "
+                f"earlier in this conversation — scroll back to find it. "
+                f"Do not re-read a slice of a file you already have in full."
             )
 
         # Read (or refresh) via _read_cached, then slice.
