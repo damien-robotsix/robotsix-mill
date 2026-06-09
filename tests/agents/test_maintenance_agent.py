@@ -124,6 +124,15 @@ class TestMaintenanceResultRedirect:
         with pytest.raises(ValidationError):
             MaintenanceResult(success=True, redirect_to="bogus")
 
+    def test_redirect_to_rejects_done_state_enum(self):
+        """Passing State.DONE directly raises ValidationError."""
+        import pytest
+        from pydantic import ValidationError
+        from robotsix_mill.core.states import State
+
+        with pytest.raises(ValidationError):
+            MaintenanceResult(success=False, redirect_to=State.DONE)
+
 
 # ── Stub tools ───────────────────────────────────────────────────────
 

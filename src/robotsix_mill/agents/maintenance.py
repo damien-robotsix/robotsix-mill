@@ -130,17 +130,24 @@ class MaintenanceResult(BaseModel):
         if v is None:
             return None
         if isinstance(v, State):
+            if v not in (State.READY, State.DRAFT):
+                raise ValueError(
+                    f"redirect_to must be State.READY or State.DRAFT, got {v}"
+                )
             return v
         if not isinstance(v, str):
             raise ValueError(
                 f"redirect_to must be a string or State, got {type(v).__name__}"
             )
         try:
-            return State(v)
+            result = State(v)
         except ValueError:
             raise ValueError(
                 f"redirect_to must be 'ready' or 'draft', not {v!r}"
             ) from None
+        if result not in (State.READY, State.DRAFT):
+            raise ValueError(f"redirect_to must be 'ready' or 'draft', not {v!r}")
+        return result
 
 
 # ---------------------------------------------------------------------------
