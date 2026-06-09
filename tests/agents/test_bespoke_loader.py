@@ -53,7 +53,7 @@ class TestBespokeAgentDefinition:
         # Defaults the operator did not specify.
         assert d.description == ""
         assert d.model == ""  # empty → runtime falls back to settings
-        assert d.web is True  # web_research enabled by default
+        assert d.web_knowledge is True  # ask_web_knowledge enabled by default
 
     def test_name_rejects_uppercase(self):
         with pytest.raises(ValueError, match="must match"):

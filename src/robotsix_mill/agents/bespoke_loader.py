@@ -50,9 +50,9 @@ class BespokeAgentDefinition(BaseModel):
         default="",
         description="provider/model id; empty → settings.bespoke_default_model",
     )
-    web: bool = Field(
+    web_knowledge: bool = Field(
         default=True,
-        description="enable the web_research sub-agent tool",
+        description="enable the ask_web_knowledge gateway tool",
     )
     system_prompt: str = Field(
         description="operator-authored prompt; the entire prompt body",
