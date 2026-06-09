@@ -6,7 +6,7 @@ that were previously defined inside ``create_app()``.
 
 from __future__ import annotations
 
-from fastapi import HTTPException, Query, Request
+from fastapi import Query, Request
 
 from ..config import RepoConfig, ReposRegistry, Settings
 from ..core.models import Ticket, TicketRead
@@ -64,29 +64,6 @@ def get_run_registry(
 def get_repos_registry(request: Request) -> ReposRegistry:
     """Return the ``ReposRegistry`` stored on app state during lifespan startup."""
     return request.app.state.repos
-
-
-def get_repo_config_for(
-    repo_id: str | None = Query(None),
-    repos: ReposRegistry = None,
-    request: Request = None,
-) -> RepoConfig | None:
-    """Resolve a ``RepoConfig`` from a ``repo_id`` query param.
-
-    When *repo_id* is provided but unknown, raises 400 immediately.
-    When omitted, returns ``None`` — the caller decides the fallback
-    (e.g. "all repos" for list endpoints, or per-ticket lookup).
-    """
-    if repo_id is None:
-        return None
-    repos_registry = repos or request.app.state.repos
-    if repo_id not in repos_registry.repos:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown repo: '{repo_id}'. Known repos: "
-            f"{sorted(repos_registry.repos.keys())}",
-        )
-    return repos_registry.repos[repo_id]
 
 
 def maybe_enqueue(ticket: Ticket, worker: Worker) -> None:
