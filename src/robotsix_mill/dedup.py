@@ -80,8 +80,10 @@ def find_prior_matching_ticket(
     non-empty and share no token with *target_concern_tokens* — i.e. the
     two tickets touch the same file but name completely different
     symbols/concerns.  When either side has no concern tokens, the path
-    match is not suppressed (absence of symbols is not evidence of
-    difference).
+    match is still flagged for multi-segment paths (absence of symbols
+    is not evidence of difference), but is suppressed for single-segment
+    (bare filename) paths — a lone filename like ``server.py`` is too
+    common to flag without corroborating concern overlap.
 
     Returns ``None`` when no match is found.
     """
@@ -140,6 +142,7 @@ def find_prior_matching_ticket(
                         # the tickets touch the same file but for unrelated
                         # reasons; suppress the path match and fall through
                         # to the fingerprint check.
+                        is_single_segment = "/" not in matched[0]
                         if target_concern_tokens:
                             cand_concern = _extract_concern_tokens(
                                 ticket.title + "\n" + body
@@ -149,12 +152,18 @@ def find_prior_matching_ticket(
                                     return ticket
                                 # Disjoint concern tokens — different
                                 # concerns; fall through to fingerprint.
-                            else:
-                                # At least one side has no concern tokens —
-                                # cannot determine difference, so flag.
+                            elif not is_single_segment:
+                                # Multi-segment: flag despite absent
+                                # concern tokens on the candidate side.
                                 return ticket
-                        else:
+                            # else: single-segment with no candidate
+                            # concern tokens — fall through.
+                        elif not is_single_segment:
+                            # Multi-segment: flag despite absent concern
+                            # tokens on the draft side.
                             return ticket
+                        # else: single-segment with no concern tokens on
+                        # either side — fall through.
                     # else: lone prose-only path — fall through to the
                     # fingerprint check rather than flagging on prose.
 

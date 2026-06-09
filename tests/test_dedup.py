@@ -624,6 +624,99 @@ def test_inflight_overlap_flags_on_same_path_no_concern_tokens_either_side(
     assert prior.id in note
 
 
+# ---------------------------------------------------------------------------
+# Single-segment path guard (bare filenames need corroborating concern overlap)
+# ---------------------------------------------------------------------------
+
+
+def test_inflight_overlap_unflagged_on_single_segment_disjoint_concerns(settings):
+    """Single-segment path `server.py`, disjoint concern tokens
+    (`new_model` vs `.secrets.baseline`) → no match (regression test
+    for the existing disjoint-concern suppression)."""
+    svc, prior = _seed(
+        settings,
+        title="add `new_model` endpoint",
+        body="## Scope\n\nAdd `new_model` handling in server.py.",
+    )
+    svc.transition(prior.id, State.READY, note="refined")
+
+    note = find_inflight_overlap(
+        _svc(settings),
+        "NEW-DRAFT",
+        "fix `.secrets.baseline` auth",
+        "## Scope\n\nFix `.secrets.baseline` in server.py.",
+        settings,
+        _now(),
+    )
+    assert note is None
+
+
+def test_inflight_overlap_flags_on_single_segment_shared_concern(settings):
+    """Single-segment path `server.py`, shared concern token `new_model`
+    → match (concern overlap corroborates the weak path signal)."""
+    svc, prior = _seed(
+        settings,
+        title="add `new_model` endpoint",
+        body="## Scope\n\nAdd `new_model` handling in server.py.",
+    )
+    svc.transition(prior.id, State.READY, note="refined")
+
+    note = find_inflight_overlap(
+        _svc(settings),
+        "NEW-DRAFT",
+        "refactor `new_model` to use async",
+        "## Scope\n\nRefactor `new_model` in server.py.",
+        settings,
+        _now(),
+    )
+    assert note is not None
+    assert prior.id in note
+    assert "server.py" in note
+
+
+def test_inflight_overlap_unflagged_on_single_segment_draft_concern_only(settings):
+    """Single-segment path `server.py`, draft names `login_form` but
+    candidate has no concern tokens → no match (bare filenames need
+    corroboration on both sides)."""
+    svc, prior = _seed(
+        settings,
+        title="rework the login form",
+        body="## Scope\n\nchanges server.py to validate input",
+    )
+    svc.transition(prior.id, State.READY, note="refined")
+
+    note = find_inflight_overlap(
+        _svc(settings),
+        "NEW-DRAFT",
+        "fix `login_form` validation",
+        "## Scope\n\nedits server.py for `login_form` validation",
+        settings,
+        _now(),
+    )
+    assert note is None
+
+
+def test_inflight_overlap_unflagged_on_single_segment_no_concern_tokens(settings):
+    """Single-segment path `server.py`, no concern tokens on either side
+    → no match (bare filenames need corroboration)."""
+    svc, prior = _seed(
+        settings,
+        title="rework the login form",
+        body="## Scope\n\nchanges server.py to validate input",
+    )
+    svc.transition(prior.id, State.READY, note="refined")
+
+    note = find_inflight_overlap(
+        _svc(settings),
+        "NEW-DRAFT",
+        "fix the login form validation",
+        "## Scope\n\nedits server.py for validation",
+        settings,
+        _now(),
+    )
+    assert note is None
+
+
 def test_scope_paths_extracts_only_declared_sections():
     """``_scope_paths`` returns paths under ``## Scope`` / ``## Acceptance``
     sections and ``file_map`` blocks, and excludes prose-only and
