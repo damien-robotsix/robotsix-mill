@@ -39,9 +39,7 @@ class MaintenanceResult(BaseModel):
 
     @field_validator("redirect_to", mode="before")
     @classmethod
-    def _coerce_redirect_to(
-        cls, v: str | State | None
-    ) -> State | None:
+    def _coerce_redirect_to(cls, v: str | State | None) -> State | None:
         """Coerce the raw string ``"ready"`` or ``"draft"`` into the
         corresponding :class:`State` enum member, and reject anything
         else that isn't already a valid ``State`` or ``None``.
