@@ -47,8 +47,9 @@ def test_no_session_returns_error(settings, monkeypatch):
 
 
 def test_service_valueerror_returns_error_string(settings, monkeypatch):
-    """When TicketService.close_thread raises ValueError, the tool
-    returns a formatted error string."""
+    """When TicketService.close_thread raises a ValueError for a reason
+    other than 'already closed' (e.g. reply thread), the tool returns a
+    formatted error string."""
     monkeypatch.setattr(
         "robotsix_mill.runtime.tracing.current_session",
         lambda: "ticket-42",
@@ -56,14 +57,36 @@ def test_service_valueerror_returns_error_string(settings, monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.core.service.TicketService.close_thread",
         lambda self, comment_id, ticket_id=None: (_ for _ in ()).throw(
-            ValueError("already closed")
+            ValueError("only top-level threads can be closed")
         ),
     )
 
     close_thread = make_close_thread_tool(settings, "test-agent")
     result = close_thread(comment_id=7)
 
-    assert result == "Error: already closed"
+    assert result == "Error: only top-level threads can be closed"
+
+
+def test_already_closed_is_idempotent_success(settings, monkeypatch):
+    """When the service raises ValueError('thread already closed'),
+    the tool returns a success-like message instead of an error."""
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.tracing.current_session",
+        lambda: "ticket-42",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.core.service.TicketService.close_thread",
+        lambda self, comment_id, ticket_id=None: (_ for _ in ()).throw(
+            ValueError("thread already closed")
+        ),
+    )
+
+    close_thread = make_close_thread_tool(settings, "test-agent")
+    result = close_thread(comment_id=7)
+
+    assert "already closed" in result
+    assert "Error" not in result
+    assert "already resolved" in result
 
 
 def test_service_keyerror_returns_error_string(settings, monkeypatch):

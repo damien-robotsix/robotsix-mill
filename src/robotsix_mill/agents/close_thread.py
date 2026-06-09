@@ -42,6 +42,9 @@ def make_close_thread_tool(settings: Settings, agent_name: str):
             svc.close_thread(comment_id, ticket_id=ticket_id)
             return f"Thread closed (id={comment_id})."
         except (ValueError, KeyError) as e:
+            # Idempotency: already-closed threads are a success, not an error.
+            if "already closed" in str(e):
+                return f"Thread already closed (id={comment_id} is already resolved)."
             return f"Error: {e}"
 
     from .tool_registry import ToolInfo, ToolRegistry
