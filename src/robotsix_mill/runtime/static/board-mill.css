@@ -427,6 +427,7 @@ pre {
   width: min(480px, 94vw);
   max-height: 90vh;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 .modal-wide { width: min(560px, 94vw); }
 .modal h2 { margin: 0 0 14px 0; font-size: 15px; color: #fff; }
