@@ -1124,6 +1124,26 @@ class Settings(BaseSettings):
     # next scheduled pass. Mirrors trace_review_max_drafts_per_run.
     # Override with MILL_DATA_DIR_AUDIT_MAX_DRAFTS_PER_PASS.
     data_dir_audit_max_drafts_per_pass: int = Field(default=5)
+    # When true (default), the data-dir audit pass DELETES orphan
+    # workspace directories (a dir under <board>/workspaces/ whose ticket
+    # no longer exists in the board DB) instead of only filing a finding.
+    # Orphans accumulate when a board DB is reset/recreated while its
+    # workspaces/ tree is left intact — the count-based archival purge
+    # (max_archived_tickets) only deletes dirs for tickets still in the
+    # DB, so it never reclaims these. The min-age guard below makes
+    # deletion safe (an in-flight workspace is never old enough to hit).
+    # Set False to revert to report-only (file an orphan finding instead
+    # of deleting). Override with MILL_DATA_DIR_AUDIT_PRUNE_ORPHANS.
+    data_dir_audit_prune_orphans: bool = Field(default=True)
+    # Minimum age (hours) an orphan workspace must reach before
+    # data_dir_audit_prune_orphans will delete it. Age is derived from
+    # the ticket-ID timestamp prefix (YYYYmmddTHHMMSSZ-…), which encodes
+    # creation time. Guards against a race where a freshly-created
+    # workspace dir exists on disk a moment before its ticket row is
+    # committed — such a dir looks like an orphan but must not be
+    # deleted. Default 24h. Override with
+    # MILL_DATA_DIR_AUDIT_ORPHAN_MIN_AGE_HOURS.
+    data_dir_audit_orphan_min_age_hours: int = Field(default=24, ge=0)
 
     # --- completeness_check agent (feature-wiring completeness) ---
     # Model for the completeness-check agent. Defaults to the same

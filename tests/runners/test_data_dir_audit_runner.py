@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -42,6 +43,8 @@ from robotsix_mill.runners.data_dir_audit_runner import (
     _enumerate_boards,
     _growth_state_path,
     _load_growth_state,
+    _orphan_age_hours,
+    _prune_orphan_workspaces,
     _save_growth_state,
     _scan_board_sizes,
     check_unbounded_candidates,
@@ -486,6 +489,141 @@ def test_batch_query_used_for_large_set(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# orphan-workspace GC (_orphan_age_hours, _prune_orphan_workspaces)
+# ---------------------------------------------------------------------------
+
+
+def test_orphan_age_hours_parses_id_timestamp():
+    """Age is computed from the ticket-ID timestamp prefix (UTC)."""
+    now = datetime(2026, 1, 2, 0, 0, 0, tzinfo=timezone.utc)
+    # Created exactly 24h before `now`.
+    age = _orphan_age_hours("20260101T000000Z-old-ab12", now)
+    assert age == pytest.approx(24.0)
+
+
+def test_orphan_age_hours_none_for_unparseable():
+    """A name without a valid timestamp prefix yields None (age unknown)."""
+    now = datetime(2026, 1, 2, 0, 0, 0, tzinfo=timezone.utc)
+    assert _orphan_age_hours("not-a-ticket-id", now) is None
+
+
+def test_prune_disabled_is_noop(tmp_path):
+    """With the toggle off, nothing is deleted and orphans pass through."""
+    s = _make_settings(tmp_path, data_dir_audit_prune_orphans=False)
+    ticket_id = "20200101T000000Z-ancient-ab12"
+    ws_dir = _make_workspace_dir(s, "board-x", ticket_id)
+    orphans = {"board-x": [OrphanWorkspace("board-x", ticket_id, ws_dir, 6)]}
+
+    pruned, reclaimed, remaining = _prune_orphan_workspaces(s, orphans)
+
+    assert pruned == []
+    assert reclaimed == 0
+    assert remaining == orphans
+    assert ws_dir.exists()
+    db.reset_engine()
+
+
+def test_prune_deletes_old_orphan(tmp_path):
+    """An old-enough orphan dir is removed and reported as pruned."""
+    s = _make_settings(
+        tmp_path,
+        data_dir_audit_prune_orphans=True,
+        data_dir_audit_orphan_min_age_hours=24,
+    )
+    # Timestamp far in the past → comfortably older than 24h.
+    ticket_id = "20200101T000000Z-ancient-ab12"
+    ws_dir = _make_workspace_dir(s, "board-x", ticket_id)
+    size = sum(p.stat().st_size for p in ws_dir.rglob("*") if p.is_file())
+    orphans = {"board-x": [OrphanWorkspace("board-x", ticket_id, ws_dir, size)]}
+
+    pruned, reclaimed, remaining = _prune_orphan_workspaces(s, orphans)
+
+    assert len(pruned) == 1
+    assert pruned[0].ticket_id == ticket_id
+    assert reclaimed == size
+    assert remaining == {}
+    assert not ws_dir.exists()
+    db.reset_engine()
+
+
+def test_prune_spares_young_orphan(tmp_path, monkeypatch):
+    """An orphan younger than the min-age guard is kept, not deleted.
+
+    Guards the create-dir-before-commit race: a freshly created
+    workspace dir must survive even when GC is enabled.
+    """
+    s = _make_settings(
+        tmp_path,
+        data_dir_audit_prune_orphans=True,
+        data_dir_audit_orphan_min_age_hours=24,
+    )
+    ticket_id = "20260101T120000Z-fresh-ab12"
+    ws_dir = _make_workspace_dir(s, "board-x", ticket_id)
+    orphans = {"board-x": [OrphanWorkspace("board-x", ticket_id, ws_dir, 6)]}
+
+    # Pin "now" to 1h after the ticket's creation timestamp.
+    fixed_now = datetime(2026, 1, 1, 13, 0, 0, tzinfo=timezone.utc)
+
+    class _FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed_now
+
+    monkeypatch.setattr(
+        "robotsix_mill.runners.data_dir_audit_runner.datetime", _FixedDatetime
+    )
+
+    pruned, reclaimed, remaining = _prune_orphan_workspaces(s, orphans)
+
+    assert pruned == []
+    assert reclaimed == 0
+    assert remaining == orphans
+    assert ws_dir.exists()
+    db.reset_engine()
+
+
+def test_prune_spares_unparseable_age(tmp_path):
+    """An orphan whose age can't be parsed is kept (fail-safe)."""
+    s = _make_settings(tmp_path, data_dir_audit_prune_orphans=True)
+    # Bypass _make_workspace_dir's ticket-shaped name on purpose.
+    ws_dir = s.workspaces_dir_for("board-x") / "weird-name-no-ts"
+    ws_dir.mkdir(parents=True)
+    (ws_dir / "f.txt").write_text("x")
+    orphans = {"board-x": [OrphanWorkspace("board-x", "weird-name-no-ts", ws_dir, 1)]}
+
+    pruned, reclaimed, remaining = _prune_orphan_workspaces(s, orphans)
+
+    assert pruned == []
+    assert remaining == orphans
+    assert ws_dir.exists()
+    db.reset_engine()
+
+
+def test_pass_prunes_orphans_end_to_end(tmp_path, monkeypatch):
+    """run_data_dir_audit_pass deletes old orphans and notes it in the summary."""
+    import robotsix_mill.runners.data_dir_audit_runner as mod
+
+    s = _make_settings(
+        tmp_path,
+        data_dir_audit_prune_orphans=True,
+        data_dir_audit_orphan_min_age_hours=24,
+    )
+    monkeypatch.setattr(mod, "Settings", lambda: s)
+
+    db.init_db(s, "board-x")
+    ticket_id = "20200101T000000Z-ancient-ab12"
+    ws_dir = _make_workspace_dir(s, "board-x", ticket_id)
+
+    result = run_data_dir_audit_pass()
+
+    assert not ws_dir.exists()
+    assert "Pruned 1 orphan workspace" in result.summary
+    # The deleted orphan is gone, so it is NOT re-filed as a finding.
+    assert "0 orphan workspaces" in result.summary
+    db.reset_engine()
+
+
+# ---------------------------------------------------------------------------
 # ticket 5 — run_data_dir_audit_pass orphan integration
 # ---------------------------------------------------------------------------
 
@@ -494,7 +632,9 @@ def test_pass_reports_orphans_per_board_in_summary(tmp_path, monkeypatch):
     """``run_data_dir_audit_pass`` discovers boards from disk, scans
     each, and includes orphan counts (with per-board detail) in the
     summary string."""
-    s = _make_settings(tmp_path)
+    # Report-only behaviour: pin orphan GC off so the orphans are
+    # counted in the summary rather than deleted.
+    s = _make_settings(tmp_path, data_dir_audit_prune_orphans=False)
 
     # Two boards, each with one orphan workspace.
     _make_workspace_dir(s, "board-a", "20260101T000000Z-orph-aa11")
@@ -512,6 +652,7 @@ def test_pass_reports_orphans_per_board_in_summary(tmp_path, monkeypatch):
     assert result.session_id == "sess-1"
     assert result.drafts_created == []
     assert "2 orphan workspaces" in result.summary
+    assert "Pruned" not in result.summary  # report-only: nothing deleted
     assert result.summary.startswith("Scanned ")
     db.reset_engine()
 
@@ -1457,6 +1598,12 @@ class TestFilingAndDedup:
         """
         board_id = "test-board"
         db.init_db(s, board_id)
+
+        # These tests assert the orphan is *filed* as a draft, which is
+        # the report-only path. Orphan GC is on by default, so pin it
+        # off here — otherwise the planted orphan is deleted before
+        # filing. (GC deletion is covered by the dedicated GC tests.)
+        s.data_dir_audit_prune_orphans = False
 
         # Oversized file: 200 MiB > 100 MiB threshold.
         fd = os.open(str(s.data_dir / "huge.bin"), os.O_CREAT | os.O_WRONLY)
