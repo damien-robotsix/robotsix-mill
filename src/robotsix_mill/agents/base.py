@@ -451,9 +451,7 @@ def build_agent(  # noqa: C901
         # argument. Only injected when both flag and id are present.
         from .list_epic_children import make_list_epic_children_tool
 
-        all_tools.append(
-            make_list_epic_children_tool(settings, current_ticket_id)
-        )
+        all_tools.append(make_list_epic_children_tool(settings, current_ticket_id))
     if reply_to_thread:
         # Tool so agents can reply to a comment thread on the current
         # ticket, enabling real conversation with humans.
