@@ -3279,6 +3279,124 @@ def test_baseline_check_sandbox_unavailable(ctx_factory, tmp_path, monkeypatch):
     assert "sandbox unavailable" in cache["diagnosis"]
 
 
+def test_baseline_gate_proceeds_when_dependency_fix_done(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """Idempotency: a ticket whose baseline-fix dependency has reached DONE
+    for THIS base_sha must NOT re-spawn a duplicate fix — it proceeds.
+
+    Without the guard, on re-entry origin/main is unchanged (the fix lives on
+    its own unmerged branch) → same base_sha → cached/fresh FAILING result →
+    a brand-new baseline-fix is spawned (the prior DONE one is invisible to
+    the open-only dedup), wedging the ticket in an operator-only re-spawn
+    cycle.
+    """
+    from robotsix_mill.core.models import SourceKind
+
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+
+    # Force a deterministic resolved base SHA so the title is predictable.
+    base_sha = "a1b2c3d4" + "0" * 32
+    monkeypatch.setattr(git_ops, "remote_branch_sha", lambda *a, **kw: base_sha)
+    # The baseline test agent reports FAILING — without the guard this would
+    # re-spawn a fix.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.implement.run_test_agent",
+        lambda **kw: (False, "pre-existing failure"),
+    )
+
+    fix_title = ImplementStage._baseline_fix_title(ctx.settings, base_sha)
+    fix = ctx.service.create(
+        fix_title,
+        "Repair the red base.",
+        source=SourceKind.IMPLEMENT_BASELINE_DEPENDENCY,
+    )
+    ctx.service.transition(fix.id, State.DONE)
+
+    t = ctx.service.create("Add feature", "Please add feature.txt")
+    ctx.service.set_depends_on(t.id, [fix.id])
+    ctx.service.transition(t.id, State.READY)
+    t = ctx.service.get(t.id)
+
+    before = len(
+        ctx.service.recent_proposals_for(SourceKind.IMPLEMENT_BASELINE_DEPENDENCY)
+    )
+
+    out = ImplementStage._run_baseline_check(
+        ctx, t, tmp_path, f"mill/{t.id}", False, ctx.settings
+    )
+
+    # Proceeds (no short-circuit Outcome) ...
+    assert out is None
+    # ... and no NEW baseline-fix ticket was spawned.
+    after = len(
+        ctx.service.recent_proposals_for(SourceKind.IMPLEMENT_BASELINE_DEPENDENCY)
+    )
+    assert after == before
+
+
+def test_baseline_gate_spawns_when_dependency_fix_for_different_sha(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """The guard must NOT fire when the depended-on baseline-fix is for a
+    DIFFERENT base_sha (different title) — normal gating still spawns/parks.
+    """
+    from robotsix_mill.core.models import SourceKind
+
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.implement.run_test_agent",
+        lambda **kw: (False, "pre-existing failure"),
+    )
+    monkeypatch.setattr(
+        coding,
+        "run_implement_agent",
+        lambda *a, **kw: ("done", [], "", None, None, False, ""),
+    )
+
+    # A DONE baseline-fix for an unrelated base_sha — its title differs from
+    # the title computed for the real base, so the guard does not fire.
+    other_sha = "deadbeef" + "0" * 32
+    fix = ctx.service.create(
+        ImplementStage._baseline_fix_title(ctx.settings, other_sha),
+        "Repair some other red base.",
+        source=SourceKind.IMPLEMENT_BASELINE_DEPENDENCY,
+    )
+    ctx.service.transition(fix.id, State.DONE)
+
+    t = ctx.service.create("Add feature", "Please add feature.txt")
+    ctx.service.set_depends_on(t.id, [fix.id])
+    ctx.service.transition(t.id, State.READY)
+    t = ctx.service.get(t.id)
+    _write_file_map(ctx, t, "feature.txt")
+
+    before = len(
+        ctx.service.recent_proposals_for(SourceKind.IMPLEMENT_BASELINE_DEPENDENCY)
+    )
+
+    out = ImplementStage().run(t, ctx)
+
+    # Normal gating: pre-existing failure parks the ticket BLOCKED ...
+    assert out.next_state is State.BLOCKED
+    assert "pre-existing test failures" in out.note
+    # ... and a NEW baseline-fix was spawned (guard did not suppress it).
+    after = len(
+        ctx.service.recent_proposals_for(SourceKind.IMPLEMENT_BASELINE_DEPENDENCY)
+    )
+    assert after == before + 1
+
+
 # --- misc helper --------------------------------------------------------
 
 

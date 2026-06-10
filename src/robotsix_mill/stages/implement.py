@@ -1515,6 +1515,33 @@ class ImplementStage(Stage):
         remote_sha = git_ops.remote_branch_sha(repo_dir, settings.forge_target_branch)
         base_sha = remote_sha or git_ops.head_sha(repo_dir)
 
+        # --- idempotency guard (per ticket, per base commit) ---
+        # If a baseline-fix this ticket already depends on has completed for
+        # THIS base_sha (same title), the gate is satisfied — re-running it
+        # would re-spawn a duplicate fix (the prior DONE fix is invisible to
+        # spawn_dependency_fix's open-only dedup), wedging the ticket in an
+        # operator-only re-spawn cycle. Placed before the cache read so it
+        # covers BOTH the cache-hit-failing and fresh-fail paths and avoids
+        # re-running the test agent on re-entry. Proceed instead; any genuine
+        # residual failure is caught downstream as a normal gate result.
+        fix_title = ImplementStage._baseline_fix_title(settings, base_sha)
+        resolved_fix_id = ImplementStage._baseline_fix_already_resolved(
+            ctx, ticket, fix_title
+        )
+        if resolved_fix_id is not None:
+            try:
+                ctx.service.add_history_note(
+                    ticket.id,
+                    f"baseline gate already satisfied by completed fix "
+                    f"{resolved_fix_id} for base {base_sha[:8]} — proceeding.",
+                )
+            except Exception:  # noqa: BLE001 — history note is best-effort
+                log.warning(
+                    "%s: failed to record baseline-gate-satisfied note",
+                    ticket.id,
+                )
+            return None
+
         # --- cache lookup ---
         if cache_path.exists():
             try:
@@ -1585,6 +1612,33 @@ class ImplementStage(Stage):
         return ImplementStage._spawn_baseline_fix(ctx, ticket, diag, base_sha, settings)
 
     @staticmethod
+    def _baseline_fix_title(settings, base_sha: str) -> str:
+        """Deterministic title for the baseline-fix ticket of *base_sha*.
+
+        Shared by :meth:`_run_baseline_check` (idempotency guard) and
+        :meth:`_spawn_baseline_fix` (spawn/dedup) so the two cannot drift.
+        """
+        return (
+            f"baseline: pre-existing test failures — "
+            f"{settings.forge_target_branch} {base_sha[:8]}"
+        )
+
+    @staticmethod
+    def _baseline_fix_already_resolved(ctx, ticket, fix_title) -> str | None:
+        """Return the id of an already-completed baseline-fix this ticket
+        depends on (same title => same base_sha), else None."""
+        for dep_id in ctx.service._parse_depends_on(ticket):
+            dep = ctx.service.get(dep_id)
+            if (
+                dep is not None
+                and dep.source == SourceKind.IMPLEMENT_BASELINE_DEPENDENCY
+                and dep.title == fix_title
+                and dep.state in (State.DONE, State.CLOSED)
+            ):
+                return dep.id
+        return None
+
+    @staticmethod
     def _spawn_baseline_fix(
         ctx: StageContext,
         ticket: Ticket,
@@ -1602,10 +1656,7 @@ class ImplementStage(Stage):
             f"pre-existing test failures on {settings.forge_target_branch} "
             f"({base_sha[:8]}): {diag[:400]}"
         )
-        title = (
-            f"baseline: pre-existing test failures — "
-            f"{settings.forge_target_branch} {base_sha[:8]}"
-        )
+        title = ImplementStage._baseline_fix_title(settings, base_sha)
         description = (
             f"## Pre-existing test failures on {settings.forge_target_branch}\n\n"
             f"**Base SHA:** {base_sha}\n\n"
