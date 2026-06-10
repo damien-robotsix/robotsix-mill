@@ -928,7 +928,11 @@ class TicketService:
                 ticket.updated_at = datetime.now(timezone.utc)
                 s.add(ticket)
                 changed.append(ticket.id)
-            s.commit()
+                s.commit()
+                if self._on_transition is not None:
+                    self._on_transition(ticket)
+            else:
+                s.commit()
         # Propagate to every descendant. _all_descendants walks the
         # parent_id graph and is cycle-safe.
         for descendant in self._all_descendants(ticket_id):
@@ -941,6 +945,8 @@ class TicketService:
                 s.add(d)
                 s.commit()
                 changed.append(d.id)
+                if self._on_transition is not None:
+                    self._on_transition(d)
         return changed
 
     def set_branch(self, ticket_id: str, branch: str) -> None:

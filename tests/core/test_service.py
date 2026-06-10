@@ -1037,6 +1037,47 @@ def test_set_priority_returns_only_actually_changed(service):
     assert a.id not in changed  # already True; no change
 
 
+def test_set_priority_broadcasts_each_changed_ticket(service):
+    """set_priority fires _on_transition exactly for the tickets whose
+    flag actually flipped (target + flipped descendants) — so the board
+    UI updates live over the WebSocket without a manual refresh."""
+    from robotsix_mill.core.models import Ticket
+
+    epic = service.create("an epic", kind="epic")
+    a = service.create("child a", parent_id=epic.id)
+    service.create("child b", parent_id=epic.id)
+    service.create("grand", parent_id=a.id)
+
+    seen: list[str] = []
+    recorded: list[Ticket] = []
+
+    def recorder(ticket: Ticket) -> None:
+        seen.append(ticket.id)
+        recorded.append(ticket)
+
+    service._on_transition = recorder
+    changed = service.set_priority(epic.id, True)
+
+    # Fired once per changed ticket — no duplicates, no extras.
+    assert sorted(seen) == sorted(changed)
+    assert len(seen) == len(set(seen))
+    # The recorded objects are usable by broadcast_sync.
+    assert all(t.priority is True for t in recorded)
+
+
+def test_set_priority_no_broadcast_when_nothing_flips(service):
+    """When the target already holds the requested value (and no
+    descendant flips), _on_transition is not invoked at all."""
+    t = service.create("a task")
+
+    seen: list[str] = []
+    service._on_transition = lambda ticket: seen.append(ticket.id)
+    changed = service.set_priority(t.id, False)  # already False
+
+    assert changed == []
+    assert seen == []
+
+
 def test_child_created_after_epic_priority_inherits(service):
     """A ticket created with parent_id pointing at a priority-flagged
     epic inherits the flag at create time — the key case for
