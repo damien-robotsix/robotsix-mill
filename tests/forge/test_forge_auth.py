@@ -81,6 +81,59 @@ def test_private_key_from_path(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# invalidate_github_token
+# ---------------------------------------------------------------------------
+
+
+def test_invalidate_github_token_removes_correct_entry(tmp_path, monkeypatch):
+    """Populate cache with two entries, invalidate one, verify the other
+    survives."""
+    auth._cache.clear()
+    mint_calls = []
+
+    def fake_mint(settings, repo_config=None):
+        mint_calls.append(1)
+        return f"tok_{len(mint_calls)}", time.time() + 3000
+
+    monkeypatch.setattr(auth, "_mint_installation_token", fake_mint)
+
+    # Two settings that share the same github_app_id (global secrets
+    # singleton) but differ in remote_url — so the cache-key
+    # namespace (app_id:remote_url) yields two distinct entries.
+    s1 = S(
+        tmp_path,
+        FORGE_AUTH="app",
+        GITHUB_APP_ID="111",
+        GITHUB_APP_PRIVATE_KEY="K1",
+        FORGE_REMOTE_URL="https://github.com/o1/r1.git",
+    )
+    s2 = S(
+        tmp_path,
+        FORGE_AUTH="app",
+        GITHUB_APP_ID="111",
+        GITHUB_APP_PRIVATE_KEY="K1",
+        FORGE_REMOTE_URL="https://github.com/o2/r2.git",
+    )
+
+    # Populate two distinct cache entries.
+    assert auth.github_token(s1) == "tok_1"
+    assert auth.github_token(s2) == "tok_2"
+    assert len(auth._cache) == 2
+
+    # Invalidate s1; s2's entry must remain.
+    auth.invalidate_github_token(s1)
+    assert len(auth._cache) == 1
+    # s2 entry still present
+    ck2 = "111:https://github.com/o2/r2.git"
+    assert ck2 in auth._cache
+
+    # Next call for s1 mints a fresh token (cache miss → mint again).
+    tok3 = auth.github_token(s1)
+    assert tok3 == "tok_3"  # fresh mint
+    assert len(auth._cache) == 2
+
+
+# ---------------------------------------------------------------------------
 # gitlab_token
 # ---------------------------------------------------------------------------
 
