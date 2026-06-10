@@ -91,34 +91,45 @@ def _verify_prior_proposals(
         if ticket.source != source_label:
             continue
 
-        # 2. Read description and parse marker.
-        desc = Workspace(
-            settings.workspaces_dir_for(ticket.board_id), ticket.id
-        ).read_description()
-        for m in _GAP_ID_RE.finditer(desc):
-            marker_label, gap_id = m.group(1), m.group(2)
-            if marker_label != source_label:
-                continue
+        # A single stale / orphaned ticket whose board can no longer be
+        # resolved (service.history -> _board_for raises ValueError) must
+        # NOT abort the whole verification pass — skip it and continue.
+        try:
+            # 2. Read description and parse marker.
+            desc = Workspace(
+                settings.workspaces_dir_for(ticket.board_id), ticket.id
+            ).read_description()
+            for m in _GAP_ID_RE.finditer(desc):
+                marker_label, gap_id = m.group(1), m.group(2)
+                if marker_label != source_label:
+                    continue
 
-            # 3. Determine resolution.
-            state_str = ticket.state.name
-            if ticket.state == State.CLOSED:
-                history = service.history(ticket.id)
-                if any(ev.state == State.DONE for ev in history):
+                # 3. Determine resolution.
+                state_str = ticket.state.name
+                if ticket.state == State.CLOSED:
+                    history = service.history(ticket.id)
+                    if any(ev.state == State.DONE for ev in history):
+                        resolution = "merged"
+                    else:
+                        resolution = "declined"
+                elif ticket.state == State.DONE:
                     resolution = "merged"
                 else:
-                    resolution = "declined"
-            elif ticket.state == State.DONE:
-                resolution = "merged"
-            else:
-                resolution = "in-flight"
+                    resolution = "in-flight"
 
-            result[gap_id] = {
-                "ticket_id": ticket.id,
-                "state": state_str,
-                "resolution": resolution,
-                "branch": ticket.branch,
-            }
+                result[gap_id] = {
+                    "ticket_id": ticket.id,
+                    "state": state_str,
+                    "resolution": resolution,
+                    "branch": ticket.branch,
+                }
+        except Exception as exc:
+            log.debug(
+                "_verify_prior_proposals: skipping ticket %s — %s",
+                ticket.id,
+                exc,
+            )
+            continue
 
     return result
 
