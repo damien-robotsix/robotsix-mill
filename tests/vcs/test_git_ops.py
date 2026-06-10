@@ -708,3 +708,34 @@ class TestIgnoredExistingPaths:
     def test_empty_input(self, tmp_path):
         dest = self._repo_with_ignored_subtree(tmp_path)
         assert git_ops.ignored_existing_paths(dest, []) == []
+
+
+# ===========================================================================
+# ignored_paths — existence-agnostic gitignore check (refine guard)
+# ===========================================================================
+
+
+class TestIgnoredPaths:
+    def _repo_with_ignored_subtree(self, tmp_path):
+        """Mimics a manifest board: ``/src/*`` gitignored for vcs-imported
+        sub-repos (the robotsix-mill-ros2 layout)."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        (dest / ".gitignore").write_text("/src/*\n!/src/.gitkeep\n")
+        git_ops.commit_all(dest, "add gitignore")
+        return dest
+
+    def test_flags_nonexistent_ignored_path(self, tmp_path):
+        dest = self._repo_with_ignored_subtree(tmp_path)
+        # Status.msg was never written, yet a /src/* rule still ignores it.
+        hits = git_ops.ignored_paths(dest, ["src/pkg/msg/Status.msg"])
+        assert hits == ["src/pkg/msg/Status.msg"]
+
+    def test_tracked_area_path_not_flagged(self, tmp_path):
+        dest = self._repo_with_ignored_subtree(tmp_path)
+        assert git_ops.ignored_paths(dest, ["robotsix_mill/foo.py"]) == []
+
+    def test_empty_input(self, tmp_path):
+        dest = self._repo_with_ignored_subtree(tmp_path)
+        assert git_ops.ignored_paths(dest, []) == []

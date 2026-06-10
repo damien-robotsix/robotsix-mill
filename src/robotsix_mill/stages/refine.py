@@ -1614,6 +1614,31 @@ class RefineStage(Stage):
         # into downstream stages as a phantom resume context.
         clear_conversation_state(ws, "refine")
 
+        # --- gitignored file_map guard (single-repo boards only) ---
+        # Deterministically reject a spec whose deliverable files target
+        # paths gitignored in the repo clone (e.g. a manifest board whose
+        # ``.gitignore`` carries ``/src/*`` for vcs-imported sub-repos).
+        # Those edits would land on disk but be invisible to git, dying at
+        # implement as an opaque "no changes produced" block. Catch it here
+        # — before any memory/title/epic side-effects — with an actionable
+        # note. Meta/multi-repo workspaces are skipped: a path tracked in
+        # one clone can look ignored relative to another, and robust
+        # per-repo resolution belongs with manifest-aware delivery.
+        if ticket.board_id != "meta" and result.file_map and repo_dir is not None:
+            blocked = git_ops.ignored_paths(repo_dir, [e.file for e in result.file_map])
+            if blocked:
+                hit_list = ", ".join(f"`{p}`" for p in blocked)
+                return Outcome(
+                    State.BLOCKED,
+                    f"refine produced a spec targeting gitignored path(s): "
+                    f"{hit_list}. This board cannot deliver changes there — the "
+                    "paths are vcs-imported / vendored sub-trees (e.g. `/src/*` "
+                    "managed via repos.yaml), invisible to git. Re-scope the "
+                    "spec to target git-tracked files in this repo (e.g. the "
+                    "manifest / repos.yaml and the board's own sources), not "
+                    "the cloned workspace sources.",
+                )
+
         if result.updated_memory:
             persist_memory(refine_memory_path, result.updated_memory)
 

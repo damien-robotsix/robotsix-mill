@@ -426,6 +426,30 @@ def ignored_existing_paths(repo: Path, paths: list[str]) -> list[str]:
     return hits
 
 
+def ignored_paths(repo: Path, paths: list[str]) -> list[str]:
+    """Subset of *paths* that are gitignored in *repo*, whether or not
+    they currently exist on disk (unlike :func:`ignored_existing_paths`).
+
+    ``git check-ignore --quiet`` matches against ignore rules regardless
+    of on-disk existence — including nested paths under an ignored
+    directory (e.g. ``src/ros2/foo/Status.msg`` against a ``/src/*``
+    rule). Used by the refine guard to reject specs whose ``file_map``
+    targets paths the board cannot deliver (vcs-imported / vendored
+    sub-trees managed via ``repos.yaml``, invisible to git)."""
+    hits: list[str] = []
+    for p in paths:
+        rel = p.lstrip("/")
+        if not rel:
+            continue
+        rc = subprocess.run(
+            ["git", "-C", str(repo), "check-ignore", "--quiet", "--", rel],
+            capture_output=True,
+        ).returncode
+        if rc == 0:
+            hits.append(rel)
+    return hits
+
+
 def diff_base(
     repo: Path,
     target_branch: str,

@@ -39,6 +39,41 @@ No raw database editing is ever needed to recover a blocked ticket.
 Implemented in `service.py:resume_blocked`, `service.py:mark_done`,
 and `states.py:TRANSITIONS`.
 
+## Common block reasons
+
+### Refine-stage block: gitignored file_map paths
+
+When a refine agent produces a spec whose `file_map` targets paths that
+are gitignored in the repo (e.g. a manifest board whose `.gitignore`
+carries `/src/*` for vcs-imported sub-repos), the refine stage blocks
+the ticket with a note like:
+
+```
+refine produced a spec targeting gitignored path(s): `src/ros2/pkg/msg/Status.msg`.
+This board cannot deliver changes there — the paths are vcs-imported / vendored
+sub-trees (e.g. `/src/*` managed via repos.yaml), invisible to git. Re-scope the
+spec to target git-tracked files in this repo (e.g. the manifest / repos.yaml and
+the board's own sources), not the cloned workspace sources.
+```
+
+**Why it happens:** On manifest-style boards (e.g. ROS 2 workspace repos),
+the `.gitignore` lists rules like `/src/*` to hide vcs-imported sub-repos
+that are cloned and managed via `repos.yaml` at runtime. Writing to those
+paths produces real files on disk, but they're invisible to git — so a
+spec targeting them would land as untracked files, never enter the commit,
+and surface as an opaque "no changes produced" failure at implement.
+
+**How to fix it:**
+1. Re-edit the ticket in `DRAFT` (use `robotsix-mill ticket transition <id> --to=DRAFT`
+   or the board's transition button).
+2. Edit the draft to remove vcs-imported scope — target git-tracked files instead
+   (e.g. the manifest YAML, the board's own source code, configuration files).
+3. Let refine run again — the new spec will be checked against the gitignore rules.
+
+**Recovery option:** If re-drafting is not feasible, use `robotsix-mill ticket
+mark-done <id> --note "abandoned: target paths are vcs-imported"` to close the
+ticket and start fresh.
+
 ## Retrying tickets
 
 Transient infrastructure errors (git outages, provider 503s, connection

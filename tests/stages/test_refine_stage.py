@@ -691,6 +691,69 @@ def test_successful_refine_with_title_override(ctx_factory, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# 9b. gitignored file_map guard → BLOCKED (manifest board)
+# ---------------------------------------------------------------------------
+
+
+def _clone_with_src_gitignore(remote_url, dest, branch, token=None):
+    """Mock clone that materialises a real repo whose ``.gitignore``
+    carries ``/src/*`` — the manifest-board (robotsix-mill-ros2) layout
+    where ``/src`` holds vcs-imported sub-repos invisible to git."""
+    del remote_url, branch, token
+    git_ops.init_repo(dest, "main")
+    (dest / ".gitignore").write_text("/src/*\n")
+    git_ops.commit_all(dest, "init gitignore")
+
+
+def test_gitignored_file_map_blocks(ctx_factory, monkeypatch):
+    ctx = ctx_factory(
+        require_approval="false",
+        refine_triage_enabled="false",
+        FORGE_REMOTE_URL="file:///fake-remote",
+    )
+    t = _ticket(ctx, title="Add Status.msg", body="Add a Status message interface")
+
+    _apply_default_mocks(
+        monkeypatch,
+        clone=_clone_with_src_gitignore,
+        run_refine_agent=_mock_refine_ok(
+            spec_markdown="## Problem\nAdd Status.msg",
+            file_map=[{"file": "src/ros2/pkg/msg/Status.msg", "note": "new interface"}],
+        ),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert "src/ros2/pkg/msg/Status.msg" in (out.note or "")
+    assert "gitignored" in (out.note or "")
+
+
+def test_tracked_file_map_reaches_ready(ctx_factory, monkeypatch):
+    """Companion / no-false-positive: a file_map of only git-tracked
+    paths is unaffected and still reaches READY."""
+    ctx = ctx_factory(
+        require_approval="false",
+        refine_triage_enabled="false",
+        FORGE_REMOTE_URL="file:///fake-remote",
+    )
+    t = _ticket(ctx, title="Edit foo", body="Edit a normal source file")
+
+    _apply_default_mocks(
+        monkeypatch,
+        clone=_clone_with_src_gitignore,
+        run_refine_agent=_mock_refine_ok(
+            spec_markdown="## Problem\nEdit foo",
+            file_map=[{"file": "robotsix_mill/foo.py", "note": "the target"}],
+        ),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+
+
+# ---------------------------------------------------------------------------
 # 10. successful refine → HUMAN_ISSUE_APPROVAL (gated, auto-approve off)
 # ---------------------------------------------------------------------------
 
