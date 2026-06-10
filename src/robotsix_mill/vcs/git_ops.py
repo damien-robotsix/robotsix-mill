@@ -403,6 +403,59 @@ def changed_files(repo: Path, target_branch: str) -> list[str]:
     return seen
 
 
+def restore_paths(repo: Path, target_branch: str, paths: list[str]) -> None:
+    """Drop *paths* from the branch's effective diff vs ``origin/<target>``.
+
+    Used to undo scope-triage-REJECTed out-of-scope changes before the
+    next iteration. For each path:
+
+    - If it exists in ``origin/<target_branch>``, restore that version
+      (``git checkout origin/<target> -- path``) — reverting any tracked
+      modification, whether unstaged or already WIP-committed.
+    - Otherwise it is a new file: drop it from the index if tracked
+      (``git rm``, covering WIP-committed additions) and delete it from
+      disk if it still exists (covering untracked additions).
+
+    After this, :func:`changed_files` no longer reports *paths*, and a
+    subsequent :func:`commit_all` records the cleaned tree — so the
+    rejected paths are absent from the diff vs origin in both the
+    unstaged and the WIP-committed cases.
+    """
+    ref = f"origin/{target_branch}"
+    for p in paths:
+        rel = p.lstrip("/")
+        if not rel:
+            continue
+        in_origin = (
+            subprocess.run(
+                ["git", "-C", str(repo), "cat-file", "-e", f"{ref}:{rel}"],
+                capture_output=True,
+            ).returncode
+            == 0
+        )
+        if in_origin:
+            subprocess.run(
+                ["git", "-C", str(repo), "checkout", ref, "--", rel],
+                capture_output=True,
+                text=True,
+            )
+            continue
+        # Not in origin — a newly added file. Drop a tracked
+        # (incl. WIP-committed) version from the index, then remove
+        # any leftover untracked file from disk.
+        subprocess.run(
+            ["git", "-C", str(repo), "rm", "-f", "--ignore-unmatch", "--", rel],
+            capture_output=True,
+            text=True,
+        )
+        file_path = repo / rel
+        try:
+            if file_path.exists():
+                file_path.unlink()
+        except OSError:
+            pass
+
+
 def ignored_existing_paths(repo: Path, paths: list[str]) -> list[str]:
     """Of *paths* (repo-relative), return those that exist on disk but are
     gitignored — i.e. invisible to ``status``/``diff``/``ls-files``.

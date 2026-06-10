@@ -2425,7 +2425,8 @@ def test_run_scope_guardrail_dedup_guard_suppresses_duplicate_reject(
     monkeypatch,
 ):
     """When all out-of-scope files were already REJECTed in prior history
-    events, the dedup guard fires → skip_iteration (implicit EXPAND).
+    events, the dedup guard fires → skip_iteration WITHOUT shipping: the
+    re-created files are cleaned from the tree and NOT added to file_map.
     v1: the source of truth for the REJECT seed is a step event, not
     a comment (scope-triage no longer comments)."""
     remote = make_bare_repo(tmp_path)
@@ -2484,10 +2485,140 @@ def test_run_scope_guardrail_dedup_guard_suppresses_duplicate_reject(
     )
 
     assert result.action == "skip_iteration"
-    # file_map was expanded in-place to include b.txt
+    # The dedup guard must NOT ship the re-created file: b.txt stays out
+    # of file_map and is cleaned back out of the working tree.
     assert result.file_map is not None
-    assert "b.txt" in result.file_map
+    assert "b.txt" not in result.file_map
     assert result.feedback is None
+    assert "b.txt" not in git_ops.changed_files(repo, "main")
+    assert not (repo / "b.txt").exists()
+
+
+def _reject_triage(
+    *, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries
+):
+    from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
+
+    return ScopeTriageVerdict(
+        action="REJECT",
+        justification="Unrelated scope creep",
+        expand_files=[],
+    )
+
+
+def test_run_scope_guardrail_reject_cleans_tracked_and_untracked(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A first-time REJECT removes the out-of-scope changes from the tree
+    before finalize commits: a tracked modification (restored to origin),
+    a newly-added tracked file, and an untracked file are all absent from
+    the diff vs origin afterwards, while the in-scope change survives."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true")
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "a.txt")
+
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+    # In-scope change + out-of-scope (tracked-mod README.md, new vendored.py),
+    # both WIP-committed; plus an untracked stray.txt.
+    (repo / "a.txt").write_text("in scope")
+    (repo / "README.md").write_text("out of scope edit")
+    (repo / "vendored.py").write_text("vendored tree")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "wip")
+    (repo / "stray.txt").write_text("untracked stray")
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "file_map.json").write_text(
+        '[{"file": "a.txt", "note": "only a.txt"}]', encoding="utf-8"
+    )
+
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+
+    monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _reject_triage)
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        f"mill/{t.id}",
+        summary="agent summary",
+        ref_files=None,
+        file_map={"a.txt"},
+        settings=ctx.settings,
+        spec="add a.txt",
+        current_feedback=None,
+    )
+
+    assert result.action == "return"
+    assert result.outcome.next_state is State.READY
+    changed = git_ops.changed_files(repo, "main")
+    # Out-of-scope paths gone from the diff (unstaged + WIP-committed).
+    assert "README.md" not in changed
+    assert "vendored.py" not in changed
+    assert "stray.txt" not in changed
+    assert not (repo / "vendored.py").exists()
+    assert not (repo / "stray.txt").exists()
+    # In-scope work preserved.
+    assert "a.txt" in changed
+
+
+def test_run_scope_guardrail_reject_cleans_resumed_wip_history(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """Resumed-branch case: the rejected file is already in the branch's
+    committed history (no unstaged edit). REJECT must scrub it from the
+    committed diff vs origin/main, not just the working tree."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true")
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "a.txt")
+
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+    branch = f"mill/{t.id}"
+    git_ops.create_branch(repo, branch)
+    # Simulate a prior polluted WIP commit (in-scope + vendored tree).
+    (repo / "a.txt").write_text("in scope")
+    (repo / "vendored.py").write_text("vendored tree")
+    git_ops.commit_all(repo, "prior wip [WIP]")
+    # Re-checkout to mimic a fresh resume off the committed branch.
+    git_ops.checkout(repo, branch)
+    assert "vendored.py" in git_ops.changed_files(repo, "main")
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "file_map.json").write_text(
+        '[{"file": "a.txt", "note": "only a.txt"}]', encoding="utf-8"
+    )
+
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+
+    monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _reject_triage)
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        branch,
+        summary="agent summary",
+        ref_files=None,
+        file_map={"a.txt"},
+        settings=ctx.settings,
+        spec="add a.txt",
+        current_feedback=None,
+    )
+
+    assert result.action == "return"
+    # finalize committed the cleaned tree → no net committed diff for the
+    # rejected file vs origin/main.
+    net = subprocess.run(
+        ["git", "-C", str(repo), "diff", "origin/main...HEAD", "--name-only"],
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert "vendored.py" not in net
+    assert "a.txt" in net
 
 
 # --- binary artifact auto-cleanup in scope guardrail ----------------------
