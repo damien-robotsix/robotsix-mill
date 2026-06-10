@@ -82,6 +82,23 @@ def test_check_column_count_matches_adapter() -> None:
     bbc.check_column_count(len(_COLUMNS), len(_COLUMNS))
 
 
+def test_screenshot_target_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("BOARD_SMOKE_SCREENSHOT", raising=False)
+    assert bbc._screenshot_target() is None
+
+
+def test_screenshot_target_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BOARD_SMOKE_SCREENSHOT", "")
+    assert bbc._screenshot_target() is None
+    monkeypatch.setenv("BOARD_SMOKE_SCREENSHOT", "   ")
+    assert bbc._screenshot_target() is None
+
+
+def test_screenshot_target_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BOARD_SMOKE_SCREENSHOT", "  artifacts/board.png  ")
+    assert bbc._screenshot_target() == "artifacts/board.png"
+
+
 # --------------------------------------------------------------------------
 # Live happy-path test — skips unless Playwright + Chromium are available.
 # --------------------------------------------------------------------------

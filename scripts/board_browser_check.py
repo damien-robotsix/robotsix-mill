@@ -16,16 +16,22 @@ as **non-fatal** so the gate's verdict does not depend on external
 network availability.
 
 The assertion / classification helpers (:func:`is_same_origin`,
-:func:`classify_console_error`, :func:`check_column_count`) are
-import-safe and browser-free so they can be unit-tested without
-Playwright or Chromium installed. The Playwright import is deferred into
-:func:`_drive_browser` for the same reason.
+:func:`classify_console_error`, :func:`check_column_count`,
+:func:`_screenshot_target`) are import-safe and browser-free so they can
+be unit-tested without Playwright or Chromium installed. The Playwright
+import is deferred into :func:`_drive_browser` for the same reason.
+
+When the ``BOARD_SMOKE_SCREENSHOT`` environment variable is set to a
+non-empty path, the driver captures a full-page PNG of the rendered board
+to that path *after* all DOM/console assertions pass. When the variable
+is unset or empty, capture is skipped and the run stays side-effect-free.
 
 Exit code: ``0`` when the board renders correctly, non-zero otherwise.
 """
 
 from __future__ import annotations
 
+import os
 import shutil
 import socket
 import sys
@@ -34,6 +40,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 # Distinctive, assert-able seed titles paired with the board column the
 # ticket should land in. ``draft`` is the create() default; ``ready`` and
@@ -90,6 +97,31 @@ def check_column_count(actual: int, expected: int) -> None:
         )
 
 
+def _screenshot_target() -> str | None:
+    """Return the screenshot output path from ``BOARD_SMOKE_SCREENSHOT``.
+
+    Returns the stripped path when the env var is set to a non-empty
+    value, or ``None`` when it is unset or empty/whitespace. Browser-free
+    and import-safe so it is unit-testable without Chromium.
+    """
+    value = os.environ.get("BOARD_SMOKE_SCREENSHOT", "").strip()
+    return value or None
+
+
+def _capture_screenshot(page: object, screenshot_path: str | None) -> None:
+    """Write a full-page PNG of *page* to *screenshot_path*.
+
+    A falsy *screenshot_path* is a no-op. Otherwise creates parent
+    directories as needed. Called only once the board is confirmed
+    healthy so a broken board never yields a misleading image.
+    """
+    if not screenshot_path:
+        return
+    Path(screenshot_path).parent.mkdir(parents=True, exist_ok=True)
+    page.screenshot(path=screenshot_path, full_page=True)  # type: ignore[attr-defined]
+    print(f"  (screenshot written to {screenshot_path})")
+
+
 # --------------------------------------------------------------------------
 # Server + DB plumbing.
 # --------------------------------------------------------------------------
@@ -140,8 +172,17 @@ def _wait_for_health(base_url: str, timeout: float = 30.0) -> None:
     raise RuntimeError(f"server did not become healthy within {timeout}s: {last_err}")
 
 
-def _drive_browser(base_url: str, expected_columns: int) -> None:
-    """Load ``GET /`` in headless Chromium and run the board assertions."""
+def _drive_browser(
+    base_url: str,
+    expected_columns: int,
+    screenshot_path: str | None = None,
+) -> None:
+    """Load ``GET /`` in headless Chromium and run the board assertions.
+
+    When *screenshot_path* is truthy, a full-page PNG of the rendered
+    board is written there *after* all assertions pass (never on a
+    failing board), creating parent directories as needed.
+    """
     from playwright.sync_api import sync_playwright
 
     console_error_urls: list[str] = []
@@ -201,6 +242,10 @@ def _drive_browser(base_url: str, expected_columns: int) -> None:
                     "same-origin console error(s) detected: "
                     + ", ".join(u or "<inline>" for u in fatal)
                 )
+
+            # Board confirmed healthy — capture visual evidence only now so
+            # a broken board never yields a misleading 'healthy' image.
+            _capture_screenshot(page, screenshot_path)
         finally:
             browser.close()
 
@@ -252,7 +297,7 @@ def run_browser_check() -> int:
         thread.start()
 
         _wait_for_health(base_url)
-        _drive_browser(base_url, len(_COLUMNS))
+        _drive_browser(base_url, len(_COLUMNS), screenshot_path=_screenshot_target())
         print("board browser smoke check: PASS")
         return 0
     except Exception as exc:  # noqa: BLE001 — top-level smoke driver
