@@ -1,7 +1,7 @@
-"""Drive the board.js Convert-to-Ticket JS tests from pytest.
+"""Drive the board-mill.js Convert-to-Ticket JS tests from pytest.
 
 The Convert-to-Ticket button + flow lives in
-``src/robotsix_mill/runtime/static/board.js`` — a flat browser script
+``src/robotsix_mill/runtime/static/board-mill.js`` — a browser script
 with no Python seam and no JS test runner in the repo.
 ``board_convert_harness.mjs`` loads the real script into Node's
 built-in ``vm`` module against a stub DOM/XHR and asserts the button
@@ -28,7 +28,9 @@ def test_board_convert_to_ticket_js() -> None:
     """Run the Node harness; require a clean (zero) exit code."""
     node = shutil.which("node")
     if node is None:
-        pytest.skip("node not on PATH — skipping board.js convert-to-ticket harness")
+        pytest.skip(
+            "node not on PATH — skipping board-mill.js convert-to-ticket harness"
+        )
 
     assert HARNESS.exists(), f"harness missing: {HARNESS}"
 
@@ -38,7 +40,7 @@ def test_board_convert_to_ticket_js() -> None:
         text=True,
     )
     assert result.returncode == 0, (
-        "board.js convert-to-ticket harness failed "
+        "board-mill.js convert-to-ticket harness failed "
         f"(exit {result.returncode})\n"
         f"--- stdout ---\n{result.stdout}\n"
         f"--- stderr ---\n{result.stderr}"

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
 from ..board_adapter import MillBoardAdapter
-from ..board_html import BOARD_HTML, build_board_skeleton
+from ..board_html import build_board_skeleton, render_board_html
 from ...core.states import State
 from ..deps import enrich_ticket_read, get_repos_registry, get_settings
 
@@ -108,18 +108,14 @@ def board() -> str:
         # robotsix-board not installed yet — serve the shell without
         # the board config script; the board will be empty until the
         # dependency is available.
-        return BOARD_HTML.replace("{CONFIG_SCRIPT}", "").replace(
-            "{BOARD_SKELETON}", skeleton
-        )
+        return render_board_html("", skeleton)
 
     config_script = render_config_script(
         adapter,
         refresh_url="/board/cards",
         refresh_interval_ms=5_000,
     )
-    return BOARD_HTML.replace("{CONFIG_SCRIPT}", config_script).replace(
-        "{BOARD_SKELETON}", skeleton
-    )
+    return render_board_html(config_script, skeleton)
 
 
 @router.websocket("/ws/board")

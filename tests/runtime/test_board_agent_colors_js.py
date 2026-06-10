@@ -1,10 +1,11 @@
-"""Drive the board.js agent→color JS tests from pytest.
+"""Drive the board-mill.js agent→color JS tests from pytest.
 
 The Runs view and the Agents menu in
-``src/robotsix_mill/runtime/static/board.js`` derive their badge/dot
-colors from a single canonical ``AGENT_COLORS`` map via ``agentColor()``
-— a flat browser script with no Python seam and no JS test runner in the
-repo. ``board_agent_colors_harness.mjs`` loads the real script into
+``src/robotsix_mill/runtime/static/board-mill.js`` derive their
+badge/dot colors from a single canonical ``AGENT_COLORS`` map via
+``agentColor()`` — a browser script with no Python seam and no JS test
+runner in the repo. ``board_agent_colors_harness.mjs`` loads the real
+script into
 Node's built-in ``vm`` module against a stub DOM/XHR and asserts the
 color-lookup behaviour using only Node built-ins (no ``npm install``).
 
@@ -28,7 +29,7 @@ def test_board_agent_colors_js() -> None:
     """Run the Node harness; require a clean (zero) exit code."""
     node = shutil.which("node")
     if node is None:
-        pytest.skip("node not on PATH — skipping board.js agent-color harness")
+        pytest.skip("node not on PATH — skipping board-mill.js agent-color harness")
 
     assert HARNESS.exists(), f"harness missing: {HARNESS}"
 
@@ -38,7 +39,7 @@ def test_board_agent_colors_js() -> None:
         text=True,
     )
     assert result.returncode == 0, (
-        "board.js agent-color harness failed "
+        "board-mill.js agent-color harness failed "
         f"(exit {result.returncode})\n"
         f"--- stdout ---\n{result.stdout}\n"
         f"--- stderr ---\n{result.stderr}"
