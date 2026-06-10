@@ -240,6 +240,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     # -- core: LLM backend toggle (DeepSeek ↔ Claude SDK) --
     "core.llm_backend": "llm_backend",
     "core.claude_sdk_agents": "claude_sdk_agents",
+    "core.claude_sdk_vision_enabled": "claude_sdk_vision_enabled",
     "core.enable_repo_creation": "enable_repo_creation",
     # Cross-repo meta-agent pass (surveys all repos for extraction/alignment).
     "core.meta_periodic": "meta_periodic",
