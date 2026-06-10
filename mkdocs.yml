@@ -15,22 +15,35 @@ nav:
       - Docker architecture: docker-architecture.md
       - GitHub App / PAT: github-app.md
       - Security model: security.md
+      - CI policy: ci-policy.md
+      - Config audit: config-audit.md
+      - "RFC: config v2": rfc-config-v2.md
   - Pipeline:
       - Agent catalog: agents.md
       - Approval gate: approval-gate.md
       - Dedup guard: dedup-guard.md
       - Merge stage: merge-stage.md
+      - Epic dedup: epic-dedup.md
+      - Inquiry to task: inquiry-to-task.md
+      - Proposed actions: proposed-actions.md
+      - Scope triage: scope-triage.md
   - Agents & Internals:
       - Audit agent: audit-agent.md
       - Blocked ticket recovery: blocked-ticket-recovery.md
       - Retrospect memory: retrospect-memory.md
       - Trace-health check: trace-health.md
       - Expert YAML schema: expert-yaml-schema.md
+      - Agent YAML schema: agent-yaml-schema.md
+      - Meta board: meta-board.md
   - Operations:
       - Cost controls & resilience: cost-and-resilience.md
       - Notifications: notifications.md
       - Ticket provenance: ticket-provenance.md
       - Workspace cleanup: workspace-cleanup.md
+      - Board cleanup: board-cleanup.md
+  - Design:
+      - Cost indicators: design/cost-indicators.md
+      - Forge architecture: design/forge-architecture.md
   - API Reference:
       - Agents: reference/agents.md
       - Core: reference/core.md
