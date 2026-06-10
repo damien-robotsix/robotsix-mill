@@ -1132,6 +1132,8 @@
       '<div class="modal-field-error" id="modal-title-err"></div>' +
       '<label class="modal-label">Description</label>' +
       '<textarea class="modal-textarea" id="modal-desc" rows="8" placeholder="Rough idea, context, constraints… (optional)"></textarea>' +
+      '<label class="modal-label">Screenshot</label>' +
+      '<input type="file" class="modal-input" id="modal-screenshot" accept="image/png,image/jpeg,image/gif,image/webp">' +
       repoField +
       '<div class="modal-field-error" id="modal-repo-err"></div>' +
       '<div class="modal-buttons">' +
@@ -1145,6 +1147,7 @@
     var titleEl = document.getElementById("modal-title");
     var titleErr = document.getElementById("modal-title-err");
     var descEl = document.getElementById("modal-desc");
+    var screenshotEl = document.getElementById("modal-screenshot");
     var submitErr = document.getElementById("modal-submit-err");
     var createBtn = document.getElementById("modal-create");
 
@@ -1154,6 +1157,29 @@
     function showSubmitErr(msg) { submitErr.textContent = msg; }
     function clearSubmitErr() { submitErr.textContent = ""; }
 
+    // Optional: paste an image straight into the description to attach it.
+    descEl.addEventListener("paste", function(e) {
+      var items = (e.clipboardData && e.clipboardData.items) || [];
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].type && items[i].type.indexOf("image/") === 0) {
+          var blob = items[i].getAsFile();
+          if (blob && screenshotEl.files.length === 0) {
+            var dt = new DataTransfer();
+            dt.items.add(blob);
+            screenshotEl.files = dt.files;
+          }
+          break;
+        }
+      }
+    });
+
+    async function uploadScreenshot(id, file) {
+      var fd = new FormData();
+      fd.append("file", file);
+      var resp = await fetch("/tickets/" + encodeURIComponent(id) + "/screenshots", { method: "POST", body: fd });
+      if (!resp.ok) { throw new Error(await resp.text()); }
+    }
+
     async function doSubmit() {
       var title = titleEl.value.trim();
       if (!title) { showTitleErr("Title is required"); titleEl.focus(); return; }
@@ -1161,8 +1187,19 @@
       createBtn.disabled = true; createBtn.textContent = "Creating…";
       var r = await jpost("/tickets", { title: title, description: descEl.value, repo_id: document.getElementById("modal-repo").value });
       if (!r.ok) { var e = await r.text(); showSubmitErr("create failed: " + e);
-        createBtn.disabled = false; createBtn.textContent = "Create"; }
-      else { close(); refresh(); }
+        createBtn.disabled = false; createBtn.textContent = "Create"; return; }
+      var file = screenshotEl.files && screenshotEl.files[0];
+      if (file) {
+        var body = await r.json();
+        try {
+          await uploadScreenshot(body.id, file);
+        } catch (err) {
+          showSubmitErr("ticket created, but screenshot upload failed: " + err.message);
+          createBtn.disabled = false; createBtn.textContent = "Create";
+          return;
+        }
+      }
+      close(); refresh();
     }
 
     backdrop.addEventListener("click", function(e) { if (e.target === backdrop) close(); });
