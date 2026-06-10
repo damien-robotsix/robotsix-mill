@@ -26,4 +26,6 @@ services:
     build:
       context: .
       target: dev
+      args:
+        MILL_BUILD_SHA: ${MILL_BUILD_SHA:-}
     image: robotsix/mill:dev

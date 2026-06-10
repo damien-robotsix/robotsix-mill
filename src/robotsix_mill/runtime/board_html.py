@@ -22,7 +22,14 @@ from __future__ import annotations
 
 import functools
 import html as _html
-import importlib.metadata
+import os
+import time
+
+# Process-start fallback token, captured once at import time.  Stable for
+# the lifetime of a process (every request sees the same value) and fresh
+# on each restart — used when ``MILL_BUILD_SHA`` is not baked into the image
+# (e.g. a dev/uvicorn run).
+_PROCESS_START_TOKEN = str(int(time.time()))
 
 
 @functools.lru_cache(maxsize=1)
@@ -31,16 +38,14 @@ def asset_version() -> str:
 
     Resolved once (cached) at startup and appended as a ``?v=<token>``
     query to every local script/css URL so browsers fetch fresh JS/CSS
-    after a deploy instead of running a stale cached bundle.  The
-    installed ``robotsix-mill`` package version is a stable per-deploy
-    value; any change to it (a release/redeploy) changes the emitted
-    URLs.  Falls back to ``"dev"`` when the package metadata is absent
-    (e.g. running straight from a source tree without an install).
+    after a deploy instead of running a stale cached bundle.  Resolves, in
+    order: the ``MILL_BUILD_SHA`` environment variable (a git short SHA
+    baked into the image at build time), used when present and non-empty;
+    otherwise a stable process-start token captured once at import time, so
+    every request in a given process gets the same non-empty token and a
+    process restart yields a fresh one.
     """
-    try:
-        return importlib.metadata.version("robotsix-mill")
-    except importlib.metadata.PackageNotFoundError:
-        return "dev"
+    return os.environ.get("MILL_BUILD_SHA", "").strip() or _PROCESS_START_TOKEN
 
 
 def build_board_skeleton(columns: list[tuple[str, str]]) -> str:
