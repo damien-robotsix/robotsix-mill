@@ -657,9 +657,7 @@ class ImplementStage(Stage):
             # tree BEFORE finalize commits, so the WIP commit (and every
             # resumed run off it) starts from the spec'd scope only.
             # Handles both unstaged and already-WIP-committed pollution.
-            git_ops.restore_paths(
-                repo_dir, settings.forge_target_branch, out_of_scope
-            )
+            git_ops.restore_paths(repo_dir, settings.forge_target_branch, out_of_scope)
             ImplementStage._finalize(
                 ctx,
                 ticket,
