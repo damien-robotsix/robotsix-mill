@@ -403,6 +403,44 @@ def changed_files(repo: Path, target_branch: str) -> list[str]:
     return seen
 
 
+def introduced_files(repo: Path, target_branch: str) -> list[str]:
+    """Return every file the BRANCH introduces relative to its merge base
+    with ``origin/<target_branch>`` — i.e. what the ticket itself changed,
+    NOT files that ``origin/<target>`` modified after the branch was cut.
+
+    Union of (order-preserving, deduplicated):
+      - ``git diff --name-only origin/<target>...HEAD`` (THREE-dot) —
+        committed branch changes vs the merge base. Three-dot diffs
+        against the merge base, so files changed on <target> after the
+        branch base do NOT appear.
+      - ``git diff --name-only HEAD`` — uncommitted tracked working-tree
+        changes (staged + unstaged) not yet in HEAD.
+      - ``git ls-files --others --exclude-standard`` — untracked new
+        files honouring .gitignore.
+    """
+    seen: list[str] = []
+    seen_set: set[str] = set()
+    committed_out = _git(repo, "diff", "--name-only", f"origin/{target_branch}...HEAD")
+    if committed_out:
+        for f in committed_out.split("\n"):
+            if f and f not in seen_set:
+                seen_set.add(f)
+                seen.append(f)
+    working_out = _git(repo, "diff", "--name-only", "HEAD")
+    if working_out:
+        for f in working_out.split("\n"):
+            if f and f not in seen_set:
+                seen_set.add(f)
+                seen.append(f)
+    untracked_out = _git(repo, "ls-files", "--others", "--exclude-standard")
+    if untracked_out:
+        for f in untracked_out.split("\n"):
+            if f and f not in seen_set:
+                seen_set.add(f)
+                seen.append(f)
+    return seen
+
+
 def restore_paths(repo: Path, target_branch: str, paths: list[str]) -> None:
     """Drop *paths* from the branch's effective diff vs ``origin/<target>``.
 

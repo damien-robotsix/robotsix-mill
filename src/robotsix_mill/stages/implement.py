@@ -405,7 +405,7 @@ class ImplementStage(Stage):
                 feedback=current_feedback,
             )
 
-        changed = git_ops.changed_files(repo_dir, settings.forge_target_branch)
+        changed = git_ops.introduced_files(repo_dir, settings.forge_target_branch)
         out_of_scope = [f for f in changed if f not in file_map]
         if not out_of_scope:
             log.info(
@@ -1160,7 +1160,7 @@ class ImplementStage(Stage):
             # handoff to review — anchored deterministically on the
             # edit-tool-call path args cross-referenced against the net
             # diff (no NL/symbol parsing).
-            changed = git_ops.changed_files(repo_dir, settings.forge_target_branch)
+            changed = git_ops.introduced_files(repo_dir, settings.forge_target_branch)
             if extra_roots:
                 for repo_path in extra_roots:
                     # Mirror _any_repo_has_changes: the primary repo is
@@ -1170,7 +1170,7 @@ class ImplementStage(Stage):
                     changed = list(
                         set(changed)
                         | set(
-                            git_ops.changed_files(
+                            git_ops.introduced_files(
                                 repo_path, settings.forge_target_branch
                             )
                         )
