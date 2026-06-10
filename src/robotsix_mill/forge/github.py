@@ -180,7 +180,10 @@ class GitHubForge(Forge):
     def __init__(self, settings, repo_config=None):
         super().__init__(settings)
         self._repo_config = repo_config
-        from .auth import github_token  # lazy: avoid import cycle with auth.py
+        from .auth import (  # lazy: avoid import cycle with auth.py
+            github_token,
+            invalidate_github_token,
+        )
 
         self._http = _ApiClient(
             settings,
@@ -188,6 +191,10 @@ class GitHubForge(Forge):
             "github_api_url",
             lambda s, rc: _build_headers(github_token(s, repo_config=rc)),
         )
+        if settings.forge_auth == "app":
+            self._http._on_401 = lambda: invalidate_github_token(
+                self.settings, self._repo_config
+            )
 
     @property
     def _remote_url(self) -> str:
@@ -270,6 +277,8 @@ class GitHubForge(Forge):
     ) -> str:
         import time
 
+        from .auth import invalidate_github_token  # lazy: avoid import cycle
+
         payload = {"title": title, "head": head, "base": base, "body": body}
         # GitHub sometimes takes a few seconds to index a freshly-
         # pushed ref before the pulls API can resolve it — the
@@ -279,6 +288,7 @@ class GitHubForge(Forge):
         # detection runs each round so we don't double-open.
         with self._http.client() as (c, api, headers):
             url = f"{api}/repos/{owner}/{repo}/pulls"
+            already_retried_401 = False
             for attempt in range(4):
                 r = c.post(url, headers=headers, json=payload)
                 if r.status_code == 201:
@@ -311,7 +321,16 @@ class GitHubForge(Forge):
                     ):
                         time.sleep(2**attempt)  # 1s, 2s, 4s
                         continue
-                # Non-422 (or final attempt) — surface the error.
+                # 401 — intermittent App-token write auth flap
+                # (GitHub replica lag). Invalidate cached token,
+                # back off, regenerate headers, retry once.
+                if r.status_code == 401 and not already_retried_401:
+                    invalidate_github_token(self.settings, self._repo_config)
+                    time.sleep(2)
+                    headers = self._http.regenerate_headers()
+                    already_retried_401 = True
+                    continue
+                # Non-422 / non-401 (or final attempt) — surface.
                 break
             raise RuntimeError(
                 f"GitHub PR create failed: {r.status_code} {r.text[:300]}"
@@ -326,9 +345,11 @@ class GitHubForge(Forge):
         private: bool,
         description: str,
     ) -> RepoInfo:
+        import time
+
         from ..config import get_secrets
 
-        from .auth import github_token  # lazy: avoid import cycle
+        from .auth import github_token, invalidate_github_token  # lazy: avoid import cycle
 
         s = self.settings
         # Repo creation needs a token that can create repos. GitHub App
@@ -339,6 +360,23 @@ class GitHubForge(Forge):
             s, repo_config=self._repo_config
         )
         custom_headers = _build_headers(token)
+
+        def _create_attempt(c, api):
+            # Primary: create under org
+            org_url = f"{api}/orgs/{owner}/repos"
+            r = c.post(org_url, headers=custom_headers, json=payload)
+            if r.status_code == 201:
+                return r, False  # response, not_a_401
+            if r.status_code in (403, 404):
+                user_url = f"{api}/user/repos"
+                r2 = c.post(user_url, headers=custom_headers, json=payload)
+                if r2.status_code == 201:
+                    return r2, False
+                r = r2
+            if r.status_code == 401:
+                return r, True  # signal 401
+            return r, False
+
         payload = {
             "name": name,
             "private": private,
@@ -348,54 +386,55 @@ class GitHubForge(Forge):
             "auto_init": False,
         }
 
-        with self._http.client() as (c, api, _headers):
-            # Primary: create under org
-            org_url = f"{api}/orgs/{owner}/repos"
-            r = c.post(org_url, headers=custom_headers, json=payload)
-            if r.status_code == 201:
-                return _parse_repo_info(r.json())
-            # Fallback on 403/404: create under user
-            if r.status_code in (403, 404):
-                user_url = f"{api}/user/repos"
-                r2 = c.post(user_url, headers=custom_headers, json=payload)
-                if r2.status_code == 201:
-                    return _parse_repo_info(r2.json())
-                # If the fallback also fails, surface that error instead
-                r = r2
-            # 422 handling — no retry; repo creation races don't apply
-            if r.status_code == 422:
-                err_text = r.text or ""
-                if "name already exists" in err_text.lower():
-                    # Re-run safety: a prior scaffold attempt may have created
-                    # the repo before failing later (e.g. on the initial
-                    # push). If the existing repo is EMPTY (no commits), reuse
-                    # it so the scaffold's force-push completes the job; only a
-                    # repo with real content is treated as a genuine conflict.
-                    existing = self._reuse_if_empty(c, api, custom_headers, owner, name)
-                    if existing is not None:
-                        return existing
-                    raise RuntimeError(
-                        f"Repository '{name}' already exists under '{owner}' "
-                        f"and is not empty — refusing to overwrite"
+        for retry in range(2):
+            with self._http.client() as (c, api, _headers):
+                r, is_401 = _create_attempt(c, api)
+                if is_401 and retry == 0:
+                    invalidate_github_token(self.settings, self._repo_config)
+                    time.sleep(2)
+                    continue
+            break  # success or final attempt
+
+        # Post-request error handling (original logic preserved).
+        if r.status_code == 201:
+            return _parse_repo_info(r.json())
+        # 422 handling — no retry; repo creation races don't apply
+        if r.status_code == 422:
+            err_text = r.text or ""
+            if "name already exists" in err_text.lower():
+                # Re-run safety: a prior scaffold attempt may have created
+                # the repo before failing later (e.g. on the initial
+                # push). If the existing repo is EMPTY (no commits), reuse
+                # it so the scaffold's force-push completes the job; only a
+                # repo with real content is treated as a genuine conflict.
+                with self._http.client() as (c, api, _headers):
+                    existing = self._reuse_if_empty(
+                        c, api, custom_headers, owner, name
                     )
+                if existing is not None:
+                    return existing
                 raise RuntimeError(
-                    f"GitHub repo create failed: {r.status_code} {r.text[:300]}"
-                )
-            if (
-                r.status_code == 403
-                and "not accessible by integration" in (r.text or "").lower()
-            ):
-                raise RuntimeError(
-                    "GitHub repo create failed: 403 Resource not accessible by "
-                    "integration. A GitHub App installation token cannot create "
-                    "repositories under a personal account — set "
-                    "`forge_repo_create_token` in secrets to a PAT with "
-                    "repo-creation rights (classic: `repo` scope; fine-grained: "
-                    "Administration:Read and write on the target account)."
+                    f"Repository '{name}' already exists under '{owner}' "
+                    f"and is not empty — refusing to overwrite"
                 )
             raise RuntimeError(
                 f"GitHub repo create failed: {r.status_code} {r.text[:300]}"
             )
+        if (
+            r.status_code == 403
+            and "not accessible by integration" in (r.text or "").lower()
+        ):
+            raise RuntimeError(
+                "GitHub repo create failed: 403 Resource not accessible by "
+                "integration. A GitHub App installation token cannot create "
+                "repositories under a personal account — set "
+                "`forge_repo_create_token` in secrets to a PAT with "
+                "repo-creation rights (classic: `repo` scope; fine-grained: "
+                "Administration:Read and write on the target account)."
+            )
+        raise RuntimeError(
+            f"GitHub repo create failed: {r.status_code} {r.text[:300]}"
+        )
 
     def _reuse_if_empty(self, c, api, headers, owner, name) -> RepoInfo | None:
         """Return the existing repo's ``RepoInfo`` iff it exists and is EMPTY
@@ -434,9 +473,11 @@ class GitHubForge(Forge):
         source_repo: str,
         target_namespace: str | None = None,
     ) -> RepoInfo:
+        import time
+
         from ..config import get_secrets
 
-        from .auth import github_token  # lazy: avoid import cycle
+        from .auth import github_token, invalidate_github_token  # lazy: avoid import cycle
 
         s = self.settings
         token = get_secrets().forge_repo_create_token or github_token(
@@ -448,23 +489,30 @@ class GitHubForge(Forge):
         if target_namespace is not None:
             payload["organization"] = target_namespace
 
-        with self._http.client() as (c, api, _headers):
-            r = c.post(f"{api}{url}", headers=custom_headers, json=payload)
-            if r.status_code in (200, 201, 202):
-                return _parse_repo_info(r.json())
-            if (
-                r.status_code == 403
-                and "not accessible by integration" in (r.text or "").lower()
-            ):
-                raise RuntimeError(
-                    "GitHub fork failed: 403 Resource not accessible by "
-                    "integration. A GitHub App installation token cannot fork "
-                    "repositories under a personal account — set "
-                    "`forge_repo_create_token` in secrets to a PAT with "
-                    "repo-creation rights (classic: `repo` scope; fine-grained: "
-                    "Administration:Read and write on the target account)."
-                )
-            raise RuntimeError(f"GitHub fork failed: {r.status_code} {r.text[:300]}")
+        for retry in range(2):
+            with self._http.client() as (c, api, _headers):
+                r = c.post(f"{api}{url}", headers=custom_headers, json=payload)
+                if r.status_code == 401 and retry == 0:
+                    invalidate_github_token(self.settings, self._repo_config)
+                    time.sleep(2)
+                    continue
+            break  # success or final attempt
+
+        if r.status_code in (200, 201, 202):
+            return _parse_repo_info(r.json())
+        if (
+            r.status_code == 403
+            and "not accessible by integration" in (r.text or "").lower()
+        ):
+            raise RuntimeError(
+                "GitHub fork failed: 403 Resource not accessible by "
+                "integration. A GitHub App installation token cannot fork "
+                "repositories under a personal account — set "
+                "`forge_repo_create_token` in secrets to a PAT with "
+                "repo-creation rights (classic: `repo` scope; fine-grained: "
+                "Administration:Read and write on the target account)."
+            )
+        raise RuntimeError(f"GitHub fork failed: {r.status_code} {r.text[:300]}")
 
     def pr_status(self, *, source_branch: str) -> dict | None:
         owner, repo = self._owner_repo
@@ -654,27 +702,43 @@ class GitHubForge(Forge):
         owner, repo = self._owner_repo
         return self._list_open_pr_branches(owner=owner, repo=repo)
 
-    # --- HTTP seamm (monkeypatched in tests) ---
+    # --- HTTP seam (monkeypatched in tests) ---
     def _get_pr(self, *, owner: str, repo: str, head: str) -> dict | None:
+        import time
+
+        from .auth import invalidate_github_token  # lazy: avoid import cycle
+
         # For cross-repo targets the head branch lives on the fork,
         # so the head filter must use the fork owner (not the upstream
         # owner passed in *owner*).  _head_owner resolves accordingly.
         head_owner = self._head_owner
-        with self._http.client() as (c, api, headers):
-            lst = c.get(
-                f"{api}/repos/{owner}/{repo}/pulls",
-                headers=headers,
-                params={"head": f"{head_owner}:{head}", "state": "all"},
-            )
-            lst.raise_for_status()
-            items = lst.json()
-            if not items:
-                return None
-            num = items[0]["number"]
-            d = c.get(f"{api}/repos/{owner}/{repo}/pulls/{num}", headers=headers)
-            d.raise_for_status()
-            pr = d.json()
-        return _parse_pr_detail(pr)
+        for retry in range(2):
+            with self._http.client() as (c, api, headers):
+                lst = c.get(
+                    f"{api}/repos/{owner}/{repo}/pulls",
+                    headers=headers,
+                    params={"head": f"{head_owner}:{head}", "state": "all"},
+                )
+                if lst.status_code == 401 and retry == 0:
+                    invalidate_github_token(self.settings, self._repo_config)
+                    time.sleep(2)
+                    continue
+                lst.raise_for_status()
+                items = lst.json()
+                if not items:
+                    return None
+                num = items[0]["number"]
+                d = c.get(
+                    f"{api}/repos/{owner}/{repo}/pulls/{num}", headers=headers
+                )
+                if d.status_code == 401 and retry == 0:
+                    invalidate_github_token(self.settings, self._repo_config)
+                    time.sleep(2)
+                    continue
+                d.raise_for_status()
+                pr = d.json()
+            return _parse_pr_detail(pr)
+        return None
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _get_pr_by_number(self, *, owner: str, repo: str, number: int) -> dict | None:
@@ -762,64 +826,102 @@ class GitHubForge(Forge):
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _list_branches(self, *, owner: str, repo: str) -> list[BranchInfo]:
+        import time
+
+        from .auth import invalidate_github_token  # lazy: avoid import cycle
+
         out: list[BranchInfo] = []
-        try:
-            with self._http.client() as (c, api, headers):
-                url = f"{api}/repos/{owner}/{repo}/branches"
-                page = 1
-                while True:
-                    r = c.get(
-                        url,
-                        headers=headers,
-                        params={"per_page": 100, "page": page},
-                    )
-                    r.raise_for_status()
-                    items = r.json()
-                    for b in items:
-                        date = (
-                            ((b.get("commit") or {}).get("commit") or {}).get(
-                                "committer"
-                            )
-                            or {}
-                        ).get("date")
-                        out.append(
-                            BranchInfo(
-                                name=b["name"],
-                                last_commit_at=_parse_iso_utc(date),
-                                is_protected=bool(b.get("protected")),
-                            )
+        for retry in range(2):
+            hit_401 = False
+            try:
+                with self._http.client() as (c, api, headers):
+                    url = f"{api}/repos/{owner}/{repo}/branches"
+                    page = 1
+                    while True:
+                        r = c.get(
+                            url,
+                            headers=headers,
+                            params={"per_page": 100, "page": page},
                         )
-                    if len(items) < 100:
-                        break
-                    page += 1
-        except Exception:
-            return []
+                        if r.status_code == 401 and retry == 0:
+                            invalidate_github_token(
+                                self.settings, self._repo_config
+                            )
+                            time.sleep(2)
+                            hit_401 = True
+                            break
+                        r.raise_for_status()
+                        items = r.json()
+                        for b in items:
+                            date = (
+                                (
+                                    (b.get("commit") or {}).get("commit") or {}
+                                ).get("committer")
+                                or {}
+                            ).get("date")
+                            out.append(
+                                BranchInfo(
+                                    name=b["name"],
+                                    last_commit_at=_parse_iso_utc(date),
+                                    is_protected=bool(b.get("protected")),
+                                )
+                            )
+                        if len(items) < 100:
+                            break
+                        page += 1
+                if hit_401:
+                    out.clear()
+                    continue
+                break  # success
+            except Exception:
+                return []
         return out
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _list_open_pr_branches(self, *, owner: str, repo: str) -> set[str]:
+        import time
+
+        from .auth import invalidate_github_token  # lazy: avoid import cycle
+
         out: set[str] = set()
-        try:
-            with self._http.client() as (c, api, headers):
-                url = f"{api}/repos/{owner}/{repo}/pulls"
-                page = 1
-                while True:
-                    r = c.get(
-                        url,
-                        headers=headers,
-                        params={"state": "open", "per_page": 100, "page": page},
-                    )
-                    r.raise_for_status()
-                    items = r.json()
-                    for pr in items:
-                        ref = (pr.get("head") or {}).get("ref")
-                        if ref:
-                            out.add(ref)
-                    if len(items) < 100:
-                        break
-                    page += 1
-        except Exception:
-            return set()
+        for retry in range(2):
+            hit_401 = False
+            try:
+                with self._http.client() as (c, api, headers):
+                    url = f"{api}/repos/{owner}/{repo}/pulls"
+                    page = 1
+                    while True:
+                        r = c.get(
+                            url,
+                            headers=headers,
+                            params={
+                                "state": "open",
+                                "per_page": 100,
+                                "page": page,
+                            },
+                        )
+                        if r.status_code == 401 and retry == 0:
+                            invalidate_github_token(
+                                self.settings, self._repo_config
+                            )
+                            time.sleep(2)
+                            hit_401 = True
+                            break
+                        r.raise_for_status()
+                        items = r.json()
+                        for pr in items:
+                            ref = (pr.get("head") or {}).get("ref")
+                            if ref:
+                                out.add(ref)
+                        if len(items) < 100:
+                            break
+                        page += 1
+                if hit_401:
+                    out.clear()
+                    continue
+                break  # success
+            except Exception:
+                return set()
         return out
 
     # --- HTTP seam (monkeypatched in tests) ---
@@ -881,31 +983,47 @@ class GitHubForge(Forge):
         repo: str,
         pull_number: int,
     ) -> dict:
-        with self._http.client() as (c, api, headers):
-            # 1. Fetch reviews (includes state field that list_pr_reviews drops).
-            r = c.get(
-                f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/reviews",
-                headers=headers,
-                params={"per_page": 100},
-            )
-            r.raise_for_status()
-            reviews_raw = r.json()
+        import time
 
-            # 2. Fetch inline review comments.
-            r2 = c.get(
-                f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/comments",
-                headers=headers,
-                params={"per_page": 100},
-            )
-            r2.raise_for_status()
-            comments_raw = r2.json()
+        from .auth import invalidate_github_token  # lazy: avoid import cycle
 
-            # 3. Fetch changed files.
-            files = self._pr_files(
-                owner=owner,
-                repo=repo,
-                pull_number=pull_number,
-            )
+        for retry in range(2):
+            with self._http.client() as (c, api, headers):
+                # 1. Fetch reviews (includes state field that list_pr_reviews drops).
+                r = c.get(
+                    f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/reviews",
+                    headers=headers,
+                    params={"per_page": 100},
+                )
+                if r.status_code == 401 and retry == 0:
+                    invalidate_github_token(self.settings, self._repo_config)
+                    time.sleep(2)
+                    continue
+                r.raise_for_status()
+                reviews_raw = r.json()
+
+                # 2. Fetch inline review comments.
+                r2 = c.get(
+                    f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/comments",
+                    headers=headers,
+                    params={"per_page": 100},
+                )
+                if r2.status_code == 401 and retry == 0:
+                    invalidate_github_token(self.settings, self._repo_config)
+                    time.sleep(2)
+                    continue
+                r2.raise_for_status()
+                comments_raw = r2.json()
+
+                # 3. Fetch changed files.
+                files = self._pr_files(
+                    owner=owner,
+                    repo=repo,
+                    pull_number=pull_number,
+                )
+
+            # If we get here the client block succeeded.
+            break
 
         # Determine aggregate review state from the latest non-dismissed
         # review.  GitHub returns reviews oldest-first; iterate reversed.
@@ -958,6 +1076,10 @@ class GitHubForge(Forge):
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _check_status(self, *, owner: str, repo: str, head: str) -> dict | None:
+        import time
+
+        from .auth import invalidate_github_token  # lazy: avoid import cycle
+
         pr = self._get_pr(owner=owner, repo=repo, head=head)
         if pr is None:
             return None
@@ -966,51 +1088,63 @@ class GitHubForge(Forge):
         if not sha:
             return None
 
-        with self._http.client() as (c, api, headers):
-            # 1. Fetch check runs (any status — completed, in_progress,
-            # queued — so a brand-new SHA with a workflow that's been
-            # queued but not started is correctly classified "pending"
-            # rather than "no CI configured" below.
-            #
-            # A 403 here means the App installation lacks ``checks: read``
-            # for this repo. That's a config gap, not a transient error
-            # — treat it as "no check_runs visible" and fall through to
-            # statuses + no-CI handling.
-            check_runs: list[dict] = []
-            cr_resp = c.get(
-                f"{api}/repos/{owner}/{repo}/commits/{sha}/check-runs",
-                headers=headers,
-                params={"per_page": 100},
-            )
-            if cr_resp.status_code != 403:
-                cr_resp.raise_for_status()
-                check_runs = cr_resp.json().get("check_runs", [])
+        for retry in range(2):
+            with self._http.client() as (c, api, headers):
+                # 1. Fetch check runs (any status — completed, in_progress,
+                # queued — so a brand-new SHA with a workflow that's been
+                # queued but not started is correctly classified "pending"
+                # rather than "no CI configured" below.
+                #
+                # A 403 here means the App installation lacks ``checks: read``
+                # for this repo. That's a config gap, not a transient error
+                # — treat it as "no check_runs visible" and fall through to
+                # statuses + no-CI handling.
+                check_runs: list[dict] = []
+                cr_resp = c.get(
+                    f"{api}/repos/{owner}/{repo}/commits/{sha}/check-runs",
+                    headers=headers,
+                    params={"per_page": 100},
+                )
+                if cr_resp.status_code == 401 and retry == 0:
+                    invalidate_github_token(self.settings, self._repo_config)
+                    time.sleep(2)
+                    continue
+                if cr_resp.status_code != 403:
+                    cr_resp.raise_for_status()
+                    check_runs = cr_resp.json().get("check_runs", [])
 
-            # 2. Always probe combined statuses too. A repo without
-            # any CI returns empty check_runs AND empty
-            # statuses_data["statuses"] — we use that to distinguish
-            # "no CI configured" (pass-through) from "CI pending"
-            # (wait). 403 on statuses follows the same logic.
-            status_runs: list[dict] = []
-            st_resp = c.get(
-                f"{api}/repos/{owner}/{repo}/commits/{sha}/status",
-                headers=headers,
-            )
-            if st_resp.status_code != 403:
-                st_resp.raise_for_status()
-                statuses_data = st_resp.json()
-                status_runs = _statuses_to_check_runs(statuses_data)
-            if not check_runs:
-                check_runs = status_runs
+                # 2. Always probe combined statuses too. A repo without
+                # any CI returns empty check_runs AND empty
+                # statuses_data["statuses"] — we use that to distinguish
+                # "no CI configured" (pass-through) from "CI pending"
+                # (wait). 403 on statuses follows the same logic.
+                status_runs: list[dict] = []
+                st_resp = c.get(
+                    f"{api}/repos/{owner}/{repo}/commits/{sha}/status",
+                    headers=headers,
+                )
+                if st_resp.status_code == 401 and retry == 0:
+                    invalidate_github_token(self.settings, self._repo_config)
+                    time.sleep(2)
+                    continue
+                if st_resp.status_code != 403:
+                    st_resp.raise_for_status()
+                    statuses_data = st_resp.json()
+                    status_runs = _statuses_to_check_runs(statuses_data)
+                if not check_runs:
+                    check_runs = status_runs
 
-            # No checks AND no statuses (either truly empty or the
-            # App lacks read permission for both endpoints) → there
-            # is nothing meaningful to gate on. Treat as success so
-            # the merge stage doesn't loop forever.
-            if not check_runs and not status_runs:
-                return {"conclusion": "success", "failing": []}
+                # No checks AND no statuses (either truly empty or the
+                # App lacks read permission for both endpoints) → there
+                # is nothing meaningful to gate on. Treat as success so
+                # the merge stage doesn't loop forever.
+                if not check_runs and not status_runs:
+                    return {"conclusion": "success", "failing": []}
 
-            return _derive_check_conclusion(c, api, owner, repo, headers, check_runs)
+                return _derive_check_conclusion(
+                    c, api, owner, repo, headers, check_runs
+                )
+        return None
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _list_workflow_runs(
@@ -1054,17 +1188,27 @@ class GitHubForge(Forge):
         repo: str,
         run_id: int,
     ) -> str:
+        import time
+
+        from .auth import invalidate_github_token  # lazy: avoid import cycle
+
         s = self.settings
 
-        with self._http.client() as (c, api, headers):
-            # 1. List jobs for the run.
-            jobs_resp = c.get(
-                f"{api}/repos/{owner}/{repo}/actions/runs/{run_id}/jobs",
-                headers=headers,
-                params={"status": "completed"},
-            )
-            jobs_resp.raise_for_status()
-            jobs = jobs_resp.json().get("jobs", [])
+        # 1. List jobs for the run (with 401 retry).
+        for retry in range(2):
+            with self._http.client() as (c, api, headers):
+                jobs_resp = c.get(
+                    f"{api}/repos/{owner}/{repo}/actions/runs/{run_id}/jobs",
+                    headers=headers,
+                    params={"status": "completed"},
+                )
+                if jobs_resp.status_code == 401 and retry == 0:
+                    invalidate_github_token(self.settings, self._repo_config)
+                    time.sleep(2)
+                    continue
+                jobs_resp.raise_for_status()
+                jobs = jobs_resp.json().get("jobs", [])
+            break
 
         # 2. Filter to failed-like jobs.
         failed_conclusions = frozenset(
@@ -1075,9 +1219,9 @@ class GitHubForge(Forge):
                 "action_required",
             }
         )
-        failed_jobs = [j for j in jobs if j.get("conclusion") in failed_conclusions][
-            :_MAX_FAILED_JOBS
-        ]
+        failed_jobs = [
+            j for j in jobs if j.get("conclusion") in failed_conclusions
+        ][:_MAX_FAILED_JOBS]
 
         if not failed_jobs:
             return ""
@@ -1085,29 +1229,40 @@ class GitHubForge(Forge):
         parts: list[str] = []
         log_max = s.ci_log_max_bytes
 
+        # 3. Fetch logs for each failed job (with 401 retry per fetch).
         with self._http.client() as (c, api, headers):
             for j in failed_jobs:
                 job_id = j["id"]
                 job_name = j.get("name", f"job-{job_id}")
-                try:
-                    log_resp = c.get(
-                        f"{api}/repos/{owner}/{repo}/actions/jobs/{job_id}/logs",
-                        headers=headers,
-                        follow_redirects=True,
-                    )
-                    log_resp.raise_for_status()
-                    raw = log_resp.text
-                except httpx.HTTPStatusError:
-                    sc = log_resp.status_code
-                    if sc == 403:
-                        raw = f"[log fetch failed for job {job_id}: HTTP 403 — App likely missing Actions:Read permission]"
+                # Each job-log fetch gets its own 401 retry.
+                raw: str = ""
+                for log_retry in range(2):
+                    try:
+                        log_resp = c.get(
+                            f"{api}/repos/{owner}/{repo}/actions/jobs/{job_id}/logs",
+                            headers=headers,
+                            follow_redirects=True,
+                        )
+                        if log_resp.status_code == 401 and log_retry == 0:
+                            invalidate_github_token(
+                                self.settings, self._repo_config
+                            )
+                            time.sleep(2)
+                            continue
+                        log_resp.raise_for_status()
+                        raw = log_resp.text
+                    except httpx.HTTPStatusError:
+                        sc = log_resp.status_code
+                        if sc == 403:
+                            raw = f"[log fetch failed for job {job_id}: HTTP 403 — App likely missing Actions:Read permission]"
+                        else:
+                            raw = f"[log fetch failed for job {job_id}: HTTP {sc}]"
+                    except Exception as exc:
+                        raw = f"[log fetch failed for job {job_id}: {type(exc).__name__}]"
                     else:
-                        raw = f"[log fetch failed for job {job_id}: HTTP {sc}]"
-                except Exception as exc:
-                    raw = f"[log fetch failed for job {job_id}: {type(exc).__name__}]"
-                else:
-                    if not raw:
-                        raw = f"[log fetch returned empty body for job {job_id}]"
+                        if not raw:
+                            raw = f"[log fetch returned empty body for job {job_id}]"
+                    break  # success or final attempt
 
                 # Strip ANSI.
                 clean = _ANSI_RE.sub("", raw)

@@ -5,12 +5,16 @@ preamble that was copied into every HTTP-calling method.
 
 from __future__ import annotations
 
+import logging
+import time
 from contextlib import contextmanager
 from typing import Callable, Iterator
 
 import httpx
 
 from ..config import RepoConfig, Settings
+
+logger = logging.getLogger(__name__)
 
 
 class _ApiClient:
@@ -41,8 +45,13 @@ class _ApiClient:
         self._repo_config = repo_config
         self._api_url_attr = api_url_attr
         self._headers_factory = headers_factory
+        self._on_401: Callable[[], None] | None = None
 
     # -- internal helper --------------------------------------------------
+
+    def regenerate_headers(self) -> dict[str, str]:
+        """Re-run the headers factory (e.g. after cache invalidation)."""
+        return self._headers_factory(self._settings, self._repo_config)
 
     def _do(self, method: str, path: str, **kwargs: object) -> httpx.Response:
         """Open a client, make a single request, buffer the body, and return
@@ -50,6 +59,11 @@ class _ApiClient:
         ``"post"``, …) — we call the corresponding method on the client so
         that test mocks which override only ``Client.get`` / ``Client.post``
         / … continue to intercept.
+
+        On the first 401 response, when an ``_on_401`` callback is
+        configured, the cached token is invalidated, a 2-second backoff
+        is applied, and the request is retried exactly once with fresh
+        headers.  A second 401 (or any other status) is returned as-is.
         """
         api_base = getattr(self._settings, self._api_url_attr).rstrip("/")
         headers = self._headers_factory(self._settings, self._repo_config)
@@ -64,6 +78,22 @@ class _ApiClient:
             # carry their payload pre-populated and don't need it.
             if hasattr(r, "read"):
                 r.read()
+
+        if r.status_code == 401 and self._on_401 is not None:
+            logger.debug(
+                "_ApiClient._do 401 on %s %s — invalidating cache, retrying",
+                method.upper(),
+                url,
+            )
+            self._on_401()
+            time.sleep(2)
+            headers = self._headers_factory(self._settings, self._repo_config)
+            with httpx.Client(timeout=30) as c:
+                fn = getattr(c, method)
+                r = fn(url, headers=headers, **kwargs)
+                if hasattr(r, "read"):
+                    r.read()
+
         return r
 
     # -- public convenience wrappers --------------------------------------

@@ -20,10 +20,13 @@ installation tokens for their respective remotes.
 
 from __future__ import annotations
 
+import logging
 import time
 
 from ..config import RepoConfig, Settings, get_secrets
 from .github import _parse_owner_repo
+
+logger = logging.getLogger(__name__)
 
 _cache: dict[str, tuple[str, float]] = {}
 
@@ -93,6 +96,21 @@ def gitlab_token() -> str:
     return token
 
 
+def invalidate_github_token(
+    settings: Settings, repo_config: RepoConfig | None = None
+) -> None:
+    """Remove the cached installation token for *settings* + *repo_config*.
+
+    Safe to call when no entry exists (``.pop(ck, None)``).  After
+    invalidation the next ``github_token(...)`` call will mint a fresh
+    token from the GitHub API.
+    """
+    remote_url = _resolve_remote_url(settings, repo_config)
+    ck = f"{get_secrets().github_app_id}:{remote_url}"
+    _cache.pop(ck, None)
+    logger.debug("invalidate_github_token key=%s", ck)
+
+
 def github_token(settings: Settings, repo_config: RepoConfig | None = None) -> str:
     """Return a forge auth token: either a static FORGE_TOKEN from secrets or a short-lived GitHub App installation token."""
     if settings.forge_auth != "app":
@@ -111,7 +129,12 @@ def github_token(settings: Settings, repo_config: RepoConfig | None = None) -> s
     ck = f"{get_secrets().github_app_id}:{remote_url}"
     cached = _cache.get(ck)
     if cached and cached[1] - 60 > time.time():
+        remaining = cached[1] - time.time()
+        logger.debug(
+            "github_token cache hit key=%s remaining_ttl=%.0fs", ck, remaining
+        )
         return cached[0]
+    logger.debug("github_token cache miss key=%s — minting fresh token", ck)
     token, expiry = _mint_installation_token(settings, repo_config=repo_config)
     _cache[ck] = (token, expiry)
     return token

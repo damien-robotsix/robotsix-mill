@@ -2028,3 +2028,125 @@ def test_delete_branch_same_repo_unchanged(tmp_path, monkeypatch):
     forge = _forge(tmp_path)
     assert forge.delete_branch(branch="mill/t-1") is True
     assert "/repos/o/r/git/refs/heads/mill/t-1" in delete_url["url"]
+
+
+# ---------------------------------------------------------------------------
+# 401 self-heal (cache invalidation + retry) — Path B (_create_pr)
+# ---------------------------------------------------------------------------
+
+
+def _app_settings(tmp_path, **kw):
+    """Return Settings + populate Secrets for GitHub App auth."""
+    import robotsix_mill.config as _cfg
+
+    # Secrets must be populated *before* Settings() so the cross-field
+    # validator (FORGE_AUTH=app requires github_app_id / private_key)
+    # can see them.
+    _reset_secrets()
+    _cfg._secrets = Secrets(
+        github_app_id=kw.get("GITHUB_APP_ID", "123"),
+        github_app_private_key=kw.get("GITHUB_APP_PRIVATE_KEY", "KEY"),
+    )
+    kw.setdefault("data_dir", str(tmp_path))
+    kw.setdefault("FORGE_KIND", "github")
+    kw.setdefault("FORGE_AUTH", "app")
+    kw.setdefault("FORGE_REMOTE_URL", "https://github.com/o/r.git")
+    # Settings model itself holds github_app_id / github_app_private_key
+    # (not just Secrets), so pass them through.
+    kw.setdefault("GITHUB_APP_ID", "123")
+    kw.setdefault("GITHUB_APP_PRIVATE_KEY", "KEY")
+    return Settings(**kw)
+
+
+def test_create_pr_401_retry_then_201_success(tmp_path, monkeypatch):
+    """First POST returns 401, retry returns 201 — PR opens successfully.
+    ``_mint_installation_token`` is called exactly twice (initial + retry)."""
+    import time as _time
+
+    from robotsix_mill.forge import auth as forge_auth
+
+    forge_auth._cache.clear()
+    mint_calls = []
+
+    def fake_mint(settings, repo_config=None):
+        mint_calls.append(_time.time())
+        return f"ghs_{len(mint_calls)}", _time.time() + 3000
+
+    monkeypatch.setattr(forge_auth, "_mint_installation_token", fake_mint)
+    monkeypatch.setattr(_time, "sleep", lambda s: None)  # skip backoff
+
+    # Stateful mock: first POST → 401, second POST → 201.
+    call_count = [0]
+
+    class RetryMockClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def post(self, url, headers=None, json=None, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return _make_response(401, {}, '{"message":"Bad credentials"}')
+            return _make_response(
+                201, {"html_url": "https://github.com/o/r/pull/42"}
+            )
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            return _make_response(200, [])
+
+    monkeypatch.setattr(real_httpx, "Client", RetryMockClient)
+
+    forge = GitHubForge(_app_settings(tmp_path))
+    url = forge.open_merge_request(
+        source_branch="feature/x", title="t", body="b"
+    )
+    assert url == "https://github.com/o/r/pull/42"
+    assert len(mint_calls) == 2  # initial + retry
+
+
+def test_create_pr_401_retry_then_401_failure(tmp_path, monkeypatch):
+    """Both POST attempts return 401 — error is surfaced (not swallowed).
+    ``_mint_installation_token`` is called exactly twice (initial + retry)."""
+    import time as _time
+
+    from robotsix_mill.forge import auth as forge_auth
+
+    forge_auth._cache.clear()
+    mint_calls = []
+
+    def fake_mint(settings, repo_config=None):
+        mint_calls.append(_time.time())
+        return f"ghs_{len(mint_calls)}", _time.time() + 3000
+
+    monkeypatch.setattr(forge_auth, "_mint_installation_token", fake_mint)
+    monkeypatch.setattr(_time, "sleep", lambda s: None)
+
+    class Always401Client:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def post(self, url, headers=None, json=None, **kwargs):
+            return _make_response(401, {}, '{"message":"Bad credentials"}')
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            return _make_response(200, [])
+
+    monkeypatch.setattr(real_httpx, "Client", Always401Client)
+
+    forge = GitHubForge(_app_settings(tmp_path))
+    with pytest.raises(RuntimeError, match="GitHub PR create failed: 401"):
+        forge.open_merge_request(
+            source_branch="feature/x", title="t", body="b"
+        )
+    assert len(mint_calls) == 2  # initial + retry
