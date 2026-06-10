@@ -293,6 +293,19 @@ def run(  # noqa: C901 — extra-packages loading adds one branch; tightly-coupl
     if install_project:
         effective_command = _maybe_install_prefix(effective_command, repo_dir, settings)
 
+    # Put the pip ``--user`` scripts dir on PATH so console-script entry
+    # points (e.g. yamllint installed via extra_sandbox_packages) resolve.
+    # pip installs them under ``$HOME/.local/bin`` = ``/tmp/.local/bin``
+    # (HOME is fixed to /tmp above) — a dir NOT on the image's PATH, so
+    # without this a gate calling such a script dies with rc=127. The
+    # export must live inside the ``sh -lc`` string (docker ``-e`` does
+    # no shell expansion) and be the FIRST statement so it is in effect
+    # for the extra-package install, the project install, and the user
+    # command alike.
+    effective_command = (
+        'export PATH="$HOME/.local/bin:/tmp/.local/bin:$PATH"; ' + effective_command
+    )
+
     # Override the image ENTRYPOINT: images like robotsix/mill have one
     # (it starts the server) which would otherwise swallow our command.
     argv += ["--entrypoint", "sh", settings.sandbox_image, "-lc", effective_command]
