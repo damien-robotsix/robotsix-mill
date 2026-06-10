@@ -1611,6 +1611,15 @@ async function toggleRuns(){
  runsOpen=true;
  document.getElementById("drawer").classList.add("open");
 }
+// Flip the show/hide-closed state and re-fetch. refresh() re-runs the
+// /tickets fetch with the correct include_closed value and re-renders
+// via _renderBoard, which already filters both closed and epic_closed.
+function toggleClosed(){
+ showClosed=!showClosed;
+ const btn=document.getElementById("toggle-closed-btn");
+ if(btn)btn.textContent=showClosed?"Hide closed":"Show closed";
+ refresh();
+}
 // -- cost dashboard -----------------------------------------------------
 async function openCostDashboard(){
  if(costDashboardOpen){close_();return}
@@ -2168,6 +2177,22 @@ function _patchTicket(t){
   let card=document.querySelector(`.card[data-id="${t.id}"]`);
   let oldCol=card?card.closest(".col"):null;
   const oldState=oldCol?oldCol.dataset.state:null;
+
+  // When closed columns are hidden, a pushed update for a closed/
+  // epic_closed ticket must NOT reveal that column. Treat it as a
+  // removal: drop any existing card (and its now-empty column) and
+  // return early without creating the target column. Push events are
+  // broadcast unconditionally; only the initial snapshot is filtered
+  // server-side, so this keeps closed tickets hidden between refreshes.
+  if(!showClosed && (newState==="closed"||newState==="epic_closed")){
+    if(card){card.remove();card._sig=null;}
+    if(oldCol){
+      const n=oldCol.querySelector("h2 .n");
+      if(n){const c=parseInt(n.textContent)-1;n.textContent=Math.max(0,c);}
+      if(!oldCol.querySelector(".card")) oldCol.remove();
+    }
+    return;
+  }
 
   if(card && oldState===newState){
     // Same column — just update the card's inner content.
