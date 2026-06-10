@@ -156,3 +156,21 @@ def test_upload_over_size_limit_returns_413(client, service, monkeypatch):
     assert r.status_code == 413, r.text
     ssdir = service.workspace(t).screenshots_dir
     assert not ssdir.exists() or list(ssdir.iterdir()) == []
+
+
+def test_upload_write_failure_returns_500(client, service, monkeypatch):
+    # An OSError while persisting the bytes → 500 with a clean detail the
+    # frontend can surface, not an unstyled generic error.
+    from pathlib import Path
+
+    def _boom(self, data):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(Path, "write_bytes", _boom)
+    t = service.create("screenshot ticket")
+    r = client.post(
+        f"/tickets/{t.id}/screenshots",
+        files={"file": ("shot.png", _PNG_BYTES, "image/png")},
+    )
+    assert r.status_code == 500, r.text
+    assert r.json()["detail"] == "failed to save screenshot"

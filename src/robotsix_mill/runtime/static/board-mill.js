@@ -1173,11 +1173,59 @@
       }
     });
 
+    // Mirror the server's _SCREENSHOT_MEDIA_TYPES / _MAX_SCREENSHOT_BYTES so
+    // invalid files fail fast without a round-trip.
+    var SCREENSHOT_MEDIA_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+    var MAX_SCREENSHOT_BYTES = 10 * 1024 * 1024;
+
     async function uploadScreenshot(id, file) {
+      if (file.type && SCREENSHOT_MEDIA_TYPES.indexOf(file.type) === -1) {
+        throw new Error("Unsupported image format — use PNG, JPEG, GIF, or WebP.");
+      }
+      if (file.size > MAX_SCREENSHOT_BYTES) {
+        throw new Error("Screenshot is too large (max 10 MiB).");
+      }
       var fd = new FormData();
       fd.append("file", file);
-      var resp = await fetch("/tickets/" + encodeURIComponent(id) + "/screenshots", { method: "POST", body: fd });
-      if (!resp.ok) { throw new Error(await resp.text()); }
+      var resp;
+      try {
+        resp = await fetch("/tickets/" + encodeURIComponent(id) + "/screenshots", { method: "POST", body: fd });
+      } catch (netErr) {
+        throw new Error("Network error — check your connection and retry.");
+      }
+      if (!resp.ok) {
+        var detail = "";
+        try { var j = await resp.json(); detail = j && j.detail; } catch (parseErr) { detail = ""; }
+        if (detail) { throw new Error(detail); }
+        if (resp.status === 413) { throw new Error("Screenshot is too large (max 10 MiB)."); }
+        if (resp.status === 400) { throw new Error("Unsupported image format — use PNG, JPEG, GIF, or WebP."); }
+        throw new Error("Upload failed (HTTP " + resp.status + ").");
+      }
+    }
+
+    // The ticket already exists on the backend; present Retry / Skip so a
+    // successfully-created ticket is never stranded by a screenshot failure.
+    function showUploadRecovery(id, file, msg) {
+      submitErr.innerHTML =
+        '<span class="modal-submit-error-msg"></span> ' +
+        '<button type="button" class="modal-btn-cancel" id="modal-ss-retry">Retry</button> ' +
+        '<button type="button" class="modal-btn-cancel" id="modal-ss-skip">Skip &amp; keep ticket</button>';
+      submitErr.querySelector(".modal-submit-error-msg").textContent =
+        "ticket created, but screenshot upload failed: " + msg;
+      createBtn.disabled = true; createBtn.textContent = "Create";
+      document.getElementById("modal-ss-retry").addEventListener("click", async function() {
+        clearSubmitErr();
+        createBtn.disabled = true; createBtn.textContent = "Uploading…";
+        try {
+          await uploadScreenshot(id, file);
+          close(); refresh();
+        } catch (err) {
+          showUploadRecovery(id, file, err.message);
+        }
+      });
+      document.getElementById("modal-ss-skip").addEventListener("click", function() {
+        close(); refresh();
+      });
     }
 
     async function doSubmit() {
@@ -1194,8 +1242,7 @@
         try {
           await uploadScreenshot(body.id, file);
         } catch (err) {
-          showSubmitErr("ticket created, but screenshot upload failed: " + err.message);
-          createBtn.disabled = false; createBtn.textContent = "Create";
+          showUploadRecovery(body.id, file, err.message);
           return;
         }
       }
