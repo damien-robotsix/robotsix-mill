@@ -1709,6 +1709,11 @@ class RepoConfig(BaseModel):
     # against ITS Langfuse project. Unset → account-level activity reconcile.
     openrouter_api_key: str | None = None
     forge_remote_url: str | None = None
+    # Optional pinned working branch. When set, member repos branch from
+    # and open PRs into this branch (e.g. "lyrical") instead of the fork's
+    # default branch. Populated from the vcs2l manifest `version` by the
+    # workspace member-sync mechanism; None → ordinary default-branch behaviour.
+    working_branch: str | None = None
     # Optional per-repo sandbox image override. When set, this repo's
     # sandbox executions (test/smoke gates + the implement coordinator's
     # interactive run_command) use this image; ``None`` → fall back to
@@ -1831,6 +1836,9 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             if isinstance(repo_data, dict)
             else None,
             forge_remote_url=repo_data.get("forge_remote_url")
+            if isinstance(repo_data, dict)
+            else None,
+            working_branch=repo_data.get("working_branch")
             if isinstance(repo_data, dict)
             else None,
             sandbox_image=repo_data.get("sandbox_image")
