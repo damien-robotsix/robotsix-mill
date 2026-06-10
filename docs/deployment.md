@@ -44,6 +44,28 @@ adds `build: .` back to the `mill` service. Docker Compose merges the
 two files automatically. Omit `--build` to reuse a previously cached
 local image.
 
+### Static asset cache-busting via `MILL_BUILD_SHA`
+
+The board's static assets (JS/CSS) carry a per-deploy cache-busting token
+appended to their URLs (e.g. `/static/board.js?v=<token>`). The build
+argument `MILL_BUILD_SHA` provides this token:
+
+```bash
+export MILL_BUILD_SHA="$(git rev-parse --short HEAD)"
+docker compose build mill
+```
+
+When `MILL_BUILD_SHA` is set, its value (typically a git short SHA) becomes
+the token. The autoupdate script (`dev/mill-autoupdate.sh`) does this
+automatically. For dev/uvicorn runs without the build argument, a stable
+process-start fallback token is used instead (ensuring non-empty tokens and
+fresh cache on each restart).
+
+**Why this matters:** UI fixes deployed in a new commit produce different
+tokens, so browsers fetch fresh JS/CSS instead of serving stale cached
+bundles. Without this, users would see old UI behavior until they
+hard-refresh.
+
 ## Enable GitHub Pages (one-time setup)
 
 The `.github/workflows/docs.yml` workflow builds the MkDocs site and
