@@ -13,6 +13,13 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from ..config import ReposRegistry, Settings
+from ..core.service import TransitionError
+from ..forge.base import NotConfiguredError
+from .exception_handlers import (
+    catchall_handler,
+    not_configured_error_handler,
+    transition_error_handler,
+)
 from .lifespan import create_lifespan, setup_logging  # noqa: F401 — re-exported
 from . import routes
 
@@ -36,6 +43,13 @@ def create_app(
         title="robotsix-mill",
         lifespan=create_lifespan(settings, repos, single_repo_id=single_repo_id),
     )
+
+    # Centralised domain-exception → HTTP mapping.  Register concrete
+    # handlers before the catch-all so the parent ``Exception`` handler
+    # only sees genuinely unexpected errors.
+    app.add_exception_handler(TransitionError, transition_error_handler)
+    app.add_exception_handler(NotConfiguredError, not_configured_error_handler)
+    app.add_exception_handler(Exception, catchall_handler)
 
     # Mill-specific static assets (board-mill.js, board-mill.css) are
     # served from a sub-path.  This mount must come BEFORE the /static

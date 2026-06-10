@@ -10,7 +10,6 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from ...core.service import TransitionError
 from ..board_adapter import MillBoardAdapter
 from ..deps import (
     enrich_ticket_read,
@@ -114,8 +113,6 @@ def board_move(
         ticket = svc.transition(card_id, target_status, None)
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
-    except TransitionError as e:
-        raise HTTPException(409, str(e)) from None
 
     maybe_enqueue(ticket, worker)
     return {"ok": True, "id": card_id, "status": target_status}

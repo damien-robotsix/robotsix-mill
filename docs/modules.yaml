@@ -111,6 +111,7 @@ modules:
     paths:
       - src/robotsix_mill/runtime/__init__.py
       - src/robotsix_mill/runtime/api.py
+      - src/robotsix_mill/runtime/exception_handlers.py
       - src/robotsix_mill/runtime/routes/**/*.py
       - src/robotsix_mill/runtime/worker.py
       - src/robotsix_mill/runtime/deps.py
@@ -125,6 +126,7 @@ modules:
       - src/robotsix_mill/runtime/stage_retry.py
       - src/robotsix_mill/runtime/static/*
       - tests/runtime/test_api.py
+      - tests/runtime/test_exception_handlers.py
       - tests/runtime/test_routes.py
       - tests/runtime/test_worker.py
       - tests/runtime/test_stale_branch_cleanup.py

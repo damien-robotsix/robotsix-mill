@@ -17,7 +17,6 @@ from ...core.models import (
     TicketRead,
     TicketTransition,
 )
-from ...core.service import TransitionError
 from ...core.states import STAGE_FOR_STATE, State
 from ...forge import get_forge
 from ..deps import (
@@ -386,8 +385,6 @@ def transition(
         ticket = svc.transition(ticket_id, body.state, body.note)
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
-    except TransitionError as e:
-        raise HTTPException(409, str(e)) from None
     maybe_enqueue(ticket, worker)  # human unblock re-triggers the chain
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
     return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
@@ -430,8 +427,6 @@ def approve_ticket(
         ticket = svc.transition(ticket_id, State.READY, note="approved by human")
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
-    except TransitionError as e:
-        raise HTTPException(409, str(e)) from None
 
     # If this ticket has an epic parent, check for a proposed epic body
     # artifact and apply it to the epic on approval.
@@ -486,14 +481,11 @@ def merge_now(
     if not result["merged"]:
         raise HTTPException(409, result["reason"])
 
-    try:
-        ticket = svc.transition(
-            ticket_id,
-            State.DONE,
-            note=f"merged via board: {pr_url}",
-        )
-    except TransitionError as e:
-        raise HTTPException(409, str(e)) from None
+    ticket = svc.transition(
+        ticket_id,
+        State.DONE,
+        note=f"merged via board: {pr_url}",
+    )
 
     maybe_enqueue(ticket, worker)  # retrospect picks up DONE
     return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
@@ -705,8 +697,6 @@ def request_changes(
         comment, ticket = svc.request_changes(ticket_id, body.body, author=body.author)
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
-    except TransitionError as e:
-        raise HTTPException(409, str(e)) from None
     maybe_enqueue(ticket, worker)
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
     return {
@@ -768,8 +758,6 @@ def redraft(
         )
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
-    except TransitionError as e:
-        raise HTTPException(409, str(e)) from None
     maybe_enqueue(ticket, worker)
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
     return {
@@ -799,8 +787,6 @@ def mark_done(
         comment, ticket = svc.mark_done(ticket_id, note=note)
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
-    except TransitionError as e:
-        raise HTTPException(409, str(e)) from None
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
     return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
 
@@ -828,8 +814,6 @@ def resume_blocked(
             ticket = svc.resume_blocked(ticket_id)
         except KeyError:
             raise HTTPException(404, "ticket not found") from None
-        except TransitionError as e:
-            raise HTTPException(409, str(e)) from None
     elif ticket.retry_attempt > 0:
         svc.set_retry_state(
             ticket_id,
