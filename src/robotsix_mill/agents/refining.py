@@ -32,6 +32,12 @@ from .prompt_blocks import section
 # ValueError for an advertised-but-absent tool.
 _STRIP_EXPLORE_SECTION_RE = re.compile(r"## Tool: `explore`.*?\n(?=## )", re.DOTALL)
 
+# Strips the ``## Tool: `read_file``` section (through to the next
+# ``## `` heading) from the triage system prompt when no repo clone
+# is available, so the prompt-tool-consistency guard doesn't raise
+# ValueError for the advertised-but-absent ``read_file`` tool.
+_STRIP_READFILE_SECTION_RE = re.compile(r"## Tool: `read_file`.*?\n(?=## )", re.DOTALL)
+
 log = logging.getLogger(__name__)
 
 
@@ -296,15 +302,25 @@ def triage_refine(
     tools: list = []
     if repo_dir is not None:
         from .explore import make_explore_tool
+        from .fs_tools import build_fs_tools
 
         tools = [make_explore_tool(settings, repo_dir, extra_roots=extra_roots)]
+        # Wire the read-only ``read_file`` closure so the classifier can
+        # deterministically verify a cited path exists before concluding
+        # it's absent — instead of over-defaulting to REFINE when the
+        # explore scout errors or returns a truncated/empty result.
+        all_fs = build_fs_tools(repo_dir, settings, extra_roots=extra_roots)
+        read_file_tool = next(t for t in all_fs if t.__name__ == "read_file")
+        tools.append(read_file_tool)
 
     system_prompt = definition.system_prompt
     if repo_dir is None:
-        # Strip the ``## Tool: `explore``` section so the build-time
-        # prompt-tool-consistency guard doesn't raise ValueError when
-        # the explore tool is absent from the resolved tool set.
+        # Strip the ``## Tool: `explore``` and ``## Tool: `read_file```
+        # sections so the build-time prompt-tool-consistency guard
+        # doesn't raise ValueError when those tools are absent from the
+        # resolved tool set.
         system_prompt = _STRIP_EXPLORE_SECTION_RE.sub("", system_prompt)
+        system_prompt = _STRIP_READFILE_SECTION_RE.sub("", system_prompt)
 
     agent = build_agent_from_definition(
         settings,
