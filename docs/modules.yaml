@@ -98,6 +98,7 @@ modules:
       - tests/forge/test_forge_base.py
       - tests/forge/test_github.py
       - tests/forge/test_gitlab.py
+      - tests/forge/test_http.py
     dependencies: [config, vcs]
 
   # -------------------------------------------------------------------
