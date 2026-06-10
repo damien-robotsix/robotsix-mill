@@ -2,7 +2,8 @@ name: "robotsix-mill CodeQL config"
 
 # Broader than the default security-extended suite — consistent with the
 # fleet's quality-focused posture (matches the sibling robotsix repos).
-queries: security-and-quality
+queries:
+  - uses: security-and-quality
 
 # Scope analysis to first-party source — mill's package lives at
 # src/robotsix_mill/.
