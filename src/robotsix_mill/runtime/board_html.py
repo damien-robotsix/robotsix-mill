@@ -1,9 +1,13 @@
 """The HTML shell for the kanban board served at ``GET /``.
 
-The board chrome (columns, cards, move control, drawer, refresh loop,
-closed toggle) is owned by robotsix-board.  This module provides the
-HTML skeleton that links to robotsix-board's static assets and to
-mill-specific JS/CSS layered on top.
+The board chrome core (columns, cards, move control, drawer, refresh loop)
+is owned by robotsix-board.  Mill's own JavaScript (`board.js`) extends
+this with mill-specific UI elements and behavior: ticket card display,
+real-time WebSocket updates, drawer panels (runs, cost dashboard,
+candidates, proposals), and the closed-ticket visibility toggle.
+
+This module provides the HTML skeleton that links to robotsix-board's
+static assets and to mill-specific JS/CSS layered on top.
 
 The ``{CONFIG_SCRIPT}`` placeholder is replaced at request time by
 ``render_config_script()`` from robotsix-board.  The ``{BOARD_SKELETON}``
