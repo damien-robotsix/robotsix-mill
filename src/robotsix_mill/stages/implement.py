@@ -998,6 +998,18 @@ class ImplementStage(Stage):
                         repo_dir=repo_dir,
                         repo_config=ctx.repo_config,
                     )
+                    # The board browser smoke writes its screenshot to
+                    # ``<clone>/artifacts/board.png`` (BOARD_SMOKE_SCREENSHOT,
+                    # relative to the sandbox cwd = the repo clone, the only
+                    # writable mount). The review stage reads it from the
+                    # workspace artifacts dir — a sibling of the clone, outside
+                    # the sandbox mount — so lift it out here. Absent for
+                    # non-board smokes / a failed render → review stays
+                    # text-only, unchanged.
+                    ws = ctx.service.workspace(ticket)
+                    src_png = repo_dir / "artifacts" / "board.png"
+                    if src_png.exists():
+                        shutil.copyfile(src_png, ws.artifacts_dir / "board.png")
                     if not smoke_passed:
                         passed = False
                         diag = smoke_diag

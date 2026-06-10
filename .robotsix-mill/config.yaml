@@ -1,7 +1,11 @@
 test_command: pytest -q
 languages: [python]
-# Path-scoped smoke gate: runs the API-level board smoke after unit tests
-# pass, but only when a ticket touches the board/runtime UI surface.
-smoke_command: scripts/smoke_board.sh
+# Path-scoped smoke gate: runs the API-level board smoke (Tier 1) AND the
+# headless-Chromium browser smoke (Tier 2) after unit tests pass, but only
+# when a ticket touches the board/runtime UI surface. The browser smoke is
+# handed BOARD_SMOKE_SCREENSHOT=artifacts/board.png so it captures a board
+# screenshot (under the repo clone) that the implement gate lifts into the
+# workspace artifacts dir for the vision-capable review stage.
+smoke_command: scripts/smoke_board.sh && BOARD_SMOKE_SCREENSHOT=artifacts/board.png scripts/smoke_board_browser.sh
 smoke_paths:
   - src/robotsix_mill/runtime/**

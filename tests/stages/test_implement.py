@@ -579,6 +579,47 @@ def test_smoke_gate_skipped_when_paths_do_not_match(ctx_factory, tmp_path, monke
     assert out.next_state is State.DOCUMENTING
 
 
+def test_smoke_gate_lifts_board_screenshot_into_artifacts(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When the board smoke writes its screenshot to <clone>/artifacts/board.png
+    (BOARD_SMOKE_SCREENSHOT, cwd = the clone), the implement gate lifts it
+    into the workspace artifacts dir where the review stage reads it."""
+    from robotsix_mill.stages import implement as impl_mod
+
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        smoke_command="scripts/smoke.sh",  # smoke gate enabled (paths empty ⇒ runs)
+        review_enabled="false",
+    )
+    monkeypatch.setattr(
+        coding, "run_implement_agent", _fake_agent({"feature.txt": "x"})
+    )
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    def _fake_smoke(*, settings, repo_dir, repo_config=None, **_kw):
+        del settings, repo_config
+        # Mirror board_browser_check.py honoring BOARD_SMOKE_SCREENSHOT.
+        png = Path(repo_dir) / "artifacts" / "board.png"
+        png.parent.mkdir(parents=True, exist_ok=True)
+        png.write_bytes(b"\x89PNG\r\n\x1a\n")
+        return (True, "smoke passed")
+
+    monkeypatch.setattr(impl_mod, "run_smoke_agent", _fake_smoke)
+
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.DOCUMENTING
+    lifted = ctx.service.workspace(t).artifacts_dir / "board.png"
+    assert lifted.exists(), "gate must lift board.png into the workspace artifacts dir"
+    assert lifted.read_bytes().startswith(b"\x89PNG")
+
+
 def test_env_error_short_circuits_within_two_cycles(ctx_factory, tmp_path, monkeypatch):
     """An ENV-ERROR diagnosis (missing binary) repeated identically caps
     the fix loop at ≤2 cycles — instead of burning max_fix_iterations —
