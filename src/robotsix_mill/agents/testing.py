@@ -11,10 +11,69 @@ sees the full log; its history stays short.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from ..config import RepoConfig, Settings, get_secrets
 from ..repo_settings import load_repo_test_command
+
+# Machine-detectable marker prefixing a deterministic, LLM-free diagnosis
+# for an ENVIRONMENTAL test-gate failure (a missing binary the agent cannot
+# fix by editing code). ``stages/implement.py`` imports this to drive its
+# fix-loop circuit breaker, keyed off the diagnosis being byte-identical
+# across cycles for the same missing binary.
+ENV_ERROR_PREFIX = "ENV-ERROR:"
+
+# Command-not-found signatures from the two common shells:
+#   dash / ``sh -lc``:  "sh: 1: yamllint: not found"
+#   bash:               "yamllint: command not found"
+_SH_NOT_FOUND_RE = re.compile(r"sh: \d+: ([^:\n]+): not found")
+_BASH_NOT_FOUND_RE = re.compile(r"(?:^|\n)\s*([\w./+-]+): command not found")
+
+
+def _detect_missing_binary(out: str) -> str | None:
+    """Extract the missing binary name from a command-not-found message.
+
+    Returns the binary name, or ``None`` if no command-not-found
+    signature is present.
+    """
+    m = _SH_NOT_FOUND_RE.search(out)
+    if m:
+        return m.group(1).strip()
+    m = _BASH_NOT_FOUND_RE.search(out)
+    if m:
+        return m.group(1).strip()
+    return None
+
+
+def _env_error_diag(rc: int, out: str) -> str | None:
+    """Return a STABLE, LLM-free diagnosis for an environmental failure —
+    a binary referenced by the gate command is not installed / not on
+    PATH — or ``None`` when the failure is not environmental.
+
+    Triggers on ``rc == 127`` OR an explicit command-not-found signature
+    (conservative: a normal assertion failure must NOT match). The string
+    is byte-identical across cycles for the same missing binary, which is
+    what lets the implement fix-loop circuit breaker fire.
+    """
+    missing_bin = _detect_missing_binary(out)
+    if rc != 127 and missing_bin is None:
+        return None
+    if missing_bin:
+        return (
+            f"{ENV_ERROR_PREFIX} command not found in sandbox: "
+            f"'{missing_bin}' (rc={rc}). This binary is not installed/on "
+            "PATH; declare it via extra_sandbox_packages in "
+            ".robotsix-mill/config.yaml (pip:<name> or apt:<name>) — not "
+            "fixable by editing code."
+        )
+    return (
+        f"{ENV_ERROR_PREFIX} a command was not found in sandbox "
+        f"(rc={rc}). A binary referenced by the test command is not "
+        "installed/on PATH; declare it via extra_sandbox_packages in "
+        ".robotsix-mill/config.yaml (pip:<name> or apt:<name>) — not "
+        "fixable by editing code."
+    )
 
 
 def run_test_agent(
@@ -74,6 +133,20 @@ def run_test_agent(
     if rc == 5 and "no tests ran" in out.lower():
         return True, "no tests collected (pytest rc=5) — treated as passing"
 
+    # Environmental failure: a binary referenced by the gate command is not
+    # installed / not on PATH (``rc=127`` or an explicit command-not-found
+    # signature). This is NOT fixable by editing code, so skip the distill
+    # LLM and return a STABLE, byte-identical diagnosis carrying a fixed
+    # marker and the binary name. The stability is load-bearing: the
+    # implement fix-loop circuit breaker fires when the same diagnosis
+    # repeats, capping unfixable env failures instead of burning every
+    # fix iteration. Conservative by design — only rc 127 or a real
+    # command-not-found signature triggers this; a normal assertion
+    # failure (rc 1) still flows to the distill agent below.
+    env_diag = _env_error_diag(rc, out)
+    if env_diag is not None:
+        return False, env_diag
+
     if retry_on_failure:
         try:
             rc2, out2 = sandbox.run(
@@ -90,9 +163,16 @@ def run_test_agent(
         # one a fix ticket will be written against).
         rc, out = rc2, out2
 
+    return False, _distill_failure(settings, repo_dir, rc, out)
+
+
+def _distill_failure(settings: Settings, repo_dir: Path, rc: int, out: str) -> str:
+    """Distill a raw failing-test log into a short, actionable diagnosis
+    via a CHEAP model. Degrades to the raw tail when no model key is set
+    or the distill agent errors."""
     tail = out[-6000:]
     if not get_secrets().openrouter_api_key:
-        return False, f"tests failed (rc={rc}); raw tail:\n{tail[-1500:]}"
+        return f"tests failed (rc={rc}); raw tail:\n{tail[-1500:]}"
 
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
@@ -130,8 +210,8 @@ def run_test_agent(
             settings=settings,
             what="test-distill",
         )
-        return False, str(result.output).strip()
+        return str(result.output).strip()
     except Exception as e:  # noqa: BLE001 — degrade to raw tail
-        return False, f"tests failed (rc={rc}); distill error {e}:\n{tail[-1500:]}"
+        return f"tests failed (rc={rc}); distill error {e}:\n{tail[-1500:]}"
     finally:
         _safe_close(agent)

@@ -33,7 +33,7 @@ from ..agents import coding
 from ..agents import prerequisite
 from ..agents.coding import AgentBudgetError, AgentRunError
 from ..agents.coordinating import ValidationResult
-from ..agents.testing import run_test_agent
+from ..agents.testing import ENV_ERROR_PREFIX, run_test_agent
 from ..core.models import SourceKind, Ticket
 from ..core.states import State
 from ..forge.auth import _resolve_remote_url, github_token
@@ -1707,6 +1707,13 @@ class ImplementStage(Stage):
         max_iters = max(1, settings.max_fix_iterations)
         ic = ImplementStage._load_implement_context(ctx, ticket, settings)
 
+        # Ordered history of the per-cycle distilled diagnosis. Drives the
+        # circuit breaker below: a fix loop that keeps producing the SAME
+        # diagnosis is not making progress, and an ENV-ERROR diagnosis is
+        # not fixable by code edits at all — both should short-circuit to
+        # BLOCKED rather than exhaust ``max_fix_iterations``.
+        diag_history: list[str] = []
+
         for attempt in range(1, max_iters + 1):
             # --- resume awareness: detect if returning from a pause ---
             resume_history: list | None = None
@@ -1754,6 +1761,44 @@ class ImplementStage(Stage):
                 return result.outcome
 
             # next_action == "retry" — update for next iteration.
+            # Circuit breaker: track the per-cycle diagnosis and bail out
+            # early when the loop is provably stuck. The retry diagnosis is
+            # carried on ``result.feedback`` (main retry path) or, when the
+            # guardrail produced a "continue", on ``result.ic.feedback``.
+            diag = (
+                result.feedback
+                or (result.ic.feedback if result.ic is not None else None)
+                or ""
+            )
+            diag_history.append(diag)
+            env_repeat = (
+                diag.startswith(ENV_ERROR_PREFIX)
+                and len(diag_history) >= 2
+                and diag_history[-2] == diag
+            )
+            triple_repeat = (
+                len(diag_history) >= 3
+                and diag != ""
+                and diag_history[-2] == diag
+                and diag_history[-3] == diag
+            )
+            if env_repeat or triple_repeat:
+                note = (
+                    "environment failure not fixable by code edits — "
+                    f"{diag[:200]} (short-circuited after {attempt} "
+                    "cycle(s) of identical diagnosis)"
+                )
+                ImplementStage._finalize(
+                    ctx,
+                    ticket,
+                    repo_dir,
+                    branch,
+                    note,
+                    ok=False,
+                    reference_files=ic.reference_files,
+                    extra_roots=extra_roots,
+                )
+                return Outcome(State.BLOCKED, note)
             if result.ic is not None:
                 ic = result.ic
 

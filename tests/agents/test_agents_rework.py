@@ -305,6 +305,93 @@ def test_test_agent_no_command_is_pass(tmp_path):
     assert passed is True
 
 
+def test_test_agent_env_error_rc127_dash_signature(tmp_path, monkeypatch):
+    """rc=127 + dash 'sh: 1: <bin>: not found' → deterministic ENV-ERROR
+    diagnosis naming the binary, WITHOUT invoking the distill LLM."""
+    from robotsix_mill import sandbox
+    from robotsix_mill.agents import retry
+
+    s = _settings(tmp_path, test_command="yamllint --strict .")
+    monkeypatch.setattr(
+        sandbox,
+        "run",
+        lambda cmd, *, repo_dir, settings, **kwargs: (
+            127,
+            "sh: 1: yamllint: not found",
+        ),
+    )
+
+    def _boom(*a, **k):
+        raise AssertionError("distill LLM must not run for an ENV-ERROR")
+
+    monkeypatch.setattr(retry, "run_agent", _boom)
+
+    passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
+    assert passed is False
+    assert fb.startswith(testing.ENV_ERROR_PREFIX)
+    assert "yamllint" in fb
+
+
+def test_test_agent_env_error_bash_command_not_found(tmp_path, monkeypatch):
+    """bash '<bin>: command not found' signature (even rc≠127) → ENV-ERROR
+    naming the binary, no distill LLM."""
+    from robotsix_mill import sandbox
+    from robotsix_mill.agents import retry
+
+    s = _settings(tmp_path, test_command="shellcheck script.sh")
+    monkeypatch.setattr(
+        sandbox,
+        "run",
+        lambda cmd, *, repo_dir, settings, **kwargs: (
+            1,
+            "shellcheck: command not found",
+        ),
+    )
+
+    def _boom(*a, **k):
+        raise AssertionError("distill LLM must not run for an ENV-ERROR")
+
+    monkeypatch.setattr(retry, "run_agent", _boom)
+
+    passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
+    assert passed is False
+    assert fb.startswith(testing.ENV_ERROR_PREFIX)
+    assert "shellcheck" in fb
+
+
+def test_test_agent_normal_failure_still_distills(tmp_path, monkeypatch):
+    """A normal assertion failure (rc=1, no command-not-found signature)
+    must still flow to the distill agent — NOT the ENV-ERROR path."""
+    from robotsix_mill import sandbox
+
+    s = _settings(tmp_path, test_command="pytest")
+    monkeypatch.setattr(
+        sandbox,
+        "run",
+        lambda cmd, *, repo_dir, settings, **kwargs: (1, "AssertionError: 1 != 2"),
+    )
+
+    class FakeModel:
+        def __init__(self, *a, **k):
+            pass
+
+    class FakeAgent:
+        def __init__(self, *a, **k):
+            pass
+
+        def run_sync(self, *a, **k):
+            return type("R", (), {"output": "distilled: assertion failed"})()
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+
+    passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
+    assert passed is False
+    assert not fb.startswith(testing.ENV_ERROR_PREFIX)
+    assert "distilled" in fb
+
+
 def test_build_agent_forwards_name(tmp_path, monkeypatch):
     """AC1: build_agent(..., name='test-agent') passes name= to Agent."""
     from robotsix_mill.agents import base as base_mod
