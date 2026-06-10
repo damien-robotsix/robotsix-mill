@@ -62,7 +62,7 @@ jobs:
       # is missing — prevents the provisioning drift this PR fixes from
       # silently recurring.
       - name: Assert sandbox-contract tools present (gh)
-        run: docker run --rm "${{ steps.scan-ref.outputs.image }}" gh --version
+        run: docker run --rm --entrypoint gh "${{ steps.scan-ref.outputs.image }}" --version
 
       # Gate: only CRITICAL, fixable CVEs block the pipeline. Runs in
       # table format so the failing CVE row is visible in the CI log
@@ -191,7 +191,7 @@ jobs:
       # PATH in the locally-loaded sandbox image. Fails the job if `gh` is
       # missing.
       - name: Assert sandbox-contract tools present (gh)
-        run: docker run --rm "${{ steps.scan-ref.outputs.image }}" gh --version
+        run: docker run --rm --entrypoint gh "${{ steps.scan-ref.outputs.image }}" --version
 
       - name: Trivy vulnerability scan (gate)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
