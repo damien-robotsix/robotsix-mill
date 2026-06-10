@@ -118,7 +118,7 @@ robotsix-mill ticket new --title "Layout is broken" \
   --screenshot layout.png
 ```
 
-Or via the web board: open the board, click **New Ticket**, and use the **Screenshot** file input to attach an image directly in the modal. Both paths support PNG, JPEG, GIF, and WebP formats. Each screenshot is limited to 10 MiB.
+Or via the web board: open the board, click **New Ticket**, and use the **Screenshot** file input to attach an image directly in the modal. Both paths support PNG, JPEG, GIF, and WebP formats. Each screenshot is limited to 10 MiB. If a screenshot upload fails, the modal shows a clear error message with options to retry or skip and keep the created ticket.
 
 To create an epic instead of a task, use `robotsix-mill epic new`:
 

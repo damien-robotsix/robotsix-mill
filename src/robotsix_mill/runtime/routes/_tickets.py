@@ -241,7 +241,10 @@ async def upload_screenshot(
         raise HTTPException(413, "screenshot exceeds the 10 MiB size limit")
 
     dest = svc.workspace(ticket).screenshots_dir / raw_name
-    dest.write_bytes(data)
+    try:
+        dest.write_bytes(data)
+    except OSError as exc:
+        raise HTTPException(500, "failed to save screenshot") from exc
     return {"filename": raw_name, "ticket_id": ticket_id}
 
 
