@@ -304,6 +304,142 @@ def _spec_is_degenerate(spec: str | None) -> bool:
     return any(norm == p or norm.startswith(p + " ") for p in _PLACEHOLDER_SPEC_PHRASES)
 
 
+# --- external-fix claim detection (live re-verification gate) ---------------
+# A refine ``no_change_needed`` verdict that asserts the work was *already
+# shipped elsewhere* must NOT be trusted on its word: the 2026-06-09 incident
+# closed a live CI-failure ticket as a duplicate while the fix had been
+# reverted at HEAD. ``git merge-base --is-ancestor`` cannot detect that
+# (the reverted fix commit is still an ancestor). So when this detector
+# fires, the stage routes the ticket to implement for a live re-check
+# instead of closing to DONE.
+
+# Unambiguous "already shipped elsewhere" phrases — any single one fires.
+_EXTERNAL_FIX_PHRASES: tuple[str, ...] = (
+    "already implemented",
+    "already fixed",
+    "already shipped",
+    "already merged",
+    "already applied",
+    "already resolved",
+    "already done",
+    "duplicate of",
+    "shipped the fix",
+    "parallel ticket",
+)
+
+# Repo ticket-id shape and commit-SHA-like token.
+_TICKET_ID_RE = re.compile(r"\b\d{8}T\d{6}Z\b")
+_COMMIT_SHA_RE = re.compile(r"\b[0-9a-f]{7,40}\b")
+
+# Resolved-claim verbs that, co-occurring with a cited ticket id / commit,
+# imply an external-fix claim even without one of the canned phrases.
+_RESOLVED_VERB_RE = re.compile(
+    r"\b(implemented|fixed|shipped|merged|applied|resolved|addressed|landed)\b"
+)
+
+# Markers of the two legitimate no-change subclasses that must KEEP closing
+# to DONE: detector false-positives and information-only deliverables. They
+# suppress only the fuzzy ref+verb co-occurrence rule (never an unambiguous
+# external-fix phrase).
+_FALSE_POSITIVE_MARKERS: tuple[str, ...] = (
+    "does not exist",
+    "doesn't exist",
+    "false positive",
+    "disproves",
+    "not actually",
+    "cannot reproduce",
+    "can't reproduce",
+)
+_INFO_ONLY_MARKERS: tuple[str, ...] = (
+    "post a comment",
+    "documenting",
+    "information-only",
+    "informational",
+    "explaining why",
+)
+
+
+def _rationale_claims_external_fix(rationale: str) -> bool:
+    """Return ``True`` when *rationale* asserts the work is already done
+    elsewhere (so the fix's live presence must be re-verified, not trusted).
+
+    Fires on an unambiguous "already shipped elsewhere" phrase, or on a
+    cited ticket id / commit SHA co-occurring with a resolved-claim verb.
+    Returns ``False`` for the two legitimate no-change subclasses — detector
+    false-positives and information-only deliverables — so they keep closing
+    to DONE.  Empty/whitespace rationale → ``False``.  Bias is toward NOT
+    firing except when an external-fix verb is unambiguously present.
+    """
+    text = (rationale or "").strip().lower()
+    if not text:
+        return False
+
+    # Unambiguous external-fix phrase → fire regardless of other markers.
+    for phrase in _EXTERNAL_FIX_PHRASES:
+        if re.search(r"\b" + re.escape(phrase) + r"\b", text):
+            return True
+
+    # The two legitimate subclasses suppress the fuzzy co-occurrence rule.
+    if any(m in text for m in _FALSE_POSITIVE_MARKERS) or any(
+        m in text for m in _INFO_ONLY_MARKERS
+    ):
+        return False
+
+    # Cited ticket id / commit SHA co-occurring with a resolved-claim verb.
+    has_ref = bool(_TICKET_ID_RE.search(text) or _COMMIT_SHA_RE.search(text))
+    if has_ref and _RESOLVED_VERB_RE.search(text):
+        return True
+
+    return False
+
+
+def _verify_cited_fix_at_head(repo_dir: Path | None, rationale: str) -> bool:
+    """Best-effort: whether a SHA cited in *rationale* is a valid commit that
+    is an ancestor of ``origin/main``.
+
+    For logging/enrichment only — it MUST NOT short-circuit back to DONE,
+    because ancestry passing does not prove the fix is live (a revert leaves
+    the original fix commit as an ancestor while the bug is back). Mirrors the
+    defensive subprocess style of ``_verify_branch_merged``: any git error is
+    swallowed and the function returns ``False`` (nothing proven).
+    """
+    if repo_dir is None:
+        return False
+    shas = _COMMIT_SHA_RE.findall((rationale or "").lower())
+    if not shas:
+        return False
+    try:
+        for sha in shas:
+            type_check = subprocess.run(
+                ["git", "-C", str(repo_dir), "cat-file", "-t", sha],
+                capture_output=True,
+                text=True,
+            )
+            if type_check.returncode != 0 or type_check.stdout.strip() != "commit":
+                continue
+            anc = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(repo_dir),
+                    "merge-base",
+                    "--is-ancestor",
+                    sha,
+                    "origin/main",
+                ],
+                capture_output=True,
+                text=True,
+            )
+            if anc.returncode == 0:
+                return True
+    except Exception:  # noqa: BLE001 — best-effort; never raise out of the stage
+        log.debug(
+            "cited-fix ancestry check failed for rationale — ignoring",
+            exc_info=True,
+        )
+    return False
+
+
 def _verify_branch_merged(repo_dir: Path | None, ticket: Ticket) -> bool:
     """Check whether *ticket*'s branch is an ancestor of the base branch.
 
@@ -1726,6 +1862,81 @@ class RefineStage(Stage):
                         "but is not merged to main. "
                         "Merge the PR or manually close.",
                     )
+
+                # Live re-verification gate: an "already shipped
+                # elsewhere" rationale (from the LLM mode-4 path OR the
+                # deterministic memory short-circuit — both converge
+                # here) is NOT trusted on its word. A reverted fix leaves
+                # the original commit as an ancestor of origin/main, so
+                # ancestry alone cannot detect the bug's return (the
+                # 2026-06-09 incident). Synthesize a verification spec and
+                # route to implement, which works against live HEAD and
+                # re-applies the fix if the bug recurred (or cheaply
+                # closes via its empty-diff path if genuinely resolved).
+                if _rationale_claims_external_fix(rationale):
+                    cited_refs = _TICKET_ID_RE.findall(
+                        rationale
+                    ) + _COMMIT_SHA_RE.findall(rationale.lower())
+                    cited = (
+                        ", ".join(dict.fromkeys(cited_refs))
+                        or "the prior ticket / commit named in the rationale"
+                    )
+                    ancestry_ok = _verify_cited_fix_at_head(repo_dir, rationale)
+                    log.info(
+                        "%s: no_change_needed rationale claims an external "
+                        "fix (%s) — routing to implement for live re-check "
+                        "(cited-commit ancestry check: %s)",
+                        ticket.id,
+                        cited,
+                        "passed (NOT sufficient — see revert subtlety)"
+                        if ancestry_ok
+                        else "not proven",
+                    )
+                    verification_spec = (
+                        "## Problem\n\n"
+                        "A prior refine pass concluded this ticket needs no "
+                        "change because the fix was already shipped elsewhere "
+                        f"({cited}). That claim was NOT verified against the "
+                        "live tree. A `git revert` re-introduces a bug while "
+                        "leaving the original fix commit as an ancestor of "
+                        "`origin/main`, so the cited fix may not actually be "
+                        "present at HEAD — re-verify before closing.\n\n"
+                        f"Original ticket: {title}\n\n"
+                        "Original problem / draft:\n\n"
+                        f"{draft or '(no draft body)'}\n\n"
+                        "Refine's unverified rationale:\n\n"
+                        f"{rationale}\n\n"
+                        "## Scope\n\n"
+                        "Inspect the relevant file(s) / condition named in the "
+                        "original problem at the current HEAD and determine "
+                        "whether the bug condition is still present.\n\n"
+                        "## Acceptance criteria\n\n"
+                        "- If the bug condition is still present at HEAD (e.g. "
+                        "the cited fix was reverted or overwritten), re-apply "
+                        "the fix so the condition is resolved (with a test "
+                        "where appropriate).\n"
+                        "- If the condition is genuinely already resolved at "
+                        "HEAD, make no change — the implement empty-diff path "
+                        "will close the ticket.\n\n"
+                        "## Out of scope / constraints\n\n"
+                        "- Do not expand scope beyond verifying and (if needed) "
+                        f"re-applying the fix for: {title}.\n"
+                        "- Ancestry of the cited commit is NOT sufficient proof "
+                        "(a revert leaves it an ancestor); verify the actual "
+                        "bug condition against the working tree.\n"
+                    )
+                    new_hash = ws.write_description(verification_spec)
+                    ctx.service.set_content_hash(ticket.id, new_hash)
+                    next_state, auto_note = _resolve_next_state(
+                        ctx, verification_spec, ticket.id, source=ticket.source
+                    )
+                    note = (
+                        "refined | unverified 'already implemented' claim "
+                        "routed to implement for live re-check"
+                    )
+                    if auto_note:
+                        note += f" | {auto_note}"
+                    return Outcome(next_state, note)
 
                 # The rationale is the agent's conclusion — into
                 # history (note), not comments. Truncate to keep the

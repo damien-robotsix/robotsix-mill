@@ -2215,7 +2215,10 @@ def test_no_change_needed_merged_branch_proceeds(
         monkeypatch,
         run_refine_agent=_mock_refine_ok(
             no_change_needed=True,
-            no_change_rationale="Already implemented and merged.",
+            # Deliberately NOT an "already implemented"-style rationale —
+            # that would (correctly) trip the external-fix re-verification
+            # gate. This test only exercises the merged-branch DONE path.
+            no_change_rationale="Informational ticket; no code change required.",
             spec_markdown=None,
         ),
         # Simulate the branch being confirmed merged.
@@ -2257,6 +2260,169 @@ def test_no_change_needed_no_branch_proceeds(
 
     assert out.next_state is State.DONE
     assert "no change needed" in (out.note or "")
+
+
+# ---------------------------------------------------------------------------
+# external-fix re-verification gate
+# ---------------------------------------------------------------------------
+
+
+def test_no_change_external_fix_claim_routes_to_implement(
+    ctx_factory,
+    monkeypatch,
+):
+    """An "already implemented in <ticket-id>" no_change_needed verdict
+    must NOT close to DONE on trust — a reverted fix can leave the cited
+    commit an ancestor of main while the bug is live. The gate routes the
+    ticket to implement (READY here, require_approval=false) for a live
+    re-check, with the workspace description rewritten to the synthesized
+    verification spec."""
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
+    t = _ticket(ctx)
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_ok(
+            no_change_needed=True,
+            no_change_rationale="already implemented in 20260609T212547Z",
+            spec_markdown=None,
+        ),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state in (State.READY, State.HUMAN_ISSUE_APPROVAL)
+    assert out.next_state is not State.DONE
+    assert "routed to implement" in (out.note or "")
+    # The workspace description is the synthesized verification spec.
+    desc = ctx.service.workspace(ctx.service.get(t.id)).read_description()
+    assert "## Acceptance criteria" in desc
+    assert "20260609T212547Z" in desc
+    assert "re-apply the fix" in desc
+
+
+def test_no_change_external_fix_from_memory_shortcircuit_builds_spec(
+    ctx_factory,
+    monkeypatch,
+):
+    """The same gate must intercept the deterministic memory short-circuit
+    output: a RefineResult with an "already implemented"-style rationale
+    and NO spec_markdown. The synthesized spec is built from the draft, so
+    the path does not crash on an empty spec body and routes to implement."""
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
+    t = _ticket(ctx)
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_ok(
+            no_change_needed=True,
+            no_change_rationale=(
+                "duplicate of 20260609T212547Z — the fix was already shipped there"
+            ),
+            spec_markdown=None,
+        ),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state in (State.READY, State.HUMAN_ISSUE_APPROVAL)
+    assert out.next_state is not State.DONE
+    desc = ctx.service.workspace(ctx.service.get(t.id)).read_description()
+    assert "## Problem" in desc
+    assert "## Acceptance criteria" in desc
+
+
+def test_no_change_false_positive_still_closes_to_done(
+    ctx_factory,
+    monkeypatch,
+):
+    """A detector-false-positive rationale ("the reported problem does not
+    exist") must NOT trip the external-fix gate — it still closes DONE."""
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
+    t = _ticket(ctx)
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_ok(
+            no_change_needed=True,
+            no_change_rationale=(
+                "The reported problem does not exist; the detector evidence "
+                "disproves it."
+            ),
+            spec_markdown=None,
+        ),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.DONE
+    assert "no change needed" in (out.note or "")
+
+
+def test_no_change_info_only_still_closes_to_done(
+    ctx_factory,
+    monkeypatch,
+):
+    """An information-only rationale ("post a comment documenting why no
+    change is needed") must NOT trip the external-fix gate — DONE."""
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
+    t = _ticket(ctx)
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_ok(
+            no_change_needed=True,
+            no_change_rationale=(
+                "Post a comment documenting why no change is needed; this is "
+                "an information-only deliverable."
+            ),
+            spec_markdown=None,
+        ),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.DONE
+    assert "no change needed" in (out.note or "")
+
+
+@pytest.mark.parametrize(
+    "rationale",
+    [
+        "already implemented in another ticket",
+        "already fixed upstream",
+        "already shipped last week",
+        "already merged to main",
+        "already applied in a sibling change",
+        "already resolved by a parallel pass",
+        "already done elsewhere",
+        "duplicate of 20260609T212547Z",
+        "a parallel ticket shipped the fix",
+        "the parallel ticket covers this",
+        "fixed in 59f312b already on main",
+    ],
+)
+def test_rationale_claims_external_fix_true(rationale):
+    """Each trigger phrase (and a cited-commit + resolved-verb co-occurrence)
+    is detected as an external-fix claim."""
+    assert refine_module._rationale_claims_external_fix(rationale) is True
+
+
+@pytest.mark.parametrize(
+    "rationale",
+    [
+        "",
+        "   ",
+        "The reported problem does not exist; evidence disproves it.",
+        "This is a false positive from the detector.",
+        "Post a comment documenting why no change is needed.",
+        "Informational ticket; the investigation is in the body.",
+        "The chain is wired correctly. Detector misread the YAML anchor.",
+    ],
+)
+def test_rationale_claims_external_fix_false(rationale):
+    """False-positive, information-only, and empty rationales do NOT fire."""
+    assert refine_module._rationale_claims_external_fix(rationale) is False
 
 
 # ---------------------------------------------------------------------------
