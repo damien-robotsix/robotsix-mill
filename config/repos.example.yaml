@@ -24,6 +24,11 @@ repos:
       public_key: "pk-lf-..."
       secret_key: "sk-lf-..."
       base_url: "https://cloud.langfuse.com"  # optional — defaults to cloud
+    # langfuse_from: "master-repo-id"  # optional — inherit the master
+    #   repo's Langfuse project (whole workspace shares ONE project).
+    #   When set, OMIT the `langfuse:` block above: a repo with
+    #   `langfuse_from` MUST NOT carry its own keys. Set automatically
+    #   for auto-registered workspace members.
     # ci_monitor:                 # optional — per-repo CI failure monitoring
     #   enabled: true             #   default: true
     #   interval_seconds: 900     #   default: 900 (15 min)
