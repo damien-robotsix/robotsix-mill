@@ -203,7 +203,7 @@ async def test_per_repo_cleanup_deletes_only_eligible(
             return {repo_config.repo_id: repo_config}
 
     monkeypatch.setattr(
-        "robotsix_mill.runtime.worker.get_repos_config",
+        "robotsix_mill.runtime.worker.periodic_passes.get_repos_config",
         lambda: FakeReposRegistry(repos={repo_config.repo_id: repo_config}),
     )
 
@@ -263,7 +263,7 @@ async def test_forge_exception_does_not_crash_loop(settings, repo_config, monkey
             return {repo_config.repo_id: repo_config}
 
     monkeypatch.setattr(
-        "robotsix_mill.runtime.worker.get_repos_config",
+        "robotsix_mill.runtime.worker.periodic_passes.get_repos_config",
         lambda: FakeReposRegistry(repos={repo_config.repo_id: repo_config}),
     )
     monkeypatch.setattr(Worker, "_initial_delay", lambda self, kind, interval: 0.0)

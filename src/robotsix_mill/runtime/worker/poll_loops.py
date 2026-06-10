@@ -1,0 +1,642 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import re
+import time
+from pathlib import Path
+
+from ...config import RepoConfig, get_repos_config
+from ...core.models import SourceKind
+from ..run_registry import RunRegistry
+
+from ._base import _WorkerBase
+
+log = logging.getLogger("robotsix_mill.worker")
+
+
+class PollLoopsMixin(_WorkerBase):
+    def _registry_for(self, repo_config) -> "RunRegistry | None":
+        """The RunRegistry a periodic pass should read/write for *repo_config*.
+
+        Per-repo registry (``run_registries[board_id]``) when available so the
+        run is recorded in — and its cadence measured from — the same
+        ``<data_dir>/<board_id>/runs.json`` the per-repo /runs API serves.
+        Falls back to the default registry for board-less ticks.
+        """
+        if repo_config is not None and self.run_registries:
+            return self.run_registries.get(repo_config.board_id, self.run_registry)
+        return self.run_registry
+
+    def _initial_delay(
+        self, kind: str, interval: int, repo_id: str = "", registry=None
+    ) -> float:
+        """Return the seconds to sleep before the first periodic pass.
+
+        Queries ``RunRegistry.most_recent(kind, repo_id)`` to decide:
+        - No registry → full ``interval`` (preserves current behaviour).
+        - Never run (``None``) → 1.0 s.
+        - Last run overdue (elapsed >= interval) → 1.0 s.
+        - Otherwise → ``interval - elapsed`` (remaining time).
+
+        *repo_id* scopes the lookup to one repo's own history. Per-repo loops
+        (the periodic-workflow + bespoke supervisors) MUST pass it: without it
+        ``most_recent`` returns the newest run of *kind* across ALL repos, so a
+        repo that has never run the agent inherits another repo's recent
+        timestamp and waits a near-full interval before its first run — every
+        restart resetting that wait. With a 24 h interval + frequent restarts
+        the first run then never fires (the symptom: audit never ran on
+        robotsix-llmio because mill's daily audit kept the shared clock warm).
+
+        *registry* selects which store to read (per-repo loops pass the repo's
+        own registry so the cadence matches where the run is recorded); defaults
+        to the worker's fallback registry.
+        """
+        reg = registry if registry is not None else self.run_registry
+        if reg is None:
+            return float(interval)
+        entry = reg.most_recent(kind, repo_id=repo_id or None)
+        if entry is None:
+            return 1.0
+        try:
+            from datetime import datetime, timezone
+
+            last_ts = datetime.fromisoformat(entry["started_at"])
+            elapsed = (datetime.now(timezone.utc) - last_ts).total_seconds()
+        except Exception:
+            return 1.0
+        if elapsed >= interval:
+            return 1.0
+        return interval - elapsed
+
+    _PERIODIC_POLL_TICK_SECONDS = 60
+
+    def _find_config_clone_dir(self, repo_config) -> Path | None:
+        """Return any existing clone of *repo_config* usable for
+        scheduler-time YAML lookup, or ``None``.
+
+        The scheduler needs to read ``<clone>/.robotsix-mill/agents/
+        <name>.yaml`` to honour per-repo periodic overrides, but the
+        scheduler does not own a clone — it piggybacks on whichever
+        worker clone exists already (bespoke supervisor, or any
+        ``<agent>_workspace/repo`` left behind by an earlier run).
+
+        Priority: periodic_workspace (legacy: bespoke_workspace) > any
+        *_workspace/repo. When no clone exists yet the loader falls back to
+        the built-in YAML.
+        """
+        if repo_config is None:
+            return None
+        base = Path(self.ctx.settings.data_dir) / repo_config.repo_id
+        if not base.is_dir():
+            return None
+        periodic = base / "periodic_workspace" / "repo"
+        if (periodic / ".git").exists():
+            return periodic
+        bespoke = base / "bespoke_workspace" / "repo"  # legacy name (pre-rename)
+        if (bespoke / ".git").exists():
+            return bespoke
+        try:
+            for child in base.iterdir():
+                if (
+                    child.is_dir()
+                    and child.name.endswith("_workspace")
+                    and (child / "repo" / ".git").exists()
+                ):
+                    return child / "repo"
+        except OSError:
+            pass
+        return None
+
+    def _resolve_periodic_schedule(
+        self,
+        label: str,
+        repo_config,
+        settings_interval_attr: str,
+        settings_enabled_attr: str | None = None,
+    ) -> tuple[bool, int]:
+        """Resolve ``(enabled, interval_seconds)`` for *label* on *repo_config*.
+
+        Lookup order for each field:
+          1. The agent YAML loaded via :func:`load_periodic_agent_definition`
+             (clone-side override wins over built-in).
+          2. The Settings field of the matching name as a fallback.
+
+        Interval is clamped to >= 60s.
+        """
+        from ...agents.yaml_loader import load_periodic_agent_definition
+
+        settings = self.ctx.settings
+        yaml_name = label.replace("-", "_")
+        repo_dir = self._find_config_clone_dir(repo_config)
+        try:
+            definition = load_periodic_agent_definition(yaml_name, repo_dir)
+        except FileNotFoundError:
+            definition = None
+
+        # Interval: YAML > Settings.
+        interval = None
+        if definition and definition.interval_seconds is not None:
+            interval = definition.interval_seconds
+        else:
+            interval = getattr(settings, settings_interval_attr, None)
+        interval = max(60, int(interval or 86400))
+
+        # Enabled: YAML > Settings.
+        enabled = True
+        if definition and definition.enabled is not None:
+            enabled = bool(definition.enabled)
+        elif settings_enabled_attr is not None:
+            enabled = bool(getattr(settings, settings_enabled_attr, True))
+        return enabled, interval
+
+    async def _run_bespoke_loop(
+        self,
+        repo_config: RepoConfig,
+        definition,
+        clone_dir,
+    ) -> None:
+        """Periodic loop for one bespoke definition.
+
+        Sleeps the YAML's ``interval_seconds`` between passes, then
+        invokes :func:`~..bespoke_runner.run_bespoke_pass` against the
+        supervisor's clone. Failures in one pass log + continue; the
+        loop only exits via cancellation.
+        """
+        from ...runners import bespoke_runner
+        from .. import tracing
+
+        interval = max(60, definition.interval_seconds)
+        label = f"bespoke:{definition.name}"
+        # Honour the persisted last-run timestamp so a restarted mill
+        # doesn't re-fire every bespoke immediately. Scope to this repo so a
+        # repo that has never run this bespoke fires promptly instead of
+        # inheriting another repo's recent timestamp.
+        initial = self._initial_delay(
+            label,
+            interval,
+            repo_id=repo_config.repo_id,
+            registry=self._registry_for(repo_config),
+        )
+        await asyncio.sleep(initial)
+        while True:
+            run_id = None
+            session_id = tracing.make_session_id(label)
+            try:
+                log.info(
+                    "Starting bespoke pass %r for repo %s",
+                    definition.name,
+                    repo_config.repo_id,
+                )
+                if self.run_registry:
+                    run_id = self.run_registry.start(
+                        label,
+                        repo_id=repo_config.repo_id,
+                    )
+                with tracing.start_ticket_root_span(
+                    session_id,
+                    label,
+                    repo_config=repo_config,
+                ):
+                    result = await asyncio.to_thread(
+                        bespoke_runner.run_bespoke_pass,
+                        session_id=session_id,
+                        definition=definition,
+                        repo_config=repo_config,
+                        repo_dir=clone_dir,
+                    )
+                log.info(
+                    "Bespoke %s/%s completed, created %d draft(s)",
+                    repo_config.repo_id,
+                    definition.name,
+                    len(result.drafts_created),
+                )
+                if self.run_registry and run_id:
+                    summary = f"Created {len(result.drafts_created)} drafts"
+                    self.run_registry.finish_ok(run_id, summary)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # noqa: BLE001 — loop must survive
+                log.exception(
+                    "bespoke %s/%s pass failed",
+                    repo_config.repo_id,
+                    definition.name,
+                )
+                if self.run_registry and run_id:
+                    self.run_registry.finish_error(run_id, str(e))
+            await asyncio.sleep(interval)
+
+    # Schedule-only periodic workflows (no prompt yaml / own runner). Their
+    # module-level ``run_<name>_pass(session_id, repo_config)`` stub is used
+    # directly — no definition override is applicable.
+    _SCHEDULE_ONLY_RUNNERS: dict[str, str] = {
+        "trace_review": "robotsix_mill.runners.trace_review_runner:run_trace_review_pass",
+        "config_sync": "robotsix_mill.runners.config_sync_runner:run_config_sync_pass",
+        "cost_reconciliation": (
+            "robotsix_mill.runners.cost_reconciliation_runner:run_cost_reconciliation_pass"
+        ),
+        "data_dir_audit": (
+            "robotsix_mill.runners.data_dir_audit_runner:run_data_dir_audit_pass"
+        ),
+    }
+
+    def _build_periodic_workflow_runner(self, wf):
+        """Return a ``runner_fn(session_id, repo_config)`` for *wf*, or None.
+
+        ``llm_agent`` → a closure that runs the matching periodic pass with
+        the merged definition threaded in as ``definition_override``.
+        ``schedule_only`` → the workflow's module-level pass stub.
+        """
+        if wf.kind == "llm_agent":
+            from ...config import Settings
+
+            definition = wf.definition
+
+            # board_cleanup is an llm_agent but has a BESPOKE runner (it
+            # operates on the board, not the code tree, so it needs the
+            # full board snapshot injected) — route it before the generic
+            # PERIODIC_PASS_CONFIGS lookup.
+            if wf.name == "board_cleanup":
+                from ...runners.periodic_runner import run_board_cleanup_pass
+
+                def _run_board_cleanup(*, session_id, repo_config):
+                    return run_board_cleanup_pass(
+                        session_id,
+                        repo_config,
+                        settings=Settings(),
+                        definition_override=definition,
+                    )
+
+                return _run_board_cleanup
+
+            from ...runners.periodic_runner import (
+                PERIODIC_PASS_CONFIGS,
+                run_periodic_pass,
+            )
+
+            cfg = PERIODIC_PASS_CONFIGS.get(wf.name)
+            if cfg is None:
+                return None
+
+            def _run(*, session_id, repo_config):
+                return run_periodic_pass(
+                    session_id,
+                    repo_config,
+                    cfg,
+                    settings=Settings(),
+                    definition_override=definition,
+                )
+
+            return _run
+        if wf.kind == "schedule_only":
+            import importlib
+
+            path = self._SCHEDULE_ONLY_RUNNERS.get(wf.name)
+            if path is None:
+                return None
+            mod_path, attr = path.rsplit(":", 1)
+            return getattr(importlib.import_module(mod_path), attr)
+        return None
+
+    async def _run_periodic_workflow_loop(self, repo_config, wf, clone_dir) -> None:
+        """Periodic loop for one resolved per-repo periodic workflow.
+
+        Sleeps the resolved interval (file override > Settings fallback) and
+        fires the matching runner. Failures log + continue; exits only via
+        cancellation by the supervisor.
+        """
+        settings = self.ctx.settings
+        label = wf.name
+        interval = wf.interval_seconds
+        if interval is None:
+            interval = getattr(settings, f"{wf.name}_interval_seconds", 86400)
+        interval = max(60, int(interval or 86400))
+
+        runner_fn = self._build_periodic_workflow_runner(wf)
+        if runner_fn is None:
+            log.warning(
+                "periodic workflow %s (%s): no runner for kind %r — not scheduling",
+                wf.name,
+                repo_config.repo_id,
+                wf.kind,
+            )
+            return
+
+        await asyncio.sleep(
+            self._initial_delay(
+                label,
+                interval,
+                repo_id=repo_config.repo_id,
+                registry=self._registry_for(repo_config),
+            )
+        )
+        while True:
+            await self._fire_periodic_pass(label, runner_fn, repo_config)
+            await asyncio.sleep(interval)
+
+    def _maintenance_enabled_for(self, repo_config, name: str) -> bool:
+        """Whether a non-LLM maintenance loop (langfuse_cleanup) runs for
+        *repo_config*: enabled iff the repo ships a
+        ``.robotsix-mill/periodic/<name>.yaml`` presence file. (The legacy
+        ``RepoConfig.<name>_periodic`` flags were removed — presence is the
+        single source of truth.)
+        """
+        return self._has_periodic_presence(repo_config, name)
+
+    def _has_periodic_presence(self, repo_config, label: str) -> bool:
+        """True when *repo_config*'s clone ships ``.robotsix-mill/periodic/
+        <label>.yaml`` — meaning the periodic supervisor owns that workflow
+        for this repo and the legacy flag-based loop must NOT also fire it.
+        """
+        from ...agents.periodic_loader import PERIODIC_DIR
+
+        clone = self._find_config_clone_dir(repo_config)
+        if clone is None:
+            return False
+        name = label.replace("-", "_")
+        return clone.joinpath(*PERIODIC_DIR, f"{name}.yaml").is_file()
+
+    async def _langfuse_cleanup_poll_loop(self) -> None:
+        """Periodic Langfuse trace cleanup: keeps each repo's project at
+        most ``langfuse_cleanup_max_traces`` rows by deleting the oldest.
+
+        Multi-repo: iterates all registered repos whose
+        ``RepoConfig.langfuse_cleanup_periodic`` flag is True. Pure
+        HTTP, no LLM — the cap exists because the self-hosted Langfuse
+        instance degrades on large trace tables.
+        """
+        settings = self.ctx.settings
+        interval = max(3600, settings.langfuse_cleanup_interval_seconds)
+        initial = self._initial_delay("langfuse-cleanup", interval)
+        await asyncio.sleep(initial)
+        while True:
+            repos = get_repos_config()
+            repo_configs = list(repos.repos.values())
+            if not repo_configs:
+                repo_configs = [None]  # type: ignore[list-item]
+            else:
+                repo_configs = [
+                    rc
+                    for rc in repo_configs
+                    if self._maintenance_enabled_for(rc, "langfuse_cleanup")
+                ]
+            for repo_config in repo_configs:
+                label = repo_config.repo_id if repo_config else "default"
+                try:
+                    from ...runners.langfuse_cleanup_runner import (
+                        run_langfuse_cleanup_pass,
+                    )
+
+                    result = await asyncio.to_thread(
+                        run_langfuse_cleanup_pass,
+                        settings=settings,
+                        repo_config=repo_config,
+                        max_traces=settings.langfuse_cleanup_max_traces,
+                    )
+                    if result.traces_deleted > 0:
+                        log.info(
+                            "langfuse-cleanup: %s — deleted %d of %d traces (cap %d)",
+                            label,
+                            result.traces_deleted,
+                            result.traces_before,
+                            settings.langfuse_cleanup_max_traces,
+                        )
+                except Exception:  # noqa: BLE001 — periodic sweep must not die
+                    log.exception("langfuse-cleanup poll failed for %s", label)
+            await asyncio.sleep(interval)
+
+    async def _timeout_escalation_poll_loop(self) -> None:
+        """Periodic timeout-escalation: detects AWAITING_USER_REPLY tickets
+        stuck beyond the threshold and escalates them to BLOCKED.
+
+        Pure DB query + state transition — no AI agent, no Langfuse tracing.
+        Global pass (non-per-repo): AWAITING_USER_REPLY tickets are
+        board-agnostic.
+        """
+        settings = self.ctx.settings
+        interval = max(60, settings.timeout_escalation_interval_seconds)
+        initial = self._initial_delay("timeout-escalation", interval)
+        await asyncio.sleep(initial)
+        while True:
+            try:
+                from ...runners.timeout_escalation_runner import run_timeout_escalation
+
+                result = await asyncio.to_thread(
+                    run_timeout_escalation,
+                    settings,
+                )
+                log.info(
+                    "timeout-escalation: pass complete — escalated=%d skipped=%d",
+                    result.get("escaped", 0),
+                    result.get("skipped", 0),
+                )
+            except Exception:  # noqa: BLE001 — never let the poll die
+                log.exception("timeout-escalation poll failed")
+            await asyncio.sleep(interval)
+
+    async def _ci_monitor_poll_loop(self) -> None:
+        """Periodic CI monitor poll: watch the forge target branch for
+        completed workflow-run failures and file a ``source="ci"`` draft
+        for each new one.
+
+        Per-repo enabled/interval are controlled via ``RepoConfig``
+        fields in ``config/repos.yaml``.  The loop runs when *any*
+        registered repo has ``ci_monitor_enabled=True``.
+        """
+        from ...core.service import TicketService
+        from ...forge import get_forge
+
+        settings = self.ctx.settings
+        ttl_seconds = 30 * 86400  # 30 days
+
+        # ANSI strip for log text (same pattern as forge/github.py).
+        _ansi_re = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+
+        # Per-repo tracking: last polled timestamp (epoch seconds).
+        last_polled: dict[str, float] = {}
+
+        # Determine the minimum interval across all enabled repos so
+        # the loop ticks frequently enough to honour the fastest one,
+        # but only poll each repo when its own interval has elapsed.
+        repos = get_repos_config()
+        repo_configs = [rc for rc in repos.repos.values() if rc.ci_monitor_enabled]
+
+        min_interval = 60
+        if repo_configs:
+            min_interval = max(
+                60, min(rc.ci_monitor_interval_seconds for rc in repo_configs)
+            )
+
+        await asyncio.sleep(self._initial_delay("ci_monitor", min_interval))
+        while True:
+            for rc in repo_configs:
+                repo_label = rc.repo_id
+                interval = max(60, rc.ci_monitor_interval_seconds)
+
+                # Honour per-repo interval.
+                now = time.time()
+                if (
+                    repo_label in last_polled
+                    and (now - last_polled[repo_label]) < interval
+                ):
+                    continue
+
+                try:
+                    state_dir = settings.data_dir / rc.repo_id
+                    service = TicketService(settings, board_id=rc.board_id)
+
+                    state_dir.mkdir(parents=True, exist_ok=True)
+                    state_path = state_dir / "ci_monitor_state.json"
+                    log.info("CI monitor poll starting for repo %s", repo_label)
+
+                    # 1. Load dedup state.
+                    state: dict = {"seen": {}}
+                    if state_path.exists():
+                        try:
+                            state = json.loads(state_path.read_text("utf-8"))
+                        except json.JSONDecodeError, OSError:
+                            state = {"seen": {}}
+                    seen = state.setdefault("seen", {})
+
+                    # 2. Prune entries older than TTL.
+                    stale = [
+                        key
+                        for key, val in seen.items()
+                        if isinstance(val, (int, float)) and (now - val) > ttl_seconds
+                    ]
+                    for key in stale:
+                        del seen[key]
+
+                    # 3. List completed workflow runs on the target branch.
+                    forge = get_forge(settings, repo_config=rc)
+                    runs = forge.list_workflow_runs(
+                        branch=settings.forge_target_branch,
+                    )
+
+                    # 4. Only the LATEST run per workflow reflects current
+                    # state (the GitHub API returns runs newest-first). Take
+                    # one run per workflow_id and act only on that — never
+                    # backfill every historical failed run.
+                    latest_by_wf: dict = {}
+                    for run in runs:
+                        wf = run.get("workflow_id")
+                        if wf is not None and wf not in latest_by_wf:
+                            latest_by_wf[wf] = run
+
+                    existing = service.list()
+
+                    for wf, run in latest_by_wf.items():
+                        if run.get("conclusion") != "failure":
+                            continue
+
+                        wf_name = run.get("name", "unknown")
+                        run_id_val = run.get("id")
+                        title = (
+                            f"CI failure: {wf_name} on {settings.forge_target_branch}"
+                        )
+
+                        # One OPEN ci ticket per workflow: if a non-terminal
+                        # source=ci ticket with this title already exists,
+                        # don't duplicate.
+                        if any(
+                            t.source == SourceKind.CI
+                            and t.title == title
+                            and t.state.value not in ("closed", "done")
+                            for t in existing
+                        ):
+                            continue
+
+                        # Also avoid re-filing for the exact same failing
+                        # commit.
+                        key = f"{wf}:{run.get('head_sha')}"
+                        if key in seen:
+                            continue
+                        log.info(
+                            "CI monitor (%s): new failure — %s (run %s) on %s",
+                            repo_label,
+                            wf_name,
+                            run_id_val,
+                            settings.forge_target_branch,
+                        )
+
+                        # Fetch job logs.
+                        logs = ""
+                        try:
+                            logs = forge.fetch_workflow_job_logs(run_id=run_id_val)
+                        except Exception:
+                            log.warning(
+                                "CI monitor: failed to fetch logs for run %s",
+                                run_id_val,
+                            )
+
+                        # Build draft body.
+                        body_parts = [
+                            f"**Workflow:** {wf_name}",
+                            f"**Branch:** {settings.forge_target_branch}",
+                            f"**Run:** [{run_id_val}]({run.get('html_url', '')})",
+                            f"**Commit:** `{run.get('head_sha', '')}`",
+                            f"**Created:** {run.get('created_at', '')}",
+                            "",
+                        ]
+                        if logs:
+                            stripped = _ansi_re.sub("", logs)
+                            if len(stripped) > 200_000:
+                                stripped = stripped[-200_000:]
+                            body_parts.append("```")
+                            body_parts.append(stripped)
+                            body_parts.append("```")
+
+                        body = "\n".join(body_parts)
+
+                        try:
+                            service.create(
+                                title=title,
+                                description=body,
+                                source=SourceKind.CI,
+                                priority=True,
+                            )
+                        except Exception:
+                            log.exception(
+                                "CI monitor: failed to create draft for run %s",
+                                run_id_val,
+                            )
+                            continue
+
+                        # Mark as seen.
+                        seen[key] = now
+
+                    # 5. Persist state.
+                    state_path.write_text(json.dumps(state), "utf-8")
+
+                    log.info("CI monitor poll completed for repo %s", repo_label)
+                except Exception:  # noqa: BLE001 — never let the poll die
+                    log.exception("CI monitor poll failed for repo %s", repo_label)
+
+                last_polled[repo_label] = time.time()
+
+            await asyncio.sleep(min_interval)
+
+    def _start_poll_loop_pass(
+        self,
+        label: str,
+        poll_loop_fn,
+        task_attr: str,
+        log_msg: str | None = None,
+        log_args: tuple = (),
+    ) -> None:
+        """Start a dedicated poll-loop periodic pass if its settings flag
+        (derived from *label*) is on and the task attribute is still ``None``.
+
+        ``poll_loop_fn`` is a zero-argument async callable (typically a
+        bound method like ``self._trace_health_poll_loop``).
+        """
+        flag = label.replace("-", "_") + "_periodic"
+        if getattr(self.ctx.settings, flag) and getattr(self, task_attr) is None:
+            setattr(
+                self,
+                task_attr,
+                asyncio.create_task(poll_loop_fn()),
+            )
+            if log_msg is not None:
+                log.info(log_msg, *log_args)

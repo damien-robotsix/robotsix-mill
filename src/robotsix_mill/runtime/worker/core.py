@@ -1,0 +1,727 @@
+from __future__ import annotations
+
+import asyncio
+import logging
+
+from ...config import RepoConfig, get_repos_config
+from ...langfuse.client import effective_cost, session_cost
+from ...stages import StageContext, get_stage
+from ...core.states import STAGE_FOR_STATE, State
+from ...notify import send_notification
+from .. import tracing
+from ..run_registry import RunRegistry
+
+from .epic import _EPIC_CHILD_TERMINAL
+from .processing import (
+    process_ticket,
+    _spawn_epic_reeval,
+)
+from .periodic_passes import PeriodicPassesMixin
+from .poll_loops import PollLoopsMixin
+
+log = logging.getLogger("robotsix_mill.worker")
+
+
+class Worker(PeriodicPassesMixin, PollLoopsMixin):
+    """In-process queue + consumer task, owned by the API service."""
+
+    # Default queue key for tickets without a board_id (legacy /
+    # repo-less tickets). Always present alongside the per-repo queues.
+    _DEFAULT_BOARD = ""
+    # The synthetic cross-repo meta board is not a registered repo, but its
+    # tickets ARE worked (refine builds a multi-repo workspace via triage —
+    # see meta.workspace.build_triaged_meta_workspace). Consume it like a board.
+    _META_BOARD = "meta"
+
+    # Stage-rank by ticket state — used as a secondary sort key in the
+    # PriorityQueue (after priority_rank, before FIFO seq). Lower = pops
+    # first = closer to CLOSED. The intent is "drain in-flight tickets
+    # through to terminal before starting fresh refines" — so the
+    # board doesn't pile up with intermediate-state work. States not in
+    # STAGE_FOR_STATE never reach the queue (maybe_enqueue gates on
+    # state-in-pipeline) but we keep them in the table to avoid KeyError
+    # on any drift. _DEFAULT_STAGE_RANK applies to unknown states.
+    _DEFAULT_STAGE_RANK: int = 99
+    _STAGE_RANK: dict = {
+        State.DONE: 0,  # retrospect → CLOSED
+        State.DELIVERABLE: 1,  # deliver opens the PR
+        State.DOCUMENTING: 2,  # document → DELIVERABLE
+        State.CODE_REVIEW: 3,  # review
+        State.ADDRESSING_REVIEW: 4,  # merge stage replying to reviewer
+        State.FIXING_CI: 5,  # ci_fix retries CI
+        State.REBASING: 6,  # merge stage, rebase substep
+        State.HUMAN_MR_APPROVAL: 7,  # merge polling (no-LLM)
+        State.WAITING_AUTO_MERGE: 8,  # merge polling (no-LLM)
+        State.IMPLEMENT_COMPLETE: 9,  # merge polling (no-LLM)
+        State.MAINTENANCE: 10,  # one agent run, usually terminal — drain like work-in-flight
+        State.READY: 11,  # implement — fresh code work
+        State.DRAFT: 12,  # refine — earliest stage
+        State.ASKED: 13,  # answer — inquiry side-channel
+    }
+    # Every STAGE_FOR_STATE state MUST appear above: a missing entry falls
+    # to _DEFAULT_STAGE_RANK (99) and is starved indefinitely on a busy
+    # board — every newly arriving draft/ready outranks it forever (live
+    # case: 4 resumed MAINTENANCE tickets sat 75+ min with zero pickup
+    # while later drafts refined). Guarded by a registry test.
+
+    @classmethod
+    def _stage_rank(cls, ticket) -> int:
+        if ticket is None:
+            return cls._DEFAULT_STAGE_RANK
+        return cls._STAGE_RANK.get(ticket.state, cls._DEFAULT_STAGE_RANK)
+
+    def __init__(
+        self,
+        ctx: StageContext,
+        run_registry: "RunRegistry | None" = None,
+        run_registries: "dict[str, RunRegistry] | None" = None,
+    ) -> None:
+        self.ctx = ctx
+        # ``run_registry`` is the default/fallback (board-less ticks).
+        # ``run_registries`` maps board_id -> that repo's RunRegistry so a
+        # periodic pass records into — and reads its cadence from — the SAME
+        # per-repo runs.json the per-repo /runs API serves. Without this every
+        # periodic run landed in the lead repo's registry and was invisible in
+        # other repos' run lists (e.g. audit on robotsix-llmio).
+        self.run_registry = run_registry
+        self.run_registries = run_registries or {}
+        # Per-repo (board_id) PriorityQueue topology — one queue per
+        # repo, so a busy repo can't block another. Items in each queue:
+        # (priority_rank, seq, ticket_id). priority_rank = 0 for
+        # priority tickets, 1 otherwise → priority tickets pop first;
+        # seq breaks ties as FIFO within a rank. The "" key holds the
+        # fallback queue for tickets without a matching repo.
+        self.queues: dict[str, asyncio.PriorityQueue] = {
+            self._DEFAULT_BOARD: asyncio.PriorityQueue(),
+        }
+        self._enqueue_seq = 0
+        # pool of consumer tasks — populated by start(), one or more
+        # per repo per its max_concurrency.
+        self._tasks: list[asyncio.Task] = []
+        self._poll_task: asyncio.Task | None = None
+        self._audit_task: asyncio.Task | None = None
+        self._trace_health_task: asyncio.Task | None = None
+        self._trace_review_task: asyncio.Task | None = None
+        # Periodic-pass runs currently executing in worker threads.
+        # The to_thread wrapper registers them on entry and removes
+        # on exit; ``stop()`` awaits this set (with a grace timeout)
+        # before tearing the loops down so a survey / audit / etc.
+        # mid-run isn't killed by a container restart.
+        self._inflight_passes: set[asyncio.Task] = set()
+        self._health_task: asyncio.Task | None = None
+        self._agent_check_task: asyncio.Task | None = None
+        self._bc_check_task: asyncio.Task | None = None
+        self._completeness_check_task: asyncio.Task | None = None
+        self._copy_paste_task: asyncio.Task | None = None
+        self._module_curator_task: asyncio.Task | None = None
+        self._ci_monitor_task: asyncio.Task | None = None
+        self._test_gap_task: asyncio.Task | None = None
+        self._survey_task: asyncio.Task | None = None
+        self._config_sync_task: asyncio.Task | None = None
+        self._cost_reconciliation_task: asyncio.Task | None = None
+        self._data_dir_audit_task: asyncio.Task | None = None
+        self._langfuse_cleanup_task: asyncio.Task | None = None
+        self._timeout_escalation_task: asyncio.Task | None = None
+        self._meta_task: asyncio.Task | None = None
+        self._cost_analyst_task: asyncio.Task | None = None
+        self._run_health_task: asyncio.Task | None = None
+        self._stale_branch_task: asyncio.Task | None = None
+        # board_id -> per-repo bespoke supervisor task. The supervisor
+        # itself owns each repo's per-bespoke child tasks; cancelling
+        # the supervisor cancels its children.
+        self._periodic_supervisor_tasks: dict[str, asyncio.Task] = {}
+        # ticket_id -> consecutive no-progress cycles in a traced stage
+        self._stuck: dict[str, int] = {}
+        # Epic-sweep dedup: epic_id → child count at last sweep re-eval, so the
+        # safety-net sweep re-evaluates an all-children-terminal epic at most
+        # once per stable child set (re-eval again only when children change).
+        self._epic_sweep_seen: dict[str, int] = {}
+        # ids queued OR in-flight — dedupe so the same ticket is never
+        # processed by two workers at once (the merge poll, emit, and
+        # requeue can all enqueue the same id).
+        self._pending: set[str] = set()
+        # ticket_id -> {"stage": str, "started_at": str} while stage.run() is executing
+        self._active: dict[str, dict] = {}
+
+    def queue_size(self) -> int:
+        """Aggregate ticket count across all per-repo queues."""
+        return sum(q.qsize() for q in self.queues.values())
+
+    async def queue_join(self) -> None:
+        """Wait for every per-repo queue to drain."""
+        import asyncio as _asyncio
+
+        await _asyncio.gather(*(q.join() for q in self.queues.values()))
+
+    def _queue_for(self, board_id: str) -> asyncio.PriorityQueue:
+        """Return the per-repo queue, creating it on first use.
+
+        Empty/unknown ``board_id`` falls through to the default queue
+        (always present at ``self._DEFAULT_BOARD``).
+        """
+        if not board_id:
+            return self.queues[self._DEFAULT_BOARD]
+        q = self.queues.get(board_id)
+        if q is None:
+            q = asyncio.PriorityQueue()
+            self.queues[board_id] = q
+        return q
+
+    def enqueue(self, ticket_id: str) -> None:
+        """Enqueue *ticket_id* on its repo's queue with CURRENT priority
+        AND stage rank.
+
+        Queue items are ``(priority_rank, stage_rank, seq, ticket_id)``.
+        Sort order: priority tickets (rank 0) first; within priority
+        class, later-pipeline tickets (lower stage_rank) first; FIFO
+        within a (priority, stage) pair. The stage tie-break drains
+        in-flight tickets through to terminal before starting fresh
+        refines — keeps the board from piling up with intermediate
+        states.
+
+        Priority AND stage are captured at enqueue time and the
+        ``_pending`` set de-duplicates concurrent enqueues. If the
+        ticket's priority or stage changes after enqueue, the pop-time
+        sanity check in :meth:`_run` re-enqueues at the correct rank.
+        Operators can also call :meth:`requeue_with_current_priority`
+        to force a refresh explicitly.
+        """
+        # asyncio is single-threaded; enqueue is only ever called from
+        # the loop thread, so this set check needs no lock.
+        if ticket_id in self._pending:
+            return
+        self._pending.add(ticket_id)
+        self._enqueue_seq += 1
+        ticket = self.ctx.service.get(ticket_id)
+        prio_rank = (
+            0 if (ticket is not None and getattr(ticket, "priority", False)) else 1
+        )
+        stage_rank = self._stage_rank(ticket)
+        board_id = (
+            ticket.board_id
+            if (ticket is not None and ticket.board_id)
+            else self._DEFAULT_BOARD
+        )
+        self._queue_for(board_id).put_nowait(
+            (prio_rank, stage_rank, self._enqueue_seq, ticket_id)
+        )
+
+    def requeue_with_current_priority(self, ticket_id: str) -> None:
+        """Force a re-enqueue that picks up the ticket's current
+        priority from the DB.
+
+        Use this from callers that mutate ``Ticket.priority`` after the
+        initial enqueue (the ``POST /tickets/{id}/priority`` route, any
+        future stage transition that changes priority). Without it the
+        stale enqueue entry stays at the OLD priority rank in the heap.
+
+        The OLD heap entry is NOT removed (Python's ``PriorityQueue``
+        doesn't support removal). When it eventually pops, the
+        consumer's pop-time priority re-check (see ``_run``) either
+        accepts it at the current priority or re-enqueues it again —
+        so duplicates are tolerated, not double-processed.
+        """
+        self._pending.discard(ticket_id)
+        self.enqueue(ticket_id)
+
+    def _repo_config_for_ticket(self, ticket_id: str) -> RepoConfig | None:
+        """Resolve the ``RepoConfig`` for *ticket_id* from its ``board_id``.
+
+        Returns ``None`` when the ticket has no ``board_id`` or no
+        matching repo is found.
+        """
+        try:
+            from ...config import get_repos_config
+
+            ticket = self.ctx.service.get(ticket_id)
+            if ticket is None or not ticket.board_id:
+                return None
+            repos = get_repos_config()
+            for rc in repos.repos.values():
+                if rc.board_id == ticket.board_id:
+                    return rc
+            return None
+        except Exception:
+            return None
+
+    async def _run(self, board_id: str = "") -> None:
+        """Consume tickets from one repo's queue.
+
+        Per-repo consumer: each repo gets ``repo.max_concurrency`` of
+        these tasks pointed at its own queue, so a busy repo can't
+        block another. ``board_id=""`` covers the fallback queue for
+        tickets without a matching repo.
+        """
+        from ...core.service import TicketService
+
+        queue = self._queue_for(board_id)
+        # Per-queue service bound to this board's DB — the lifespan's
+        # ctx.service is pinned to the first repo, so reads/writes via
+        # it would hit the wrong DB for any non-first repo's tickets.
+        board_service = (
+            TicketService(self.ctx.settings, board_id=board_id)
+            if board_id
+            else self.ctx.service
+        )
+        while True:
+            popped_prio, popped_stage, _seq, ticket_id = await queue.get()
+            try:
+                before = board_service.get(ticket_id)
+                before_state = before.state if before else None
+
+                # Pop-time sanity check: the entry's (priority, stage)
+                # ranks were captured at enqueue time; if either has
+                # since changed (priority flip, state transition while
+                # queued) the popped entry's order is stale. Re-enqueue
+                # at the correct ranks and skip — the fresher entry
+                # handles the actual run.
+                if before is not None:
+                    cur_prio = 0 if getattr(before, "priority", False) else 1
+                    cur_stage = self._stage_rank(before)
+                    if (cur_prio, cur_stage) != (popped_prio, popped_stage):
+                        log.debug(
+                            "%s: popped (prio=%d, stage=%d) but current "
+                            "(prio=%d, stage=%d); re-enqueuing at correct rank",
+                            ticket_id,
+                            popped_prio,
+                            popped_stage,
+                            cur_prio,
+                            cur_stage,
+                        )
+                        # Drop from _pending so requeue isn't deduped away.
+                        self._pending.discard(ticket_id)
+                        self.enqueue(ticket_id)
+                        queue.task_done()
+                        continue
+
+                # Resolve per-ticket repo_config from the ticket's board_id.
+                ticket_repo_config = self._repo_config_for_ticket(ticket_id)
+                per_ticket_ctx = StageContext(
+                    settings=self.ctx.settings,
+                    service=board_service,
+                    repo_config=ticket_repo_config,
+                )
+
+                await process_ticket(ticket_id, per_ticket_ctx, active_map=self._active)
+                after = board_service.get(ticket_id)
+                self._check_progress(
+                    ticket_id,
+                    before_state,
+                    after.state if after else None,
+                    repo_config=ticket_repo_config,
+                )
+            except Exception:  # noqa: BLE001 — never let the consumer die
+                log.exception("processing %s crashed", ticket_id)
+            finally:
+                # drop from in-flight FIRST so a re-enqueue (e.g. next
+                # merge-poll cycle) is accepted again.
+                self._pending.discard(ticket_id)
+                self._active.pop(ticket_id, None)
+                queue.task_done()
+
+    def _maybe_sweep_orphaned_epic(self, epic, svc) -> None:
+        """Re-evaluate an EPIC_OPEN epic whose children are ALL terminal but
+        which is still open (a missed child-close trigger orphaned it).
+
+        Idempotent: re-evaluates at most once per stable terminal child set
+        (keyed on child count), so a healthy epic isn't re-billed every poll.
+        Re-evaluates again only when the child count changes (e.g. epic_status
+        spawned new children). The epic_status agent itself decides whether to
+        actually close — this just ensures it gets the chance."""
+        children = svc.list_children(epic.id)
+        if not children:
+            return
+        if not all(c.state in _EPIC_CHILD_TERMINAL for c in children):
+            return
+        if self._epic_sweep_seen.get(epic.id) == len(children):
+            return  # already swept this stable terminal child set
+        self._epic_sweep_seen[epic.id] = len(children)
+        log.info(
+            "epic %s: all %d children terminal but still EPIC_OPEN — "
+            "sweep-triggering re-evaluation (missed child-close trigger)",
+            epic.id,
+            len(children),
+        )
+        _spawn_epic_reeval(epic.id, self.ctx)
+
+    def _check_progress(
+        self, ticket_id: str, before, after, repo_config: RepoConfig | None = None
+    ) -> None:
+        """No-progress safety net. A ticket that keeps re-entering the
+        same *model-driven* (traced) stage without ever advancing —
+        runs interrupted before any checkpoint, or a churning stage —
+        would otherwise be re-billed to the LLM on every requeue,
+        silently. After ``max_stuck_cycles`` such cycles, escalate to
+        BLOCKED (resumable) and notify. Poll stages (merge/deliver,
+        traced=False) are exempt: human_mr_approval/rebasing legitimately waits
+        on a PR or rebase cycle."""
+
+        # --- retrying-ticket exemption: tickets in explicit backoff
+        # must not be counted as stuck (they're waiting on an external
+        # outage, not churning). ---
+        ticket = self.ctx.service.get(ticket_id)
+        if ticket is not None and (ticket.retry_attempt or 0) > 0:
+            self._stuck.pop(ticket_id, None)
+            return
+
+        # --- dollar-cap safety net: check before the state-change
+        # early-return so the cap fires even when the ticket is making
+        # forward progress (cost accumulates across all stages). ---
+        if self.ctx.settings.max_spend_usd_per_ticket > 0.0:
+            cost = session_cost(self.ctx.settings, ticket_id, repo_config=repo_config)
+            # Exclude the pre-redraft baseline so the cap restarts at
+            # zero after a redraft: only spend accrued since the most
+            # recent redraft counts toward the limit. ``ticket`` was
+            # fetched above for the retry-attempt check.
+            baseline = (
+                getattr(ticket, "pre_redraft_cost_usd", 0.0) or 0.0
+                if ticket is not None
+                else 0.0
+            )
+            effective = effective_cost(cost, baseline)
+            if effective > self.ctx.settings.max_spend_usd_per_ticket:
+                note = (
+                    f"Cost cap exceeded: ${effective:.2f} spent "
+                    f"(limit ${self.ctx.settings.max_spend_usd_per_ticket:.2f}; "
+                    "pre-redraft cost excluded). "
+                    "Escalated to BLOCKED to stop further LLM billing. "
+                    "Use resume-blocked to override and continue."
+                )
+                log.error("%s: %s", ticket_id, note)
+                self.ctx.service.transition(ticket_id, State.BLOCKED, note=note[:200])
+                self._stuck.pop(ticket_id, None)
+                t = self.ctx.service.get(ticket_id)
+                if t is not None:
+                    send_notification(t, State.BLOCKED, note[:200], self.ctx.settings)
+                return
+
+        if after is None or after != before:
+            self._stuck.pop(ticket_id, None)
+            return
+        stage_name = STAGE_FOR_STATE.get(after)
+        if stage_name is None:
+            return  # terminal / human-wait — not our concern
+        if not getattr(get_stage(stage_name), "traced", True):
+            return  # poll stage: same-state is by design, never block
+        # Dependency-gated ticket: implement.py returns Outcome(READY)
+        # when ``unmet_dependencies`` is non-empty — that is the contract,
+        # not a stuck state. The ticket is legitimately waiting for
+        # another ticket to merge. Counting these toward stuck-cycles
+        # would block ANY dependent ticket within ``max_stuck_cycles``
+        # poll ticks of being approved, even though nothing is wrong.
+        ticket = self.ctx.service.get(ticket_id)
+        if ticket is not None and self.ctx.service.unmet_dependencies(ticket):
+            self._stuck.pop(ticket_id, None)
+            return
+        n = self._stuck.get(ticket_id, 0) + 1
+        self._stuck[ticket_id] = n
+        if n < self.ctx.settings.max_stuck_cycles:
+            return
+        note = (
+            f"no progress after {n} {stage_name} cycles in {after} — "
+            "likely interrupted mid-run or non-terminating; escalated "
+            "to BLOCKED to stop wasted LLM runs. Use resume-blocked "
+            "to re-run this stage, or move to READY/DRAFT to retry "
+            "the full chain."
+        )
+        log.error("%s: %s", ticket_id, note)
+        self.ctx.service.transition(ticket_id, State.BLOCKED, note=note[:200])
+        self._stuck.pop(ticket_id, None)
+        t = self.ctx.service.get(ticket_id)
+        if t is not None:
+            send_notification(t, State.BLOCKED, note[:200], self.ctx.settings)
+
+    async def _poll_loop(self) -> None:
+        """Periodic reconcile sweep: re-enqueue EVERY non-terminal
+        ticket that has an automated stage (STAGE_FOR_STATE) and isn't
+        already in flight.
+
+        Originally this only re-enqueued human_mr_approval/rebasing for the
+        merge/rebase cycle. But drafts created out-of-band — by the
+        audit runner, the retrospect stage, and the report_issue tool
+        (they call service.create() directly, not the API endpoint that
+        enqueues) — were NEVER picked up until a process restart ran
+        requeue_unfinished(). The mill's whole self-improvement loop
+        (audit/agent → draft → refine → …) silently stalled between
+        restarts. This is periodic requeue_unfinished: idempotent
+        (enqueue() dedupes via _pending), cheap (the process_ticket
+        chain carries each ticket as far as it can in one pass), and
+        robust to any current/future draft-creating path. States with
+        no automated stage (e.g. human_issue_approval) are untouched —
+        they correctly wait for a human."""
+        from ...config import get_repos_config
+        from ...core.service import TicketService
+
+        interval = max(15, self.ctx.settings.merge_poll_seconds)
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                # Fan out across every registered repo's DB — the
+                # lifespan service is pinned to the lead repo, so
+                # without this any non-lead-repo ticket that lands in
+                # a poll-relevant state (READY after scope-triage
+                # REJECT, HUMAN_MR_APPROVAL, REBASING, …) would never
+                # be re-enqueued and would silently stall.
+                # Seed with the synthetic cross-repo meta board: its
+                # tickets ARE worked (refine builds a multi-repo
+                # workspace), but it is not a registered repo, so without
+                # this a meta ticket that becomes READY *after* startup
+                # (e.g. its dependency closes) would never be re-enqueued
+                # and would sit READY until the next restart —
+                # requeue_unfinished() seeds meta but only runs once.
+                boards: list[str] = [self._META_BOARD]
+                # Always sweep the worker's own context service first
+                # — covers single-repo / test setups where the lifespan
+                # service is the only one bound and get_repos_config()
+                # may not return it.
+                if self.ctx.service.board_id not in boards:
+                    boards.append(self.ctx.service.board_id)
+                try:
+                    for rc in get_repos_config().repos.values():
+                        if rc.board_id and rc.board_id not in boards:
+                            boards.append(rc.board_id)
+                except Exception:
+                    pass
+                for board_id in boards:
+                    svc = (
+                        self.ctx.service
+                        if board_id == self.ctx.service.board_id
+                        else TicketService(self.ctx.settings, board_id=board_id)
+                    )
+                    for t in svc.list():
+                        # Safety net: an EPIC_OPEN epic is normally re-evaluated
+                        # by the child-close hook (_maybe_reevaluate_epic). If
+                        # that trigger is ever missed (a child closes via a path
+                        # that bypasses it, a race, or an error), the epic is
+                        # orphaned in EPIC_OPEN forever — epics are NOT in
+                        # STAGE_FOR_STATE, so the requeue sweep below skips them.
+                        # Catch it here.
+                        if t.kind == "epic" and t.state == State.EPIC_OPEN:
+                            self._maybe_sweep_orphaned_epic(t, svc)
+                            continue
+                        if t.state == State.AWAITING_USER_REPLY:
+                            log.debug(
+                                "%s: skipping reconcile — awaiting user reply",
+                                t.id,
+                            )
+                            continue
+                        if t.state not in STAGE_FOR_STATE:
+                            continue
+                        # Dep-gated tickets are skipped at the source —
+                        # enqueuing them would just trigger _process_ticket_inner
+                        # to short-circuit (no trace, no work), but every sweep
+                        # would still consume a queue slot + a service.get +
+                        # an unmet check. Cheaper to filter here.
+                        if svc.unmet_dependencies(t):
+                            continue
+                        self.enqueue(t.id)
+            except Exception:  # noqa: BLE001 — never let the poll die
+                log.exception("reconcile sweep failed")
+
+    def start(self) -> None:
+        if not self._tasks:
+            repos = get_repos_config()
+            pool_sizes = [
+                (rc.board_id, max(1, rc.max_concurrency)) for rc in repos.repos.values()
+            ]
+            pool_sizes.append((self._DEFAULT_BOARD, 1))
+            pool_sizes.append((self._META_BOARD, 1))
+            for board_id, n in pool_sizes:
+                for _ in range(n):
+                    self._tasks.append(asyncio.create_task(self._run(board_id)))
+            log.info(
+                "worker pool started: %s",
+                ", ".join(f"{bid or '<default>'}={n}" for bid, n in pool_sizes),
+            )
+        if self._poll_task is None:
+            self._poll_task = asyncio.create_task(self._poll_loop())
+
+        # --- Per-repo periodic LLM agents + schedule-only passes ---
+        # These now run via the per-repo periodic supervisor (spawned
+        # below), driven by .robotsix-mill/periodic/<name>.yaml presence
+        # files in each managed repo. The legacy repos.yaml enable-flags
+        # were removed.
+
+        # --- Pattern B: dedicated poll-loop tasks ---
+        self._start_poll_loop_pass(
+            "trace-health",
+            self._trace_health_poll_loop,
+            "_trace_health_task",
+            log_msg="Periodic trace-health enabled: interval %ds",
+            log_args=(self.ctx.settings.trace_health_interval_seconds,),
+        )
+        # Cost-cache warming is no longer a backend daemon — it's driven by
+        # the board's /tickets poll (runtime/cost_warm.py). See PR removing
+        # _cost_warmer_loop.
+        self._start_poll_loop_pass(
+            "langfuse-cleanup",
+            self._langfuse_cleanup_poll_loop,
+            "_langfuse_cleanup_task",
+            log_msg="Periodic Langfuse cleanup enabled: interval %ds, cap %d traces/project",
+            log_args=(
+                self.ctx.settings.langfuse_cleanup_interval_seconds,
+                self.ctx.settings.langfuse_cleanup_max_traces,
+            ),
+        )
+        self._start_poll_loop_pass(
+            "timeout-escalation",
+            self._timeout_escalation_poll_loop,
+            "_timeout_escalation_task",
+            log_msg="Periodic timeout escalation enabled: interval %ds, threshold %ds",
+            log_args=(
+                self.ctx.settings.timeout_escalation_interval_seconds,
+                self.ctx.settings.timeout_escalation_threshold_seconds,
+            ),
+        )
+        self._start_poll_loop_pass(
+            "meta",
+            self._meta_pass_loop,
+            "_meta_task",
+            log_msg="Periodic meta-agent enabled: interval %ds",
+            log_args=(self.ctx.settings.meta_interval_seconds,),
+        )
+        self._start_poll_loop_pass(
+            "cost-analyst",
+            self._cost_analyst_pass_loop,
+            "_cost_analyst_task",
+            log_msg="Periodic cost-analyst enabled: interval %ds",
+            log_args=(self.ctx.settings.cost_analyst_interval_seconds,),
+        )
+        self._start_poll_loop_pass(
+            "run-health",
+            self._run_health_pass_loop,
+            "_run_health_task",
+            log_msg="Periodic run-health enabled: interval %ds",
+            log_args=(self.ctx.settings.run_health_interval_seconds,),
+        )
+        self._start_poll_loop_pass(
+            "stale-branch-cleanup",
+            self._stale_branch_cleanup_loop,
+            "_stale_branch_task",
+            log_msg="Periodic stale-branch cleanup enabled: interval %ds",
+            log_args=(self.ctx.settings.stale_branch_cleanup_interval_seconds,),
+        )
+
+        # --- CI monitor (unique: checks repo config, not just settings) ---
+        if self._ci_monitor_task is None:
+            repos = get_repos_config()
+            if any(rc.ci_monitor_enabled for rc in repos.repos.values()):
+                self._ci_monitor_task = asyncio.create_task(
+                    self._ci_monitor_poll_loop()
+                )
+                log.info("CI monitor enabled (per-repo config)")
+
+        # --- Periodic supervisors: one per repo (owns the clone; discovers
+        # .robotsix-mill/periodic/ presence files AND legacy bespoke files).
+        # Always spawned — the unified periodic-workflow path does not depend
+        # on the bespoke master switch (that switch still gates legacy bespoke
+        # files inside the supervisor).
+        for rc in get_repos_config().repos.values():
+            if rc.board_id in self._periodic_supervisor_tasks:
+                continue
+            self._periodic_supervisor_tasks[rc.board_id] = asyncio.create_task(
+                self._periodic_supervisor(rc)
+            )
+            log.info(
+                "Periodic supervisor enabled for repo %s (discovery interval %ds)",
+                rc.repo_id,
+                self.ctx.settings.bespoke_discovery_interval_seconds,
+            )
+
+    async def stop(self) -> None:
+        # Wait for periodic passes that are mid-run (survey, audit,
+        # health, …) to finish before tearing the loops down. Without
+        # this a SIGTERM during a survey run would lose the work and
+        # leave half-cooked drafts.
+        inflight = list(self._inflight_passes)
+        if inflight:
+            grace = max(0, self.ctx.settings.shutdown_grace_seconds)
+            log.info(
+                "stop: awaiting %d in-flight periodic pass(es) (grace %ds)",
+                len(inflight),
+                grace,
+            )
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*inflight, return_exceptions=True),
+                    timeout=grace if grace > 0 else None,
+                )
+            except asyncio.TimeoutError:
+                log.warning(
+                    "stop: in-flight passes did not finish within %ds — "
+                    "cancelling remaining %d",
+                    grace,
+                    sum(1 for t in inflight if not t.done()),
+                )
+        tasks = list(self._tasks)
+        for attr in (
+            "_poll_task",
+            "_audit_task",
+            "_trace_health_task",
+            "_trace_review_task",
+            "_health_task",
+            "_ci_monitor_task",
+            "_agent_check_task",
+            "_bc_check_task",
+            "_completeness_check_task",
+            "_copy_paste_task",
+            "_module_curator_task",
+            "_test_gap_task",
+            "_survey_task",
+            "_config_sync_task",
+            "_cost_reconciliation_task",
+            "_data_dir_audit_task",
+            "_langfuse_cleanup_task",
+            "_timeout_escalation_task",
+            "_meta_task",
+            "_cost_analyst_task",
+            "_run_health_task",
+            "_stale_branch_task",
+        ):
+            t = getattr(self, attr)
+            if t is not None:
+                tasks.append(t)
+                setattr(self, attr, None)
+        # Periodic supervisors: cancelling each one cancels its child
+        # per-workflow loop tasks via the supervisor's ``finally``.
+        for t in self._periodic_supervisor_tasks.values():
+            tasks.append(t)
+        self._periodic_supervisor_tasks.clear()
+        for t in tasks:
+            t.cancel()
+        for t in tasks:
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
+        self._tasks = []
+        tracing.flush_tracing()
+
+    def requeue_unfinished(self) -> None:
+        """On startup, re-enqueue any ticket left mid-pipeline so a
+        restart resumes work (idempotent: stages are re-entrant).
+
+        With per-repo DBs, fan out across every registered repo
+        so nothing is missed.
+        """
+        from ...config import get_repos_config
+        from ...core.service import TicketService
+
+        boards: list[str] = [self._META_BOARD]
+        try:
+            for rc in get_repos_config().repos.values():
+                if rc.board_id and rc.board_id not in boards:
+                    boards.append(rc.board_id)
+        except Exception:
+            pass
+        for board_id in boards:
+            svc = TicketService(self.ctx.settings, board_id=board_id)
+            try:
+                for ticket in svc.list():
+                    if ticket.state in STAGE_FOR_STATE:
+                        self.enqueue(ticket.id)
+            except Exception:
+                log.exception(
+                    "requeue_unfinished: failed to enumerate board %r",
+                    board_id or "<default>",
+                )

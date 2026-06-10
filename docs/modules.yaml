@@ -113,7 +113,7 @@ modules:
       - src/robotsix_mill/runtime/api.py
       - src/robotsix_mill/runtime/exception_handlers.py
       - src/robotsix_mill/runtime/routes/**/*.py
-      - src/robotsix_mill/runtime/worker.py
+      - src/robotsix_mill/runtime/worker/*.py
       - src/robotsix_mill/runtime/deps.py
       - src/robotsix_mill/runtime/lifespan.py
       - src/robotsix_mill/runtime/tracing.py

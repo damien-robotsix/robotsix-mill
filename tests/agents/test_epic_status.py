@@ -30,7 +30,9 @@ async def test_hook_fires_on_done_for_epic_parent(ctx, service, monkeypatch):
     def fake_spawn(epic_id, _ctx):
         called_with.append(epic_id)
 
-    monkeypatch.setattr("robotsix_mill.runtime.worker._spawn_epic_reeval", fake_spawn)
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.processing._spawn_epic_reeval", fake_spawn
+    )
 
     class DoneStage(Stage):
         name = "merge"
@@ -64,7 +66,9 @@ async def test_hook_does_not_fire_for_non_epic_parent(ctx, service, monkeypatch)
     def fake_spawn(epic_id, _ctx):
         called_with.append(epic_id)
 
-    monkeypatch.setattr("robotsix_mill.runtime.worker._spawn_epic_reeval", fake_spawn)
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.processing._spawn_epic_reeval", fake_spawn
+    )
 
     class DoneStage(Stage):
         name = "merge"
@@ -98,7 +102,9 @@ async def test_hook_does_not_fire_for_non_done_transition(ctx, service, monkeypa
     def fake_spawn(epic_id, _ctx):
         called_with.append(epic_id)
 
-    monkeypatch.setattr("robotsix_mill.runtime.worker._spawn_epic_reeval", fake_spawn)
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.processing._spawn_epic_reeval", fake_spawn
+    )
 
     class ReviewStage(Stage):
         name = "implement"
@@ -690,7 +696,9 @@ async def test_hook_fires_on_closed_for_epic_parent(ctx, service, monkeypatch):
     def fake_spawn(epic_id, _ctx):
         called_with.append(epic_id)
 
-    monkeypatch.setattr("robotsix_mill.runtime.worker._spawn_epic_reeval", fake_spawn)
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.processing._spawn_epic_reeval", fake_spawn
+    )
 
     class CloseStage(Stage):
         name = "retrospect"
@@ -725,7 +733,9 @@ async def test_hook_fires_on_answered_for_epic_parent(ctx, service, monkeypatch)
     def fake_spawn(epic_id, _ctx):
         called_with.append(epic_id)
 
-    monkeypatch.setattr("robotsix_mill.runtime.worker._spawn_epic_reeval", fake_spawn)
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.processing._spawn_epic_reeval", fake_spawn
+    )
 
     class AnswerStage(Stage):
         name = "answer"
@@ -826,7 +836,7 @@ def test_sweep_reevaluates_orphaned_all_terminal_epic(ctx, service, monkeypatch)
     """An EPIC_OPEN epic whose children are ALL terminal gets a sweep re-eval."""
     spawned: list = []
     monkeypatch.setattr(
-        "robotsix_mill.runtime.worker._spawn_epic_reeval",
+        "robotsix_mill.runtime.worker.core._spawn_epic_reeval",
         lambda epic_id, _c: spawned.append(epic_id),
     )
     epic = service.create("Epic", "goal", kind="epic")
@@ -847,7 +857,7 @@ def test_sweep_reevaluates_orphaned_all_terminal_epic(ctx, service, monkeypatch)
 def test_sweep_skips_epic_with_open_child(ctx, service, monkeypatch):
     spawned: list = []
     monkeypatch.setattr(
-        "robotsix_mill.runtime.worker._spawn_epic_reeval",
+        "robotsix_mill.runtime.worker.core._spawn_epic_reeval",
         lambda epic_id, _c: spawned.append(epic_id),
     )
     epic = service.create("Epic", "goal", kind="epic")
@@ -872,7 +882,7 @@ def test_sweep_skips_epic_with_open_child(ctx, service, monkeypatch):
 def test_sweep_skips_childless_epic(ctx, service, monkeypatch):
     spawned: list = []
     monkeypatch.setattr(
-        "robotsix_mill.runtime.worker._spawn_epic_reeval",
+        "robotsix_mill.runtime.worker.core._spawn_epic_reeval",
         lambda epic_id, _c: spawned.append(epic_id),
     )
     epic = service.create("Epic", "goal", kind="epic")

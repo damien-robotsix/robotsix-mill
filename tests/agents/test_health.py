@@ -628,7 +628,7 @@ async def test_worker_spawns_periodic_supervisor_per_repo(
 
     monkeypatch.setattr(Worker, "_periodic_supervisor", noop_supervisor)
     monkeypatch.setattr(
-        "robotsix_mill.runtime.worker.get_repos_config",
+        "robotsix_mill.runtime.worker.core.get_repos_config",
         lambda: ReposRegistry(repos={repo_config.repo_id: repo_config}),
     )
 

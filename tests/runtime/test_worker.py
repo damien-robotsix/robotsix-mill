@@ -210,7 +210,7 @@ def test_dollar_cap_excludes_pre_redraft_baseline(ctx, service, monkeypatch):
     cap = ctx.settings.max_spend_usd_per_ticket
     # Live session total well above the cap (pre-redraft cost included).
     monkeypatch.setattr(
-        "robotsix_mill.runtime.worker.session_cost", lambda *a, **k: cap + 100.0
+        "robotsix_mill.runtime.worker.core.session_cost", lambda *a, **k: cap + 100.0
     )
 
     def _set_baseline(ticket_id, value):
@@ -246,7 +246,7 @@ def test_dollar_cap_effective_equal_to_cap_not_blocked(ctx, service, monkeypatch
 
     cap = ctx.settings.max_spend_usd_per_ticket
     monkeypatch.setattr(
-        "robotsix_mill.runtime.worker.session_cost", lambda *a, **k: cap + 50.0
+        "robotsix_mill.runtime.worker.core.session_cost", lambda *a, **k: cap + 50.0
     )
 
     def _set_baseline(ticket_id, value):
@@ -447,7 +447,7 @@ async def test_start_creates_per_repo_consumer_pools(ctx, monkeypatch):
         }
     )
     monkeypatch.setattr(
-        "robotsix_mill.runtime.worker.get_repos_config",
+        "robotsix_mill.runtime.worker.core.get_repos_config",
         lambda: fake_repos,
     )
 
@@ -503,7 +503,7 @@ async def test_pool_runs_tickets_in_parallel(ctx, service, monkeypatch):
         }
     )
     monkeypatch.setattr(
-        "robotsix_mill.runtime.worker.get_repos_config",
+        "robotsix_mill.runtime.worker.core.get_repos_config",
         lambda: fake_repos,
     )
 
@@ -1003,7 +1003,7 @@ async def test_periodic_pass_per_repo_forwards_repo_config_to_span(ctx, monkeypa
         langfuse_secret_key="sk-test",
     )
     monkeypatch.setattr(
-        "robotsix_mill.runtime.worker.get_repos_config",
+        "robotsix_mill.runtime.worker.periodic_passes.get_repos_config",
         lambda: ReposRegistry(repos={"test-repo": fake_repo}),
     )
 
