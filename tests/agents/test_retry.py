@@ -4,7 +4,7 @@ import json
 
 import httpx
 import pytest
-from pydantic_ai.exceptions import ModelHTTPError
+from pydantic_ai.exceptions import ModelHTTPError, UsageLimitExceeded
 
 from robotsix_mill.agents.retry import call_with_retry, is_transient, is_rate_limited
 from robotsix_mill.config import Settings
@@ -16,13 +16,6 @@ def _settings(tmp_path, **env):
     env.setdefault("transient_backoff_base", "1.0")
     env.setdefault("transient_backoff_cap", "4.0")
     return Settings(**env)
-
-
-class _FakeUsageLimitExceeded(Exception):
-    """Name matches the real pydantic-ai cap exception."""
-
-
-_FakeUsageLimitExceeded.__name__ = "UsageLimitExceeded"
 
 
 def _httpx_status(code):
@@ -47,7 +40,7 @@ def _httpx_status(code):
         (_httpx_status(429), True),
         (_httpx_status(502), True),
         (_httpx_status(403), False),
-        (_FakeUsageLimitExceeded("cap"), False),
+        (UsageLimitExceeded("cap"), False),
         (ValueError("bug"), False),
         (json.JSONDecodeError("Expecting value", "x", 0), True),  # bad model JSON
     ],
@@ -221,7 +214,7 @@ def test_non_transient_not_retried(tmp_path, exc):
 @pytest.mark.parametrize(
     "exc,expected",
     [
-        (_FakeUsageLimitExceeded("cap"), True),
+        (UsageLimitExceeded("cap"), True),
         (ModelHTTPError(429, "m"), False),
         (ModelHTTPError(503, "m"), False),
         (ModelHTTPError(404, "m"), False),
@@ -239,7 +232,7 @@ def test_is_rate_limited(exc, expected):
 def test_is_rate_limited_walks_chain():
     """UsageLimitExceeded wrapped in a RuntimeError must still be
     recognised through the cause chain."""
-    inner = _FakeUsageLimitExceeded("cap")
+    inner = UsageLimitExceeded("cap")
     wrapped = RuntimeError("agent run failed")
     wrapped.__cause__ = inner
     assert is_rate_limited(wrapped) is True
@@ -256,9 +249,9 @@ def test_rate_limit_raises_immediately_without_fallback(tmp_path):
 
     def fn():
         calls["n"] += 1
-        raise _FakeUsageLimitExceeded("cap")
+        raise UsageLimitExceeded("cap")
 
-    with pytest.raises(_FakeUsageLimitExceeded):
+    with pytest.raises(UsageLimitExceeded):
         call_with_retry(fn, settings=s, sleep=slept.append)
     assert calls["n"] == 1  # exactly one call, no retries
     assert len(slept) == 0  # no backoff delay
@@ -272,9 +265,9 @@ def test_rate_limit_exhausts_then_raises(tmp_path):
 
     def fn():
         calls["n"] += 1
-        raise _FakeUsageLimitExceeded("cap")
+        raise UsageLimitExceeded("cap")
 
-    with pytest.raises(_FakeUsageLimitExceeded):
+    with pytest.raises(UsageLimitExceeded):
         call_with_retry(fn, settings=s, sleep=slept.append)
     assert calls["n"] == 1  # exactly one call, no retries
     assert len(slept) == 0  # no backoff
@@ -293,7 +286,7 @@ def test_rate_limit_fallback_activates(tmp_path):
 
     def primary():
         primary_calls["n"] += 1
-        raise _FakeUsageLimitExceeded("cap")
+        raise UsageLimitExceeded("cap")
 
     def fallback():
         fallback_calls["n"] += 1
@@ -323,13 +316,13 @@ def test_rate_limit_fallback_exhausts_then_raises(tmp_path):
 
     def primary():
         primary_calls["n"] += 1
-        raise _FakeUsageLimitExceeded("cap")
+        raise UsageLimitExceeded("cap")
 
     def fallback():
         fallback_calls["n"] += 1
-        raise _FakeUsageLimitExceeded("fallback-cap")
+        raise UsageLimitExceeded("fallback-cap")
 
-    with pytest.raises(_FakeUsageLimitExceeded):
+    with pytest.raises(UsageLimitExceeded):
         call_with_retry(
             primary,
             settings=s,
@@ -431,7 +424,7 @@ def test_async_rate_limit_activates_fallback_once(tmp_path):
 
     async def fn():
         calls["n"] += 1
-        raise _FakeUsageLimitExceeded("cap")
+        raise UsageLimitExceeded("cap")
 
     async def fallback():
         fb["n"] += 1
