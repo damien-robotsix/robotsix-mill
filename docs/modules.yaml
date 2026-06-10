@@ -21,6 +21,7 @@ modules:
       - src/robotsix_mill/config.py
       - src/robotsix_mill/config_loader.py
       - src/robotsix_mill/repo_settings.py
+      - src/robotsix_mill/workspace_members.py
       - src/robotsix_mill/__init__.py
       - src/robotsix_mill/py.typed
       - config/mill.defaults.yaml
@@ -29,6 +30,7 @@ modules:
       - config/secrets.example.yaml
       - tests/config/test_config.py
       - tests/config/test_repo_settings.py
+      - tests/config/test_workspace_members.py
       - tests/config/test_migrate_config.py
     dependencies: []
 
