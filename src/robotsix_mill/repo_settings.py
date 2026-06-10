@@ -113,7 +113,21 @@ def load_extra_sandbox_packages(repo_dir: Path | None) -> list[str]:
     (a list). Strips whitespace from each entry and filters out
     empty/whitespace-only strings. Non-string items are coerced via
     ``str(x).strip()`` (matching ``load_repo_languages``). Never raises
-    — a malformed value or missing file yields ``[]``."""
+    — a malformed value or missing file yields ``[]``.
+
+    Entry grammar (implemented in ``sandbox._build_extra_packages_prefix``):
+
+    * ``pip:<name>`` → installed via ``pip install --user`` (Python
+      packages, e.g. ``pip:yamllint``).
+    * ``apt:<name>`` → installed via ``apt-get install -y`` (system
+      tools, e.g. ``apt:shellcheck``).
+    * a bare ``<name>`` (no prefix) defaults to apt — the sandbox image
+      is Debian-based.
+
+    Declaring any apt package (prefixed or bare) makes the sandbox drop
+    ``--read-only`` and add tmpfs mounts for apt's state directories so
+    the install can write to the root filesystem; pip-only package sets
+    keep the read-only root."""
     raw = _load_repo_config_dict(repo_dir)
     if raw is None:
         return []

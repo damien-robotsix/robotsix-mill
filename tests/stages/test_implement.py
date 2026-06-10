@@ -503,6 +503,83 @@ def test_failing_gate_blocks_resumable(ctx_factory, tmp_path, monkeypatch):
     assert "WIP" in log  # WIP committed so a human can pick it up
 
 
+def test_env_error_short_circuits_within_two_cycles(ctx_factory, tmp_path, monkeypatch):
+    """An ENV-ERROR diagnosis (missing binary) repeated identically caps
+    the fix loop at ≤2 cycles — instead of burning max_fix_iterations —
+    and BLOCKS with a note naming the missing binary."""
+    from robotsix_mill.stages import implement as impl_mod
+    from robotsix_mill.agents.testing import ENV_ERROR_PREFIX
+
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="yamllint --strict .",
+        max_fix_iterations="8",  # high → prove the breaker fires early
+    )
+    calls = []
+
+    def _run(*, settings, repo_dir, spec, feedback=None, **_kwargs):
+        del settings, spec  # seam signature
+        calls.append(feedback)
+        (Path(repo_dir) / "feature.txt").write_text("work")
+        return ("tried", ["feature.txt"], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+    env_diag = (
+        f"{ENV_ERROR_PREFIX} command not found in sandbox: 'yamllint' (rc=127). "
+        "This binary is not installed/on PATH; declare it via "
+        "extra_sandbox_packages in .robotsix-mill/config.yaml (pip:<name> or "
+        "apt:<name>) — not fixable by editing code."
+    )
+    monkeypatch.setattr(impl_mod, "run_test_agent", lambda **kw: (False, env_diag))
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert "environment failure" in out.note
+    assert "yamllint" in out.note  # missing binary surfaced
+    assert len(calls) == 2  # short-circuited at the 2nd identical env-error
+
+
+def test_identical_diagnosis_three_cycles_short_circuits(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A NON-env failure yielding the identical distilled diagnosis 3
+    consecutive cycles is short-circuited to BLOCKED (the general
+    repeated-identical-diagnosis guard), not run to max_fix_iterations."""
+    from robotsix_mill.stages import implement as impl_mod
+
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="false",
+        max_fix_iterations="8",
+    )
+    calls = []
+
+    def _run(*, settings, repo_dir, spec, feedback=None, **_kwargs):
+        del settings, spec
+        calls.append(feedback)
+        (Path(repo_dir) / "feature.txt").write_text("work")
+        return ("tried", ["feature.txt"], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+    diag = "test_foo assertion failed: expected 1 got 2"
+    monkeypatch.setattr(impl_mod, "run_test_agent", lambda **kw: (False, diag))
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert diag in out.note
+    assert len(calls) == 3  # short-circuited after 3 identical diagnoses
+
+
 def _commits(repo):
     return subprocess.run(
         ["git", "-C", str(repo), "log", "--pretty=%s"],
