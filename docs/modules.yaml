@@ -198,6 +198,7 @@ modules:
       - src/robotsix_mill/runners/periodic_runner.py
       - src/robotsix_mill/runners/verify_runner.py
       - src/robotsix_mill/draft_target.py
+      - tests/runners/test_draft_target.py
       - tests/runners/test_pass_runner.py
       - tests/runners/test_periodic_runner.py
       - tests/runners/test_cost_reconciliation_runner.py
