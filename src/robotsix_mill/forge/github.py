@@ -210,6 +210,23 @@ class GitHubForge(Forge):
     def _owner_repo(self) -> tuple[str, str]:
         return _parse_owner_repo(self._remote_url)
 
+    @property
+    def _head_owner(self) -> str:
+        """Owner of the head branch for PR lookups.
+
+        For cross-repo targets the head lives on the fork, so this
+        returns the fork owner; otherwise it's the same as the
+        upstream/remote owner.  Used by ``_get_pr`` to build the
+        ``head=<owner>:<branch>`` filter so the lookup finds the PR
+        whose head branch is owned by the fork, not the upstream.
+        """
+        if self._repo_config is not None:
+            cct = getattr(self._repo_config, "cross_repo_target", None)
+            if cct is not None and cct.fork_remote_url:
+                fork_owner, _ = _parse_owner_repo(cct.fork_remote_url)
+                return fork_owner
+        return self._owner_repo[0]
+
     def open_merge_request(
         self,
         *,
@@ -269,10 +286,15 @@ class GitHubForge(Forge):
                 # 422 — either "already exists" or a transient
                 # post-push indexing race.
                 if r.status_code == 422:
+                    # head is already fully qualified for cross-fork
+                    # PRs (e.g. "fork-owner:branch"); for same-repo
+                    # PRs it's just the branch name and needs the
+                    # owner prefix.
+                    head_param = head if ":" in head else f"{owner}:{head}"
                     q = c.get(
                         url,
                         headers=headers,
-                        params={"head": f"{owner}:{head}", "state": "open"},
+                        params={"head": head_param, "state": "open"},
                     )
                     items = q.json() if q.status_code == 200 else []
                     if items:
@@ -610,6 +632,17 @@ class GitHubForge(Forge):
         )
 
     def delete_branch(self, *, branch: str) -> bool:
+        # For cross-repo targets the head branch lives on the fork,
+        # not the upstream repo.  Resolve the fork owner/repo so the
+        # DELETE goes to the right place instead of 404'ing on
+        # upstream.
+        if self._repo_config is not None:
+            cct = getattr(self._repo_config, "cross_repo_target", None)
+            if cct is not None and cct.fork_remote_url:
+                fork_owner, fork_repo = _parse_owner_repo(cct.fork_remote_url)
+                return self._delete_branch(
+                    owner=fork_owner, repo=fork_repo, branch=branch
+                )
         owner, repo = self._owner_repo
         return self._delete_branch(owner=owner, repo=repo, branch=branch)
 
@@ -623,11 +656,15 @@ class GitHubForge(Forge):
 
     # --- HTTP seamm (monkeypatched in tests) ---
     def _get_pr(self, *, owner: str, repo: str, head: str) -> dict | None:
+        # For cross-repo targets the head branch lives on the fork,
+        # so the head filter must use the fork owner (not the upstream
+        # owner passed in *owner*).  _head_owner resolves accordingly.
+        head_owner = self._head_owner
         with self._http.client() as (c, api, headers):
             lst = c.get(
                 f"{api}/repos/{owner}/{repo}/pulls",
                 headers=headers,
-                params={"head": f"{owner}:{head}", "state": "all"},
+                params={"head": f"{head_owner}:{head}", "state": "all"},
             )
             lst.raise_for_status()
             items = lst.json()
