@@ -1383,3 +1383,23 @@ def test_handle_epic_decision_close_with_new_children_downgrades():
     # close + new_children downgrades to keep_open → no transition occurs.
     assert result.decision == "keep_open"
     assert not any(c[0] == "transition" for c in svc.calls)
+
+
+def test_stage_rank_covers_every_pipeline_state():
+    """Every STAGE_FOR_STATE state must have an explicit _STAGE_RANK.
+
+    A missing entry silently falls to _DEFAULT_STAGE_RANK (99) and is
+    starved indefinitely on a busy board — every newly arriving draft or
+    ready outranks it forever. Live case: MAINTENANCE was absent, so four
+    resumed maintenance tickets sat 75+ minutes with zero pickup while
+    later-created drafts refined ahead of them.
+    """
+    from robotsix_mill.core.states import STAGE_FOR_STATE
+    from robotsix_mill.runtime.worker import Worker
+
+    missing = [s for s in STAGE_FOR_STATE if s not in Worker._STAGE_RANK]
+    assert not missing, (
+        f"states with a pipeline stage but no explicit queue rank "
+        f"(would be starved at default rank {Worker._DEFAULT_STAGE_RANK}): "
+        f"{missing}"
+    )
