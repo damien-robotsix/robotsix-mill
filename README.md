@@ -109,7 +109,7 @@ docker compose exec mill robotsix-mill ticket new --title "Add X" --description-
 .venv/bin/robotsix-mill ticket new --title "Add X" --description-file -
 ```
 
-Attach screenshots to a ticket for the refine agent to review (the flag is repeatable):
+Attach screenshots to a ticket for the refine agent to review. Via the CLI (the flag is repeatable):
 
 ```sh
 robotsix-mill ticket new --title "Layout is broken" \
@@ -117,6 +117,8 @@ robotsix-mill ticket new --title "Layout is broken" \
   --screenshot error.png \
   --screenshot layout.png
 ```
+
+Or via the web board: open the board, click **New Ticket**, and use the **Screenshot** file input to attach an image directly in the modal. Both paths support PNG, JPEG, GIF, and WebP formats.
 
 To create an epic instead of a task, use `robotsix-mill epic new`:
 
