@@ -417,6 +417,43 @@ def test_real_review_yaml_has_conciseness_directive():
             _os.environ.pop("MILL_REVIEW_MODEL", None)
 
 
+def test_real_review_yaml_has_max_tokens_cap():
+    """The real review.yaml must declare a max_tokens output cap.
+
+    Guards a trace-review cost fix: source trace
+    a2df28bd0ec58c341c679a1530e439dc / generation 61e63af1a47121e3 showed
+    the review agent emitting 16,789 output tokens from only 298 input
+    tokens ($0.32, 3.0x the median) — inline self-talk and diff
+    re-summarization instead of a structured ReviewVerdict. The
+    conciseness directive alone (guarded by
+    test_real_review_yaml_has_conciseness_directive) proved insufficient,
+    so a deterministic max_tokens cap backstops runaway generations. If a
+    future edit removes or unsets the cap, this test FAILS.
+    """
+    p = Path("agent_definitions/review.yaml")
+    if not p.exists():
+        pytest.skip("agent_definitions/review.yaml not found")
+
+    # Mock the env var so resolution succeeds.
+    import os as _os
+
+    had_model = "MILL_REVIEW_MODEL" in _os.environ
+    _os.environ.setdefault("MILL_REVIEW_MODEL", "test/model")
+
+    try:
+        ad = load_agent_definition(p)
+        assert ad.name == "review"
+        assert ad.max_tokens is not None
+        assert ad.max_tokens == 8192
+        # Sanity: present and within a tunable-but-bounded range that
+        # stays above legitimate verdicts and below the observed runaway.
+        assert 2048 <= ad.max_tokens <= 12288
+    finally:
+        # Don't leak the env var if it wasn't set before.
+        if not had_model:
+            _os.environ.pop("MILL_REVIEW_MODEL", None)
+
+
 # Representative worst-case size of the retrospect runtime memory ledger.
 # This tracks the observed ~34K-char per-board ledger surfaced to the agent
 # at runtime — NOT the checked-in seed docs/retrospect-memory.md (~946 bytes),
