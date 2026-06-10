@@ -42,6 +42,7 @@ nav:
       - Ticket provenance: ticket-provenance.md
       - Workspace cleanup: workspace-cleanup.md
       - Board cleanup: board-cleanup.md
+      - Attaching screenshots: screenshots.md
   - Design:
       - Cost indicators: design/cost-indicators.md
       - Forge architecture: design/forge-architecture.md
