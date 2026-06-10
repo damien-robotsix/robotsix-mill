@@ -21,13 +21,14 @@ from __future__ import annotations
 import json
 import logging
 import os
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 
 from robotsix_mill.config import Settings, _reset_secrets
 from robotsix_mill.core import db
-from robotsix_mill.core.models import SourceKind, Ticket
+from robotsix_mill.core.models import SourceKind, Ticket, TicketEvent, _now
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.runners.data_dir_audit_runner import (
@@ -42,6 +43,7 @@ from robotsix_mill.runners.data_dir_audit_runner import (
     _enumerate_boards,
     _growth_state_path,
     _load_growth_state,
+    _prune_closed_workspaces,
     _save_growth_state,
     _scan_board_sizes,
     check_unbounded_candidates,
@@ -118,6 +120,57 @@ def _write_bytes(path: Path, size: int, *, fill: bytes = b"x") -> None:
     """Create ``path`` containing exactly ``size`` bytes of ``fill``."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(fill * size)
+
+
+def _insert_closed_ticket(
+    settings: Settings,
+    board_id: str,
+    ticket_id: str,
+    *,
+    closed_at,
+    state: State = State.CLOSED,
+) -> None:
+    """Insert a terminal-state Ticket plus a backdated terminal
+    ``TicketEvent`` (``at=closed_at``) so the prune age guard has a
+    close time to measure against."""
+    db.init_db(settings, board_id)
+    with db.session(settings, board_id) as s:
+        s.add(
+            Ticket(
+                id=ticket_id,
+                title="t",
+                state=state,
+                workspace_path=str(settings.workspaces_dir_for(board_id) / ticket_id),
+                board_id=board_id,
+            )
+        )
+        s.add(
+            TicketEvent(
+                ticket_id=ticket_id,
+                state=state,
+                at=closed_at,
+            )
+        )
+        s.commit()
+
+
+def _insert_ticket_with_state(
+    settings: Settings, board_id: str, ticket_id: str, state: State
+) -> None:
+    """Insert a Ticket row in an arbitrary (non-terminal) ``state``,
+    with no terminal event."""
+    db.init_db(settings, board_id)
+    with db.session(settings, board_id) as s:
+        s.add(
+            Ticket(
+                id=ticket_id,
+                title="t",
+                state=state,
+                workspace_path=str(settings.workspaces_dir_for(board_id) / ticket_id),
+                board_id=board_id,
+            )
+        )
+        s.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -1768,4 +1821,200 @@ def _engine_cleanup():
     ``reset_engine()`` runs."""
     db.reset_engine()
     yield
+    db.reset_engine()
+
+
+# ---------------------------------------------------------------------------
+# prune_closed GC — workspaces of terminal-state tickets
+# ---------------------------------------------------------------------------
+
+
+def test_prune_closed_knob_default_off_is_noop(tmp_path, monkeypatch):
+    """With ``data_dir_audit_prune_closed`` unset/false, an old CLOSED
+    ticket's workspace is NOT removed by the pass."""
+    s = _make_settings(tmp_path)
+    ws = _make_workspace_dir(s, "board-x", "20260101T000000Z-closed-aaaa")
+    _insert_closed_ticket(
+        s,
+        "board-x",
+        "20260101T000000Z-closed-aaaa",
+        closed_at=_now() - timedelta(days=30),
+    )
+
+    monkeypatch.setattr(
+        "robotsix_mill.runners.data_dir_audit_runner.Settings",
+        lambda: s,
+    )
+
+    result = run_data_dir_audit_pass()
+
+    assert ws.exists()
+    assert result.closed_pruned == 0
+    db.reset_engine()
+
+
+def test_prune_closed_removes_old_closed_workspace(tmp_path):
+    """With the age threshold low, a CLOSED-ticket workspace older than
+    the threshold is removed and the return count reflects it."""
+    s = _make_settings(
+        tmp_path,
+        data_dir_audit_prune_closed=True,
+        data_dir_audit_prune_closed_age_seconds=0,
+    )
+    ws = _make_workspace_dir(s, "board-x", "20260101T000000Z-closed-bbbb")
+    _insert_closed_ticket(
+        s,
+        "board-x",
+        "20260101T000000Z-closed-bbbb",
+        closed_at=_now() - timedelta(days=30),
+    )
+
+    removed = _prune_closed_workspaces(s)
+
+    assert removed == 1
+    assert not ws.exists()
+    db.reset_engine()
+
+
+def test_prune_closed_age_guard_keeps_recent_closure(tmp_path):
+    """With a 7-day threshold, a ticket closed 'now' is NOT removed."""
+    s = _make_settings(
+        tmp_path,
+        data_dir_audit_prune_closed=True,
+        data_dir_audit_prune_closed_age_seconds=604_800,
+    )
+    ws = _make_workspace_dir(s, "board-x", "20260101T000000Z-closed-cccc")
+    _insert_closed_ticket(
+        s,
+        "board-x",
+        "20260101T000000Z-closed-cccc",
+        closed_at=_now(),
+    )
+
+    removed = _prune_closed_workspaces(s)
+
+    assert removed == 0
+    assert ws.exists()
+    db.reset_engine()
+
+
+def test_prune_closed_leaves_non_terminal_workspaces(tmp_path):
+    """DRAFT, DONE, and BLOCKED ticket workspaces are never pruned."""
+    s = _make_settings(
+        tmp_path,
+        data_dir_audit_prune_closed=True,
+        data_dir_audit_prune_closed_age_seconds=0,
+    )
+    ws_draft = _make_workspace_dir(s, "board-x", "20260101T000000Z-draft-0001")
+    ws_done = _make_workspace_dir(s, "board-x", "20260101T000000Z-done-0002")
+    ws_blocked = _make_workspace_dir(s, "board-x", "20260101T000000Z-blkd-0003")
+    _insert_ticket_with_state(s, "board-x", "20260101T000000Z-draft-0001", State.DRAFT)
+    _insert_ticket_with_state(s, "board-x", "20260101T000000Z-done-0002", State.DONE)
+    _insert_ticket_with_state(s, "board-x", "20260101T000000Z-blkd-0003", State.BLOCKED)
+
+    removed = _prune_closed_workspaces(s)
+
+    assert removed == 0
+    assert ws_draft.exists()
+    assert ws_done.exists()
+    assert ws_blocked.exists()
+    db.reset_engine()
+
+
+def test_prune_closed_leaves_orphans(tmp_path):
+    """A workspace dir with no matching ticket row is left for the
+    orphan detector, not removed by the prune step."""
+    s = _make_settings(
+        tmp_path,
+        data_dir_audit_prune_closed=True,
+        data_dir_audit_prune_closed_age_seconds=0,
+    )
+    ws = _make_workspace_dir(s, "board-x", "20260101T000000Z-orph-dddd")
+    db.init_db(s, "board-x")  # board DB exists, but ticket row does not
+
+    removed = _prune_closed_workspaces(s)
+
+    assert removed == 0
+    assert ws.exists()
+    db.reset_engine()
+
+
+def test_prune_closed_board_failure_is_skipped(tmp_path, monkeypatch, caplog):
+    """A board whose DB access raises is skipped with a warning while a
+    second healthy board is still processed — no exception propagates."""
+    s = _make_settings(
+        tmp_path,
+        data_dir_audit_prune_closed=True,
+        data_dir_audit_prune_closed_age_seconds=0,
+    )
+    ws_a = _make_workspace_dir(s, "board-a", "20260101T000000Z-closed-aa11")
+    ws_b = _make_workspace_dir(s, "board-b", "20260101T000000Z-closed-bb22")
+    _insert_closed_ticket(
+        s,
+        "board-a",
+        "20260101T000000Z-closed-aa11",
+        closed_at=_now() - timedelta(days=30),
+    )
+    db.init_db(s, "board-b")  # discoverable board with a workspace candidate
+
+    real_session = db.session
+
+    def fake_session(settings, board_id):
+        if board_id == "board-b":
+            raise RuntimeError("simulated unreachable DB")
+        return real_session(settings, board_id)
+
+    monkeypatch.setattr(db, "session", fake_session)
+
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.data_dir_audit"):
+        removed = _prune_closed_workspaces(s)
+
+    assert removed == 1
+    assert not ws_a.exists()  # healthy board pruned
+    assert ws_b.exists()  # failing board untouched
+    assert any(r.levelno == logging.WARNING for r in caplog.records)
+    db.reset_engine()
+
+
+def test_pass_alert_only_after_gc(tmp_path, monkeypatch):
+    """A large CLOSED-ticket workspace that would push the data dir over
+    the oversized threshold produces no oversized finding once pruned,
+    but DOES when pruning is disabled."""
+
+    def _build_settings(*, prune: bool) -> Settings:
+        root = tmp_path / ("on" if prune else "off")
+        st = _make_settings(
+            root,
+            data_dir_audit_prune_closed=prune,
+            data_dir_audit_prune_closed_age_seconds=0,
+            data_dir_audit_size_threshold_bytes=1_000_000,
+        )
+        ws = _make_workspace_dir(st, "board-x", "20260101T000000Z-closed-eeee")
+        _write_bytes(ws / "big.bin", 2_000_000)
+        _insert_closed_ticket(
+            st,
+            "board-x",
+            "20260101T000000Z-closed-eeee",
+            closed_at=_now() - timedelta(days=30),
+        )
+        return st
+
+    # Pruning ENABLED → workspace GC'd before measurement → no oversized.
+    s_on = _build_settings(prune=True)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s_on
+    )
+    result_on = run_data_dir_audit_pass()
+    assert result_on.closed_pruned == 1
+    assert result_on.oversized_items == []
+    db.reset_engine()
+
+    # Pruning DISABLED → workspace remains → oversized finding produced.
+    s_off = _build_settings(prune=False)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s_off
+    )
+    result_off = run_data_dir_audit_pass()
+    assert result_off.closed_pruned == 0
+    assert any(item["path"].endswith("big.bin") for item in result_off.oversized_items)
     db.reset_engine()

@@ -30,16 +30,19 @@ import json
 import logging
 import os
 import re
+import shutil
 from collections import defaultdict
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlmodel import select
 
 from ..config import RepoConfig, Settings
 from ..core import db
-from ..core.models import SourceKind, Ticket
+from ..core.models import SourceKind, Ticket, TicketEvent, _now
 from ..core.service import TicketService
+from ..core.states import State
 
 log = logging.getLogger("robotsix_mill.data_dir_audit")
 
@@ -54,6 +57,11 @@ _TICKET_ID_PREFIX_RE = re.compile(r"^\d{8}T\d{6}Z-")
 # Keeps the IN-clause small enough for SQLite while still avoiding the
 # one-query-per-directory anti-pattern.
 _BATCH_SIZE = 500
+
+# Terminal ticket states: those with empty outgoing transition sets in
+# ``core.states`` (``TRANSITIONS[...] == set()``). A workspace whose
+# ticket sits in one of these is eligible for prune_closed GC.
+_TERMINAL_STATES = {State.CLOSED, State.EPIC_CLOSED, State.ANSWERED}
 
 
 @dataclass
@@ -347,6 +355,9 @@ class DataDirAuditPassResult:
     session_id: str = ""
     findings: list[dict] = field(default_factory=list)
     growth_flags: list[dict] = field(default_factory=list)
+    # Number of terminal-state ticket workspaces removed by the opt-in
+    # prune_closed GC step (0 when the knob is disabled).
+    closed_pruned: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -675,6 +686,155 @@ def find_orphan_workspaces(
             )
         )
     return orphans
+
+
+# ---------------------------------------------------------------------------
+# Opt-in GC: prune workspaces of terminal-state tickets
+# ---------------------------------------------------------------------------
+
+
+def _close_time_from_ticket_id(name: str) -> datetime | None:
+    """Parse a tz-aware close time from a ticket-ID timestamp prefix.
+
+    The prefix is ``YYYYmmddTHHMMSSZ-`` (16 chars before the dash).
+    Returns ``None`` when the prefix does not parse — a defensive
+    fallback used only when no terminal ``TicketEvent`` exists.
+    """
+    try:
+        return datetime.strptime(name[:16], "%Y%m%dT%H%M%SZ").replace(
+            tzinfo=timezone.utc
+        )
+    except ValueError:
+        return None
+
+
+def _workspace_candidates(workspaces_dir: Path) -> list[tuple[str, Path]]:
+    """List ``(ticket_id, path)`` for ticket-ID-named workspace subdirs."""
+    candidates: list[tuple[str, Path]] = []
+    for child in sorted(workspaces_dir.iterdir()):
+        if not child.is_dir():
+            continue
+        name = child.name
+        if not _TICKET_ID_PREFIX_RE.match(name):
+            continue
+        candidates.append((name, child))
+    return candidates
+
+
+def _terminal_close_times(
+    settings: Settings,
+    board_id: str,
+    candidate_ids: list[str],
+) -> tuple[set[str], dict[str, datetime]]:
+    """Cross-reference *candidate_ids* against *board_id*'s DB in batched
+    ``IN`` selects.
+
+    Returns ``(terminal_ids, close_times)`` where ``terminal_ids`` are
+    the candidate IDs whose ticket exists AND is in a terminal state,
+    and ``close_times`` maps each such ID to the max ``at`` of its
+    terminal ``TicketEvent`` rows (the close time).
+    """
+    terminal_ids: set[str] = set()
+    close_times: dict[str, datetime] = {}
+    with db.session(settings, board_id) as s:
+        for start in range(0, len(candidate_ids), _BATCH_SIZE):
+            chunk = candidate_ids[start : start + _BATCH_SIZE]
+            chunk_terminal = set(
+                s.exec(
+                    select(Ticket.id).where(
+                        Ticket.id.in_(chunk),
+                        Ticket.state.in_(_TERMINAL_STATES),
+                    )
+                ).all()
+            )
+            if not chunk_terminal:
+                continue
+            terminal_ids.update(chunk_terminal)
+            rows = s.exec(
+                select(TicketEvent.ticket_id, TicketEvent.at).where(
+                    TicketEvent.ticket_id.in_(chunk_terminal),
+                    TicketEvent.state.in_(_TERMINAL_STATES),
+                )
+            ).all()
+            for ticket_id, at in rows:
+                # Keep the most recent terminal-event time per ticket.
+                prior = close_times.get(ticket_id)
+                if prior is None or at > prior:
+                    close_times[ticket_id] = at
+    return terminal_ids, close_times
+
+
+def _prune_board_workspaces(
+    settings: Settings,
+    board_id: str,
+    now: datetime,
+    age_threshold_seconds: int,
+) -> int:
+    """Remove terminal-state ticket workspaces for one board.
+
+    Mirrors :func:`find_orphan_workspaces`: lists workspace subdirs,
+    skips non-ticket-ID names, and cross-references the board DB in
+    batched ``IN`` selects. A directory is removed only when its ticket
+    is present AND in a terminal state AND its close time is at least
+    *age_threshold_seconds* old. Returns the number of dirs removed.
+    """
+    workspaces_dir = settings.workspaces_dir_for(board_id)
+    if not workspaces_dir.exists():
+        return 0
+
+    candidates = _workspace_candidates(workspaces_dir)
+    if not candidates:
+        return 0
+
+    candidate_ids = [name for name, _ in candidates]
+    terminal_ids, close_times = _terminal_close_times(settings, board_id, candidate_ids)
+
+    removed = 0
+    for name, path in candidates:
+        if name not in terminal_ids:
+            continue
+        close_time = close_times.get(name) or _close_time_from_ticket_id(name)
+        if close_time is None:
+            continue
+        if (now - close_time).total_seconds() < age_threshold_seconds:
+            continue
+        shutil.rmtree(path, ignore_errors=True)
+        if not path.exists():
+            removed += 1
+            log.info(
+                "data_dir_audit: pruned closed workspace board=%r ticket=%s path=%s",
+                board_id,
+                name,
+                path,
+            )
+    if removed:
+        log.info(
+            "data_dir_audit: board=%r pruned %d closed workspace(s)",
+            board_id,
+            removed,
+        )
+    return removed
+
+
+def _prune_closed_workspaces(settings: Settings) -> int:
+    """Remove workspace dirs of terminal-state tickets older than the
+    configured age. Returns the number of directories removed."""
+    now = _now()
+    age_threshold_seconds = settings.data_dir_audit_prune_closed_age_seconds
+    total_removed = 0
+    for board_id in _boards_from_disk(settings):
+        try:
+            total_removed += _prune_board_workspaces(
+                settings, board_id, now, age_threshold_seconds
+            )
+        except Exception:
+            log.warning(
+                "data_dir_audit: board=%r — closed-workspace prune failed",
+                board_id,
+                exc_info=True,
+            )
+            continue
+    return total_removed
 
 
 # ---------------------------------------------------------------------------
@@ -1020,6 +1180,7 @@ def _build_summary(
     orphans_by_board: dict[str, list[OrphanWorkspace]],
     total_orphans: int,
     drafts_created: list[dict],
+    closed_pruned: int = 0,
 ) -> str:
     """Render a multi-line summary for the runs panel.
 
@@ -1033,7 +1194,10 @@ def _build_summary(
     header = f"Scanned {_human_bytes(total_bytes)} in {total_files:,} files."
 
     if not oversized and not all_growth_flags and not findings and total_orphans == 0:
-        return header + " No issues found."
+        base = header + " No issues found."
+        if closed_pruned > 0:
+            return base + f"\nClosed workspaces pruned: {closed_pruned}."
+        return base
 
     lines: list[str] = [header]
 
@@ -1082,6 +1246,9 @@ def _build_summary(
         word = "draft" if n == 1 else "drafts"
         lines.append(f"Filed {n} {word}.")
 
+    if closed_pruned > 0:
+        lines.append(f"Closed workspaces pruned: {closed_pruned}.")
+
     return "\n".join(lines)
 
 
@@ -1117,6 +1284,14 @@ def run_data_dir_audit_pass(
     # ``robotsix_mill.data_dir_audit_runner.Settings`` to inject a
     # tmp_path-rooted instance.
     settings = Settings()
+
+    # Opt-in GC (this ticket): prune workspace dirs of terminal-state
+    # tickets BEFORE size measurement, so every downstream measurement
+    # (oversized / growth / orphan) and therefore every filed alert
+    # reflects the post-GC state. Default-off via the knob.
+    closed_pruned = 0
+    if settings.data_dir_audit_prune_closed:
+        closed_pruned = _prune_closed_workspaces(settings)
 
     # Walk ``data_dir`` exactly once: the size dicts feed both the
     # top-N oversized check (ticket 2) and the summary header's
@@ -1173,6 +1348,7 @@ def run_data_dir_audit_pass(
         orphans_by_board,
         total_orphans,
         drafts_created,
+        closed_pruned=closed_pruned,
     )
 
     log.info("data-dir audit pass done: %s", summary)
@@ -1185,4 +1361,5 @@ def run_data_dir_audit_pass(
         session_id=session_id,
         findings=findings,
         growth_flags=all_growth_flags,
+        closed_pruned=closed_pruned,
     )
