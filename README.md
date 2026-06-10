@@ -109,6 +109,15 @@ docker compose exec mill robotsix-mill ticket new --title "Add X" --description-
 .venv/bin/robotsix-mill ticket new --title "Add X" --description-file -
 ```
 
+Attach screenshots to a ticket for the refine agent to review (the flag is repeatable):
+
+```sh
+robotsix-mill ticket new --title "Layout is broken" \
+  --description-file issue.md \
+  --screenshot error.png \
+  --screenshot layout.png
+```
+
 To create an epic instead of a task, use `robotsix-mill epic new`:
 
 ```sh
