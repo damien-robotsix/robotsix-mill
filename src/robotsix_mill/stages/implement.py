@@ -529,6 +529,24 @@ class ImplementStage(Stage):
                 capture_output=True,
                 text=True,
             ).stdout
+            if not raw.strip():
+                # NEW (untracked) files produce an EMPTY ``git diff`` — the
+                # triage agent then sees "no visible content", cannot judge
+                # the file, and ESCALATEs to a human (live case: the
+                # worker.py package refactor cb63, whose new submodules all
+                # summarized empty). Show the file head instead so the
+                # agent gets the same 40-line budget of real content.
+                file_path = repo_dir / path
+                if file_path.is_file():
+                    try:
+                        head = file_path.read_text(
+                            encoding="utf-8", errors="replace"
+                        ).split("\n")[:38]
+                        raw = "NEW FILE (untracked — no diff vs base):\n" + "\n".join(
+                            head
+                        )
+                    except OSError:
+                        raw = "NEW FILE (untracked — unreadable)"
             lines = raw.split("\n")
             diff_summaries[path] = "\n".join(lines[:40])
 

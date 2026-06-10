@@ -4165,3 +4165,60 @@ def test_claimed_gitignored_edits_fail_open(tmp_path):
     """Malformed input never raises — the detector only enriches notes."""
     assert ImplementStage._claimed_gitignored_edits(tmp_path, b"{bad") == []
     assert ImplementStage._claimed_gitignored_edits(tmp_path, None) == []
+
+
+def test_scope_triage_new_file_summary_shows_content(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """NEW (untracked) out-of-scope files have an empty ``git diff`` vs the
+    base; the triage agent then sees no content and ESCALATEs blindly (live
+    case: the worker.py package refactor cb63 — every new submodule
+    summarized empty). The summary must fall back to the file head."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        max_fix_iterations="3",
+    )
+    t = _ticket(ctx)
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "file_map.json").write_text(
+        '[{"file": "wip.txt", "note": "only this file"}]',
+        encoding="utf-8",
+    )
+
+    def _run(*, settings, repo_dir, spec, **_kwargs):
+        del settings, spec
+        (Path(repo_dir) / "wip.txt").write_text("in scope")
+        # Brand-new file, never tracked → empty `git diff origin/main -- f`.
+        (Path(repo_dir) / "brand_new_module.py").write_text(
+            "def shiny_new_helper():\n    return 42\n"
+        )
+        return ("edit done", [], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+    from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
+
+    captured: dict = {}
+
+    def _fake_triage(
+        *, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries
+    ):
+        captured["summaries"] = dict(diff_summaries)
+        return ScopeTriageVerdict(
+            action="ESCALATE",
+            justification="capture only",
+            expand_files=[],
+        )
+
+    monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
+
+    ImplementStage().run(t, ctx)
+
+    summary = captured["summaries"]["brand_new_module.py"]
+    assert "NEW FILE" in summary
+    assert "shiny_new_helper" in summary
