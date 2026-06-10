@@ -68,6 +68,27 @@ NON_IMPLEMENTATION_CLOSE_PREFIXES = (
 
 UNMERGED_BRANCH_PREFIX = "Implementation exists on branch"
 
+# States that prove a ticket has completed (or moved past) refine.
+# Used by _is_valid_dedup_target to reject an un-refined DRAFT
+# candidate, so a further-along ticket is never buried in it.
+REFINE_PROGRESS_STATES = frozenset(
+    {
+        State.HUMAN_ISSUE_APPROVAL,
+        State.READY,
+        State.DOCUMENTING,
+        State.CODE_REVIEW,
+        State.DELIVERABLE,
+        State.HUMAN_MR_APPROVAL,
+        State.IMPLEMENT_COMPLETE,
+        State.WAITING_AUTO_MERGE,
+        State.MAINTENANCE,
+        State.REBASING,
+        State.FIXING_CI,
+        State.ADDRESSING_REVIEW,
+        State.DONE,
+    }
+)
+
 # History-note prefix written by ``TicketService.request_changes`` when an
 # operator sends a refined ticket back to DRAFT with feedback. Its presence
 # means a human is actively shaping THIS ticket — the dedup guard must not
@@ -1144,6 +1165,9 @@ class RefineStage(Stage):
         - a **circular** target whose history marks it as a dedup of
           ``ticket`` itself;
         - an ``ERRORED`` candidate (failed attempt);
+        - an un-refined ``DRAFT`` candidate whose history never reached a
+          refine-progress state (closing a further-along ticket into it
+          risks burying the fix in a ticket that may never be implemented);
         - a ``CLOSED`` candidate that never passed through ``DONE``
           (declined-as-noise / split parent);
         - a candidate that reached ``DONE`` via a non-implementation
@@ -1170,6 +1194,21 @@ class RefineStage(Stage):
 
             # Failed attempt — let refine re-escalate.
             if cand.state == State.ERRORED:
+                return False
+
+            # Un-refined DRAFT candidate: closing a further-along ticket into a
+            # candidate that has never progressed past DRAFT risks burying the
+            # fix in a ticket that may never be implemented.  Prefer keeping the
+            # current ticket, which is actively being refined.
+            if cand.state == State.DRAFT and not any(
+                ev.state in REFINE_PROGRESS_STATES for ev in history
+            ):
+                log.info(
+                    "%s: dedup candidate %s is an un-refined DRAFT (no refine "
+                    "progress) — not a valid dedup target, proceeding with refine",
+                    ticket.id,
+                    candidate_id,
+                )
                 return False
 
             # Declined-as-noise / split parent: CLOSED but never DONE.
