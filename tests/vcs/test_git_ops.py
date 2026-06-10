@@ -597,6 +597,85 @@ class TestChangedFiles:
 
 
 # ===========================================================================
+# 13a. introduced_files — integration (real git)
+# ===========================================================================
+
+
+class TestIntroducedFiles:
+    def test_phantom_main_change_excluded(self, tmp_path):
+        """The core fix: a file X that main modified AFTER the branch was
+        cut must NOT appear in introduced_files (it's not the ticket's
+        work), even though the old changed_files DOES report it."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        # Branch `feature` from the base commit (commit A).
+        git_ops.create_branch(dest, "feature")
+
+        # Advance origin/main with a change to an unrelated file X via a
+        # second clone, then fetch so the working clone's origin/main ref
+        # is ahead of the branch base.
+        pusher = tmp_path / "pusher"
+        subprocess.run(
+            ["git", "clone", "-q", remote, str(pusher)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        _git(pusher, "config", "user.email", "op@t")
+        _git(pusher, "config", "user.name", "operator")
+        (pusher / "X.txt").write_text("changed on main after branch was cut\n")
+        _git(pusher, "add", "-A")
+        _git(pusher, "commit", "-q", "-m", "main changes X")
+        _git(pusher, "push", "origin", "main")
+        _git(dest, "fetch", "origin")
+
+        # introduced_files excludes X; old changed_files includes it.
+        assert "X.txt" not in git_ops.introduced_files(dest, "main")
+        assert "X.txt" in git_ops.changed_files(dest, "main")
+
+    def test_committed_branch_change_reported(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "a.txt").write_text("branch work\n")
+        git_ops.commit_all(dest, "add a.txt on branch")
+        assert "a.txt" in git_ops.introduced_files(dest, "main")
+
+    def test_uncommitted_tracked_change_reported(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "README.md").write_text("modified\n")
+        assert "README.md" in git_ops.introduced_files(dest, "main")
+
+    def test_untracked_file_reported(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "new_file.txt").write_text("untracked")
+        assert "new_file.txt" in git_ops.introduced_files(dest, "main")
+
+    def test_gitignored_file_does_not_appear(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / ".gitignore").write_text("*.ignored\n")
+        (dest / "test.ignored").write_text("should be ignored")
+        assert "test.ignored" not in git_ops.introduced_files(dest, "main")
+
+    def test_clean_repo_returns_empty_list(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        assert git_ops.introduced_files(dest, "main") == []
+
+
+# ===========================================================================
 # 13b. restore_paths — integration (real git)
 # ===========================================================================
 

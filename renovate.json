@@ -1,6 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"],
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
   "enabledManagers": ["pep621", "github-actions", "dockerfile", "docker-compose"],
   "timezone": "Etc/UTC",
   "schedule": ["before 9am on monday"],
