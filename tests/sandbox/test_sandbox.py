@@ -12,6 +12,12 @@ def _settings(tmp_path, **env):
     return Settings(**env)
 
 
+# The PATH export sandbox.run() prepends to every effective command so
+# that pip --user console scripts (installed under $HOME/.local/bin =
+# /tmp/.local/bin) resolve in the sandbox.
+PATH_EXPORT = 'export PATH="$HOME/.local/bin:/tmp/.local/bin:$PATH"; '
+
+
 # Every command is always containerized — there is no local mode. These
 # tests assert the isolation flags without needing a Docker daemon
 # (subprocess.run is mocked).
@@ -54,7 +60,43 @@ def test_argv_is_isolated(tmp_path, monkeypatch):
     assert "mill_data:/data" not in a  # data-dir root NOT exposed
     assert a[a.index("-w") + 1] == "/data/work/repo"
     assert a[a.index("--entrypoint") + 1] == "sh"  # image ENTRYPOINT bypassed
-    assert a[-3:] == ["python:3.14-slim", "-lc", "pytest -q"]
+    assert a[-3:] == ["python:3.14-slim", "-lc", PATH_EXPORT + "pytest -q"]
+
+
+def test_path_export_prepended_for_plain_and_install(tmp_path, monkeypatch):
+    """The -lc command string must begin with the pip --user scripts-dir
+    PATH export for BOTH a plain command and an install_project=True
+    command, so console scripts (e.g. yamllint via extra_sandbox_packages)
+    resolve instead of dying with rc=127."""
+    repo = tmp_path / "ticket"
+    (repo / "src").mkdir(parents=True)
+    (repo / "pyproject.toml").write_text("[project]\nname='x'\n", encoding="utf-8")
+
+    s = _settings(
+        tmp_path,
+        data_dir=str(tmp_path),
+        sandbox_data_mount=str(tmp_path),
+        sandbox_proxy_url="http://sandbox-proxy:8888",
+    )
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+
+    # plain command (install_project=False)
+    sandbox.run("yamllint --strict .", repo_dir=repo, settings=s)
+    assert seen["argv"][-1].startswith(PATH_EXPORT)
+
+    # install_project=True (the test gate)
+    sandbox.run("yamllint --strict .", repo_dir=repo, settings=s, install_project=True)
+    cmd = seen["argv"][-1]
+    assert cmd.startswith(PATH_EXPORT)
+    # the project install must run AFTER the export (so the export is in
+    # effect for the install too)
+    assert "pip install --user" in cmd[len(PATH_EXPORT) :]
 
 
 def test_proxy_env_includes_no_proxy_for_loopback(tmp_path, monkeypatch):
@@ -299,8 +341,9 @@ def test_install_project_prefixes_pip_when_pyproject_and_proxy(tmp_path, monkeyp
     sandbox.run("pytest -q", repo_dir=repo, settings=s, install_project=True)
 
     cmd = seen["argv"][-1]
-    assert (
-        cmd == "pip install --user --quiet --disable-pip-version-check . && pytest -q"
+    assert cmd == (
+        PATH_EXPORT
+        + "pip install --user --quiet --disable-pip-version-check . && pytest -q"
     )
 
 
@@ -322,7 +365,7 @@ def test_install_project_noop_without_pyproject(tmp_path, monkeypatch):
 
     monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
     sandbox.run("pytest -q", repo_dir=repo, settings=s, install_project=True)
-    assert seen["argv"][-1] == "pytest -q"
+    assert seen["argv"][-1] == PATH_EXPORT + "pytest -q"
 
 
 def test_install_project_noop_without_network(tmp_path, monkeypatch):
@@ -345,7 +388,7 @@ def test_install_project_noop_without_network(tmp_path, monkeypatch):
 
     monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
     sandbox.run("pytest -q", repo_dir=repo, settings=s, install_project=True)
-    assert seen["argv"][-1] == "pytest -q"
+    assert seen["argv"][-1] == PATH_EXPORT + "pytest -q"
 
 
 def test_install_project_off_by_default(tmp_path, monkeypatch):
@@ -370,7 +413,7 @@ def test_install_project_off_by_default(tmp_path, monkeypatch):
     sandbox.run(
         "git status", repo_dir=repo, settings=s
     )  # default install_project=False
-    assert seen["argv"][-1] == "git status"
+    assert seen["argv"][-1] == PATH_EXPORT + "git status"
 
 
 def test_sandbox_no_pythonpath_without_src_layout(tmp_path, monkeypatch):
@@ -418,7 +461,7 @@ def test_extra_packages_empty_list_no_prefix(tmp_path, monkeypatch):
 
     a = seen["argv"]
     assert "--read-only" in a
-    assert a[-1] == "true"
+    assert a[-1] == PATH_EXPORT + "true"
 
 
 def test_extra_packages_pip_only_keeps_readonly(tmp_path, monkeypatch):
@@ -647,7 +690,7 @@ def test_extra_packages_missing_config_noop(tmp_path, monkeypatch):
 
     a = seen["argv"]
     assert "--read-only" in a
-    assert a[-1] == "true"
+    assert a[-1] == PATH_EXPORT + "true"
 
 
 def test_extra_packages_integration_from_config_file(tmp_path, monkeypatch):
