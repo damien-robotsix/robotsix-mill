@@ -237,6 +237,17 @@ def run_coordinator(
     pre_seeded: dict[str, str] | None = None
     final_message_history: list | None = message_history
 
+    # Paths-only list (relative ``rf["path"]`` strings) of the reference
+    # files the parent pre-seeds into its own context. Forwarded to the
+    # context-isolated explore scout so it does NOT re-read files the
+    # coordinator already has loaded. None on the resume path
+    # (message_history provided) where nothing is pre-seeded.
+    pre_seeded_paths: list[str] | None = (
+        [rf["path"] for rf in reference_files]
+        if (reference_files and message_history is None)
+        else None
+    )
+
     if reference_files and message_history is None:
         # Build pre_seeded mapping for _file_cache seeding (resolved Paths).
         # Read fresh from disk every time — the artifact is paths-only.
@@ -307,7 +318,12 @@ def run_coordinator(
         # generic "no changes produced" block.
         board_id=board_id,
         tools=[
-            make_explore_tool(settings, repo_dir, extra_roots=extra_roots),
+            make_explore_tool(
+                settings,
+                repo_dir,
+                extra_roots=extra_roots,
+                pre_seeded_paths=pre_seeded_paths,
+            ),
             make_consult_expert_tool(settings, repo_dir, board_id=board_id),
             make_spawn_subtask_tool(settings, repo_dir),
             make_post_comment_tool(settings, agent_name="implement"),
