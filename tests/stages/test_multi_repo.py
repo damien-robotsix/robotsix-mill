@@ -79,6 +79,17 @@ def test_create_ticket_no_repo_id_multi_repo(multi_repo_client):
     assert "repo_id is required" in detail.lower()
 
 
+def test_create_epic_no_repo_id_multi_repo(multi_repo_client):
+    """POST /epics without repo_id in multi-repo mode → 400."""
+    r = multi_repo_client.post(
+        "/epics",
+        json={"title": "No repo id"},
+    )
+    assert r.status_code == 400
+    detail = r.json()["detail"]
+    assert "repo_id is required" in detail.lower()
+
+
 # -- 2b. Ticket listing isolation ---------------------------------------
 
 
