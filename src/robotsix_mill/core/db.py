@@ -161,7 +161,20 @@ def session(settings: Settings, board_id: str) -> Session:
 
 
 def reset_engine() -> None:
-    """Test hook: drop the cached engines so fresh DB paths are picked up."""
+    """Test hook: drop the cached engines so fresh DB paths are picked up.
+
+    Dispose each engine before dropping it so its pooled SQLite
+    connections (and their file descriptors) are released. Without this
+    every test that swaps the cache leaks an undisposed engine; across a
+    full suite run those leaked file descriptors accumulate and
+    eventually trip an "unable to open database file" / too-many-open-
+    files error on whichever later test happens to cross the limit.
+    """
     global _engines, _initialized
+    for engine in _engines.values():
+        try:
+            engine.dispose()  # type: ignore[attr-defined]
+        except Exception:
+            pass
     _engines = {}
     _initialized = set()
