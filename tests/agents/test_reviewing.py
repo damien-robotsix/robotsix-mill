@@ -151,6 +151,25 @@ def _patch_agent(monkeypatch, agent):
     monkeypatch.setattr("robotsix_mill.agents.base.build_agent", lambda *a, **k: agent)
 
 
+def _patch_agent_definition(monkeypatch, agent):
+    """Patch the higher-level builder so the Claude-SDK routing branch
+    (which would import claude_agent_sdk) is bypassed entirely."""
+    monkeypatch.setattr(
+        "robotsix_mill.agents.base.build_agent_from_definition",
+        lambda *a, **k: agent,
+    )
+
+
+# A minimal but valid 1x1 PNG (content is irrelevant — the code only
+# reads the bytes and wraps them in a BinaryContent).
+import base64  # noqa: E402
+
+_PNG_1X1 = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+    "+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+)
+
+
 def test_request_limit_from_settings_not_hardcoded(tmp_path, monkeypatch):
     """The review agent's UsageLimits(request_limit=…) must come from
     settings.review_request_limit, NOT a hard-coded integer."""
@@ -179,6 +198,97 @@ def test_request_limit_from_settings_not_hardcoded(tmp_path, monkeypatch):
     assert isinstance(usage_limits, UsageLimits)
     assert "request_limit" not in kwargs
     assert usage_limits.request_limit == 42  # from settings, not 20
+
+
+# --- Board screenshot attachment (Tier 3) -----------------------------------
+
+
+def _write_png(tmp_path) -> "object":
+    from pathlib import Path
+
+    p = Path(tmp_path) / "board.png"
+    p.write_bytes(_PNG_1X1)
+    return p
+
+
+def test_screenshot_attached_on_claude_sdk_path(tmp_path, monkeypatch):
+    """Routed to the Claude SDK backend + an existing PNG → the run input
+    is a list whose final element is a BinaryContent image, alongside the
+    diff/spec text."""
+    from pydantic_ai import BinaryContent
+
+    agent = _FakeAgent()
+    _patch_agent_definition(monkeypatch, agent)
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k", llm_backend="claude_sdk")
+    png = _write_png(tmp_path)
+
+    result = run_review_agent(
+        settings=s,
+        diff="diff --git a/x b/x",
+        spec="Fix x",
+        screenshot_path=png,
+    )
+    assert isinstance(result, ReviewVerdict)
+
+    assert len(agent.calls) == 1
+    run_input = agent.calls[0][0]
+    assert isinstance(run_input, list)
+    images = [c for c in run_input if isinstance(c, BinaryContent)]
+    assert len(images) == 1
+    assert images[0].media_type == "image/png"
+    assert images[0].data == _PNG_1X1
+    # The diff/spec text is still present alongside the image.
+    assert any(isinstance(c, str) and "Fix x" in c for c in run_input)
+
+
+def test_screenshot_not_attached_on_deepseek_path(tmp_path, monkeypatch):
+    """Default DeepSeek backend → NO image is attached; the run input is the
+    bare string prompt, byte-for-byte equivalent to today."""
+    from pydantic_ai import BinaryContent
+
+    agent = _FakeAgent()
+    _patch_agent(monkeypatch, agent)
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")  # default llm_backend
+    png = _write_png(tmp_path)
+
+    result = run_review_agent(
+        settings=s,
+        diff="diff --git a/x b/x",
+        spec="Fix x",
+        screenshot_path=png,
+    )
+    assert isinstance(result, ReviewVerdict)
+
+    assert len(agent.calls) == 1
+    run_input = agent.calls[0][0]
+    assert isinstance(run_input, str)
+    assert not isinstance(run_input, list)
+    assert "Fix x" in run_input
+    # Sanity: no BinaryContent leaked into the string path.
+    assert BinaryContent.__name__ not in run_input
+
+
+def test_missing_screenshot_falls_back_to_text(tmp_path, monkeypatch):
+    """Claude SDK routing but the screenshot file does not exist → no
+    crash, falls back to the bare-string text path."""
+    from pathlib import Path
+
+    agent = _FakeAgent()
+    _patch_agent_definition(monkeypatch, agent)
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k", llm_backend="claude_sdk")
+
+    result = run_review_agent(
+        settings=s,
+        diff="diff --git a/x b/x",
+        spec="Fix x",
+        screenshot_path=Path(tmp_path) / "does-not-exist.png",
+    )
+    assert isinstance(result, ReviewVerdict)
+    run_input = agent.calls[0][0]
+    assert isinstance(run_input, str)
 
 
 # --- _coerce_verdict: parse-fallback must not crash the review stage --------
