@@ -243,8 +243,11 @@ class TestRunCoordinator:
         # ── make_explore_tool (robotsix_mill.agents.explore) ────────
         from robotsix_mill.agents import explore as _expl
 
-        def _fake_make_explore_tool(settings, repo_dir, extra_roots=None):
+        def _fake_make_explore_tool(
+            settings, repo_dir, extra_roots=None, pre_seeded_paths=None
+        ):
             self.captured["explore_extra_roots"] = extra_roots
+            self.captured["explore_pre_seeded_paths"] = pre_seeded_paths
 
             def _explore(question):
                 return "explored"
@@ -566,6 +569,44 @@ class TestRunCoordinator:
 
         # message_history passed directly, not synthesised
         assert self.captured["message_history"] == existing_mh
+
+    def test_pre_seeded_paths_forwarded_to_explore(
+        self,
+        settings,
+        tmp_path,
+    ):
+        """When the coordinator pre-seeds ``reference_files`` it forwards
+        the matching relative paths to ``make_explore_tool`` as
+        ``pre_seeded_paths`` so the context-isolated scout does NOT re-read
+        files the parent already has loaded."""
+        (tmp_path / "model.py").write_text("M")
+        (tmp_path / "provider.py").write_text("P")
+        ref = [{"path": "model.py"}, {"path": "provider.py"}]
+        self._run(settings, tmp_path, reference_files=ref)
+
+        assert self.captured["explore_pre_seeded_paths"] == [
+            "model.py",
+            "provider.py",
+        ]
+
+    def test_pre_seeded_paths_none_with_message_history(
+        self,
+        settings,
+        tmp_path,
+    ):
+        """On the resume path (``message_history`` provided) the parent does
+        NOT pre-seed, so ``pre_seeded_paths`` must be ``None`` — never claim
+        files are loaded when they are not."""
+        (tmp_path / "model.py").write_text("M")
+        ref = [{"path": "model.py"}]
+        self._run(
+            settings,
+            tmp_path,
+            reference_files=ref,
+            message_history=["existing"],
+        )
+
+        assert self.captured["explore_pre_seeded_paths"] is None
 
     def test_reference_files_with_feedback_synthesis(
         self,

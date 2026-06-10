@@ -315,6 +315,113 @@ def test_prompt_unchanged_when_known_context_omitted(tmp_path, monkeypatch):
     assert cap["prompt"] == "where is X?"
 
 
+def _patch_fake_agent(monkeypatch, cap):
+    """Patch the explore Agent/provider/model seams to capture the prompt."""
+
+    class FakeModel:
+        def __init__(self, name, **kw):
+            pass
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            pass
+
+        async def run(self, q, *, usage_limits=None):
+            cap["prompt"] = q
+            return type("R", (), {"output": "answer"})()
+
+    import pydantic_ai
+    import pydantic_ai.providers.openrouter as orp
+    from robotsix_mill.agents import openrouter_cost as oc
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+
+
+def test_pre_seeded_paths_are_prepended_to_prompt(tmp_path, monkeypatch):
+    """pre_seeded_paths injects a <preloaded_files> block listing each
+    path plus a do-not-re-read instruction, and keeps the question."""
+    (tmp_path / "a.txt").write_text("hi")
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k", explore_model="explore/cheap")
+    cap = {}
+    _patch_fake_agent(monkeypatch, cap)
+
+    out = asyncio.run(
+        explore.run_explore(
+            settings=s,
+            repo_dir=tmp_path,
+            question="where is tracing?",
+            pre_seeded_paths=["a.py", "b.py"],
+        )
+    )
+    assert out == "answer"
+    assert "<preloaded_files>" in cap["prompt"]
+    assert "a.py" in cap["prompt"]
+    assert "b.py" in cap["prompt"]
+    assert "Do NOT spend tokens" in cap["prompt"]
+    assert "where is tracing?" in cap["prompt"]
+
+
+def test_pre_seeded_paths_merge_with_known_context(tmp_path, monkeypatch):
+    """When both known_context and pre_seeded_paths are supplied, both
+    appear in the composed prompt (neither overwrites the other)."""
+    (tmp_path / "a.txt").write_text("hi")
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k", explore_model="explore/cheap")
+    cap = {}
+    _patch_fake_agent(monkeypatch, cap)
+
+    out = asyncio.run(
+        explore.run_explore(
+            settings=s,
+            repo_dir=tmp_path,
+            question="where is X?",
+            known_context="some terse facts",
+            pre_seeded_paths=["model.py"],
+        )
+    )
+    assert out == "answer"
+    assert "some terse facts" in cap["prompt"]
+    assert "model.py" in cap["prompt"]
+    assert "<preloaded_files>" in cap["prompt"]
+    assert "where is X?" in cap["prompt"]
+
+
+def test_prompt_unchanged_when_pre_seeded_paths_omitted(tmp_path, monkeypatch):
+    """With neither known_context nor pre_seeded_paths, the prompt equals
+    the verbatim question (no behavior change)."""
+    (tmp_path / "a.txt").write_text("hi")
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k", explore_model="explore/cheap")
+    cap = {}
+    _patch_fake_agent(monkeypatch, cap)
+
+    out = asyncio.run(
+        explore.run_explore(settings=s, repo_dir=tmp_path, question="where is X?")
+    )
+    assert out == "answer"
+    assert cap["prompt"] == "where is X?"
+
+
+def test_make_explore_tool_forwards_pre_seeded_paths(tmp_path, monkeypatch):
+    """The make_explore_tool closure forwards pre_seeded_paths to
+    run_explore."""
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k", explore_model="explore/cheap")
+    cap = {}
+
+    async def fake_run_explore(**kw):
+        cap.update(kw)
+        return "answer"
+
+    monkeypatch.setattr(explore, "run_explore", fake_run_explore)
+
+    tool = explore.make_explore_tool(
+        s, tmp_path, pre_seeded_paths=["model.py", "provider.py"]
+    )
+    out = asyncio.run(tool("where is X?"))
+    assert out == "answer"
+    assert cap["pre_seeded_paths"] == ["model.py", "provider.py"]
+
+
 # --- bounded retry + sentinel tests -------------------------------------
 
 

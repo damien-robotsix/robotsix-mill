@@ -121,12 +121,57 @@ SCOPE DISCIPLINE — always follow these limits:
 """
 
 
+def _compose_explore_prompt(
+    question: str,
+    known_context: str | None,
+    pre_seeded_paths: list[str] | None,
+) -> str:
+    """Compose the effective scout prompt.
+
+    When the caller supplied ``known_context`` (compact facts already
+    gathered) or ``pre_seeded_paths`` (files the calling agent already has
+    loaded in full), prepend a clearly-delimited block so the scout can
+    short-circuit redundant exploration. ``pre_seeded_paths`` contributes a
+    paths-only ``<preloaded_files>`` block telling the scout NOT to re-read
+    them; it is merged with — not overwriting — any ``known_context``. When
+    neither is supplied the question is returned verbatim (no behavior
+    change).
+    """
+    preamble = None
+    if pre_seeded_paths:
+        preloaded = "\n".join(pre_seeded_paths)
+        preamble = (
+            "The calling agent already has these files loaded in full and "
+            "analyzed; treat their contents as KNOWN. Do NOT spend tokens "
+            "re-reading them. If the question is answerable from them, say "
+            "so concisely and point to the relevant symbols/lines instead "
+            "of re-dumping content:\n"
+            "<preloaded_files>\n"
+            f"{preloaded}\n"
+            "</preloaded_files>"
+        )
+    effective_known = "\n\n".join(p for p in (preamble, known_context) if p)
+    if not effective_known:
+        return question
+    return (
+        "Known context already gathered by the caller (CHECK THIS "
+        "BEFORE calling any tool — if it already answers the question, "
+        "reply directly without exploring):\n"
+        "<known_context>\n"
+        f"{effective_known}\n"
+        "</known_context>\n\n"
+        "Question:\n"
+        f"{question}"
+    )
+
+
 async def run_explore(
     *,
     settings: Settings,
     repo_dir: Path,
     question: str,
     known_context: str | None = None,
+    pre_seeded_paths: list[str] | None = None,
     extra_roots: list[Path] | None = None,
 ) -> str:
     """Run the read-only exploration sub-agent against ``repo_dir`` and
@@ -143,23 +188,7 @@ async def run_explore(
     if not repo_dir.exists():
         return "explore unavailable: workspace repo directory does not exist — the repository has not been cloned yet"
 
-    # Compose the effective user prompt: when the caller supplied known
-    # context, prepend a clearly-delimited block so the scout can
-    # short-circuit redundant exploration.  Otherwise pass the question
-    # verbatim (no behavior change).
-    if known_context:
-        prompt = (
-            "Known context already gathered by the caller (CHECK THIS "
-            "BEFORE calling any tool — if it already answers the question, "
-            "reply directly without exploring):\n"
-            "<known_context>\n"
-            f"{known_context}\n"
-            "</known_context>\n\n"
-            "Question:\n"
-            f"{question}"
-        )
-    else:
-        prompt = question
+    prompt = _compose_explore_prompt(question, known_context, pre_seeded_paths)
 
     # lazy: keep core import-light / the suite hermetic
     from pydantic_ai import Agent
@@ -284,13 +313,21 @@ async def run_explore(
 
 
 def make_explore_tool(
-    settings: Settings, repo_dir: Path, extra_roots: list[Path] | None = None
+    settings: Settings,
+    repo_dir: Path,
+    extra_roots: list[Path] | None = None,
+    pre_seeded_paths: list[str] | None = None,
 ):
     """Return the ``explore(question)`` closure.
 
     Factory that creates a per-coordinator explore function wired to
     the given settings, repo directory, and extra roots, and registers
     itself in ``ToolRegistry`` so agents can discover it.
+
+    ``pre_seeded_paths`` lists reference-file paths the calling agent has
+    already loaded into its own context; the factory forwards them to
+    :func:`run_explore` so the scout is told NOT to re-read them. It is
+    injected by the factory, not a parameter the LLM supplies.
     """
 
     async def explore(question: str, known_context: str | None = None) -> str:
@@ -308,9 +345,13 @@ def make_explore_tool(
         exploration instead of re-discovering them. Keep it terse — paths
         and symbols, not whole file dumps. Leave it unset when you have
         nothing relevant to share."""
-        # Only forward known_context when the caller populated it, so the
-        # default call shape (and existing seam fakes) stays unchanged.
-        extra = {} if known_context is None else {"known_context": known_context}
+        # Only forward known_context / pre_seeded_paths when populated, so
+        # the default call shape (and existing seam fakes) stays unchanged.
+        extra: dict[str, object] = (
+            {} if known_context is None else {"known_context": known_context}
+        )
+        if pre_seeded_paths is not None:
+            extra["pre_seeded_paths"] = pre_seeded_paths
         return await run_explore(
             settings=settings,
             repo_dir=repo_dir,
