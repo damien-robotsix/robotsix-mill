@@ -98,6 +98,11 @@ function getEl(id) {
 }
 
 const documentStub = {
+  // Keep the DOM "loading" so board-mill.js defers its bootstrap to the
+  // (noop) DOMContentLoaded listener instead of running it synchronously
+  // at eval time — this harness only exercises agentColor()/AGENT_COLORS
+  // and does not stub the robotsix-board refresh seam.
+  readyState: "loading",
   getElementById: getEl,
   createElement: (tag) => makeEl("_created_" + tag),
   querySelector: (sel) => getEl("_qs_" + sel),
