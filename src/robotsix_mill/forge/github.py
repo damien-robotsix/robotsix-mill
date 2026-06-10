@@ -392,6 +392,10 @@ class GitHubForge(Forge):
                 if is_401 and retry == 0:
                     invalidate_github_token(self.settings, self._repo_config)
                     time.sleep(2)
+                    token = get_secrets().forge_repo_create_token or github_token(
+                        s, repo_config=self._repo_config
+                    )
+                    custom_headers = _build_headers(token)
                     continue
             break  # success or final attempt
 
@@ -1248,6 +1252,7 @@ class GitHubForge(Forge):
                                 self.settings, self._repo_config
                             )
                             time.sleep(2)
+                            headers = self._http.regenerate_headers()
                             continue
                         log_resp.raise_for_status()
                         raw = log_resp.text
