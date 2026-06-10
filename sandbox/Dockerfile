@@ -12,6 +12,22 @@ RUN apt-get update \
     && curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" | sh \
     && rm -rf /var/lib/apt/lists/*
 
+# GitHub CLI (`gh`) for driving contribution workflows (push -> PR -> merge)
+# from inside the sandbox. `gh` is not in Debian's default apt repos, so add
+# the official GitHub CLI apt source first. `docker build` has full host
+# network (the runtime egress proxy does not apply at build time, as with the
+# Playwright/Chromium layer below), so fetching the keyring here is fine.
+# `curl` is already installed in the first RUN layer above.
+# hadolint ignore=DL3008,DL4006
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+      -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+      > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/*
+
 # Playwright + headless Chromium for the browser-level board smoke gate
 # (scripts/board_browser_check.py). The runtime egress proxy
 # (sandbox/proxy/filter) blocks Playwright's browser-download CDN, so

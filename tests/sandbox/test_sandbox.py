@@ -440,6 +440,23 @@ def test_sandbox_no_pythonpath_without_src_layout(tmp_path, monkeypatch):
     assert not any("PYTHONPATH" in str(x) for x in a)
 
 
+# ── Dockerfile provisioning ───────────────────────────────────────────
+
+
+def test_dockerfile_installs_github_cli():
+    """The sandbox image must bake in the GitHub CLI (`gh`) via the
+    official apt source so tickets can drive push -> PR -> merge
+    reproducibly. Asserted against the Dockerfile text so it's testable
+    without a Docker daemon (the sandbox has neither network nor daemon)."""
+    dockerfile = (
+        Path(__file__).resolve().parents[2] / "sandbox" / "Dockerfile"
+    ).read_text(encoding="utf-8")
+    assert "cli.github.com" in dockerfile
+    assert "install -y --no-install-recommends gh" in dockerfile
+    # curl must remain (it fetches the keyring and is used elsewhere)
+    assert "curl" in dockerfile
+
+
 # ── extra sandbox packages ────────────────────────────────────────────
 
 
