@@ -76,6 +76,13 @@ def test_default_max_spend_sentinel():
     assert s.max_spend_usd_per_ticket == 20.0
 
 
+def test_default_review_model_is_pro():
+    """The review agent — the last automated merge gate — defaults to the
+    full DeepSeek tier (regression guard against drift back to flash)."""
+    s = Settings()
+    assert s.review_model == "deepseek/deepseek-v4-pro"
+
+
 # ---------------------------------------------------------------------------
 # 2. Env-var alias resolution — exhaustive parametrized test
 # ---------------------------------------------------------------------------
