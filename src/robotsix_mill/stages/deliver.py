@@ -62,6 +62,7 @@ from ..core.models import Ticket
 from ..core.states import State
 from ..forge import get_forge
 from ..forge.auth import _resolve_remote_url, github_token
+from ..forge.github import _parse_owner_repo
 from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
 
@@ -432,8 +433,16 @@ class DeliverStage(Stage):
         """
         repo_label = repo_config.repo_id if repo_config is not None else "default"
 
-        # Per-repo forge inputs.
-        remote_url = _resolve_remote_url(s, repo_config)
+        # Cross-repo target: when configured, the branch is pushed to the
+        # fork and the PR is opened fork→upstream (see CrossRepoTarget).
+        cross_repo_target = getattr(repo_config, "cross_repo_target", None)
+
+        # Per-repo forge inputs. For a cross-repo target the push goes to
+        # the fork, not the clone remote.
+        if cross_repo_target is not None:
+            remote_url = cross_repo_target.fork_remote_url
+        else:
+            remote_url = _resolve_remote_url(s, repo_config)
         try:
             token = github_token(s, repo_config=repo_config)
         except RuntimeError as e:
@@ -456,6 +465,24 @@ class DeliverStage(Stage):
             repo_dir
         ) or not git_ops.branch_has_net_diff(repo_dir):
             return None, None
+
+        # Cross-repo auto-fork: ensure the fork exists before pushing to
+        # it. Opt-in (default False), mirroring enable_repo_creation's
+        # conservative default.
+        if cross_repo_target is not None and cross_repo_target.auto_fork:
+            try:
+                up_owner, up_repo = _parse_owner_repo(
+                    cross_repo_target.upstream_remote_url
+                )
+                get_forge(s, repo_config=repo_config).fork_repo(
+                    source_owner=up_owner, source_repo=up_repo
+                )
+            except Exception as e:  # noqa: BLE001 — resumable, don't lose branch
+                log.exception("%s: auto-fork failed for %s", ticket.id, repo_label)
+                return None, Outcome(
+                    State.BLOCKED,
+                    f"auto-fork failed for {repo_label} — resumable: {e}",
+                )
 
         try:
             git_ops.push(repo_dir, branch, remote_url, token)
@@ -496,9 +523,24 @@ class DeliverStage(Stage):
             )
 
         try:
-            url = get_forge(s, repo_config=repo_config).open_merge_request(
-                source_branch=branch, title=title, body=body
-            )
+            forge = get_forge(s, repo_config=repo_config)
+            if cross_repo_target is not None:
+                # Cross-repo: open the PR fork→upstream. Pass the fork's
+                # ``owner/repo`` as the head so GitHub forms
+                # ``head=<fork-owner>:<branch>``.
+                fork_owner, fork_repo = _parse_owner_repo(
+                    cross_repo_target.fork_remote_url
+                )
+                url = forge.open_merge_request(
+                    source_branch=branch,
+                    title=title,
+                    body=body,
+                    head_repo=f"{fork_owner}/{fork_repo}",
+                )
+            else:
+                url = forge.open_merge_request(
+                    source_branch=branch, title=title, body=body
+                )
         except Exception as e:  # noqa: BLE001 — resumable, don't lose branch
             log.exception("%s: open PR failed for %s", ticket.id, repo_label)
             return None, Outcome(

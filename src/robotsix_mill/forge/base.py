@@ -45,9 +45,22 @@ class Forge(ABC):
         self.settings = settings
 
     @abstractmethod
-    def open_merge_request(self, *, source_branch: str, title: str, body: str) -> str:
+    def open_merge_request(
+        self,
+        *,
+        source_branch: str,
+        title: str,
+        body: str,
+        head_repo: str | None = None,
+    ) -> str:
         """Open an MR/PR for ``source_branch`` against
-        ``settings.forge_target_branch``. Returns the MR/PR URL."""
+        ``settings.forge_target_branch``. Returns the MR/PR URL.
+
+        ``head_repo`` opts into a cross-fork PR: when given as an
+        ``"owner/repo"`` string, the head branch lives in that fork and
+        the PR is opened against the upstream repo / ``base_branch``
+        resolved from the repo's ``cross_repo_target``. When ``None``
+        (the default), behaviour is the ordinary same-repo PR."""
 
     @abstractmethod
     def pr_status(self, *, source_branch: str) -> dict | None:

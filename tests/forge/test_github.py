@@ -223,6 +223,42 @@ def test_create_pr_post_payload_shape(tmp_path, monkeypatch):
     assert set(payload.keys()) == {"head", "base", "title", "body"}
 
 
+def test_create_pr_cross_fork_head_and_upstream_base(tmp_path, monkeypatch):
+    """A cross_repo_target opens the PR fork→upstream: POST targets the
+    upstream owner/repo, head is ``<fork-owner>:<branch>``, base is the
+    target's base_branch."""
+    from robotsix_mill.config import CrossRepoTarget, RepoConfig
+
+    captured = _mock_httpx(
+        monkeypatch,
+        post_response=_make_response(
+            201, {"html_url": "https://github.com/up/r/pull/7"}
+        ),
+    )
+    rc = RepoConfig(
+        repo_id="r",
+        board_id="b",
+        langfuse_project_name="r",
+        langfuse_public_key="",
+        langfuse_secret_key="",
+        cross_repo_target=CrossRepoTarget(
+            upstream_remote_url="https://github.com/up/r.git",
+            fork_remote_url="https://github.com/fork/r.git",
+            base_branch="develop",
+        ),
+    )
+    forge = GitHubForge(_settings(tmp_path), repo_config=rc)
+    url = forge.open_merge_request(
+        source_branch="feature/x", title="t", body="b", head_repo="fork/r"
+    )
+
+    assert url == "https://github.com/up/r/pull/7"
+    assert "repos/up/r/pulls" in captured["post_url"]
+    payload = captured["post_payload"]
+    assert payload["head"] == "fork:feature/x"
+    assert payload["base"] == "develop"
+
+
 # ---------------------------------------------------------------------------
 # _get_pr (via pr_status)
 # ---------------------------------------------------------------------------
@@ -1750,3 +1786,245 @@ def test_list_open_pr_branches_exception_returns_empty(tmp_path, monkeypatch):
     _mock_httpx_paged(monkeypatch, raise_exc=real_httpx.ConnectError("net down"))
     forge = _forge(tmp_path)
     assert forge.list_open_pr_branches() == set()
+
+
+# ---------------------------------------------------------------------------
+# Cross-repo target: _head_owner, _get_pr head filter, _create_pr retry,
+# and delete_branch routing.
+# ---------------------------------------------------------------------------
+
+
+def test_head_owner_is_fork_owner_for_cross_repo_target(tmp_path):
+    """_head_owner returns the fork owner when cross_repo_target is set,
+    and the upstream owner otherwise."""
+    from robotsix_mill.config import CrossRepoTarget, RepoConfig
+
+    # Same-repo: _head_owner == upstream owner.
+    forge_same = GitHubForge(
+        _settings(tmp_path),
+        repo_config=RepoConfig(
+            repo_id="r",
+            board_id="b",
+            langfuse_project_name="r",
+            langfuse_public_key="",
+            langfuse_secret_key="",
+            forge_remote_url="https://github.com/up/r.git",
+        ),
+    )
+    assert forge_same._head_owner == "up"
+
+    # Cross-repo: _head_owner == fork owner.
+    forge_cross = GitHubForge(
+        _settings(tmp_path),
+        repo_config=RepoConfig(
+            repo_id="r",
+            board_id="b",
+            langfuse_project_name="r",
+            langfuse_public_key="",
+            langfuse_secret_key="",
+            cross_repo_target=CrossRepoTarget(
+                upstream_remote_url="https://github.com/up/r.git",
+                fork_remote_url="https://github.com/fork-owner/r.git",
+            ),
+        ),
+    )
+    assert forge_cross._head_owner == "fork-owner"
+    # _owner_repo still resolves to upstream (PRs live there).
+    assert forge_cross._owner_repo == ("up", "r")
+
+    # No repo_config: _head_owner falls back to global remote owner.
+    forge_no_rc = GitHubForge(_settings(tmp_path))
+    assert forge_no_rc._head_owner == "o"  # from default FORGE_REMOTE_URL
+
+
+def test_get_pr_cross_repo_uses_fork_owner_in_head_filter(tmp_path, monkeypatch):
+    """_get_pr for a cross-repo target uses the fork owner, not the
+    upstream owner, in the ``head=<owner>:<branch>`` query param."""
+    from robotsix_mill.config import CrossRepoTarget, RepoConfig
+
+    rc = RepoConfig(
+        repo_id="r",
+        board_id="b",
+        langfuse_project_name="r",
+        langfuse_public_key="",
+        langfuse_secret_key="",
+        cross_repo_target=CrossRepoTarget(
+            upstream_remote_url="https://github.com/up/r.git",
+            fork_remote_url="https://github.com/fork-owner/r.git",
+        ),
+    )
+
+    captured_params: dict = {}
+
+    class ParamCaptureClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def post(self, url, headers=None, json=None):
+            return _make_response(500, {}, "")
+
+        def get(self, url, headers=None, params=None):
+            captured_params.update(params or {})
+            # Return list + detail responses so _get_pr succeeds.
+            if "/pulls/" in url and url.rstrip("/").split("/")[-1].isdigit():
+                return _make_response(
+                    200,
+                    {
+                        "number": 7,
+                        "merged": False,
+                        "state": "open",
+                        "html_url": "http://pr/7",
+                        "mergeable": True,
+                        "mergeable_state": "clean",
+                        "head": {"sha": "abc123"},
+                    },
+                )
+            return _make_response(200, [{"number": 7}])
+
+    monkeypatch.setattr(real_httpx, "Client", ParamCaptureClient)
+
+    forge = GitHubForge(_settings(tmp_path), repo_config=rc)
+    status = forge.pr_status(source_branch="feature/x")
+
+    assert status is not None
+    assert status["number"] == 7
+    # The head filter must use the fork owner, not upstream.
+    assert captured_params.get("head") == "fork-owner:feature/x"
+
+
+def test_create_pr_cross_repo_422_retry_does_not_double_qualify_head(
+    tmp_path, monkeypatch,
+):
+    """When a cross-fork PR create gets a 422, the existing-PR lookup
+    re-uses the already-qualified ``head="fork-owner:branch"`` instead of
+    prepending the upstream owner (which would produce the malformed
+    ``"upstream:fork-owner:branch"``)."""
+    from robotsix_mill.config import CrossRepoTarget, RepoConfig
+
+    rc = RepoConfig(
+        repo_id="r",
+        board_id="b",
+        langfuse_project_name="r",
+        langfuse_public_key="",
+        langfuse_secret_key="",
+        cross_repo_target=CrossRepoTarget(
+            upstream_remote_url="https://github.com/up/r.git",
+            fork_remote_url="https://github.com/fork-owner/r.git",
+        ),
+    )
+
+    captured_get_params: dict = {}
+    post_422 = _make_response(
+        422, {}, '{"field":"head","code":"invalid"}'
+    )
+
+    class ParamCaptureClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def post(self, url, headers=None, json=None):
+            return post_422
+
+        def get(self, url, headers=None, params=None):
+            captured_get_params.update(params or {})
+            return _make_response(
+                200,
+                [{"html_url": "http://pr/99", "number": 99}],
+            )
+
+    monkeypatch.setattr(real_httpx, "Client", ParamCaptureClient)
+
+    forge = GitHubForge(_settings(tmp_path), repo_config=rc)
+    url = forge.open_merge_request(
+        source_branch="feature/x",
+        title="t",
+        body="b",
+        head_repo="fork-owner/r",
+    )
+
+    assert url == "http://pr/99"
+    # Must be "fork-owner:feature/x", not "up:fork-owner:feature/x".
+    assert captured_get_params.get("head") == "fork-owner:feature/x"
+
+
+def test_delete_branch_cross_repo_targets_fork_not_upstream(
+    tmp_path, monkeypatch,
+):
+    """delete_branch for a cross-repo target issues DELETE against the
+    fork's git/refs/heads/<branch>, not the upstream's."""
+    from robotsix_mill.config import CrossRepoTarget, RepoConfig
+
+    rc = RepoConfig(
+        repo_id="r",
+        board_id="b",
+        langfuse_project_name="r",
+        langfuse_public_key="",
+        langfuse_secret_key="",
+        cross_repo_target=CrossRepoTarget(
+            upstream_remote_url="https://github.com/up/r.git",
+            fork_remote_url="https://github.com/fork-owner/r.git",
+        ),
+    )
+
+    delete_url: dict = {}
+
+    class DeleteCaptureClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def delete(self, url, headers=None, **kwargs):
+            delete_url["url"] = url
+            return _make_response(204, {})
+
+    monkeypatch.setattr(real_httpx, "Client", DeleteCaptureClient)
+
+    forge = GitHubForge(_settings(tmp_path), repo_config=rc)
+    assert forge.delete_branch(branch="mill/t-1") is True
+
+    # Must target fork-owner/r, not up/r.
+    assert "/repos/fork-owner/r/git/refs/heads/mill/t-1" in delete_url["url"]
+    assert "up/r" not in delete_url["url"]
+
+
+def test_delete_branch_same_repo_unchanged(tmp_path, monkeypatch):
+    """delete_branch without a cross_repo_target still targets the
+    upstream/remote repo (same-repo behaviour unchanged)."""
+    delete_url: dict = {}
+
+    class DeleteCaptureClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def delete(self, url, headers=None, **kwargs):
+            delete_url["url"] = url
+            return _make_response(204, {})
+
+    monkeypatch.setattr(real_httpx, "Client", DeleteCaptureClient)
+
+    forge = _forge(tmp_path)
+    assert forge.delete_branch(branch="mill/t-1") is True
+    assert "/repos/o/r/git/refs/heads/mill/t-1" in delete_url["url"]

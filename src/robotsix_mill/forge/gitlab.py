@@ -72,7 +72,19 @@ class GitLabForge(Forge):
     # Public methods mandated by Forge ABC
     # ------------------------------------------------------------------
 
-    def open_merge_request(self, *, source_branch: str, title: str, body: str) -> str:
+    def open_merge_request(
+        self,
+        *,
+        source_branch: str,
+        title: str,
+        body: str,
+        head_repo: str | None = None,
+    ) -> str:
+        if head_repo is not None:
+            raise NotImplementedError(
+                "cross-fork merge requests are not supported by the GitLab "
+                "adapter; cross_repo_target is GitHub-only"
+            )
         s = self.settings
         project_path = _parse_gitlab_project_path(self._remote_url)
         return self._create_mr(

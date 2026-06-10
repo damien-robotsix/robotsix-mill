@@ -29,6 +29,16 @@ repos:
     #                             #   Per-repo isolation: each repo
     #                             #   gets its own consumer pool, so a
     #                             #   busy repo can't block another.
+    # cross_repo_target:          # optional — deliver to an external fork.
+    #   # When set, a ticket that runs against THIS repo has its branch
+    #   # pushed to `fork_remote_url` and a PR opened fork→upstream against
+    #   # `upstream_remote_url`/`base_branch` (instead of the clone remote).
+    #   # GitHub-only. Per-ticket overrides are not (yet) supported.
+    #   upstream_remote_url: "https://github.com/upstream-org/their-repo.git"
+    #   fork_remote_url: "https://github.com/your-org/their-repo.git"
+    #   base_branch: "main"       # optional — upstream branch to PR into. Default "main".
+    #   auto_fork: false          # optional — when true, ensure the fork exists
+    #                             #   via the forge fork API before push. Default false.
     # NOTE: `test_command` and `language(s)` are NO LONGER set here. A managed
     #   repo owns both in its OWN source tree at
     #   <repo>/.robotsix-mill/config.yaml:
