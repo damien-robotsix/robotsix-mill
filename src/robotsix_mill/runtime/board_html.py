@@ -4,7 +4,8 @@ The board chrome core (columns, cards, move control, drawer, refresh loop)
 is owned by robotsix-board.  Mill's own JavaScript (`board.js`) extends
 this with mill-specific UI elements and behavior: ticket card display,
 real-time WebSocket updates, drawer panels (runs, cost dashboard,
-candidates, proposals), and the closed-ticket visibility toggle.
+candidates, proposals), repo filtering via the selector dropdown, and the
+closed-ticket visibility toggle.
 
 This module provides the HTML skeleton that links to robotsix-board's
 static assets and to mill-specific JS/CSS layered on top.
