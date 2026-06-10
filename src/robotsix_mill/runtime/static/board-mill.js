@@ -2147,6 +2147,18 @@
     fetchGates();
     fetchLangfuseStatus();
     refreshCandidateBadge();
+
+    // Update the board refresh URL to include the repo filter
+    if (window.robotsixBoardSetRefreshUrl) {
+      if (repoId !== "all") {
+        window.robotsixBoardSetRefreshUrl(
+          "/board/cards?repo_id=" + encodeURIComponent(repoId)
+        );
+      } else {
+        window.robotsixBoardSetRefreshUrl("/board/cards");
+      }
+    }
+
     // Delegate board rendering to robotsix-board
     window.robotsixBoardRefresh();
     // After a short delay, fetch active labels and apply to cards
@@ -2164,6 +2176,14 @@
     // Configure robotsix-board gate endpoint once
     if (window.robotsixBoardSetGateEndpoint) {
       window.robotsixBoardSetGateEndpoint('/gates');
+    }
+
+    // Apply repo filter to the initial board render
+    var repoId = getRepoId();
+    if (window.robotsixBoardSetRefreshUrl && repoId !== "all") {
+      window.robotsixBoardSetRefreshUrl(
+        "/board/cards?repo_id=" + encodeURIComponent(repoId)
+      );
     }
 
     // Initial data fetch

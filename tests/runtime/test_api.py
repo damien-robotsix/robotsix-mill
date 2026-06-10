@@ -77,6 +77,15 @@ def test_board_config_script_references_board_cards(client):
         assert "/board/cards" in body
 
 
+def test_board_mill_js_sets_repo_filtered_refresh_url(client):
+    """board-mill.js must push the selected repo filter into the board
+    refresh URL via robotsixBoardSetRefreshUrl so the dropdown actually
+    filters tickets (the URL becomes /board/cards?repo_id=...)."""
+    js = client.get("/static/mill/board-mill.js").text
+    assert "robotsixBoardSetRefreshUrl" in js
+    assert "/board/cards?repo_id=" in js
+
+
 def test_create_and_get(client):
     r = client.post("/tickets", json={"title": "T", "description": "body"})
     assert r.status_code == 201
