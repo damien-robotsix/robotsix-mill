@@ -1408,6 +1408,63 @@ def test_verify_prior_proposals_service_list_exception(tmp_path, monkeypatch):
     db.reset_engine()
 
 
+def test_verify_prior_proposals_skips_ticket_with_unresolvable_board(
+    tmp_path, monkeypatch
+):
+    """One CLOSED ticket whose service.history() raises ValueError (board
+    no longer resolvable) must NOT abort the whole pass — that ticket is
+    skipped while a well-formed matching ticket's entry is still returned."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    # Healthy CLOSED ticket with a DONE event → resolution "merged".
+    good = service.create(
+        "Good gap",
+        "body\n\n<!-- audit-gap-id: good_gap -->",
+        source=SourceKind.AUDIT,
+    )
+    with db.session(settings, "test-board") as s:
+        ticket = s.get(type(good), good.id)
+        ticket.state = State.DONE
+        s.add(TicketEvent(ticket_id=good.id, state=State.DONE, note="done"))
+        s.add(TicketEvent(ticket_id=good.id, state=State.CLOSED, note="closed"))
+        ticket.state = State.CLOSED
+        s.commit()
+
+    # Orphaned CLOSED ticket whose board can no longer be resolved.
+    bad = service.create(
+        "Bad gap",
+        "body\n\n<!-- audit-gap-id: bad_gap -->",
+        source=SourceKind.AUDIT,
+    )
+    with db.session(settings, "test-board") as s:
+        ticket = s.get(type(bad), bad.id)
+        ticket.state = State.CLOSED
+        s.add(TicketEvent(ticket_id=bad.id, state=State.CLOSED, note="closed"))
+        s.commit()
+
+    real_history = service.history
+
+    def fake_history(ticket_id):
+        if ticket_id == bad.id:
+            raise ValueError(f"Ticket {ticket_id} not found in any configured board")
+        return real_history(ticket_id)
+
+    monkeypatch.setattr(service, "history", fake_history)
+
+    # Must not raise — returns a dict skipping the bad ticket.
+    result = _verify_prior_proposals(service, settings, SourceKind.AUDIT)
+    assert isinstance(result, dict)
+    assert "good_gap" in result
+    assert result["good_gap"]["ticket_id"] == good.id
+    assert result["good_gap"]["resolution"] == "merged"
+    assert "bad_gap" not in result
+
+    db.reset_engine()
+
+
 # ------------------------------------------------------------------ run_agent_pass max_drafts clipping
 
 
