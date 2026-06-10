@@ -1714,6 +1714,14 @@ class RepoConfig(BaseModel):
     langfuse_public_key: str
     langfuse_secret_key: str
     langfuse_base_url: str = "https://cloud.langfuse.com"
+    # Optional reference to another repo_id whose Langfuse project this
+    # repo inherits. When set, this repo MUST NOT supply its own langfuse
+    # keys; load_repos_config resolves the reference by copying the
+    # referenced (master) repo's langfuse_project_name/public_key/
+    # secret_key/base_url into this entry, so the whole workspace shares
+    # one Langfuse project. Populated by the workspace member-sync
+    # mechanism. None -> this repo uses its own langfuse block.
+    langfuse_from: str | None = None
     # Per-repo OpenRouter inference key. When set, cost-reconciliation runs in
     # PER-KEY mode for this repo (snapshot this key's cumulative usage each pass
     # + diff against the prior snapshot) so its provider spend reconciles
@@ -1821,8 +1829,10 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
 
     raw = load_repos_yaml(config_file)
     repos: dict[str, RepoConfig] = {}
+    raw_langfuse: dict[str, dict] = {}
     for repo_id, repo_data in raw.items():
         langfuse = repo_data.get("langfuse", {}) if isinstance(repo_data, dict) else {}
+        raw_langfuse[repo_id] = langfuse if isinstance(langfuse, dict) else {}
         ci_monitor = (
             repo_data.get("ci_monitor", {}) if isinstance(repo_data, dict) else {}
         )
@@ -1852,6 +1862,9 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             working_branch=repo_data.get("working_branch")
             if isinstance(repo_data, dict)
             else None,
+            langfuse_from=repo_data.get("langfuse_from")
+            if isinstance(repo_data, dict)
+            else None,
             sandbox_image=repo_data.get("sandbox_image")
             if isinstance(repo_data, dict)
             else None,
@@ -1865,6 +1878,50 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             max_concurrency=repo_data.get("max_concurrency", 1)
             if isinstance(repo_data, dict)
             else 1,
+        )
+
+    # Resolve ``langfuse_from`` references: a member repo inherits the
+    # referenced master's Langfuse project, so the whole workspace shares one
+    # project. Enforce the operator rule that a referencing repo must NOT
+    # carry its own keys, and reject unknown / chained / self references.
+    from .config_loader import ConfigError
+
+    for repo_id, cfg in list(repos.items()):
+        if cfg.langfuse_from is None:
+            continue
+        own_langfuse = raw_langfuse.get(repo_id, {})
+        if (
+            own_langfuse.get("project_name")
+            or own_langfuse.get("public_key")
+            or own_langfuse.get("secret_key")
+        ):
+            raise ConfigError(
+                f"Repo '{repo_id}' sets langfuse_from='{cfg.langfuse_from}' but "
+                f"also supplies its own langfuse keys; a repo inheriting a "
+                f"Langfuse project must not carry separate keys."
+            )
+        if cfg.langfuse_from not in repos:
+            known = sorted(repos.keys())
+            raise ConfigError(
+                f"Repo '{repo_id}' references unknown langfuse_from "
+                f"'{cfg.langfuse_from}'. Known repos: {known}"
+            )
+        master = repos[cfg.langfuse_from]
+        if master.langfuse_from is not None:
+            raise ConfigError(
+                f"Repo '{repo_id}' references langfuse_from "
+                f"'{cfg.langfuse_from}', which itself sets langfuse_from "
+                f"'{master.langfuse_from}'; langfuse_from must point at a "
+                f"master repo that holds its own keys (no chaining or "
+                f"self-reference)."
+            )
+        repos[repo_id] = cfg.model_copy(
+            update={
+                "langfuse_project_name": master.langfuse_project_name,
+                "langfuse_public_key": master.langfuse_public_key,
+                "langfuse_secret_key": master.langfuse_secret_key,
+                "langfuse_base_url": master.langfuse_base_url,
+            }
         )
 
     # Optional dedicated Langfuse project for the synthetic cross-repo

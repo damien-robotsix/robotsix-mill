@@ -37,7 +37,7 @@ from pathlib import Path
 
 import yaml
 
-from .config import _reset_repos_config, get_repos_config
+from .config import _reset_repos_config
 from .repo_scaffold import _repos_yaml_path
 from .workspace_members import DetectedMember
 
@@ -100,9 +100,8 @@ def sync_workspace_members(
 
     data = _load_repos_document(path)
     repos = data["repos"]
-    langfuse = _master_langfuse(master_repo_id)
 
-    member_ids = _upsert_members(repos, members, master_repo_id, langfuse, result)
+    member_ids = _upsert_members(repos, members, master_repo_id, result)
     _flag_vanished(repos, master_repo_id, member_ids, result)
 
     _write_repos_document(path, data)
@@ -133,7 +132,6 @@ def _upsert_members(
     repos: dict,
     members: list[DetectedMember],
     master_repo_id: str,
-    langfuse: dict,
     result: MemberSyncResult,
 ) -> set[str]:
     """Upsert each detected member into *repos*, recording the outcome on
@@ -158,7 +156,7 @@ def _upsert_members(
             result.skipped.append(repo_id)
             continue
 
-        entry = _member_entry(member, repo_id, master_repo_id, langfuse)
+        entry = _member_entry(member, repo_id, master_repo_id)
         if existing is None:
             repos[repo_id] = entry
             result.added.append(repo_id)
@@ -215,16 +213,13 @@ def _is_member_of(entry, master_repo_id: str) -> bool:
     return isinstance(entry, dict) and entry.get("member_of") == master_repo_id
 
 
-def _member_entry(
-    member: DetectedMember, repo_id: str, master_repo_id: str, langfuse: dict
-) -> dict:
+def _member_entry(member: DetectedMember, repo_id: str, master_repo_id: str) -> dict:
     """Build the ``config/repos.yaml`` stanza for a detected member."""
     entry: dict = {
         "board_id": repo_id,
-        # Langfuse inherited from the master repo. Ticket 4 refines this into
-        # a ``langfuse_from`` reference so the whole workspace shares one
-        # project; for now the master's concrete keys are copied in.
-        "langfuse": dict(langfuse),
+        # Inherit the master's Langfuse project by reference — resolved
+        # at config-load time so the whole workspace shares one project.
+        "langfuse_from": master_repo_id,
         "forge_remote_url": member.url,
         # Provenance: lets a later pass distinguish member-sync entries from
         # manually configured repos (and scope disappearance detection).
@@ -235,34 +230,6 @@ def _member_entry(
     if member.cross_repo_target is not None:
         entry["cross_repo_target"] = member.cross_repo_target.model_dump()
     return entry
-
-
-def _master_langfuse(master_repo_id: str) -> dict:
-    """Return the master repo's Langfuse block to inherit, or a safe default.
-
-    Mirrors :func:`repo_scaffold._append_repo_config`'s key-copy: a missing
-    master falls back to empty keys + the default base URL.
-    """
-    try:
-        master = get_repos_config().repos[master_repo_id]
-    except KeyError:
-        log.warning(
-            "master repo %r not found in repos config; using empty Langfuse "
-            "keys for its members",
-            master_repo_id,
-        )
-        return {
-            "project_name": master_repo_id,
-            "public_key": "",
-            "secret_key": "",
-            "base_url": "https://cloud.langfuse.com",
-        }
-    return {
-        "project_name": master.langfuse_project_name,
-        "public_key": master.langfuse_public_key,
-        "secret_key": master.langfuse_secret_key,
-        "base_url": master.langfuse_base_url,
-    }
 
 
 def _load_repos_document(path: Path) -> dict:

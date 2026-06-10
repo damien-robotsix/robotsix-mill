@@ -14,7 +14,6 @@ import yaml
 from robotsix_mill.config import (
     CrossRepoTarget,
     RepoConfig,
-    ReposRegistry,
     Settings,
     _reset_repos_config,
 )
@@ -50,13 +49,9 @@ def _master_cfg(repo_id="ros2-workspace"):
 
 
 def _register_master(monkeypatch, master_cfg, *extra):
-    repos = {master_cfg.repo_id: master_cfg}
-    for cfg in extra:
-        repos[cfg.repo_id] = cfg
-    reg = ReposRegistry(repos=repos)
-    monkeypatch.setattr(
-        "robotsix_mill.workspace_member_sync.get_repos_config", lambda: reg
-    )
+    """No-op now: member-sync no longer looks up the master via
+    get_repos_config — it writes langfuse_from unconditionally."""
+    pass
 
 
 def _member(path, url, version=None, cross_repo_target=None):
@@ -122,10 +117,9 @@ class TestRegistration:
         assert entry["forge_remote_url"] == "https://github.com/upstream/zeta.git"
         assert entry["working_branch"] == "lyrical"
         assert entry["member_of"] == "ros2-workspace"
-        # Langfuse inherited from the master repo.
-        assert entry["langfuse"]["public_key"] == "pk-master"
-        assert entry["langfuse"]["secret_key"] == "sk-master"
-        assert entry["langfuse"]["base_url"] == "https://lf.master.com"
+        # Inherit the master's Langfuse project by reference (Ticket 4).
+        assert entry["langfuse_from"] == "ros2-workspace"
+        assert "langfuse" not in entry
         # cross_repo_target derived from the manifest policy.
         assert entry["cross_repo_target"]["fork_remote_url"] == (
             "https://github.com/fork/zeta.git"
@@ -237,18 +231,15 @@ class TestRegistration:
         repos_file = tmp_path / "repos.yaml"
         monkeypatch.setenv("MILL_REPOS_FILE", str(repos_file))
         settings = _make_settings(tmp_path)
-        # Register a registry WITHOUT the master id.
-        reg = ReposRegistry(repos={})
-        monkeypatch.setattr(
-            "robotsix_mill.workspace_member_sync.get_repos_config", lambda: reg
-        )
 
         members = [_member("src/alpha/pkg", "https://github.com/upstream/alpha.git")]
         sync_workspace_members(settings, "ros2-workspace", members, file_tickets=False)
 
         entry = _read(repos_file)["repos"]["src-alpha-pkg"]
-        assert entry["langfuse"]["public_key"] == ""
-        assert entry["langfuse"]["project_name"] == "ros2-workspace"
+        # Member-sync always writes langfuse_from unconditionally;
+        # validation of the master's existence happens at config-load time.
+        assert entry["langfuse_from"] == "ros2-workspace"
+        assert "langfuse" not in entry
         _reset_repos_config()
 
 
