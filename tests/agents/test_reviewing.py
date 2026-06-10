@@ -211,16 +211,55 @@ def _write_png(tmp_path) -> "object":
     return p
 
 
-def test_screenshot_attached_on_claude_sdk_path(tmp_path, monkeypatch):
-    """Routed to the Claude SDK backend + an existing PNG → the run input
-    is a list whose final element is a BinaryContent image, alongside the
-    diff/spec text."""
+def test_screenshot_not_attached_when_vision_gate_off(tmp_path, monkeypatch):
+    """Regression for the 1200s stall (ticket 565a / 348e): routed to the
+    Claude SDK backend with the vision capability gate at its default
+    (False), an existing board PNG must NOT be attached — the run input
+    stays a bare ``str`` with no BinaryContent, so the input shape that
+    hangs the llmio bridge can no longer be emitted. The transport-level
+    fix (teaching the robotsix-llmio claude_sdk bridge to consume image
+    parts) lives there and needs a dependency bump — out of scope here."""
     from pydantic_ai import BinaryContent
 
     agent = _FakeAgent()
     _patch_agent_definition(monkeypatch, agent)
 
     s = _settings(tmp_path, OPENROUTER_API_KEY="k", llm_backend="claude_sdk")
+    png = _write_png(tmp_path)
+
+    result = run_review_agent(
+        settings=s,
+        diff="diff --git a/x b/x",
+        spec="Fix x",
+        screenshot_path=png,
+    )
+    assert isinstance(result, ReviewVerdict)
+
+    assert len(agent.calls) == 1
+    run_input = agent.calls[0][0]
+    assert isinstance(run_input, str)
+    assert not isinstance(run_input, list)
+    assert "Fix x" in run_input
+    # No BinaryContent leaked into the string path.
+    assert BinaryContent.__name__ not in run_input
+
+
+def test_screenshot_attached_when_vision_gate_on(tmp_path, monkeypatch):
+    """Claude SDK backend + ``claude_sdk_vision_enabled=True`` + an
+    existing PNG → the run input is a list whose final element is a
+    BinaryContent image, alongside the diff/spec text. This exercises the
+    (future) vision-enabled path that the capability gate guards."""
+    from pydantic_ai import BinaryContent
+
+    agent = _FakeAgent()
+    _patch_agent_definition(monkeypatch, agent)
+
+    s = _settings(
+        tmp_path,
+        OPENROUTER_API_KEY="k",
+        llm_backend="claude_sdk",
+        claude_sdk_vision_enabled=True,
+    )
     png = _write_png(tmp_path)
 
     result = run_review_agent(
@@ -271,14 +310,20 @@ def test_screenshot_not_attached_on_deepseek_path(tmp_path, monkeypatch):
 
 
 def test_missing_screenshot_falls_back_to_text(tmp_path, monkeypatch):
-    """Claude SDK routing but the screenshot file does not exist → no
-    crash, falls back to the bare-string text path."""
+    """Claude SDK routing + vision gate ON but the screenshot file does
+    not exist → no crash, falls back to the bare-string text path. The
+    missing/unreadable-file silent degradation must stay intact."""
     from pathlib import Path
 
     agent = _FakeAgent()
     _patch_agent_definition(monkeypatch, agent)
 
-    s = _settings(tmp_path, OPENROUTER_API_KEY="k", llm_backend="claude_sdk")
+    s = _settings(
+        tmp_path,
+        OPENROUTER_API_KEY="k",
+        llm_backend="claude_sdk",
+        claude_sdk_vision_enabled=True,
+    )
 
     result = run_review_agent(
         settings=s,

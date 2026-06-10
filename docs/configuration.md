@@ -281,6 +281,21 @@ Every setting below shows:
 | `core.models.auto_approve` | `MILL_AUTO_APPROVE_MODEL` | `deepseek/deepseek-v4-flash` | Model for the auto-approve triage call (must be fast and cheap) |
 | `core.models.scope_triage` | `MILL_SCOPE_TRIAGE_MODEL` | `deepseek/deepseek-v4-flash` | Scope-triage model — classifies out-of-scope changes as EXPAND/REJECT/ESCALATE |
 
+### 1.1 LLM backend (Claude SDK)
+
+REVERSIBLE provider selection. Default `deepseek` keeps every agent on
+the OpenRouter/DeepSeek path; setting `llm_backend: claude_sdk` (or
+listing names in `claude_sdk_agents`) routes those agents through the
+robotsix-llmio Claude Agent SDK transport.
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| `llm_backend` | — | `deepseek` | Global backend toggle. `claude_sdk` routes ALL agents through the Claude Agent SDK |
+| `claude_sdk_agents` | — | `[]` | Per-agent opt-in: only these agent names use the Claude SDK while the rest stay on DeepSeek |
+| `claude_max_concurrency` | `MILL_CLAUDE_MAX_CONCURRENCY` | `4` | Process-wide cap on concurrent Claude SDK runs (each spawns a `claude` CLI subprocess) |
+| `claude_fallback_to_deepseek` | `MILL_CLAUDE_FALLBACK_TO_DEEPSEEK` | `true` | On a terminal Claude run failure, fall back to the equivalent DeepSeek build (needs an OpenRouter key) |
+| `claude_sdk_vision_enabled` | — | `false` | Allow inline image (screenshot/vision) input on the Claude SDK path. **Default off**: the installed llmio bridge cannot consume `BinaryContent` image parts — it stringifies them into a useless repr that hangs the `claude` CLI until the 1200s per-call cap fires. While off, the refine/review screenshot paths degrade to a text note. Flip to `true` (a one-line change) once the bridge gains real image-input support |
+
 ### 2. Request limits
 
 | YAML path | Env var | Default | Description |
