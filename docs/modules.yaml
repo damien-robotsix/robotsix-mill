@@ -601,6 +601,7 @@ modules:
       - tests/__init__.py
       - tests/conftest.py
       - tests/script_loader.py
+      - tests/test_docs_nav.py
       - tests/test_modules_yaml_paths.py
     dependencies: []
 
