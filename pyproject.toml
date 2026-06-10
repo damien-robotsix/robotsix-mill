@@ -233,6 +233,12 @@ DEP002 = [
 # Packages imported directly but pulled in transitively through
 # pydantic-ai-slim / sqlmodel — the imports are intentional.
 DEP003 = ["pydantic", "sqlalchemy", "openai"]
+# playwright is a Tier 2 browser-smoke-check dependency installed
+# out-of-band (scripts/board_browser_check.py), deliberately NOT a
+# runtime/dev dependency: the hermetic pytest suite never imports it and
+# the import is deferred into _drive_browser(). Declaring it would bloat
+# the install and the network-isolated test sandbox can't fetch Chromium.
+DEP001 = ["playwright"]
 
 [tool.mypy]
 strict = true
