@@ -1,0 +1,543 @@
+"""Pre-refine gate phases for the refine stage.
+
+A mixin (:class:`RefineGatesMixin`) holding the cheap, deterministic-or-
+single-LLM-call guards that run *before* the expensive refine agent:
+dedup / already-done, in-flight advisory, freshness, and obsolescence.
+These are mixed into :class:`RefineStage` (in ``core.py``); they call the
+pure helpers from :mod:`.helpers` and the agent modules from
+:mod:`...agents`.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from pathlib import Path
+
+from ...agents import dedup, freshness, obsolescence
+from ...core.datetime_utils import _as_utc
+from ...core.models import SourceKind, Ticket
+from ...core.states import State
+from ..base import Outcome, StageContext
+from .helpers import (
+    DEDUP_ALREADY_DONE_PREFIX,
+    DEDUP_DUPLICATE_PREFIX,
+    FRESHNESS_STALE_PREFIX,
+    NON_IMPLEMENTATION_CLOSE_PREFIXES,
+    OBSOLESCENCE_GAP_PREFIX,
+    OPERATOR_SENDBACK_PREFIX,
+    REFINE_PROGRESS_STATES,
+    _build_candidates_block,
+    log,
+)
+
+
+class RefineGatesMixin:
+    """Pre-refine gate staticmethods mixed into :class:`RefineStage`."""
+
+    @staticmethod
+    def _run_dedup_guard(
+        ctx: StageContext,
+        ticket: Ticket,
+        draft: str,
+        repo_dir: Path | None,
+        s,
+    ) -> Outcome | None:
+        """Run the dedup / already-done guard (best-effort).
+
+        Returns ``None`` for trivial drafts (< 100 chars) or when the
+        dedup check finds no match, signalling that refine should
+        proceed.  Returns ``Outcome(State.DONE, ...)`` when the verdict
+        indicates a duplicate or already-implemented ticket.
+        """
+        if len(draft) < 100:
+            log.debug(
+                "%s: trivial draft (%d chars), skipping dedup",
+                ticket.id,
+                len(draft),
+            )
+            return None
+
+        # Operator-iteration guard: if a human has sent this ticket back with
+        # "changes requested" feedback, they are actively shaping it — do NOT
+        # let dedup auto-close it as a duplicate/already-done (that discards
+        # their intent). Proceed straight to refine instead.
+        try:
+            if any(
+                ev.note and ev.note.startswith(OPERATOR_SENDBACK_PREFIX)
+                for ev in ctx.service.history(ticket.id)
+            ):
+                log.info(
+                    "%s: operator has requested changes — skipping dedup guard "
+                    "(human is actively iterating this ticket)",
+                    ticket.id,
+                )
+                return None
+        except Exception:  # noqa: BLE001 — best-effort; never block refine
+            log.debug("%s: dedup sendback-check skipped", ticket.id, exc_info=True)
+
+        # Gather candidate tickets: all non-terminal + recently closed.
+        all_tickets = ctx.service.list()
+        now = datetime.now(timezone.utc)
+        lookback_cutoff = datetime.fromtimestamp(
+            now.timestamp() - s.dedup_lookback_days * 86400, tz=timezone.utc
+        )
+        non_terminal = {State.CLOSED, State.ERRORED}
+        candidates = [
+            t
+            for t in all_tickets
+            if t.id != ticket.id
+            and (
+                t.state not in non_terminal
+                or (
+                    t.state == State.CLOSED and _as_utc(t.updated_at) >= lookback_cutoff
+                )
+            )
+        ]
+        # Pre-filter by parent/epic: when the ticket belongs to an epic,
+        # only keep candidates that share the same parent, are the parent
+        # itself, are orphans (no parent), or are recently-closed
+        # cross-epic tickets.  This avoids feeding the LLM dozens of
+        # tickets from unrelated areas.
+        if ticket.parent_id is not None:
+            before = len(candidates)
+            candidates = [
+                t
+                for t in candidates
+                if t.parent_id == ticket.parent_id  # sibling
+                or t.id == ticket.parent_id  # parent epic
+                or t.parent_id is None  # orphan
+                or t.state == State.CLOSED  # recently-closed (any area)
+            ]
+            if len(candidates) < before:
+                log.debug(
+                    "%s: parent filter reduced dedup candidates from %d to %d",
+                    ticket.id,
+                    before,
+                    len(candidates),
+                )
+
+        # Epics are never duplicates of task/inquiry tickets.
+        # Keep the parent epic (already handled above) but drop all others.
+        candidates = [
+            t for t in candidates if t.kind != "epic" or t.id == ticket.parent_id
+        ]
+
+        # Similarity-based pre-filter: keep only the top-N most relevant
+        # candidates so the LLM sees a fixed budget regardless of repo size.
+        before_ranking = len(candidates)
+        candidates = dedup.rank_candidates_by_similarity(
+            draft_title=ticket.title,
+            draft_body=draft,
+            candidates=candidates,
+            max_candidates=s.dedup_max_candidates,
+        )
+        if len(candidates) < before_ranking:
+            log.debug(
+                "%s: similarity ranking reduced dedup candidates from %d to %d",
+                ticket.id,
+                before_ranking,
+                len(candidates),
+            )
+
+        candidates_json = _build_candidates_block(candidates, ctx)
+
+        # Zero-overlap short-circuit: when the draft shares no meaningful
+        # token with any candidate (title+body), no candidate could
+        # plausibly be a duplicate — skip the LLM call entirely. Bodies
+        # are assembled the same way _build_candidates_block reads them.
+        candidate_texts: list[str] = []
+        for t in candidates:
+            try:
+                body = ctx.service.workspace(t).read_description()
+            except Exception:
+                body = ""
+            candidate_texts.append(f"{t.title} {body}")
+
+        if s.dedup_skip_on_no_overlap and (
+            not candidates
+            or not dedup.any_candidate_overlap(
+                draft_title=ticket.title,
+                draft_body=draft,
+                candidates_texts=candidate_texts,
+            )
+        ):
+            log.debug(
+                "%s: no candidate token overlap (%d candidates) — "
+                "skipping dedup LLM call",
+                ticket.id,
+                len(candidates),
+            )
+            verdict = {
+                "duplicate_of": None,
+                "already_done": None,
+                "reason": "skipped: no candidate token overlap",
+            }
+        else:
+            try:
+                verdict = dedup.run_dedup_check(
+                    settings=s,
+                    draft_title=ticket.title,
+                    draft_body=draft,
+                    candidates_json=candidates_json,
+                    repo_dir=repo_dir,
+                )
+            except Exception:
+                log.warning(
+                    "%s: dedup check failed, proceeding with refine",
+                    ticket.id,
+                    exc_info=True,
+                )
+                verdict = {
+                    "duplicate_of": None,
+                    "already_done": None,
+                    "reason": "dedup check failed",
+                }
+
+        # Discarded drafts go to DONE (not directly CLOSED) so retrospect
+        # still analyses them — sanity-check the dedup verdict, capture
+        # any lesson in the memory ledger, and keep the audit trail
+        # consistent with every other terminal-ish ticket.
+        dup_id = verdict.get("duplicate_of")
+        if dup_id:
+            if RefineGatesMixin._is_valid_dedup_target(ctx, ticket, dup_id, repo_dir):
+                return Outcome(
+                    State.DONE,
+                    f"{DEDUP_DUPLICATE_PREFIX}{dup_id}: {verdict.get('reason', 'no reason')}",
+                )
+            log.info(
+                "%s: dedup verdict named duplicate_of=%s but it is not a "
+                "valid dedup target (terminal/declined/circular/unmerged) — "
+                "proceeding with refine",
+                ticket.id,
+                dup_id,
+            )
+        done_id = verdict.get("already_done")
+        if done_id:
+            if RefineGatesMixin._is_valid_dedup_target(ctx, ticket, done_id, repo_dir):
+                return Outcome(
+                    State.DONE,
+                    f"{DEDUP_ALREADY_DONE_PREFIX}{done_id}: {verdict.get('reason', 'no reason')}",
+                )
+            log.info(
+                "%s: dedup verdict named already_done=%s but it is not a "
+                "valid dedup target (terminal/declined/circular/unmerged) — "
+                "proceeding with refine",
+                ticket.id,
+                done_id,
+            )
+        return None
+
+    @staticmethod
+    def _is_valid_dedup_target(
+        ctx: StageContext,
+        ticket: Ticket,
+        candidate_id: str,
+        repo_dir: Path | None,
+    ) -> bool:
+        """Return whether *candidate_id* is an acceptable dedup target
+        for *ticket*.
+
+        Best-effort: any lookup failure degrades to ``True`` is wrong —
+        a failure should *not* close the ticket, so it returns ``False``
+        only for proven-bad candidates and ``True`` otherwise.  A
+        candidate that cannot be resolved to a ticket (e.g. a commit
+        hash for ``already_done``) is accepted.
+
+        Rejects (returns ``False``):
+        - a **circular** target whose history marks it as a dedup of
+          ``ticket`` itself;
+        - an ``ERRORED`` candidate (failed attempt);
+        - an un-refined ``DRAFT`` candidate whose history never reached a
+          refine-progress state (closing a further-along ticket into it
+          risks burying the fix in a ticket that may never be implemented);
+        - a ``CLOSED`` candidate that never passed through ``DONE``
+          (declined-as-noise / split parent);
+        - a candidate that reached ``DONE`` via a non-implementation
+          closure (dedup-closed or freshness-closed — never actually
+          implemented);
+        - a candidate whose implementation branch was never merged to
+          the base branch (stranded implementation).
+        """
+        try:
+            cand = ctx.service.get(candidate_id)
+            if cand is None:
+                # Not a ticket id (e.g. a commit hash) — preserve the
+                # already-implemented-via-commit behaviour.
+                return True
+            history = ctx.service.history(cand.id)
+
+            # Circular guard: the candidate was itself closed as a
+            # dedup of the current ticket.
+            _dedup_prefixes = (DEDUP_DUPLICATE_PREFIX, DEDUP_ALREADY_DONE_PREFIX)
+            for ev in history:
+                note = ev.note or ""
+                if note.startswith(_dedup_prefixes) and ticket.id in note:
+                    return False
+
+            # Failed attempt — let refine re-escalate.
+            if cand.state == State.ERRORED:
+                return False
+
+            # Un-refined DRAFT candidate: closing a further-along ticket into a
+            # candidate that has never progressed past DRAFT risks burying the
+            # fix in a ticket that may never be implemented.  Prefer keeping the
+            # current ticket, which is actively being refined.
+            if cand.state == State.DRAFT and not any(
+                ev.state in REFINE_PROGRESS_STATES for ev in history
+            ):
+                log.info(
+                    "%s: dedup candidate %s is an un-refined DRAFT (no refine "
+                    "progress) — not a valid dedup target, proceeding with refine",
+                    ticket.id,
+                    candidate_id,
+                )
+                return False
+
+            # Declined-as-noise / split parent: CLOSED but never DONE.
+            if cand.state == State.CLOSED and not any(
+                ev.state == State.DONE for ev in history
+            ):
+                return False
+
+            # Reached DONE via a non-implementation closure (dedup- or
+            # freshness-closed) — never actually implemented.  Applies
+            # whether the candidate is still DONE or has since CLOSED.
+            for ev in history:
+                if ev.state == State.DONE and (ev.note or "").startswith(
+                    NON_IMPLEMENTATION_CLOSE_PREFIXES
+                ):
+                    return False
+
+            # The candidate reached DONE via a real implementation, but if
+            # that implementation lives only on an unmerged branch the work
+            # never reached main — "already implemented in X" is invalid.
+            # Resolve through the package façade so a test that patches
+            # ``robotsix_mill.stages.refine._verify_branch_merged`` still
+            # takes effect.
+            from robotsix_mill.stages import refine as _facade
+
+            if cand.branch and not _facade._verify_branch_merged(repo_dir, cand):
+                log.info(
+                    "%s: dedup candidate %s has branch '%s' not merged to "
+                    "main — not a valid dedup target",
+                    ticket.id,
+                    candidate_id,
+                    cand.branch,
+                )
+                return False
+
+            return True
+        except Exception:
+            # Best-effort: a lookup error must never raise and must not
+            # close the ticket — degrade to "proceed with refine".
+            log.warning(
+                "%s: dedup target validation failed for %s, proceeding with refine",
+                ticket.id,
+                candidate_id,
+                exc_info=True,
+            )
+            return False
+
+    @staticmethod
+    def _run_inflight_advisory(
+        ctx: StageContext,
+        ticket: Ticket,
+        draft: str,
+        ws,
+        s,
+    ) -> str:
+        """Advisory pre-refine dedup against CONCURRENT in-flight tickets.
+
+        Best-effort: reuses ``dedup.find_inflight_overlap`` to spot a
+        recent matching ticket in ANY state (including
+        DRAFT/READY/REFINING/IMPLEMENT — the structural gap the dedup
+        guard cannot close).  On a strong match, logs a warning and
+        prepends a ``[!warning]`` advisory naming the concurrent ticket
+        to the draft — it never auto-closes, mirroring c853's
+        epic-decomposition pattern; refine/the operator decides.
+
+        Returns the (possibly annotated) draft to carry forward to the
+        refine agent.  Independent drafts only: epic children get their
+        concurrent-overlap flag at epic-decomposition pre-filing time, so
+        children/epics are skipped.  Trivial drafts (< 100 chars) skip the
+        check, matching the dedup guard's threshold.
+        """
+        if ticket.parent_id is not None or ticket.kind == "epic":
+            return draft
+        if len(draft) < 100:
+            return draft
+
+        from ...dedup import annotate_child_body, find_inflight_overlap
+
+        note = find_inflight_overlap(
+            ctx.service,
+            ticket.id,
+            ticket.title,
+            draft,
+            s,
+            datetime.now(timezone.utc),
+        )
+        if not note:
+            return draft
+
+        log.warning(
+            "%s: draft flagged as possible duplicate of a concurrent "
+            "in-flight ticket — %s",
+            ticket.id,
+            note,
+        )
+        annotated = annotate_child_body(
+            draft, note, source_desc="draft-intake pre-refine dedup"
+        )
+        new_hash = ws.write_description(annotated)
+        ctx.service.set_content_hash(ticket.id, new_hash)
+        return annotated
+
+    @staticmethod
+    def _run_freshness_gate(
+        ctx: StageContext,
+        ticket: Ticket,
+        draft: str,
+        repo_dir: Path | None,
+        s,
+    ) -> Outcome | None:
+        """Run the deterministic freshness gate (best-effort).
+
+        Returns ``None`` when the cited evidence is confirmed fresh or
+        the gate is disabled / not applicable, signalling that refine
+        should proceed.  Returns ``Outcome(State.DONE, ...)`` when the
+        cited evidence cannot be verified on HEAD — the ticket is stale
+        or hallucinated and should be short-circuited.
+
+        The gate is gated behind ``freshness_gate_enabled`` (default
+        ``False``, opt-in).  When enabled, it extracts file paths from
+        the draft and verifies them against the cloned repo.  If the
+        draft cites multiple files and the majority cannot be found,
+        the ticket is likely stale.
+        """
+        if not s.freshness_gate_enabled:
+            return None
+
+        if not draft or len(draft) < 50:
+            log.debug(
+                "%s: trivial draft (%d chars), skipping freshness gate",
+                ticket.id,
+                len(draft),
+            )
+            return None
+
+        try:
+            result = freshness.run_freshness_check(
+                draft=draft,
+                repo_dir=repo_dir,
+            )
+        except Exception:
+            log.warning(
+                "%s: freshness check failed, proceeding with refine",
+                ticket.id,
+                exc_info=True,
+            )
+            return None
+
+        if result.get("stale"):
+            reason = result.get("reason", "cited evidence not found on HEAD")
+            log.info(
+                "%s: freshness gate flagged as stale — %s",
+                ticket.id,
+                reason,
+            )
+            # Discarded drafts go to DONE so retrospect still analyses
+            # them — same pattern as the dedup guard.
+            return Outcome(
+                State.DONE,
+                f"{FRESHNESS_STALE_PREFIX} — {reason}",
+            )
+
+        log.debug(
+            "%s: freshness gate passed — %s",
+            ticket.id,
+            result.get("reason", ""),
+        )
+        return None
+
+    @staticmethod
+    def _run_obsolescence_gate(
+        ctx: StageContext,
+        ticket: Ticket,
+        draft: str,
+        repo_dir: Path | None,
+        s,
+    ) -> Outcome | None:
+        """Run the LLM-based obsolescence gate (best-effort).
+
+        For a *spawned* follow-up/corrective draft, re-evaluate whether
+        the cited evidence gap (a missing doc section, a still-listed
+        dependency, a grep that should return nothing) still exists on
+        HEAD.  When the gap was already resolved in place by a
+        parallel/parent ticket, short-circuit the draft straight to
+        ``DONE`` before any refine LLM budget is spent.
+
+        Returns ``None`` (proceed) when the gate is disabled, the draft
+        is trivial, the ticket is user-authored, the check fails, or the
+        gap is confirmed to still exist.  Returns
+        ``Outcome(State.DONE, ...)`` when the gap is already resolved.
+
+        The gate is gated behind ``obsolescence_gate_enabled`` (default
+        ``False``, opt-in).  User-authored drafts reflect deliberate
+        human intent and are never auto-closed — the gate targets the
+        spawned follow-up/corrective drafts (retrospect, agent,
+        review-spawned) that make up the Evidence population.
+        """
+        if not s.obsolescence_gate_enabled:
+            return None
+
+        if not draft or len(draft) < 50:
+            log.debug(
+                "%s: trivial draft (%d chars), skipping obsolescence gate",
+                ticket.id,
+                len(draft),
+            )
+            return None
+
+        if ticket.source == SourceKind.USER:
+            log.debug(
+                "%s: user-authored draft, skipping obsolescence gate",
+                ticket.id,
+            )
+            return None
+
+        try:
+            result = obsolescence.run_obsolescence_check(
+                settings=s,
+                draft_title=ticket.title,
+                draft_body=draft,
+                repo_dir=repo_dir,
+            )
+        except Exception:
+            log.warning(
+                "%s: obsolescence check failed, proceeding with refine",
+                ticket.id,
+                exc_info=True,
+            )
+            return None
+
+        if result.get("obsolete"):
+            reason = result.get("reason", "cited gap already resolved on HEAD")
+            log.info(
+                "%s: obsolescence gate flagged as obsolete — %s",
+                ticket.id,
+                reason,
+            )
+            # Discarded drafts go to DONE so retrospect still analyses
+            # them — same pattern as the freshness/dedup gates.
+            return Outcome(
+                State.DONE,
+                f"{OBSOLESCENCE_GAP_PREFIX} — {reason}",
+            )
+
+        log.debug(
+            "%s: obsolescence gate passed — %s",
+            ticket.id,
+            result.get("reason", ""),
+        )
+        return None
