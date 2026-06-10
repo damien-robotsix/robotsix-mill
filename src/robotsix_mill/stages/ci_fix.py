@@ -32,6 +32,7 @@ log = logging.getLogger("robotsix_mill.stages.ci_fix")
 _CI_FIX_COUNTER = "ci_fix_attempts.txt"
 _CI_NO_CHANGE_COUNTER = "ci_no_change_cycles.txt"
 _CI_FIX_CYCLE_COUNTER = "ci_fix_cycles.txt"
+_CI_REFRESH_COUNTER = "ci_fix_refresh_attempts.txt"
 
 
 def _read_counter(path) -> int:
@@ -211,6 +212,13 @@ class CIFixStage(Stage):
             # cycles (the counter never reached the ceiling). The counter is
             # reset only on GENUINE forward progress — when merge advances the
             # ticket out of the CI gate to HUMAN_MR_APPROVAL (merge.py).
+            #
+            # Do reset the refresh counter, though: CI going green is genuine
+            # forward progress, so a later, independent staleness can be
+            # refreshed once more.
+            _write_counter(
+                ctx.service.workspace(ticket).artifacts_dir / _CI_REFRESH_COUNTER, 0
+            )
             return Outcome(State.IMPLEMENT_COMPLETE)
 
         if conclusion in ("pending", None):
@@ -331,7 +339,7 @@ class CIFixStage(Stage):
             )
 
         if result is not None and result.status == "OUT_OF_SCOPE":
-            return self._handle_out_of_scope(ticket, ctx, result)
+            return self._handle_out_of_scope(ticket, ctx, branch, result)
 
         # Agent failed (result is None on crash, or status == "FAILED").
         if attempt < max_attempts:
@@ -398,15 +406,58 @@ class CIFixStage(Stage):
         self,
         ticket: Ticket,
         ctx: StageContext,
+        branch: str,
         result: CiFixResult,
     ) -> Outcome:
         """Route an out-of-scope CI failure to a dedicated fix ticket.
 
-        Delegates the spawn-or-reuse + wire + park logic to
-        :func:`~.dependency_fix.spawn_dependency_fix`, which is shared
+        Before spawning, detect a *stale* branch (one behind its base, where
+        the failure may already be fixed on main) and refresh it once via the
+        forge's server-side update-branch primitive instead of spawning a
+        dependency fix. Otherwise delegates the spawn-or-reuse + wire + park
+        logic to :func:`~.dependency_fix.spawn_dependency_fix`, which is shared
         with the implement-stage baseline check (and, later, verify /
         review / merge).
         """
+        s = ctx.settings
+        artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
+        refresh_path = artifacts_dir / _CI_REFRESH_COUNTER
+
+        # Stale-branch backstop: when this branch is behind its base, the
+        # failure may already be fixed on main (a fast-moving main races the
+        # ci-fix agent). Refresh the branch once via the forge's server-side
+        # update-branch and re-poll CI instead of spawning a dependency fix.
+        # Use the forge's server-side "behind" signal (NOT the local-clone
+        # branch_is_behind_main, which never advances after a server-side
+        # refresh and would loop forever).
+        if _read_counter(refresh_path) == 0:
+            try:
+                pr = get_forge(s, repo_config=ctx.repo_config).pr_status(
+                    source_branch=branch
+                )
+            except Exception:  # noqa: BLE001 — treat as not-behind, fall through
+                pr = None
+            if (pr or {}).get("mergeable_state") == "behind":
+                res = get_forge(s, repo_config=ctx.repo_config).update_branch(
+                    source_branch=branch
+                )
+                if res.get("updated") or res.get("reason") == "already up to date":
+                    _write_counter(refresh_path, 1)
+                    try:
+                        ctx.service.add_history_note(
+                            ticket.id,
+                            "branch was stale — refreshed via forge "
+                            "update-branch before classifying out-of-scope; "
+                            "re-running CI",
+                        )
+                    except Exception:  # noqa: BLE001 — history note is best-effort
+                        log.warning(
+                            "%s: failed to record branch-refresh note", ticket.id
+                        )
+                    return Outcome(State.IMPLEMENT_COMPLETE)
+                # update_branch failed (PR not found / HTTP error) — fall
+                # through to the normal spawn path so we don't get stuck.
+
         # Deterministic title so the spawn is idempotent across cycles.
         title = (
             f"ci_fix: out-of-scope CI failure — "
@@ -432,8 +483,12 @@ class CIFixStage(Stage):
 
         # Reset the per-ticket ci_fix counters so a later re-entry (after
         # auto-unblock + a fresh pipeline pass) starts clean.
-        artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
-        for counter in (_CI_FIX_COUNTER, _CI_NO_CHANGE_COUNTER, _CI_FIX_CYCLE_COUNTER):
+        for counter in (
+            _CI_FIX_COUNTER,
+            _CI_NO_CHANGE_COUNTER,
+            _CI_FIX_CYCLE_COUNTER,
+            _CI_REFRESH_COUNTER,
+        ):
             _write_counter(artifacts_dir / counter, 0)
 
         return outcome
@@ -511,5 +566,7 @@ class CIFixStage(Stage):
             )
         # Reset attempt counter on success.
         _write_counter(counter_path, 0)
+        # Genuine forward progress — allow a future staleness to refresh again.
+        _write_counter(counter_path.parent / _CI_REFRESH_COUNTER, 0)
         log.info("%s: ci fix succeeded, branch force-pushed", ticket.id)
         return Outcome(State.IMPLEMENT_COMPLETE)  # re-check CI on next poll

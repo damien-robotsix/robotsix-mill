@@ -237,6 +237,11 @@ class Forge(ABC):
         """
         return []
 
+    def update_branch(self, *, source_branch: str) -> dict:
+        """Merge the PR's base branch into the PR branch (server-side) so its
+        CI re-runs against the current base tip. Default: unsupported no-op."""
+        return {"updated": False, "reason": "not supported"}
+
     def delete_branch(self, *, branch: str) -> bool:
         """Delete the remote head branch *branch* after merge.
 

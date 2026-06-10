@@ -503,6 +503,24 @@ class GitHubForge(Forge):
             pull_number=pr["number"],
         )
 
+    def update_branch(self, *, source_branch: str) -> dict:
+        owner, repo = self._owner_repo
+        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
+        if pr is None:
+            return {"updated": False, "reason": "PR not found"}
+        try:
+            r = self._http.put(
+                f"/repos/{owner}/{repo}/pulls/{pr['number']}/update-branch"
+            )
+            if r.status_code == 202:
+                return {"updated": True, "reason": "update-branch accepted"}
+            if r.status_code == 422:
+                # branch already up to date — nothing to do
+                return {"updated": False, "reason": "already up to date"}
+            return {"updated": False, "reason": f"HTTP {r.status_code}: {r.text[:200]}"}
+        except Exception as e:  # noqa: BLE001
+            return {"updated": False, "reason": str(e)}
+
     def list_pr_reviews(self, *, source_branch: str) -> list[dict]:
         owner, repo = self._owner_repo
         pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
