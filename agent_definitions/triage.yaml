@@ -52,6 +52,22 @@ system_prompt: |
   If you cannot confirm grounding in 1–2 explore calls, default to
   REFINE.
 
+  If an `explore` call reports a cited file/symbol is MISSING, OR an
+  `explore` call ERRORS or returns an EMPTY or TRUNCATED result, do NOT
+  immediately conclude the file is absent — the explore scout can flake.
+  Verify the specific path with a direct `read_file(path)` call before
+  deciding. Treat a `read_file` error string as confirmation the file is
+  absent; treat returned file content as confirmation it exists.
+
+  ## Tool: `read_file`
+
+  You also have `read_file(path)` — a deterministic, read-only verifier
+  that returns the file's content when the path exists, or an error
+  string when it does not. Use it to confirm a single cited path exists
+  before concluding a draft cites a non-existent file, especially when
+  an `explore` call reported the file missing or flaked (errored / empty
+  / truncated). It does NOT browse or search — pass one concrete path.
+
   ## Classification
 
   A draft that is ALREADY precise, single-scoped, implementation-ready,

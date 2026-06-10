@@ -3126,6 +3126,58 @@ def test_triage_refine_agent_config(monkeypatch, tmp_path):
     assert seen_kwargs["ask_user"] is False
 
 
+def test_triage_refine_wires_read_file_with_repo_dir(monkeypatch, tmp_path):
+    """With repo_dir provided, triage_refine wires exactly an ``explore``
+    tool plus a read-only ``read_file`` tool — and no write/edit/delete/
+    run_command/list_dir."""
+    from robotsix_mill.agents import base as base_mod
+    from robotsix_mill.agents.refining import triage_refine, TriageResult
+
+    seen_kwargs: dict = {}
+
+    def fake_build_agent(
+        settings,
+        system_prompt,
+        output_type,
+        tools,
+        web_knowledge,
+        report_issue,
+        model_name,
+        name,
+        ask_user,
+        **kwargs,
+    ):
+        seen_kwargs.update(tools=tools)
+
+        class FakeAgent:
+            def run_sync(
+                self, msg, message_history=None, board_id="", usage_limits=None
+            ):
+                return type(
+                    "R", (), {"output": TriageResult(decision="REFINE", reason="test")}
+                )()
+
+        return FakeAgent()
+
+    monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    s = Settings(data_dir=str(tmp_path), triage_model="test/triage-model")
+    result = triage_refine(
+        settings=s, title="Test", draft="do x in foo.py", repo_dir=repo_dir
+    )
+
+    assert result.decision == "REFINE"
+    tool_names = {t.__name__ for t in seen_kwargs["tools"]}
+    assert "explore" in tool_names
+    assert "read_file" in tool_names
+    assert not (
+        tool_names
+        & {"write_file", "edit_file", "delete_file", "run_command", "list_dir"}
+    )
+
+
 def test_triage_skip_skips_full_refine(ctx, service, monkeypatch):
     """When triage returns SKIP, run_refine_agent is NOT called,
     the draft is preserved, and the ticket goes to READY."""

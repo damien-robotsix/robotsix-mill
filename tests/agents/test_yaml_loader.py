@@ -351,6 +351,34 @@ def test_real_refine_yaml_parses():
             _os.environ.pop("MILL_REFINE_MODEL", None)
 
 
+def test_real_triage_yaml_parses():
+    """Smoke-test: the existing agent_definitions/triage.yaml parses and
+    documents both the explore and read_file verification tools."""
+    p = Path("agent_definitions/triage.yaml")
+    if not p.exists():
+        pytest.skip("agent_definitions/triage.yaml not found")
+
+    import os as _os
+
+    had_model = "MILL_TRIAGE_MODEL" in _os.environ
+    _os.environ.setdefault("MILL_TRIAGE_MODEL", "test/model")
+
+    try:
+        ad = load_agent_definition(p)
+        assert ad.name == "triage"
+        assert ad.tools == []
+        assert ad.output_type == "TriageResult"
+        assert ad.retries == 2
+        assert ad.module == "refining"
+        assert "## Tool: `explore`" in ad.system_prompt
+        assert "## Tool: `read_file`" in ad.system_prompt
+        assert "`read_file(path)`" in ad.system_prompt
+        assert "Verify the specific path with a direct `read_file" in (ad.system_prompt)
+    finally:
+        if not had_model:
+            _os.environ.pop("MILL_TRIAGE_MODEL", None)
+
+
 def test_real_implement_yaml_has_output_style_brevity_guidance():
     """The real implement.yaml's system_prompt must carry the
     output-style brevity guidance that discourages running commentary.
