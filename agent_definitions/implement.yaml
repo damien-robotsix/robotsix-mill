@@ -22,6 +22,7 @@ tools:
 # for library API questions; the cache amortises across tickets.
 report_issue: true
 read_ticket: true
+list_epic_children: true
 web_knowledge: true
 output_type: ImplementResult
 retries: 2

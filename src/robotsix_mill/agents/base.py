@@ -110,6 +110,7 @@ def build_agent_from_definition(
     *,
     tools: list | None = None,
     repo_dir: "Path | None" = None,
+    current_ticket_id: str = "",
     **overrides,
 ) -> AgentHandle:
     """Build an agent from an :class:`AgentDefinition`, bridging the YAML
@@ -158,6 +159,8 @@ def build_agent_from_definition(
         web_knowledge=definition.web_knowledge,
         report_issue=definition.report_issue,
         read_ticket=definition.read_ticket,
+        list_epic_children=definition.list_epic_children,
+        current_ticket_id=current_ticket_id,
         reply_to_thread=definition.reply_to_thread,
         close_thread=definition.close_thread,
         list_threads=definition.list_threads,
@@ -396,6 +399,8 @@ def build_agent(  # noqa: C901
     web_knowledge: bool = False,
     report_issue: bool = True,
     read_ticket: bool = False,
+    list_epic_children: bool = False,
+    current_ticket_id: str = "",
     reply_to_thread: bool = True,
     close_thread: bool = True,
     list_threads: bool = True,
@@ -438,6 +443,15 @@ def build_agent(  # noqa: C901
         from .read_ticket import make_read_ticket_tool
 
         all_tools.append(make_read_ticket_tool(settings))
+    if list_epic_children and current_ticket_id:
+        # Read-only tool so an agent can enumerate its sibling epic
+        # children (children of its parent epic) when it needs the
+        # substantive content of an intended sibling ticket. The current
+        # ticket id is bound at build time so the agent calls it with no
+        # argument. Only injected when both flag and id are present.
+        from .list_epic_children import make_list_epic_children_tool
+
+        all_tools.append(make_list_epic_children_tool(settings, current_ticket_id))
     if reply_to_thread:
         # Tool so agents can reply to a comment thread on the current
         # ticket, enabling real conversation with humans.

@@ -710,6 +710,7 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
     extra_roots: list[Path] | None = None,
     message_history: list | None = None,
     board_id: str = "",
+    current_ticket_id: str = "",
     language_instructions: str = "",
     deployed_log_summary: str = "",
     screenshot_paths: list[Path] | None = None,
@@ -817,6 +818,7 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
         definition,
         tools=tools,
         board_id=board_id,
+        current_ticket_id=current_ticket_id,
         **overrides,
     )
 

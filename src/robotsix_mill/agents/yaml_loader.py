@@ -54,6 +54,7 @@ class AgentDefinition(BaseModel):
     web_knowledge: bool = False
     report_issue: bool = True
     read_ticket: bool = False
+    list_epic_children: bool = False
     reply_to_thread: bool = True
     close_thread: bool = True
     list_threads: bool = True

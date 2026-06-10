@@ -205,6 +205,7 @@ def run_coordinator(
     message_history: list | None = None,
     previous_attempt_summary: str | None = None,
     board_id: str = "",
+    current_ticket_id: str = "",
     language_instructions: str = "",
     extra_roots: list[Path] | None = None,
 ) -> ImplementResult:
@@ -317,6 +318,7 @@ def run_coordinator(
         # unmerged parent ticket) can't record WHY — it just surfaces as a
         # generic "no changes produced" block.
         board_id=board_id,
+        current_ticket_id=current_ticket_id,
         tools=[
             make_explore_tool(
                 settings,
