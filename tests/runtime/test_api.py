@@ -15,8 +15,129 @@ def client(settings, repos_registry):
         yield c
 
 
+@pytest.fixture
+def multi_repo_client(settings, two_repo_registry):
+    # Multi-repo mode: no single_repo_id, so /repos surfaces every
+    # registered repo plus the synthetic "meta" entry.
+    with TestClient(create_app(two_repo_registry, settings)) as c:
+        yield c
+
+
+@pytest.fixture
+def clean_failures():
+    """Keep the module-global Langfuse failure registry clean so test
+    ordering can't bleed across langfuse-status tests."""
+    from robotsix_mill.runtime.tracing import clear_export_failures
+
+    clear_export_failures()
+    yield
+    clear_export_failures()
+
+
 def test_health(client):
     assert client.get("/health").json()["status"] == "ok"
+
+
+def test_health_reports_uptime_when_started_at_set(client):
+    """The started_at branch: with app.state.started_at set, /health
+    returns the started_at isoformat and a non-negative int uptime."""
+    from datetime import datetime, timedelta, timezone
+
+    started = datetime.now(timezone.utc) - timedelta(seconds=5)
+    saved = getattr(client.app.state, "started_at", None)
+    client.app.state.started_at = started
+    try:
+        r = client.get("/health")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["status"] == "ok"
+        assert body["started_at"] == started.isoformat()
+        assert isinstance(body["uptime_seconds"], int)
+        assert body["uptime_seconds"] >= 0
+    finally:
+        if saved is None:
+            delattr(client.app.state, "started_at")
+        else:
+            client.app.state.started_at = saved
+
+
+def test_langfuse_status_empty(client, clean_failures):
+    """With the failure registry cleared, /langfuse-status reports none."""
+    r = client.get("/langfuse-status")
+    assert r.status_code == 200
+    assert r.json() == {"failures": [], "count": 0}
+
+
+def test_langfuse_status_with_failures(client, clean_failures):
+    """Seeded failures are surfaced with their project/error values."""
+    from robotsix_mill.runtime.tracing import record_export_failure
+
+    record_export_failure(project="proj-a", error="boom", status=500)
+    record_export_failure(project="proj-b", error="kaput", status=None)
+
+    r = client.get("/langfuse-status")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["count"] == 2
+    assert isinstance(body["failures"], list)
+    assert len(body["failures"]) == 2
+    projects = {f["project"] for f in body["failures"]}
+    errors = {f["error"] for f in body["failures"]}
+    assert projects == {"proj-a", "proj-b"}
+    assert errors == {"boom", "kaput"}
+
+
+def test_langfuse_status_clear(client, clean_failures):
+    """POST /langfuse-status/clear returns 204 with empty body and
+    empties the registry."""
+    from robotsix_mill.runtime.tracing import record_export_failure
+
+    record_export_failure(project="proj-a", error="boom", status=500)
+
+    r = client.post("/langfuse-status/clear")
+    assert r.status_code == 204
+    assert r.content == b""
+
+    after = client.get("/langfuse-status").json()
+    assert after == {"failures": [], "count": 0}
+
+
+def test_list_repos_single_repo(client):
+    """Single-repo mode returns exactly the one repo and short-circuits
+    before appending the synthetic meta entry."""
+    r = client.get("/repos")
+    assert r.status_code == 200
+    body = r.json()
+    assert body == [{"repo_id": "test-repo", "board_id": "test-board"}]
+    assert all(e["repo_id"] != "meta" for e in body)
+
+
+def test_list_repos_multi_repo(multi_repo_client):
+    """Multi-repo mode lists every repo plus the meta entry appended
+    last, exposing only repo_id/board_id (no Langfuse secrets)."""
+    r = multi_repo_client.get("/repos")
+    assert r.status_code == 200
+    body = r.json()
+    assert {"repo_id": "repo-a", "board_id": "board-a"} in body
+    assert {"repo_id": "repo-b", "board_id": "board-b"} in body
+    assert body[-1] == {"repo_id": "meta", "board_id": "meta"}
+    for entry in body:
+        assert set(entry.keys()) == {"repo_id", "board_id"}
+
+
+def test_board_import_error_fallback(client, monkeypatch):
+    """When robotsix_board is not importable, board() falls back to
+    render_board_html("", skeleton) without raising."""
+    import sys
+
+    monkeypatch.setitem(sys.modules, "robotsix_board", None)
+
+    r = client.get("/")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/html")
+    body = r.text
+    assert 'class="board-column" data-status="draft"' in body
+    assert "{CONFIG_SCRIPT}" not in body
 
 
 def test_gates(client, settings):
