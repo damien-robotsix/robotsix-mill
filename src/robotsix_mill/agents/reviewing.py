@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field
-from typing import Literal
+from typing import Any, Literal
 
 from ..config import Settings
 
@@ -118,6 +118,7 @@ def run_review_agent(
     prior_context: str | None = None,
     repo_dir: Path | None = None,
     reference_files: list[str] | None = None,
+    screenshot_path: Path | None = None,
 ) -> ReviewVerdict:
     """Run a blind review of *diff* against *spec*.
 
@@ -144,11 +145,20 @@ def run_review_agent(
     consume the result" cycle). Pass the union of the implement
     stage's ``ImplementResult.reference_files`` and paths parsed from
     the diff so the common case (reviewer wants every modified file)
-    skips all its read_file round-trips."""
+    skips all its read_file round-trips.
+
+    When *screenshot_path* is provided AND the file exists AND the review
+    agent is routed to the Claude SDK backend (vision-capable), the PNG
+    is read and attached as a ``pydantic_ai.BinaryContent`` image on the
+    FINAL user turn so the model sees the rendered board alongside the
+    diff. On the default DeepSeek path (no Claude SDK routing) the image
+    is never attached — DeepSeek has no vision and would reject an image
+    block. A missing/unreadable screenshot degrades silently to the
+    text-only path; it never alters routing or crashes review."""
     from pydantic_ai.usage import UsageLimits
 
     from .yaml_loader import load_agent_definition
-    from .base import build_agent_from_definition, _safe_close
+    from .base import build_agent_from_definition, _safe_close, _use_claude_sdk
     from .retry import run_agent
 
     definition = load_agent_definition(
@@ -190,7 +200,7 @@ def run_review_agent(
         user_prompt += section("ticket-spec", spec) + "\n\n" + section("git-diff", diff)
         limits = UsageLimits(request_limit=settings.review_request_limit)
         run_kwargs: dict = {"usage_limits": limits}
-        run_user_prompt: str | None = user_prompt
+        run_user_prompt: str | list[Any] | None = user_prompt
         # Build the synthetic message_history AFTER the user_prompt is
         # finalized so the prompt can be prepended cleanly BEFORE the
         # preload tool calls; see fs_tools.build_preseed_history.
@@ -205,6 +215,12 @@ def run_review_agent(
             if preseed:
                 run_kwargs["message_history"] = preseed
                 run_user_prompt = None
+        # Attach a board screenshot as a vision image ONLY when the review
+        # agent is routed to the Claude SDK backend (DeepSeek has no vision
+        # and rejects image blocks). A missing/unreadable file degrades
+        # silently to the text-only path — never crash review.
+        if screenshot_path is not None and _use_claude_sdk(settings, definition.name):
+            run_user_prompt = _maybe_attach_screenshot(run_user_prompt, screenshot_path)
         result = run_agent(
             agent,
             lambda h: h.run_sync(run_user_prompt, **run_kwargs),
@@ -231,6 +247,41 @@ def run_review_agent(
     finally:
         _safe_close(agent)
     return _coerce_verdict(result.output)
+
+
+def _maybe_attach_screenshot(
+    run_user_prompt: str | list[Any] | None,
+    screenshot_path: Path,
+) -> str | list[Any] | None:
+    """Return *run_user_prompt* with the board PNG attached as a vision
+    image, or unchanged when the file is missing/unreadable.
+
+    Caller has already confirmed the agent is routed to a vision-capable
+    backend. A missing/unreadable file degrades silently to the text-only
+    path — review must never crash on a bad screenshot.
+    """
+    if not screenshot_path.exists():
+        return run_user_prompt
+    try:
+        png_bytes = screenshot_path.read_bytes()
+    except OSError:
+        return run_user_prompt
+    if not png_bytes:
+        return run_user_prompt
+
+    from pydantic_ai import BinaryContent
+
+    image = BinaryContent(data=png_bytes, media_type="image/png")
+    if run_user_prompt is None:
+        # Pre-seed active: the text prompt is in message_history; give the
+        # run a short instruction plus the image as the final user turn.
+        return [
+            "A full-page screenshot of the rendered kanban board is "
+            "attached. Assess its visual appearance (columns, seeded "
+            "tickets, layout) alongside the diff.",
+            image,
+        ]
+    return [run_user_prompt, image]
 
 
 def _coerce_verdict(output: object) -> ReviewVerdict:

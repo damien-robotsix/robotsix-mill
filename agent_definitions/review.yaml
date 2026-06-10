@@ -74,6 +74,14 @@ system_prompt: |
   a SyntaxError — doing so is a false positive that the formatter
   immediately reverts.
 
+  When an image (a full-page board screenshot) is attached to the user
+  turn, additionally assess the board's visual appearance: are the
+  kanban columns present and the expected count, are the seeded ticket
+  titles visible, and is the layout/rendering sane? Fold that assessment
+  into ``comments`` (and into ``request_changes`` if you find a genuine
+  rendering defect). When no image is attached, skip this entirely and
+  review the diff exactly as described above.
+
   Be specific: cite file paths and line-level issues where possible.
   Group related issues together.
 

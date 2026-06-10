@@ -104,6 +104,7 @@ def test_approve_transitions_to_deliverable(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        screenshot_path=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(verdict="APPROVE", comments="lgtm")
@@ -131,6 +132,7 @@ def test_request_changes_transitions_to_ready(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        screenshot_path=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(verdict="REQUEST_CHANGES", comments="X is broken")
@@ -165,6 +167,7 @@ def test_needs_discussion_pauses_for_user_reply(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        screenshot_path=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(verdict="NEEDS_DISCUSSION", comments="questionable design")
@@ -200,6 +203,7 @@ def test_blind_review_only_diff_and_spec(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        screenshot_path=None,
     ):
         captured["diff"] = diff
         captured["spec"] = spec
@@ -235,6 +239,7 @@ def test_agent_error_blocks_resumable(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        screenshot_path=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         raise RuntimeError("model unavailable")
@@ -268,6 +273,7 @@ def test_empty_diff_approves_without_agent(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        screenshot_path=None,
     ):
         agent_called.append(1)
         return ReviewVerdict(verdict="APPROVE", comments="")
@@ -312,6 +318,7 @@ def test_writes_review_artifact_on_approve(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        screenshot_path=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(
@@ -345,6 +352,7 @@ def test_writes_review_artifact_on_request_changes(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        screenshot_path=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(
@@ -378,6 +386,7 @@ def test_comment_multiline_collapse(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        screenshot_path=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(
@@ -409,6 +418,7 @@ def test_comment_truncation(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        screenshot_path=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(
@@ -445,6 +455,7 @@ def test_comment_empty_returns_no_details(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        screenshot_path=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(
@@ -495,6 +506,7 @@ def test_request_changes_under_cap(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        screenshot_path=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(verdict="REQUEST_CHANGES", comments="fix X")
@@ -534,6 +546,7 @@ def test_request_changes_at_cap_escalates(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        screenshot_path=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(verdict="REQUEST_CHANGES", comments="still broken")
@@ -571,6 +584,7 @@ def test_approve_resets_counter(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        screenshot_path=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(verdict="APPROVE", comments="lgtm")
@@ -601,6 +615,7 @@ def test_needs_discussion_preserves_counter(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        screenshot_path=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(verdict="NEEDS_DISCUSSION", comments="questionable")
@@ -838,6 +853,56 @@ def test_out_of_scope_ask_uses_explicit_title(ctx_factory, monkeypatch):
     children = _spawned_children(ctx, t.id)
     assert len(children) == 1
     assert children[0].title == "Add __pycache__ to .gitignore"
+
+
+# --- board screenshot plumbing -----------------------------------------
+
+
+def test_screenshot_passed_when_board_png_present(ctx_factory, monkeypatch):
+    """When artifacts/board.png exists, the stage passes it as
+    ``screenshot_path`` to ``run_review_agent``."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+    board_png = ws.artifacts_dir / "board.png"
+    board_png.write_bytes(b"\x89PNG\r\n\x1a\n fake png bytes")
+
+    captured: dict = {}
+
+    def _fake_review(*, screenshot_path=None, **_kw):
+        captured["screenshot_path"] = screenshot_path
+        return ReviewVerdict(verdict="APPROVE", comments="ok")
+
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
+
+    ReviewStage().run(t, ctx)
+    assert captured["screenshot_path"] == board_png
+
+    # Artifact records the screenshot was present.
+    text = (ws.artifacts_dir / "review.md").read_text(encoding="utf-8")
+    assert "board_screenshot: present" in text
+
+
+def test_screenshot_none_when_board_png_absent(ctx_factory, monkeypatch):
+    """With no artifacts/board.png, the stage passes ``screenshot_path=None``
+    and review behaves exactly as today."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+
+    captured: dict = {}
+
+    def _fake_review(*, screenshot_path=None, **_kw):
+        captured["screenshot_path"] = screenshot_path
+        return ReviewVerdict(verdict="APPROVE", comments="ok")
+
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
+
+    ReviewStage().run(t, ctx)
+    assert captured["screenshot_path"] is None
+
+    ws = ctx.service.workspace(t)
+    text = (ws.artifacts_dir / "review.md").read_text(encoding="utf-8")
+    assert "board_screenshot: absent" in text
 
 
 # --- prior-context input cap -------------------------------------------

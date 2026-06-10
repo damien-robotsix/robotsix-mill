@@ -298,6 +298,13 @@ class ReviewStage(Stage):
         # any non-trivial diff. See fs_tools.build_preseed_history.
         modified_paths = _paths_from_diff(diff)
 
+        # A board screenshot (captured by the smoke gate for UI-touching
+        # tickets) lands at artifacts/board.png. When present, hand it to
+        # the reviewer so a vision-capable backend can assess the rendered
+        # board; when absent, pass None and review behaves as today.
+        board_png = ws.artifacts_dir / "board.png"
+        screenshot_path = board_png if board_png.exists() else None
+
         # Run the blind review agent.
         try:
             verdict: ReviewVerdict = run_review_agent(
@@ -307,6 +314,7 @@ class ReviewStage(Stage):
                 prior_context=prior_context,
                 repo_dir=repo_dir,
                 reference_files=modified_paths,
+                screenshot_path=screenshot_path,
             )
         except Exception as e:
             log.exception("%s: review agent error", ticket.id)
@@ -326,6 +334,7 @@ class ReviewStage(Stage):
         ws.artifacts_dir.joinpath("review.md").write_text(
             f"verdict: {verdict.verdict}\n"
             f"auto_merge_eligible: {str(verdict.auto_merge_eligible).lower()}\n"
+            f"board_screenshot: {'present' if screenshot_path else 'absent'}\n"
             f"comment: {_collapse_comments(verdict.comments)}\n",
             encoding="utf-8",
         )
