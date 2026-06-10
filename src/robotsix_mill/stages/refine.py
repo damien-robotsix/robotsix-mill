@@ -1753,6 +1753,7 @@ class RefineStage(Stage):
                 board_id=memory_board_id,
                 language_instructions=language_instructions,
                 deployed_log_summary=deployed_log_summary,
+                screenshot_paths=ws.list_screenshots(),
             )
         except RuntimeError as e:  # e.g. OPENROUTER_API_KEY not set
             # ModelHTTPError subclasses RuntimeError, so a transient model

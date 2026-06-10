@@ -4,9 +4,19 @@ from __future__ import annotations
 
 import json
 import logging
+import mimetypes
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Request
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Body,
+    Depends,
+    File,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 
 from ...agents.ask_to_ticket import run_ask_to_ticket_agent
 from ...core.models import (
@@ -181,6 +191,51 @@ def get_description(
     if ticket is None:
         raise HTTPException(404, "ticket not found")
     return {"description": svc.workspace(ticket).read_description()}
+
+
+# Supported screenshot image media types (content-type → canonical).
+_SCREENSHOT_MEDIA_TYPES = {
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/webp",
+}
+
+
+@router.post("/tickets/{ticket_id}/screenshots", status_code=201)
+async def upload_screenshot(
+    ticket_id: str,
+    file: UploadFile = File(...),
+    svc=Depends(get_service),
+) -> dict:
+    """Attach an image screenshot to a ticket for the refine agent to view.
+
+    Stores the bytes under the ticket's ``screenshots/`` directory (a
+    sibling of ``artifacts/`` so a refine reset does not wipe user
+    input). Rejects non-image uploads with 400 and unknown tickets with
+    404. The filename is reduced to its basename to prevent traversal.
+    """
+    ticket = svc.get(ticket_id)
+    if ticket is None:
+        raise HTTPException(404, "ticket not found")
+
+    media_type = file.content_type
+    if media_type not in _SCREENSHOT_MEDIA_TYPES:
+        guessed, _ = mimetypes.guess_type(file.filename or "")
+        media_type = guessed
+    if media_type not in _SCREENSHOT_MEDIA_TYPES:
+        raise HTTPException(400, "upload must be an image (png, jpeg, gif, webp)")
+
+    # Basename only — strip any directory components to prevent traversal.
+    raw_name = (file.filename or "").replace("\\", "/").split("/")[-1].strip()
+    if not raw_name or raw_name in (".", ".."):
+        ext = mimetypes.guess_extension(media_type) or ".png"
+        existing = len(svc.workspace(ticket).list_screenshots())
+        raw_name = f"screenshot-{existing + 1}{ext}"
+
+    dest = svc.workspace(ticket).screenshots_dir / raw_name
+    dest.write_bytes(await file.read())
+    return {"filename": raw_name, "ticket_id": ticket_id}
 
 
 @router.get("/tickets/{ticket_id}/retrospect")
