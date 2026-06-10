@@ -60,6 +60,59 @@ def load_repo_test_command(repo_dir: Path | None) -> str | None:
     return stripped or None
 
 
+def load_repo_smoke_command(repo_dir: Path | None) -> str | None:
+    """Return the per-repo ``smoke_command`` from
+    ``<repo_dir>/.robotsix-mill/config.yaml``, or ``None``.
+
+    Exact analogue of :func:`load_repo_test_command`: returns the
+    stripped command when the file's top-level ``smoke_command`` key is
+    present and is a non-empty string; otherwise returns ``None``. Never
+    raises — a missing or malformed file is treated as "not set" so a
+    managed repo can't take mill down by committing a broken file:
+
+    * ``repo_dir is None`` → ``None``.
+    * file absent → ``None`` (silent no-op).
+    * unreadable / invalid YAML → ``log.warning`` + ``None``.
+    * top-level not a mapping, or ``smoke_command`` value not a string
+      → ``log.warning`` + ``None`` (clear type mismatch).
+    * key absent, or value empty/whitespace-only → ``None`` (plain
+      absence, no warning).
+    """
+    raw = _load_repo_config_dict(repo_dir)
+    if raw is None or "smoke_command" not in raw:
+        return None
+    value = raw["smoke_command"]
+    if not isinstance(value, str):
+        log.warning("repo settings: 'smoke_command' must be a string — ignoring")
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def load_repo_smoke_paths(repo_dir: Path | None) -> list[str]:
+    """Return the per-repo ``smoke_paths`` glob list from
+    ``<repo_dir>/.robotsix-mill/config.yaml``, or ``[]``.
+
+    Accepts ``smoke_paths: [src/runtime/**, src/x/*.css]`` (a list of
+    glob strings). Strips whitespace from each entry and filters out
+    empty/whitespace-only strings. Non-string items are coerced via
+    ``str(x).strip()`` (matching :func:`load_repo_languages`). Never
+    raises — a malformed value or missing file yields ``[]``.
+
+    The globs scope the path-scoped smoke gate: an empty/absent list
+    means the smoke command runs unconditionally (when set), otherwise
+    the gate runs only when a ticket's introduced files match a glob."""
+    raw = _load_repo_config_dict(repo_dir)
+    if raw is None:
+        return []
+    val = raw.get("smoke_paths")
+    if isinstance(val, list):
+        return [str(x).strip() for x in val if str(x).strip()]
+    if "smoke_paths" in raw:
+        log.warning("repo settings: 'smoke_paths' must be a list — ignoring")
+    return []
+
+
 def _load_repo_config_dict(repo_dir: Path | None) -> dict | None:
     """Read + validate ``<repo_dir>/.robotsix-mill/config.yaml`` into a dict.
 

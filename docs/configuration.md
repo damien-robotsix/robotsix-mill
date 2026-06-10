@@ -139,6 +139,37 @@ in `repos.yaml`. The precedence is: per-repo `.robotsix-mill/config.yaml`
 `test_command` > `repos.yaml` per-repo `test_command` > this global
 `sandbox.test_command`; empty everywhere makes the gate pass.
 
+### Smoke gate (`smoke_command` / `smoke_paths`)
+
+A repo can declare an optional **path-scoped smoke gate** that runs
+*after* the unit-test gate passes — a lightweight end-to-end check (e.g.
+booting the server and hitting key routes) that catches breakages a unit
+suite misses:
+
+```yaml
+# .robotsix-mill/config.yaml
+smoke_command: scripts/smoke_board.sh
+smoke_paths:
+  - src/robotsix_mill/runtime/**
+```
+
+- `smoke_command` — the shell command the gate runs in the sandbox. The
+  per-repo value wins over the global `sandbox.smoke_command` (env
+  `MILL_SMOKE_COMMAND`); empty everywhere means **no smoke gate** (the
+  gate short-circuits to PASS). The gate is strictly opt-in — no command
+  set anywhere is a no-op.
+- `smoke_paths` — a glob list scoping *when* the gate runs. When
+  empty/absent the smoke command runs **unconditionally** (whenever it is
+  set); otherwise the gate runs only when the ticket's introduced files
+  match a glob. A pure backend change that touches no listed path skips
+  the gate. `smoke_paths` is inherently per-repo and has no global
+  counterpart.
+
+The smoke gate runs **only after unit tests pass** (no point smoking a
+red build), and a smoke failure routes exactly like a unit-test failure
+(retry while iterations remain, escalate on the last, BLOCKED on
+sandbox-unavailable).
+
 ### Per-language instructions
 
 A repo declares the language(s) it uses in the same

@@ -11,11 +11,12 @@ sees the full log; its history stays short.
 
 from __future__ import annotations
 
+import fnmatch
 import re
-from pathlib import Path
+from pathlib import Path, PurePath
 
 from ..config import RepoConfig, Settings, get_secrets
-from ..repo_settings import load_repo_test_command
+from ..repo_settings import load_repo_smoke_command, load_repo_test_command
 
 # Machine-detectable marker prefixing a deterministic, LLM-free diagnosis
 # for an ENVIRONMENTAL test-gate failure (a missing binary the agent cannot
@@ -161,6 +162,97 @@ def run_test_agent(
             )
         # Both runs red — distill the SECOND output (fresher, and the
         # one a fix ticket will be written against).
+        rc, out = rc2, out2
+
+    return False, _distill_failure(settings, repo_dir, rc, out)
+
+
+def smoke_paths_match(changed_files: list[str], smoke_paths: list[str]) -> bool:
+    """Return ``True`` when the smoke gate should run for *changed_files*.
+
+    Pure and side-effect-free (no sandbox / git) so it is unit-testable
+    in isolation. An empty ``smoke_paths`` means "run unconditionally"
+    (the gate is path-scoped only when globs are declared). Otherwise the
+    gate runs when ANY changed file matches ANY glob.
+
+    Matching uses both :func:`fnmatch.fnmatch` and
+    :meth:`pathlib.PurePath.match` against POSIX-style relative paths (as
+    returned by ``git_ops.introduced_files``) so directory-recursive
+    patterns like ``src/robotsix_mill/runtime/**`` and shallow patterns
+    like ``src/robotsix_mill/runtime/static/*.css`` both work."""
+    if not smoke_paths:
+        return True
+    for path in changed_files:
+        pure = PurePath(path)
+        for pattern in smoke_paths:
+            if fnmatch.fnmatch(path, pattern):
+                return True
+            try:
+                if pure.match(pattern):
+                    return True
+            except ValueError:
+                # An invalid pattern for PurePath.match — fnmatch already
+                # had its chance above; treat as non-matching.
+                continue
+    return False
+
+
+def run_smoke_agent(
+    *,
+    settings: Settings,
+    repo_dir: Path,
+    repo_config: RepoConfig | None = None,
+    retry_on_failure: bool = False,
+) -> tuple[bool, str]:
+    """Run the smoke command in the sandbox. Return ``(passed,
+    feedback)``. Closely mirrors :func:`run_test_agent`: on pass the
+    feedback is a short confirmation; on fail it is a cheap-model
+    distilled, actionable diagnosis (NOT the raw log). Sandbox infra
+    failure -> ``(False, "<reason>")`` so the coordinator can react.
+
+    Smoke command resolution (highest precedence first): the per-repo
+    ``.robotsix-mill/config.yaml`` ``smoke_command`` committed in the
+    clone wins when set, else ``settings.smoke_command`` (the fleet-wide
+    global fallback). When both are empty the gate short-circuits to
+    PASS — the smoke gate is strictly opt-in, so a repo without a smoke
+    command no-ops.
+
+    ``retry_on_failure``: re-run the smoke command ONCE before distilling
+    a failure (mirrors the test-gate flake guard)."""
+    from .. import sandbox
+
+    cmd = ((load_repo_smoke_command(repo_dir) or "") or settings.smoke_command).strip()
+    if not cmd:
+        return True, "no smoke gate configured (treated as passing)"
+    try:
+        rc, out = sandbox.run(
+            cmd, repo_dir=repo_dir, settings=settings, install_project=True
+        )
+    except sandbox.SandboxError as e:
+        return False, f"sandbox unavailable: {e}"
+    if rc == 0:
+        return True, "smoke passed"
+
+    # Environmental failure (missing binary / not on PATH): stable,
+    # LLM-free diagnosis so the implement fix-loop circuit breaker can
+    # fire. Same carve-out as the test gate; the pytest ``rc==5`` no-tests
+    # carve-out is test-suite-specific and intentionally NOT applied here.
+    env_diag = _env_error_diag(rc, out)
+    if env_diag is not None:
+        return False, env_diag
+
+    if retry_on_failure:
+        try:
+            rc2, out2 = sandbox.run(
+                cmd, repo_dir=repo_dir, settings=settings, install_project=True
+            )
+        except sandbox.SandboxError as e:
+            return False, f"sandbox unavailable on flake re-run: {e}"
+        if rc2 == 0:
+            return True, (
+                f"smoke passed on re-run (first run failed rc={rc} — flaky); "
+                "treated as passing"
+            )
         rc, out = rc2, out2
 
     return False, _distill_failure(settings, repo_dir, rc, out)

@@ -503,6 +503,82 @@ def test_failing_gate_blocks_resumable(ctx_factory, tmp_path, monkeypatch):
     assert "WIP" in log  # WIP committed so a human can pick it up
 
 
+def test_smoke_gate_runs_after_tests_pass_when_paths_match(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A board-touching ticket (empty smoke_paths ⇒ unconditional) runs the
+    smoke gate after the unit gate passes, and a smoke failure routes
+    exactly like a unit-test failure (escalate → BLOCKED-resumable)."""
+    from robotsix_mill.stages import implement as impl_mod
+
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",  # unit gate passes
+        smoke_command="scripts/smoke.sh",  # smoke gate enabled
+        review_enabled="false",
+        max_fix_iterations="1",  # escalate on the first failure
+    )
+    monkeypatch.setattr(
+        coding, "run_implement_agent", _fake_agent({"feature.txt": "x"})
+    )
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    smoke_calls = []
+
+    def _fake_smoke(**kwargs):
+        smoke_calls.append(kwargs)
+        return (False, "smoke failed: board did not render")
+
+    monkeypatch.setattr(impl_mod, "run_smoke_agent", _fake_smoke)
+
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    out = ImplementStage().run(t, ctx)
+
+    assert smoke_calls, "smoke gate must run after the unit gate passes"
+    assert out.next_state is State.BLOCKED
+    assert "still failing" in out.note and "resumable" in out.note
+
+
+def test_smoke_gate_skipped_when_paths_do_not_match(ctx_factory, tmp_path, monkeypatch):
+    """A pure-backend ticket whose introduced files match no smoke_paths
+    glob does NOT invoke the smoke gate — the ticket proceeds normally."""
+    from robotsix_mill.stages import implement as impl_mod
+
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        smoke_command="scripts/smoke.sh",
+        review_enabled="false",
+    )
+    monkeypatch.setattr(coding, "run_implement_agent", _fake_agent({"backend.py": "x"}))
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+    # Non-empty, board-scoped globs; the changed file (backend.py) matches none.
+    monkeypatch.setattr(
+        impl_mod,
+        "load_repo_smoke_paths",
+        lambda repo_dir: ["src/robotsix_mill/runtime/**"],
+    )
+
+    smoke_calls = []
+    monkeypatch.setattr(
+        impl_mod,
+        "run_smoke_agent",
+        lambda **kw: smoke_calls.append(kw) or (True, "smoke passed"),
+    )
+
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "backend.py")
+
+    out = ImplementStage().run(t, ctx)
+
+    assert not smoke_calls, "smoke gate must NOT run for a non-matching diff"
+    assert out.next_state is State.DOCUMENTING
+
+
 def test_env_error_short_circuits_within_two_cycles(ctx_factory, tmp_path, monkeypatch):
     """An ENV-ERROR diagnosis (missing binary) repeated identically caps
     the fix loop at ≤2 cycles — instead of burning max_fix_iterations —

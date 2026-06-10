@@ -15,6 +15,8 @@ from types import SimpleNamespace
 from robotsix_mill.repo_settings import (
     load_extra_sandbox_packages,
     load_repo_languages,
+    load_repo_smoke_command,
+    load_repo_smoke_paths,
     load_repo_test_command,
     resolve_language_instructions,
 )
@@ -212,4 +214,92 @@ def test_extra_sandbox_packages_malformed_yaml_returns_empty(tmp_path, caplog):
     _write_config(tmp_path, "extra_sandbox_packages: [unterminated\n")
     with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
         assert load_extra_sandbox_packages(tmp_path) == []
+    assert any("read/parse error" in r.message for r in caplog.records)
+
+
+# --- smoke_command ---------------------------------------------------------
+
+
+def test_smoke_command_none_repo_dir_returns_none():
+    assert load_repo_smoke_command(None) is None
+
+
+def test_smoke_command_missing_file_returns_none(tmp_path):
+    assert load_repo_smoke_command(tmp_path) is None
+
+
+def test_smoke_command_present_is_stripped(tmp_path):
+    _write_config(tmp_path, 'smoke_command: "  scripts/smoke.sh  "\n')
+    assert load_repo_smoke_command(tmp_path) == "scripts/smoke.sh"
+
+
+def test_smoke_command_missing_key_returns_none(tmp_path):
+    _write_config(tmp_path, "test_command: pytest\n")
+    assert load_repo_smoke_command(tmp_path) is None
+
+
+def test_smoke_command_empty_value_returns_none(tmp_path):
+    _write_config(tmp_path, 'smoke_command: "   "\n')
+    assert load_repo_smoke_command(tmp_path) is None
+
+
+def test_smoke_command_non_string_warns_and_returns_none(tmp_path, caplog):
+    _write_config(tmp_path, "smoke_command: 123\n")
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+        assert load_repo_smoke_command(tmp_path) is None
+    assert any("string" in r.message for r in caplog.records)
+
+
+def test_smoke_command_malformed_yaml_returns_none(tmp_path, caplog):
+    _write_config(tmp_path, "smoke_command: [unterminated\n")
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+        assert load_repo_smoke_command(tmp_path) is None
+    assert any("read/parse error" in r.message for r in caplog.records)
+
+
+# --- smoke_paths -----------------------------------------------------------
+
+
+def test_smoke_paths_none_repo_dir_returns_empty():
+    assert load_repo_smoke_paths(None) == []
+
+
+def test_smoke_paths_missing_file_returns_empty(tmp_path):
+    assert load_repo_smoke_paths(tmp_path) == []
+
+
+def test_smoke_paths_list(tmp_path):
+    _write_config(
+        tmp_path,
+        "smoke_paths:\n  - src/runtime/**\n  - src/x/*.css\n",
+    )
+    assert load_repo_smoke_paths(tmp_path) == ["src/runtime/**", "src/x/*.css"]
+
+
+def test_smoke_paths_missing_key_returns_empty(tmp_path):
+    _write_config(tmp_path, "smoke_command: scripts/smoke.sh\n")
+    assert load_repo_smoke_paths(tmp_path) == []
+
+
+def test_smoke_paths_whitespace_stripped_and_empties_filtered(tmp_path):
+    _write_config(tmp_path, "smoke_paths:\n  - ' src/a/** '\n  - ''\n  - '  '\n")
+    assert load_repo_smoke_paths(tmp_path) == ["src/a/**"]
+
+
+def test_smoke_paths_non_string_coerced(tmp_path):
+    _write_config(tmp_path, "smoke_paths:\n  - 42\n  - src/a/**\n")
+    assert load_repo_smoke_paths(tmp_path) == ["42", "src/a/**"]
+
+
+def test_smoke_paths_non_list_warns_and_returns_empty(tmp_path, caplog):
+    _write_config(tmp_path, "smoke_paths: src/runtime/**\n")
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+        assert load_repo_smoke_paths(tmp_path) == []
+    assert any("must be a list" in r.message for r in caplog.records)
+
+
+def test_smoke_paths_malformed_yaml_returns_empty(tmp_path, caplog):
+    _write_config(tmp_path, "smoke_paths: [unterminated\n")
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+        assert load_repo_smoke_paths(tmp_path) == []
     assert any("read/parse error" in r.message for r in caplog.records)
