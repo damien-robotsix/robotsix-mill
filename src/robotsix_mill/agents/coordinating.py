@@ -150,6 +150,25 @@ class ValidationResult(BaseModel):
 
 
 def make_run_tests_tool(settings: Settings, repo_dir: Path):
+    """Build the ``run_tests`` tool for the implement coordinator.
+
+    The returned callable runs the project's full test suite in the
+    isolated sandbox by delegating to :func:`~.testing.run_test_agent`,
+    and reports back a ``PASS``/``FAIL`` line plus a short, actionable
+    diagnosis rather than the raw log. The tool is also registered in
+    the :class:`~.tool_registry.ToolRegistry` capability catalog.
+
+    Args:
+        settings: Application configuration passed through to the test
+            sub-agent.
+        repo_dir: Path to the ticket's repository clone the suite runs
+            against.
+
+    Returns:
+        A zero-argument ``run_tests`` closure returning the formatted
+        result string.
+    """
+
     def run_tests() -> str:
         """Run the project's test suite (isolated sandbox) via the test
         sub-agent. Returns 'PASS' or 'FAIL' followed by a short,

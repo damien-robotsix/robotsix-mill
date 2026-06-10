@@ -20,6 +20,14 @@ MAX_GAPS = 10
 
 
 class AgentCheckResult(PeriodicAgentResult):
+    """Structured result of an agent-definition coherence pass.
+
+    Extends :class:`~.periodic_base.PeriodicAgentResult` (which carries
+    the updated memory ledger and the parallel draft-ticket lists) with
+    a ``findings`` field holding the human-readable narrative of the
+    coherence issues the agent surfaced.
+    """
+
     findings: str = ""
 
 

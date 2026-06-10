@@ -140,6 +140,16 @@ class TraceFinding(BaseModel):
 
 
 class TraceInspectResult(BaseModel):
+    """Structured result of a single trace deep-inspection pass.
+
+    ``findings`` is the list of solution-bearing
+    :class:`TraceFinding` items the inspector surfaced (empty for a
+    clean trace), ``updated_memory`` is the agent's refreshed pattern
+    ledger, and ``error`` is non-empty only when the analysis itself
+    failed (e.g. the trace was too large for the model context) — which
+    distinguishes a genuine no-findings run from one that never ran.
+    """
+
     findings: list[TraceFinding] = Field(default_factory=list)
     updated_memory: str = ""
     # When non-empty, surfaces an inspector-side failure to the caller

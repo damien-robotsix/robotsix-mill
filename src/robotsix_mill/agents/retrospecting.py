@@ -26,6 +26,17 @@ log = logging.getLogger(__name__)
 
 
 class MemoryEdit(BaseModel):
+    """A single targeted edit to the retrospect memory ledger.
+
+    Expresses one change without re-emitting the whole ledger. ``op``
+    selects the operation (``append``, ``replace``, or ``remove``);
+    ``find`` is the exact existing ledger block to locate (required for
+    ``replace``/``remove``, matched verbatim including the ``## ``
+    heading); and ``text`` is the new content (the section to add for
+    ``append`` or the replacement for ``replace``; ignored for
+    ``remove``).
+    """
+
     op: Literal["append", "replace", "remove"]
     # For "replace"/"remove": the EXACT existing block of ledger text to
     # locate (must match verbatim, including the "## " heading line).
@@ -36,6 +47,21 @@ class MemoryEdit(BaseModel):
 
 
 class RetrospectResult(BaseModel):
+    """Structured outcome of a retrospect pass over a finished ticket.
+
+    ``findings`` and ``conclusion`` are the agent's analysis of the
+    ticket's workflow and Langfuse session. The ``propose_draft`` /
+    ``draft_title`` / ``draft_body`` / ``draft_gap_id`` fields describe
+    an optional improvement ticket to file, and ``follow_up_title`` /
+    ``follow_up_body`` an optional continuation ticket; ``draft_target``
+    and ``follow_up_target`` route each to the current repo's board or
+    the mill maintenance board. Memory updates flow through exactly one
+    of ``updated_memory`` (full re-emit), ``memory_edits`` (targeted
+    :class:`MemoryEdit` operations, preferred for modifications), or
+    ``memory_delta`` — in that precedence order. ``agented_md_proposals``
+    carries any proposed ``AGENT.md`` changes.
+    """
+
     findings: str
     conclusion: str
     propose_draft: bool = False
@@ -202,6 +228,43 @@ def run_retrospect_agent(
     sibling_context: str = "",
     repo_dir: Path | None = None,
 ) -> RetrospectResult:
+    """Analyse a finished ticket and propose a concrete improvement.
+
+    Builds the retrospect agent from its YAML definition and runs it
+    over the ticket's workflow history plus its Langfuse session
+    summary, returning a structured :class:`RetrospectResult`. When a
+    repository clone is available the agent gets read-only filesystem
+    tools (``read_file``, ``list_dir``, ``run_command``) so it can
+    verify gap claims before filing follow-ups. A pre-parse repair hook
+    salvages output whose ``updated_memory`` JSON contains unescaped
+    characters, and non-structured output is degraded safely via
+    :func:`_coerce_result`.
+
+    Args:
+        settings: Application configuration — model name
+            (``retrospect_model``) and retry parameters.
+        ticket_summary: Summary of the finished ticket under review.
+        history_text: The ticket's rendered workflow history.
+        langfuse_summary: Pre-computed Langfuse session summary, or
+            ``None`` for a workflow-only review.
+        memory: The agent's memory ledger as a Markdown string.
+        comments_text: The ticket's operator/agent comment history.
+        recent_proposals: Recent prior proposals prepended to the
+            prompt for dedup awareness.
+        verified_proposals: Verified-state table of prior proposals for
+            ledger reconciliation.
+        epic_context: Optional epic context block appended to the
+            prompt.
+        sibling_context: Optional sibling-ticket context block appended
+            to the prompt.
+        repo_dir: Optional path to the local repository clone; when set
+            and present, enables the read-only filesystem tools.
+
+    Returns:
+        A :class:`RetrospectResult` with findings, conclusion, optional
+        draft/follow-up proposals, and memory updates. Degrades to an
+        empty result when the agent returns unparseable output.
+    """
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
 

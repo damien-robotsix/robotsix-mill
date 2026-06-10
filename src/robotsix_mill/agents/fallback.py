@@ -43,9 +43,42 @@ class FallbackAgentHandle:
         return self._fallback
 
     def run_sync(self, *args: Any, **kwargs: Any) -> Any:
+        """Run the primary handle synchronously.
+
+        Delegates straight to the primary's ``run_sync``; the fallback
+        is never consulted here. ``run_agent`` (not this method) owns
+        the fallback decision — it detects the ``fallback_builder``
+        attribute and rebuilds against DeepSeek/OpenRouter only after
+        the primary's local retries are exhausted.
+
+        Args:
+            *args: Positional arguments forwarded to the primary's
+                ``run_sync``.
+            **kwargs: Keyword arguments forwarded to the primary's
+                ``run_sync``.
+
+        Returns:
+            Whatever the primary handle's ``run_sync`` returns.
+        """
         return self._primary.run_sync(*args, **kwargs)
 
     async def run(self, *args: Any, **kwargs: Any) -> Any:
+        """Run the primary handle asynchronously.
+
+        The async counterpart to :meth:`run_sync`: it awaits and
+        delegates to the primary's ``run`` and does not consult the
+        fallback — ``arun_agent`` orchestrates the fallback rebuild
+        only after the primary's local retries fail.
+
+        Args:
+            *args: Positional arguments forwarded to the primary's
+                ``run``.
+            **kwargs: Keyword arguments forwarded to the primary's
+                ``run``.
+
+        Returns:
+            Whatever awaiting the primary handle's ``run`` returns.
+        """
         return await self._primary.run(*args, **kwargs)
 
     def close(self) -> None:
