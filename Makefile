@@ -12,7 +12,6 @@ $(BIN)/activate:
 # Editable install with dev (+tracing) extras into a local venv.
 # Uses uv sync with the committed uv.lock for reproducible installs.
 install:
-	uv lock --extra dev --extra tracing
 	uv sync --frozen --extra dev --extra tracing
 
 test: install

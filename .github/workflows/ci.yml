@@ -27,12 +27,11 @@ jobs:
         with:
           version: "0.8.15"
 
-      - name: Generate lockfile
-        run: uv lock
-        env:
-          UV_PROJECT_ENVIRONMENT: system
-
       - name: Install dev deps
+        # Installs from the committed uv.lock; --frozen fails the build
+        # if the lock is stale relative to pyproject.toml (no `uv lock`
+        # regeneration step — that would silently pull new @main commits
+        # of the robotsix-* git deps). See docs/dependencies.md.
         run: uv sync --frozen --extra dev --extra tracing
         env:
           UV_PROJECT_ENVIRONMENT: system
