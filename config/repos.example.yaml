@@ -16,6 +16,9 @@ repos:
   example-repo:
     board_id: "example-board"
     # forge_remote_url: "https://github.com/your-org/your-repo.git"  # optional — defaults to FORGE_REMOTE_URL
+    # working_branch: "main"      # optional — pinned branch that member repos
+    #                             #   branch from and PR into (e.g. "lyrical").
+    #                             #   Defaults to None → fork's default branch.
     langfuse:
       project_name: "example-repo"
       public_key: "pk-lf-..."
