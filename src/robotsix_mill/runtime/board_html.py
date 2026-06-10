@@ -1,9 +1,13 @@
 """The HTML shell for the kanban board served at ``GET /``.
 
-The board chrome (columns, cards, move control, drawer, refresh loop,
-closed toggle) is owned by robotsix-board.  This module provides the
-HTML skeleton that links to robotsix-board's static assets and to
-mill-specific JS/CSS layered on top.
+The board chrome core (columns, cards, move control, drawer, refresh loop)
+is owned by robotsix-board.  Mill's own JavaScript (`board.js`) extends
+this with mill-specific UI elements and behavior: ticket card display,
+real-time WebSocket updates, drawer panels (runs, cost dashboard,
+candidates, proposals), and the closed-ticket visibility toggle.
+
+This module provides the HTML skeleton that links to robotsix-board's
+static assets and to mill-specific JS/CSS layered on top.
 
 The ``{CONFIG_SCRIPT}`` placeholder is replaced at request time by
 ``render_config_script()`` from robotsix-board.  The ``{BOARD_SKELETON}``
@@ -117,6 +121,11 @@ margin-left:4px">
 background:#7c3aed;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">
   📝 Proposals
+</button>
+<button id="toggle-closed-btn" onclick="toggleClosed()" style="font-size:11px;padding:3px 10px;
+background:#6b7280;color:#fff;border:none;border-radius:4px;cursor:pointer;
+margin-left:4px">
+  Show closed
 </button>
 </header>
 <div id="lf-status" style="display:none;background:#3a2418;border-bottom:1px solid #6b3320;color:#e8b08a;padding:6px 12px;font-size:12px"></div>
