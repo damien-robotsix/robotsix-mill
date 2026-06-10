@@ -94,6 +94,28 @@ RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
         npm=9.2.0~ds1-3 \
     && rm -rf /var/lib/apt/lists/*
 
+# GitHub CLI (`gh`) for driving contribution workflows (push -> PR -> merge)
+# from inside the sandbox. `gh` lives in the app image too because the
+# dev-pinned sandbox runs `robotsix/mill:dev` (config/mill.local.yaml
+# `sandbox.image`), not `robotsix/mill-sandbox`, so it must be in the `base`
+# stage to reach that path; every image derived from base (dev, production)
+# inherits it. `gh` is not in Debian's default apt repos, so add the official
+# GitHub CLI apt source first. `curl` is not present in `base` (unlike the
+# sandbox image), so install it in this same layer to fetch the keyring;
+# `docker build` has full host network (the runtime egress proxy does not
+# apply at build time), so fetching the keyring here is fine.
+# hadolint ignore=DL3008,DL4006
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+      -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+      > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/*
+
 # Claude Agent SDK transport (opt-in via llm_backend / claude_sdk_agents)
 # drives the `claude` CLI subprocess for subscription-auth LLM calls. Install
 # it globally so it's on PATH; subscription credentials come from a mounted
