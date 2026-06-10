@@ -106,6 +106,11 @@ function getEl(id) {
 }
 
 const documentStub = {
+  // Keep readyState "loading" so board-mill.js's bootstrap guard defers
+  // millBootstrap() to the (no-op) DOMContentLoaded listener instead of
+  // invoking it synchronously at eval time — this harness only exercises
+  // _actionButtonsHtml()/convertToTicket(), not the bootstrap path.
+  readyState: "loading",
   getElementById: getEl,
   createElement: (tag) => makeEl("_created_" + tag),
   querySelector: (sel) => getEl("_qs_" + sel),
