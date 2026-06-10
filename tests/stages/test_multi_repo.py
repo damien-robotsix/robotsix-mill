@@ -239,6 +239,69 @@ def test_cost_endpoint_missing_repo_id_multi_repo(multi_repo_client):
     assert "repo_id is required" in detail.lower()
 
 
+def test_cost_endpoint_unknown_repo_id(multi_repo_client):
+    """Cost endpoint with an unknown repo_id → 400 from _resolve_cost_repo
+    (raised before any Langfuse call)."""
+    r = multi_repo_client.get("/costs/by-agent?repo_id=nonexistent")
+    assert r.status_code == 400
+    detail = r.json()["detail"]
+    assert "Unknown repo" in detail
+
+
+def test_most_expensive_trace_all_picks_best(multi_repo_client, monkeypatch):
+    """GET /costs/most-expensive-trace?repo_id=all returns the single
+    highest-cost trace across all repos."""
+
+    def fake_trace(settings, lookback_hours, repo_config=None, max_tickets=None):
+        if repo_config and repo_config.langfuse_project_name == "proj-a":
+            return {
+                "id": "a",
+                "name": "implement",
+                "total_cost": 0.5,
+                "timestamp": "2025-01-01T00:00:00Z",
+                "session_id": "s-a",
+            }
+        return {
+            "id": "b",
+            "name": "implement",
+            "total_cost": 0.9,
+            "timestamp": "2025-01-01T00:00:00Z",
+            "session_id": "s-b",
+        }
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.most_expensive_trace", fake_trace
+    )
+
+    r = multi_repo_client.get("/costs/most-expensive-trace?repo_id=all")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["id"] == "b"
+    assert data["total_cost"] == 0.9
+
+
+def test_most_expensive_ticket_all_picks_best(multi_repo_client, service, monkeypatch):
+    """GET /costs/most-expensive-ticket?repo_id=all picks the
+    highest-cost repo's ticket and resolves it against the DB."""
+    t = service.create("Most expensive across repos")
+
+    def fake_ticket(settings, lookback_hours, repo_config=None, max_tickets=None):
+        if repo_config and repo_config.langfuse_project_name == "proj-a":
+            return {"session_id": "s-a", "total_cost": 0.5, "trace_count": 1}
+        return {"session_id": t.id, "total_cost": 0.9, "trace_count": 2}
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.most_expensive_ticket", fake_ticket
+    )
+
+    r = multi_repo_client.get("/costs/most-expensive-ticket?repo_id=all")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ticket_id"] == t.id
+    assert data["cost_usd"] == 0.9
+    assert data["title"] == "Most expensive across repos"
+
+
 # -- 3. Board UI tests ---------------------------------------------------
 
 
