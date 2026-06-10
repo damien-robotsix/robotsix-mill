@@ -392,6 +392,123 @@ def test_zero_diff_guard_happy_path_unaffected(tmp_path, monkeypatch):
     assert t.id in seen["title"]
 
 
+# --- cross-repo target (push to fork, PR fork→upstream) ----------------
+
+
+def _ctx_cross(tmp_path, cct, **env):
+    """Build a StageContext whose repo_config carries *cct*
+    (a CrossRepoTarget)."""
+    ctx = _ctx(tmp_path, **env)
+    from robotsix_mill.config import RepoConfig
+
+    rc = RepoConfig(
+        repo_id="test-repo",
+        board_id="test-board",
+        langfuse_project_name="test",
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",
+        cross_repo_target=cct,
+    )
+    return StageContext(settings=ctx.settings, service=ctx.service, repo_config=rc)
+
+
+def test_cross_repo_pushes_to_fork_and_opens_fork_to_upstream_pr(tmp_path, monkeypatch):
+    """With a cross_repo_target, deliver pushes to fork_remote_url and
+    opens the PR with head_repo set to the fork's owner/repo."""
+    from robotsix_mill.config import CrossRepoTarget
+
+    remote, _ = _bare(tmp_path)
+    cct = CrossRepoTarget(
+        upstream_remote_url="https://github.com/up/r.git",
+        fork_remote_url="https://github.com/fork-owner/r.git",
+        base_branch="main",
+    )
+    ctx = _ctx_cross(
+        tmp_path,
+        cct,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL=remote,
+        FORGE_TOKEN="t",
+    )
+
+    pushed = {}
+
+    def fake_push(repo_dir, branch, remote_url, token):
+        pushed.update(remote_url=remote_url, branch=branch)
+
+    seen = {}
+
+    def fake_pr(self, *, source_branch, title, body, head_repo=None):
+        seen.update(head_repo=head_repo, source_branch=source_branch)
+        return "https://github.com/up/r/pull/5"
+
+    monkeypatch.setattr(git_ops, "push", fake_push)
+    monkeypatch.setattr(github.GitHubForge, "open_merge_request", fake_pr)
+    t, branch = _ticket_with_branch(ctx, remote)
+
+    out = DeliverStage().run(t, ctx)
+
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert "https://github.com/up/r/pull/5" in out.note
+    # Pushed to the fork, not the clone remote.
+    assert pushed["remote_url"] == "https://github.com/fork-owner/r.git"
+    assert pushed["branch"] == branch
+    # PR opened with the fork as head_repo.
+    assert seen["head_repo"] == "fork-owner/r"
+    assert seen["source_branch"] == branch
+
+
+def test_cross_repo_auto_fork_forks_before_push(tmp_path, monkeypatch):
+    """auto_fork=True ensures the fork via Forge.fork_repo() before push."""
+    from robotsix_mill.config import CrossRepoTarget
+    from robotsix_mill.forge.base import RepoInfo
+
+    remote, _ = _bare(tmp_path)
+    cct = CrossRepoTarget(
+        upstream_remote_url="https://github.com/up/r.git",
+        fork_remote_url="https://github.com/fork-owner/r.git",
+        auto_fork=True,
+    )
+    ctx = _ctx_cross(
+        tmp_path,
+        cct,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL=remote,
+        FORGE_TOKEN="t",
+    )
+
+    events = []
+
+    def fake_push(repo_dir, branch, remote_url, token):
+        events.append(("push", remote_url))
+
+    def fake_fork(self, *, source_owner, source_repo, target_namespace=None):
+        events.append(("fork", source_owner, source_repo))
+        return RepoInfo(
+            id=1,
+            name=source_repo,
+            clone_url="https://github.com/fork-owner/r.git",
+            html_url="https://github.com/fork-owner/r",
+        )
+
+    def fake_pr(self, *, source_branch, title, body, head_repo=None):
+        return "https://github.com/up/r/pull/9"
+
+    monkeypatch.setattr(git_ops, "push", fake_push)
+    monkeypatch.setattr(github.GitHubForge, "fork_repo", fake_fork)
+    monkeypatch.setattr(github.GitHubForge, "open_merge_request", fake_pr)
+    t, _ = _ticket_with_branch(ctx, remote)
+
+    out = DeliverStage().run(t, ctx)
+
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    # Fork happened, and it happened BEFORE the push.
+    assert ("fork", "up", "r") in events
+    assert events.index(("fork", "up", "r")) < events.index(
+        ("push", "https://github.com/fork-owner/r.git")
+    )
+
+
 # --- multi-repo delivery (meta-board tickets, N ≥ 1) -------------------
 
 

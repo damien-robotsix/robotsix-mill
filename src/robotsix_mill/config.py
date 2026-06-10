@@ -1660,6 +1660,38 @@ def _reset_secrets() -> None:
 # ---------------------------------------------------------------------------
 
 
+class CrossRepoTarget(BaseModel):
+    """Declarative *cross-repo target* for a repo whose deliverable
+    belongs in a different (forked/external) repository.
+
+    When a :class:`RepoConfig` carries one of these, the deliver/merge
+    stages drive a fork-contribution workflow: the ticket's branch is
+    pushed to ``fork_remote_url`` and a PR is opened *fork → upstream*
+    against ``base_branch`` on ``upstream_remote_url`` (the merge
+    target Y), instead of pushing to the clone remote.
+
+    Fields:
+    - ``upstream_remote_url`` — the repo PRs are opened against (Y).
+    - ``fork_remote_url`` — the fork the branch is pushed to.
+    - ``base_branch`` — the upstream branch to PR into (mirrors
+      ``forge_target_branch``).
+    - ``auto_fork`` — when True, ensure the fork exists via
+      ``Forge.fork_repo()`` before push.
+    """
+
+    upstream_remote_url: str
+    fork_remote_url: str
+    base_branch: str = "main"
+    auto_fork: bool = False
+
+    @field_validator("upstream_remote_url", "fork_remote_url", "base_branch")
+    @classmethod
+    def _validate_non_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("must be non-empty")
+        return v
+
+
 class RepoConfig(BaseModel):
     """Configuration for a single repository — its board identity,
     Langfuse observability project credentials, and per-repo CI
@@ -1677,6 +1709,11 @@ class RepoConfig(BaseModel):
     # against ITS Langfuse project. Unset → account-level activity reconcile.
     openrouter_api_key: str | None = None
     forge_remote_url: str | None = None
+    # Optional cross-repo target: when set, deliver pushes the ticket
+    # branch to ``fork_remote_url`` and opens a fork→upstream PR against
+    # ``upstream_remote_url``/``base_branch`` instead of the clone
+    # remote. ``None`` → ordinary same-repo delivery (unchanged).
+    cross_repo_target: CrossRepoTarget | None = None
     ci_monitor_enabled: bool = True
     # Default 900s (15 min): main-branch CI breaks should be turned into
     # tickets within minutes, not a day. A repo may override via the
@@ -1760,6 +1797,14 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
         ci_monitor = (
             repo_data.get("ci_monitor", {}) if isinstance(repo_data, dict) else {}
         )
+        cross_repo_raw = (
+            repo_data.get("cross_repo_target") if isinstance(repo_data, dict) else None
+        )
+        cross_repo_target = (
+            CrossRepoTarget(**cross_repo_raw)
+            if isinstance(cross_repo_raw, dict)
+            else None
+        )
         repos[repo_id] = RepoConfig(
             repo_id=repo_id,
             board_id=repo_data.get("board_id", "")
@@ -1775,6 +1820,7 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             forge_remote_url=repo_data.get("forge_remote_url")
             if isinstance(repo_data, dict)
             else None,
+            cross_repo_target=cross_repo_target,
             ci_monitor_enabled=ci_monitor.get("enabled", True)
             if isinstance(ci_monitor, dict)
             else True,

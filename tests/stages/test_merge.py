@@ -3821,6 +3821,60 @@ def test_waiting_auto_merge_merge_pr_success_verify_fails_goes_to_implement_comp
     assert "merge not confirmed" in out.note
 
 
+def test_cross_repo_merge_routes_to_upstream_pr(tmp_path, monkeypatch):
+    """A repo with a cross_repo_target merges/polls the UPSTREAM PR:
+    the forge resolved for merge_pr targets the upstream owner/repo,
+    not the clone remote."""
+    from robotsix_mill.config import CrossRepoTarget, RepoConfig
+
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    # Replace the ctx repo_config with one carrying a cross_repo_target.
+    rc = RepoConfig(
+        repo_id="test-repo",
+        board_id="test-board",
+        langfuse_project_name="test",
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",
+        forge_remote_url="https://github.com/fork-owner/r.git",
+        cross_repo_target=CrossRepoTarget(
+            upstream_remote_url="https://github.com/up/r.git",
+            fork_remote_url="https://github.com/fork-owner/r.git",
+        ),
+    )
+    ctx = StageContext(settings=ctx.settings, service=ctx.service, repo_config=rc)
+
+    seen = {}
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "https://github.com/up/r/pull/1",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+
+    def fake_merge(self, *, source_branch):
+        seen["owner_repo"] = self._owner_repo
+        return {"merged": True, "reason": "merged"}
+
+    monkeypatch.setattr(github.GitHubForge, "merge_pr", fake_merge)
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+    # The merge targeted the UPSTREAM repo, not the fork clone remote.
+    assert seen["owner_repo"] == ("up", "r")
+
+
 def test_waiting_auto_merge_no_repo_proceeds_to_done(tmp_path, monkeypatch):
     """No git repo in workspace → _verify_merge_ancestor returns True
     (best-effort) → DONE as before."""

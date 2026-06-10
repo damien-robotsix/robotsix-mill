@@ -223,6 +223,42 @@ def test_create_pr_post_payload_shape(tmp_path, monkeypatch):
     assert set(payload.keys()) == {"head", "base", "title", "body"}
 
 
+def test_create_pr_cross_fork_head_and_upstream_base(tmp_path, monkeypatch):
+    """A cross_repo_target opens the PR fork→upstream: POST targets the
+    upstream owner/repo, head is ``<fork-owner>:<branch>``, base is the
+    target's base_branch."""
+    from robotsix_mill.config import CrossRepoTarget, RepoConfig
+
+    captured = _mock_httpx(
+        monkeypatch,
+        post_response=_make_response(
+            201, {"html_url": "https://github.com/up/r/pull/7"}
+        ),
+    )
+    rc = RepoConfig(
+        repo_id="r",
+        board_id="b",
+        langfuse_project_name="r",
+        langfuse_public_key="",
+        langfuse_secret_key="",
+        cross_repo_target=CrossRepoTarget(
+            upstream_remote_url="https://github.com/up/r.git",
+            fork_remote_url="https://github.com/fork/r.git",
+            base_branch="develop",
+        ),
+    )
+    forge = GitHubForge(_settings(tmp_path), repo_config=rc)
+    url = forge.open_merge_request(
+        source_branch="feature/x", title="t", body="b", head_repo="fork/r"
+    )
+
+    assert url == "https://github.com/up/r/pull/7"
+    assert "repos/up/r/pulls" in captured["post_url"]
+    payload = captured["post_payload"]
+    assert payload["head"] == "fork:feature/x"
+    assert payload["base"] == "develop"
+
+
 # ---------------------------------------------------------------------------
 # _get_pr (via pr_status)
 # ---------------------------------------------------------------------------

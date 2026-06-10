@@ -191,8 +191,16 @@ class GitHubForge(Forge):
 
     @property
     def _remote_url(self) -> str:
-        """Effective remote URL: per-repo override, else global setting."""
+        """Effective remote URL: per-repo override, else global setting.
+
+        For a repo with a ``cross_repo_target`` the effective remote is
+        the *upstream* repo PRs are opened against — so PR create,
+        status polling and merge all naturally target upstream. The
+        push (to the fork) is driven separately by the deliver stage."""
         if self._repo_config is not None:
+            cct = getattr(self._repo_config, "cross_repo_target", None)
+            if cct is not None and cct.upstream_remote_url:
+                return cct.upstream_remote_url
             remote = getattr(self._repo_config, "forge_remote_url", None)
             if remote:
                 return remote
@@ -202,14 +210,32 @@ class GitHubForge(Forge):
     def _owner_repo(self) -> tuple[str, str]:
         return _parse_owner_repo(self._remote_url)
 
-    def open_merge_request(self, *, source_branch: str, title: str, body: str) -> str:
+    def open_merge_request(
+        self,
+        *,
+        source_branch: str,
+        title: str,
+        body: str,
+        head_repo: str | None = None,
+    ) -> str:
         s = self.settings
         owner, repo = self._owner_repo
+        base = s.forge_target_branch
+        head = source_branch
+        if head_repo is not None:
+            # Cross-fork PR: head lives in the fork (``owner:branch``),
+            # base on the upstream repo / ``base_branch``. ``_owner_repo``
+            # already resolves to upstream via ``cross_repo_target``.
+            fork_owner = head_repo.split("/", 1)[0]
+            head = f"{fork_owner}:{source_branch}"
+            cct = getattr(self._repo_config, "cross_repo_target", None)
+            if cct is not None:
+                base = cct.base_branch
         return self._create_pr(
             owner=owner,
             repo=repo,
-            head=source_branch,
-            base=s.forge_target_branch,
+            head=head,
+            base=base,
             title=title,
             body=body,
         )
