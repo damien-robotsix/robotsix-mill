@@ -1899,7 +1899,8 @@ def test_get_pr_cross_repo_uses_fork_owner_in_head_filter(tmp_path, monkeypatch)
 
 
 def test_create_pr_cross_repo_422_retry_does_not_double_qualify_head(
-    tmp_path, monkeypatch,
+    tmp_path,
+    monkeypatch,
 ):
     """When a cross-fork PR create gets a 422, the existing-PR lookup
     re-uses the already-qualified ``head="fork-owner:branch"`` instead of
@@ -1920,9 +1921,7 @@ def test_create_pr_cross_repo_422_retry_does_not_double_qualify_head(
     )
 
     captured_get_params: dict = {}
-    post_422 = _make_response(
-        422, {}, '{"field":"head","code":"invalid"}'
-    )
+    post_422 = _make_response(422, {}, '{"field":"head","code":"invalid"}')
 
     class ParamCaptureClient:
         def __init__(self, **kw):
@@ -1960,7 +1959,8 @@ def test_create_pr_cross_repo_422_retry_does_not_double_qualify_head(
 
 
 def test_delete_branch_cross_repo_targets_fork_not_upstream(
-    tmp_path, monkeypatch,
+    tmp_path,
+    monkeypatch,
 ):
     """delete_branch for a cross-repo target issues DELETE against the
     fork's git/refs/heads/<branch>, not the upstream's."""
