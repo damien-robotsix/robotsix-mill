@@ -201,6 +201,9 @@ _SCREENSHOT_MEDIA_TYPES = {
     "image/webp",
 }
 
+# Reject screenshot uploads larger than this (10 MiB) before writing.
+_MAX_SCREENSHOT_BYTES = 10 * 1024 * 1024
+
 
 @router.post("/tickets/{ticket_id}/screenshots", status_code=201)
 async def upload_screenshot(
@@ -233,8 +236,12 @@ async def upload_screenshot(
         existing = len(svc.workspace(ticket).list_screenshots())
         raw_name = f"screenshot-{existing + 1}{ext}"
 
+    data = await file.read()
+    if len(data) > _MAX_SCREENSHOT_BYTES:
+        raise HTTPException(413, "screenshot exceeds the 10 MiB size limit")
+
     dest = svc.workspace(ticket).screenshots_dir / raw_name
-    dest.write_bytes(await file.read())
+    dest.write_bytes(data)
     return {"filename": raw_name, "ticket_id": ticket_id}
 
 

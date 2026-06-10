@@ -66,3 +66,93 @@ def test_upload_strips_path_traversal(client, service):
     assert (ssdir / "evil.png").exists()
     # Nothing escaped the screenshots dir.
     assert [p.name for p in ssdir.iterdir()] == ["evil.png"]
+
+
+def test_upload_content_type_fallback_via_guess_type(client, service):
+    # Generic content-type but a .png filename → media type is resolved
+    # via mimetypes.guess_type and the upload succeeds.
+    t = service.create("screenshot ticket")
+    r = client.post(
+        f"/tickets/{t.id}/screenshots",
+        files={"file": ("shot.png", _PNG_BYTES, "application/octet-stream")},
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["filename"] == "shot.png"
+    saved = service.workspace(t).screenshots_dir / "shot.png"
+    assert saved.read_bytes() == _PNG_BYTES
+
+
+def test_upload_auto_generates_filename(client, service):
+    # Blank/dot filenames → server auto-generates screenshot-{n}{ext},
+    # with the counter driven by the current screenshot count.
+    t = service.create("screenshot ticket")
+    r1 = client.post(
+        f"/tickets/{t.id}/screenshots",
+        files={"file": (".", _PNG_BYTES, "image/png")},
+    )
+    assert r1.status_code == 201, r1.text
+    assert r1.json()["filename"] == "screenshot-1.png"
+
+    r2 = client.post(
+        f"/tickets/{t.id}/screenshots",
+        files={"file": ("..", _PNG_BYTES, "image/png")},
+    )
+    assert r2.status_code == 201, r2.text
+    assert r2.json()["filename"] == "screenshot-2.png"
+
+    ssdir = service.workspace(t).screenshots_dir
+    assert sorted(p.name for p in ssdir.iterdir()) == [
+        "screenshot-1.png",
+        "screenshot-2.png",
+    ]
+
+
+def test_upload_non_png_formats_accepted(client, service):
+    # Validation is content-type driven, so the bytes need not be real
+    # images for jpeg/gif/webp.
+    t = service.create("screenshot ticket")
+    ssdir = service.workspace(t).screenshots_dir
+    for name, ctype in (
+        ("shot.jpg", "image/jpeg"),
+        ("shot.gif", "image/gif"),
+        ("shot.webp", "image/webp"),
+    ):
+        blob = b"blob-" + ctype.encode()
+        r = client.post(
+            f"/tickets/{t.id}/screenshots",
+            files={"file": (name, blob, ctype)},
+        )
+        assert r.status_code == 201, r.text
+        assert (ssdir / name).read_bytes() == blob
+
+
+def test_upload_duplicate_basename_overwrites(client, service):
+    # Same basename twice → last write wins, only one file present.
+    t = service.create("screenshot ticket")
+    client.post(
+        f"/tickets/{t.id}/screenshots",
+        files={"file": ("dup.png", b"first", "image/png")},
+    )
+    r = client.post(
+        f"/tickets/{t.id}/screenshots",
+        files={"file": ("dup.png", b"second", "image/png")},
+    )
+    assert r.status_code == 201, r.text
+    ssdir = service.workspace(t).screenshots_dir
+    assert [p.name for p in ssdir.iterdir()] == ["dup.png"]
+    assert (ssdir / "dup.png").read_bytes() == b"second"
+
+
+def test_upload_over_size_limit_returns_413(client, service, monkeypatch):
+    # Shrink the limit and upload more bytes than it → 413, nothing written.
+    from robotsix_mill.runtime.routes import _tickets
+
+    monkeypatch.setattr(_tickets, "_MAX_SCREENSHOT_BYTES", 10)
+    t = service.create("screenshot ticket")
+    r = client.post(
+        f"/tickets/{t.id}/screenshots",
+        files={"file": ("big.png", b"x" * 50, "image/png")},
+    )
+    assert r.status_code == 413, r.text
+    ssdir = service.workspace(t).screenshots_dir
+    assert not ssdir.exists() or list(ssdir.iterdir()) == []
