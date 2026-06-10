@@ -674,6 +674,71 @@ def test_most_expensive_trace_max_tickets_clamp(client, monkeypatch):
     assert captured[-1] == 1, f"expected clamped to 1, got {captured[-1]}"
 
 
+def test_most_expensive_trace_null(client, monkeypatch):
+    """GET /costs/most-expensive-trace returns null when Langfuse yields
+    nothing (single-repo branch)."""
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.most_expensive_trace",
+        lambda settings, lookback_hours, repo_config=None, max_tickets=None: None,
+    )
+
+    r = client.get("/costs/most-expensive-trace")
+    assert r.status_code == 200
+    assert r.json() is None
+
+
+# -- GET /tickets/{id}/cost-breakdown -----------------------------------
+
+
+def test_cost_breakdown_happy_path(client, service, monkeypatch):
+    """GET /tickets/{id}/cost-breakdown returns available=True with the
+    per-trace rows from Langfuse."""
+    t = service.create("Cost breakdown test")
+    rows = [
+        {
+            "name": "refine",
+            "cost": 0.12,
+            "at": "2025-01-01T00:00:00Z",
+            "trace_id": "tr-1",
+            "latency": 1.0,
+            "model": "x",
+        }
+    ]
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_traces",
+        lambda settings, ticket_id, repo_config=None: rows,
+    )
+
+    r = client.get(f"/tickets/{t.id}/cost-breakdown")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["available"] is True
+    assert data["traces"] == rows
+
+
+def test_cost_breakdown_unavailable_when_langfuse_none(client, service, monkeypatch):
+    """GET /tickets/{id}/cost-breakdown returns available=False when
+    session_traces yields None (tracing disabled)."""
+    t = service.create("Cost breakdown unavailable")
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_traces",
+        lambda settings, ticket_id, repo_config=None: None,
+    )
+
+    r = client.get(f"/tickets/{t.id}/cost-breakdown")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["available"] is False
+    assert data["traces"] == []
+
+
+def test_cost_breakdown_404_missing_ticket(client):
+    """GET /tickets/{nonexistent}/cost-breakdown returns 404 before any
+    Langfuse call."""
+    r = client.get("/tickets/does-not-exist/cost-breakdown")
+    assert r.status_code == 404
+
+
 # -- GET /traces/recent --------------------------------------------------
 
 
