@@ -2169,6 +2169,16 @@
   }
 
   // =========================================================================
+  // Status bar
+  // =========================================================================
+  function updateMeta() {
+    var meta = document.getElementById("meta");
+    if (!meta) return;
+    var n = document.querySelectorAll("#board .board-card").length;
+    meta.textContent = n + " tickets · " + new Date().toLocaleTimeString();
+  }
+
+  // =========================================================================
   // Main refresh — delegates board rendering to robotsix-board
   // =========================================================================
   async function refresh() {
@@ -2195,6 +2205,7 @@
 
     // Delegate board rendering to robotsix-board
     window.robotsixBoardRefresh();
+    updateMeta();
     // After a short delay, fetch active labels and apply to cards
     setTimeout(function() {
       if (refreshSeq === tok) {
@@ -2206,7 +2217,7 @@
   // =========================================================================
   // Bootstrap
   // =========================================================================
-  document.addEventListener('DOMContentLoaded', function() {
+  function millBootstrap() {
     // Configure robotsix-board gate endpoint once
     if (window.robotsixBoardSetGateEndpoint) {
       window.robotsixBoardSetGateEndpoint('/gates');
@@ -2271,6 +2282,7 @@
     // 1s tick: refresh drawer content when open, also periodically refresh active labels
     setInterval(function() {
       hideEmptyColumns();
+      updateMeta();
       if (runsOpen) renderRuns();
       else if (proposalsOpen) renderProposals();
       else if (sel) refreshDetail(sel);
@@ -2279,7 +2291,19 @@
         fetchActive().then(applyActiveLabels);
       }
     }, 1000);
-  });
+  }
+
+  // Run the mill bootstrap as soon as the DOM is ready. Mirror the
+  // shared robotsix-board init guard so the filter setup (and therefore
+  // the robotsixBoardSetRefreshUrl call) runs even when board-mill.js
+  // evaluates after DOMContentLoaded has already fired (cached assets /
+  // bfcache / fast reload) — otherwise the filtered refresh URL is never
+  // set and the board polls /board/cards unfiltered.
+  if (document.readyState === "loading") {
+    document.addEventListener('DOMContentLoaded', millBootstrap);
+  } else {
+    millBootstrap();
+  }
 
   // =========================================================================
   // Expose functions called from inline HTML onclick handlers
@@ -2324,6 +2348,7 @@
   window.fetchRepos = fetchRepos;
   window.connectWebSocket = connectWebSocket;
   window.refresh = refresh;
+  window.updateMeta = updateMeta;
   window.runAudit = runAudit;
   window.runTraceHealth = runTraceHealth;
   window.runLangfuseCleanup = runLangfuseCleanup;
