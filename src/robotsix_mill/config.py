@@ -441,6 +441,14 @@ class Settings(BaseSettings):
     # ("no test gate configured"). MILL_TEST_COMMAND can override for
     # single-repo / legacy setups.
     test_command: str = Field(default="")
+    # Global fallback for the path-scoped smoke gate command (run after
+    # unit tests pass). Empty by default — the per-repo
+    # `.robotsix-mill/config.yaml` `smoke_command` wins when set, this is
+    # the fleet-wide fallback, and empty everywhere means no smoke gate
+    # (short-circuits to PASS). MILL_SMOKE_COMMAND can override.
+    # Path-scoping (`smoke_paths`) is inherently per-repo and lives only
+    # in `.robotsix-mill/config.yaml`; there is no global counterpart.
+    smoke_command: str = Field(default="")
     branch_prefix: str = Field(default="mill/")
     # Wall-clock cap (seconds) for the agent's shell tool and the test
     # command, so a hung command can't stall a worker forever.

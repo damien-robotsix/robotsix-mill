@@ -33,10 +33,16 @@ from ..agents import coding
 from ..agents import prerequisite
 from ..agents.coding import AgentBudgetError, AgentRunError
 from ..agents.coordinating import ValidationResult
-from ..agents.testing import ENV_ERROR_PREFIX, run_test_agent
+from ..agents.testing import (
+    ENV_ERROR_PREFIX,
+    run_smoke_agent,
+    run_test_agent,
+    smoke_paths_match,
+)
 from ..core.models import SourceKind, Ticket
 from ..core.states import State
 from ..forge.auth import _resolve_remote_url, github_token
+from ..repo_settings import load_repo_smoke_command, load_repo_smoke_paths
 from ..runners.pass_runner import load_memory, persist_memory
 from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
@@ -968,6 +974,32 @@ class ImplementStage(Stage):
             repo_dir=repo_dir,
             repo_config=ctx.repo_config,
         )
+        # --- path-scoped smoke gate (runs ONLY after unit tests pass) ---
+        # No point smoking a red build; a smoke failure folds into the
+        # SAME passed/diag → ValidationResult.decide machinery as a test
+        # failure (retry while iterations remain, escalate on the last,
+        # BLOCKED on sandbox-unavailable). Strictly opt-in: skipped
+        # entirely unless a smoke command is set (repo file wins over the
+        # global fallback), and skipped when the ticket's introduced
+        # files don't match the repo's smoke_paths globs.
+        if passed:
+            smoke_cmd = (
+                load_repo_smoke_command(repo_dir) or settings.smoke_command
+            ).strip()
+            if smoke_cmd:
+                changed = git_ops.introduced_files(
+                    repo_dir, settings.forge_target_branch
+                )
+                smoke_paths = load_repo_smoke_paths(repo_dir)
+                if smoke_paths_match(changed, smoke_paths):
+                    smoke_passed, smoke_diag = run_smoke_agent(
+                        settings=settings,
+                        repo_dir=repo_dir,
+                        repo_config=ctx.repo_config,
+                    )
+                    if not smoke_passed:
+                        passed = False
+                        diag = smoke_diag
         if not passed and diag.startswith("sandbox unavailable"):
             ImplementStage._finalize(
                 ctx,

@@ -116,6 +116,7 @@ sandbox:
   data_mount: null                     # host path for bind-mounted data (overrides data_volume)
   command_timeout: 1800                # wall-clock cap (seconds) for shell/test commands
   test_command: ""                     # global fallback. Precedence: per-repo .robotsix-mill/config.yaml test_command (highest) > repos.yaml.test_command > this. Empty everywhere = PASS short-circuit.
+  smoke_command: ""                    # global fallback for the path-scoped smoke gate (runs after unit tests pass). Precedence: per-repo .robotsix-mill/config.yaml smoke_command (highest) > this global fallback > empty everywhere = no smoke gate (short-circuits to PASS).
   skills_dir: skills                   # directory of skill docs injected into system prompts
 
 # ---------------------------------------------------------------------------

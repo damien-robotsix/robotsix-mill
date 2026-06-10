@@ -1,2 +1,7 @@
 test_command: pytest -q
 languages: [python]
+# Path-scoped smoke gate: runs the API-level board smoke after unit tests
+# pass, but only when a ticket touches the board/runtime UI surface.
+smoke_command: scripts/smoke_board.sh
+smoke_paths:
+  - src/robotsix_mill/runtime/**

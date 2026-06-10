@@ -306,6 +306,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "sandbox.data_mount": "sandbox_data_mount",
     "sandbox.command_timeout": "command_timeout",
     "sandbox.test_command": "test_command",
+    "sandbox.smoke_command": "smoke_command",
     "sandbox.skills_dir": "skills_dir",
     # -- web --
     "web.search_enabled": "web_search",

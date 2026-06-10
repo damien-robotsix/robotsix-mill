@@ -247,6 +247,96 @@ def test_test_agent_repo_file_command_wins(tmp_path, monkeypatch):
     assert cap["cmd"] == "repo-file-cmd"
 
 
+# --- smoke gate -----------------------------------------------------------
+
+
+def test_smoke_agent_empty_command_short_circuits_pass(tmp_path, monkeypatch):
+    """No smoke command set anywhere → PASS short-circuit (opt-in)."""
+    from robotsix_mill import sandbox
+
+    s = _settings(tmp_path, smoke_command="")
+
+    def _boom(*a, **k):  # must NOT be called when no command is set
+        raise AssertionError("sandbox.run must not run with no smoke command")
+
+    monkeypatch.setattr(sandbox, "run", _boom)
+    passed, fb = testing.run_smoke_agent(settings=s, repo_dir=tmp_path)
+    assert passed is True
+    assert "no smoke gate configured" in fb
+
+
+def test_smoke_agent_pass(tmp_path, monkeypatch):
+    from robotsix_mill import sandbox
+
+    s = _settings(tmp_path, smoke_command="scripts/smoke.sh")
+    monkeypatch.setattr(
+        sandbox,
+        "run",
+        lambda cmd, *, repo_dir, settings, **kwargs: (0, "ok"),
+    )
+    passed, fb = testing.run_smoke_agent(settings=s, repo_dir=tmp_path)
+    assert passed is True and "smoke passed" in fb
+
+
+def test_smoke_agent_repo_file_command_wins(tmp_path, monkeypatch):
+    """The repo's ``.robotsix-mill/config.yaml`` ``smoke_command`` overrides
+    ``settings.smoke_command`` and is the command handed to ``sandbox.run``."""
+    from robotsix_mill import sandbox
+
+    cfg_dir = tmp_path / ".robotsix-mill"
+    cfg_dir.mkdir()
+    (cfg_dir / "config.yaml").write_text(
+        'smoke_command: "repo-smoke-cmd"\n', encoding="utf-8"
+    )
+
+    s = _settings(tmp_path, smoke_command="settings-smoke-cmd")
+    cap = {}
+
+    def fake_run(cmd, *, repo_dir, settings, **kwargs):
+        cap["cmd"] = cmd
+        return (0, "ok")
+
+    monkeypatch.setattr(sandbox, "run", fake_run)
+    passed, fb = testing.run_smoke_agent(settings=s, repo_dir=tmp_path)
+    assert passed is True
+    assert cap["cmd"] == "repo-smoke-cmd"
+
+
+def test_smoke_agent_sandbox_unavailable(tmp_path, monkeypatch):
+    from robotsix_mill import sandbox
+
+    s = _settings(tmp_path, smoke_command="scripts/smoke.sh")
+
+    def _raise(*a, **k):
+        raise sandbox.SandboxError("docker down")
+
+    monkeypatch.setattr(sandbox, "run", _raise)
+    passed, fb = testing.run_smoke_agent(settings=s, repo_dir=tmp_path)
+    assert passed is False
+    assert fb.startswith("sandbox unavailable")
+
+
+def test_smoke_paths_match_empty_list_is_unconditional():
+    assert testing.smoke_paths_match(["src/foo/bar.py"], []) is True
+    assert testing.smoke_paths_match([], []) is True
+
+
+def test_smoke_paths_match_glob_match():
+    changed = ["src/robotsix_mill/runtime/board_html.py"]
+    assert testing.smoke_paths_match(changed, ["src/robotsix_mill/runtime/**"]) is True
+    # Shallow extension glob.
+    css = ["src/robotsix_mill/runtime/static/board.css"]
+    assert (
+        testing.smoke_paths_match(css, ["src/robotsix_mill/runtime/static/*.css"])
+        is True
+    )
+
+
+def test_smoke_paths_match_non_match():
+    changed = ["src/robotsix_mill/stages/implement.py"]
+    assert testing.smoke_paths_match(changed, ["src/robotsix_mill/runtime/**"]) is False
+
+
 def test_test_agent_fail_distills_via_cheap_model(tmp_path, monkeypatch):
     from robotsix_mill import sandbox
 
