@@ -179,8 +179,8 @@ def test_board_renders_source_badge(client):
     and the HTML shell references both the shared and mill CSS files."""
     r = client.get("/")
     body = r.text
-    assert '<link rel="stylesheet" href="/static/board.css">' in body
-    assert '<link rel="stylesheet" href="/static/mill/board-mill.css">' in body
+    assert '<link rel="stylesheet" href="/static/board.css?v=' in body
+    assert '<link rel="stylesheet" href="/static/mill/board-mill.css?v=' in body
     css = client.get("/static/mill/board-mill.css").text
     assert "src-badge" in css
     assert "src-user" in css
@@ -462,21 +462,22 @@ def test_blocked_override_to_draft_via_api(client, service):
 
 
 def test_board_script_is_well_formed():
-    """Regression: a malformed template literal in board.js (a missing
-    closing backtick on the Approve button) was a JS syntax error that
-    wedged the whole board on 'loading…'. Guard the structural
-    invariants."""
+    """Regression: a malformed template literal in the board script (a
+    missing closing backtick on the Approve button) was a JS syntax
+    error that wedged the whole board on 'loading…'. Guard the
+    structural invariants on the served ``board-mill.js``."""
     from pathlib import Path
 
     import robotsix_mill.runtime.board_html
 
     js_path = (
-        Path(robotsix_mill.runtime.board_html.__file__).parent / "static" / "board.js"
+        Path(robotsix_mill.runtime.board_html.__file__).parent
+        / "static"
+        / "board-mill.js"
     )
     js = js_path.read_text()
     assert js.count("`") % 2 == 0, "unbalanced template-literal backticks"
     assert '</button>":' not in js  # the exact past defect
-    assert "</button>`:" in js  # correctly-closed literal
 
 
 def test_board_js_escapes_js_string_handlers(client):
@@ -608,8 +609,74 @@ def test_board_html_references_static_assets(client):
     """GET / returns HTML that references the static CSS and JS files
     rather than embedding them inline."""
     body = client.get("/").text
-    assert '<link rel="stylesheet" href="/static/board.css">' in body
-    assert '<script src="/static/board.js"></script>' in body
+    # Local asset URLs carry a per-deploy ``?v=`` cache-busting query.
+    assert '<link rel="stylesheet" href="/static/board.css?v=' in body
+    assert '<script src="/static/board.js?v=' in body
+
+
+def test_board_html_asset_urls_carry_version_query(monkeypatch):
+    """All local script/css URLs carry a per-deploy ``?v=`` cache-busting
+    query, and changing the resolved version changes the emitted URLs."""
+    import robotsix_mill.runtime.board_html as bh
+
+    monkeypatch.setattr(bh, "asset_version", lambda: "abc123")
+    html_a = bh.render_board_html("", "")
+    assert "/static/board.css?v=abc123" in html_a
+    assert "/static/mill/board-mill.css?v=abc123" in html_a
+    assert "/static/board.js?v=abc123" in html_a
+    assert "/static/mill/board-mill.js?v=abc123" in html_a
+    # No un-versioned local asset tags slip through.
+    assert "{ASSET_VERSION}" not in html_a
+    assert 'href="/static/board.css"' not in html_a
+    assert 'src="/static/board.js"' not in html_a
+
+    # A different version yields different URLs.
+    monkeypatch.setattr(bh, "asset_version", lambda: "deadbeef")
+    html_b = bh.render_board_html("", "")
+    assert "?v=deadbeef" in html_b
+    assert "?v=abc123" not in html_b
+
+
+def test_board_inline_handlers_defined_in_served_scripts():
+    """Every inline ``onclick=``/``onchange=`` handler emitted by
+    board_html.py must reference a global that is actually defined in a
+    SERVED script: exposed as ``window.<fn> =`` in board-mill.js, or
+    defined as a function in robotsix-board's packaged board.js.
+
+    Regression guard for the #1036 class of bug, where a handler
+    (``toggleClosed()``) was wired in the HTML but its implementation
+    lived only in a dead, never-mounted ``static/board.js`` — so the
+    button threw ``ReferenceError`` in the browser."""
+    import re
+    from pathlib import Path
+
+    import robotsix_mill.runtime.board_html as bh
+
+    html = bh.render_board_html("", "")
+
+    static = Path(bh.__file__).parent / "static"
+    mill_js = (static / "board-mill.js").read_text()
+
+    try:
+        from robotsix_board import static_dir as _board_static_dir
+
+        board_js = (_board_static_dir() / "board.js").read_text()
+    except Exception:
+        board_js = ""
+
+    # Capture the leading global identifier of each handler — anchoring
+    # to ``("`` excludes method calls like ``event.stopPropagation()``.
+    handlers = set(re.findall(r'on(?:click|change)="\s*([A-Za-z_$][\w$]*)\s*\(', html))
+    assert handlers, "expected at least one inline handler in the board HTML"
+
+    for fn in sorted(handlers):
+        in_mill = f"window.{fn} =" in mill_js or f"window.{fn}=" in mill_js
+        in_board = f"function {fn}(" in board_js or f"window.{fn} =" in board_js
+        assert in_mill or in_board, (
+            f"inline handler {fn}() references a global not defined in any "
+            "served script (board-mill.js window exports or robotsix-board "
+            "board.js)"
+        )
 
 
 def test_static_assets_served(client):

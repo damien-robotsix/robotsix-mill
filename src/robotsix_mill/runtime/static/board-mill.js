@@ -4,7 +4,11 @@
   // =========================================================================
   // State variables
   // =========================================================================
-  let showClosed = false;
+  const SHOW_CLOSED_KEY = "robotsix-mill:show-closed";
+  let showClosed = (function() {
+    try { return localStorage.getItem(SHOW_CLOSED_KEY) === "true"; }
+    catch (_e) { return false; }
+  })();
   let sel = null;
   let runsOpen = false;
   let costDashboardOpen = false;
@@ -415,6 +419,36 @@
       ).length;
       cols[i].style.display = n === 0 ? 'none' : '';
     }
+    applyClosedVisibility();
+  }
+
+  // Show or hide the terminal columns (closed + epic_closed) according to
+  // the current `showClosed` state. Uses the `.hidden` class (which
+  // robotsix-board's board.css renders as `display:none`) so it composes
+  // with hideEmptyColumns' inline `style.display` toggle: an empty
+  // closed column stays hidden via the inline rule, while a non-empty one
+  // is hidden only when `.hidden` is present.
+  function applyClosedVisibility() {
+    var sels = '#board .board-column[data-status="closed"],' +
+      ' #board .board-column[data-status="epic_closed"]';
+    var cols = document.querySelectorAll(sels);
+    for (var i = 0; i < cols.length; i++) {
+      cols[i].classList.toggle('hidden', !showClosed);
+    }
+  }
+
+  // Flip the show/hide-closed state, persist the preference, update the
+  // button label, and re-apply column visibility. refresh() re-runs the
+  // board fetch/render; applyClosedVisibility (re-invoked via
+  // hideEmptyColumns) then hides/shows the closed + epic_closed columns.
+  function toggleClosed() {
+    showClosed = !showClosed;
+    try { localStorage.setItem(SHOW_CLOSED_KEY, String(showClosed)); }
+    catch (_e) { /* localStorage may be unavailable */ }
+    var btn = document.getElementById("toggle-closed-btn");
+    if (btn) btn.textContent = showClosed ? "Hide closed" : "Show closed";
+    applyClosedVisibility();
+    refresh();
   }
 
   // =========================================================================
@@ -2178,6 +2212,10 @@
       window.robotsixBoardSetGateEndpoint('/gates');
     }
 
+    // Reflect any persisted show-closed preference in the toggle label
+    var closedBtn = document.getElementById("toggle-closed-btn");
+    if (closedBtn) closedBtn.textContent = showClosed ? "Hide closed" : "Show closed";
+
     // Apply repo filter to the initial board render
     var repoId = getRepoId();
     if (window.robotsixBoardSetRefreshUrl && repoId !== "all") {
@@ -2278,6 +2316,7 @@
   window.newEpic = newEpic;
   window.newInquiry = newInquiry;
   window.onRepoChange = onRepoChange;
+  window.toggleClosed = toggleClosed;
   window.renderCostDashboard = renderCostDashboard;
   window.costMode = costMode;
   window.costLookbackHours = costLookbackHours;

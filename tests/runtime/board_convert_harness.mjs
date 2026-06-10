@@ -1,10 +1,11 @@
-// Node harness exercising the Convert-to-Ticket button + flow in board.js.
+// Node harness exercising the Convert-to-Ticket button + flow in
+// board-mill.js.
 //
-// board.js is a flat browser script (no module exports); it is loaded
-// here into a Node `vm` context against a hand-rolled minimal DOM/XHR
-// stub so that `_actionButtonsHtml()` and `convertToTicket()` can be
-// invoked and asserted on without a browser, a JS test runner, or any
-// third-party dependency.
+// board-mill.js is a browser script wrapped in an IIFE; its wrapper is
+// stripped (below) and the body loaded into a Node `vm` context against
+// a hand-rolled minimal DOM/XHR stub so that `_actionButtonsHtml()` and
+// `convertToTicket()` can be invoked and asserted on without a browser,
+// a JS test runner, or any third-party dependency.
 //
 // Uses ONLY Node built-ins (node:fs, node:vm, node:path, node:assert,
 // node:url). Run with `node board_convert_harness.mjs`; exits non-zero
@@ -17,12 +18,20 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// Resolve the real board.js relative to this harness — never duplicate it.
+// Resolve the real served board-mill.js relative to this harness —
+// never duplicate it.
 const BOARD_JS = path.resolve(
   __dirname,
-  "../../src/robotsix_mill/runtime/static/board.js",
+  "../../src/robotsix_mill/runtime/static/board-mill.js",
 );
-const source = fs.readFileSync(BOARD_JS, "utf8");
+// board-mill.js wraps everything in an IIFE so it leaks no browser
+// globals. Strip that wrapper so the top-level function declarations
+// surface as vm context globals (the way the flat board.js used to),
+// letting the harness invoke _actionButtonsHtml()/convertToTicket().
+const source = fs
+  .readFileSync(BOARD_JS, "utf8")
+  .replace(/^\(function\(\)\s*\{\s*"use strict";/, "")
+  .replace(/\}\)\(\);\s*$/, "");
 
 // --- minimal DOM/XHR/timer/window stubs --------------------------------
 // These mirror the stubs used in board_proposals_harness.mjs so the

@@ -648,7 +648,9 @@ def test_board_html_contains_test_gap_button():
     import robotsix_mill.runtime.board_html
 
     js = (
-        Path(robotsix_mill.runtime.board_html.__file__).parent / "static" / "board.js"
+        Path(robotsix_mill.runtime.board_html.__file__).parent
+        / "static"
+        / "board-mill.js"
     ).read_text()
     assert "/test-gap" in js
 
@@ -659,8 +661,8 @@ def test_board_contains_test_gap_js_and_css():
     import robotsix_mill.runtime.board_html
 
     base = Path(robotsix_mill.runtime.board_html.__file__).parent / "static"
-    css = (base / "board.css").read_text()
-    js = (base / "board.js").read_text()
+    css = (base / "board-mill.css").read_text()
+    js = (base / "board-mill.js").read_text()
     assert ".src-test_gap" in css
     assert "src-test_gap" in css
     assert "test_gap" in js

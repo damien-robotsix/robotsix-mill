@@ -786,7 +786,9 @@ def test_board_html_contains_health_button():
     import robotsix_mill.runtime.board_html
 
     js = (
-        Path(robotsix_mill.runtime.board_html.__file__).parent / "static" / "board.js"
+        Path(robotsix_mill.runtime.board_html.__file__).parent
+        / "static"
+        / "board-mill.js"
     ).read_text()
     assert "/health-check" in js
 
@@ -797,8 +799,8 @@ def test_board_html_contains_health_css_class():
     import robotsix_mill.runtime.board_html
 
     base = Path(robotsix_mill.runtime.board_html.__file__).parent / "static"
-    css = (base / "board.css").read_text()
-    js = (base / "board.js").read_text()
+    css = (base / "board-mill.css").read_text()
+    js = (base / "board-mill.js").read_text()
     assert ".src-health" in css
     assert "src-health" in css  # substring within .src-health rule
     assert '"health"' in js  # mapped in srcClass()
