@@ -422,6 +422,7 @@ class RefineAgentMixin:
                 extra_roots=extra_roots,
                 message_history=resume_history,
                 board_id=memory_board_id,
+                current_ticket_id=ticket.id,
                 language_instructions=language_instructions,
                 deployed_log_summary=deployed_log_summary,
                 screenshot_paths=ws.list_screenshots(),

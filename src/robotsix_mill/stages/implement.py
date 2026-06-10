@@ -792,6 +792,7 @@ class ImplementStage(Stage):
                 previous_attempt_summary=ic.previous_attempt_summary,
                 file_map=ic.file_map,
                 board_id=memory_board_id,
+                current_ticket_id=ticket.id,
                 message_history=resume_history,
                 language_instructions=language_instructions,
                 extra_roots=extra_roots,

@@ -62,6 +62,7 @@ reply_to_thread: false
 close_thread: false
 modules: true
 web_knowledge: true
+list_epic_children: true
 
 output_type: RefineResult
 retries: 2

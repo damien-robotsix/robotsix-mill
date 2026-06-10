@@ -335,6 +335,7 @@ modules:
       - src/robotsix_mill/agents/ci_patterns.py
       - src/robotsix_mill/agents/consult_expert.py
       - src/robotsix_mill/agents/read_ticket.py
+      - src/robotsix_mill/agents/list_epic_children.py
       - src/robotsix_mill/agents/reply_thread.py
       - src/robotsix_mill/agents/close_thread.py
       - src/robotsix_mill/agents/ask_user.py
@@ -346,6 +347,7 @@ modules:
       - tests/agents/test_explore.py
       - tests/agents/test_report_issue.py
       - tests/agents/test_read_ticket.py
+      - tests/agents/test_list_epic_children.py
       - tests/agents/test_ask_user.py
       - tests/agents/test_consult_expert.py
       - tests/agents/test_ci_patterns.py
