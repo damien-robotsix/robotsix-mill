@@ -105,3 +105,99 @@ def test_no_screenshots_uses_plain_string(settings, monkeypatch):
     )
 
     assert isinstance(captured["prompt"], str)
+
+
+def test_multiple_screenshots_preserve_order(settings, monkeypatch, tmp_path):
+    captured = _install_capture(monkeypatch, claude_sdk=True)
+    a = tmp_path / "a.png"
+    b = tmp_path / "b.png"
+    a.write_bytes(b"AAA")
+    b.write_bytes(b"BBB")
+
+    refining.run_refine_agent(
+        settings=settings,
+        title="T",
+        draft="draft text",
+        screenshot_paths=[a, b],
+    )
+
+    prompt = captured["prompt"]
+    assert isinstance(prompt, list)
+    assert isinstance(prompt[0], str)
+    images = prompt[1:]
+    assert len(images) == 2
+    assert all(isinstance(i, BinaryContent) for i in images)
+    # Input order is preserved.
+    assert images[0].data == b"AAA"
+    assert images[1].data == b"BBB"
+
+
+def test_media_type_mapping_per_suffix(settings, monkeypatch, tmp_path):
+    for suffix, expected in (
+        (".jpg", "image/jpeg"),
+        (".jpeg", "image/jpeg"),
+        (".gif", "image/gif"),
+        (".webp", "image/webp"),
+    ):
+        captured = _install_capture(monkeypatch, claude_sdk=True)
+        shot = tmp_path / f"shot{suffix}"
+        shot.write_bytes(_PNG)
+
+        refining.run_refine_agent(
+            settings=settings,
+            title="T",
+            draft="draft text",
+            screenshot_paths=[shot],
+        )
+
+        prompt = captured["prompt"]
+        assert isinstance(prompt, list)
+        assert prompt[1].media_type == expected
+
+
+def test_unsupported_suffix_skipped(settings, monkeypatch, tmp_path):
+    captured = _install_capture(monkeypatch, claude_sdk=True)
+    shot = tmp_path / "notes.txt"
+    shot.write_bytes(b"hello")
+
+    refining.run_refine_agent(
+        settings=settings,
+        title="T",
+        draft="draft text",
+        screenshot_paths=[shot],
+    )
+
+    # Only path is unsupported → no BinaryContent → plain str prompt.
+    assert isinstance(captured["prompt"], str)
+
+
+def test_unreadable_file_skipped(settings, monkeypatch, tmp_path):
+    captured = _install_capture(monkeypatch, claude_sdk=True)
+    missing = tmp_path / "gone.png"  # never created
+
+    refining.run_refine_agent(
+        settings=settings,
+        title="T",
+        draft="draft text",
+        screenshot_paths=[missing],
+    )
+
+    # Unreadable file is skipped (no crash); only path → plain str prompt.
+    assert isinstance(captured["prompt"], str)
+
+
+def test_all_skipped_falls_back_to_plain_string(settings, monkeypatch, tmp_path):
+    captured = _install_capture(monkeypatch, claude_sdk=True)
+    bad_suffix = tmp_path / "notes.txt"
+    bad_suffix.write_bytes(b"hi")
+    missing = tmp_path / "gone.png"
+
+    refining.run_refine_agent(
+        settings=settings,
+        title="T",
+        draft="draft text",
+        screenshot_paths=[bad_suffix, missing],
+    )
+
+    # Every screenshot skipped → _vision collapses → plain str payload.
+    assert isinstance(captured["prompt"], str)
