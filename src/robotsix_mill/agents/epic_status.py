@@ -17,6 +17,17 @@ from .prompt_blocks import section
 
 
 class EpicStatusResult(BaseModel):
+    """Structured verdict on whether an epic's goal has been achieved.
+
+    ``decision`` is the action to take on the epic (``close``,
+    ``keep_open``, ``update_description``, or ``update_deps``) and
+    ``note`` is a human-readable rationale. The remaining optional
+    fields carry the concrete mutations a decision may imply:
+    ``dep_updates`` (per-child dependency rewrites), ``new_children``
+    (additional child tickets to file), ``child_rescopes`` (per-child
+    title/body rewrites), and ``child_closures`` (child IDs to close).
+    """
+
     decision: Literal["close", "keep_open", "update_description", "update_deps"]
     note: str = ""
     dep_updates: dict[str, list[str] | None] | None = Field(default=None)

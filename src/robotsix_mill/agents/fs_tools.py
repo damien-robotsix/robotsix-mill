@@ -205,6 +205,33 @@ def build_fs_tools(
     pre_seeded: dict[Path, str] | None = None,
     extra_roots: list[Path] | None = None,
 ) -> list:
+    """Build the filesystem + shell tool closures sandboxed to *root*.
+
+    Returns the ``read_file``, ``write_file``, ``edit_file``,
+    ``delete_file``, ``list_dir``, and ``run_command`` tools as plain
+    closures (pydantic-ai derives each tool's schema from its type
+    hints + docstring). Every path is resolved and confined to *root*
+    (or an entry in *extra_roots*) so the agent cannot read or write
+    outside the ticket's clone, and the tools share an in-memory
+    file-content cache for the lifetime of this call. Each tool is also
+    registered in the :class:`~.tool_registry.ToolRegistry` catalog.
+
+    Args:
+        root: The repository directory the tools are confined to.
+        settings: Application configuration (controls e.g.
+            ``lint_on_edit`` syntax checking and the ``run_command``
+            sandbox).
+        pre_seeded: Optional mapping of resolved ``Path`` to file
+            content used to warm the shared read cache (e.g. the
+            implement coordinator's reference files).
+        extra_roots: Optional additional directories that resolved
+            paths are also allowed to fall inside.
+
+    Returns:
+        A list of the six tool closures, in the order ``read_file``,
+        ``write_file``, ``edit_file``, ``delete_file``, ``list_dir``,
+        ``run_command``.
+    """
     root = Path(root).resolve()
 
     # In-memory file-content cache shared by all closures in this

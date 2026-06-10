@@ -211,6 +211,27 @@ def _apply_text_cap(body: str, max_bytes: int) -> str:
 
 
 def make_web_fetch(settings: Settings):  # noqa: C901 — adds a per-consult fetch budget gate to the existing cache/extract/cap pipeline
+    """Build the ``web_fetch`` tool exposed to web-knowledge agents.
+
+    The returned callable performs an http(s) GET via the dedicated
+    network-enabled fetch sandbox (:func:`sandbox.fetch`) and layers
+    per-run URL deduplication, HTML→text extraction, a post-extraction
+    size cap, and a per-consult fetch budget on top of the raw fetch.
+    Setting ``web.fetch_raw: true`` in the YAML config disables the
+    dedup/extraction layers and returns the verbatim curl body.
+
+    Args:
+        settings: Application configuration — controls ``web_fetch_raw``,
+            the byte/call budgets (``web_fetch_max_calls``,
+            ``web_fetch_max_total_bytes``), and the text cap
+            (``web_fetch_max_text_bytes``).
+
+    Returns:
+        A ``web_fetch(url)`` closure returning the (possibly
+        extracted, capped, or cached) text content, or an error /
+        budget-exhausted sentinel string.
+    """
+
     def web_fetch(url: str) -> str:
         """Fetch an http(s) URL and return its text content (size
         capped). Use for official docs, source files, package

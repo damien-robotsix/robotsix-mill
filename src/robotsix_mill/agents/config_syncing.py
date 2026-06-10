@@ -131,6 +131,14 @@ MAX_GAPS = 5
 
 
 class ConfigSyncResult(BaseModel):
+    """Structured result of a config-sync drift inspection pass.
+
+    Carries the agent's ``updated_memory`` ledger plus three parallel
+    lists describing newly-discovered config-drift gaps to file as
+    draft tickets: ``draft_titles``, ``draft_bodies``, and the
+    ``gap_ids`` used for dedup against the memory ledger.
+    """
+
     updated_memory: str = ""
     draft_titles: list[str] = Field(default_factory=list)
     draft_bodies: list[str] = Field(default_factory=list)

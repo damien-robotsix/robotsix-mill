@@ -26,6 +26,13 @@ SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt
 
 
 class EpicBreakdownResult(BaseModel):
+    """Structured result of breaking an epic into child tickets.
+
+    Holds parallel ``child_titles`` and ``child_bodies`` lists (one
+    entry per proposed child ticket) plus an optional ``epic_body``
+    carrying a revised epic description when the agent reworked it.
+    """
+
     child_titles: list[str] = Field(default_factory=list)
     child_bodies: list[str] = Field(default_factory=list)
     epic_body: str | None = None
