@@ -1221,6 +1221,36 @@ def test_list_children_endpoint(client, service):
     assert child_ids == {c1.id, c2.id}
 
 
+def test_create_epic_unknown_repo(client):
+    """POST /epics with an unknown repo_id returns 400."""
+    r = client.post("/epics", json={"title": "X", "repo_id": "nonexistent"})
+    assert r.status_code == 400
+    detail = r.json()["detail"]
+    assert "Unknown repo" in detail
+    assert "nonexistent" in detail
+
+
+def test_create_epic_value_error(client, monkeypatch):
+    """When svc.create raises ValueError, POST /epics re-raises it as 400."""
+    from robotsix_mill.core.service import TicketService
+
+    def raising_create(self, title, *args, **kwargs):
+        raise ValueError("bad")
+
+    monkeypatch.setattr(TicketService, "create", raising_create)
+
+    r = client.post("/epics", json={"title": "Valid title"})
+    assert r.status_code == 400
+    assert "bad" in r.json()["detail"]
+
+
+def test_list_children_404_nonexistent(client):
+    """GET /tickets/{id}/children on a missing ticket returns 404."""
+    r = client.get("/tickets/does-not-exist/children")
+    assert r.status_code == 404
+    assert "ticket not found" in r.json()["detail"]
+
+
 # --- generate-children endpoint tests ---
 
 
@@ -1314,6 +1344,39 @@ def test_generate_children_creates_children(client, service, monkeypatch):
     assert len(children) == 2, f"expected 2 children, got {len(children)}"
     child_titles = {c["title"] for c in children}
     assert child_titles == {"Child A", "Child B"}
+
+
+def test_generate_children_background_error_path(client, service, monkeypatch):
+    """When the breakdown agent raises in the background thread, the route
+    still returns 202 immediately and the runner calls
+    ``registry.finish_error``."""
+    import threading
+
+    epic = service.create("Will fail", kind="epic")
+
+    def boom(**kw):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_breakdown.run_epic_breakdown_agent",
+        boom,
+    )
+
+    # Capture the finish_error call by wrapping the live run registry.
+    registry = client.app.state.run_registry
+    finished_error = threading.Event()
+    orig_finish_error = registry.finish_error
+
+    def tracking_finish_error(run_id, error):
+        orig_finish_error(run_id, error)
+        finished_error.set()
+
+    monkeypatch.setattr(registry, "finish_error", tracking_finish_error)
+
+    r = client.post(f"/tickets/{epic.id}/generate-children")
+    assert r.status_code == 202
+
+    assert finished_error.wait(5), "registry.finish_error was not called"
 
 
 def test_generate_children_flags_overlapping_child(client, service, monkeypatch):
