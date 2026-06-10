@@ -247,6 +247,47 @@ def test_test_agent_repo_file_command_wins(tmp_path, monkeypatch):
     assert cap["cmd"] == "repo-file-cmd"
 
 
+def _repo_config(**overrides):
+    from robotsix_mill.config import RepoConfig
+
+    base = dict(
+        repo_id="r",
+        board_id="b",
+        langfuse_project_name="p",
+        langfuse_public_key="pk",
+        langfuse_secret_key="sk",
+    )
+    base.update(overrides)
+    return RepoConfig(**base)
+
+
+def test_test_agent_forwards_repo_sandbox_image(tmp_path, monkeypatch):
+    """``run_test_agent`` threads ``repo_config.sandbox_image`` into the
+    underlying ``sandbox.run`` call; ``None`` when no config / unset."""
+    from robotsix_mill import sandbox
+
+    s = _settings(tmp_path, test_command="pytest -q")
+    cap = {}
+
+    def fake_run(cmd, *, repo_dir, settings, **kwargs):
+        cap["sandbox_image"] = kwargs.get("sandbox_image")
+        return (0, "ok")
+
+    monkeypatch.setattr(sandbox, "run", fake_run)
+
+    cfg = _repo_config(sandbox_image="ros:rolling-ros-base")
+    testing.run_test_agent(settings=s, repo_dir=tmp_path, repo_config=cfg)
+    assert cap["sandbox_image"] == "ros:rolling-ros-base"
+
+    # repo_config=None → None.
+    testing.run_test_agent(settings=s, repo_dir=tmp_path, repo_config=None)
+    assert cap["sandbox_image"] is None
+
+    # repo_config with sandbox_image unset → None.
+    testing.run_test_agent(settings=s, repo_dir=tmp_path, repo_config=_repo_config())
+    assert cap["sandbox_image"] is None
+
+
 # --- smoke gate -----------------------------------------------------------
 
 
@@ -300,6 +341,28 @@ def test_smoke_agent_repo_file_command_wins(tmp_path, monkeypatch):
     passed, fb = testing.run_smoke_agent(settings=s, repo_dir=tmp_path)
     assert passed is True
     assert cap["cmd"] == "repo-smoke-cmd"
+
+
+def test_smoke_agent_forwards_repo_sandbox_image(tmp_path, monkeypatch):
+    """``run_smoke_agent`` threads ``repo_config.sandbox_image`` into the
+    underlying ``sandbox.run`` call; ``None`` when no config / unset."""
+    from robotsix_mill import sandbox
+
+    s = _settings(tmp_path, smoke_command="scripts/smoke.sh")
+    cap = {}
+
+    def fake_run(cmd, *, repo_dir, settings, **kwargs):
+        cap["sandbox_image"] = kwargs.get("sandbox_image")
+        return (0, "ok")
+
+    monkeypatch.setattr(sandbox, "run", fake_run)
+
+    cfg = _repo_config(sandbox_image="ros:rolling-ros-base")
+    testing.run_smoke_agent(settings=s, repo_dir=tmp_path, repo_config=cfg)
+    assert cap["sandbox_image"] == "ros:rolling-ros-base"
+
+    testing.run_smoke_agent(settings=s, repo_dir=tmp_path, repo_config=None)
+    assert cap["sandbox_image"] is None
 
 
 def test_smoke_agent_sandbox_unavailable(tmp_path, monkeypatch):

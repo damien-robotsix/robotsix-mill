@@ -757,11 +757,14 @@ class TestRunCommand:
         tools = _build(root, settings)
         cap = {}
 
-        def _capture(command, *, repo_dir, settings, epic_workspace_path=None):
+        def _capture(
+            command, *, repo_dir, settings, epic_workspace_path=None, **kwargs
+        ):
             cap["command"] = command
             cap["repo_dir"] = repo_dir
             cap["settings"] = settings
             cap["epic_workspace_path"] = epic_workspace_path
+            cap["sandbox_image"] = kwargs.get("sandbox_image")
             return (0, "ok")
 
         monkeypatch.setattr(sandbox, "run", _capture)
@@ -770,6 +773,29 @@ class TestRunCommand:
         assert cap["command"] == "pytest tests/"
         assert cap["repo_dir"] == root
         assert cap["settings"] is settings
+        # No sandbox_image passed to build_fs_tools → forwarded as None.
+        assert cap["sandbox_image"] is None
+
+    def test_run_command_forwards_sandbox_image(self, tmp_path, settings, monkeypatch):
+        """build_fs_tools(sandbox_image=...) threads the image into the
+        run_command tool's sandbox.run call."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = {
+            t.__name__: t
+            for t in build_fs_tools(
+                root, settings, sandbox_image="ros:rolling-ros-base"
+            )
+        }
+        cap = {}
+
+        def _capture(command, *, repo_dir, settings, **kwargs):
+            cap["sandbox_image"] = kwargs.get("sandbox_image")
+            return (0, "ok")
+
+        monkeypatch.setattr(sandbox, "run", _capture)
+        tools["run_command"]("pytest tests/")
+        assert cap["sandbox_image"] == "ros:rolling-ros-base"
 
     def test_empty_output_success(self, tmp_path, settings, fake_sandbox):
         """Successful command with no output returns a friendly message."""

@@ -211,6 +211,7 @@ def build_fs_tools(
     *,
     pre_seeded: dict[Path, str] | None = None,
     extra_roots: list[Path] | None = None,
+    sandbox_image: str | None = None,
 ) -> list:
     """Build the filesystem + shell tool closures sandboxed to *root*.
 
@@ -233,6 +234,9 @@ def build_fs_tools(
             implement coordinator's reference files).
         extra_roots: Optional additional directories that resolved
             paths are also allowed to fall inside.
+        sandbox_image: Optional per-repo sandbox image override forwarded
+            to ``sandbox.run`` for the ``run_command`` tool. ``None`` →
+            falls back to ``settings.sandbox_image``.
 
     Returns:
         A list of the six tool closures, in the order ``read_file``,
@@ -602,7 +606,12 @@ def build_fs_tools(
                 "the repository has not been cloned yet"
             )
         try:
-            rc, out = sandbox.run(command, repo_dir=root, settings=settings)
+            rc, out = sandbox.run(
+                command,
+                repo_dir=root,
+                settings=settings,
+                sandbox_image=sandbox_image,
+            )
         except sandbox.SandboxError as e:
             return f"sandbox error: {e}"
         if not out.strip():

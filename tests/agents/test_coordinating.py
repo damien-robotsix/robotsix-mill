@@ -226,9 +226,12 @@ class TestRunCoordinator:
         # ── build_fs_tools (robotsix_mill.agents.fs_tools) ──────────
         from robotsix_mill.agents import fs_tools as _fs
 
-        def _fake_build_fs_tools(root, settings, *, pre_seeded=None, extra_roots=None):
+        def _fake_build_fs_tools(
+            root, settings, *, pre_seeded=None, extra_roots=None, sandbox_image=None
+        ):
             self.captured["fs_pre_seeded"] = pre_seeded
             self.captured["fs_extra_roots"] = extra_roots
+            self.captured["fs_sandbox_image"] = sandbox_image
 
             # Return a single read_file tool so the filtering in
             # run_coordinator doesn't blow up.

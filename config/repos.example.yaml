@@ -29,6 +29,18 @@ repos:
     #                             #   Per-repo isolation: each repo
     #                             #   gets its own consumer pool, so a
     #                             #   busy repo can't block another.
+    # sandbox_image: "ros:rolling-ros-base"   # optional — per-repo sandbox
+    #   image for this repo's gates + interactive commands. Default:
+    #   MILL_SANDBOX_IMAGE / Settings.sandbox_image (python:3.14-slim).
+    #   ALL ROS/apt/system deps MUST be baked into this image: the sandbox
+    #   runs non-root (apt blocked) and the egress proxy excludes apt.ros.org
+    #   (rosdep cannot fetch at gate time). The matching gate this unblocks
+    #   lives in the MEMBER repo's own .robotsix-mill/config.yaml, e.g.:
+    #   test_command: >-
+    #     . /opt/ros/rolling/setup.sh &&
+    #     colcon build --packages-select <pkg> &&
+    #     colcon test --packages-select <pkg> &&
+    #     colcon test-result --verbose
     # cross_repo_target:          # optional — deliver to an external fork.
     #   # When set, a ticket that runs against THIS repo has its branch
     #   # pushed to `fork_remote_url` and a PR opened fork→upstream against

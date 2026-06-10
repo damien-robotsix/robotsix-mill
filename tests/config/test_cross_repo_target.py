@@ -66,3 +66,14 @@ def test_cross_repo_target_defaults(tmp_path):
 def test_cross_repo_target_omitted_is_none(tmp_path):
     reg = load_repos_config(_write(tmp_path, _BASE_REPO))
     assert reg.repos["example"].cross_repo_target is None
+
+
+def test_sandbox_image_round_trips(tmp_path):
+    body = _BASE_REPO + '    sandbox_image: "ros:rolling-ros-base"\n'
+    reg = load_repos_config(_write(tmp_path, body))
+    assert reg.repos["example"].sandbox_image == "ros:rolling-ros-base"
+
+
+def test_sandbox_image_omitted_is_none(tmp_path):
+    reg = load_repos_config(_write(tmp_path, _BASE_REPO))
+    assert reg.repos["example"].sandbox_image is None

@@ -151,13 +151,18 @@ def run_test_agent(
     cmd = ((load_repo_test_command(repo_dir) or "") or settings.test_command).strip()
     if not cmd:
         return True, "no test gate configured (treated as passing)"
+    image = repo_config.sandbox_image if repo_config else None
     try:
         # install_project: install the repo's DECLARED deps before the
         # gate runs. Without this the gate tests against the image's
         # frozen site-packages, so any ticket adding a new third-party
         # runtime dep fails forever with ModuleNotFoundError.
         rc, out = sandbox.run(
-            cmd, repo_dir=repo_dir, settings=settings, install_project=True
+            cmd,
+            repo_dir=repo_dir,
+            settings=settings,
+            install_project=True,
+            sandbox_image=image,
         )
     except sandbox.SandboxError as e:
         return False, f"sandbox unavailable: {e}"
@@ -189,7 +194,11 @@ def run_test_agent(
     if retry_on_failure:
         try:
             rc2, out2 = sandbox.run(
-                cmd, repo_dir=repo_dir, settings=settings, install_project=True
+                cmd,
+                repo_dir=repo_dir,
+                settings=settings,
+                install_project=True,
+                sandbox_image=image,
             )
         except sandbox.SandboxError as e:
             return False, f"sandbox unavailable on flake re-run: {e}"
@@ -262,9 +271,14 @@ def run_smoke_agent(
     cmd = ((load_repo_smoke_command(repo_dir) or "") or settings.smoke_command).strip()
     if not cmd:
         return True, "no smoke gate configured (treated as passing)"
+    image = repo_config.sandbox_image if repo_config else None
     try:
         rc, out = sandbox.run(
-            cmd, repo_dir=repo_dir, settings=settings, install_project=True
+            cmd,
+            repo_dir=repo_dir,
+            settings=settings,
+            install_project=True,
+            sandbox_image=image,
         )
     except sandbox.SandboxError as e:
         return False, f"sandbox unavailable: {e}"
@@ -282,7 +296,11 @@ def run_smoke_agent(
     if retry_on_failure:
         try:
             rc2, out2 = sandbox.run(
-                cmd, repo_dir=repo_dir, settings=settings, install_project=True
+                cmd,
+                repo_dir=repo_dir,
+                settings=settings,
+                install_project=True,
+                sandbox_image=image,
             )
         except sandbox.SandboxError as e:
             return False, f"sandbox unavailable on flake re-run: {e}"
