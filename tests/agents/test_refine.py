@@ -4766,3 +4766,66 @@ class TestClassifyMaintenanceDraft:
     def test_empty_draft(self):
         """Empty title and draft → None."""
         assert refining._classify_maintenance_draft("", "") is None
+
+
+class TestRefineFullModelFloor:
+    """Refine must never run on a flash model — ``_refine_full_model`` and
+    ``_build_refine_overrides`` coerce any flash-tier resolved model up to
+    the full refine model.
+
+    The hermetic conftest resolves ``Settings().refine_model`` to
+    ``"test/model"`` (not the repo's ``deepseek/deepseek-v4-pro`` default),
+    so assertions compare against ``Settings(...).refine_model``."""
+
+    def _definition(self, model: str):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(model=model, system_prompt="SP")
+
+    def test_unset_env_falls_back_to_refine_model(self, tmp_path):
+        """An empty ``definition.model`` (unset ``MILL_REFINE_MODEL``) →
+        ``settings.refine_model``."""
+        s = Settings(data_dir=str(tmp_path))
+        overrides = refining._build_refine_overrides(self._definition(""), s, None, "")
+        assert overrides["model_name"] == s.refine_model
+
+    def test_flash_override_coerced_to_full(self, tmp_path):
+        """A flash-tier ``definition.model`` is coerced to the full model."""
+        s = Settings(data_dir=str(tmp_path))
+        overrides = refining._build_refine_overrides(
+            self._definition("deepseek/deepseek-v4-flash"), s, None, ""
+        )
+        assert overrides["model_name"] == s.refine_model
+        assert "flash" not in overrides["model_name"]
+
+    def test_cheap_alias_is_flash_and_coerced(self, tmp_path):
+        """The ``cheap`` tier alias resolves to a flash model and is coerced."""
+        s = Settings(data_dir=str(tmp_path))
+        overrides = refining._build_refine_overrides(
+            self._definition("cheap"), s, None, ""
+        )
+        assert overrides["model_name"] == s.refine_model
+
+    def test_non_flash_override_passes_through(self, tmp_path):
+        """A non-flash ``definition.model`` override is preserved verbatim."""
+        s = Settings(data_dir=str(tmp_path))
+        overrides = refining._build_refine_overrides(
+            self._definition("anthropic/claude-main"), s, None, ""
+        )
+        assert overrides["model_name"] == "anthropic/claude-main"
+
+    def test_floor_used_when_refine_model_itself_flash(self, tmp_path):
+        """If ``settings.refine_model`` itself resolves to flash, the
+        ``_REFINE_MODEL_FLOOR`` literal is used instead."""
+        s = Settings(data_dir=str(tmp_path), refine_model="deepseek/deepseek-v4-flash")
+        assert (
+            refining._refine_full_model("deepseek/deepseek-v4-flash", s)
+            == refining._REFINE_MODEL_FLOOR
+        )
+        assert "flash" not in refining._REFINE_MODEL_FLOOR
+
+    def test_never_returns_flash(self, tmp_path):
+        """For any flash input, the result is never a flash model."""
+        s = Settings(data_dir=str(tmp_path))
+        for model in ("deepseek/deepseek-v4-flash", "cheap"):
+            assert not refining._is_flash_model(refining._refine_full_model(model, s))

@@ -625,6 +625,46 @@ def _coerce_refine_output(output: object) -> "RefineResult":
     return RefineResult(spec_markdown=str(output).strip() or None)
 
 
+# Refine must never run on a flash model: the flash tier exhausts its
+# output-retry budget on the structured RefineResult and the stage fails.
+# ``_refine_full_model`` is the single choke point that coerces any
+# flash-tier resolved model up to the full refine model. This floor is the
+# pro-tier model used when even ``settings.refine_model`` resolves to flash.
+_REFINE_MODEL_FLOOR = "deepseek/deepseek-v4-pro"
+
+
+def _is_flash_model(model_name: str) -> bool:
+    """True when *model_name* resolves to the flash (cheap) tier.
+
+    Mirrors ``base.py``'s tier heuristic: resolve tier aliases (``cheap`` →
+    flash model), then test for ``flash`` in the resolved name."""
+    from .base import _MODEL_TIER_ALIASES
+
+    resolved = _MODEL_TIER_ALIASES.get(model_name.strip().lower(), model_name)
+    return "flash" in resolved
+
+
+def _refine_full_model(model_name: str, settings: Settings) -> str:
+    """Coerce a flash-tier *model_name* up to the full refine model.
+
+    Non-flash models pass through unchanged (so a legitimate non-flash
+    ``MILL_REFINE_MODEL`` override keeps working). A flash-tier model is
+    replaced by ``settings.refine_model`` — or the ``_REFINE_MODEL_FLOOR``
+    literal if that itself resolves to flash — with a ``log.warning``."""
+    if not _is_flash_model(model_name):
+        return model_name
+    replacement = settings.refine_model
+    if _is_flash_model(replacement):
+        replacement = _REFINE_MODEL_FLOOR
+    log.warning(
+        "refine: resolved model %r is flash-tier; coercing to %r to keep "
+        "refine off the flash model",
+        model_name,
+        replacement,
+    )
+    return replacement
+
+
 def _build_refine_overrides(
     definition,
     settings: Settings,
@@ -642,8 +682,9 @@ def _build_refine_overrides(
         overrides["system_prompt"] = REVIEWER_SENDBACK_PROMPT
         overrides["reply_to_thread"] = True
         overrides["close_thread"] = True
-    if not definition.model:
-        overrides["model_name"] = settings.refine_model
+    overrides["model_name"] = _refine_full_model(
+        definition.model or settings.refine_model, settings
+    )
     if language_instructions:
         base_prompt = overrides.get("system_prompt", definition.system_prompt)
         overrides["system_prompt"] = (
