@@ -166,7 +166,14 @@ def _safe(root: Path, rel: str, *, extra_roots: list[Path] | None = None) -> Pat
             for extra in extra_roots:
                 if p.is_relative_to(extra.resolve()):
                     return p
-        raise ValueError(f"path {rel!r} escapes the repository")
+        raise ValueError(
+            f"path {rel!r} escapes the repository — all filesystem tools "
+            "(read_file, list_dir, run_command) are sandboxed to the repo "
+            "checkout, so files outside it (installed dependencies under "
+            "site-packages, /usr/local/lib, /etc, other workspaces) are NOT "
+            "reachable by any tool. Do NOT retry this path and do NOT fall "
+            "back to run_command/grep/cat on it — it will fail the same way."
+        )
     return p
 
 
