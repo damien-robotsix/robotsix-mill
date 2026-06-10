@@ -266,6 +266,7 @@ modules:
       - tests/stages/test_multi_repo.py
       - src/robotsix_mill/stages/_implemented_repos.py
       - tests/stages/test_implemented_repos.py
+      - tests/stages/test_smoke_gate_browser.py
     dependencies: [config, core, forge, vcs, agents, runners, langfuse, runtime, hooks]
 
   # -------------------------------------------------------------------
