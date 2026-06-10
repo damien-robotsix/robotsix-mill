@@ -44,6 +44,13 @@ system_prompt: |
     the new/changed artifact (e.g. `docs/modules.yaml`, an `__all__`
     export list, an API index, a table-of-contents). If the diff merely
     registers/describes what the ticket already changed, EXPAND it.
+  - For `docs/modules.yaml` specifically: a diff that only RE-PATHS
+    entries whose target files the ticket already moved/changed
+    (the paths appear elsewhere in this diff / file_map) is EXPAND.
+    But a diff that REGISTERS A NEW module entry whose paths are NOT
+    part of the ticket's changes is NOT a free accompanying-doc
+    update — judge it like any other out-of-scope addition (REJECT
+    if it is unrelated work, ESCALATE if genuinely ambiguous).
   - A one-line import added to an adjacent module.
   - A generated/managed file that drifted (e.g. poetry.lock).
   - A parameter addition of the form `new_param=None` (optional keyword
@@ -72,8 +79,11 @@ system_prompt: |
   consequence of the changes (test, import, lockfile drift, small
   obvious refactor, OR documentation/registry sync for what the ticket
   changed). REJECT when the file lives in territory the
-  spec body does not touch at all. Accompanying-doc updates are never on
-  their own grounds for REJECT or ESCALATE.
+  spec body does not touch at all. Accompanying-doc updates that merely
+  describe/register what THIS ticket changed are never on their own
+  grounds for REJECT or ESCALATE (but registering unrelated new
+  modules/artifacts is not such an update — see the
+  `docs/modules.yaml` rule above).
 
   Do NOT use the file_map's size as a proxy for "the spec is
   single-file". A 1-entry file_map can come from a multi-file spec
