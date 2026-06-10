@@ -1179,3 +1179,229 @@ def test_in_scope_done_still_pushes_no_fix_ticket(tmp_path, monkeypatch):
     assert out.next_state is State.IMPLEMENT_COMPLETE
     assert push_calls == [1]
     assert ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY) == []
+
+
+# ---------------------------------------------------------------------------
+# OUT_OF_SCOPE on a stale branch → refresh instead of spawn
+# ---------------------------------------------------------------------------
+
+
+def test_out_of_scope_stale_branch_refreshes_no_spawn(tmp_path, monkeypatch):
+    """A branch reporting mergeable_state == 'behind' is refreshed once via
+    forge.update_branch instead of spawning a dependency fix."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "CodeQL", "summary": "alert", "text": None, "annotations": []}
+            ],
+        },
+    )
+    # pr_status reports the branch is behind its base.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "sha": "abc123",
+            "mergeable": True,
+            "mergeable_state": "behind",
+        },
+    )
+    update_calls = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "update_branch",
+        lambda self, *, source_branch: (
+            update_calls.append(source_branch)
+            or {"updated": True, "reason": "update-branch accepted"}
+        ),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: _oos_result(),
+    )
+    push_calls = []
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        lambda *a, **k: push_calls.append(1),
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert update_calls == [f"mill/{t.id}"]
+    # No dependency fix spawned and the parent's depends_on is unchanged.
+    assert ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY) == []
+    orig = ctx.service.get(t.id)
+    assert not orig.depends_on or json.loads(orig.depends_on) == []
+    assert push_calls == []
+    # Refresh counter recorded.
+    refresh_path = (
+        ctx.service.workspace(t).artifacts_dir / "ci_fix_refresh_attempts.txt"
+    )
+    assert _read_counter(refresh_path) == 1
+
+
+def test_out_of_scope_clean_branch_spawns_fix(tmp_path, monkeypatch):
+    """A branch reporting mergeable_state == 'clean' (up to date) spawns the
+    dependency fix exactly as before — update_branch is never called."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "CodeQL", "summary": "alert", "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "sha": "abc123",
+            "mergeable": True,
+            "mergeable_state": "clean",
+        },
+    )
+    update_calls = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "update_branch",
+        lambda self, *, source_branch: (
+            update_calls.append(source_branch) or {"updated": True}
+        ),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: _oos_result(),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        lambda *a, **k: None,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert update_calls == []
+    fixes = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)
+    assert len(fixes) == 1
+
+
+def test_out_of_scope_stale_branch_refresh_capped_at_one(tmp_path, monkeypatch):
+    """When the refresh counter is already >= 1, a still-behind branch does
+    NOT re-call update_branch and falls through to the normal spawn path."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "CodeQL", "summary": "alert", "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "sha": "abc123",
+            "mergeable": True,
+            "mergeable_state": "behind",
+        },
+    )
+    update_calls = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "update_branch",
+        lambda self, *, source_branch: (
+            update_calls.append(source_branch) or {"updated": True}
+        ),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: _oos_result(),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        lambda *a, **k: None,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+    # Pre-seed the refresh counter so a prior refresh already happened.
+    refresh_path = (
+        ctx.service.workspace(t).artifacts_dir / "ci_fix_refresh_attempts.txt"
+    )
+    _write_counter(refresh_path, 1)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    # No second update_branch call.
+    assert update_calls == []
+    fixes = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)
+    assert len(fixes) == 1
+
+
+# ---------------------------------------------------------------------------
+# GitHubForge.update_branch HTTP mapping
+# ---------------------------------------------------------------------------
+
+
+def test_github_update_branch_http_mapping(tmp_path, monkeypatch):
+    """update_branch maps HTTP 202 → updated, 422 → already up to date,
+    other → failure, and missing PR → not found."""
+    ctx = _gh(tmp_path)
+    forge = github.GitHubForge(ctx.settings, repo_config=ctx.repo_config)
+
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "_get_pr",
+        lambda self, *, owner, repo, head: {"number": 7},
+    )
+
+    class _Resp:
+        def __init__(self, status_code, text=""):
+            self.status_code = status_code
+            self.text = text
+
+    put_calls = []
+
+    def fake_put(path, **kw):
+        put_calls.append(path)
+        return _Resp(status_map["code"], status_map.get("text", ""))
+
+    monkeypatch.setattr(forge._http, "put", fake_put)
+
+    status_map = {"code": 202}
+    assert forge.update_branch(source_branch="b")["updated"] is True
+    assert put_calls[-1] == "/repos/o/r/pulls/7/update-branch"
+
+    status_map = {"code": 422}
+    res = forge.update_branch(source_branch="b")
+    assert res["updated"] is False
+    assert res["reason"] == "already up to date"
+
+    status_map = {"code": 500, "text": "boom"}
+    res = forge.update_branch(source_branch="b")
+    assert res["updated"] is False
+    assert "HTTP 500" in res["reason"]
+
+    # Missing PR.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "_get_pr",
+        lambda self, *, owner, repo, head: None,
+    )
+    res = forge.update_branch(source_branch="b")
+    assert res == {"updated": False, "reason": "PR not found"}

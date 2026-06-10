@@ -95,6 +95,28 @@ implement agent, scoped to the ticket's clone. It never pushes, opens
 PRs, or interacts with the forge. The agent does **NOT** have web-search
 access — it works only from the failing summary and local files.
 
+### Stale-branch refresh (out-of-scope failures)
+
+When the ci-fix agent classifies a failure as **out-of-scope** (i.e., the
+failing check cannot be fixed by changes in this ticket's diff), the stage
+first checks whether the PR branch is behind its base. If the branch is
+stale, a fix that landed on the target branch while the ci-fix agent was
+running may have already resolved the failure. In this case, the stage
+calls the forge's `update_branch` API to merge the target branch into the
+PR branch server-side, records a history note, and returns to
+`IMPLEMENT_COMPLETE` to re-poll CI.
+
+This **stale-branch refresh** happens at most once per out-of-scope cycle
+(tracked by an internal counter). If the failure still exists after a
+refresh, the stage proceeds to spawn a dedicated dependency-fix ticket as
+before.
+
+- The refresh is deterministic and non-fatal — it never blocks forward
+  progress and gracefully falls back to the normal out-of-scope spawn if
+  the API call fails.
+- This optimization reduces spurious dependency-fix tickets on fast-moving
+  target branches where fixes land frequently.
+
 ## Auto-fix of review feedback (opt-in)
 
 When `MILL_REVIEW_FEEDBACK_ENABLED=true` and a human reviewer submits a
