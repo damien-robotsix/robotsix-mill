@@ -139,6 +139,37 @@ in `repos.yaml`. The precedence is: per-repo `.robotsix-mill/config.yaml`
 `test_command` > `repos.yaml` per-repo `test_command` > this global
 `sandbox.test_command`; empty everywhere makes the gate pass.
 
+#### Test gate environment-error circuit breaker
+
+The test gate has a **circuit breaker** that detects when a test suite
+failure is due to a **missing or inaccessible binary** in the sandbox —
+not a code problem the implement agent can fix by editing the repo. When
+detected, the gate short-circuits with a stable ENV-ERROR diagnosis
+instead of forwarding the failure to the distill agent for analysis.
+
+The ENV-ERROR circuit breaker fires on:
+- **rc=127** — a binary was not found on PATH (shell standard for "command not found")
+- **rc=126 + Permission denied** on a `$HOME/.local/bin` path — a
+  `pip install --user` console script exists but cannot execute because
+  the sandbox's `/tmp` tmpfs was not mounted with the `exec` flag (by
+  default Docker mounts tmpfs as `noexec`). The sandbox has been updated
+  to mount `/tmp` as `exec` to allow pip console scripts to run; if a
+  script still fails with rc=126 on a HOME path, the gate reports ENV-ERROR.
+
+This prevents the implement fix-loop from burning iterations on unfixable
+sandbox issues. The diagnosis is **byte-identical across runs** for the
+same failure (e.g. same missing binary) so the circuit breaker recognizes
+repeated failures and escal​ates instead of retrying forever.
+
+**Sandbox requirements for console scripts:** If your repo uses
+`extra_sandbox_packages` to install pip packages with CLI entry points
+(e.g. `pip:yamllint`, `pip:vcs`), those console scripts are installed
+under `$HOME/.local/bin` (which maps to `/tmp/.local/bin` in the sandbox)
+and must be executable. The sandbox's `/tmp` tmpfs is mounted with the
+`exec` flag to support this. If a console script cannot execute even
+with `exec` mounted, the ENV-ERROR circuit breaker will catch it and
+report it as a sandbox regression rather than treating it as a code bug.
+
 ### Smoke gate (`smoke_command` / `smoke_paths`)
 
 A repo can declare an optional **path-scoped smoke gate** that runs
