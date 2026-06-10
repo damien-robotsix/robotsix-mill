@@ -456,6 +456,44 @@ def test_dedup_unmerged_candidate_proceeds_to_refine(ctx_factory, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# 5a-bis. dedup: un-refined DRAFT candidate → proceed to refine
+# ---------------------------------------------------------------------------
+
+
+def test_dedup_unrefined_draft_candidate_proceeds_to_refine(ctx_factory, monkeypatch):
+    """A ``duplicate_of`` candidate that has never progressed past DRAFT
+    (no refine-progress history) is NOT a valid dedup target — closing a
+    further-along ticket into it would bury the fix in a ticket that may
+    never be implemented.  Refine must run rather than short-circuit to
+    DONE."""
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
+    t = _ticket(ctx, body="Fix the login form")
+
+    # Candidate left in DRAFT (never refined) — no transition at all.
+    cand = _ticket(ctx, title="Login form fix", body="Fix the login form")
+
+    refine_called = []
+
+    def _track(*a, **k):
+        refine_called.append(1)
+        return _mock_refine_ok(spec_markdown="## Problem\nDo it")(*a, **k)
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_track,
+        run_dedup_check=_mock_dedup(
+            duplicate_of=cand.id, already_done=None, reason="same idea"
+        ),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert "duplicate" not in (out.note or "")
+    assert len(refine_called) == 1
+
+
+# ---------------------------------------------------------------------------
 # 5b. dedup: already_done candidate with MERGED branch → DONE (no regression)
 # ---------------------------------------------------------------------------
 

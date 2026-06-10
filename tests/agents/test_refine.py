@@ -498,6 +498,9 @@ def test_dedup_duplicate_ticket_closes(ctx, service, monkeypatch):
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
 
     t_a = service.create("Add dark mode toggle", _DEDUP_BODY)
+    # Drive t_a to a refined state so it is a valid dedup target — an
+    # un-refined DRAFT candidate is now rejected by _is_valid_dedup_target.
+    service.transition(t_a.id, State.READY, note="refined")
     t_b = service.create("Add dark mode toggle", _DEDUP_BODY)
 
     def fake_dedup(
