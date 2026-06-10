@@ -237,7 +237,11 @@ modules:
       - src/robotsix_mill/stages/deliver.py
       - src/robotsix_mill/stages/document.py
       - src/robotsix_mill/stages/review.py
-      - src/robotsix_mill/stages/refine.py
+      - src/robotsix_mill/stages/refine/__init__.py
+      - src/robotsix_mill/stages/refine/core.py
+      - src/robotsix_mill/stages/refine/gates.py
+      - src/robotsix_mill/stages/refine/orchestration.py
+      - src/robotsix_mill/stages/refine/helpers.py
       - src/robotsix_mill/stages/answer.py
       - src/robotsix_mill/stages/merge.py
       - src/robotsix_mill/stages/ci_fix.py

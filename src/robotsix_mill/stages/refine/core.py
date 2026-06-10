@@ -1,0 +1,206 @@
+"""The :class:`RefineStage` orchestrator.
+
+Assembles the gate phases (:class:`RefineGatesMixin`) and the refine-agent
+pipeline (:class:`RefineAgentMixin`) into the public ``Stage`` subclass and
+holds ``run`` (the orchestrator) plus ``_clone_or_resume``.
+"""
+
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+from ...agents import refining
+from ...core.models import Ticket
+from ...core.states import State
+from ...forge.auth import github_token
+from ...vcs import git_ops
+from ..base import Outcome, Stage, StageContext
+from .gates import RefineGatesMixin
+from .helpers import log
+from .orchestration import RefineAgentMixin
+
+
+class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
+    """Refine a draft ticket into a detailed, self-contained engineering specification."""
+
+    name = "refine"
+    input_state = State.DRAFT
+
+    def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
+        """Process a DRAFT ticket: gate on dependencies, refine the draft into a self-contained engineering spec (or split into children / promote to epic) via the refining agent."""
+        ws = ctx.service.workspace(ticket)
+        draft = ws.read_description().strip()
+        epic_ctx = ctx.service.get_epic_context(ticket)
+        title = ticket.title.strip()
+        if not title and not draft:
+            return Outcome(State.BLOCKED, "empty title and draft — nothing to refine")
+
+        # --- dependency gate: refuse to refine until all deps are
+        # terminal (CLOSED/DONE). Same-state no-op → the reconcile
+        # sweep re-enqueues this ticket each poll cycle.
+        unmet = ctx.service.unmet_dependencies(ticket)
+        if unmet:
+            log.debug(
+                "%s: unmet dependencies — deferring refine: %s",
+                ticket.id,
+                unmet,
+            )
+            return Outcome(State.DRAFT)
+
+        s = ctx.settings
+
+        # --- triage phase 0: maintenance keyword check (before clone) ---
+        # Deterministic, no LLM, no workspace.  When the draft requests
+        # a create-repo, fork-repo, or cross-repo investigation, route
+        # directly to MAINTENANCE — skip the clone + full triage.
+        if s.maintenance_triage_enabled:
+            action = refining._classify_maintenance_draft(title, draft)
+            if action is not None:
+                # Preserve the original draft as an artifact for
+                # traceability (mirrors the triage-SKIP and normal-refine
+                # paths).
+                (ws.artifacts_dir / "draft-original.md").write_text(
+                    draft if draft else "(title-only ticket, no body provided)",
+                    encoding="utf-8",
+                )
+                # Tag the ticket with a maintenance:$action label so the
+                # maintenance stage can optionally dispatch on action type
+                # without re-parsing the draft.
+                try:
+                    ctx.service.set_labels(ticket.id, [f"maintenance:{action}"])
+                except Exception:
+                    log.warning(
+                        "%s: set_labels failed for maintenance triage — "
+                        "continuing anyway",
+                        ticket.id,
+                        exc_info=True,
+                    )
+                return Outcome(
+                    State.MAINTENANCE,
+                    f"maintenance triage: routed to MAINTENANCE "
+                    f"(action={action}) — {title}",
+                )
+        # --- end triage phase 0 ---
+
+        # Phase 1: build the workspace. A meta-board ticket is cross-repo:
+        # a triage agent picks the required registered repos and we clone
+        # those into a multi-repo workspace (repo_dir = first, extra_roots =
+        # all), so the refine agent can read across them. Every other board
+        # is the normal single-repo clone.
+        extra_roots: list[Path] | None = None
+        if ticket.board_id == "meta":
+            from ...meta.workspace import build_triaged_meta_workspace
+
+            repo_dir, extra_roots, outcome = build_triaged_meta_workspace(
+                ctx, ticket, ws, draft, author="refine"
+            )
+            if outcome is not None:
+                return outcome
+        else:
+            result = RefineStage._clone_or_resume(ctx, ticket, ws)
+            if isinstance(result, Outcome):
+                return result
+            repo_dir = result
+
+        # --- prepare hook: let the repo run custom setup after clone,
+        # before any agent executes ---
+        if repo_dir is not None:
+            from ...hooks import run_prepare_hook
+
+            hook_error = run_prepare_hook(repo_dir, ticket.id, ws.dir)
+            if hook_error is not None:
+                return Outcome(State.BLOCKED, hook_error)
+
+        # Phase 2: freshness gate — verify cited evidence against HEAD
+        # before spending any LLM budget on refine.  Runs before the
+        # dedup guard because it is deterministic (no LLM call).
+        stale = RefineStage._run_freshness_gate(ctx, ticket, draft, repo_dir, s)
+        if stale is not None:
+            return stale
+
+        # Phase 2.5: obsolescence gate — for *spawned* follow-up drafts,
+        # re-evaluate (via a cheap LLM call) whether the cited gap was
+        # already resolved in place by a parallel/parent ticket.  Runs
+        # after the deterministic freshness gate and before the dedup
+        # guard.
+        obsolete = RefineStage._run_obsolescence_gate(ctx, ticket, draft, repo_dir, s)
+        if obsolete is not None:
+            return obsolete
+
+        # Phase 3: dedup guard
+        dup = RefineStage._run_dedup_guard(ctx, ticket, draft, repo_dir, s)
+        if dup is not None:
+            return dup
+
+        # Phase 3.5: advisory dedup against CONCURRENT in-flight tickets.
+        # The dedup guard above can only close against a genuinely-DONE
+        # candidate, so two drafts that converge while both in flight both
+        # survive it.  This best-effort pass flags (never closes) such an
+        # overlap so refine/the operator can decide.
+        draft = RefineStage._run_inflight_advisory(ctx, ticket, draft, ws, s)
+
+        # Phase 4: refine agent + result handling
+        return RefineStage._run_refine_agent(
+            ctx, ticket, draft, repo_dir, epic_ctx, title, ws, s, extra_roots
+        )
+
+    @staticmethod
+    def _clone_or_resume(
+        ctx: StageContext, ticket: Ticket, ws
+    ) -> Path | Outcome | None:
+        """Resolve remote URL, reuse or clone repo, escalate clone failures.
+
+        Returns the ``repo_dir`` ``Path`` when a clone exists or is
+        successfully created.  On clone failure, adds a BLOCKED comment
+        via ``ctx.service.add_comment`` and returns an ``Outcome``.
+        Returns ``None`` when no ``remote_url`` is configured (caller
+        treats ``None`` as "no repo available").
+        """
+        # Resolve through the package façade so a test that patches
+        # ``robotsix_mill.stages.refine._resolve_remote_url`` (a module-level
+        # seam in the pre-split module) still takes effect.
+        from robotsix_mill.stages import refine as _facade
+
+        s = ctx.settings
+        remote_url = _facade._resolve_remote_url(s, ctx.repo_config)
+        if not remote_url:
+            return None
+
+        cand = ws.dir / "repo"
+        if (cand / ".git").exists():
+            return cand  # idempotent: reuse an existing clone
+
+        try:
+            try:
+                token = github_token(s, repo_config=ctx.repo_config)
+            except RuntimeError:
+                token = None  # no credentials configured — clone will fail
+            git_ops.clone(
+                remote_url,
+                cand,
+                s.forge_target_branch,
+                token,
+            )
+            return cand
+        except subprocess.CalledProcessError as e:
+            # Escalate clone failure to BLOCKED — running refine
+            # with no repo grounds the agent's system prompt
+            # against tools that aren't registered (the
+            # `tools=[]` path in refining.py:385). The result is
+            # an inconsistent, tool-less refine that wastes
+            # tokens. Surface the cause to the operator instead.
+            reason = f"refine clone failed: {(e.stderr or '').strip()[:200]}"
+            log.warning("%s: %s", ticket.id, reason)
+            # The diagnostic used to be posted as a comment; the
+            # transition note carries the same info and v1 keeps
+            # agent conclusions out of comments. The remediation
+            # hint ("fix permissions/credentials/disk/network, then
+            # resume-blocked") lives in this commit's git log as
+            # ambient context.
+            return Outcome(
+                State.BLOCKED,
+                f"{reason}. Fix the underlying cause (permissions, "
+                "credentials, disk space, network) then "
+                "`resume-blocked` to re-run refine.",
+            )
