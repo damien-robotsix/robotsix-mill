@@ -36,9 +36,37 @@ class Workspace:
         return d
 
     @property
+    def screenshots_dir(self) -> Path:
+        """Path to the ``screenshots/`` subdirectory, creating it lazily on first access.
+
+        Kept as a sibling of ``artifacts/`` (not under it) so user-supplied
+        screenshots survive a refine restart-from-scratch, which wipes
+        ``artifacts/`` but must preserve user input.
+        """
+        d = self.dir / "screenshots"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    @property
     def repo_dir(self) -> Path:
         """Path to the ``repo/`` subdirectory (no creation side-effect)."""
         return self.dir / "repo"
+
+    def list_screenshots(self) -> list[Path]:
+        """Return stored screenshot image files, sorted by name for determinism.
+
+        Returns ``[]`` when the ``screenshots/`` directory is absent. Only files
+        with a supported image extension (``.png``, ``.jpg``, ``.jpeg``,
+        ``.gif``, ``.webp``) are included.
+        """
+        d = self.dir / "screenshots"
+        if not d.exists():
+            return []
+        exts = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+        return sorted(
+            (p for p in d.iterdir() if p.is_file() and p.suffix.lower() in exts),
+            key=lambda p: p.name,
+        )
 
     def write_description(self, text: str) -> str:
         """Write *text* to ``description.md`` and return the new content hash."""

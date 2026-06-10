@@ -59,6 +59,7 @@ modules:
       - tests/core/test_duration.py
       - tests/core/test_prune_clone.py
       - tests/core/test_proposed_action_executor.py
+      - tests/core/test_workspace_screenshots.py
     dependencies: [config]
 
   # -------------------------------------------------------------------
@@ -128,6 +129,7 @@ modules:
       - tests/runtime/test_api.py
       - tests/runtime/test_exception_handlers.py
       - tests/runtime/test_routes.py
+      - tests/runtime/test_screenshot_upload.py
       - tests/runtime/test_worker.py
       - tests/runtime/test_stale_branch_cleanup.py
       - tests/runtime/test_tracing.py
@@ -415,6 +417,7 @@ modules:
       - tests/agents/test_ask_to_ticket.py
       - tests/agents/test_audit.py
       - tests/agents/test_refine.py
+      - tests/agents/test_refine_screenshots.py
       - tests/agents/test_dedup.py
       - tests/agents/test_obsolescence.py
       - tests/agents/test_ci_fixing.py
@@ -505,6 +508,7 @@ modules:
     paths:
       - src/robotsix_mill/cli.py
       - tests/cli/test_cli.py
+      - tests/cli/test_screenshot_cli.py
     dependencies: [config, core]
 
   - id: hooks

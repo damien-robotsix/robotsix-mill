@@ -712,6 +712,7 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
     board_id: str = "",
     language_instructions: str = "",
     deployed_log_summary: str = "",
+    screenshot_paths: list[Path] | None = None,
 ) -> RefineResult:
     """Return a structured ``RefineResult``. When ``repo_dir`` is given
     the agent grounds the spec in that local clone via explore/
@@ -722,6 +723,13 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
     ``message_history`` — when non-``None``, passed directly to
     ``agent.run_sync(…)`` so the agent continues from a prior paused
     conversation (the resume path after ``ask_user``).
+
+    ``screenshot_paths`` — user-supplied image files attached to the
+    ticket. When present AND the claude_sdk backend is active for
+    refine, each image is read and passed to the model as a
+    ``pydantic_ai.BinaryContent`` block so the agent can *see* it. On
+    the non-vision default (DeepSeek) path the images are not attached;
+    a short text note tells the agent they exist instead.
 
     Raises ``RuntimeError`` if no OpenRouter key is configured.
 
@@ -757,7 +765,7 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
     from pydantic_ai.usage import UsageLimits
 
     from .yaml_loader import load_agent_definition
-    from .base import build_agent_from_definition, _safe_close
+    from .base import build_agent_from_definition, _safe_close, _use_claude_sdk
     from .retry import run_agent
 
     definition = load_agent_definition(
@@ -835,13 +843,53 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
             f"{reviewer_comments}",
         )
 
+    # Decide the prompt payload: attach screenshots as vision input only
+    # on the claude_sdk path (the DeepSeek default has no vision and
+    # errors on image blocks). When images exist but the backend can't
+    # see them, leave a text note so the agent knows they're there.
+    _vision = bool(screenshot_paths) and _use_claude_sdk(settings, "refine")
+    binary_contents: list = []
+    if _vision:
+        from pydantic_ai import BinaryContent
+
+        _media_types = {
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".gif": "image/gif",
+            ".webp": "image/webp",
+        }
+        for sp in screenshot_paths or []:
+            media_type = _media_types.get(sp.suffix.lower())
+            if media_type is None:
+                continue
+            try:
+                data = sp.read_bytes()
+            except OSError as e:
+                log.warning("refine: could not read screenshot %s: %s", sp, e)
+                continue
+            binary_contents.append(BinaryContent(data=data, media_type=media_type))
+        if not binary_contents:
+            _vision = False
+    elif screenshot_paths:
+        user_prompt += "\n\n" + section(
+            "attached-screenshots",
+            f"{len(screenshot_paths)} screenshot(s) are attached to this "
+            "ticket but cannot be viewed by the current model backend "
+            "(no vision). Refine from the text draft.",
+        )
+
+    prompt_payload: object = (
+        [user_prompt, *binary_contents] if binary_contents else user_prompt
+    )
+
     limits = UsageLimits(request_limit=settings.refine_request_limit)
 
     try:
         result = run_agent(
             agent,
             lambda h: h.run_sync(
-                user_prompt,
+                prompt_payload,
                 message_history=message_history,
                 usage_limits=limits,
             ),

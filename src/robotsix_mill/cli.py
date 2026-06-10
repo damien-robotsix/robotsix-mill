@@ -26,7 +26,9 @@ from __future__ import annotations
 import argparse
 import json
 import importlib
+import mimetypes
 import sys
+from pathlib import Path
 
 import httpx
 
@@ -455,8 +457,39 @@ def _ticket_new(args: argparse.Namespace, settings: Settings) -> int:
             json={"title": args.title, "description": body, "repo_id": repo_id},
         )
         r.raise_for_status()
-        print(r.json()["id"])
+        ticket_id = r.json()["id"]
+        for path in getattr(args, "screenshot", None) or []:
+            _upload_screenshot(c, ticket_id, path)
+        print(ticket_id)
     return 0
+
+
+def _upload_screenshot(c: httpx.Client, ticket_id: str, path: str) -> None:
+    """Upload one screenshot to *ticket_id*; warn on failure, never raise.
+
+    The ticket already exists at this point, so a failed upload must not
+    fail the whole ``ticket new`` command.
+    """
+    p = Path(path)
+    try:
+        data = p.read_bytes()
+    except OSError as e:
+        print(f"warning: could not read screenshot {path}: {e}", file=sys.stderr)
+        return
+    media_type = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
+    try:
+        resp = c.post(
+            f"/tickets/{ticket_id}/screenshots",
+            files={"file": (p.name, data, media_type)},
+        )
+        if resp.status_code // 100 != 2:
+            print(
+                f"warning: screenshot upload failed for {path}: "
+                f"HTTP {resp.status_code} {resp.text}",
+                file=sys.stderr,
+            )
+    except httpx.HTTPError as e:
+        print(f"warning: screenshot upload failed for {path}: {e}", file=sys.stderr)
 
 
 def _epic_new(args: argparse.Namespace, settings: Settings) -> int:
@@ -632,6 +665,11 @@ def main(argv: list[str] | None = None) -> int:
         "--repo-id",
         help="repository identifier (required when multiple repos are "
         "registered; optional when only one)",
+    )
+    p_new.add_argument(
+        "--screenshot",
+        action="append",
+        help="attach an image file to the ticket (repeatable)",
     )
 
     p_list = tsub.add_parser("list", help="list tickets")
