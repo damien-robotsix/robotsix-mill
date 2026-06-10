@@ -654,7 +654,7 @@ class Settings(BaseSettings):
     # Model for the review agent. Defaults to the capable coordinator model.
     # Override to use a *different* model for a genuinely independent review
     # perspective (the dual-model benefit).
-    review_model: str = Field(default="deepseek/deepseek-v4-flash")
+    review_model: str = Field(default="deepseek/deepseek-v4-pro")
     # Model for the review-revision agent. Defaults to the capable
     # coordinator model. Override to use a different model.
     review_revision_model: str = Field(default="deepseek/deepseek-v4-pro")

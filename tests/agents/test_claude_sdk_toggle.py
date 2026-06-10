@@ -141,6 +141,17 @@ class TestBuildAgentRouting:
         )
         assert cap["tier"] == Tier.DEFAULT  # pro → default tier
 
+    def test_review_default_model_maps_to_default_tier(self):
+        from robotsix_llmio.core.provider import Tier
+
+        # With the new config default, the review agent resolves to the full
+        # tier under the Claude SDK backend (last automated merge gate).
+        s = _settings(llm_backend="claude_sdk")
+        _, cap = self._build_routed(
+            s, name="review", model_name=Settings().review_model
+        )
+        assert cap["tier"] == Tier.DEFAULT
+
     def test_tier_alias_cheap_maps_to_cheap_tier(self):
         from robotsix_llmio.core.provider import Tier
 

@@ -32,7 +32,7 @@ core:
     audit: deepseek/deepseek-v4-flash                     # periodic quality/security scan; flash is enough — read-only proposer, no code-writing risk
     dedup: *default_model                                 # pre-refine duplicate/already-done check
     web_research: *default_model                          # web lookups — conclusion only
-    review: deepseek/deepseek-v4-flash                    # blind diff audit — flash by operator choice (cost): gates merges but cheap is acceptable here
+    review: deepseek/deepseek-v4-pro                      # blind diff audit — full tier as the last automated merge gate; a weak reviewer lets defects escape into costly ci_fix loops
     trace_inspector: deepseek/deepseek-v4-flash           # inspects Langfuse observation tree — flash is plenty for summarisation
     test_gap: deepseek/deepseek-v4-flash                  # periodic "untested modules" finder — read-only, flash sufficient
     agent_check: deepseek/deepseek-v4-flash               # periodic agent-yaml audit — read-only structural check
@@ -143,7 +143,7 @@ gates:
   auto_approve_enabled: false              # conservative auto-approve triage
   auto_approve_model: deepseek/deepseek-v4-flash  # model for auto-approve triage (flash is plenty for spec-shape classification)
   review_enabled: false                    # enable dual-model code review before deliver
-  review_model: deepseek/deepseek-v4-flash  # review agent model — flash by operator choice (cost); must match core.models.review above
+  review_model: deepseek/deepseek-v4-pro   # review agent model — full tier as the last automated merge gate; must match core.models.review above
   review_max_rounds: 3                     # max CODE_REVIEW round-trips before escalate
   auto_merge_enabled: false                # auto-merge green PR via forge API (opt-in)
   review_feedback_enabled: false           # enable autonomous review-revision (opt-in — implements changes requested by human reviewers)
