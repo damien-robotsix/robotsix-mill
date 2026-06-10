@@ -11,3 +11,16 @@ RUN apt-get update \
         npm=9.2.0~ds1-3 \
     && curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" | sh \
     && rm -rf /var/lib/apt/lists/*
+
+# Playwright + headless Chromium for the browser-level board smoke gate
+# (scripts/board_browser_check.py). The runtime egress proxy
+# (sandbox/proxy/filter) blocks Playwright's browser-download CDN, so
+# Chromium MUST be baked in at build time — `docker build` has full host
+# network. `--with-deps` also pulls the apt libraries Chromium needs.
+#
+# Image-size impact: Chromium + its shared libraries add roughly ~300 MB
+# to the sandbox image.
+ARG PLAYWRIGHT_VERSION=1.55.0
+# hadolint ignore=DL3013
+RUN pip install --no-cache-dir "playwright==${PLAYWRIGHT_VERSION}" \
+    && playwright install --with-deps chromium
