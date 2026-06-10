@@ -478,6 +478,9 @@ def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResul
     #    clone_repo can populate the workspace)
     with tempfile.TemporaryDirectory(prefix="maintenance_") as tmpdir_str:
         tmpdir = Path(tmpdir_str)
+        # Must mirror make_clone_repo_tool's ``workspace_root / "repo"``
+        # clone target so the investigation tools can read the clone.
+        clone_dir = tmpdir / "repo"
         tools: list[Any] = []
         tools.append(make_create_repo_tool(ctx.settings, ctx, draft))
         tools.append(make_fork_repo_tool(ctx.settings))
@@ -497,7 +500,9 @@ def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResul
         # Read-only filesystem tools (read_file, list_dir, run_command)
         from .fs_tools import build_fs_tools
 
-        all_fs = build_fs_tools(investigation_root, ctx.settings)
+        all_fs = build_fs_tools(
+            investigation_root, ctx.settings, extra_roots=[clone_dir]
+        )
         ro_fs = {
             t.__name__: t
             for t in all_fs
@@ -526,8 +531,14 @@ def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResul
         # Explore / parallel_explore tools scoped to investigation_root
         from .explore import make_explore_tool, make_parallel_explore_tool
 
-        tools.append(make_explore_tool(ctx.settings, investigation_root))
-        tools.append(make_parallel_explore_tool(ctx.settings, investigation_root))
+        tools.append(
+            make_explore_tool(ctx.settings, investigation_root, extra_roots=[clone_dir])
+        )
+        tools.append(
+            make_parallel_explore_tool(
+                ctx.settings, investigation_root, extra_roots=[clone_dir]
+            )
+        )
 
         # 5. Build the agent. board_id wires the report_issue tool to the
         # ticket's own board — without it the tool dies with "board_id is

@@ -442,6 +442,87 @@ class TestAgentConstruction:
         assert "edit_file" not in tool_names
         assert "delete_file" not in tool_names
 
+    def test_clone_dir_passed_as_extra_root(self, tmp_path, monkeypatch):
+        """run_maintenance_agent forwards the clone dir (``<tmpdir>/repo``)
+        as an extra root to all three investigation-tool factories."""
+        s = _settings(tmp_path)
+
+        captured: dict = {}
+
+        def _dummy_fs_tool(name):
+            def _fn(*a, **k):
+                pass
+
+            _fn.__name__ = name
+            return _fn
+
+        def fake_build_fs_tools(root, settings, *, pre_seeded=None, extra_roots=None):
+            captured["fs"] = extra_roots
+            return [_dummy_fs_tool(n) for n in ("read_file", "list_dir", "run_command")]
+
+        def fake_make_explore_tool(settings, repo_dir, extra_roots=None):
+            captured["explore"] = extra_roots
+            return _dummy_fs_tool("explore")
+
+        def fake_make_parallel_explore_tool(settings, repo_dir, extra_roots=None):
+            captured["parallel_explore"] = extra_roots
+            return _dummy_fs_tool("parallel_explore")
+
+        monkeypatch.setattr(
+            "robotsix_mill.agents.fs_tools.build_fs_tools",
+            fake_build_fs_tools,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.explore.make_explore_tool",
+            fake_make_explore_tool,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.explore.make_parallel_explore_tool",
+            fake_make_parallel_explore_tool,
+        )
+
+        class FakeModel:
+            def __init__(self, name, **kw):
+                pass
+
+        class FakeAgent:
+            def __init__(self, **kw):
+                pass
+
+            def run_sync(self, prompt, *, usage_limits=None, **kw):
+                return type(
+                    "R", (), {"output": MaintenanceResult(success=True, note="ok")}
+                )()
+
+        monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+        monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+        monkeypatch.setattr(
+            "robotsix_mill.agents.openrouter_cost.CostInstrumentedOpenRouterModel",
+            FakeModel,
+        )
+
+        ticket = MagicMock()
+        ticket.id = "test-ticket-1"
+        ticket.board_id = "test-board"
+        ticket.title = "Test ticket"
+
+        ctx = MagicMock()
+        ctx.settings = s
+        ctx.repo_config = None
+
+        ws_mock = MagicMock()
+        ws_mock.dir = tmp_path / "nonexistent"
+        ws_mock.repo_dir = tmp_path / "nonexistent" / "repo"
+        ws_mock.read_description.return_value = "Test draft"
+        ctx.service.workspace.return_value = ws_mock
+
+        run_maintenance_agent(ticket, ctx)
+
+        for key in ("fs", "explore", "parallel_explore"):
+            extra = captured[key]
+            assert isinstance(extra, list) and extra, f"{key} extra_roots empty"
+            assert extra[0].name == "repo"
+
     def test_run_maintenance_agent_stage_contract(self, tmp_path, monkeypatch):
         """The returned object satisfies the MaintenanceStage.run()
         contract: it has .success and .note attributes."""
