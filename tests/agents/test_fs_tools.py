@@ -1032,10 +1032,31 @@ class TestFileReadCache:
         result = tools["read_file"](path="../../../etc/passwd")
         assert "error" in result.lower()
 
+        # The error must be actionable: it still names the escape, says the
+        # path is unreachable by all fs tools, and tells the model not to
+        # fall back to run_command.
+        assert "escapes the repository" in result
+        assert "run_command" in result
+        assert "Do NOT retry" in result
+
         # A subsequent read of a valid file with name "passwd" in root
         # must not be poisoned by the prior error.
         _make_file(root, "passwd", "local\n")
         assert tools["read_file"](path="passwd") == "local\n"
+
+    def test_escape_error_actionable_absolute(self, tmp_path, settings):
+        """read_file of an out-of-repo absolute path (e.g. a site-packages
+        file) returns the enriched, actionable escape error."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+
+        result = tools["read_file"](
+            path="/usr/local/lib/python3.14/site-packages/foo.py"
+        )
+        assert "escapes the repository" in result
+        assert "run_command" in result
+        assert "Do NOT retry" in result
 
     def test_repeat_full_read_returns_content(self, tmp_path, settings):
         """First full-file read returns content; second returns the same

@@ -95,6 +95,11 @@ def test_explore_scout_prompt_forbids_whole_files():
     assert "at most 5 files" in _SYSTEM_PROMPT.lower()
     assert "do not trace full call chains" in _SYSTEM_PROMPT.lower()
 
+    # external/installed-dependency paths are outside the sandbox and must
+    # not be read or grepped; ask_web_knowledge (parent) is the alternative
+    assert "site-packages" in _SYSTEM_PROMPT
+    assert "ask_web_knowledge" in _SYSTEM_PROMPT
+
 
 def test_test_agent_pass(tmp_path, monkeypatch):
     from robotsix_mill import sandbox

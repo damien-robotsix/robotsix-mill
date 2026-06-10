@@ -97,6 +97,13 @@ SCOPE DISCIPLINE — always follow these limits:
   seen in a previous list_dir or grep result, verify it exists with
   list_dir on the parent directory or run_command with find. Never guess
   a file path.
+- EXTERNAL DEPENDENCIES ARE OUTSIDE THE SANDBOX: source for installed/
+  external dependencies (anything under ``site-packages`` or an absolute
+  system path like ``/usr/local/lib/...``) lives OUTSIDE the repo
+  checkout and is NOT reachable by read_file OR run_command. Do not
+  attempt or retry such paths. Instead, report back that the question
+  requires external-library knowledge — the parent agent can resolve it
+  via ``ask_web_knowledge``.
 - USE LIMIT + OFFSET ON read_file: never read a whole large file
   when you already know the line range. ``read_file`` accepts
   ``offset:`` and ``limit:`` arguments — pass them whenever grep
