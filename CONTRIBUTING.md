@@ -25,6 +25,17 @@ Install pre-commit hooks (Ruff, mypy, Bandit):
 .venv/bin/pre-commit install
 ```
 
+### Dependencies
+
+`uv.lock` is **committed** and is the source of truth for installs:
+`make install` and CI run `uv sync --frozen` against it (no `uv lock`
+regeneration), so `main` builds off pinned commits. The four
+`robotsix-*` shared libraries are git deps tracking `@main`; new commits
+advance into mill only through the automated `uv.lock` bump PR
+([`deps-bump.yml`](.github/workflows/deps-bump.yml)). See
+[docs/dependencies.md](docs/dependencies.md) for the full pin + bump
+mechanism, trade-offs, and the CI-monitor heuristic.
+
 ## Project structure
 
 ## Layout
@@ -251,7 +262,8 @@ check.
 | [`docker-publish.yml`](.github/workflows/docker-publish.yml) | Push to `main` | hadolint lint → build Docker image → Trivy CRITICAL scan → push to Docker Hub with SBOM + SLSA attestation |
 | hadolint gate (in `docker-publish.yml`) | (within `docker-publish.yml` push) | `hadolint/hadolint-action@v3.3.0` with `failure-threshold: warning` |
 | [`security-audit.yml`](.github/workflows/security-audit.yml) | Push/PR to `main`, weekly cron | `pip-audit` (CVEs) + `pip-licenses` (license allowlist gate) on installed dependencies |
-| [`ci.yml`](.github/workflows/ci.yml) | Push/PR to `main` | deptry → module taxonomy → Ruff → mypy `--strict` (advisory) → Bandit MEDIUM+ (advisory; see `[tool.bandit]`) → pytest (70% cov) |
+| [`ci.yml`](.github/workflows/ci.yml) | Push/PR to `main` | `uv sync --frozen` (committed-lock gate — fails on a stale `uv.lock`) → deptry → module taxonomy → Ruff → mypy `--strict` (advisory) → Bandit MEDIUM+ (advisory; see `[tool.bandit]`) → pytest (70% cov) |
+| [`deps-bump.yml`](.github/workflows/deps-bump.yml) | Weekly cron + manual | `uv lock --upgrade` → opens a PR refreshing `uv.lock` (shared-lib `@main` bumps), gated by `ci.yml` on the PR — see [docs/dependencies.md](docs/dependencies.md) |
 
 **Note on the hadolint gate in `docker-publish.yml`:** hadolint runs with
 `failure-threshold: warning` on every push to `main`. Warnings are
