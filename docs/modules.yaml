@@ -232,7 +232,11 @@ modules:
       - src/robotsix_mill/stages/__init__.py
       - src/robotsix_mill/stages/base.py
       - src/robotsix_mill/stages/registry.py
-      - src/robotsix_mill/stages/implement.py
+      - src/robotsix_mill/stages/implement/__init__.py
+      - src/robotsix_mill/stages/implement/file_operations.py
+      - src/robotsix_mill/stages/implement/implementation_logic.py
+      - src/robotsix_mill/stages/implement/validation.py
+      - src/robotsix_mill/stages/implement/phase_coordinator.py
       - src/robotsix_mill/stages/maintenance.py
       - src/robotsix_mill/stages/deliver.py
       - src/robotsix_mill/stages/document.py
