@@ -803,6 +803,9 @@ class ImplementStage(Stage):
                 language_instructions=language_instructions,
                 extra_roots=extra_roots,
                 model_name=agent_model,
+                sandbox_image=ctx.repo_config.sandbox_image
+                if ctx.repo_config
+                else None,
             )
         except AgentBudgetError as e:
             ImplementStage._finalize(

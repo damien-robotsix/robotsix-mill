@@ -190,6 +190,7 @@ def run(  # noqa: C901 — extra-packages loading adds one branch; tightly-coupl
     repo_dir: Path,
     settings: Settings,
     install_project: bool = False,
+    sandbox_image: str | None = None,
 ) -> tuple[int, str]:
     """Execute ``command`` against ``repo_dir`` in a disposable
     container. Returns ``(exit_code, combined_output)``. Raises
@@ -308,7 +309,10 @@ def run(  # noqa: C901 — extra-packages loading adds one branch; tightly-coupl
 
     # Override the image ENTRYPOINT: images like robotsix/mill have one
     # (it starts the server) which would otherwise swallow our command.
-    argv += ["--entrypoint", "sh", settings.sandbox_image, "-lc", effective_command]
+    # Per-repo override (sandbox_image) wins; None falls back to the
+    # fleet-wide settings.sandbox_image so existing callers are unchanged.
+    image = sandbox_image or settings.sandbox_image
+    argv += ["--entrypoint", "sh", image, "-lc", effective_command]
 
     try:
         r = subprocess.run(

@@ -63,6 +63,41 @@ def test_argv_is_isolated(tmp_path, monkeypatch):
     assert a[-3:] == ["python:3.14-slim", "-lc", PATH_EXPORT + "pytest -q"]
 
 
+def test_sandbox_image_override(tmp_path, monkeypatch):
+    s = _settings(
+        tmp_path,
+        data_dir="/data",
+        sandbox_image="python:3.14-slim",
+        sandbox_proxy_url="",
+    )
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        sandbox, "_repo_mount", lambda repo_dir, settings: ["--mount", "x"]
+    )
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+
+    # Per-repo override wins over settings.sandbox_image.
+    sandbox.run(
+        "pytest -q",
+        repo_dir="/data/work/repo",
+        settings=s,
+        sandbox_image="ros:rolling-ros-base",
+    )
+    a = seen["argv"]
+    assert a[a.index("--entrypoint") + 1] == "sh"
+    assert a[a.index("--entrypoint") + 2] == "ros:rolling-ros-base"
+
+    # None (omitted) → fall back to settings.sandbox_image.
+    sandbox.run("pytest -q", repo_dir="/data/work/repo", settings=s)
+    a = seen["argv"]
+    assert a[a.index("--entrypoint") + 2] == "python:3.14-slim"
+
+
 def test_path_export_prepended_for_plain_and_install(tmp_path, monkeypatch):
     """The -lc command string must begin with the pip --user scripts-dir
     PATH export for BOTH a plain command and an install_project=True

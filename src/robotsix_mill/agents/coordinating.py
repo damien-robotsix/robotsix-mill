@@ -208,6 +208,7 @@ def run_coordinator(
     current_ticket_id: str = "",
     language_instructions: str = "",
     extra_roots: list[Path] | None = None,
+    sandbox_image: str | None = None,
 ) -> ImplementResult:
     """Run ONE explore→read→edit pass for the ticket and return the
     structured result.
@@ -267,7 +268,11 @@ def run_coordinator(
                 )
 
     fs = build_fs_tools(
-        repo_dir, settings, pre_seeded=pre_seeded, extra_roots=extra_roots
+        repo_dir,
+        settings,
+        pre_seeded=pre_seeded,
+        extra_roots=extra_roots,
+        sandbox_image=sandbox_image,
     )
     # the main agent reads + writes itself and includes run_command for
     # focused diagnosis (re-run a single failing test, run a linter,

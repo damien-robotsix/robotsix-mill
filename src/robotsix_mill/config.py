@@ -1709,6 +1709,19 @@ class RepoConfig(BaseModel):
     # against ITS Langfuse project. Unset → account-level activity reconcile.
     openrouter_api_key: str | None = None
     forge_remote_url: str | None = None
+    # Optional per-repo sandbox image override. When set, this repo's
+    # sandbox executions (test/smoke gates + the implement coordinator's
+    # interactive run_command) use this image; ``None`` → fall back to
+    # ``settings.sandbox_image``. Deliberately operator-controlled here in
+    # ``config/repos.yaml`` (NOT the repo's own ``.robotsix-mill/config.yaml``
+    # where test_command/extra_sandbox_packages live): selecting the base
+    # Docker image is a higher-trust knob than declaring packages on a
+    # trusted base. ``.robotsix-mill/config.yaml`` is committed in the managed
+    # repo and editable by any PR; letting a PR pick an arbitrary base image
+    # whose on-PATH binaries run with the repo bind-mounted is a sandbox-trust
+    # escalation. Keeping it in operator-controlled ``config/repos.yaml`` keeps
+    # image selection on the trusted side of the boundary.
+    sandbox_image: str | None = None
     # Optional cross-repo target: when set, deliver pushes the ticket
     # branch to ``fork_remote_url`` and opens a fork→upstream PR against
     # ``upstream_remote_url``/``base_branch`` instead of the clone
@@ -1818,6 +1831,9 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             if isinstance(repo_data, dict)
             else None,
             forge_remote_url=repo_data.get("forge_remote_url")
+            if isinstance(repo_data, dict)
+            else None,
+            sandbox_image=repo_data.get("sandbox_image")
             if isinstance(repo_data, dict)
             else None,
             cross_repo_target=cross_repo_target,
