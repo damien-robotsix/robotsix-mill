@@ -507,6 +507,31 @@ def test_extra_packages_pip_only_keeps_readonly(tmp_path, monkeypatch):
     assert "apt-get" not in cmd
 
 
+def test_tmp_tmpfs_mounted_exec(tmp_path, monkeypatch):
+    """The /tmp tmpfs is mounted exec (Docker's default is noexec) so pip
+    --user console scripts under $HOME/.local/bin can execute; nosuid/nodev
+    hardening is retained."""
+    s = _settings(tmp_path, data_dir="/data", sandbox_proxy_url="")
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        sandbox, "_repo_mount", lambda repo_dir, settings: ["--mount", "x"]
+    )
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    monkeypatch.setattr(sandbox, "load_extra_sandbox_packages", lambda repo_dir: [])
+    sandbox.run("true", repo_dir="/data/work/repo", settings=s)
+
+    a = seen["argv"]
+    tmpfs_indices = [i for i, x in enumerate(a) if x == "--tmpfs"]
+    tmpfs_targets = {a[i + 1] for i in tmpfs_indices}
+    assert "/tmp:exec,rw,nosuid,nodev" in tmpfs_targets
+    assert "/tmp" not in tmpfs_targets
+
+
 def test_extra_packages_apt_drops_readonly(tmp_path, monkeypatch):
     """Any apt package → --read-only ABSENT, tmpfs mounts for apt dirs added."""
     s = _settings(tmp_path, data_dir="/data", sandbox_proxy_url="")

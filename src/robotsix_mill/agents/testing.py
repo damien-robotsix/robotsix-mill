@@ -31,6 +31,13 @@ ENV_ERROR_PREFIX = "ENV-ERROR:"
 _SH_NOT_FOUND_RE = re.compile(r"sh: \d+: ([^:\n]+): not found")
 _BASH_NOT_FOUND_RE = re.compile(r"(?:^|\n)\s*([\w./+-]+): command not found")
 
+# Permission-denied signature (rc 126): an existing file that resolved but
+# could not EXECUTE. We only treat it as environmental when the path points
+# into the sandbox HOME ($HOME/.local/bin = /tmp/.local/bin) or /tmp — the
+# fingerprint of a pip --user console script blocked by a noexec tmpfs, not
+# a buggy repo script.
+_PERM_DENIED_RE = re.compile(r"((?:/tmp|\S*\.local/bin)\S*): Permission denied")
+
 
 def _detect_missing_binary(out: str) -> str | None:
     """Extract the missing binary name from a command-not-found message.
@@ -47,18 +54,49 @@ def _detect_missing_binary(out: str) -> str | None:
     return None
 
 
+def _detect_noexec_script(out: str) -> str | None:
+    """Extract a Permission-denied path under the sandbox HOME
+    (``/tmp/.local/bin``) or ``/tmp``.
+
+    Returns the offending path, or ``None`` when no such signature is
+    present — the fingerprint of a pip --user console script blocked by a
+    ``noexec`` tmpfs.
+    """
+    m = _PERM_DENIED_RE.search(out)
+    if m:
+        return m.group(1).strip()
+    return None
+
+
 def _env_error_diag(rc: int, out: str) -> str | None:
     """Return a STABLE, LLM-free diagnosis for an environmental failure —
     a binary referenced by the gate command is not installed / not on
     PATH — or ``None`` when the failure is not environmental.
 
-    Triggers on ``rc == 127`` OR an explicit command-not-found signature
-    (conservative: a normal assertion failure must NOT match). The string
-    is byte-identical across cycles for the same missing binary, which is
-    what lets the implement fix-loop circuit breaker fire.
+    Triggers on ``rc == 127`` OR an explicit command-not-found signature,
+    OR ``rc == 126`` with a Permission-denied signature on a
+    ``$HOME/.local/bin`` (or ``/tmp``) path — a pip --user console script
+    blocked by a ``noexec`` tmpfs (conservative: a normal assertion
+    failure must NOT match). The string is byte-identical across cycles
+    for the same failure, which is what lets the implement fix-loop
+    circuit breaker fire.
     """
     missing_bin = _detect_missing_binary(out)
     if rc != 127 and missing_bin is None:
+        # Not command-not-found, but rc 126 + a Permission-denied signature
+        # on a $HOME/.local/bin (or /tmp) path means a pip --user console
+        # script could not EXECUTE because the sandbox /tmp tmpfs is mounted
+        # noexec. Classify it so the fix-loop circuit breaker fires if the
+        # exec tmpfs mount ever regresses.
+        noexec_path = _detect_noexec_script(out)
+        if rc == 126 and noexec_path is not None:
+            return (
+                f"{ENV_ERROR_PREFIX} command not executable in sandbox: "
+                f"'{noexec_path}' (rc={rc}). A pip --user console script "
+                "under $HOME/.local/bin could not execute — the sandbox "
+                "/tmp tmpfs must be mounted exec (not noexec). This is a "  # noqa: S108 — /tmp is the in-sandbox Docker tmpfs path, not a host temp file
+                "sandbox regression, not fixable by editing code."
+            )
         return None
     if missing_bin:
         return (

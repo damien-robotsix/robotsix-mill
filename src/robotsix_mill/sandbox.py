@@ -234,7 +234,10 @@ def run(  # noqa: C901 — extra-packages loading adds one branch; tightly-coupl
         "--memory",
         settings.sandbox_memory,
         "--tmpfs",
-        "/tmp",  # nosec B108 — /tmp here is a Docker tmpfs INSIDE the sandbox, not the host's
+        # Mount exec (Docker's default tmpfs options include noexec): pip
+        # --user console scripts land under $HOME/.local/bin = /tmp/.local/bin
+        # and must be executable. Keep nosuid/nodev hardening.
+        "/tmp:exec,rw,nosuid,nodev",  # nosec B108 — /tmp here is a Docker tmpfs INSIDE the sandbox, not the host's
         "-e",
         "HOME=/tmp",  # nosec B108
         *_repo_mount(repo_dir, settings),
