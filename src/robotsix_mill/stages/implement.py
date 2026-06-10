@@ -624,16 +624,24 @@ class ImplementStage(Stage):
                     already_rejected.add(m)
             new_oos = [f for f in out_of_scope if f not in already_rejected]
             if not new_oos:
+                # The agent re-created files a prior REJECT already
+                # cleaned. Don't bounce to READY again (that ping-pongs
+                # forever) — but DON'T add them to file_map either, which
+                # used to silently ship previously-REJECTed scope creep.
+                # Clean them out of the tree again and fall through to the
+                # test gate so the in-scope work can still make progress.
                 log.warning(
-                    "%s: suppressing duplicate scope-triage REJECT — "
-                    "all %d out-of-scope file(s) already rejected in "
-                    "prior run(s): %s",
+                    "%s: duplicate scope-triage REJECT — all %d out-of-scope "
+                    "file(s) re-created after a prior REJECT cleanup: %s. "
+                    "Removing them again; not shipping without an explicit "
+                    "EXPAND verdict.",
                     ticket.id,
                     len(out_of_scope),
                     ", ".join(out_of_scope),
                 )
-                for f in out_of_scope:
-                    file_map.add(f)
+                git_ops.restore_paths(
+                    repo_dir, settings.forge_target_branch, out_of_scope
+                )
                 return _ScopeGuardrailResult(
                     action="skip_iteration",
                     file_map=file_map,
@@ -645,6 +653,11 @@ class ImplementStage(Stage):
                 ticket.id,
                 verdict.justification,
             )
+            # Remove the rejected out-of-scope changes from the working
+            # tree BEFORE finalize commits, so the WIP commit (and every
+            # resumed run off it) starts from the spec'd scope only.
+            # Handles both unstaged and already-WIP-committed pollution.
+            git_ops.restore_paths(repo_dir, settings.forge_target_branch, out_of_scope)
             ImplementStage._finalize(
                 ctx,
                 ticket,

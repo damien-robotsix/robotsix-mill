@@ -597,6 +597,63 @@ class TestChangedFiles:
 
 
 # ===========================================================================
+# 13b. restore_paths — integration (real git)
+# ===========================================================================
+
+
+class TestRestorePaths:
+    def test_restores_modified_tracked_file_unstaged(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "README.md").write_text("polluted\n")
+        assert "README.md" in git_ops.changed_files(dest, "main")
+        git_ops.restore_paths(dest, "main", ["README.md"])
+        assert "README.md" not in git_ops.changed_files(dest, "main")
+        assert (dest / "README.md").read_text() == "seed\n"
+
+    def test_removes_untracked_new_file(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "stray.txt").write_text("untracked junk")
+        assert "stray.txt" in git_ops.changed_files(dest, "main")
+        git_ops.restore_paths(dest, "main", ["stray.txt"])
+        assert "stray.txt" not in git_ops.changed_files(dest, "main")
+        assert not (dest / "stray.txt").exists()
+
+    def test_reverts_wip_committed_modification(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        # Modify a tracked file AND add a new file, then WIP-commit both.
+        (dest / "README.md").write_text("polluted\n")
+        (dest / "vendored.py").write_text("vendored\n")
+        git_ops.commit_all(dest, "wip")
+        assert "README.md" in git_ops.changed_files(dest, "main")
+        assert "vendored.py" in git_ops.changed_files(dest, "main")
+        git_ops.restore_paths(dest, "main", ["README.md", "vendored.py"])
+        # Working tree no longer diffs from origin for either path...
+        changed = git_ops.changed_files(dest, "main")
+        assert "README.md" not in changed
+        assert "vendored.py" not in changed
+        assert (dest / "README.md").read_text() == "seed\n"
+        assert not (dest / "vendored.py").exists()
+        # ...and a follow-up commit leaves no net diff vs origin/main.
+        git_ops.commit_all(dest, "cleanup")
+        net = subprocess.run(
+            ["git", "-C", str(dest), "diff", "origin/main...HEAD", "--name-only"],
+            capture_output=True,
+            text=True,
+        ).stdout
+        assert "README.md" not in net
+        assert "vendored.py" not in net
+
+
+# ===========================================================================
 # 14. diff_base — integration (real git)
 # ===========================================================================
 

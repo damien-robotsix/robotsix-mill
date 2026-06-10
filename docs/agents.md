@@ -98,3 +98,4 @@ Shared modules used to build and equip agents.
 - [docs/trace-health.md](trace-health.md) — trace-health check deep dive
 - [docs/retrospect-memory.md](retrospect-memory.md) — retrospect memory ledger
 - [docs/merge-stage.md](merge-stage.md) — merge stage (rebase + CI-fix)
+- [docs/scope-triage.md](scope-triage.md) — scope-triage classifier (EXPAND / REJECT / ESCALATE verdicts and cleanup behavior)
