@@ -1899,7 +1899,8 @@ def test_get_pr_cross_repo_uses_fork_owner_in_head_filter(tmp_path, monkeypatch)
 
 
 def test_create_pr_cross_repo_422_retry_does_not_double_qualify_head(
-    tmp_path, monkeypatch,
+    tmp_path,
+    monkeypatch,
 ):
     """When a cross-fork PR create gets a 422, the existing-PR lookup
     re-uses the already-qualified ``head="fork-owner:branch"`` instead of
@@ -1920,9 +1921,7 @@ def test_create_pr_cross_repo_422_retry_does_not_double_qualify_head(
     )
 
     captured_get_params: dict = {}
-    post_422 = _make_response(
-        422, {}, '{"field":"head","code":"invalid"}'
-    )
+    post_422 = _make_response(422, {}, '{"field":"head","code":"invalid"}')
 
     class ParamCaptureClient:
         def __init__(self, **kw):
@@ -1960,7 +1959,8 @@ def test_create_pr_cross_repo_422_retry_does_not_double_qualify_head(
 
 
 def test_delete_branch_cross_repo_targets_fork_not_upstream(
-    tmp_path, monkeypatch,
+    tmp_path,
+    monkeypatch,
 ):
     """delete_branch for a cross-repo target issues DELETE against the
     fork's git/refs/heads/<branch>, not the upstream's."""
@@ -2092,9 +2092,7 @@ def test_create_pr_401_retry_then_201_success(tmp_path, monkeypatch):
             call_count[0] += 1
             if call_count[0] == 1:
                 return _make_response(401, {}, '{"message":"Bad credentials"}')
-            return _make_response(
-                201, {"html_url": "https://github.com/o/r/pull/42"}
-            )
+            return _make_response(201, {"html_url": "https://github.com/o/r/pull/42"})
 
         def get(self, url, headers=None, params=None, **kwargs):
             return _make_response(200, [])
@@ -2102,9 +2100,7 @@ def test_create_pr_401_retry_then_201_success(tmp_path, monkeypatch):
     monkeypatch.setattr(real_httpx, "Client", RetryMockClient)
 
     forge = GitHubForge(_app_settings(tmp_path))
-    url = forge.open_merge_request(
-        source_branch="feature/x", title="t", body="b"
-    )
+    url = forge.open_merge_request(source_branch="feature/x", title="t", body="b")
     assert url == "https://github.com/o/r/pull/42"
     assert len(mint_calls) == 2  # initial + retry
 
@@ -2146,7 +2142,5 @@ def test_create_pr_401_retry_then_401_failure(tmp_path, monkeypatch):
 
     forge = GitHubForge(_app_settings(tmp_path))
     with pytest.raises(RuntimeError, match="GitHub PR create failed: 401"):
-        forge.open_merge_request(
-            source_branch="feature/x", title="t", body="b"
-        )
+        forge.open_merge_request(source_branch="feature/x", title="t", body="b")
     assert len(mint_calls) == 2  # initial + retry

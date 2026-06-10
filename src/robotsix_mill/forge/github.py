@@ -349,7 +349,10 @@ class GitHubForge(Forge):
 
         from ..config import get_secrets
 
-        from .auth import github_token, invalidate_github_token  # lazy: avoid import cycle
+        from .auth import (
+            github_token,
+            invalidate_github_token,
+        )  # lazy: avoid import cycle
 
         s = self.settings
         # Repo creation needs a token that can create repos. GitHub App
@@ -412,9 +415,7 @@ class GitHubForge(Forge):
                 # it so the scaffold's force-push completes the job; only a
                 # repo with real content is treated as a genuine conflict.
                 with self._http.client() as (c, api, _headers):
-                    existing = self._reuse_if_empty(
-                        c, api, custom_headers, owner, name
-                    )
+                    existing = self._reuse_if_empty(c, api, custom_headers, owner, name)
                 if existing is not None:
                     return existing
                 raise RuntimeError(
@@ -436,9 +437,7 @@ class GitHubForge(Forge):
                 "repo-creation rights (classic: `repo` scope; fine-grained: "
                 "Administration:Read and write on the target account)."
             )
-        raise RuntimeError(
-            f"GitHub repo create failed: {r.status_code} {r.text[:300]}"
-        )
+        raise RuntimeError(f"GitHub repo create failed: {r.status_code} {r.text[:300]}")
 
     def _reuse_if_empty(self, c, api, headers, owner, name) -> RepoInfo | None:
         """Return the existing repo's ``RepoInfo`` iff it exists and is EMPTY
@@ -481,7 +480,10 @@ class GitHubForge(Forge):
 
         from ..config import get_secrets
 
-        from .auth import github_token, invalidate_github_token  # lazy: avoid import cycle
+        from .auth import (
+            github_token,
+            invalidate_github_token,
+        )  # lazy: avoid import cycle
 
         s = self.settings
         token = get_secrets().forge_repo_create_token or github_token(
@@ -736,9 +738,7 @@ class GitHubForge(Forge):
                 if not items:
                     return None
                 num = items[0]["number"]
-                d = c.get(
-                    f"{api}/repos/{owner}/{repo}/pulls/{num}", headers=headers
-                )
+                d = c.get(f"{api}/repos/{owner}/{repo}/pulls/{num}", headers=headers)
                 if d.status_code == 401 and retry == 0:
                     invalidate_github_token(self.settings, self._repo_config)
                     time.sleep(2)
@@ -852,9 +852,7 @@ class GitHubForge(Forge):
                             params={"per_page": 100, "page": page},
                         )
                         if r.status_code == 401 and retry == 0:
-                            invalidate_github_token(
-                                self.settings, self._repo_config
-                            )
+                            invalidate_github_token(self.settings, self._repo_config)
                             time.sleep(2)
                             hit_401 = True
                             break
@@ -862,9 +860,9 @@ class GitHubForge(Forge):
                         items = r.json()
                         for b in items:
                             date = (
-                                (
-                                    (b.get("commit") or {}).get("commit") or {}
-                                ).get("committer")
+                                ((b.get("commit") or {}).get("commit") or {}).get(
+                                    "committer"
+                                )
                                 or {}
                             ).get("date")
                             out.append(
@@ -909,9 +907,7 @@ class GitHubForge(Forge):
                             },
                         )
                         if r.status_code == 401 and retry == 0:
-                            invalidate_github_token(
-                                self.settings, self._repo_config
-                            )
+                            invalidate_github_token(self.settings, self._repo_config)
                             time.sleep(2)
                             hit_401 = True
                             break
@@ -1227,9 +1223,9 @@ class GitHubForge(Forge):
                 "action_required",
             }
         )
-        failed_jobs = [
-            j for j in jobs if j.get("conclusion") in failed_conclusions
-        ][:_MAX_FAILED_JOBS]
+        failed_jobs = [j for j in jobs if j.get("conclusion") in failed_conclusions][
+            :_MAX_FAILED_JOBS
+        ]
 
         if not failed_jobs:
             return ""
@@ -1252,9 +1248,7 @@ class GitHubForge(Forge):
                             follow_redirects=True,
                         )
                         if log_resp.status_code == 401 and log_retry == 0:
-                            invalidate_github_token(
-                                self.settings, self._repo_config
-                            )
+                            invalidate_github_token(self.settings, self._repo_config)
                             time.sleep(2)
                             headers = self._http.regenerate_headers()
                             continue
@@ -1267,7 +1261,9 @@ class GitHubForge(Forge):
                         else:
                             raw = f"[log fetch failed for job {job_id}: HTTP {sc}]"
                     except Exception as exc:
-                        raw = f"[log fetch failed for job {job_id}: {type(exc).__name__}]"
+                        raw = (
+                            f"[log fetch failed for job {job_id}: {type(exc).__name__}]"
+                        )
                     else:
                         if not raw:
                             raw = f"[log fetch returned empty body for job {job_id}]"

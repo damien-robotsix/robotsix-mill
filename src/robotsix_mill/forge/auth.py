@@ -130,9 +130,7 @@ def github_token(settings: Settings, repo_config: RepoConfig | None = None) -> s
     cached = _cache.get(ck)
     if cached and cached[1] - 60 > time.time():
         remaining = cached[1] - time.time()
-        logger.debug(
-            "github_token cache hit key=%s remaining_ttl=%.0fs", ck, remaining
-        )
+        logger.debug("github_token cache hit key=%s remaining_ttl=%.0fs", ck, remaining)
         return cached[0]
     logger.debug("github_token cache miss key=%s — minting fresh token", ck)
     token, expiry = _mint_installation_token(settings, repo_config=repo_config)
