@@ -637,6 +637,41 @@ def test_board_html_asset_urls_carry_version_query(monkeypatch):
     assert "?v=abc123" not in html_b
 
 
+def test_asset_version_uses_build_sha_env(monkeypatch):
+    """asset_version() reads MILL_BUILD_SHA when present, and the token
+    changes when the env value changes (so the emitted URLs change)."""
+    import robotsix_mill.runtime.board_html as bh
+
+    try:
+        monkeypatch.setenv("MILL_BUILD_SHA", "abc1234")
+        bh.asset_version.cache_clear()
+        assert bh.asset_version() == "abc1234"
+
+        # A different SHA yields a different token (URLs change).
+        monkeypatch.setenv("MILL_BUILD_SHA", "def5678")
+        bh.asset_version.cache_clear()
+        assert bh.asset_version() == "def5678"
+    finally:
+        bh.asset_version.cache_clear()
+
+
+def test_asset_version_process_start_fallback(monkeypatch):
+    """With MILL_BUILD_SHA unset, asset_version() returns a non-empty
+    process-start fallback token (never empty/None), distinct from a SHA."""
+    import robotsix_mill.runtime.board_html as bh
+
+    try:
+        monkeypatch.delenv("MILL_BUILD_SHA", raising=False)
+        bh.asset_version.cache_clear()
+        token = bh.asset_version()
+        assert token is not None
+        assert isinstance(token, str)
+        assert token != ""
+        assert token != "abc1234"
+    finally:
+        bh.asset_version.cache_clear()
+
+
 def test_board_inline_handlers_defined_in_served_scripts():
     """Every inline ``onclick=``/``onchange=`` handler emitted by
     board_html.py must reference a global that is actually defined in a

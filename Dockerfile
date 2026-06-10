@@ -123,6 +123,11 @@ RUN groupadd --system --gid 1000 mill \
 
 WORKDIR /app
 
+# Per-deploy cache-busting token for static asset URLs (asset_version()).
+# Optional: absent build-arg → empty ENV → runtime process-start fallback.
+ARG MILL_BUILD_SHA=
+ENV MILL_BUILD_SHA=${MILL_BUILD_SHA}
+
 # Runtime config used to be set here via MILL_* env vars (data_dir,
 # api_host, api_url). The MILL_* alias surface was retired in
 # 9cd2630; the equivalent settings now live in config/mill.local.yaml

@@ -173,6 +173,12 @@ fi
 export DOCKER_GID
 DOCKER_GID=$(getent group docker | cut -d: -f3)
 
+# Bake the just-deployed commit's short SHA into the image as the
+# per-deploy static-asset cache-busting token (compose build.args ->
+# Dockerfile ARG/ENV -> asset_version()). Same commit => same token.
+export MILL_BUILD_SHA
+MILL_BUILD_SHA=$(git rev-parse --short HEAD)
+
 log "mill idle — building image for ${remote:0:7}"
 if ! docker compose build mill >>"$LOG" 2>&1; then
   log "ERROR: docker compose build failed"
