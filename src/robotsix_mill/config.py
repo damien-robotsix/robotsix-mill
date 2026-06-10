@@ -174,6 +174,16 @@ class Settings(BaseSettings):
     claude_fallback_to_deepseek: bool = Field(
         default=True, alias="MILL_CLAUDE_FALLBACK_TO_DEEPSEEK"
     )
+    # Capability gate for inline-image (vision) input on the Claude SDK
+    # transport. Default False: the installed robotsix-llmio claude_sdk
+    # bridge silently mishandles ``BinaryContent`` image parts (it
+    # stringifies them into a useless repr that hangs the ``claude`` CLI
+    # until the 1200s per-call cap fires), so mill must NOT emit inline
+    # images on that path. The refine/review screenshot paths degrade to
+    # a text note while this is False. Flip to True (a one-line change)
+    # once the bridge gains real image-input support (which also needs a
+    # robotsix-llmio pin bump) to re-enable inline vision.
+    claude_sdk_vision_enabled: bool = Field(default=False)
     model: str = Field(default="deepseek/deepseek-v4-pro")
     explore_model: str = Field(default="deepseek/deepseek-v4-flash")
     # Max concurrent scouts a single ``parallel_explore`` fan-out runs. Each

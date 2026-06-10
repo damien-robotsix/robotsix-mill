@@ -227,6 +227,22 @@ def _use_claude_sdk(settings: Settings, name: str | None) -> bool:
     return settings.llm_backend == "claude_sdk"
 
 
+def claude_sdk_supports_inline_image(settings: Settings) -> bool:
+    """Single source of truth: may an agent attach an inline image
+    (``BinaryContent``) to a Claude SDK run?
+
+    Default False — the installed robotsix-llmio claude_sdk bridge cannot
+    consume image parts: its ``_content_to_text`` stringifies any non-``str``
+    content into a useless repr that hangs the ``claude`` CLI until the 1200s
+    per-call cap fires. Until that bridge gains real image-input support (and
+    its pin is bumped), the refine/review screenshot paths MUST degrade to a
+    text note instead of emitting inline ``BinaryContent``. Gated by
+    ``settings.claude_sdk_vision_enabled`` so vision can be re-enabled with a
+    one-line config flip once the bridge supports it.
+    """
+    return bool(settings.claude_sdk_vision_enabled)
+
+
 def _render_module_map(module_list: list[dict]) -> str:
     """Render a scannable ``## Module Map`` section from the taxonomy.
 

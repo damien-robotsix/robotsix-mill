@@ -766,7 +766,12 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
     from pydantic_ai.usage import UsageLimits
 
     from .yaml_loader import load_agent_definition
-    from .base import build_agent_from_definition, _safe_close, _use_claude_sdk
+    from .base import (
+        build_agent_from_definition,
+        _safe_close,
+        _use_claude_sdk,
+        claude_sdk_supports_inline_image,
+    )
     from .retry import run_agent
 
     definition = load_agent_definition(
@@ -846,10 +851,17 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
         )
 
     # Decide the prompt payload: attach screenshots as vision input only
-    # on the claude_sdk path (the DeepSeek default has no vision and
-    # errors on image blocks). When images exist but the backend can't
-    # see them, leave a text note so the agent knows they're there.
-    _vision = bool(screenshot_paths) and _use_claude_sdk(settings, "refine")
+    # on the claude_sdk path AND only when that backend can actually view
+    # inline images (the capability gate — default OFF, because the
+    # installed llmio bridge silently mishandles BinaryContent and stalls
+    # the CLI for 1200s). The DeepSeek default has no vision either. When
+    # images exist but the backend can't see them, leave a text note so
+    # the agent knows they're there.
+    _vision = (
+        bool(screenshot_paths)
+        and _use_claude_sdk(settings, "refine")
+        and claude_sdk_supports_inline_image(settings)
+    )
     binary_contents: list = []
     if _vision:
         from pydantic_ai import BinaryContent

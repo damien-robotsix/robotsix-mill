@@ -1,10 +1,25 @@
 """Tests for screenshot (vision) wiring in ``run_refine_agent``.
 
-Verifies the prompt payload handed to ``run_sync`` depends on the
-backend gate:
+The prompt payload handed to ``run_sync`` depends on TWO gates:
 
-* claude_sdk path + screenshots → list ``[str, BinaryContent, ...]``
+* the backend must be claude_sdk (DeepSeek has no vision), AND
+* ``settings.claude_sdk_vision_enabled`` must be True — the capability
+  gate. It defaults to False because the installed robotsix-llmio
+  claude_sdk bridge silently mishandles ``BinaryContent`` image parts
+  (stringifies them into a useless repr that hangs the ``claude`` CLI
+  until the 1200s per-call cap fires).
+
+So:
+
+* claude_sdk + vision gate ON + screenshots → ``[str, BinaryContent, ...]``
+* claude_sdk + vision gate OFF (the default) → plain ``str`` (degraded note)
 * DeepSeek default path → plain ``str`` (no ``BinaryContent``).
+
+NOTE: the deeper transport-level fix — teaching the robotsix-llmio
+claude_sdk bridge to convert ``BinaryContent`` into an SDK-supported
+image input — and its test belong in ``robotsix-llmio`` (would require
+a dependency bump) and are out of scope here. These tests only assert
+that mill can no longer EMIT the input shape that stalls the bridge.
 """
 
 from __future__ import annotations
@@ -30,8 +45,13 @@ class _FakeResult:
         return b"[]"
 
 
-def _install_capture(monkeypatch, *, claude_sdk: bool):
-    """Patch the agent seam; return a dict capturing the run_sync prompt."""
+def _install_capture(monkeypatch, *, claude_sdk: bool, vision: bool = False):
+    """Patch the agent seam; return a dict capturing the run_sync prompt.
+
+    ``vision`` drives the capability gate (``claude_sdk_supports_inline_image``)
+    independently of the backend toggle so a test can exercise the
+    (future) vision-enabled path explicitly.
+    """
     captured: dict = {}
 
     class _FakeHandle:
@@ -44,6 +64,9 @@ def _install_capture(monkeypatch, *, claude_sdk: bool):
     )
     monkeypatch.setattr(base, "_safe_close", lambda agent: None)
     monkeypatch.setattr(base, "_use_claude_sdk", lambda settings, name: claude_sdk)
+    monkeypatch.setattr(
+        base, "claude_sdk_supports_inline_image", lambda settings: vision
+    )
 
     # run_agent simply invokes make_run on the (fake) agent.
     from robotsix_mill.agents import retry
@@ -54,8 +77,39 @@ def _install_capture(monkeypatch, *, claude_sdk: bool):
     return captured
 
 
-def test_claude_sdk_path_attaches_binary_content(settings, monkeypatch, tmp_path):
-    captured = _install_capture(monkeypatch, claude_sdk=True)
+def test_claude_sdk_default_no_vision_degrades_to_string(
+    settings, monkeypatch, tmp_path
+):
+    """Regression for the 1200s stall (ticket 565a / 348e): on the
+    claude_sdk path with the vision flag at its default (False), a
+    ticket with attached screenshots must yield a bare ``str`` prompt
+    with NO ``BinaryContent`` — the input shape that hangs the llmio
+    bridge can no longer be emitted. The transport-level fix lives in
+    robotsix-llmio (needs a dependency bump) and is out of scope here.
+    """
+    captured = _install_capture(monkeypatch, claude_sdk=True, vision=False)
+    shot = tmp_path / "shot.png"
+    shot.write_bytes(_PNG)
+
+    refining.run_refine_agent(
+        settings=settings,
+        title="T",
+        draft="draft text",
+        screenshot_paths=[shot],
+    )
+
+    prompt = captured["prompt"]
+    assert isinstance(prompt, str)
+    assert not isinstance(prompt, list)
+    assert "BinaryContent" not in prompt  # not even stringified into the text
+    # The agent gets a degraded note that screenshots exist but aren't viewable.
+    assert "screenshot" in prompt.lower()
+
+
+def test_claude_sdk_vision_enabled_attaches_binary_content(
+    settings, monkeypatch, tmp_path
+):
+    captured = _install_capture(monkeypatch, claude_sdk=True, vision=True)
     shot = tmp_path / "shot.png"
     shot.write_bytes(_PNG)
 
@@ -95,7 +149,7 @@ def test_deepseek_path_uses_plain_string(settings, monkeypatch, tmp_path):
 
 
 def test_no_screenshots_uses_plain_string(settings, monkeypatch):
-    captured = _install_capture(monkeypatch, claude_sdk=True)
+    captured = _install_capture(monkeypatch, claude_sdk=True, vision=True)
 
     refining.run_refine_agent(
         settings=settings,
@@ -108,7 +162,7 @@ def test_no_screenshots_uses_plain_string(settings, monkeypatch):
 
 
 def test_multiple_screenshots_preserve_order(settings, monkeypatch, tmp_path):
-    captured = _install_capture(monkeypatch, claude_sdk=True)
+    captured = _install_capture(monkeypatch, claude_sdk=True, vision=True)
     a = tmp_path / "a.png"
     b = tmp_path / "b.png"
     a.write_bytes(b"AAA")
@@ -139,7 +193,7 @@ def test_media_type_mapping_per_suffix(settings, monkeypatch, tmp_path):
         (".gif", "image/gif"),
         (".webp", "image/webp"),
     ):
-        captured = _install_capture(monkeypatch, claude_sdk=True)
+        captured = _install_capture(monkeypatch, claude_sdk=True, vision=True)
         shot = tmp_path / f"shot{suffix}"
         shot.write_bytes(_PNG)
 
@@ -156,7 +210,7 @@ def test_media_type_mapping_per_suffix(settings, monkeypatch, tmp_path):
 
 
 def test_unsupported_suffix_skipped(settings, monkeypatch, tmp_path):
-    captured = _install_capture(monkeypatch, claude_sdk=True)
+    captured = _install_capture(monkeypatch, claude_sdk=True, vision=True)
     shot = tmp_path / "notes.txt"
     shot.write_bytes(b"hello")
 
@@ -172,7 +226,7 @@ def test_unsupported_suffix_skipped(settings, monkeypatch, tmp_path):
 
 
 def test_unreadable_file_skipped(settings, monkeypatch, tmp_path):
-    captured = _install_capture(monkeypatch, claude_sdk=True)
+    captured = _install_capture(monkeypatch, claude_sdk=True, vision=True)
     missing = tmp_path / "gone.png"  # never created
 
     refining.run_refine_agent(
@@ -187,7 +241,7 @@ def test_unreadable_file_skipped(settings, monkeypatch, tmp_path):
 
 
 def test_all_skipped_falls_back_to_plain_string(settings, monkeypatch, tmp_path):
-    captured = _install_capture(monkeypatch, claude_sdk=True)
+    captured = _install_capture(monkeypatch, claude_sdk=True, vision=True)
     bad_suffix = tmp_path / "notes.txt"
     bad_suffix.write_bytes(b"hi")
     missing = tmp_path / "gone.png"

@@ -158,7 +158,12 @@ def run_review_agent(
     from pydantic_ai.usage import UsageLimits
 
     from .yaml_loader import load_agent_definition
-    from .base import build_agent_from_definition, _safe_close, _use_claude_sdk
+    from .base import (
+        build_agent_from_definition,
+        _safe_close,
+        _use_claude_sdk,
+        claude_sdk_supports_inline_image,
+    )
     from .retry import run_agent
 
     definition = load_agent_definition(
@@ -216,10 +221,17 @@ def run_review_agent(
                 run_kwargs["message_history"] = preseed
                 run_user_prompt = None
         # Attach a board screenshot as a vision image ONLY when the review
-        # agent is routed to the Claude SDK backend (DeepSeek has no vision
-        # and rejects image blocks). A missing/unreadable file degrades
-        # silently to the text-only path — never crash review.
-        if screenshot_path is not None and _use_claude_sdk(settings, definition.name):
+        # agent is routed to the Claude SDK backend AND that backend can
+        # actually view inline images (the capability gate — default OFF,
+        # because the installed llmio bridge silently mishandles
+        # BinaryContent and stalls the CLI for 1200s). DeepSeek has no
+        # vision either. A missing/unreadable file degrades silently to the
+        # text-only path — never crash review.
+        if (
+            screenshot_path is not None
+            and _use_claude_sdk(settings, definition.name)
+            and claude_sdk_supports_inline_image(settings)
+        ):
             run_user_prompt = _maybe_attach_screenshot(run_user_prompt, screenshot_path)
         result = run_agent(
             agent,
