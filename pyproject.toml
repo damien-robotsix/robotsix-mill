@@ -31,7 +31,7 @@ dependencies = [
     # Shared kanban-board frontend library: column-per-status board chrome
     # parameterized by a BoardAdapter Protocol and a render-mode switch.
     # Consumed via git dependency — see robotsix-board README for API docs.
-    "robotsix-board @ git+https://github.com/damien-robotsix/robotsix-board.git",
+    "robotsix-board @ git+https://github.com/damien-robotsix/robotsix-board.git@709d3a0fec9bb483e3eaba5a84171e304e4fc4d6",
 ]
 
 [project.optional-dependencies]
