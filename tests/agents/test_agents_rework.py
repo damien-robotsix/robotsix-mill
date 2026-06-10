@@ -449,6 +449,68 @@ def test_test_agent_env_error_bash_command_not_found(tmp_path, monkeypatch):
     assert "shellcheck" in fb
 
 
+def test_test_agent_env_error_rc126_noexec_permission_denied(tmp_path, monkeypatch):
+    """rc=126 + Permission-denied on a $HOME/.local/bin path → ENV-ERROR
+    (a pip --user console script blocked by a noexec tmpfs), no distill LLM."""
+    from robotsix_mill import sandbox
+    from robotsix_mill.agents import retry
+
+    s = _settings(tmp_path, test_command="yamllint --strict .")
+    monkeypatch.setattr(
+        sandbox,
+        "run",
+        lambda cmd, *, repo_dir, settings, **kwargs: (
+            126,
+            "sh: 1: /tmp/.local/bin/yamllint: Permission denied",
+        ),
+    )
+
+    def _boom(*a, **k):
+        raise AssertionError("distill LLM must not run for an ENV-ERROR")
+
+    monkeypatch.setattr(retry, "run_agent", _boom)
+
+    passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
+    assert passed is False
+    assert fb.startswith(testing.ENV_ERROR_PREFIX)
+    assert "/tmp/.local/bin/yamllint" in fb
+
+
+def test_test_agent_rc126_unrelated_path_still_distills(tmp_path, monkeypatch):
+    """rc=126 Permission-denied on a NON-HOME path (a repo script bug) must
+    NOT match the noexec signature — it flows to the distill agent."""
+    from robotsix_mill import sandbox
+
+    s = _settings(tmp_path, test_command="./run.sh")
+    monkeypatch.setattr(
+        sandbox,
+        "run",
+        lambda cmd, *, repo_dir, settings, **kwargs: (
+            126,
+            "sh: 1: ./run.sh: Permission denied",
+        ),
+    )
+
+    class FakeModel:
+        def __init__(self, *a, **k):
+            pass
+
+    class FakeAgent:
+        def __init__(self, *a, **k):
+            pass
+
+        def run_sync(self, *a, **k):
+            return type("R", (), {"output": "distilled: bad perms"})()
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+
+    passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
+    assert passed is False
+    assert not fb.startswith(testing.ENV_ERROR_PREFIX)
+
+
 def test_test_agent_normal_failure_still_distills(tmp_path, monkeypatch):
     """A normal assertion failure (rc=1, no command-not-found signature)
     must still flow to the distill agent — NOT the ENV-ERROR path."""

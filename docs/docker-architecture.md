@@ -77,6 +77,8 @@ part: the sandbox is a **sibling** container, not a nested one.
 │  │  SIBLING of mill (both children of the host daemon)         │   │
 │  │  --network none, non-root, read-only root, tmpfs /tmp,      │   │
 │  │  pids/memory capped                                         │   │
+│  │  /tmp mounted exec (not noexec) so pip --user console        │   │
+│  │  scripts under $HOME/.local/bin can execute                 │   │
 │  │  mounts only:  ./.data → /data                              │   │
 │  │  runs the single shell command, then is destroyed           │   │
 │  └─────────────────────────────────────────────────────────────┘  │
