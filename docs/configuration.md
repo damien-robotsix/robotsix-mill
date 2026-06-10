@@ -707,6 +707,63 @@ Each repo ID must be unique and non-empty. The `board_id` must also be
 non-empty. The registry validates that every entry's `repo_id` matches
 its YAML key.
 
+### Workspace member auto-registration
+
+A master repository that uses vcs2l manifests to declare workspace members
+can opt into **automatic registration** of those members as RepoConfig
+entries. When enabled, the mill detects members from the manifest and
+automatically upserts them into `config/repos.yaml`, creating boards and
+filing build-out tickets on their behalf.
+
+#### How it works
+
+The workspace-member sync agent:
+
+1. **Detects** vcs2l manifest members from the master repo's manifest file
+   (typically `.rosinstall`).
+2. **Derives** a `repo_id` from each member's path key (e.g. `src/zeta/pkg`
+   → `src-zeta-pkg`), slugifying special characters to ASCII.
+3. **Inherits** Langfuse configuration from the master repo so all members
+   share observability projects.
+4. **Upserts** entries into `config/repos.yaml` with the member's:
+   - `forge_remote_url` from the manifest `url` field
+   - `working_branch` from the manifest `version` field (if present)
+   - `cross_repo_target` upstream policy (if present)
+   - `member_of: <master_repo_id>` provenance marker
+5. **Flags** members that vanish from the manifest with `pending_removal: true`
+   instead of auto-deleting — boards + history stay intact for operator review.
+6. **Files** a build-out ticket on each newly registered member's board so the
+   pipeline populates the member's `.robotsix-mill/config.yaml` and enables it.
+
+#### Fields added by auto-registration
+
+When a member is auto-registered, its entry carries additional fields:
+
+| YAML key | Description |
+|----------|-------------|
+| `member_of` | Master repo ID; presence indicates this entry was synced from a manifest. Used to scope disappearance detection — only this master's members are affected by subsequent sync passes. |
+| `pending_removal` | Set to `true` when the member vanishes from the manifest but the entry is retained for operator review. Cleared when the member reappears. |
+
+Manual entries (not synced) omit both fields, so sync passes never modify
+them — collision with a non-member entry is logged and skipped.
+
+#### Integration with repo provisioning
+
+Auto-registered members follow the same onboarding path as manually
+configured repos:
+
+- **Board creation** happens automatically on first ticket write (no explicit
+  board provisioning needed).
+- **Build-out ticket** is filed on the member's board with instructions to add
+  `.robotsix-mill/config.yaml` (test command + languages).
+- **Langfuse project** is inherited from the master repo and wired
+  automatically.
+- **Cross-repo targeting** is configured if the manifest declares an upstream
+  policy for the member.
+
+This integration ensures members are fully onboarded into the mill pipeline
+in a single pass without additional operator steps.
+
 ### Multi-repo behaviour
 
 When multiple repos are registered (default when `config/repos.yaml`
