@@ -4,6 +4,13 @@
 # rebuild never kills an in-flight audit/implement/etc. run mid-way
 # (wasted tokens). Meant to run from cron every 30 minutes.
 #
+# Escalation: on a continuously-busy board the mill is never idle, so
+# every run would defer and deploys would starve forever. To bound
+# this, consecutive busy-deferrals are counted; after MAX_DEFERRALS in
+# a row the script FORCE-deploys gracefully, relying on the mill
+# service's stop_grace_period: 30m to drain any in-flight stage on
+# recreate (draft refines simply re-run).
+#
 # Dev-environment helper. Lives in the repo (dev/) but its runtime
 # files (log, deployed-SHA marker) are written to the repo's PARENT
 # directory so they never dirty the working tree.
@@ -19,12 +26,17 @@ REPO="$(dirname "$SCRIPT_DIR")"
 STATE_DIR="$(dirname "$REPO")"          # runtime files live outside the repo
 LOG="$STATE_DIR/mill-autoupdate.log"
 DEPLOYED_FILE="$STATE_DIR/.mill-deployed-sha"
+DEFERRAL_FILE="$STATE_DIR/.mill-autoupdate-deferrals"  # consecutive busy-deferral counter
 LOCK="/tmp/mill-autoupdate.lock"
 API="http://localhost:8077"
 
 PRE_BUILD_WAIT=1200   # max secs to wait for idle before starting a rebuild
 POST_BUILD_WAIT=300   # max secs to wait again after build, before recreate
 POLL_INTERVAL=90      # secs between idle checks
+# After this many consecutive busy-deferrals (~2h at the 30-min cron
+# cadence) force a graceful deploy so deploys can't starve forever on a
+# perpetually-busy board.
+MAX_DEFERRALS=${MAX_DEFERRALS:-4}
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >>"$LOG"; }
 
@@ -116,9 +128,20 @@ log "new commits on origin/main ($dep_short -> ${remote:0:7}):"
 git --no-pager log --oneline "${deployed:-HEAD}..$remote" 2>/dev/null \
   | sed 's/^/    /' >>"$LOG"
 
+deferrals="$(cat "$DEFERRAL_FILE" 2>/dev/null || echo 0)"
+[[ "$deferrals" =~ ^[0-9]+$ ]] || deferrals=0
+
+forced=0
 if ! wait_until_idle "$PRE_BUILD_WAIT"; then
-  log "mill still busy after ${PRE_BUILD_WAIT}s — deferring update to next run"
-  exit 0
+  deferrals=$((deferrals + 1))
+  echo "$deferrals" >"$DEFERRAL_FILE"
+  if [ "$deferrals" -ge "$MAX_DEFERRALS" ]; then
+    forced=1
+    log "mill still busy after ${PRE_BUILD_WAIT}s, but ${deferrals} consecutive deferrals >= ${MAX_DEFERRALS} — FORCING graceful deploy (stop_grace_period 30m drains in-flight stages; draft refines re-run)"
+  else
+    log "mill still busy after ${PRE_BUILD_WAIT}s — deferring update to next run (deferral ${deferrals}/${MAX_DEFERRALS})"
+    exit 0
+  fi
 fi
 
 # Protect the user's .env across the merge. .env is tracked, but the
@@ -159,13 +182,14 @@ fi
 # A pass/stage may have started during the build — wait again so the
 # container recreate doesn't interrupt it. The image is already built,
 # so if this times out the next cron run just recreates (cheap).
-if ! wait_until_idle "$POST_BUILD_WAIT"; then
+if [ "$forced" -ne 1 ] && ! wait_until_idle "$POST_BUILD_WAIT"; then
   log "mill became busy during build — deferring container recreate to next run"
   exit 0
 fi
 
 if docker compose up -d mill >>"$LOG" 2>&1; then
   echo "$remote" >"$DEPLOYED_FILE"
+  rm -f "$DEFERRAL_FILE"   # reset consecutive-deferral counter after any successful deploy
   log "rebuild + restart OK — container now on ${remote:0:7}"
 else
   log "ERROR: docker compose up failed"
