@@ -1155,6 +1155,17 @@ class Settings(BaseSettings):
     # next scheduled pass. Mirrors trace_review_max_drafts_per_run.
     # Override with MILL_DATA_DIR_AUDIT_MAX_DRAFTS_PER_PASS.
     data_dir_audit_max_drafts_per_pass: int = Field(default=5)
+    # Opt-in GC: prune workspace directories of tickets in a terminal
+    # state (CLOSED / EPIC_CLOSED / ANSWERED) during the data-dir audit
+    # pass, before size measurement. Default False for one release
+    # cycle; flip to True in a follow-up once observed clean.
+    # Override with MILL_DATA_DIR_AUDIT_PRUNE_CLOSED.
+    data_dir_audit_prune_closed: bool = Field(default=False)
+    # Minimum age (seconds since the ticket entered its terminal state)
+    # before its workspace becomes eligible for prune_closed GC. Recent
+    # closures are kept for post-mortems. Default 7 days.
+    # Override with MILL_DATA_DIR_AUDIT_PRUNE_CLOSED_AGE_SECONDS.
+    data_dir_audit_prune_closed_age_seconds: int = Field(default=604_800, ge=0)
 
     # --- completeness_check agent (feature-wiring completeness) ---
     # Model for the completeness-check agent. Defaults to the same
