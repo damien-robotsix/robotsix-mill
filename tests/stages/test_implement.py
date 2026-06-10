@@ -3088,6 +3088,275 @@ def test_binary_artifact_untracked_file_cleanup(ctx_factory, tmp_path, monkeypat
     assert result.action == "skip_iteration"
 
 
+# --- modules.yaml auto-EXPAND in scope guardrail --------------------------
+
+
+def test_modules_yaml_repath_in_scope_auto_expands(ctx_factory, tmp_path, monkeypatch):
+    """AC1: a refactor that re-paths in-scope modules in docs/modules.yaml
+    is auto-EXPANDed — no LLM invoked, file_map gains the file."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+    )
+    t = _ticket(ctx)
+
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+
+    # Seed the base with old.py TRACKED and docs/modules.yaml pointing to it.
+    (repo / "src" / "robotsix_mill").mkdir(parents=True, exist_ok=True)
+    (repo / "src" / "robotsix_mill" / "old.py").write_text("# old module")
+    (repo / "docs").mkdir(exist_ok=True)
+    (repo / "docs" / "modules.yaml").write_text(
+        "modules:\n  - id: my_module\n    paths:\n      - src/robotsix_mill/old.py\n"
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "seed old module")
+    _git(repo, "push", "origin", "main")
+
+    # Create the mill branch and move the module with git mv.
+    branch = f"mill/{t.id}"
+    _git(repo, "checkout", "-q", "-b", branch)
+    pkg = repo / "src" / "robotsix_mill" / "pkg"
+    pkg.mkdir(parents=True)
+    _git(repo, "mv", "src/robotsix_mill/old.py", "src/robotsix_mill/pkg/new.py")
+
+    # Re-path docs/modules.yaml to the new location.
+    (repo / "docs" / "modules.yaml").write_text(
+        "modules:\n"
+        "  - id: my_module\n"
+        "    paths:\n"
+        "      - src/robotsix_mill/pkg/new.py\n"
+    )
+    _git(repo, "add", "docs/modules.yaml")
+    _git(repo, "commit", "-q", "-m", "wip: move module")
+
+    # file_map contains only the new path (the moved file).
+    _write_file_map(ctx, t, "src/robotsix_mill/pkg/new.py")
+
+    # Mock scope-triage to prove it is NOT called for this file.
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+
+    def _fake_triage(
+        *, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries
+    ):
+        raise AssertionError(
+            "LLM must NOT be called — docs/modules.yaml should be "
+            "auto-EXPANDed deterministically"
+        )
+
+    monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        branch,
+        summary="agent summary",
+        ref_files=None,
+        file_map={"src/robotsix_mill/pkg/new.py"},
+        settings=ctx.settings,
+        spec="move old.py to pkg/new.py",
+        current_feedback=None,
+    )
+
+    # AC1: auto-EXPAND → skip_iteration
+    assert result.action == "skip_iteration"
+    assert result.file_map is not None
+    assert "docs/modules.yaml" in result.file_map
+
+    # Step event recording the auto-EXPAND was emitted.
+    history = ctx.service.history(t.id)
+    events = [ev.note for ev in history if ev.note]
+    assert any(
+        "scope-triage auto-EXPAND" in note
+        and "docs/modules.yaml" in note
+        and "registry sync" in note
+        for note in events
+    ), f"auto-EXPAND step event missing; history events: {events}"
+
+
+def test_modules_yaml_new_unrelated_module_still_flagged(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """AC2: registering a NEW module in docs/modules.yaml with paths NOT in
+    file_map is NOT auto-EXPANDed — it stays in out_of_scope and reaches
+    the LLM (or blocks when triage is disabled)."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+    )
+    t = _ticket(ctx)
+
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+
+    # Seed docs/modules.yaml with a paths: entry.
+    (repo / "docs").mkdir(exist_ok=True)
+    (repo / "docs" / "modules.yaml").write_text(
+        "modules:\n  - id: my_module\n    paths:\n      - src/robotsix_mill/legit.py\n"
+    )
+    _git(repo, "add", "docs/modules.yaml")
+    _git(repo, "commit", "-q", "-m", "seed modules.yaml")
+    _git(repo, "push", "origin", "main")
+
+    # Create mill branch with a legitimate in-scope change AND an
+    # unrelated modules.yaml addition.
+    branch = f"mill/{t.id}"
+    _git(repo, "checkout", "-q", "-b", branch)
+
+    # In-scope change: the legit file.
+    (repo / "src" / "robotsix_mill").mkdir(parents=True, exist_ok=True)
+    (repo / "src" / "robotsix_mill" / "legit.py").write_text("# legit change")
+    _git(repo, "add", "src/robotsix_mill/legit.py")
+
+    # Unrelated: register a brand-new module entry in modules.yaml.
+    (repo / "docs" / "modules.yaml").write_text(
+        "modules:\n"
+        "  - id: my_module\n"
+        "    paths:\n"
+        "      - src/robotsix_mill/legit.py\n"
+        "  - id: unrelated_module\n"
+        "    paths:\n"
+        "      - src/robotsix_mill/unrelated.py\n"
+    )
+    _git(repo, "add", "docs/modules.yaml")
+    _git(repo, "commit", "-q", "-m", "wip: legit + unrelated registry")
+
+    # file_map contains only the legitimate file.
+    _write_file_map(ctx, t, "src/robotsix_mill/legit.py")
+
+    # Mock scope-triage to capture what out_of_scope_files it receives.
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+    from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
+
+    triage_calls = []
+
+    def _fake_triage(
+        *, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries
+    ):
+        triage_calls.append((out_of_scope_files, diff_summaries))
+        return ScopeTriageVerdict(
+            action="REJECT",
+            justification="Unrelated module registered",
+            expand_files=[],
+        )
+
+    monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        branch,
+        summary="agent summary",
+        ref_files=None,
+        file_map={"src/robotsix_mill/legit.py"},
+        settings=ctx.settings,
+        spec="update legit.py",
+        current_feedback=None,
+    )
+
+    # The triage agent WAS called (docs/modules.yaml was NOT auto-EXPANDed).
+    assert len(triage_calls) == 1, (
+        "scope-triage should be called because unrelated module path is not in file_map"
+    )
+    out_of_scope_files, _ = triage_calls[0]
+    assert "docs/modules.yaml" in out_of_scope_files, (
+        "docs/modules.yaml should remain in out_of_scope_files"
+    )
+    # The guardrail returns because the LLM issued REJECT.
+    assert result.action == "return"
+
+
+def test_modules_yaml_added_paths_parses_diff(tmp_path):
+    """Unit test: _modules_yaml_added_paths correctly extracts added path
+    tokens from a git diff, ignoring removed lines, comments, and non-path
+    YAML keys."""
+    from robotsix_mill.stages.implement import _modules_yaml_added_paths
+
+    # Build a minimal git repo with a base and a branch that modifies
+    # docs/modules.yaml.
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "t@t")
+    _git(repo, "config", "user.name", "t")
+
+    # Base commit: empty modules.yaml.
+    (repo / "docs").mkdir(exist_ok=True)
+    (repo / "docs" / "modules.yaml").write_text(
+        "modules:\n"
+        "  - id: existing\n"
+        "    description: already present\n"
+        "    paths:\n"
+        "      - src/robotsix_mill/existing.py\n"
+    )
+    _git(repo, "add", "docs/modules.yaml")
+    _git(repo, "commit", "-q", "-m", "base")
+    # Create a fake remote ref so origin/main resolves.
+    _git(repo, "branch", "-M", "main")
+
+    # Modify: add new paths, a comment line, a description line, and
+    # delete an old path. The helper must:
+    # - pick up the added paths (renamed.py, brand_new.py)
+    # - ignore the removed path (existing.py)
+    # - ignore comment/description/id lines.
+    (repo / "docs" / "modules.yaml").write_text(
+        "modules:\n"
+        "  - id: existing\n"
+        "    description: already present (updated description)\n"
+        "    paths:\n"
+        "      - src/robotsix_mill/renamed.py\n"
+        "      - src/robotsix_mill/brand_new.py\n"
+        "  # comment line\n"
+    )
+    _git(repo, "add", "docs/modules.yaml")
+
+    # We need origin/main to be the base commit. Since we can't easily
+    # make a real remote, we use a trick: tag the base commit as a
+    # substitute for origin/main in the git diff call. Actually, the
+    # helper uses `origin/{target_branch}`, so we need a real remote.
+    # Create a bare clone as the "remote":
+    bare = tmp_path / "remote.git"
+    subprocess.run(
+        ["git", "clone", "--bare", "-q", str(repo), str(bare)],
+        check=True,
+        capture_output=True,
+    )
+    _git(repo, "remote", "add", "origin", f"file://{bare}")
+    # Fetch so origin/main is known locally.
+    _git(repo, "fetch", "-q", "origin")
+
+    # Now the helper should diff HEAD (uncommitted) against origin/main.
+    added = _modules_yaml_added_paths(repo, "main")
+
+    assert "src/robotsix_mill/renamed.py" in added, (
+        f"expected renamed.py in added paths, got {added}"
+    )
+    assert "src/robotsix_mill/brand_new.py" in added, (
+        f"expected brand_new.py in added paths, got {added}"
+    )
+    # Removed path must NOT appear.
+    assert "src/robotsix_mill/existing.py" not in added, (
+        "removed path existing.py should not be in added paths"
+    )
+    # Non-path lines must NOT appear.
+    for non_path in (
+        "description:",
+        "id:",
+        "modules:",
+        "# comment line",
+    ):
+        assert non_path not in added, (
+            f"non-path token {non_path!r} should not be in added paths"
+        )
+    # Comment and description variants.
+    assert "already present (updated description)" not in added
+
+
 # --- test-baseline check -------------------------------------------------
 
 

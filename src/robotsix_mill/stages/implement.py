@@ -118,6 +118,60 @@ def _is_binary_artifact(repo_dir: Path, path: str, target_branch: str) -> bool:
     return False
 
 
+# --- docs/modules.yaml re-path auto-detection ------------------------------
+
+
+MODULES_YAML = "docs/modules.yaml"
+
+
+def _modules_yaml_added_paths(repo_dir: Path, target_branch: str) -> set[str]:
+    """Return the set of repo-relative path tokens ADDED to
+    docs/modules.yaml relative to origin/<target_branch>.
+
+    Parses the unified diff: for every added line (starts with '+'
+    but not the '+++' header), strip the '+', surrounding
+    whitespace, and an optional leading YAML list marker '- ';
+    keep the remainder when it looks like a repo path (contains
+    '/', no embedded whitespace, not a comment). These are the
+    file paths the diff newly registers in the taxonomy.
+    """
+    try:
+        raw = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_dir),
+                "diff",
+                f"origin/{target_branch}",
+                "--",
+                MODULES_YAML,
+            ],
+            capture_output=True,
+            text=True,
+        ).stdout
+    except subprocess.CalledProcessError:
+        return set()
+
+    paths: set[str] = set()
+    for line in raw.split("\n"):
+        if not line.startswith("+") or line.startswith("+++"):
+            continue
+        # Strip the leading '+' and surrounding whitespace.
+        token = line[1:].strip()
+        # Strip an optional YAML list marker '- '.
+        if token.startswith("- "):
+            token = token[2:].strip()
+        # Keep only tokens that look like repo paths:
+        # contain '/' and no embedded whitespace, not a comment.
+        if (
+            "/" in token
+            and not any(c.isspace() for c in token)
+            and not token.startswith("#")
+        ):
+            paths.add(token)
+    return paths
+
+
 # ---------------------------------------------------------------------------
 # Internal dataclasses for the refactored implement loop
 # ---------------------------------------------------------------------------
@@ -426,6 +480,41 @@ class ImplementStage(Stage):
                 file_map=file_map,
                 feedback=current_feedback,
             )
+
+        # --- deterministic auto-EXPAND for docs/modules.yaml re-pathing ---
+        # A package-split/move refactor MUST re-path the moved files in
+        # docs/modules.yaml (CI enforces it). When that diff only re-paths
+        # entries whose target files are ALREADY in the file_map, the edit
+        # is a mechanical consequence of an in-scope move — auto-add it so
+        # we neither ESCALATE nor pay for an LLM round-trip. When the diff
+        # registers NEW paths that are NOT in the file_map (an unrelated
+        # new module), leave it out_of_scope so it is still flagged.
+        if MODULES_YAML in out_of_scope:
+            added = _modules_yaml_added_paths(repo_dir, settings.forge_target_branch)
+            if added and added <= file_map:
+                file_map.add(MODULES_YAML)
+                out_of_scope = [f for f in out_of_scope if f != MODULES_YAML]
+                log.info(
+                    "%s: auto-EXPAND docs/modules.yaml — re-paths only "
+                    "in-scope modules (%d added path(s), all in file_map)",
+                    ticket.id,
+                    len(added),
+                )
+                ctx.service.add_step_event(
+                    ticket.id,
+                    "scope-triage auto-EXPAND: `docs/modules.yaml` re-paths "
+                    "only in-scope modules — registry sync, not scope creep",
+                )
+                if not out_of_scope:
+                    return _ScopeGuardrailResult(
+                        action="skip_iteration",
+                        file_map=file_map,
+                        feedback=current_feedback,
+                    )
+            # When ``added`` is empty (e.g. a deletion-only diff that
+            # removes paths but adds none), do NOT auto-EXPAND — let it
+            # fall through to the existing scope-triage LLM, which is no
+            # worse than today.
 
         log.warning(
             "%s: scope violation — %d out-of-scope file(s): %s",
