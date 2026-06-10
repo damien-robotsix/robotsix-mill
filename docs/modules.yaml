@@ -493,6 +493,7 @@ modules:
     paths:
       - src/robotsix_mill/sandbox.py
       - tests/sandbox/test_sandbox.py
+      - tests/sandbox/test_sandbox_integration.py
       - sandbox/**/*
     dependencies: [config]
 
