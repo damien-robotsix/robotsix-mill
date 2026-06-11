@@ -13,11 +13,23 @@ permissions:
   contents: read
 
 jobs:
-  tests:
-    runs-on: ubuntu-latest
+  ci:
     permissions:
       contents: read
       security-events: write
+    uses: ./.github/workflows/python-ci.yml
+    with:
+      python-version: "3.14"
+      uv-version: "0.8.15"
+      install-extras: "dev tracing"
+      cov-package: "robotsix_mill"
+      coverage-threshold: 70
+      pytest-args: -m "not docker"
+      bandit-severity: "medium"
+      mypy-advisory: true
+
+  mill-specific:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
@@ -35,18 +47,9 @@ jobs:
           version: "0.8.15"
 
       - name: Install dev deps
-        # Installs from the committed uv.lock; --frozen fails the build
-        # if the lock is stale relative to pyproject.toml (no `uv lock`
-        # regeneration step — that would silently pull new @main commits
-        # of the robotsix-* git deps). See docs/dependencies.md.
         run: uv sync --frozen --extra dev --extra tracing
         env:
           UV_PROJECT_ENVIRONMENT: system
-
-      - name: deptry (dependency hygiene)
-        env:
-          UV_PROJECT_ENVIRONMENT: system
-        run: uv run deptry .
 
       - name: Validate module taxonomy
         env:
@@ -59,42 +62,3 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: system
         run: uv run python scripts/check_config_sync.py
-
-      - name: Ruff (lint + format check)
-        env:
-          UV_PROJECT_ENVIRONMENT: system
-        run: |
-          uv run ruff check --output-format=github .
-          uv run ruff format --check --diff .
-
-      - name: Mypy (static type check, advisory)
-        # Codebase carries pre-existing strict-mode debt (~700 errors
-        # across ~90 files) that pre-dates this gate. Mypy runs and
-        # surfaces a summary as a CI annotation but does NOT block CI
-        # until the backlog is worked off in dedicated tickets. Remove
-        # the ``|| true`` once mypy --strict is clean.
-        env:
-          UV_PROJECT_ENVIRONMENT: system
-        run: |
-          set +e
-          uv run mypy src/ --strict 2>&1 | tee mypy.log
-          err_count=$(grep -cE '^src/.*: error:' mypy.log || echo 0)
-          echo "::warning::mypy --strict reported ${err_count} pre-existing errors (advisory; not blocking CI)"
-          exit 0
-
-      - name: Bandit (security SAST)
-        # Severity floor (MEDIUM+) is a deliberate, documented policy —
-        # see [tool.bandit] in pyproject.toml / CONTRIBUTING.md.
-        env:
-          UV_PROJECT_ENVIRONMENT: system
-        run: uv run bandit -c pyproject.toml -r src/ --severity-level medium
-
-      - name: Run tests
-        env:
-          UV_PROJECT_ENVIRONMENT: system
-          GIT_BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD~1' }}
-        # Docker integration tests (pytest.mark.docker) require the
-        # sandbox Docker image and the mill-sandbox-net proxy network
-        # — infrastructure that only exists in the full mill deployment,
-        # not in GitHub Actions CI. Skip them here.
-        run: uv run pytest tests/ -x -m "not docker" --tb=long --cov=robotsix_mill --cov-fail-under=70 --cov-report=term-missing
