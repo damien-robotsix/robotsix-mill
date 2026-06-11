@@ -55,7 +55,7 @@ def make_close_thread_tool(settings: Settings, agent_name: str):
     ToolRegistry.register(
         ToolInfo(
             name="close_thread",
-            description="Close a top-level comment thread on the current ticket (marks it resolved). Idempotent: re-closing an already-resolved thread returns an \"already closed\" success message — do not retry.",
+            description='Close a top-level comment thread on the current ticket (marks it resolved). Idempotent: re-closing an already-resolved thread returns an "already closed" success message — do not retry.',
             category="reporting",
             parameters={"comment_id": "int"},
         )
