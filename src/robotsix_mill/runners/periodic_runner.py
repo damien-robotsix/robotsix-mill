@@ -555,6 +555,20 @@ def run_board_cleanup_pass(
         board = []
     board_snapshot = _render_board_snapshot(board)
 
+    # Deterministic short-circuit: an empty board (empty DB result or the
+    # ``except → board = []`` fallback) has nothing to clean up, so skip the
+    # agent pass entirely — invoking the LLM here is guaranteed wasted cost +
+    # latency. The no-op path MUST NOT write the memory file (run_agent_pass,
+    # which normally persists memory, is skipped); preserve existing contents.
+    if not board:
+        log.info("board_cleanup pass skipped: board is empty (session %s)", session_id)
+        return BoardCleanupPassResult(
+            updated_memory=(memory_file.read_text() if memory_file.exists() else ""),
+            drafts_created=[],
+            session_id=session_id,
+            proposed_actions=[],
+        )
+
     from ..agents import board_cleanup as agent_module
 
     log.info("board_cleanup pass starting (session %s)", session_id)
