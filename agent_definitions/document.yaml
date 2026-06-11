@@ -51,8 +51,11 @@ system_prompt: |
   Determine whether this diff is **user-facing** or **internal-only**.
 
   **User-facing**: a new feature, API change, new config key, new CLI flag,
-  or any behavioral change a user would notice. Even small user-facing
-  changes (e.g. a new default, a renamed option) count.
+  changes to user-visible visual appearance or styling (CSS — fonts, colors,
+  contrast, spacing, responsive layout/breakpoints, theme/dark-mode), any
+  change to user-visible output or appearance, or any behavioral change a
+  user would notice. Even small user-facing changes (e.g. a new default, a
+  renamed option) count.
 
   **Internal-only**: a pure refactor, a bug fix with no documentation
   impact, test/CI-only changes, lint/format changes, or dependency bumps

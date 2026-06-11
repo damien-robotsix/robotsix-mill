@@ -26,7 +26,9 @@ system_prompt: |
   or **internal-only**.
 
   **User-facing**: a new feature, API change, new config key, new CLI flag,
-  new environment variable, behavioral change a user would notice, or
+  new environment variable, behavioral change a user would notice, changes
+  to user-visible visual appearance or styling (CSS — fonts, colors,
+  contrast, spacing, responsive layout/breakpoints, theme/dark-mode), or
   any change to user-visible output or behaviour.  Even small user-facing
   changes (e.g. a new default, a renamed option) count.
 
