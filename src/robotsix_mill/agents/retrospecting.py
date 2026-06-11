@@ -18,6 +18,27 @@ from .prompt_blocks import section
 
 log = logging.getLogger(__name__)
 
+# Known no-data placeholders for the pre-computed Langfuse summary. The
+# first doubles as the workflow-only fallback injected into the prompt
+# when ``langfuse_summary`` is falsy.
+_NO_LANGFUSE_PLACEHOLDER = "(no Langfuse trace data — workflow-only review)"
+_NO_TRACES_PLACEHOLDER = "(no Langfuse traces found for this session)"
+
+
+def _langfuse_absent(langfuse_summary: str | None) -> bool:
+    """Return True when *langfuse_summary* carries no real trace data.
+
+    Treats ``None``, empty/whitespace-only strings, and the known
+    no-data placeholders as absent.
+    """
+    if langfuse_summary is None:
+        return True
+    stripped = langfuse_summary.strip()
+    if not stripped:
+        return True
+    return stripped in (_NO_LANGFUSE_PLACEHOLDER, _NO_TRACES_PLACEHOLDER)
+
+
 # Per-trace deep inspection formerly gated by `_DEEP_ANALYSIS_ADDENDUM`
 # was removed — trace / cost evaluation is now handled by the
 # periodical cost-evaluation pipeline (cost_reconciliation_runner,
@@ -265,6 +286,31 @@ def run_retrospect_agent(
         draft/follow-up proposals, and memory updates. Degrades to an
         empty result when the agent returns unparseable output.
     """
+    # Pre-LLM guard: when there is genuinely no auditable run evidence
+    # (no Langfuse trace data AND empty workflow history AND no comments),
+    # short-circuit instead of running a full generation over a near-empty
+    # prompt — that path lets the model fabricate PR numbers / scores. The
+    # ticket description alone is not run evidence. A Langfuse-less but
+    # history-present ticket is the supported workflow-only review and is
+    # NOT short-circuited here.
+    if (
+        _langfuse_absent(langfuse_summary)
+        and history_text.strip() == ""
+        and comments_text.strip() == ""
+    ):
+        return RetrospectResult(
+            findings=(
+                "No auditable trace or workflow data was available for this "
+                "ticket: there were no Langfuse traces and the workflow "
+                "history and comments were empty. No retrospect was performed "
+                "and no claims could be verified — there was nothing to audit."
+            ),
+            conclusion=(
+                "Insufficient audit data — no Langfuse traces and empty "
+                "workflow history; retrospect skipped."
+            ),
+        )
+
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
 
@@ -320,7 +366,7 @@ def run_retrospect_agent(
             )
         )
 
-    lf = langfuse_summary or "(no Langfuse trace data — workflow-only review)"
+    lf = langfuse_summary or _NO_LANGFUSE_PLACEHOLDER
     verified_block = ("\n\n" + verified_proposals) if verified_proposals else ""
     prompt = (
         f"{recent_proposals}"

@@ -87,12 +87,15 @@ def test_audit_agent_has_report_issue_false(monkeypatch):
 
 
 def test_retrospect_agent_has_report_issue_false(monkeypatch):
+    # Non-empty history_text so the pre-LLM "insufficient audit data"
+    # guard in run_retrospect_agent does not short-circuit before
+    # build_agent is reached (workflow-only review path).
     kw = _collect_build_agent_kwargs(
         monkeypatch,
         "retrospecting",
         "run_retrospect_agent",
         ticket_summary="",
-        history_text="",
+        history_text="ticket went DRAFT -> READY -> ... -> DONE",
         langfuse_summary=None,
         memory="",
     )
