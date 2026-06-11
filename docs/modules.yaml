@@ -619,6 +619,7 @@ modules:
       - .python-version
       - .trivyignore
       - .secrets.baseline
+      - mypy-baseline.txt
       - scripts/**/*
       - dev/**/*
       - tests/__init__.py
