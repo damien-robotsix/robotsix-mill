@@ -110,21 +110,25 @@ jobs:
           uv run ruff check --output-format=github .
           uv run ruff format --check --diff .
 
-      - name: Mypy (static type check, advisory)
+      - name: Mypy (static type check, baseline ratchet)
         if: ${{ inputs.mypy-advisory }}
-        # Codebase carries pre-existing strict-mode debt (~700 errors
-        # across ~90 files) that pre-dates this gate. Mypy runs and
-        # surfaces a summary as a CI annotation but does NOT block CI
-        # until the backlog is worked off in dedicated tickets. Remove
-        # the ``|| true`` once mypy --strict is clean.
+        # Ratchets against a committed mypy-baseline.txt snapshot: known
+        # pre-existing strict-mode errors (~700 across ~90 files) are
+        # tolerated, but any *new* error not in the baseline blocks CI.
+        # To shrink the baseline after fixing errors, run:
+        #   uv run mypy src/ --strict | uv run mypy-baseline sync
+        # and commit the updated mypy-baseline.txt.
         env:
           UV_PROJECT_ENVIRONMENT: system
-        run: |
-          set +e
-          uv run mypy src/ --strict 2>&1 | tee mypy.log
-          err_count=$(grep -cE '^src/.*: error:' mypy.log || echo 0)
-          echo "::warning::mypy --strict reported ${err_count} pre-existing errors (advisory; not blocking CI)"
-          exit 0
+        run: uv run mypy src/ --strict | uv run mypy-baseline filter
+
+      - name: Mypy (baseline burndown nudge)
+        if: ${{ inputs.mypy-advisory }}
+        # Surfaces one pre-existing error from the baseline as a CI
+        # annotation to encourage incremental burndown. Non-blocking.
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+        run: uv run mypy-baseline suggest --exit-zero
 
       - name: Mypy (static type check)
         if: ${{ !inputs.mypy-advisory }}
