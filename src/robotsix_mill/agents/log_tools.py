@@ -2,7 +2,7 @@
 
 The refine agent gets an interactive ``query_app_logs`` tool — built by
 :func:`make_log_query_tool` — only when the target repo declares a
-``deployed_log_folder`` in its ``.robotsix-mill/config.yaml`` *and* that
+``deployed_log_folder`` in mill's central ``config/repos.yaml`` *and* that
 folder resolves to an existing directory in the sandbox.  It complements
 the static ``## Deployed system logs`` directory listing injected into the
 system prompt: the summary orients the agent, this tool lets it drill into

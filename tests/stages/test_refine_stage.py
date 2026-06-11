@@ -3267,11 +3267,12 @@ def test_maintenance_triage_normal_draft_proceeds_to_refine(ctx_factory, monkeyp
 # ---------------------------------------------------------------------------
 
 
-def _write_repo_log_config(repo_dir, folder: str):
-    cfg_dir = repo_dir / ".robotsix-mill"
-    cfg_dir.mkdir(parents=True, exist_ok=True)
-    (cfg_dir / "config.yaml").write_text(
-        f"deployed_log_folder: {folder}\n", encoding="utf-8"
+def _set_repo_log_folder(ctx, folder: str):
+    """Set ``deployed_log_folder`` on the ctx's central RepoConfig — the
+    value now lives in mill's ``config/repos.yaml``, not the managed
+    repo's committed ``.robotsix-mill/config.yaml``."""
+    ctx.repo_config = ctx.repo_config.model_copy(
+        update={"deployed_log_folder": folder}
     )
 
 
@@ -3301,7 +3302,7 @@ def test_deployed_log_folder_absent_dir_skips_and_warns(
     repo_dir = tmp_path / "repo"
     repo_dir.mkdir()
     missing = tmp_path / "no-such-log-folder"
-    _write_repo_log_config(repo_dir, str(missing))
+    _set_repo_log_folder(ctx, str(missing))
 
     captured: dict = {}
     _apply_default_mocks(monkeypatch, run_refine_agent=_capture_refine_kwargs(captured))
@@ -3337,7 +3338,7 @@ def test_deployed_log_folder_present_dir_wires_tool(ctx_factory, monkeypatch, tm
     repo_dir.mkdir()
     logs = tmp_path / "deployed-logs"
     logs.mkdir()
-    _write_repo_log_config(repo_dir, str(logs))
+    _set_repo_log_folder(ctx, str(logs))
 
     captured: dict = {}
     _apply_default_mocks(monkeypatch, run_refine_agent=_capture_refine_kwargs(captured))
