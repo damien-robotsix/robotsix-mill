@@ -24,9 +24,12 @@ jobs:
   bump:
     runs-on: ubuntu-latest
     steps:
-      # Keep the persisted GITHUB_TOKEN: peter-evans/create-pull-request
-      # pushes the bump branch using the credentials checkout writes into
-      # .git/config, so persist-credentials: false would break the push.
+      # The bump PR must be created with the DEPS_BUMP_TOKEN PAT, not the
+      # built-in GITHUB_TOKEN: GitHub does not trigger workflow runs for
+      # events authored by GITHUB_TOKEN (its recursion guard), which would
+      # leave the bump PR with zero CI and silently defeat the pin+bump
+      # gate. The PAT is wired into the create-pull-request step's `token:`
+      # input below, which handles both the branch push and PR creation.
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4  # zizmor: ignore[artipacked]
 
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6
@@ -39,6 +42,7 @@ jobs:
       - name: Open bump PR if the lock changed
         uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e  # v7.0.8
         with:
+          token: ${{ secrets.DEPS_BUMP_TOKEN }}
           add-paths: uv.lock
           branch: deps/uv-lock-bump
           delete-branch: true
