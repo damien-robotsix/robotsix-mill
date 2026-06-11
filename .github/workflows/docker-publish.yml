@@ -13,6 +13,44 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      sandbox: ${{ steps.detect.outputs.sandbox }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          # Need the parent commit available so ``git diff`` against
+          # ``github.event.before`` works; this job never writes to the repo.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Detect sandbox/Dockerfile changes
+        id: detect
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          # Fail safe toward rebuilding: a branch-creation / first push
+          # (zero-SHA ``before``) or an unavailable diff base resolves to
+          # sandbox=true. A change to sandbox/Dockerfile OR to this workflow
+          # file (so edits to the publish-sandbox job logic still rebuild)
+          # also resolves to sandbox=true.
+          zero="0000000000000000000000000000000000000000"
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "$zero" ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            echo "Diff base unavailable; defaulting to rebuild."
+            echo "sandbox=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only "$BEFORE" "$AFTER" \
+              | grep -qE '^(sandbox/Dockerfile|\.github/workflows/docker-publish\.yml)$'; then
+            echo "sandbox=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "sandbox=false" >> "$GITHUB_OUTPUT"
+          fi
+
   publish:
     runs-on: ubuntu-latest
     permissions:
@@ -170,6 +208,8 @@ jobs:
 
   publish-sandbox:
     runs-on: ubuntu-latest
+    needs: changes
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.sandbox == 'true' }}
     permissions:
       id-token: write
       packages: write
