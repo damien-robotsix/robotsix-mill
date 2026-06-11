@@ -41,10 +41,14 @@ sandbox:
   # absolute host path moves here. Replace with YOUR absolute path.
   data_mount: /ABSOLUTE/PATH/TO/robotsix-mill/.data
 
-  # Override the sandbox image. The default (robotsix/mill-sandbox:latest)
-  # is a minimal Python + uv image with no mill source. For full toolchain
-  # access (git, pytest, mill source), use robotsix/mill:dev.
-  # image: robotsix/mill:dev
+  # Override the sandbox image. The sandbox image MUST contain
+  # Playwright + Chromium, or the Tier-2 browser smoke gate
+  # (scripts/board_browser_check.py) silently SKIPs instead of running
+  # the real rendered-columns / console-error assertions. The default
+  # (robotsix/mill-sandbox:latest) bakes them in. Do NOT pin this to the
+  # app image robotsix/mill:dev — that image has no Playwright, so
+  # overriding it here disables the browser gate.
+  # image: robotsix/mill-sandbox:latest
 
   # Override the proxy URL. Set to empty string to disable the proxy and
   # restore --network none (all network access blocked).

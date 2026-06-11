@@ -35,8 +35,22 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
 # network. `--with-deps` also pulls the apt libraries Chromium needs.
 #
 # Image-size impact: Chromium + its shared libraries add roughly ~300 MB
-# to the sandbox image.
+# to the sandbox image. That is under the ~500 MB threshold, so the
+# browser is baked into this single dedicated image — no opt-in variant
+# is needed (see docs/configuration.md, sandbox.image entry).
+#
+# PLAYWRIGHT_BROWSERS_PATH pins the browser cache to a fixed, world-
+# readable system path OUTSIDE any user $HOME. `playwright install` runs
+# as root here and writes Chromium into /ms-playwright; the image ENV
+# survives `docker run`, and sandbox.py launches the container with
+# `--user $UID:$GID` + `HOME=/tmp` WITHOUT overriding
+# PLAYWRIGHT_BROWSERS_PATH, so the non-root runtime user reads the same
+# baked browser. `chmod -R a+rX` makes the install tree readable and
+# traversable by that non-root user (the egress proxy blocks the
+# Playwright download CDN, so no runtime download is possible).
 ARG PLAYWRIGHT_VERSION=1.55.0
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 # hadolint ignore=DL3013
 RUN pip install --no-cache-dir "playwright==${PLAYWRIGHT_VERSION}" \
-    && playwright install --with-deps chromium
+    && playwright install --with-deps chromium \
+    && chmod -R a+rX /ms-playwright
