@@ -64,6 +64,25 @@ _BATCH_SIZE = 500
 _TERMINAL_STATES = {State.CLOSED, State.EPIC_CLOSED, State.ANSWERED}
 
 
+def _workspace_ticket_id_for_path(path: str) -> str | None:
+    """Map a growth-flag *path* to its per-ticket workspace id, if any.
+
+    Growth-flag ``path`` values are POSIX paths relative to the board
+    root (e.g. ``"workspaces/<ticket_id>/repo/.git/objects/"``,
+    ``"workspaces/<ticket_id>"``, or ``"big.log"``). Returns the ticket
+    id when the path lies inside ``workspaces/<ticket_id>/`` and the
+    second segment looks like a ticket id; otherwise ``None``.
+    """
+    parts = path.split("/")
+    if (
+        len(parts) >= 2
+        and parts[0] == "workspaces"
+        and _TICKET_ID_PREFIX_RE.match(parts[1])
+    ):
+        return parts[1]
+    return None
+
+
 @dataclass
 class OrphanWorkspace:
     """A workspace directory whose ticket no longer exists in the DB."""
@@ -764,6 +783,33 @@ def _terminal_close_times(
     return terminal_ids, close_times
 
 
+def _active_workspace_ticket_ids(settings: Settings, board_id: str) -> set[str]:
+    """Return ids of *active* per-ticket workspaces for *board_id*.
+
+    A workspace is active when its directory name has a live Ticket row
+    in the board DB (an absent row means an **orphan**, handled by
+    :func:`find_orphan_workspaces`) AND that ticket is NOT terminal (a
+    terminal-but-unpruned workspace is a GC concern handled by
+    :func:`_prune_closed_workspaces`). Growth confined to an active
+    workspace is expected transient runtime data and is suppressed
+    upstream of filing.
+    """
+    workspaces_dir = settings.workspaces_dir_for(board_id)
+    if not workspaces_dir.exists():
+        return set()
+    candidates = _workspace_candidates(workspaces_dir)
+    if not candidates:
+        return set()
+    candidate_ids = [name for name, _ in candidates]
+    existing: set[str] = set()
+    with db.session(settings, board_id) as s:
+        for start in range(0, len(candidate_ids), _BATCH_SIZE):
+            chunk = candidate_ids[start : start + _BATCH_SIZE]
+            existing.update(s.exec(select(Ticket.id).where(Ticket.id.in_(chunk))).all())
+    terminal_ids, _ = _terminal_close_times(settings, board_id, candidate_ids)
+    return existing - terminal_ids
+
+
 def _prune_board_workspaces(
     settings: Settings,
     board_id: str,
@@ -1162,6 +1208,32 @@ def _scan_growth_deltas(settings: Settings) -> tuple[list[dict], int]:
         # Persist current scan as new state (prunes deleted paths
         # naturally — only currently-existing paths are written).
         _save_growth_state(state_path, current)
+
+        # Suppress growth flags whose path lies inside an active
+        # (live, non-terminal) per-ticket workspace — that growth is
+        # expected transient runtime data (e.g. the repo/ clone) and
+        # should never be filed. The active set is computed lazily,
+        # only when a flag is actually a workspace path.
+        if board_flags:
+            active_ids = None
+            kept: list[dict] = []
+            for flag in board_flags:
+                tid = _workspace_ticket_id_for_path(flag["path"])
+                if tid is not None:
+                    if active_ids is None:
+                        active_ids = _active_workspace_ticket_ids(settings, board_id)
+                    if tid in active_ids:
+                        log.info(
+                            "data_dir_audit: suppressing growth flag for active "
+                            "workspace board=%r ticket=%s path=%s delta=%dB",
+                            board_id,
+                            tid,
+                            flag["path"],
+                            int(flag["delta_bytes"]),
+                        )
+                        continue
+                kept.append(flag)
+            board_flags = kept
 
         if board_flags:
             boards_with_flags += 1
