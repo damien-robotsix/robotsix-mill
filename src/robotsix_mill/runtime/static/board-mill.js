@@ -453,6 +453,17 @@
     refresh();
   }
 
+  // Strip the redundant "Show closed" checkbox (#board-closed-toggle) that
+  // robotsix-board's attachClosedToggle() injects before #board. The mill
+  // header button #toggle-closed-btn is the canonical control (it toggles
+  // both the closed and epic_closed columns and persists under the mill
+  // localStorage key), so the upstream checkbox is a stale duplicate. No-op
+  // when the element is absent.
+  function removeDuplicateClosedToggle() {
+    var el = document.getElementById("board-closed-toggle");
+    if (el) el.remove();
+  }
+
   // =========================================================================
   // WebSocket
   // =========================================================================
@@ -2330,6 +2341,10 @@
     var closedBtn = document.getElementById("toggle-closed-btn");
     if (closedBtn) closedBtn.textContent = showClosed ? "Hide closed" : "Show closed";
 
+    // Remove robotsix-board's duplicate show-closed checkbox if it has
+    // already been injected by the time bootstrap runs.
+    removeDuplicateClosedToggle();
+
     // Apply repo filter to the initial board render
     var repoId = getRepoId();
     if (window.robotsixBoardSetRefreshUrl && repoId !== "all") {
@@ -2385,6 +2400,7 @@
     // 1s tick: refresh drawer content when open, also periodically refresh active labels
     setInterval(function() {
       hideEmptyColumns();
+      removeDuplicateClosedToggle();
       updateMeta();
       if (runsOpen) renderRuns();
       else if (proposalsOpen) renderProposals();
