@@ -1,6 +1,6 @@
 # Test-gap agent — dedicated test-coverage oversight.
 
-name: test-gap
+name: test_gap
 description: >-
   Identifies modules with zero dedicated test coverage, prioritizes by
   complexity and I/O surface, and proposes draft tickets
