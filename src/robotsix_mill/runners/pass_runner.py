@@ -235,14 +235,27 @@ _EPHEMERAL_PROPOSED_ACTIONS_SECTION_RE = re.compile(
     r"(?:[ \t]*\|[^\n]*\n?)+"
 )
 
+# The ``<recent_proposals>…</recent_proposals>`` block is injected fresh into
+# the agent prompt every run as transient DB-surfaced data (see
+# ``_format_recent_proposals``). An agent that echoes that block into its
+# ``updated_memory`` permanently contaminates the cross-run ledger — every
+# subsequent run re-reads the phantom reference and treats it as real repo
+# code. Strip any echoed block on persist. Non-greedy + DOTALL so it matches
+# the full block across newlines, tolerant of surrounding whitespace.
+_EPHEMERAL_RECENT_PROPOSALS_RE = re.compile(
+    r"[ \t]*<recent_proposals>.*?</recent_proposals>[ \t]*\n?",
+    re.DOTALL,
+)
+
 
 def strip_ephemeral_sections(memory_text: str) -> str:
     """Remove the DB-derived ``## Prior proposals — verified state`` and
-    ``## Prior proposed actions — decided`` tables from a memory document
+    ``## Prior proposed actions — decided`` tables, plus any echoed
+    ``<recent_proposals>…</recent_proposals>`` block, from a memory document
     before it is persisted to the cross-run ledger.
 
-    Removes only the heading + the contiguous table rows — any surrounding
-    cross-ticket notes the agent wrote are preserved.
+    Removes only the heading + the contiguous table rows (and the XML block) —
+    any surrounding cross-ticket notes the agent wrote are preserved.
     """
     # Fast path: leave text byte-for-byte unchanged when there is nothing to
     # strip (the vast majority of memory documents) — only normalise whitespace
@@ -250,6 +263,7 @@ def strip_ephemeral_sections(memory_text: str) -> str:
     if not memory_text or (
         "## Prior proposals" not in memory_text
         and "## Prior proposed actions" not in memory_text
+        and "<recent_proposals>" not in memory_text
     ):
         return memory_text
     cleaned: str | None = None
@@ -257,8 +271,16 @@ def strip_ephemeral_sections(memory_text: str) -> str:
         cleaned = _EPHEMERAL_MEMORY_SECTION_RE.sub("", memory_text)
     if "## Prior proposed actions" in (cleaned or memory_text):
         cleaned = _EPHEMERAL_PROPOSED_ACTIONS_SECTION_RE.sub("", cleaned or memory_text)
-    # collapse the blank-line gap a removed section leaves behind
-    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned or memory_text).strip()
+    if "<recent_proposals>" in (cleaned if cleaned is not None else memory_text):
+        cleaned = _EPHEMERAL_RECENT_PROPOSALS_RE.sub(
+            "", cleaned if cleaned is not None else memory_text
+        )
+    # collapse the blank-line gap a removed section leaves behind. Use an
+    # ``is not None`` guard (not ``or``) so a section that strips down to an
+    # empty string isn't silently replaced by the original ``memory_text``.
+    cleaned = re.sub(
+        r"\n{3,}", "\n\n", cleaned if cleaned is not None else memory_text
+    ).strip()
     return cleaned + "\n" if cleaned else ""
 
 
