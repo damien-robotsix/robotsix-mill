@@ -615,9 +615,26 @@ def test_smoke_gate_lifts_board_screenshot_into_artifacts(
     out = ImplementStage().run(t, ctx)
 
     assert out.next_state is State.DOCUMENTING
-    lifted = ctx.service.workspace(t).artifacts_dir / "board.png"
+    ws = ctx.service.workspace(t)
+    lifted = ws.artifacts_dir / "board.png"
     assert lifted.exists(), "gate must lift board.png into the workspace artifacts dir"
     assert lifted.read_bytes().startswith(b"\x89PNG")
+
+    # The screenshot must be MOVED, not copied: the clone working tree is
+    # clean afterwards so _finalize's ``git add -A`` cannot stage it, and
+    # the resulting commit must not carry the stray binary.
+    clone = ws.dir / "repo"
+    assert not (clone / "artifacts" / "board.png").exists(), (
+        "screenshot must be moved out of the clone, not left for git add -A"
+    )
+    tracked = subprocess.run(
+        ["git", "ls-files", "artifacts/board.png"],
+        cwd=clone,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert tracked == "", "board.png must not be committed into the feature branch"
 
 
 def test_env_error_short_circuits_within_two_cycles(ctx_factory, tmp_path, monkeypatch):

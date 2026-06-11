@@ -24,3 +24,7 @@ _epic
 dist/
 build/
 docker-compose.override.yml
+# Transient board browser smoke screenshot. The implement gate writes it
+# to <clone>/artifacts/board.png and moves it out to the workspace; this
+# ignore is defence-in-depth so a lingering copy is never staged.
+/artifacts/board.png
