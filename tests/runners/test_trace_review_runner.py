@@ -505,6 +505,46 @@ class TestRunTraceReviewPass:
         assert "put uv sync in CI" in body
         assert "Inspector confidence" in body
 
+    def test_classifier_flags_forwarded_to_inspector(
+        self,
+        settings,
+        monkeypatch,
+    ):
+        # A single tool error flags the trace (binary flag, no baseline
+        # needed). Capture the kwargs the runner forwards to the
+        # inspector and assert classifier_flags == the trace's flags.
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.list_all_traces_since",
+            lambda *a, **kw: [_trace(totalCost=0.10)],
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
+            lambda *a, **kw: {
+                "observations": [
+                    _obs("run_command", output="error: command failed"),
+                ]
+            },
+        )
+        captured: dict = {}
+
+        def _capture(**kw):
+            captured.update(kw)
+            return TraceInspectResult()
+
+        monkeypatch.setattr(
+            "robotsix_mill.agents.trace_inspector.run_trace_inspector",
+            _capture,
+        )
+
+        result = run_trace_review_pass(
+            session_id="sess-flags", repo_config=_test_repo_config()
+        )
+        assert result.traces_flagged == 1
+        assert "classifier_flags" in captured
+        # Forwarded verbatim from the classifier's _TraceFlags.flags
+        # (the lone tool error plus the incomplete-trace tail flag).
+        assert captured["classifier_flags"] == ["tool_errors (1)", "incomplete_trace"]
+
     def test_dedup_against_existing_open_trace_review_ticket(
         self,
         settings,

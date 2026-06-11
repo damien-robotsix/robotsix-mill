@@ -530,6 +530,7 @@ def run_trace_review_pass(
             memory="",
             model_name=settings.trace_review_model,
             started_at=_process_started_at,
+            classifier_flags=flags.flags,
         )
         if result.error:
             log.warning(
