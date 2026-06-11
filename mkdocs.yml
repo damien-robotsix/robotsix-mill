@@ -11,6 +11,7 @@ nav:
   - Home: index.md
   - Configuration & Deployment:
       - Configuration reference: configuration.md
+      - Observability: observability.md
       - Continuous deployment: deployment.md
       - Docker architecture: docker-architecture.md
       - GitHub App / PAT: github-app.md

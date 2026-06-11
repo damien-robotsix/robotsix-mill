@@ -266,6 +266,28 @@ Then run:
 MILL_CONFIG_FILE=config/mill.production.yaml docker compose up -d
 ```
 
+### Deployed log folder (`deployed_log_folder`)
+
+A managed repo can point the refine agent at its live deployment's log
+directory by committing a single field to its own
+`.robotsix-mill/config.yaml`:
+
+```yaml
+# .robotsix-mill/config.yaml
+deployed_log_folder: /var/log/robotsix-auto-mail
+```
+
+- `deployed_log_folder` — a path (string) to the live deployment's log
+  directory, either **absolute** or **relative to the repo root**
+  (relative paths are resolved against the repo dir, and a warning is
+  logged for relative paths). It is **opt-in**: when absent — or when it
+  does not resolve to an existing directory — the log tooling is
+  silently skipped. When it resolves, it drives the refine agent's
+  `query_app_logs` tool plus an injected log summary. This field carries
+  only the non-secret path; Langfuse keys stay central in
+  `config/repos.yaml`. See [observability.md](observability.md) for the
+  full story.
+
 ### Set up secrets
 
 ```sh
@@ -842,6 +864,7 @@ files use the legacy flat path (`<data_dir>/audit_memory.md`).
 ## See also
 
 - [index.md](index.md) — documentation home
+- [observability.md](observability.md) — per-repo Langfuse + deployed-log config the refine agent consults
 - [deployment.md](deployment.md) — continuous deployment guide
 - [config-audit.md](config-audit.md) — complete inventory of every config value and its source
 - [`config/mill.defaults.yaml`](../config/mill.defaults.yaml) — committed canonical defaults
