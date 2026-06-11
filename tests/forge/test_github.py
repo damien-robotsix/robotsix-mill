@@ -1644,6 +1644,101 @@ def test_list_code_scanning_alerts_404_returns_empty(tmp_path, monkeypatch):
     assert forge.list_code_scanning_alerts(source_branch="feature/x") == []
 
 
+def _alert(number, rule_id, path, line):
+    """Build a raw GitHub code-scanning alert dict (274d shape)."""
+    return {
+        "number": number,
+        "rule": {"id": rule_id, "security_severity_level": "warning"},
+        "html_url": f"http://alert/{number}",
+        "most_recent_instance": {
+            "location": {"path": path, "start_line": line},
+            "message": {"text": f"{rule_id} flagged"},
+        },
+    }
+
+
+def test_list_code_scanning_alerts_finds_merge_ref_only(tmp_path, monkeypatch):
+    """274d: a pull_request-triggered CodeQL analysis files its alerts under
+    the PR merge ref ``refs/pull/{N}/merge`` — NOT ``refs/heads/{branch}``.
+    list_code_scanning_alerts must resolve the PR and query the merge ref;
+    the pre-fix branch-ref-only query returned ``[]``."""
+    merge_alerts = [
+        _alert(1, "py/unused-global-variable", "src/pkg/new_mod.py", 5),
+        _alert(2, "py/empty-except", "src/pkg/new_mod.py", 12),
+    ]
+
+    class MockClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            params = params or {}
+            if "code-scanning/alerts" in url:
+                # Alerts exist ONLY under the PR merge ref.
+                if params.get("ref") == "refs/pull/301/merge":
+                    return _make_response(200, merge_alerts)
+                return _make_response(200, [])
+            if "/pulls/301" in url:
+                return _make_response(
+                    200, {"number": 301, "state": "open", "head": {"sha": "s"}}
+                )
+            if "/pulls" in url:
+                return _make_response(200, [{"number": 301}])
+            return _make_response(404, [], "")
+
+    monkeypatch.setattr(real_httpx, "Client", MockClient)
+
+    forge = _forge(tmp_path)
+    out = forge.list_code_scanning_alerts(source_branch="mill/274d")
+    assert {a["rule"] for a in out} == {
+        "py/unused-global-variable",
+        "py/empty-except",
+    }
+    assert all(a["path"] == "src/pkg/new_mod.py" for a in out)
+
+
+def test_list_code_scanning_alerts_no_pr_falls_back_to_branch_ref(
+    tmp_path, monkeypatch
+):
+    """When ``_get_pr`` finds no PR, the query falls back to the branch ref
+    (existing behaviour preserved for non-PR contexts)."""
+    branch_alerts = [_alert(9, "py/x", "src/a.py", 3)]
+
+    class MockClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            params = params or {}
+            if "code-scanning/alerts" in url:
+                if params.get("ref") == "refs/heads/feature/x":
+                    return _make_response(200, branch_alerts)
+                return _make_response(200, [])
+            if "/pulls" in url:
+                # No open/any PR for this head → _get_pr returns None.
+                return _make_response(200, [])
+            return _make_response(404, [], "")
+
+    monkeypatch.setattr(real_httpx, "Client", MockClient)
+
+    forge = _forge(tmp_path)
+    out = forge.list_code_scanning_alerts(source_branch="feature/x")
+    assert len(out) == 1
+    assert out[0]["rule"] == "py/x" and out[0]["path"] == "src/a.py"
+
+
 # ---------------------------------------------------------------------------
 # _delete_branch (via delete_branch)
 # ---------------------------------------------------------------------------

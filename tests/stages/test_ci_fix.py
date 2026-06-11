@@ -1164,6 +1164,83 @@ def test_all_in_diff_alerts_suppress_dependency_fixer(tmp_path, monkeypatch):
     assert push_calls == []
 
 
+def test_alerts_in_added_files_classify_in_scope_no_spawn(tmp_path, monkeypatch):
+    """274d's exact shape: every CodeQL alert lives in a file the PR ADDED
+    (pr_files status='added'). _pr_changed_paths keeps added files, so the
+    alerts classify in-scope → no CI_FIX_DEPENDENCY fixer is spawned, the
+    agent's OUT_OF_SCOPE verdict is overridden back to IMPLEMENT_COMPLETE,
+    and the branch is never pushed."""
+    ctx = _gh(tmp_path)
+    added = "src/pkg/new_mod.py"
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "CodeQL", "summary": "alert", "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    # 274d: 16x unused-global + 4x empty-except, ALL in the PR's added files.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_code_scanning_alerts",
+        lambda self, *, source_branch: (
+            [
+                {
+                    "rule": "py/unused-global-variable",
+                    "severity": "warning",
+                    "path": added,
+                    "line": i,
+                    "message": "unused global",
+                }
+                for i in range(16)
+            ]
+            + [
+                {
+                    "rule": "py/empty-except",
+                    "severity": "warning",
+                    "path": added,
+                    "line": 100 + i,
+                    "message": "empty except",
+                }
+                for i in range(4)
+            ]
+        ),
+    )
+    # The alert file is an ADDED file in the PR (status='added').
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [
+            {"path": added, "status": "added", "additions": 40, "deletions": 0}
+        ],
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: _oos_result(),
+    )
+    push_calls = []
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        lambda *a, **k: push_calls.append(1),
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY) == []
+    assert push_calls == []
+
+
 def test_out_of_scope_description_names_untouched_alert(tmp_path, monkeypatch):
     """The spawned out-of-scope ticket's description names the untouched
     alert's rule id + path (AC3)."""

@@ -46,6 +46,7 @@ import subprocess
 from pathlib import Path
 
 from ..agents.ci_fixing import run_ci_fix_agent
+from .ci_fix import _pr_changed_paths
 from ..agents.rebasing import run_rebase_agent
 from ..agents.review_revision import run_review_revision_agent
 from ..config import RepoConfig, get_repo_config
@@ -115,17 +116,23 @@ def _write_counter(path, value: int) -> None:
 
 
 def _build_failing_summary(
-    failing: list[dict], log_text: str = "", alerts: list[dict] | None = None
+    failing: list[dict],
+    log_text: str = "",
+    alerts: list[dict] | None = None,
+    changed_paths: set[str] | None = None,
 ) -> str:
     """Markdown summary of failing checks for the CI-fix agent.
 
     A thin wrapper over ``stages.ci_fix._build_failing_summary`` (imported
     lazily to avoid a module-load cycle) so the multi-repo path renders the
-    same job-logs + code-scanning-alert detail as the single-repo path.
+    same job-logs + code-scanning-alert detail as the single-repo path. When
+    *changed_paths* is provided the alerts are partitioned against the PR's
+    own diff and labelled in-scope / out-of-scope, mirroring the single-repo
+    ``ci_fix._build_failure_detail`` path.
     """
     from .ci_fix import _build_failing_summary as _ci_fix_summary
 
-    return _ci_fix_summary(failing, log_text, alerts)
+    return _ci_fix_summary(failing, log_text, alerts, changed_paths)
 
 
 def _read_reason(path) -> str:
@@ -537,8 +544,10 @@ class MergeStage(Stage):
 
         log_text = ""
         alerts: list[dict] = []
+        changed_paths: set[str] = set()
         try:
             alerts = forge.list_code_scanning_alerts(source_branch=branch)
+            changed_paths = _pr_changed_paths(forge, branch)
             pr = forge.pr_status(source_branch=branch)
             head_sha = (pr or {}).get("sha", "")
             if head_sha:
@@ -555,7 +564,9 @@ class MergeStage(Stage):
                 "%s: failed to fetch job logs / alerts for %s", ticket.id, repo_id
             )
 
-        failing_summary = _build_failing_summary(failing, log_text, alerts)
+        failing_summary = _build_failing_summary(
+            failing, log_text, alerts, changed_paths
+        )
         log.info(
             "%s: multi-repo CI failing for %s — ci-fix attempt %d/%d",
             ticket.id,
