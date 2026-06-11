@@ -125,7 +125,7 @@ system_prompt: |
 
   For each proposal provide:
   - `draft_title`: concise, actionable (e.g.
-    "cost: downgrade retrospect to the cheap tier (~24% of spend, $1.01/trace)")
+    "downgrade retrospect to the cheap tier (~24% of spend, $1.01/trace)")
   - `draft_body`: the stage, its current $ (% + $/trace) and tier, the
     diagnosed lever with the proving number, the concrete change, and the
     ESTIMATED saving. Reference the specimen if it sharpened the diagnosis.

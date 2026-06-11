@@ -625,7 +625,7 @@ def test_pass_integrates_find_largest_items(tmp_path, monkeypatch):
     # Filing logic (ticket 6) now creates one draft for the oversized
     # file when a board is available.
     assert len(result.drafts_created) == 1
-    assert "data-dir audit: oversized huge.bin" in result.drafts_created[0]["title"]
+    assert "oversized huge.bin" in result.drafts_created[0]["title"]
 
 
 # ---------------------------------------------------------------------------
@@ -1558,9 +1558,9 @@ class TestFilingAndDedup:
         titles = [d["title"] for d in result.drafts_created]
         prefixes = {
             "data-dir audit: orphan workspace",
-            "data-dir audit: growth",
-            "data-dir audit: oversized",
-            "data-dir audit: unbounded",
+            "growth",
+            "oversized",
+            "unbounded",
         }
         seen = set()
         for title in titles:
@@ -1570,12 +1570,8 @@ class TestFilingAndDedup:
         assert seen == prefixes, titles
         # Exactly one per issue type (plus possibly a couple of incidental
         # growth flags from the workspaces/ dir as it accrues content).
-        oversized_count = sum(
-            1 for t in titles if t.startswith("data-dir audit: oversized")
-        )
-        unbounded_count = sum(
-            1 for t in titles if t.startswith("data-dir audit: unbounded")
-        )
+        oversized_count = sum(1 for t in titles if t.startswith("oversized"))
+        unbounded_count = sum(1 for t in titles if t.startswith("unbounded"))
         orphan_count = sum(1 for t in titles if t.startswith("data-dir audit: orphan"))
         assert oversized_count == 1, titles
         assert unbounded_count == 1, titles

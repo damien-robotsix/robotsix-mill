@@ -887,7 +887,7 @@ def _build_oversized_finding(item: dict) -> tuple[str, str, str]:
     is_dir = bool(item.get("is_directory"))
     gap_id = f"oversized:{_sanitize_gap_segment(path)}"
     kind = "directory" if is_dir else "file"
-    title = f"data-dir audit: oversized {path} ({_human_bytes(size)})"
+    title = f"oversized {path} ({_human_bytes(size)})"
     body = (
         "_Filed by the periodic data-dir audit pass._\n\n"
         "## Finding\n\n"
@@ -910,9 +910,7 @@ def _build_growth_finding(flag: dict) -> tuple[str, str, str]:
     prior_size = int(flag["prior_size_bytes"])
     threshold_exceeded = flag.get("threshold_exceeded", "")
     gap_id = f"growth:{_sanitize_gap_segment(board_id)}:{_sanitize_gap_segment(path)}"
-    title = (
-        f"data-dir audit: growth {path} (+{_human_bytes(delta_bytes)}, +{delta_pct}%)"
-    )
+    title = f"growth {path} (+{_human_bytes(delta_bytes)}, +{delta_pct}%)"
     body = (
         "_Filed by the periodic data-dir audit pass._\n\n"
         "## Finding\n\n"
@@ -940,7 +938,7 @@ def _build_unbounded_finding(finding: dict) -> tuple[str, str, str]:
     record_count = finding.get("record_count")
     record_max = finding.get("record_max")
     gap_id = f"unbounded:{_sanitize_gap_segment(path)}"
-    title = f"data-dir audit: unbounded {path} (>{_human_bytes(cap_bytes)})"
+    title = f"unbounded {path} (>{_human_bytes(cap_bytes)})"
     body_lines = [
         "_Filed by the periodic data-dir audit pass._",
         "",

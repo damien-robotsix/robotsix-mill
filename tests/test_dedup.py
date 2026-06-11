@@ -109,7 +109,7 @@ def test_fingerprint_title_match_without_file_path(settings):
     _seed(
         settings,
         title=(
-            "trace-review: tool_error — claude code returned an error result success"
+            "tool_error — claude code returned an error result success"
         ),
         body="unrelated body that does not name any code locus",
     )
@@ -127,7 +127,7 @@ def test_fingerprint_title_match_without_file_path(settings):
 def test_recency_window_excludes_older_matches(settings):
     svc, ticket = _seed(
         settings,
-        title="trace-review: tool_error — earlier wrapper bug",
+        title="tool_error — earlier wrapper bug",
         body=f"prior body mentioning {_TARGET_PATH}",
     )
     svc.transition(ticket.id, State.DONE, note="merged")
@@ -148,7 +148,7 @@ def test_recency_window_excludes_older_matches(settings):
 def test_errored_candidate_excluded(settings):
     svc, ticket = _seed(
         settings,
-        title="trace-review: tool_error — earlier wrapper bug",
+        title="tool_error — earlier wrapper bug",
         body=f"prior body mentioning {_TARGET_PATH}",
     )
     svc.transition(ticket.id, State.ERRORED, note="fix attempt failed")
@@ -167,7 +167,7 @@ def test_errored_candidate_excluded(settings):
 def test_declined_closed_candidate_excluded(settings):
     svc, ticket = _seed(
         settings,
-        title="trace-review: tool_error — earlier wrapper bug",
+        title="tool_error — earlier wrapper bug",
         body=f"prior body mentioning {_TARGET_PATH}",
     )
     # DRAFT → CLOSED directly (never DONE) = declined draft.
@@ -187,7 +187,7 @@ def test_declined_closed_candidate_excluded(settings):
 def test_closed_after_done_candidate_matches(settings):
     svc, ticket = _seed(
         settings,
-        title="trace-review: tool_error — earlier wrapper bug",
+        title="tool_error — earlier wrapper bug",
         body=f"prior body mentioning {_TARGET_PATH}",
     )
     svc.transition(ticket.id, State.DONE, note="merged")
@@ -208,7 +208,7 @@ def test_closed_after_done_candidate_matches(settings):
 def test_exclude_ids_excludes_candidate(settings):
     svc, ticket = _seed(
         settings,
-        title="trace-review: tool_error — earlier wrapper bug",
+        title="tool_error — earlier wrapper bug",
         body=f"prior body mentioning {_TARGET_PATH}",
     )
     svc.transition(ticket.id, State.DONE, note="merged")
