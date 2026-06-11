@@ -54,3 +54,12 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN pip install --no-cache-dir "playwright==${PLAYWRIGHT_VERSION}" \
     && playwright install --with-deps chromium \
     && chmod -R a+rX /ms-playwright
+
+# Test-gate tooling for every board whose test_command is `pytest …`.
+# The per-run `pip install --user .` only provides each repo's RUNTIME
+# deps (dev extras / PEP 735 dependency-groups never reach the sandbox),
+# so the gate binaries must be baked into the image. Keep this list to
+# the universal gate surface; repo-specific needs go through
+# extra_sandbox_packages in each repo's .robotsix-mill/config.yaml.
+# hadolint ignore=DL3013
+RUN pip install --no-cache-dir pytest pytest-asyncio pytest-cov
