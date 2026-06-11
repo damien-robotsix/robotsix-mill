@@ -14,10 +14,10 @@ on:
         type: string
         default: "0.8.15"
       install-extras:
-        description: Space-separated extras expanded into repeated --extra flags on uv sync --frozen.
+        description: Space-separated extras expanded into repeated --extra flags on uv sync --frozen. The dev group arrives automatically via [tool.uv] default-groups.
         required: false
         type: string
-        default: "dev"
+        default: "tracing"
       runs-on:
         description: Runner label for the security job.
         required: false
