@@ -18,13 +18,15 @@ model: "${MILL_REFINE_MODEL}"
 # the spec in real file paths, patterns, and constraints.
 #
 # NOTE: ``run_command`` IS available (added by ``run_refine_agent`` at
-# runtime). Prefer delegating investigation to ``explore`` — every
-# direct ``read_file`` / ``run_command`` / ``list_dir`` call burns one
-# of your refine requests, while ``explore`` calls don't count against
-# that cap.  Use direct tools only as narrow exceptions: ``list_dir``
-# for trivial existence checks, ``read_file`` only after ``explore``
-# has pinned a symbol/offset, and ``run_command`` for targeted
-# one-liners on already-known files.
+# runtime). Match the tool to the question: use direct tools for
+# trivial lookups — ``read_file`` for a single, already-known file
+# path, ``list_dir`` (or ``run_command 'ls -la <path>'``) for
+# existence checks, and ``run_command`` for targeted one-liners on
+# already-known files. Reserve ``explore`` / ``parallel_explore`` for
+# genuinely multi-step investigation (tree traversal, cross-referencing
+# multiple files, locating a symbol whose path/offset is unknown,
+# repo-wide grep); those calls don't count against your refine request
+# cap, which is why they're worth it for complex work.
 #
 # Langfuse tools (``langfuse_*``, ``inspect_cost``) are read-only and
 # hit the Langfuse API — each call counts against your refine request
@@ -83,10 +85,19 @@ system_prompt: |
     patterns/conventions, and constraints. Do NOT web-fetch the
     project's own files.
   - **Choose the right search tool for the question:**
-    * **Default: delegate to `explore` / `parallel_explore`.** Even
-      for investigations that feel "simple" — the explore sub-agent
-      has its own 100-call budget outside your refine request cap,
-      so every delegation saves a top-level request.  **Scan the
+    * **Match the tool to the question's complexity.** For a question
+      about a **single, already-known file path** — its content, or
+      its first/last N lines — call `read_file` directly. For a
+      **path-existence check** ("does path X exist?"), call `list_dir`
+      (or `run_command 'ls -la <path>'`) directly. Do NOT spin up
+      `explore` for these trivial lookups. Delegate to `explore` /
+      `parallel_explore` **only** for genuinely multi-step
+      investigation: traversing the directory tree, cross-referencing
+      multiple files, locating a symbol by name when its path/offset
+      is unknown, or running a repo-wide `grep`.  For that complex
+      work `explore` is preferred because the sub-agent has its own
+      100-call budget outside your refine request cap, so the
+      delegation doesn't burn a top-level request.  **Scan the
       Module Map first** (the `## Module Map` section above): match
       the ticket topic against module descriptions to identify which
       module(s) are implicated, then feed those module paths into
@@ -98,17 +109,19 @@ system_prompt: |
       put them as distinct bullet sub-questions inside one `explore`
       request.  Serial single-facet calls re-read the same large
       files and module map each time, wasting context and cost.
-    * **Use direct tools only as narrow exceptions:**
-      - `read_file` — only AFTER `explore` has located the exact
-        symbol or offset.  Never guess line numbers; ask `explore` to
-        find a symbol by name first (e.g. "what line is function X
+    * **Use direct tools for the lookups they're best at:**
+      - `read_file` — the FIRST choice for a single, already-known
+        file path (its content or first/last N lines).  When you need
+        a symbol whose offset you do NOT know, ask `explore` to locate
+        it first.  Never guess line numbers; ask `explore` to find a
+        symbol by name first (e.g. "what line is function X
         defined at in path/to/file.py?"), then read with the
         confirmed offset.  Cap total `read_file` calls at ≤ 5 per
         refine run.  Avoid reading a whole directory of files just to
         "build context" — that's `explore`'s job.
-      - `list_dir` — only for trivial existence checks ("does path X
-        exist?").
-      - `run_command` — only for targeted `grep`/`find` one-liners on
+      - `list_dir` — the FIRST choice for trivial existence checks
+        ("does path X exist?").
+      - `run_command` — for targeted `grep`/`find` one-liners on
         already-pinned-down symbols or files (e.g.
         ``grep -rn 'def make_explore_tool' src/``), and only when the
         output is bounded.
