@@ -206,6 +206,7 @@ test("hyphen and underscore spellings resolve to the same color", () => {
     ["bc-check", "bc_check"],
     ["completeness-check", "completeness_check"],
     ["config-sync", "config_sync"],
+    ["member-sync", "member_sync"],
     ["cost-reconciliation", "cost_reconciliation"],
     ["roadmap-sync", "roadmap_sync"],
     ["trace-review", "trace_review"],
@@ -228,6 +229,7 @@ test("previously grey-only Runs kinds now render their menu color", () => {
   assert.equal(agentColor("bc-check"), "#84cc16");
   assert.equal(agentColor("completeness-check"), "#84cc16");
   assert.equal(agentColor("config-sync"), "#6366f1");
+  assert.equal(agentColor("member-sync"), "#0891b2");
   assert.equal(agentColor("cost-reconciliation"), "#6366f1");
   assert.equal(agentColor("roadmap-sync"), "#9333ea");
   assert.equal(agentColor("trace-review"), "#0ea5e9");

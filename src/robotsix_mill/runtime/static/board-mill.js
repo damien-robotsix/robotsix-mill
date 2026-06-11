@@ -61,6 +61,7 @@
     cost_analyst: '#4f46e5',
     run_health: '#3b82f6',
     config_sync: '#6366f1',
+    member_sync: '#0891b2',
     roadmap_sync: '#9333ea',
     trace_review: '#0ea5e9',
     module_curator: '#f97316',
@@ -73,6 +74,7 @@
     retrospect: "retrospect",
     audit: "audit",
     config_sync: "config-sync",
+    member_sync: "member-sync",
     "trace-health": "trace-health",
     health: "health",
     test_gap: "test-gap",
@@ -2024,6 +2026,23 @@
     }
   }
 
+  async function runMemberSync() {
+    var btn = event.target;
+    btn.disabled = true; btn.textContent = 'Running...';
+    try {
+      var repoId = getRepoId();
+      var msUrl = repoId !== "all" ? "/member-sync?repo_id=" + encodeURIComponent(repoId) : "/member-sync";
+      var r = await jpost(msUrl);
+      if (!r.ok) { throw new Error(await r.text()); }
+      alert("Member-sync started — it reconciles workspace members against the configured roster. New draft tickets appear on the board when it finishes.");
+      setTimeout(refresh, 4000);
+    } catch (e) {
+      alert("Member-sync failed to start: " + e);
+    } finally {
+      btn.disabled = false; btn.textContent = 'Member Sync';
+    }
+  }
+
   async function runTraceReview() {
     var btn = event.target;
     btn.disabled = true; btn.textContent = 'Running...';
@@ -2449,6 +2468,7 @@
   window.runCostAnalyst = runCostAnalyst;
   window.runRunHealth = runRunHealth;
   window.runConfigSync = runConfigSync;
+  window.runMemberSync = runMemberSync;
   window.runTraceReview = runTraceReview;
   window.runRoadmapSync = runRoadmapSync;
   window.runMeta = runMeta;
