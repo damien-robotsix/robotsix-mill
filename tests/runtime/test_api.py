@@ -143,7 +143,7 @@ def test_board_import_error_fallback(client, monkeypatch):
 
 
 def test_gates(client, settings):
-    """GET /gates returns the four pipeline gate flags from the live Settings."""
+    """GET /gates returns the pipeline gate flags from the live Settings."""
     r = client.get("/gates")
     assert r.status_code == 200
     body = r.json()
@@ -152,6 +152,7 @@ def test_gates(client, settings):
         "review": settings.review_enabled,
         "auto_merge": settings.auto_merge_enabled,
         "require_approval": settings.require_approval,
+        "comments_after_body": settings.comments_after_body,
     }
 
 

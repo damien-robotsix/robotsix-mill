@@ -620,6 +620,10 @@ class Settings(BaseSettings):
     # merge its own green PR via the forge API without waiting for a
     # human. Default False (opt-in).
     auto_merge_enabled: bool = Field(default=False)
+    # When True, the board's ticket detail drawer renders description.md
+    # below the comments with a collapsible "Hide" toggle (the frontend
+    # reads ``gatesCache.comments_after_body``). Default False (opt-in).
+    comments_after_body: bool = Field(default=False)
     # When True (and a human reviewer requests changes on the PR),
     # the merge stage will invoke the review-revision agent to
     # implement the requested changes automatically. Default False
