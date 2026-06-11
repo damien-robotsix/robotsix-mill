@@ -430,6 +430,83 @@ def test_run_periodic_pass_no_forge_remote_skips_clone(tmp_path, monkeypatch):
     assert captured_repo_dir["value"] is None
 
 
+def test_run_periodic_pass_requires_repo_short_circuits_on_clone_failure(
+    tmp_path, monkeypatch
+):
+    """For a requires_repo=True config (module_curator), a clone failure
+    short-circuits before the agent: run_agent_pass is NOT called and a
+    no-op result (empty drafts, correct session_id) is returned."""
+    settings = _make_settings(
+        tmp_path,
+        FORGE_REMOTE_URL="https://example.test/r.git",
+        FORGE_TARGET_BRANCH="main",
+    )
+
+    def fake_clone(url, dest, branch, token):
+        raise subprocess.CalledProcessError(1, "git")
+
+    from robotsix_mill.vcs import git_ops
+
+    monkeypatch.setattr(git_ops, "clone", fake_clone)
+
+    agent_pass_calls = []
+
+    def fake_run_agent_pass(**kw):
+        agent_pass_calls.append(True)
+        return _fake_agent_pass_result()
+
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.run_agent_pass", fake_run_agent_pass
+    )
+
+    config = PERIODIC_PASS_CONFIGS["module_curator"]
+    result = run_periodic_pass(
+        session_id="test-sid",
+        repo_config=_test_repo_config(),
+        config=config,
+        settings=settings,
+    )
+
+    assert len(agent_pass_calls) == 0
+    assert isinstance(result, config.result_dataclass)
+    assert result.drafts_created == []
+    assert result.session_id == "test-sid"
+
+
+def test_run_periodic_pass_requires_repo_short_circuit_logs_warning(
+    tmp_path, monkeypatch, caplog
+):
+    """The module_curator short-circuit logs a warning naming the pass."""
+    settings = _make_settings(
+        tmp_path,
+        FORGE_REMOTE_URL="https://example.test/r.git",
+        FORGE_TARGET_BRANCH="main",
+    )
+
+    def fake_clone(url, dest, branch, token):
+        raise subprocess.CalledProcessError(1, "git")
+
+    from robotsix_mill.vcs import git_ops
+
+    monkeypatch.setattr(git_ops, "clone", fake_clone)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.run_agent_pass",
+        lambda **kw: _fake_agent_pass_result(),
+    )
+
+    with caplog.at_level(logging.WARNING):
+        run_periodic_pass(
+            session_id="test-sid",
+            repo_config=_test_repo_config(),
+            config=PERIODIC_PASS_CONFIGS["module_curator"],
+            settings=settings,
+        )
+
+    assert any(
+        "module_curator pass skipped" in record.message for record in caplog.records
+    )
+
+
 # ------------------------------------------------------------------ PERIODIC_PASS_CONFIGS registry
 
 
@@ -448,6 +525,16 @@ def test_periodic_pass_configs_registry_has_all_ten_entries():
         "test_gap",
     }
     assert set(PERIODIC_PASS_CONFIGS.keys()) == expected
+
+
+def test_periodic_pass_configs_requires_repo_only_module_curator():
+    """Only the module_curator entry sets requires_repo=True; all other
+    registry entries keep the default False."""
+    assert PERIODIC_PASS_CONFIGS["module_curator"].requires_repo is True
+    for key, cfg in PERIODIC_PASS_CONFIGS.items():
+        if key == "module_curator":
+            continue
+        assert cfg.requires_repo is False, f"{key}.requires_repo should be False"
 
 
 def test_periodic_pass_configs_each_has_required_fields():
