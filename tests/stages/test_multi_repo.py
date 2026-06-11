@@ -13,6 +13,29 @@ from robotsix_mill.config import RepoConfig
 from robotsix_mill.runtime.api import create_app
 
 
+class _StubReadClient:
+    """Minimal ``LangfuseReadClient`` stand-in that paginates to nothing,
+    so cost-endpoint routing tests can capture the per-repo credentials
+    without hitting the network."""
+
+    def iter_pages(self, url, params=None, *, error_label="request"):
+        return iter(())
+
+
+def _capture_build_client(captured_projects):
+    """Patch target for ``_build_read_client``: records which repo's
+    Langfuse project each call routed through, then returns an empty
+    stub client."""
+
+    def fake_build(settings, repo_config=None):
+        captured_projects.append(
+            repo_config.langfuse_project_name if repo_config else None
+        )
+        return _StubReadClient()
+
+    return fake_build
+
+
 # -- fixtures -----------------------------------------------------------
 
 
@@ -144,13 +167,10 @@ def test_cost_by_agent_repo_a(multi_repo_client, monkeypatch):
     """GET /costs/by-agent?repo_id=repo-a routes through proj-a."""
     captured_projects: list[str | None] = []
 
-    def fake_get(settings, path, params=None, repo_config=None):
-        captured_projects.append(
-            repo_config.langfuse_project_name if repo_config else None
-        )
-        return {"data": []}
-
-    monkeypatch.setattr("robotsix_mill.langfuse.client._langfuse_api_get", fake_get)
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client._build_read_client",
+        _capture_build_client(captured_projects),
+    )
 
     r = multi_repo_client.get("/costs/by-agent?repo_id=repo-a")
     assert r.status_code == 200
@@ -165,13 +185,10 @@ def test_cost_by_agent_repo_b(multi_repo_client, monkeypatch):
     """GET /costs/by-agent?repo_id=repo-b routes through proj-b."""
     captured_projects: list[str | None] = []
 
-    def fake_get(settings, path, params=None, repo_config=None):
-        captured_projects.append(
-            repo_config.langfuse_project_name if repo_config else None
-        )
-        return {"data": []}
-
-    monkeypatch.setattr("robotsix_mill.langfuse.client._langfuse_api_get", fake_get)
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client._build_read_client",
+        _capture_build_client(captured_projects),
+    )
 
     r = multi_repo_client.get("/costs/by-agent?repo_id=repo-b")
     assert r.status_code == 200
@@ -185,13 +202,10 @@ def test_cost_by_agent_all(multi_repo_client, monkeypatch):
     """GET /costs/by-agent?repo_id=all aggregates across proj-a and proj-b."""
     captured_projects: list[str | None] = []
 
-    def fake_get(settings, path, params=None, repo_config=None):
-        captured_projects.append(
-            repo_config.langfuse_project_name if repo_config else None
-        )
-        return {"data": []}
-
-    monkeypatch.setattr("robotsix_mill.langfuse.client._langfuse_api_get", fake_get)
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client._build_read_client",
+        _capture_build_client(captured_projects),
+    )
 
     r = multi_repo_client.get("/costs/by-agent?repo_id=all")
     assert r.status_code == 200
@@ -207,13 +221,10 @@ def test_cost_trend_repo_routing(multi_repo_client, monkeypatch):
     """GET /costs/trend?repo_id=repo-a only hits proj-a."""
     captured_projects: list[str | None] = []
 
-    def fake_get(settings, path, params=None, repo_config=None):
-        captured_projects.append(
-            repo_config.langfuse_project_name if repo_config else None
-        )
-        return {"data": []}
-
-    monkeypatch.setattr("robotsix_mill.langfuse.client._langfuse_api_get", fake_get)
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client._build_read_client",
+        _capture_build_client(captured_projects),
+    )
 
     r = multi_repo_client.get("/costs/trend?repo_id=repo-a")
     assert r.status_code == 200
@@ -227,13 +238,10 @@ def test_cost_trend_all(multi_repo_client, monkeypatch):
     """GET /costs/trend?repo_id=all hits both projects."""
     captured_projects: list[str | None] = []
 
-    def fake_get(settings, path, params=None, repo_config=None):
-        captured_projects.append(
-            repo_config.langfuse_project_name if repo_config else None
-        )
-        return {"data": []}
-
-    monkeypatch.setattr("robotsix_mill.langfuse.client._langfuse_api_get", fake_get)
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client._build_read_client",
+        _capture_build_client(captured_projects),
+    )
 
     r = multi_repo_client.get("/costs/trend?repo_id=all")
     assert r.status_code == 200

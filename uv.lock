@@ -1530,7 +1530,7 @@ source = { git = "https://github.com/damien-robotsix/robotsix-board.git?rev=main
 [[package]]
 name = "robotsix-llmio"
 version = "0.1.0"
-source = { git = "https://github.com/damien-robotsix/robotsix-llmio?rev=main#3d1439ea9c4c831c6a9ad6f81e7106bc7422c64b" }
+source = { git = "https://github.com/damien-robotsix/robotsix-llmio?rev=main#46682bfb9c9e2f4c0cba8d539a32617a53291800" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic-ai-slim" },
