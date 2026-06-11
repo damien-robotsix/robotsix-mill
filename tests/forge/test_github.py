@@ -223,6 +223,31 @@ def test_create_pr_post_payload_shape(tmp_path, monkeypatch):
     assert set(payload.keys()) == {"head", "base", "title", "body"}
 
 
+def test_create_pr_base_honors_repo_working_branch(tmp_path, monkeypatch):
+    """A repo_config.working_branch must become the PR base — regression
+    for ros2-example-interfaces 5a2a, where the deliver stage computed the
+    target as ``lyrical`` but the forge re-derived ``main`` from settings
+    and GitHub answered 422 base-invalid."""
+    from robotsix_mill.config import RepoConfig
+
+    captured = _mock_httpx(
+        monkeypatch,
+        post_response=_make_response(201, {"html_url": "http://x"}),
+    )
+    rc = RepoConfig(
+        repo_id="r",
+        board_id="b",
+        langfuse_project_name="r",
+        langfuse_public_key="",
+        langfuse_secret_key="",
+        working_branch="lyrical",
+    )
+    forge = GitHubForge(_settings(tmp_path), repo_config=rc)
+    forge.open_merge_request(source_branch="feature/x", title="t", body="b")
+
+    assert captured["post_payload"]["base"] == "lyrical"
+
+
 def test_create_pr_cross_fork_head_and_upstream_base(tmp_path, monkeypatch):
     """A cross_repo_target opens the PR fork→upstream: POST targets the
     upstream owner/repo, head is ``<fork-owner>:<branch>``, base is the

@@ -244,7 +244,9 @@ class GitHubForge(Forge):
     ) -> str:
         s = self.settings
         owner, repo = self._owner_repo
-        base = s.forge_target_branch
+        from ..config import target_branch_for  # lazy: avoid import cycle
+
+        base = target_branch_for(s, self._repo_config)
         head = source_branch
         if head_repo is not None:
             # Cross-fork PR: head lives in the fork (``owner:branch``),

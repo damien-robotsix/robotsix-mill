@@ -192,6 +192,33 @@ def test_create_mr_201_returns_web_url(tmp_path, monkeypatch):
     assert captured["post_payload"]["description"] == "b"
 
 
+def test_create_mr_target_honors_repo_working_branch(tmp_path, monkeypatch):
+    """A repo_config.working_branch must become the MR target_branch
+    (same seam as the GitHub 422 base-invalid regression on 5a2a)."""
+    from robotsix_mill.config import RepoConfig
+
+    project_json = {"id": 42}
+    mr_json = {"web_url": "https://gitlab.com/ns/project/-/merge_requests/2"}
+    get_map = {"projects/ns%2Fproject": _make_response(200, project_json)}
+    captured = _mock_httpx(
+        monkeypatch,
+        get_map=get_map,
+        post_response=_make_response(201, mr_json),
+    )
+
+    rc = RepoConfig(
+        repo_id="r",
+        board_id="b",
+        langfuse_project_name="r",
+        langfuse_public_key="",
+        langfuse_secret_key="",
+        working_branch="lyrical",
+    )
+    forge = GitLabForge(_settings(tmp_path), repo_config=rc)
+    forge.open_merge_request(source_branch="feature/x", title="t", body="b")
+    assert captured["post_payload"]["target_branch"] == "lyrical"
+
+
 def test_create_mr_409_falls_back_to_existing_mr(tmp_path, monkeypatch):
     """409 → find MR by source_branch and return its web_url."""
     project_json = {"id": 42}
