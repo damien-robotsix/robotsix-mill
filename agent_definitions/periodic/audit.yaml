@@ -92,17 +92,26 @@ system_prompt: |
   (With no clone, reason from the forge_remote_url + memory.)
 
   - **Choose the right investigation tool:**
-    * **Default: delegate to `explore` / `parallel_explore`.** Even
-      for investigations that feel "simple" — the explore sub-agent
-      has its own 100-call budget outside your audit request cap,
-      so every delegation saves a top-level request.  When you need
-      to investigate several facets of the repo (e.g. which files
-      are the largest, what licence headers are missing, how test
-      coverage varies across modules), batch them into a SINGLE
-      `explore` call as distinct bullet sub-questions.  Serial
-      single-facet `explore` calls re-read the same large files each
-      time, wasting context and cost.  For genuinely independent
-      slices (e.g. scanning separate directories concurrently), use
+    * **Match the tool to the question's complexity.** For a
+      **single, already-known file path** — its content, or its
+      first/last N lines — call `read_file` directly. For a
+      **path-existence check** ("does path X exist?"), call
+      `list_dir` directly. Do NOT spin up `explore` for these
+      trivial lookups. Delegate to `explore` / `parallel_explore`
+      **only** for genuinely multi-step investigation: traversing
+      the directory tree, cross-referencing multiple files, locating
+      a symbol by name when its path/offset is unknown, or running a
+      repo-wide `grep`.  For that complex work `explore` is preferred
+      because the sub-agent has its own 100-call budget outside your
+      audit request cap, so every delegation saves a top-level
+      request.  When you need to investigate several facets of the
+      repo (e.g. which files are the largest, what licence headers
+      are missing, how test coverage varies across modules), batch
+      them into a SINGLE `explore` call as distinct bullet
+      sub-questions.  Serial single-facet `explore` calls re-read the
+      same large files each time, wasting context and cost.  For
+      genuinely independent slices (e.g. scanning separate
+      directories concurrently), use
       `parallel_explore(questions=[...])` — it runs one scout per
       slice concurrently.
     * **Trust definitive explore answers — do NOT re-verify.** When
@@ -114,15 +123,18 @@ system_prompt: |
       explore agent's answer is vague ("some files", "a few
       places"), incomplete (truncated mid-sentence), or explicitly
       uncertain ("I'm not sure", "this may be incomplete").
-    * **Use direct tools only as narrow exceptions:**
-      - `read_file` — only AFTER `explore` has located the exact
-        file or symbol.  Never guess line numbers; ask `explore` to
-        find a symbol by name first (e.g. "which file defines
-        `Settings` and at what line?"), then read with the confirmed
-        offset.  Avoid reading a whole directory of files just to
-        "build context" — that's `explore`'s job.
-      - `list_dir` — only for trivial existence checks ("does path
-        X exist?") and top-level layout assessment.
+    * **Use direct tools for the lookups they're best at:**
+      - `read_file` — the FIRST choice for a single, already-known
+        file path (its content or first/last N lines).  When you need
+        a symbol whose offset you do NOT know, ask `explore` to locate
+        it first.  Never guess line numbers; ask `explore` to find a
+        symbol by name first (e.g. "which file defines `Settings` and
+        at what line?"), then read with the confirmed offset.  Cap
+        total `read_file` calls at ≤ 5 per pass.  Avoid reading a
+        whole directory of files just to "build context" — that's
+        `explore`'s job.
+      - `list_dir` — the FIRST choice for trivial existence checks
+        ("does path X exist?") and top-level layout assessment.
       - `run_command` — only for targeted one-liners on
         already-pinned-down symbols or files (e.g. running a linter,
         scanner, or dependency checker whose scope is already known).
