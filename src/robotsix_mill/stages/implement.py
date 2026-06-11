@@ -1098,10 +1098,17 @@ class ImplementStage(Stage):
                     # the sandbox mount — so lift it out here. Absent for
                     # non-board smokes / a failed render → review stays
                     # text-only, unchanged.
+                    # MOVE (not copy) so the screenshot never lingers in
+                    # the clone's working tree — otherwise ``_finalize``'s
+                    # ``git add -A`` would stage and commit it into the
+                    # feature branch (``.png`` is not a binary artifact and
+                    # the smoke runs past the scope guardrail).
                     ws = ctx.service.workspace(ticket)
                     src_png = repo_dir / "artifacts" / "board.png"
                     if src_png.exists():
-                        shutil.copyfile(src_png, ws.artifacts_dir / "board.png")
+                        shutil.move(
+                            str(src_png), str(ws.artifacts_dir / "board.png")
+                        )
                     if not smoke_passed:
                         passed = False
                         diag = smoke_diag
