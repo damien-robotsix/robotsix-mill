@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -2022,6 +2024,121 @@ def test_merge_now_forge_rejection_409(client, service, monkeypatch):
 
     # Ticket state must be unchanged.
     assert service.get(t.id).state is State.HUMAN_MR_APPROVAL
+
+
+def _to_human_mr_approval(service, title):
+    """Walk a fresh ticket up to HUMAN_MR_APPROVAL for merge-now tests."""
+    t = service.create(title)
+    service.transition(t.id, State.READY, note="approved (autonomous)")
+    service.transition(t.id, State.DELIVERABLE, note="delivered")
+    service.transition(t.id, State.IMPLEMENT_COMPLETE, note="gates checking")
+    service.transition(t.id, State.HUMAN_MR_APPROVAL, note="awaiting merge")
+    return service.get(t.id)
+
+
+def _write_pr_urls(service, ticket, entries):
+    """Write a ``pr_urls.json`` manifest into the ticket's artifacts dir."""
+    d = service.workspace(ticket).artifacts_dir
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "pr_urls.json").write_text(json.dumps(entries), encoding="utf-8")
+
+
+def _patch_multirepo_forge(monkeypatch, forges_by_repo):
+    """Route per-repo ``get_forge`` calls to per-repo fakes.
+
+    ``_repo_config_for_entry`` is stubbed to return the entry's
+    ``repo_id`` string, which then keys the per-repo forge in the
+    patched ``get_forge``.
+    """
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge._repo_config_for_entry",
+        lambda entry: entry["repo_id"],
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.routes._tickets.get_forge",
+        lambda s, repo_config=None: forges_by_repo[repo_config],
+    )
+
+
+def test_merge_now_multi_repo_merges_every_repo(client, service, monkeypatch):
+    """merge-now on a multi-repo ticket merges every repo's PR (one
+    merge_pr per repo via its own forge) and transitions to done."""
+    forge_a = _FakeForge()
+    forge_b = _FakeForge()
+    _patch_multirepo_forge(monkeypatch, {"repo-a": forge_a, "repo-b": forge_b})
+
+    t = _to_human_mr_approval(service, "Multi-repo merge")
+    _write_pr_urls(
+        service,
+        t,
+        [
+            {"repo_id": "repo-a", "branch": "mill/a", "url": "u-a"},
+            {"repo_id": "repo-b", "branch": "mill/b", "url": "u-b"},
+        ],
+    )
+
+    r = client.post(f"/tickets/{t.id}/merge-now")
+    assert r.status_code == 200, f"Got {r.status_code}: {r.text}"
+    assert r.json()["state"] == "done"
+
+    # One merge per repo, each on its own per-repo branch.
+    assert [c["source_branch"] for c in forge_a.merge_calls] == ["mill/a"]
+    assert [c["source_branch"] for c in forge_b.merge_calls] == ["mill/b"]
+
+
+def test_merge_now_multi_repo_one_rejected_409(client, service, monkeypatch):
+    """When one repo's merge is rejected, merge-now returns 409 naming
+    that repo and leaves the ticket in human_mr_approval."""
+    forge_a = _FakeForge()
+    forge_b = _FakeForge(merge_result={"merged": False, "reason": "branch protection"})
+    _patch_multirepo_forge(monkeypatch, {"repo-a": forge_a, "repo-b": forge_b})
+
+    t = _to_human_mr_approval(service, "Multi-repo reject")
+    _write_pr_urls(
+        service,
+        t,
+        [
+            {"repo_id": "repo-a", "branch": "mill/a", "url": "u-a"},
+            {"repo_id": "repo-b", "branch": "mill/b", "url": "u-b"},
+        ],
+    )
+
+    r = client.post(f"/tickets/{t.id}/merge-now")
+    assert r.status_code == 409
+    assert "repo-b" in r.text
+    assert "branch protection" in r.text
+
+    # repo-a stays merged (skipped on retry); ticket state unchanged.
+    assert len(forge_a.merge_calls) == 1
+    assert service.get(t.id).state is State.HUMAN_MR_APPROVAL
+
+
+def test_merge_now_multi_repo_skips_already_merged(client, service, monkeypatch):
+    """An already-merged repo is skipped (idempotent re-press); the
+    remaining repo is merged and the ticket reaches done."""
+    forge_a = _FakeForge(
+        pr_status_result={"url": "u-a", "merged": True, "state": "closed"},
+    )
+    forge_b = _FakeForge()
+    _patch_multirepo_forge(monkeypatch, {"repo-a": forge_a, "repo-b": forge_b})
+
+    t = _to_human_mr_approval(service, "Multi-repo idempotent")
+    _write_pr_urls(
+        service,
+        t,
+        [
+            {"repo_id": "repo-a", "branch": "mill/a", "url": "u-a"},
+            {"repo_id": "repo-b", "branch": "mill/b", "url": "u-b"},
+        ],
+    )
+
+    r = client.post(f"/tickets/{t.id}/merge-now")
+    assert r.status_code == 200, f"Got {r.status_code}: {r.text}"
+    assert r.json()["state"] == "done"
+
+    # repo-a already merged → skipped; repo-b merged.
+    assert forge_a.merge_calls == []
+    assert [c["source_branch"] for c in forge_b.merge_calls] == ["mill/b"]
 
 
 def test_merge_reason_returns_file(client, service):

@@ -662,15 +662,16 @@ class MergeStage(Stage):
         self, ticket: Ticket, ctx: StageContext, green: list[dict]
     ) -> Outcome:
         """Auto-merge the green multi-repo PRs when the review gate marks the
-        ticket eligible. Held (same-state) when not eligible, so a human can
-        merge instead. Partial merges are fine — the next poll continues."""
+        ticket eligible. Held in HUMAN_MR_APPROVAL when not eligible, so a human
+        can merge instead (mirrors the single-repo gate path). Partial merges
+        are fine — the next poll continues."""
         s = ctx.settings
         eligible, reason = self._auto_merge_eligible(ticket, ctx)
         if not eligible:
             self._maybe_comment(
                 ticket, ctx, f"multi-repo PRs green; auto-merge held: {reason}"
             )
-            return Outcome(ticket.state)
+            return Outcome(State.HUMAN_MR_APPROVAL, reason)
 
         for r in green:
             try:
