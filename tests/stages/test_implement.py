@@ -4506,13 +4506,16 @@ def _no_prereq_block_spec():
 
 
 def test_prereq_gate_disabled_never_checks(ctx_factory, tmp_path, monkeypatch):
-    """Default (gate disabled): run_prerequisite_check is never called and
+    """Gate explicitly disabled: run_prerequisite_check is never called and
     behaviour is unchanged — the stage proceeds to the agent."""
     from robotsix_mill.agents import prerequisite
 
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        prerequisite_gate_enabled="false",
     )
     assert ctx.settings.prerequisite_gate_enabled is False
 
@@ -4546,6 +4549,45 @@ def test_prereq_gate_unmet_blocks_without_agent(ctx_factory, tmp_path, monkeypat
         review_enabled="false",
         prerequisite_gate_enabled="true",
     )
+
+    monkeypatch.setattr(
+        prerequisite,
+        "run_prerequisite_check",
+        lambda *a, **kw: {
+            "unmet": ["symbol CostLogSource from robotsix_llmio"],
+            "reason": "unmet",
+        },
+    )
+
+    def _boom(*a, **kw):
+        raise AssertionError("run_implement_agent must NOT be called")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _boom)
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    out = ImplementStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "CostLogSource" in out.note
+    assert "prerequisite" in out.note.lower()
+
+
+def test_prereq_gate_default_activation_blocks_without_agent(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """Flag left at its NEW default (not set explicitly) + an unmet
+    prerequisite → BLOCKED, WITHOUT invoking run_implement_agent. Proves
+    the default activation works end-to-end."""
+    from robotsix_mill.agents import prerequisite
+
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    # The flag is on by default now — the test must NOT set it.
+    assert ctx.settings.prerequisite_gate_enabled is True
 
     monkeypatch.setattr(
         prerequisite,
