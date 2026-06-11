@@ -1565,6 +1565,13 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+tracing = [
+    { name = "langfuse" },
+    { name = "opentelemetry-exporter-otlp-proto-http" },
+    { name = "opentelemetry-sdk" },
+]
+
+[package.dev-dependencies]
 dev = [
     { name = "bandit" },
     { name = "deptry" },
@@ -1579,22 +1586,12 @@ docs = [
     { name = "mkdocs-material" },
     { name = "mkdocstrings", extra = ["python"] },
 ]
-tracing = [
-    { name = "langfuse" },
-    { name = "opentelemetry-exporter-otlp-proto-http" },
-    { name = "opentelemetry-sdk" },
-]
 
 [package.metadata]
 requires-dist = [
-    { name = "bandit", extras = ["toml"], marker = "extra == 'dev'", specifier = ">=1.8" },
-    { name = "deptry", marker = "extra == 'dev'", specifier = ">=0.25" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "langfuse", marker = "extra == 'tracing'", specifier = ">=3" },
-    { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9" },
-    { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=0.27" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.15" },
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'tracing'" },
     { name = "opentelemetry-sdk", marker = "extra == 'tracing'" },
     { name = "pydantic", specifier = ">=2" },
@@ -1602,19 +1599,30 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2" },
     { name = "pypdf", specifier = ">=5" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7" },
     { name = "pyyaml", specifier = ">=6" },
     { name = "robotsix-board", git = "https://github.com/damien-robotsix/robotsix-board.git?rev=main" },
     { name = "robotsix-llmio", extras = ["openrouter-deepseek", "claude-sdk"], git = "https://github.com/damien-robotsix/robotsix-llmio?rev=main" },
-    { name = "robotsix-modules", marker = "extra == 'dev'", git = "https://github.com/damien-robotsix/robotsix-modules?rev=main" },
     { name = "robotsix-yaml-config", git = "https://github.com/damien-robotsix/robotsix-yaml-config?rev=main" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = "==0.15.15" },
     { name = "sqlmodel", specifier = ">=0.0.22" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
-provides-extras = ["tracing", "dev", "docs"]
+provides-extras = ["tracing"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "bandit", extras = ["toml"], specifier = ">=1.8" },
+    { name = "deptry", specifier = ">=0.25" },
+    { name = "mypy", specifier = ">=1.15" },
+    { name = "pytest", specifier = ">=8" },
+    { name = "pytest-asyncio", specifier = ">=0.21" },
+    { name = "pytest-cov", specifier = ">=7" },
+    { name = "robotsix-modules", git = "https://github.com/damien-robotsix/robotsix-modules?rev=main" },
+    { name = "ruff", specifier = "==0.15.15" },
+]
+docs = [
+    { name = "mkdocs-material", specifier = ">=9" },
+    { name = "mkdocstrings", extras = ["python"], specifier = ">=0.27" },
+]
 
 [[package]]
 name = "robotsix-modules"

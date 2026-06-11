@@ -41,7 +41,7 @@ jobs:
       - name: Install docs deps
         env:
           UV_PROJECT_ENVIRONMENT: system
-        run: uv sync --frozen --extra docs
+        run: uv sync --frozen --group docs
 
       - name: Configure Git
         run: |

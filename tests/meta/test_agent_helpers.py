@@ -62,6 +62,24 @@ def test_robotsix_deps_of_parses_pyproject(tmp_path):
     assert deps == {"robotsix-yaml-config", "robotsix-modules"}
 
 
+def test_robotsix_deps_of_parses_dependency_groups(tmp_path):
+    # PEP 735 [dependency-groups] tooling must be discovered too, not just
+    # [project.optional-dependencies] extras.
+    repo = tmp_path / "consumer"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text(
+        "[project]\n"
+        'name = "robotsix-mill"\n'
+        'dependencies = ["robotsix-yaml-config @ git+https://example/x@main"]\n'
+        "[dependency-groups]\n"
+        'dev = ["pytest>=8", "robotsix-modules @ git+https://example/m@main"]\n',
+        encoding="utf-8",
+    )
+    pkg, deps = _robotsix_deps_of(repo)
+    assert pkg == "robotsix-mill"
+    assert deps == {"robotsix-yaml-config", "robotsix-modules"}
+
+
 def test_robotsix_deps_of_missing_pyproject(tmp_path):
     repo = tmp_path / "norepo"
     repo.mkdir()
