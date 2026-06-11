@@ -21,7 +21,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from ..config import Settings, get_secrets
+from ..config import RepoConfig, Settings, get_secrets
 from .langfuse_tools import render_trace_findings
 from .prompt_blocks import section
 
@@ -251,6 +251,7 @@ def run_trace_inspector(
     settings: Settings,
     trace_data: str,
     repo_dir: Path | None = None,
+    repo_config: RepoConfig | None = None,
     memory: str = "",
     model_name: str | None = None,
     started_at: datetime | None = None,
@@ -283,6 +284,14 @@ def run_trace_inspector(
     through from the trace-review runner so the LLM can reason about
     restart correlation when ``incomplete_trace`` +
     ``restart_correlated`` flags are present.
+
+    The optional ``repo_config`` carries the target repo's Langfuse
+    read credentials so callers that fetch additional trace data on
+    behalf of this sub-agent resolve the per-repo project rather than
+    mill's global one. The inspector itself analyses the supplied
+    ``trace_data`` and makes no further Langfuse calls, so this is
+    threaded for credential-resolution consistency; the OpenRouter
+    key (``get_secrets()``) stays global.
 
     On error, the result's ``error`` field is populated rather than
     returning a silent empty findings list — the previous behaviour

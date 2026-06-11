@@ -555,3 +555,182 @@ def test_inspect_cost_passes_repo_dir(tmp_path, monkeypatch):
     assert callable(tool)
     output = tool("s1")
     assert "session total: $0.0000" in output
+
+
+# ── per-repo Langfuse credential resolution (repo_config) ────────────
+
+
+def _repo_config():
+    from robotsix_mill.config import RepoConfig
+
+    return RepoConfig(
+        repo_id="robotsix-auto-mail",
+        board_id="auto-mail",
+        langfuse_project_name="auto-mail-project",
+        langfuse_public_key="pk-repo",
+        langfuse_secret_key="sk-repo",
+        langfuse_base_url="https://repo.langfuse.example",
+    )
+
+
+def test_build_langfuse_tools_threads_repo_config(tmp_path, monkeypatch):
+    """The four simple closures forward the per-repo repo_config to the
+    client calls when one is supplied."""
+    s = _settings(tmp_path)
+    rc = _repo_config()
+    captured = {}
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_cost",
+        lambda settings, sid, repo_config=None: (
+            captured.update(cost=repo_config) or 0.0
+        ),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.fetch_session_summary",
+        lambda settings, sid, repo_config=None: (
+            captured.update(summary=repo_config) or "ok"
+        ),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client._langfuse_api_get",
+        lambda settings, path, params, repo_config=None: (
+            captured.update(list=repo_config) or {"data": []}
+        ),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.fetch_trace_detail",
+        lambda settings, tid, repo_config=None: (
+            captured.update(detail=repo_config) or None
+        ),
+    )
+
+    tools = _build_langfuse_tools(s, repo_config=rc)
+    cost_fn, summary_fn, list_fn, detail_fn = tools
+    cost_fn("s1")
+    summary_fn("s1")
+    list_fn("s1")
+    detail_fn("t1")
+
+    assert captured["cost"] is rc
+    assert captured["summary"] is rc
+    assert captured["list"] is rc
+    assert captured["detail"] is rc
+
+
+def test_inspect_cost_resolves_repo_credentials(tmp_path, monkeypatch):
+    """make_cost_inspect_tool forwards repo_config to session_cost /
+    session_traces when supplied."""
+    s = _settings(tmp_path)
+    rc = _repo_config()
+    captured = {}
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_cost",
+        lambda settings, sid, repo_config=None: (
+            captured.update(cost=repo_config) or 0.0
+        ),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_traces",
+        lambda settings, sid, repo_config=None: (
+            captured.update(traces=repo_config) or []
+        ),
+    )
+
+    tool = make_cost_inspect_tool(s, repo_dir=None, repo_config=rc)
+    tool("s1")
+
+    assert captured["cost"] is rc
+    assert captured["traces"] is rc
+
+
+def test_inspect_cost_none_repo_config_uses_global(tmp_path, monkeypatch):
+    """With repo_config=None the client calls receive no repo_config
+    (global Secrets fallback path)."""
+    s = _settings(tmp_path)
+    captured = {}
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_cost",
+        lambda settings, sid, repo_config=None: (
+            captured.update(cost=repo_config) or 0.0
+        ),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.session_traces",
+        lambda settings, sid, repo_config=None: (
+            captured.update(traces=repo_config) or []
+        ),
+    )
+
+    tool = make_cost_inspect_tool(s)
+    tool("s1")
+
+    assert captured["cost"] is None
+    assert captured["traces"] is None
+
+
+def test_langfuse_inspect_trace_resolves_repo_credentials(tmp_path, monkeypatch):
+    """make_langfuse_inspect_tool forwards repo_config to
+    fetch_trace_detail and run_trace_inspector when supplied."""
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+    rc = _repo_config()
+    captured = {}
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.fetch_trace_detail",
+        lambda settings, tid, repo_config=None: (
+            captured.update(detail=repo_config)
+            or {"id": tid, "name": "test", "observations": []}
+        ),
+    )
+
+    from robotsix_mill.agents.trace_inspector import TraceInspectResult
+
+    def fake_run_trace_inspector(**kwargs):
+        captured["inspector"] = kwargs.get("repo_config")
+        return TraceInspectResult()
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.trace_inspector.run_trace_inspector",
+        fake_run_trace_inspector,
+    )
+
+    tool = make_langfuse_inspect_tool(s, repo_dir=None, repo_config=rc)
+    tool("trace-1")
+
+    assert captured["detail"] is rc
+    assert captured["inspector"] is rc
+
+
+def test_langfuse_inspect_trace_none_repo_config(tmp_path, monkeypatch):
+    """With repo_config=None, fetch_trace_detail and run_trace_inspector
+    receive None (global fallback path)."""
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+    captured = {}
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.fetch_trace_detail",
+        lambda settings, tid, repo_config=None: (
+            captured.update(detail=repo_config)
+            or {"id": tid, "name": "test", "observations": []}
+        ),
+    )
+
+    from robotsix_mill.agents.trace_inspector import TraceInspectResult
+
+    def fake_run_trace_inspector(**kwargs):
+        captured["inspector"] = kwargs.get("repo_config")
+        return TraceInspectResult()
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.trace_inspector.run_trace_inspector",
+        fake_run_trace_inspector,
+    )
+
+    tool = make_langfuse_inspect_tool(s)
+    tool("trace-1")
+
+    assert captured["detail"] is None
+    assert captured["inspector"] is None

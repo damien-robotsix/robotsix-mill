@@ -416,6 +416,7 @@ class RefineAgentMixin:
                 title=ticket.title,
                 draft=draft,
                 repo_dir=repo_dir,
+                repo_config=ctx.repo_config,
                 reviewer_comments=reviewer_comments,
                 memory=memory_text,
                 epic_context=epic_ctx,
