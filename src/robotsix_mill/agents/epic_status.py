@@ -25,7 +25,14 @@ class EpicStatusResult(BaseModel):
     fields carry the concrete mutations a decision may imply:
     ``dep_updates`` (per-child dependency rewrites), ``new_children``
     (additional child tickets to file), ``child_rescopes`` (per-child
-    title/body rewrites), and ``child_closures`` (child IDs to close).
+    title/body rewrites), and ``child_closures`` (a map of child ID ->
+    the merged covering sibling whose delivered scope obsoletes it).
+
+    ``child_closures`` is a ``dict[child_id -> covering_sibling_id]``.
+    A legacy bare ``list[str]`` (child IDs with no named covering
+    sibling) is still accepted for robustness and normalized by the
+    worker — but such entries carry no covering sibling and are refused
+    by the delivery-evidence gate.
     """
 
     decision: Literal["close", "keep_open", "update_description", "update_deps"]
@@ -33,28 +40,31 @@ class EpicStatusResult(BaseModel):
     dep_updates: dict[str, list[str] | None] | None = Field(default=None)
     new_children: list[dict[str, str]] | None = Field(default=None)
     child_rescopes: dict[str, dict[str, str]] | None = Field(default=None)
-    child_closures: list[str] | None = Field(default=None)
+    child_closures: dict[str, str] | list[str] | None = Field(default=None)
 
 
 def _build_children_table(children: list[dict]) -> str:
     """Build a compact Markdown table of child tickets.
 
-    Columns: ID, Title, State, Deps, Summary.  The Summary column
-    is the first ~300 chars of the child's description with newlines
-    collapsed to spaces and pipe characters escaped.  Deps are shown
-    as a comma-separated list or ``-`` if none.
+    Columns: ID, Title, State, Delivery, Deps, Summary.  The Delivery
+    column reports whether the child actually shipped scope (``merged``)
+    vs delivered nothing (``dedup-closed``/``unstarted``/in-progress).
+    The Summary column is the first ~300 chars of the child's
+    description with newlines collapsed to spaces and pipe characters
+    escaped.  Deps are shown as a comma-separated list or ``-`` if none.
     """
     if not children:
         return "(none)"
 
-    header = "| ID | Title | State | Deps | Summary |"
-    sep = "|---|---|---|---|---|"
+    header = "| ID | Title | State | Delivery | Deps | Summary |"
+    sep = "|---|---|---|---|---|---|"
     rows: list[str] = [header, sep]
 
     for child in children:
         cid = _escape_pipe(child.get("id", ""))
         title = _escape_pipe(child.get("title", ""))
         state = _escape_pipe(child.get("state", ""))
+        delivery = _escape_pipe(child.get("delivery", ""))
 
         deps_list = child.get("depends_on") or []
         deps = ", ".join(deps_list) if deps_list else "-"
@@ -65,7 +75,7 @@ def _build_children_table(children: list[dict]) -> str:
         if len(desc) > 300:
             desc = desc[:300] + "..."
 
-        rows.append(f"| {cid} | {title} | {state} | {deps} | {desc} |")
+        rows.append(f"| {cid} | {title} | {state} | {delivery} | {deps} | {desc} |")
 
     return "\n".join(rows)
 

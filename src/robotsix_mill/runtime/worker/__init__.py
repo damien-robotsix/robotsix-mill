@@ -26,6 +26,7 @@ from .epic import (
     _fetch_draft_child,
     _handle_epic_decision,
     _reconcile_child_changes,
+    _resolve_delivery,
     _run_epic_reeval,
     _run_epic_reprocess,
     _validate_epic_state,
@@ -54,5 +55,6 @@ __all__ = [
     "_handle_epic_decision",
     "_fetch_draft_child",
     "_reconcile_child_changes",
+    "_resolve_delivery",
     "_branch_is_stale",
 ]

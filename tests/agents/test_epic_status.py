@@ -158,6 +158,32 @@ def test_epic_status_agent_result_shape(monkeypatch):
     assert r.note == "All children complete."
 
 
+def test_children_table_renders_delivery_column():
+    from robotsix_mill.agents.epic_status import _build_children_table
+
+    children = [
+        {"id": "C1", "title": "One", "state": "draft", "delivery": "merged"},
+        {"id": "C2", "title": "Two", "state": "draft", "delivery": "unstarted"},
+    ]
+    table = _build_children_table(children)
+
+    header = table.splitlines()[0]
+    assert "Delivery" in header
+    # Header column count matches the separator row column count.
+    assert header.count("|") == table.splitlines()[1].count("|")
+    assert "merged" in table
+    assert "unstarted" in table
+
+
+def test_child_closures_accepts_dict_and_list():
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+
+    as_map = EpicStatusResult(decision="keep_open", child_closures={"C1": "S1"})
+    assert as_map.child_closures == {"C1": "S1"}
+    as_list = EpicStatusResult(decision="keep_open", child_closures=["C1"])
+    assert as_list.child_closures == ["C1"]
+
+
 # -----------------------------------------------------------------------
 # End-to-end tests (via _run_epic_reeval)
 # -----------------------------------------------------------------------
@@ -348,20 +374,23 @@ def test_e2e_skips_rescope_of_in_flight_child(settings, service, monkeypatch):
 
 
 def test_e2e_closes_draft_child(settings, service, monkeypatch):
-    """Epic has a child in DRAFT. Agent returns child_closures with the
-    child's ID. Assert child transitions to CLOSED."""
+    """Epic has a child in DRAFT and a merged sibling that covers it.
+    Agent returns child_closures mapping child -> merged sibling.
+    Assert child transitions to CLOSED with a note naming the sibling."""
     from robotsix_mill.agents.epic_status import EpicStatusResult
 
     epic = service.create("My Epic", "Build the thing", kind="epic")
     child = service.create("Obsolete child", "no longer needed", parent_id=epic.id)
     # child starts in DRAFT
+    sibling = service.create("Did the work", "delivers scope", parent_id=epic.id)
+    service.transition(sibling.id, State.DONE, note="merged: http://example/pr/1")
 
     monkeypatch.setattr(
         "robotsix_mill.agents.epic_status.run_epic_status_agent",
         lambda **kw: EpicStatusResult(
             decision="keep_open",
             note="Closing obsolete child.",
-            child_closures=[child.id],
+            child_closures={child.id: sibling.id},
         ),
     )
 
@@ -369,6 +398,14 @@ def test_e2e_closes_draft_child(settings, service, monkeypatch):
 
     updated = service.get(child.id)
     assert updated.state == State.CLOSED
+    # The closure note names the covering merged sibling.
+    events = service.history(child.id)
+    close_notes = [e.note for e in events if e.state == State.CLOSED]
+    assert any(sibling.id in (n or "") for n in close_notes)
+    assert not any(
+        "Obsoleted by epic re-evaluation after sibling merge" in (n or "")
+        for n in close_notes
+    )
 
 
 def test_e2e_skips_closure_of_done_child(settings, service, monkeypatch):
@@ -410,6 +447,10 @@ def test_e2e_mixed_operations(settings, service, monkeypatch):
     close_child = service.create("Close me", "obsolete", parent_id=epic.id)
     ready_child = service.create("In-flight", "don't touch", parent_id=epic.id)
     service.transition(ready_child.id, State.READY)
+    merged_sibling = service.create("Covers it", "delivers scope", parent_id=epic.id)
+    service.transition(
+        merged_sibling.id, State.DONE, note="merged: http://example/pr/2"
+    )
 
     monkeypatch.setattr(
         "robotsix_mill.agents.epic_status.run_epic_status_agent",
@@ -423,7 +464,7 @@ def test_e2e_mixed_operations(settings, service, monkeypatch):
                 draft_child.id: {"title": "Rescoped title"},
                 ready_child.id: {"title": "Should not apply"},
             },
-            child_closures=[close_child.id],
+            child_closures={close_child.id: merged_sibling.id},
         ),
     )
 

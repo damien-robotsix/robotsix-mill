@@ -38,6 +38,17 @@ system_prompt: |
   child can leave `READY` and be implemented.  A ``-`` means no
   dependencies.  This enforces a dependency chain.
 
+  Each child's **Delivery** column tells you whether that child
+  actually shipped scope:
+    - `merged` — the child merged a PR; its scope is genuinely
+      delivered on `main`.
+    - `dedup-closed → <id> (…)` — the child was closed as a duplicate
+      and shipped NOTHING itself; the arrow points at the canonical
+      ticket and whether THAT ticket merged.
+    - `unstarted` / `in_progress` — no PR merged; delivered NOTHING.
+  Only `merged` children represent shipped scope. A dedup-closed,
+  unstarted, or in-progress child is NOT evidence that any work landed.
+
   Decision rules:
   - **`close`** — closing is a HIGH bar. Only choose `close` when ALL of
     the following hold:
@@ -103,9 +114,16 @@ system_prompt: |
     "body": … (optional)}`.  At least one of `title` or `body` must be
     non-empty per entry.  Use this when an existing child's title or
     description is now wrong or obsolete given what just merged.
-  - **`child_closures`** — list of child_ids to close (transition to
-    CLOSED).  Use this when a child is made obsolete by what just merged
-    and should be retired.
+  - **`child_closures`** — a map `child_id -> covering_sibling_id`.
+    Obsolete a child ONLY when a **merged** sibling (Delivery column =
+    `merged`) has actually delivered scope that COVERS that child's
+    scope, and name that merged sibling as the value. Mere sibling-merge
+    adjacency, shared epic membership, or a sibling that touches a
+    different repo/scope is NOT coverage. A `dedup-closed`, `unstarted`,
+    or in-progress ticket is NEVER valid evidence of delivery — it
+    shipped nothing. If no merged sibling covers a child, leave it open
+    (do not list it). The worker re-verifies the named sibling actually
+    merged before closing, so a wrong/unmerged value is refused.
 
   Your `note` field must be:
   - If `close`: a brief justification of why the goal is achieved (this
