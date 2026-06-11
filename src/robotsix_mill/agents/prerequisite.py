@@ -23,11 +23,15 @@ Lines that don't match either form are ignored (forward-compatible).
 
 from __future__ import annotations
 
+import base64
 import logging
 import re
 import subprocess
 import sys
 from pathlib import Path
+
+from .. import sandbox
+from ..config import Settings
 
 log = logging.getLogger("robotsix_mill.agents.prerequisite")
 
@@ -120,11 +124,97 @@ def _default_runner(code: str, repo_dir: Path, timeout: float) -> int:
     return proc.returncode
 
 
+def _build_batch_script(directives: list[dict]) -> str:
+    """Build a single stdlib-only Python script that checks every directive.
+
+    Each directive runs in its OWN ``try/except ImportError`` block (no
+    target module is imported at the top level of the generated script),
+    printing ``PREREQ_OK:<i>`` on success and ``PREREQ_FAIL:<i>`` when the
+    import / symbol resolution fails.  The indices line up positionally
+    with *directives* so the caller can map failures back to directive
+    strings.
+    """
+    lines: list[str] = []
+    for i, d in enumerate(directives):
+        lines.append("try:")
+        lines.append(f"    {d['code']}")
+        lines.append(f"    print('PREREQ_OK:{i}')")
+        lines.append("except ImportError:")
+        lines.append(f"    print('PREREQ_FAIL:{i}')")
+    return "\n".join(lines) + "\n"
+
+
+def _sandbox_batch_check(
+    directives: list[dict],
+    repo_dir: Path,
+    settings: Settings,
+    sandbox_image: str | None,
+) -> tuple[list[str], str | None]:
+    """Check every directive inside the target repo's own environment.
+
+    Runs ONE sandbox container with ``install_project=True`` so the
+    repo's declared dependencies (``pip install .``) are installed once
+    before the batch script executes — resolving cross-repo symbols
+    against the *target repo's* deps rather than the mill's
+    site-packages.  Returns ``(unmet, error)``:
+
+    - ``unmet`` is the list of directive strings that failed.
+    - ``error`` is ``"sandbox unavailable"`` on a :class:`SandboxError`
+      (the gate then proceeds — a checker fault never blocks), else
+      ``None``.
+
+    On a non-zero exit with NO markers in the output the script crashed
+    before reporting anything; we conservatively treat ALL directives as
+    unmet.
+    """
+    script = _build_batch_script(directives)
+    encoded = base64.b64encode(script.encode("utf-8")).decode("ascii")
+    # Decode + exec the stdlib-only script via base64 so no shell quoting
+    # of the multi-line source is needed.
+    command = (
+        "python3 -c \"import base64; "
+        f"exec(base64.b64decode('{encoded}').decode())\""
+    )
+    try:
+        rc, output = sandbox.run(
+            command,
+            repo_dir=repo_dir,
+            settings=settings,
+            install_project=True,
+            sandbox_image=sandbox_image,
+        )
+    except sandbox.SandboxError:
+        log.warning(
+            "prerequisite: sandbox unavailable — proceeding", exc_info=True
+        )
+        return [], "sandbox unavailable"
+
+    fail_indices: set[int] = set()
+    has_markers = False
+    for m in re.finditer(r"PREREQ_(OK|FAIL):(\d+)", output):
+        has_markers = True
+        if m.group(1) == "FAIL":
+            fail_indices.add(int(m.group(2)))
+
+    if rc != 0 and not has_markers:
+        # Script crashed before reporting — conservative: all unmet.
+        return [d["directive"] for d in directives], None
+
+    unmet = [
+        directives[i]["directive"]
+        for i in range(len(directives))
+        if i in fail_indices
+    ]
+    return unmet, None
+
+
 def run_prerequisite_check(
     spec: str,
     repo_dir: Path | None,
     *,
     runner=_default_runner,
+    settings: Settings | None = None,
+    sandbox_image: str | None = None,
 ) -> dict:
     """Verify external symbol/import prerequisites declared in *spec*.
 
@@ -148,6 +238,25 @@ def run_prerequisite_check(
 
     if repo_dir is None:
         return {"unmet": [], "reason": "no repo — cannot verify prerequisites"}
+
+    # Production path: when the runner is the default AND settings are
+    # available, verify against the TARGET repo's own environment — the
+    # sandbox installs its declared deps (``pip install .``) before the
+    # batch check runs, so cross-repo symbols resolve correctly. The
+    # whole batch runs in a single container (one ``pip install .``).
+    if runner is _default_runner and settings is not None:
+        unmet, error = _sandbox_batch_check(
+            directives, repo_dir, settings, sandbox_image
+        )
+        if unmet:
+            return {
+                "unmet": unmet,
+                "reason": "unmet prerequisite(s): " + ", ".join(unmet),
+            }
+        return {
+            "unmet": [],
+            "reason": f"all {len(directives)} prerequisite(s) satisfied",
+        }
 
     # Split the total budget evenly so the gate stays bounded regardless
     # of how many directives are declared.

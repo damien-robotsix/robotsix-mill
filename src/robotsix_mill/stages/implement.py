@@ -1646,7 +1646,7 @@ class ImplementStage(Stage):
         Verifies that symbol/import prerequisites the spec declares in a
         ````prereq```` block are satisfiable in the cloned repo's
         environment before the expensive coordinator agent runs.  This
-        is the cheapest gate (regex parse + bounded subprocess), so it
+        is the cheapest gate (regex parse + sandboxed check), so it
         runs first.
 
         No-op (returns ``None``) when ``prerequisite_gate_enabled`` is
@@ -1660,7 +1660,14 @@ class ImplementStage(Stage):
             return None
 
         try:
-            result = prerequisite.run_prerequisite_check(spec, repo_dir)
+            result = prerequisite.run_prerequisite_check(
+                spec,
+                repo_dir,
+                settings=s,
+                sandbox_image=ctx.repo_config.sandbox_image
+                if ctx.repo_config
+                else None,
+            )
         except Exception:
             log.warning(
                 "%s: prerequisite check failed, proceeding with implement",

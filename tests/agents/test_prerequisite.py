@@ -9,10 +9,14 @@ installed-package state.
 
 from pathlib import Path
 
+from robotsix_mill.agents import prerequisite
 from robotsix_mill.agents.prerequisite import (
+    _build_batch_script,
+    _sandbox_batch_check,
     parse_prerequisites,
     run_prerequisite_check,
 )
+from robotsix_mill.sandbox import SandboxError
 
 
 # --- parse_prerequisites ---
@@ -185,3 +189,145 @@ def test_check_runner_error_treated_as_met():
 
     result = run_prerequisite_check(spec, Path("/tmp"), runner=boom)
     assert result["unmet"] == []
+
+
+# --- _sandbox_batch_check (sandbox path) ---
+
+_TWO_DIRECTIVES = [
+    {"directive": "import foo.bar", "code": "import foo.bar"},
+    {
+        "directive": "symbol Baz from foo.qux",
+        "code": "from foo.qux import Baz",
+    },
+]
+
+
+class _DummySettings:
+    """Stand-in for ``Settings`` — only its non-None-ness matters here;
+    ``sandbox.run`` is mocked so no real attribute is read."""
+
+
+def test_build_batch_script_is_valid_python():
+    """The generated script compiles and contains a per-directive
+    ``try/except ImportError`` block plus OK/FAIL markers."""
+    script = _build_batch_script(_TWO_DIRECTIVES)
+    # Compiles cleanly (stdlib-only, no top-level target imports).
+    compile(script, "<batch>", "exec")
+    assert "try:" in script
+    assert "except ImportError:" in script
+    assert "import foo.bar" in script
+    assert "from foo.qux import Baz" in script
+    assert "PREREQ_OK:0" in script
+    assert "PREREQ_FAIL:0" in script
+    assert "PREREQ_OK:1" in script
+    assert "PREREQ_FAIL:1" in script
+
+
+def test_sandbox_batch_all_pass(monkeypatch):
+    """All directives report PREREQ_OK → empty unmet."""
+
+    def fake_run(command, *, repo_dir, settings, install_project, sandbox_image):
+        assert install_project is True
+        return 0, "PREREQ_OK:0\nPREREQ_OK:1\n"
+
+    monkeypatch.setattr(prerequisite.sandbox, "run", fake_run)
+    unmet, error = _sandbox_batch_check(
+        _TWO_DIRECTIVES, Path("/tmp"), _DummySettings(), None
+    )
+    assert unmet == []
+    assert error is None
+
+
+def test_sandbox_batch_one_fail(monkeypatch):
+    """A PREREQ_FAIL marker surfaces that directive in unmet."""
+
+    def fake_run(command, *, repo_dir, settings, install_project, sandbox_image):
+        return 0, "PREREQ_OK:0\nPREREQ_FAIL:1\n"
+
+    monkeypatch.setattr(prerequisite.sandbox, "run", fake_run)
+    unmet, error = _sandbox_batch_check(
+        _TWO_DIRECTIVES, Path("/tmp"), _DummySettings(), None
+    )
+    assert unmet == ["symbol Baz from foo.qux"]
+    assert error is None
+
+
+def test_sandbox_batch_sandbox_error(monkeypatch):
+    """A SandboxError degrades gracefully → empty unmet, error string."""
+
+    def fake_run(command, *, repo_dir, settings, install_project, sandbox_image):
+        raise SandboxError("no docker")
+
+    monkeypatch.setattr(prerequisite.sandbox, "run", fake_run)
+    unmet, error = _sandbox_batch_check(
+        _TWO_DIRECTIVES, Path("/tmp"), _DummySettings(), None
+    )
+    assert unmet == []
+    assert error == "sandbox unavailable"
+
+
+def test_sandbox_batch_nonzero_no_markers(monkeypatch):
+    """Non-zero exit with no markers → ALL directives unmet (conservative)."""
+
+    def fake_run(command, *, repo_dir, settings, install_project, sandbox_image):
+        return 1, "Traceback (most recent call last): SyntaxError\n"
+
+    monkeypatch.setattr(prerequisite.sandbox, "run", fake_run)
+    unmet, error = _sandbox_batch_check(
+        _TWO_DIRECTIVES, Path("/tmp"), _DummySettings(), None
+    )
+    assert unmet == ["import foo.bar", "symbol Baz from foo.qux"]
+    assert error is None
+
+
+def test_check_settings_takes_sandbox_path(monkeypatch):
+    """``run_prerequisite_check`` with ``settings`` routes through the
+    sandbox batch checker (default runner, no explicit ``runner=``)."""
+    spec = (
+        "## Prerequisites\n```prereq\nsymbol CostLogSource from robotsix_llmio\n```\n"
+    )
+    captured = {}
+
+    def fake_batch(directives, repo_dir, settings, sandbox_image):
+        captured["directives"] = directives
+        captured["sandbox_image"] = sandbox_image
+        return ["symbol CostLogSource from robotsix_llmio"], None
+
+    monkeypatch.setattr(prerequisite, "_sandbox_batch_check", fake_batch)
+    result = run_prerequisite_check(
+        spec, Path("/tmp"), settings=_DummySettings(), sandbox_image="img:1"
+    )
+    assert result["unmet"] == ["symbol CostLogSource from robotsix_llmio"]
+    assert captured["sandbox_image"] == "img:1"
+    assert len(captured["directives"]) == 1
+
+
+def test_check_settings_all_pass(monkeypatch):
+    """Sandbox path reporting no unmet → gate passes."""
+    spec = (
+        "## Prerequisites\n```prereq\nsymbol CostLogSource from robotsix_llmio\n```\n"
+    )
+
+    def fake_batch(directives, repo_dir, settings, sandbox_image):
+        return [], None
+
+    monkeypatch.setattr(prerequisite, "_sandbox_batch_check", fake_batch)
+    result = run_prerequisite_check(spec, Path("/tmp"), settings=_DummySettings())
+    assert result["unmet"] == []
+
+
+def test_check_explicit_runner_bypasses_sandbox(monkeypatch):
+    """An explicit ``runner=`` still bypasses the sandbox entirely even
+    when ``settings`` is supplied."""
+
+    def exploding_batch(*a, **kw):  # pragma: no cover - must not be called
+        raise AssertionError("sandbox path must not be taken")
+
+    monkeypatch.setattr(prerequisite, "_sandbox_batch_check", exploding_batch)
+    spec = (
+        "## Prerequisites\n```prereq\nsymbol CostLogSource from robotsix_llmio\n```\n"
+    )
+    result = run_prerequisite_check(
+        spec, Path("/tmp"), runner=_runner_all_fail, settings=_DummySettings()
+    )
+    assert result["unmet"] == ["symbol CostLogSource from robotsix_llmio"]
