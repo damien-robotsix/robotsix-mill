@@ -354,6 +354,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "pipeline.rebase_max_attempts": "rebase_max_attempts",
     "pipeline.ci_fix_max_attempts": "ci_fix_max_attempts",
     "pipeline.ci_fix_max_cycles": "ci_fix_max_cycles",
+    "pipeline.review_revision_max_attempts": "review_revision_max_attempts",
     "pipeline.retrospect_spawn_drafts": "retrospect_spawn_drafts",
     "pipeline.retrospect_spawn_agented_proposals": "retrospect_spawn_agented_proposals",
     "pipeline.prune_clone_on_close": "prune_clone_on_close",
