@@ -41,7 +41,9 @@ from robotsix_mill.runners.data_dir_audit_runner import (
     OrphanWorkspace,
     _compute_growth_deltas,
     _enumerate_boards,
+    _file_findings_as_tickets,
     _growth_state_path,
+    _is_periodic_pass_workspace_path,
     _load_growth_state,
     _prune_closed_workspaces,
     _save_growth_state,
@@ -2094,6 +2096,141 @@ def test_growth_not_suppressed_for_terminal_workspace(tmp_path, monkeypatch):
 
     ws_prefix = f"workspaces/{ticket_id}"
     assert any(f["path"].startswith(ws_prefix) for f in result.growth_flags)
+    db.reset_engine()
+
+
+def _grow_periodic_workspace_file(settings: Settings, board_id: str) -> None:
+    """Grow a file inside a periodic-pass clone path
+    (``<board>/health_workspace/repo/``) so the second audit pass sees a
+    large delta on that periodic-pass clone."""
+    _write_bytes(
+        settings.data_dir / board_id / "health_workspace" / "repo" / "objects.bin",
+        20_000_000,
+    )
+
+
+def test_is_periodic_pass_workspace_path():
+    """Unit cases for ``_is_periodic_pass_workspace_path``."""
+    assert _is_periodic_pass_workspace_path("health_workspace/repo/.git/objects/")
+    assert _is_periodic_pass_workspace_path("survey_workspace/repo")
+    # Plain top-level file → False.
+    assert not _is_periodic_pass_workspace_path("big.log")
+    # Per-ticket workspace path → False (handled by the b844 branch).
+    assert not _is_periodic_pass_workspace_path(
+        "workspaces/20260101T000000Z-active-ab12/repo"
+    )
+
+
+def test_growth_suppressed_for_periodic_pass_workspace(tmp_path, monkeypatch, caplog):
+    """Growth inside a periodic-pass clone (``health_workspace/repo/``)
+    is suppressed unconditionally and an INFO line is logged."""
+    s = _make_settings(tmp_path)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
+    )
+    board_id = "test-board"
+    db.init_db(s, board_id)
+    # Seed a small clone file so the periodic-pass path exists in the
+    # baseline snapshot; the second pass then observes a large delta.
+    _write_bytes(
+        s.data_dir / board_id / "health_workspace" / "repo" / "objects.bin",
+        100,
+    )
+
+    run_data_dir_audit_pass()  # baseline
+    _grow_periodic_workspace_file(s, board_id)
+
+    with caplog.at_level(logging.INFO, logger="robotsix_mill.data_dir_audit"):
+        result = run_data_dir_audit_pass()
+
+    assert not any(
+        f["path"].startswith("health_workspace/") for f in result.growth_flags
+    )
+    assert any(
+        "suppressing growth flag for periodic-pass workspace" in rec.message
+        for rec in caplog.records
+    )
+    db.reset_engine()
+
+
+def test_cross_class_cap_counts_across_classes(tmp_path):
+    """A single ``data_dir_audit_max_drafts_per_pass`` cap counts across
+    a mixed-class finding set (proving the cap is global, not per-class).
+
+    With 2 oversized + 2 growth + 2 unbounded findings and a cap of 3,
+    exactly 3 drafts are created — drawn in ``_order_findings`` priority
+    (growth → oversized → unbounded), so the result spans more than one
+    class."""
+    s = _make_settings(tmp_path, data_dir_audit_max_drafts_per_pass=3)
+    db.init_db(s, "test-board")
+    service = TicketService(s, board_id="test-board")
+
+    oversized = [
+        {"path": "big_a.bin", "size_bytes": 300 * 1024 * 1024, "is_directory": False},
+        {"path": "big_b.bin", "size_bytes": 250 * 1024 * 1024, "is_directory": False},
+    ]
+    growth_flags = [
+        {
+            "check": "growth_delta",
+            "path": "grow_a.log",
+            "board_id": "test-board",
+            "current_size_bytes": 50_000_000,
+            "prior_size_bytes": 1_000_000,
+            "delta_bytes": 49_000_000,
+            "delta_pct": 4900.0,
+            "threshold_exceeded": "both",
+        },
+        {
+            "check": "growth_delta",
+            "path": "grow_b.log",
+            "board_id": "test-board",
+            "current_size_bytes": 40_000_000,
+            "prior_size_bytes": 1_000_000,
+            "delta_bytes": 39_000_000,
+            "delta_pct": 3900.0,
+            "threshold_exceeded": "both",
+        },
+    ]
+    unbounded = [
+        {
+            "check": "unbounded_candidates",
+            "path": "reg_a.json",
+            "current_size": 6 * 1024 * 1024,
+            "cap_size": 5 * 1024 * 1024,
+            "cap_detail": "default=5 MB",
+            "pattern": "*.json",
+            "record_count": None,
+            "record_max": None,
+        },
+        {
+            "check": "unbounded_candidates",
+            "path": "reg_b.json",
+            "current_size": 7 * 1024 * 1024,
+            "cap_size": 5 * 1024 * 1024,
+            "cap_detail": "default=5 MB",
+            "pattern": "*.json",
+            "record_count": None,
+            "record_max": None,
+        },
+    ]
+
+    created = _file_findings_as_tickets(
+        s,
+        service,
+        oversized,
+        growth_flags,
+        unbounded,
+        {},
+    )
+
+    # Exactly the global cap, NOT cap-per-class (which would be 6).
+    assert len(created) == 3
+    titles = [d["title"] for d in created]
+    # Priority order: both growth flags first (delta desc), then the
+    # largest oversized — proving the cap drew across classes.
+    assert sum(1 for t in titles if t.startswith("growth")) == 2
+    assert sum(1 for t in titles if t.startswith("oversized")) == 1
+    assert not any(t.startswith("unbounded") for t in titles)
     db.reset_engine()
 
 
