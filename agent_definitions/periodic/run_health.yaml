@@ -104,7 +104,7 @@ system_prompt: |
 
   For each proposal provide:
   - `draft_title`: concise, actionable (e.g.
-    "run-health: bc_check errors on broken clone (config parse error, 3×)")
+    "bc_check errors on broken clone (config parse error, 3×)")
   - `draft_body`: the run kind + board, last-seen + count, the error/summary
     signature, and a first hypothesis for the cause.
   - `gap_id`: short snake_case identifier for dedup in the memory ledger.

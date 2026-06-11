@@ -161,7 +161,7 @@ def _file_discrepancy(
         )
 
     marker = f"<!-- cost_reconciliation-gap-id: {date_str} -->"
-    title = f"Cost reconciliation: OpenRouter vs Langfuse — ${delta:.2f} delta on {date_str}"
+    title = f"OpenRouter vs Langfuse — ${delta:.2f} delta on {date_str}"
     header = (
         "Automated cost-reconciliation check: OpenRouter vs Langfuse spend "
         f"diverged by more than the $1.00 tolerance on {date_str}. Raw figures "

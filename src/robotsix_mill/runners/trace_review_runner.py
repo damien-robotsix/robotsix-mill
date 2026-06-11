@@ -554,7 +554,7 @@ def run_trace_review_pass(
                     max_drafts,
                 )
                 break
-            title = f"trace-review: {finding.category} — {finding.symptom[:90]}"
+            title = f"{finding.category} — {finding.symptom[:90]}"
             prior = find_prior_matching_ticket(
                 service,
                 target_board_id,

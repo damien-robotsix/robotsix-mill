@@ -196,7 +196,7 @@ def test_dirty_pass_creates_draft(tmp_path, monkeypatch):
     result = run_cost_reconciliation_pass(repo_config=_test_repo_config())
     assert len(result.drafts_created) == 1
     draft = result.drafts_created[0]
-    assert "Cost reconciliation" in draft["title"]
+    assert "OpenRouter vs Langfuse" in draft["title"]
     assert "5.00" in result.summary
 
     service = TicketService(settings, board_id="test-board")
@@ -249,7 +249,7 @@ def test_duplicate_date_suppressed(tmp_path, monkeypatch):
     date_str = _yesterday_date_str()
     body = f"old\n<!-- cost_reconciliation-gap-id: {date_str} -->\n"
     prior = service.create(
-        "Cost reconciliation: prior draft",
+        "prior draft",
         body,
         source=SourceKind.COST_RECONCILIATION,
     )
@@ -266,7 +266,7 @@ def test_new_date_creates_draft_when_prior_exists_for_other_date(tmp_path, monke
     service = TicketService(settings, board_id="test-board")
     body = "old\n<!-- cost_reconciliation-gap-id: 2025-01-01 -->\n"
     service.create(
-        "Cost reconciliation: stale draft",
+        "stale draft",
         body,
         source=SourceKind.COST_RECONCILIATION,
     )

@@ -514,7 +514,7 @@ class TestRunTraceReviewPass:
         # title the inspector would produce.
         svc = TicketService(settings, board_id="test-board")
         svc.create(
-            title="trace-review: tool_error — run_command kept failing on uv lock",
+            title="tool_error — run_command kept failing on uv lock",
             description="seed",
             source=SourceKind.TRACE_REVIEW,
         )
@@ -797,7 +797,7 @@ class TestPreFilingDedup:
     def test_skip_when_prior_ticket_is_done(self, settings, monkeypatch, caplog):
         svc, ticket = self._seed_prior_ticket(
             settings,
-            title="trace-review: tool_error — earlier wrapper bug",
+            title="tool_error — earlier wrapper bug",
             body=f"prior body mentioning {self._TARGET_PATH}",
         )
         from robotsix_mill.core.states import State
@@ -820,7 +820,7 @@ class TestPreFilingDedup:
     def test_skip_when_prior_ticket_is_draft(self, settings, monkeypatch):
         self._seed_prior_ticket(
             settings,
-            title="trace-review: tool_error — earlier wrapper bug",
+            title="tool_error — earlier wrapper bug",
             body=f"prior body mentioning {self._TARGET_PATH}",
         )
         # Leave it in DRAFT (default state after service.create).
@@ -843,7 +843,7 @@ class TestPreFilingDedup:
     def test_file_when_only_match_is_closed_declined(self, settings, monkeypatch):
         svc, ticket = self._seed_prior_ticket(
             settings,
-            title="trace-review: tool_error — earlier wrapper bug",
+            title="tool_error — earlier wrapper bug",
             body=f"prior body mentioning {self._TARGET_PATH}",
         )
         from robotsix_mill.core.states import State
@@ -862,7 +862,7 @@ class TestPreFilingDedup:
     def test_skip_when_match_is_closed_after_done(self, settings, monkeypatch):
         svc, ticket = self._seed_prior_ticket(
             settings,
-            title="trace-review: tool_error — earlier wrapper bug",
+            title="tool_error — earlier wrapper bug",
             body=f"prior body mentioning {self._TARGET_PATH}",
         )
         from robotsix_mill.core.states import State
@@ -883,7 +883,7 @@ class TestPreFilingDedup:
 
         svc, ticket = self._seed_prior_ticket(
             settings,
-            title="trace-review: tool_error — earlier wrapper bug",
+            title="tool_error — earlier wrapper bug",
             body=f"prior body mentioning {self._TARGET_PATH}",
         )
         from robotsix_mill.core.states import State
@@ -918,10 +918,7 @@ class TestPreFilingDedup:
         # here since target_files=[]).
         self._seed_prior_ticket(
             settings,
-            title=(
-                "trace-review: tool_error — claude code returned an "
-                "error result success"
-            ),
+            title=("tool_error — claude code returned an error result success"),
             body="unrelated body that does not name any code locus",
         )
         finding = self._finding(
