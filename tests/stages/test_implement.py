@@ -1601,6 +1601,45 @@ def test_scope_check_passes_when_all_in_scope(
     ), f"expected scope-passed info log, got: {caplog.messages}"
 
 
+def test_scope_check_directory_entry_prefix_matches(
+    ctx_factory, tmp_path, monkeypatch, caplog
+):
+    """A file_map entry ending in "/" covers every file under that
+    directory — regression for auto-mail 6624, where a declared
+    ".deps/" removal flooded the scope check with 118 "out-of-scope"
+    files that were the ticket's own deliverable."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx)
+
+    ws = ctx.service.workspace(t)
+    file_map_path = ws.artifacts_dir / "file_map.json"
+    file_map_path.write_text(
+        '[{"file": "vendored/", "note": "delete the vendored tree"}]',
+        encoding="utf-8",
+    )
+
+    inner = _fake_agent({"vendored/pkg/data.txt": "x", "vendored/other.txt": "y"})
+
+    def _agent_with_dirs(*, repo_dir, **kwargs):
+        (Path(repo_dir) / "vendored" / "pkg").mkdir(parents=True, exist_ok=True)
+        return inner(repo_dir=repo_dir, **kwargs)
+
+    monkeypatch.setattr(coding, "run_implement_agent", _agent_with_dirs)
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="robotsix_mill.stages.implement"):
+        out = ImplementStage().run(t, ctx)
+    assert out.next_state is State.DOCUMENTING
+    assert any("scope check passed" in m for m in caplog.messages), (
+        f"expected scope-passed info log, got: {caplog.messages}"
+    )
+
+
 def test_scope_check_skipped_when_no_file_map(
     ctx_factory, tmp_path, monkeypatch, caplog
 ):

@@ -474,7 +474,17 @@ class ImplementStage(Stage):
             )
 
         changed = git_ops.introduced_files(repo_dir, target)
-        out_of_scope = [f for f in changed if f not in file_map]
+        # Directory entries in the file_map (trailing "/") cover every
+        # file under them. Without this, a map entry like ".deps/" never
+        # matches the individual ".deps/<pkg>/..." paths and a directory
+        # removal floods the scope check (live case: auto-mail 6624, 118
+        # "out-of-scope" files that WERE the ticket's deliverable).
+        dir_prefixes = tuple(e for e in file_map if e.endswith("/"))
+        out_of_scope = [
+            f
+            for f in changed
+            if f not in file_map and not f.startswith(dir_prefixes or ("\0",))
+        ]
         if not out_of_scope:
             log.info(
                 "%s: scope check passed — %d file(s) changed, "
