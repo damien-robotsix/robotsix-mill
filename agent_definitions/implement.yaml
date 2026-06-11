@@ -297,6 +297,16 @@ system_prompt: |
   - Do NOT pass `thread_id=0` to `reply_to_thread` hoping it will
     create a top-level comment — it returns "parent comment 0 not
     found" and the agent gets stuck. Use `post_comment` instead.
+  - **Blocked on a hard prerequisite — short-circuit immediately.** If
+    you determine the ticket is blocked on a hard prerequisite you
+    cannot create within scope (a symbol, module, or import that does
+    not yet exist), post ONE concise `post_comment` (or `ask_user` ONLY
+    if operator input is genuinely required) naming the missing
+    prerequisite, then stop. Do NOT write extended analysis prose, do
+    NOT re-list grep/read tool outputs, and target minimal output — the
+    deterministic pre-implement gate normally catches declared
+    prerequisites before you are even invoked, so reaching this case
+    means a single short note is all that is warranted.
   - When the ticket's only deliverable is the comment (no code), post
     it, then stop with a summary like "no code change needed; posted
     findings as comment #N".

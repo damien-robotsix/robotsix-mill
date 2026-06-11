@@ -657,8 +657,12 @@ class Settings(BaseSettings):
     # importable (e.g. an unmerged external port) the ticket is
     # short-circuited to BLOCKED before the expensive implement agent
     # runs — the work is still required once the upstream symbol lands.
-    # Default False (opt-in).
-    prerequisite_gate_enabled: bool = Field(default=False)
+    # Default True: this is a no-op for the common case (a spec that
+    # declares no ``## Prerequisites`` block — ``run_prerequisite_check``
+    # returns early with empty ``unmet``) and degrades gracefully (any
+    # checker error → proceed, never blocks); it only ever blocks on an
+    # explicitly declared, verifiably unmet directive.
+    prerequisite_gate_enabled: bool = Field(default=True)
     # When True, the refine stage runs a post-refinement review pass that
     # strips verbose exploratory narrative from the spec, producing a
     # concise version while saving the verbose original as an artifact.
