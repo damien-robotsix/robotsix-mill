@@ -78,6 +78,12 @@ BINARY_ARTIFACT_EXTENSIONS: frozenset[str] = frozenset(
 )
 
 
+# Number of out-of-scope file paths to show in the flood-guard
+# operator note before truncating with a "+N more" marker — keeps the
+# note readable when an artifact flood leaves hundreds of files.
+_FLOOD_SAMPLE_SIZE = 20
+
+
 def _is_binary_artifact(repo_dir: Path, path: str, target_branch: str) -> bool:
     """Return True if *path* is a binary artifact.
 
@@ -588,6 +594,51 @@ class ImplementStage(Stage):
             )
 
         out_of_scope = text_out_of_scope
+
+        # --- flood guard (deterministic prompt-size cap) ---
+        # When an implement pass leaves an abnormally large out-of-scope
+        # TEXT tree (a build-artifact flood the binary detector misses —
+        # node_modules/, dist/, generated sources, sourcemaps, minified
+        # JS/CSS), do NOT build per-file diffs or call the scope-triage
+        # LLM: its prompt would balloon to thousands of diff summaries,
+        # overflow the context window, and fall through to auto-ESCALATE.
+        # Skip the LLM entirely (zero tokens) and BLOCK deterministically
+        # for human review. Fires before the scope_triage_enabled check so
+        # the disabled path (which also joins the whole list) can't flood.
+        # Non-destructive — files are left for human inspection (matches
+        # the ESCALATE path).
+        if (
+            settings.scope_triage_max_files
+            and len(out_of_scope) > settings.scope_triage_max_files
+        ):
+            ordered = sorted(out_of_scope)
+            sample = ordered[:_FLOOD_SAMPLE_SIZE]
+            sample_str = ", ".join(f"`{f}`" for f in sample)
+            remaining = len(ordered) - len(sample)
+            if remaining > 0:
+                sample_str += f", … (+{remaining} more)"
+            message = (
+                f"scope-triage flood guard: {len(out_of_scope)} out-of-scope "
+                f"text file(s) exceed cap of {settings.scope_triage_max_files} "
+                f"— likely a build-artifact flood. Skipped the scope-triage "
+                f"LLM and BLOCKED for human review. Sample: {sample_str}"
+            )
+            log.warning("%s: %s", ticket.id, message)
+            ctx.service.add_step_event(ticket.id, message)
+            ImplementStage._finalize(
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                message,
+                ok=False,
+                reference_files=ref_files,
+                extra_roots=None,
+            )
+            return _ScopeGuardrailResult(
+                action="return",
+                outcome=Outcome(State.BLOCKED, message),
+            )
 
         if not settings.scope_triage_enabled:
             ImplementStage._finalize(

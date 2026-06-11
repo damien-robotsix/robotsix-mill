@@ -269,6 +269,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.limits.review_requests": "review_request_limit",
     "core.limits.web_research_requests": "web_research_request_limit",
     "core.limits.scope_triage_requests": "scope_triage_request_limit",
+    "core.limits.scope_triage_max_files": "scope_triage_max_files",
     "core.limits.triage_requests": "triage_request_limit",
     "core.limits.max_fix_iterations": "max_fix_iterations",
     "core.limits.max_stuck_cycles": "max_stuck_cycles",

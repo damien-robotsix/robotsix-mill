@@ -739,6 +739,15 @@ class Settings(BaseSettings):
     # left zero headroom and the resulting "agent error" auto-escalated
     # tickets to humans (live case: ticket ff7f).
     scope_triage_request_limit: int = Field(default=8)
+    # Maximum number of out-of-scope TEXT files fed into the scope-triage
+    # prompt. When an implement pass leaves MORE than this many out-of-scope
+    # text files (after binary-artifact auto-cleanup), treat it as a build-
+    # artifact flood: skip the scope-triage LLM entirely (its prompt would
+    # balloon to thousands of diff summaries) and block deterministically for
+    # human review. Default 50 leaves normal PRs untouched. 0 disables.
+    scope_triage_max_files: int = Field(
+        default=50, ge=0, alias="MILL_SCOPE_TRIAGE_MAX_FILES"
+    )
     # Per-call cap for pre-refine triage agent (main call + tool calls).
     triage_request_limit: int = Field(default=8)
 

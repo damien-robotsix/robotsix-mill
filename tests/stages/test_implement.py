@@ -3105,6 +3105,192 @@ def test_binary_artifact_untracked_file_cleanup(ctx_factory, tmp_path, monkeypat
     assert result.action == "skip_iteration"
 
 
+# --- scope-triage flood guard ---------------------------------------------
+
+
+def test_scope_triage_flood_guard_blocks(ctx_factory, tmp_path, monkeypatch):
+    """When the out-of-scope TEXT file count exceeds
+    scope_triage_max_files, the flood guard short-circuits: the
+    scope-triage LLM is NEVER called, the result is BLOCKED, and a
+    flood-guard step event with a truncated sample is recorded."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        scope_triage_max_files=5,
+    )
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "a.txt")
+
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+
+    # Create more out-of-scope text files than the cap (5) and well
+    # past _FLOOD_SAMPLE_SIZE-independent truncation logic.
+    n_files = 12
+    for i in range(n_files):
+        (repo / f"flood_{i:02d}.txt").write_text(f"flood file {i}\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "wip: artifact flood")
+
+    settings = ctx.settings
+
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+
+    triage_called = []
+
+    def _fake_triage(
+        *, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries
+    ):
+        triage_called.append(1)
+        raise AssertionError("scope-triage should not be called for a flood")
+
+    monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        f"mill/{t.id}",
+        summary="agent summary",
+        ref_files=None,
+        file_map={"a.txt"},
+        settings=settings,
+        spec="add a.txt",
+        current_feedback=None,
+    )
+
+    assert len(triage_called) == 0, "LLM must not be called for a flood"
+    assert result.action == "return"
+    assert result.outcome is not None
+    assert result.outcome.next_state is State.BLOCKED
+    assert "flood guard" in result.outcome.note
+    # 12 files > _FLOOD_SAMPLE_SIZE? No (20). But the message still
+    # reports the count and cap.
+    assert "12" in result.outcome.note
+    assert "5" in result.outcome.note
+
+    # A flood-guard step event was recorded.
+    events = [ev.note for ev in ctx.service.history(t.id) if ev.note]
+    assert any("scope-triage flood guard" in note for note in events)
+
+
+def test_scope_triage_flood_guard_truncates_sample(ctx_factory, tmp_path, monkeypatch):
+    """When the out-of-scope count exceeds _FLOOD_SAMPLE_SIZE, the
+    operator-facing message truncates the sample with a '+N more' marker."""
+    from robotsix_mill.stages.implement import _FLOOD_SAMPLE_SIZE
+
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        scope_triage_max_files=5,
+    )
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "a.txt")
+
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+
+    n_files = _FLOOD_SAMPLE_SIZE + 5
+    for i in range(n_files):
+        (repo / f"flood_{i:03d}.txt").write_text(f"flood file {i}\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "wip: big artifact flood")
+
+    settings = ctx.settings
+
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+
+    monkeypatch.setattr(
+        scope_triage_mod,
+        "run_scope_triage_agent",
+        lambda **_k: (_ for _ in ()).throw(AssertionError("must not be called")),
+    )
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        f"mill/{t.id}",
+        summary="agent summary",
+        ref_files=None,
+        file_map={"a.txt"},
+        settings=settings,
+        spec="add a.txt",
+        current_feedback=None,
+    )
+
+    assert result.outcome is not None
+    assert result.outcome.next_state is State.BLOCKED
+    assert "flood guard" in result.outcome.note
+    assert "more)" in result.outcome.note
+    assert "+5 more" in result.outcome.note
+
+
+def test_scope_triage_flood_guard_below_cap_calls_llm(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """Out-of-scope count <= cap: the guard does NOT trip — the
+    scope-triage LLM is still invoked normally."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        scope_triage_max_files=5,
+    )
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "a.txt")
+
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+
+    # Only 2 out-of-scope text files — well under the cap of 5.
+    for i in range(2):
+        (repo / f"small_{i}.txt").write_text(f"small file {i}\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "wip: small out-of-scope set")
+
+    settings = ctx.settings
+
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+    from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
+
+    triage_called = []
+
+    def _fake_triage(
+        *, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries
+    ):
+        triage_called.append(out_of_scope_files)
+        return ScopeTriageVerdict(
+            action="ESCALATE",
+            justification="ambiguous",
+            expand_files=[],
+        )
+
+    monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        f"mill/{t.id}",
+        summary="agent summary",
+        ref_files=None,
+        file_map={"a.txt"},
+        settings=settings,
+        spec="add a.txt",
+        current_feedback=None,
+    )
+
+    assert len(triage_called) == 1, "LLM must be called below the cap"
+    # ESCALATE → BLOCKED via the normal scope-triage path, NOT the flood guard.
+    assert result.action == "return"
+    assert result.outcome is not None
+    assert result.outcome.next_state is State.BLOCKED
+    assert "flood guard" not in (result.outcome.note or "")
+
+
 # --- modules.yaml auto-EXPAND in scope guardrail --------------------------
 
 
