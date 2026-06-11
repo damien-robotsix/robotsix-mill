@@ -13,6 +13,7 @@ import logging
 from types import SimpleNamespace
 
 from robotsix_mill.repo_settings import (
+    load_deployed_log_folder,
     load_extra_sandbox_packages,
     load_repo_languages,
     load_repo_smoke_command,
@@ -303,3 +304,39 @@ def test_smoke_paths_malformed_yaml_returns_empty(tmp_path, caplog):
     with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
         assert load_repo_smoke_paths(tmp_path) == []
     assert any("read/parse error" in r.message for r in caplog.records)
+
+
+# --- deployed_log_folder ---------------------------------------------------
+
+
+def test_deployed_log_folder_none_repo_dir_returns_none():
+    assert load_deployed_log_folder(None) is None
+
+
+def test_deployed_log_folder_missing_file_returns_none(tmp_path):
+    assert load_deployed_log_folder(tmp_path) is None
+
+
+def test_deployed_log_folder_missing_key_returns_none(tmp_path, caplog):
+    _write_config(tmp_path, "test_command: pytest\n")
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+        assert load_deployed_log_folder(tmp_path) is None
+    # Plain absence of the key must not warn.
+    assert not any("deployed_log_folder" in r.message for r in caplog.records)
+
+
+def test_deployed_log_folder_empty_value_returns_none(tmp_path):
+    _write_config(tmp_path, 'deployed_log_folder: "   "\n')
+    assert load_deployed_log_folder(tmp_path) is None
+
+
+def test_deployed_log_folder_non_string_warns_and_returns_none(tmp_path, caplog):
+    _write_config(tmp_path, "deployed_log_folder:\n  - /var/log/app\n")
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+        assert load_deployed_log_folder(tmp_path) is None
+    assert any("deployed_log_folder" in r.message for r in caplog.records)
+
+
+def test_deployed_log_folder_present_is_stripped(tmp_path):
+    _write_config(tmp_path, 'deployed_log_folder: "  /var/log/app  "\n')
+    assert load_deployed_log_folder(tmp_path) == "/var/log/app"

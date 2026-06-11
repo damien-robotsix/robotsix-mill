@@ -1841,6 +1841,43 @@ class ReposRegistry(BaseModel):
         return self
 
 
+def _validate_no_partial_langfuse(
+    repos: dict[str, RepoConfig], raw_langfuse: dict[str, dict[str, Any]]
+) -> None:
+    """Reject a partially-specified Langfuse block.
+
+    The public/secret key pair is the canonical "observability is
+    configured" signal (mirrors the meta-config logic in
+    :func:`load_repos_config`, which builds a project only when BOTH keys
+    are present). Both present → configured; both absent/empty → no
+    observability (unchanged behavior). Exactly one present is a
+    half-configured block that would fail opaquely at runtime — raise
+    :class:`~robotsix_mill.config_loader.ConfigError`. Repos that inherit
+    via ``langfuse_from`` carry no own keys and are validated separately,
+    so they are skipped here.
+    """
+    from .config_loader import ConfigError
+
+    for repo_id, cfg in repos.items():
+        if cfg.langfuse_from is not None:
+            continue
+        own_langfuse = raw_langfuse.get(repo_id, {})
+        has_public = bool(own_langfuse.get("public_key"))
+        has_secret = bool(own_langfuse.get("secret_key"))
+        if has_public and not has_secret:
+            raise ConfigError(
+                f"Repo '{repo_id}' supplies langfuse.public_key but is missing "
+                f"langfuse.secret_key; both are required to enable observability "
+                f"(or omit the langfuse block entirely)."
+            )
+        if has_secret and not has_public:
+            raise ConfigError(
+                f"Repo '{repo_id}' supplies langfuse.secret_key but is missing "
+                f"langfuse.public_key; both are required to enable observability "
+                f"(or omit the langfuse block entirely)."
+            )
+
+
 def load_repos_config(config_file: str | None = None) -> ReposRegistry:
     """Load repos configuration from ``config/repos.yaml`` (or override).
 
@@ -1946,6 +1983,10 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
                 "langfuse_base_url": master.langfuse_base_url,
             }
         )
+
+    # Reject a partially-specified Langfuse block (extracted to keep this
+    # function's cyclomatic complexity in check).
+    _validate_no_partial_langfuse(repos, raw_langfuse)
 
     # Optional dedicated Langfuse project for the synthetic cross-repo
     # meta board. Built only when a ``meta:`` block supplies usable
