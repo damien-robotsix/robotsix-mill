@@ -416,7 +416,7 @@ robotsix-llmio Claude Agent SDK transport.
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `core.memory.dedup_lookback_days` | `MILL_DEDUP_LOOKBACK_DAYS` | `30` | Days back to consider closed tickets as dup candidates |
+| `core.memory.dedup_lookback_days` | `MILL_DEDUP_LOOKBACK_DAYS` | `7` | Days back to consider closed tickets as dup candidates |
 | `epic_dedup_lookback_days` | `MILL_EPIC_DEDUP_LOOKBACK_DAYS` | `7` | Recency window (days) for the epic-decomposition pre-filing dedup recent-ticket check (see [epic-dedup.md](epic-dedup.md)) |
 | `core.limits.dedup_skip_on_no_overlap` | `MILL_DEDUP_SKIP_ON_NO_OVERLAP` | `true` | Skip dedup LLM call when draft shares no token overlap with any candidate — saves cost in the "clearly unrelated" case |
 | `core.limits.dedup_candidate_body_max_chars` | `MILL_DEDUP_CANDIDATE_BODY_MAX_CHARS` | `4000` | Cap each candidate body fed to dedup prompt; ≤0 disables truncation |
