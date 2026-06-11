@@ -46,6 +46,7 @@ from robotsix_mill.runners.data_dir_audit_runner import (
     _prune_closed_workspaces,
     _save_growth_state,
     _scan_board_sizes,
+    _workspace_ticket_id_for_path,
     check_unbounded_candidates,
     find_largest_items,
     find_orphan_workspaces,
@@ -2013,4 +2014,106 @@ def test_pass_alert_only_after_gc(tmp_path, monkeypatch):
     result_off = run_data_dir_audit_pass()
     assert result_off.closed_pruned == 0
     assert any(item["path"].endswith("big.bin") for item in result_off.oversized_items)
+    db.reset_engine()
+
+
+# ---------------------------------------------------------------------------
+# Active-workspace growth-flag suppression
+# ---------------------------------------------------------------------------
+
+
+def _grow_workspace_file(settings: Settings, board_id: str, ticket_id: str) -> None:
+    """Grow a file inside ``<board>/workspaces/<ticket_id>/`` so the
+    second audit pass observes a large delta on that workspace dir."""
+    _write_bytes(
+        settings.workspaces_dir_for(board_id) / ticket_id / "repo.bin",
+        20_000_000,
+    )
+
+
+def test_workspace_ticket_id_for_path():
+    """Unit cases for ``_workspace_ticket_id_for_path``."""
+    tid = "20260101T000000Z-active-ab12"
+    assert _workspace_ticket_id_for_path(f"workspaces/{tid}/repo/.git/objects/") == tid
+    assert _workspace_ticket_id_for_path(f"workspaces/{tid}") == tid
+    # Non-workspace path → None.
+    assert _workspace_ticket_id_for_path("big.log") is None
+    # Second segment not a ticket-ID prefix → None.
+    assert _workspace_ticket_id_for_path("workspaces/not-a-ticket/repo") is None
+
+
+def test_growth_suppressed_for_active_workspace(tmp_path, monkeypatch, caplog):
+    """Growth inside an active (live, non-terminal) ticket workspace is
+    suppressed and an INFO line is logged."""
+    s = _make_settings(tmp_path)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
+    )
+    board_id = "test-board"
+    ticket_id = "20260101T000000Z-active-ab12"
+    _make_workspace_dir(s, board_id, ticket_id)
+    _insert_ticket(s, board_id, ticket_id)  # DRAFT / active; creates mill.db
+
+    run_data_dir_audit_pass()  # baseline
+    _grow_workspace_file(s, board_id, ticket_id)
+
+    with caplog.at_level(logging.INFO, logger="robotsix_mill.data_dir_audit"):
+        result = run_data_dir_audit_pass()
+
+    ws_prefix = f"workspaces/{ticket_id}"
+    assert not any(f["path"].startswith(ws_prefix) for f in result.growth_flags)
+    assert any(
+        "suppressing growth flag for active workspace" in rec.message
+        for rec in caplog.records
+    )
+    db.reset_engine()
+
+
+def test_growth_not_suppressed_for_terminal_workspace(tmp_path, monkeypatch):
+    """Growth inside a terminal-ticket workspace is NOT suppressed (GC
+    is handled elsewhere)."""
+    s = _make_settings(tmp_path)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
+    )
+    board_id = "test-board"
+    ticket_id = "20260101T000000Z-closed-bbbb"
+    _make_workspace_dir(s, board_id, ticket_id)
+    _insert_closed_ticket(
+        s,
+        board_id,
+        ticket_id,
+        closed_at=_now() - timedelta(days=30),
+        state=State.CLOSED,
+    )
+
+    run_data_dir_audit_pass()  # baseline
+    _grow_workspace_file(s, board_id, ticket_id)
+
+    result = run_data_dir_audit_pass()
+
+    ws_prefix = f"workspaces/{ticket_id}"
+    assert any(f["path"].startswith(ws_prefix) for f in result.growth_flags)
+    db.reset_engine()
+
+
+def test_growth_not_suppressed_for_orphan_workspace(tmp_path, monkeypatch):
+    """Growth inside an orphan workspace (no Ticket row) is NOT
+    suppressed."""
+    s = _make_settings(tmp_path)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
+    )
+    board_id = "test-board"
+    ticket_id = "20260101T000000Z-orph-cccc"
+    _make_workspace_dir(s, board_id, ticket_id)
+    db.init_db(s, board_id)  # board DB exists, but no ticket row
+
+    run_data_dir_audit_pass()  # baseline
+    _grow_workspace_file(s, board_id, ticket_id)
+
+    result = run_data_dir_audit_pass()
+
+    ws_prefix = f"workspaces/{ticket_id}"
+    assert any(f["path"].startswith(ws_prefix) for f in result.growth_flags)
     db.reset_engine()
