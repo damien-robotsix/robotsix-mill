@@ -284,7 +284,14 @@ PR/push through a **baseline ratchet** (`mypy-baseline filter`).
 The committed `mypy-baseline.txt` captures all known pre-existing
 strict-mode errors (~1,100 across ~140 files), which are tolerated.
 Any *new* error not in the baseline blocks CI — preventing regressions
-while the backlog is burned down incrementally.
+while the backlog is burned down incrementally. A **separate,
+non-blocking** `mypy-baseline suggest` step (`--exit-zero`) runs
+alongside the gating ratchet and surfaces one backlog item per run as a
+CI annotation to encourage incremental burndown of the baseline. Like
+the hadolint gate and the Bandit severity floor, this is a deliberate,
+documented advisory policy: it surfaces feedback without blocking the
+pipeline, and is distinct from the gating `mypy-baseline filter` ratchet
+above.
 
 **To shrink the baseline** after fixing type errors: run
 `uv run mypy src/ --strict | uv run mypy-baseline sync` and commit
