@@ -82,6 +82,77 @@ def test_system_prompt_requires_optimization_code_verification():
     assert "path/to/file.py:LINE" in prompt
 
 
+def test_system_prompt_has_statistical_signal_gate():
+    """Statistical-signal flags must be held to a verification bar.
+
+    Mirrors the optimization gate: before filing a finding that rests on
+    a ``cost_outlier`` / ``observation_storm`` / ``tool_errors`` flag the
+    inspector must cross-check the trace's own model/cost/usage data, rule
+    out benign explanations, and downgrade to REQUIRES_HUMAN_REVIEW when it
+    cannot.
+    """
+    prompt = _SYSTEM_PROMPT
+    assert "Verifying statistical-signal flags" in prompt
+    # Each of the three statistical signals is named with its check.
+    assert "cost_outlier" in prompt
+    assert "observation_storm" in prompt
+    assert "tool_errors" in prompt
+    # Cheap-model / cache benign-explanation guidance for cost_outlier.
+    assert "calculatedTotalCost" in prompt
+    # Reuses the same downgrade convention as the optimization gate.
+    assert "REQUIRES_HUMAN_REVIEW" in prompt
+
+
+def _capture_inspector_prompt(monkeypatch, **kwargs) -> str:
+    """Run run_trace_inspector with the agent seam stubbed and return the
+    user prompt that would have been sent to the model."""
+    captured: dict[str, str] = {}
+
+    class _Handle:
+        def run_sync(self, prompt, **kw):
+            captured["prompt"] = prompt
+
+            class _R:
+                output = TraceInspectResult()
+
+            return _R()
+
+    def fake_run_agent(agent, make_run, **kw):
+        return make_run(_Handle())
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.retry.run_agent",
+        fake_run_agent,
+    )
+    trace_inspector_mod.run_trace_inspector(**kwargs)
+    return captured["prompt"]
+
+
+def test_classifier_flags_injected_into_prompt(monkeypatch):
+    """Non-empty classifier_flags render a classifier_flags section."""
+    flags = ["cost_outlier ($9.99 vs $1.00)", "tool_errors (3)"]
+    prompt = _capture_inspector_prompt(
+        monkeypatch,
+        settings=_settings_with_api_key(),
+        trace_data=_fake_trace_clean(),
+        classifier_flags=flags,
+    )
+    assert "classifier_flags" in prompt
+    assert "cost_outlier ($9.99 vs $1.00)" in prompt
+    assert "tool_errors (3)" in prompt
+
+
+def test_classifier_flags_none_omits_section(monkeypatch):
+    """classifier_flags=None leaves the prompt without the flags section."""
+    prompt = _capture_inspector_prompt(
+        monkeypatch,
+        settings=_settings_with_api_key(),
+        trace_data=_fake_trace_clean(),
+        classifier_flags=None,
+    )
+    assert "classifier_flags" not in prompt
+
+
 def _fake_trace_clean() -> str:
     trace = {
         "id": "trace-clean",

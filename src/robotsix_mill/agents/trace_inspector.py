@@ -77,6 +77,38 @@ budget. Before filing any ``optimization`` finding:
   finding whose ``root_cause`` names no ``path/to/file.py:LINE`` is
   not ready to file — either ground it in the code or drop it.
 
+## Verifying statistical-signal flags
+
+The Phase 1 classifier's ``cost_outlier``, ``observation_storm``, and
+``tool_errors`` flags are statistical signals, not proof of a problem
+— they have a history of false positives. Before filing ANY finding
+whose evidence rests on one of these flags, you MUST cross-check the
+trace's own per-observation ``model`` / ``usage`` /
+``calculatedTotalCost`` data and rule out the benign explanations
+below:
+
+- **``cost_outlier``**: confirm the cost concentrates in genuinely
+  expensive work, NOT a high-volume *cheap* model. A ``deepseek`` /
+  flash sub-agent can rack up huge token counts while its
+  ``calculatedTotalCost`` stays negligible — often because of a high
+  prompt-cache hit rate. A high token count on a cheap model is **not**
+  an anomaly. If the cost is plausibly explained by an expected recent
+  change or a cheap model, do NOT file it as actionable.
+- **``observation_storm``**: check whether the high observation count
+  matches the genuine task scope (multi-file / multi-step work) and
+  whether per-observation cost is low (cache-efficient execution). If
+  the volume is proportionate to the scope, do NOT file it as
+  actionable.
+- **``tool_errors``**: distinguish retry / boundary patterns (e.g.
+  ``read_file`` offset-boundary retries) and transient network errors
+  from *structural* failures. Only file when the errors are structural.
+
+Follow the SAME downgrade convention as the optimization gate: when
+you cannot rule out a benign explanation, either drop the finding or
+downgrade it to ``confidence="low"`` and prefix ``proposed_solution``
+with ``REQUIRES_HUMAN_REVIEW:``, stating the unverified assumption
+explicitly so downstream refine can detect and close it cheaply.
+
 ## Phase 1 classifier flags
 
 The trace may carry deterministic flags set by the pre-classifier.
@@ -255,6 +287,7 @@ def run_trace_inspector(
     memory: str = "",
     model_name: str | None = None,
     started_at: datetime | None = None,
+    classifier_flags: list[str] | None = None,
 ) -> TraceInspectResult:
     """Analyse a single trace's full observation tree and return
     structured findings with proposed solutions.
@@ -284,6 +317,14 @@ def run_trace_inspector(
     through from the trace-review runner so the LLM can reason about
     restart correlation when ``incomplete_trace`` +
     ``restart_correlated`` flags are present.
+
+    The optional ``classifier_flags`` are the deterministic Phase-1
+    flags that surfaced the trace — when non-empty they are rendered
+    into the prompt as a ``classifier_flags`` section so the inspector
+    knows *why* the trace was flagged and can apply the
+    statistical-signal verification gate. ``None``/empty omits the
+    section (the periodic retrospect tool-less call site leaves it
+    unset).
 
     The optional ``repo_config`` carries the target repo's Langfuse
     read credentials so callers that fetch additional trace data on
@@ -342,6 +383,11 @@ def run_trace_inspector(
         tools=tools,
     )
     limits = UsageLimits(request_limit=request_limit)
+    flags_section = (
+        section("classifier_flags", ", ".join(classifier_flags)) + "\n\n"
+        if classifier_flags
+        else ""
+    )
     prompt = (
         section("memory", memory or "(empty — start a new ledger)")
         + "\n\n"
@@ -351,6 +397,7 @@ def run_trace_inspector(
             f"Current time: {datetime.now(timezone.utc).isoformat()}",
         )
         + "\n\n"
+        + flags_section
         + "Analyse the following Langfuse trace JSON for tool errors, "
         + "agent limitations, and optimisation opportunities. For each "
         + "finding, propose a CONCRETE solution grounded in the code "
