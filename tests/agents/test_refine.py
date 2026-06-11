@@ -479,6 +479,19 @@ def test_system_prompt_forbids_guessing_line_numbers():
     )
 
 
+def test_system_prompt_forbids_re_exploring_already_read_files():
+    """Invariant lock: the refine agent's SYSTEM_PROMPT must instruct
+    the agent to check its conversation history before delegating to
+    `explore`, and not re-explore files it has already read this turn."""
+    from robotsix_mill.agents.refining import SYSTEM_PROMPT
+
+    sentinel = "conversation history before delegating to `explore`"
+    assert sentinel in SYSTEM_PROMPT, (
+        f"SYSTEM_PROMPT must instruct the agent to reuse already-read "
+        f"context ({sentinel!r}); found no match."
+    )
+
+
 # --- dedup guard tests ---
 
 # Substantive body — dedup is skipped for drafts under 100 chars, so
