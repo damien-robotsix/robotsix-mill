@@ -2758,8 +2758,9 @@ def test_multi_repo_url_fallback_partial_merge_stays_same_state(tmp_path, monkey
     )
 
     out = MergeStage().run(t, ctx)
-    # repo-a merged (via fallback), repo-b green → not all merged → no-op.
-    assert out.next_state is State.IMPLEMENT_COMPLETE
+    # repo-a merged (via fallback), repo-b green but not eligible →
+    # surface HUMAN_MR_APPROVAL so a human can merge the remaining PR.
+    assert out.next_state is State.HUMAN_MR_APPROVAL
     assert not (ctx.service.workspace(t).artifacts_dir / "merge.md").exists()
 
 
@@ -2810,8 +2811,9 @@ def test_multi_repo_partial_merge_stays_same_state(tmp_path, monkeypatch):
     )
 
     out = MergeStage().run(t, ctx)
-    # Same-state no-op (ticket sits in IMPLEMENT_COMPLETE).
-    assert out.next_state is State.IMPLEMENT_COMPLETE
+    # repo-a merged, repo-b green but not eligible → surface
+    # HUMAN_MR_APPROVAL so a human can merge the remaining PR.
+    assert out.next_state is State.HUMAN_MR_APPROVAL
     assert not (ctx.service.workspace(t).artifacts_dir / "merge.md").exists()
 
 
@@ -3225,10 +3227,11 @@ def test_multi_repo_ci_fix_cycle_reset_on_green(tmp_path, monkeypatch):
     assert merge_mod._read_counter(cycle_path) == 2
 
     # CI turns green — the _run_multi_repo poll observes success and
-    # resets the counter.  The ticket stays IMPLEMENT_COMPLETE (re-poll).
+    # resets the counter.  With no eligible review the all-green hold now
+    # surfaces HUMAN_MR_APPROVAL so a human can merge.
     ci_state["conclusion"] = "success"
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert out.next_state is State.HUMAN_MR_APPROVAL
     assert merge_mod._read_counter(cycle_path) == 0
 
 
@@ -3290,8 +3293,8 @@ def test_multi_repo_all_green_auto_merges_when_eligible(tmp_path, monkeypatch):
 
 
 def test_multi_repo_all_green_holds_when_not_eligible(tmp_path, monkeypatch):
-    """All PRs green but no auto-merge-eligible review → no merges, same-state
-    (waits for a human to merge)."""
+    """All PRs green but no auto-merge-eligible review → no merges, surface
+    HUMAN_MR_APPROVAL so a human can merge via merge-now."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     remote_a = "https://github.com/o/a.git"
     _install_multirepo_registry([("repo-a", remote_a)])
@@ -3320,7 +3323,7 @@ def test_multi_repo_all_green_holds_when_not_eligible(tmp_path, monkeypatch):
     _write_pr_urls(ctx, t, [{"repo_id": "repo-a", "branch": branch, "url": "u-a"}])
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert out.next_state is State.HUMAN_MR_APPROVAL
     assert merged_calls == []  # nothing merged without an eligible review
 
 

@@ -526,8 +526,16 @@ def merge_now(
     merge path — it bypasses auto-merge eligibility and calls the
     forge's merge endpoint immediately.
 
-    Returns 409 when the ticket is not in human_mr_approval or when
-    the forge rejects the merge (branch protection, conflict, etc.).
+    For multi-repo (meta-board) tickets — those whose deliver stage
+    wrote ``pr_urls.json`` — this merges the PR of *every* repo listed
+    in the manifest, each via that repo's own ``RepoConfig``. Already-
+    merged repos are skipped so a re-press after a partial failure is
+    idempotent; only when every repo is merged does the ticket advance
+    to done.
+
+    Returns 409 when the ticket is not in human_mr_approval, when the
+    manifest is corrupt, or when the forge rejects a merge (branch
+    protection, conflict, etc.).
     """
     ticket = svc.get(ticket_id)
     if ticket is None:
@@ -536,6 +544,46 @@ def merge_now(
         raise HTTPException(409, "ticket is not in human_mr_approval")
 
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
+
+    # Multi-repo mode: when the deliver stage wrote ``pr_urls.json`` we
+    # merge every touched repo's PR. Reuse the merge stage's helpers so
+    # the manifest schema stays single-sourced.
+    from ...stages.merge import _load_pr_urls, _repo_config_for_entry
+
+    try:
+        pr_entries = _load_pr_urls(svc.workspace(ticket).artifacts_dir)
+    except ValueError as e:
+        raise HTTPException(409, f"pr_urls.json corrupted: {e}")
+
+    if pr_entries:
+        merged_urls: list[str] = []
+        for entry in pr_entries:
+            repo_id = entry.get("repo_id", "")
+            branch = entry.get("branch", "")
+            url = entry.get("url", branch)
+            rc = _repo_config_for_entry(entry)
+            entry_forge = get_forge(settings, repo_config=rc)
+            # Idempotent re-press: skip repos whose PR is already merged.
+            pr = entry_forge.pr_status(source_branch=branch)
+            if pr is None or pr.get("merged"):
+                merged_urls.append(url)
+                continue
+            result = entry_forge.merge_pr(source_branch=branch)
+            if not result["merged"]:
+                raise HTTPException(
+                    409, f"merge rejected for {repo_id}: {result['reason']}"
+                )
+            merged_urls.append(pr.get("url", url))
+
+        ticket = svc.transition(
+            ticket_id,
+            State.DONE,
+            note=f"merged via board: {', '.join(merged_urls)}",
+        )
+        maybe_enqueue(ticket, worker)  # retrospect picks up DONE
+        return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
+
+    # Single-repo path (unchanged).
     forge = get_forge(settings, repo_config=repo_config)
     pr = forge.pr_status(source_branch=ticket.branch)
     if pr is None:
