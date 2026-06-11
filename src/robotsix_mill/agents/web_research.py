@@ -38,21 +38,14 @@ async def run_web_research(*, settings: Settings, query: str) -> str:
 
     # lazy: keep core import-light / the suite hermetic
     from pydantic_ai import Agent
-    from pydantic_ai.providers.openrouter import OpenRouterProvider
     from pydantic_ai.usage import UsageLimits
 
-    from .base import _aclose_async_client, timeout_http_client
-    from .openrouter_cost import CostInstrumentedOpenRouterModel
+    from .base import _aclose_async_client, build_openrouter_model
     from .web_tools import make_web_fetch
 
     online = ":online" if settings.web_search else ""
-    client = timeout_http_client(settings)
-    model = CostInstrumentedOpenRouterModel(
-        f"{settings.web_research_model}{online}",
-        provider=OpenRouterProvider(
-            api_key=get_secrets().openrouter_api_key,
-            http_client=client,
-        ),
+    model, client = build_openrouter_model(
+        settings, f"{settings.web_research_model}{online}"
     )
     agent = Agent(
         model=model,

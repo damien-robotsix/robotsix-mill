@@ -269,11 +269,9 @@ def run_trace_inspector(
 
     # lazy: keep core import-light / the suite hermetic
     from pydantic_ai import Agent, PromptedOutput
-    from pydantic_ai.providers.openrouter import OpenRouterProvider
     from pydantic_ai.usage import UsageLimits
 
-    from .base import _close_async_client, timeout_http_client
-    from .openrouter_cost import CostInstrumentedOpenRouterModel
+    from .base import _close_async_client, build_openrouter_model
 
     # Wire read-only fs tools + explore when repo_dir is provided.
     # NEVER include write_file/edit_file/delete_file: the inspector
@@ -293,13 +291,8 @@ def run_trace_inspector(
     # to read → reason → emit (20 reqs is generous but bounded).
     request_limit = 20 if repo_dir is not None else 3
 
-    client = timeout_http_client(settings)
-    model = CostInstrumentedOpenRouterModel(
-        model_name or settings.trace_inspector_model,
-        provider=OpenRouterProvider(
-            api_key=get_secrets().openrouter_api_key,
-            http_client=client,
-        ),
+    model, client = build_openrouter_model(
+        settings, model_name or settings.trace_inspector_model
     )
     agent = Agent(
         model=model,
