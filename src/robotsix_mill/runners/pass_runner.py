@@ -378,7 +378,34 @@ def _test_file_exists_for_gap(repo_dir: Path, title: str) -> bool:
             basename = module_path
             test_path = repo_dir / "tests" / f"test_{basename}"
 
-        return test_path.exists()
+        # Primary check: the strict naming-convention mirror.
+        if test_path.exists():
+            return True
+
+        # Narrowly-scoped fallback for route modules under
+        # ``runtime/routes/``: those are exercised through the FastAPI app
+        # via HTTP-endpoint tests, not via a 1:1 mirror file (e.g.
+        # ``runtime/routes/_candidates.py`` is tested in
+        # ``tests/runtime/test_candidates_routes.py``). Confined to this
+        # prefix so non-route modules retain strict-mirror semantics.
+        if module_path.startswith("runtime/routes/"):
+            # basename without .py, leading underscores stripped:
+            # _candidates.py -> candidates, _health.py -> health.
+            token = basename[: -len(".py")].lstrip("_")
+            if token:
+                runtime_tests = repo_dir / "tests" / "runtime"
+                for test_file in runtime_tests.rglob("test_*.py"):
+                    if token in test_file.name:
+                        return True
+                    try:
+                        contents = test_file.read_text(encoding="utf-8")
+                    except OSError:
+                        # Unreadable file — skip it, never raise out of the guard.
+                        continue
+                    if f"/{token}" in contents or f"test_{token}" in contents:
+                        return True
+
+        return False
 
     # HEALTH pattern: "Add tests/<dir>/ test subdirectory for ..."
     m = re.match(r"^Add tests/(.+?)/", title)

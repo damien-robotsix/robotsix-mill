@@ -1314,6 +1314,87 @@ def test_test_file_exists_for_gap_bare_filename_not_in_subdir(tmp_path):
     )
 
 
+# --- runtime/routes/ fallback (HTTP-endpoint tested route modules) ---
+
+
+def test_test_file_exists_for_gap_route_module_naming_convention(tmp_path):
+    """A route module tested via the standard `test_<module>_routes.py`
+    naming (not a 1:1 mirror) is detected by the fallback."""
+    test_file = tmp_path / "tests" / "runtime" / "test_candidates_routes.py"
+    test_file.parent.mkdir(parents=True, exist_ok=True)
+    test_file.write_text("# candidates route tests\n", encoding="utf-8")
+    assert (
+        _test_file_exists_for_gap(
+            tmp_path,
+            "test gap: add unit tests for runtime/routes/_candidates.py",
+        )
+        is True
+    )
+
+
+def test_test_file_exists_for_gap_route_module_shared_file(tmp_path):
+    """A route module tested in a shared file (referencing the token as a
+    route path / test-function name) is detected by the fallback."""
+    test_file = tmp_path / "tests" / "runtime" / "test_api.py"
+    test_file.parent.mkdir(parents=True, exist_ok=True)
+    test_file.write_text(
+        "def test_health(client):\n    client.get('/health')\n",
+        encoding="utf-8",
+    )
+    assert (
+        _test_file_exists_for_gap(
+            tmp_path,
+            "test gap: add unit tests for runtime/routes/_health.py",
+        )
+        is True
+    )
+
+
+def test_test_file_exists_for_gap_route_module_src_prefixed(tmp_path):
+    """The fallback also fires for the full src/robotsix_mill/ prefixed form."""
+    test_file = tmp_path / "tests" / "runtime" / "test_candidates_routes.py"
+    test_file.parent.mkdir(parents=True, exist_ok=True)
+    test_file.write_text("# candidates route tests\n", encoding="utf-8")
+    assert (
+        _test_file_exists_for_gap(
+            tmp_path,
+            "test gap: add unit tests for "
+            "src/robotsix_mill/runtime/routes/_candidates.py",
+        )
+        is True
+    )
+
+
+def test_test_file_exists_for_gap_route_module_genuinely_untested(tmp_path):
+    """A route module with no matching test anywhere under tests/runtime/
+    is NOT suppressed (conservative False)."""
+    (tmp_path / "tests" / "runtime").mkdir(parents=True, exist_ok=True)
+    assert (
+        _test_file_exists_for_gap(
+            tmp_path,
+            "test gap: add unit tests for runtime/routes/_nonexistent.py",
+        )
+        is False
+    )
+
+
+def test_test_file_exists_for_gap_non_routes_runtime_module_no_fallback(tmp_path):
+    """A runtime/ module that is NOT under runtime/routes/ does not trigger
+    the fallback — strict-mirror semantics are preserved."""
+    # A test file under tests/runtime/ references the token, but the module
+    # is runtime/server.py (not under routes/), so the fallback must not fire.
+    test_file = tmp_path / "tests" / "runtime" / "test_server_routes.py"
+    test_file.parent.mkdir(parents=True, exist_ok=True)
+    test_file.write_text("def test_server():\n    pass\n", encoding="utf-8")
+    assert (
+        _test_file_exists_for_gap(
+            tmp_path,
+            "test gap: add unit tests for runtime/server.py",
+        )
+        is False
+    )
+
+
 # ------------------------------------------------------------------ load_memory additional edge cases
 
 
