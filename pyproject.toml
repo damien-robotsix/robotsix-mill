@@ -256,3 +256,4 @@ strict = true
 python_version = "3.14"
 packages = ["src/robotsix_mill"]
 ignore_missing_imports = true
+show_error_codes = true

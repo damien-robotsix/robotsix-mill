@@ -113,7 +113,7 @@ jobs:
       - name: Mypy (static type check, baseline ratchet)
         if: ${{ inputs.mypy-advisory }}
         # Ratchets against a committed mypy-baseline.txt snapshot: known
-        # pre-existing strict-mode errors (~700 across ~90 files) are
+        # pre-existing strict-mode errors (~1,100 across ~140 files) are
         # tolerated, but any *new* error not in the baseline blocks CI.
         # To shrink the baseline after fixing errors, run:
         #   uv run mypy src/ --strict | uv run mypy-baseline sync

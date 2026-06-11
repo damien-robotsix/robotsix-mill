@@ -282,7 +282,7 @@ gate (analogous to the mypy backlog cleanup plan). See
 **Note on the mypy step in `ci.yml`:** mypy `--strict` runs on every
 PR/push through a **baseline ratchet** (`mypy-baseline filter`).
 The committed `mypy-baseline.txt` captures all known pre-existing
-strict-mode errors (~1,000 across ~140 files), which are tolerated.
+strict-mode errors (~1,100 across ~140 files), which are tolerated.
 Any *new* error not in the baseline blocks CI — preventing regressions
 while the backlog is burned down incrementally.
 
