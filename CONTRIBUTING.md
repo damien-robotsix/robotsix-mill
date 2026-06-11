@@ -231,7 +231,7 @@ All enforced by [`.pre-commit-config.yaml`](.pre-commit-config.yaml):
 | Tool   | Version | Configuration |
 |--------|---------|---------------|
 | Ruff (lint + format) | v0.11.0 | `ruff --fix` + `ruff format` |
-| mypy | v1.15.0 | `--strict --ignore-missing-imports`; stubs for `pydantic-ai-slim`, `sqlmodel`, `fastapi` (CI: advisory/non-gating — see CI overview) |
+| mypy | v1.15.0 | `--strict --ignore-missing-imports`; stubs for `pydantic-ai-slim`, `sqlmodel`, `fastapi` (CI: baseline ratchet via `mypy-baseline` — see CI overview) |
 | Bandit | 1.8.3 | Config from `pyproject.toml`; targets `src/`, skips `B101` (assert) |
 | hadolint | v2.14.0 | `--failure-threshold warning` (advisory/non-gating); config from `.hadolint.yaml` |
 | pre-commit-hooks | v5.0.0 | trailing-whitespace, end-of-file-fixer, check-yaml, check-json, check-toml, check-merge-conflict, detect-private-key, check-added-large-files (500 KB max) |
@@ -280,16 +280,17 @@ gate (analogous to the mypy backlog cleanup plan). See
 [`.hadolint.yaml`](.hadolint.yaml) for per-rule rationale.
 
 **Note on the mypy step in `ci.yml`:** mypy `--strict` runs on every
-PR/push and surfaces an error-count summary as a CI annotation, but it
-does **not** block CI. This is a deliberate, documented advisory policy:
-the codebase carries a pre-existing strict-mode backlog of ~700 errors
-across ~90 files that pre-dates the gate, so gating now would red-fail
-all CI. Keeping the check advisory preserves the static-type-checking
-signal (regressions stay visible in CI logs/annotations) — the same
-pattern this repo uses for the Bandit severity floor. Once the backlog
-is cleared in separate dedicated tickets (a future sub-epic), the
-`|| true`/`exit 0` advisory wrapper will be removed and mypy promoted to
-a hard gate.
+PR/push through a **baseline ratchet** (`mypy-baseline filter`).
+The committed `mypy-baseline.txt` captures all known pre-existing
+strict-mode errors (~1,100 across ~140 files), which are tolerated.
+Any *new* error not in the baseline blocks CI — preventing regressions
+while the backlog is burned down incrementally.
+
+**To shrink the baseline** after fixing type errors: run
+`uv run mypy src/ --strict | uv run mypy-baseline sync` and commit
+the updated (smaller) `mypy-baseline.txt`. When the baseline file
+becomes empty the ratchet step can be replaced with a direct
+`uv run mypy src/ --strict` hard gate.
 
 **Note on the license gate in `security-audit.yml`:** the `license-audit`
 job runs `pip-licenses` over the installed `.[tracing]` dependency tree
