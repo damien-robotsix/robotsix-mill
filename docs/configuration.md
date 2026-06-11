@@ -501,7 +501,7 @@ robotsix-llmio Claude Agent SDK transport.
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `pipeline.merge_poll_seconds` | `MILL_MERGE_POLL_SECONDS` | `120` | Poll interval for PR merge/CI status |
-| `pipeline.rebase_max_attempts` | `MILL_REBASE_MAX_ATTEMPTS` | `5` | Max rebase LLM invocations before BLOCK |
+| `pipeline.rebase_max_attempts` | `MILL_REBASE_MAX_ATTEMPTS` | `3` | Max rebase LLM invocations before BLOCK |
 | `pipeline.ci_fix_max_attempts` | `MILL_CI_FIX_MAX_ATTEMPTS` | `2` | Max CI-fix LLM invocations before BLOCK |
 | `pipeline.ci_max_auto_retries` | `MILL_CI_MAX_AUTO_RETRIES` | `3` | Max consecutive ci-fix cycles with no code changes before BLOCK |
 | `pipeline.ci_fix_max_cycles` | `MILL_CI_FIX_MAX_CYCLES` | `3` | Hard ceiling on total ci-fix cycles per ticket (counts every agent-running cycle on failing CI; reset only when CI turns green). Set to 0 to disable. |
