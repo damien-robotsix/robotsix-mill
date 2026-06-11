@@ -11,6 +11,7 @@ convention as test_implement.py.
 from __future__ import annotations
 
 import json
+import logging
 import subprocess
 
 import pytest
@@ -3259,3 +3260,100 @@ def test_maintenance_triage_normal_draft_proceeds_to_refine(ctx_factory, monkeyp
 
     assert out.next_state is State.READY
     assert "refined" in out.note
+
+
+# ---------------------------------------------------------------------------
+# deployed_log_folder resolution / graceful skip (orchestration wiring)
+# ---------------------------------------------------------------------------
+
+
+def _write_repo_log_config(repo_dir, folder: str):
+    cfg_dir = repo_dir / ".robotsix-mill"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    (cfg_dir / "config.yaml").write_text(
+        f"deployed_log_folder: {folder}\n", encoding="utf-8"
+    )
+
+
+def _capture_refine_kwargs(captured, spec_markdown="## Problem\nFix it"):
+    """A run_refine_agent mock that records deployed_log_dir / extra_roots."""
+
+    def _run(*, settings, title, draft, **kw):
+        del settings, title, draft
+        captured["deployed_log_dir"] = kw.get("deployed_log_dir")
+        captured["extra_roots"] = kw.get("extra_roots")
+        captured["deployed_log_summary"] = kw.get("deployed_log_summary")
+        return RefineResult(spec_markdown=spec_markdown)
+
+    return _run
+
+
+def test_deployed_log_folder_absent_dir_skips_and_warns(
+    ctx_factory, monkeypatch, tmp_path, caplog
+):
+    """When deployed_log_folder resolves to a path that is not a directory,
+    refine proceeds without wiring deployed_log_dir / extra_roots and logs
+    a WARNING."""
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
+    t = _ticket(ctx, body="Investigate ingestion errors from the deployed logs")
+    ws = ctx.service.workspace(t)
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    missing = tmp_path / "no-such-log-folder"
+    _write_repo_log_config(repo_dir, str(missing))
+
+    captured: dict = {}
+    _apply_default_mocks(monkeypatch, run_refine_agent=_capture_refine_kwargs(captured))
+
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.stages.refine"):
+        out = RefineStage._run_refine_agent(
+            ctx,
+            t,
+            "Investigate ingestion errors from the deployed logs",
+            repo_dir,
+            None,
+            t.title,
+            ws,
+            ctx.settings,
+        )
+
+    assert out.next_state is State.READY
+    assert captured["deployed_log_dir"] is None
+    assert captured["extra_roots"] is None
+    assert any(
+        "does not exist or is not a directory" in r.message for r in caplog.records
+    )
+
+
+def test_deployed_log_folder_present_dir_wires_tool(ctx_factory, monkeypatch, tmp_path):
+    """When deployed_log_folder is an existing directory, deployed_log_dir
+    is set and the folder is appended to extra_roots."""
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
+    t = _ticket(ctx, body="Investigate ingestion errors from the deployed logs")
+    ws = ctx.service.workspace(t)
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    logs = tmp_path / "deployed-logs"
+    logs.mkdir()
+    _write_repo_log_config(repo_dir, str(logs))
+
+    captured: dict = {}
+    _apply_default_mocks(monkeypatch, run_refine_agent=_capture_refine_kwargs(captured))
+
+    out = RefineStage._run_refine_agent(
+        ctx,
+        t,
+        "Investigate ingestion errors from the deployed logs",
+        repo_dir,
+        None,
+        t.title,
+        ws,
+        ctx.settings,
+    )
+
+    assert out.next_state is State.READY
+    assert captured["deployed_log_dir"] == logs.resolve()
+    assert captured["extra_roots"] == [logs.resolve()]
+    assert captured["deployed_log_summary"]
