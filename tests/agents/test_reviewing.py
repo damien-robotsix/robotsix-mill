@@ -442,3 +442,115 @@ def test_run_review_agent_degrades_to_needs_discussion_after_two_failures(
     assert verdict.verdict == "NEEDS_DISCUSSION"
     assert verdict.auto_merge_eligible is False
     assert len(calls) == 2
+
+
+# --- Token-limit / context-window degraded retry ----------------------------
+
+
+_TOKEN_LIMIT_MSG = (
+    "Model token limit 1048576 exceeded: 1500815 tokens requested "
+    "(1491808 input text). maximum context length is 1048576."
+)
+
+
+def test_token_limit_triggers_degraded_retry(tmp_path, monkeypatch):
+    """A token-limit error on the first review pass triggers a single
+    degraded retry: preseed message_history is dropped and the diff is
+    hard-truncated. The degraded pass succeeding yields its verdict."""
+    agent = _FakeAgent()
+    _patch_agent(monkeypatch, agent)
+
+    # Preseed a real file so the first attempt carries message_history.
+    (tmp_path / "x.py").write_text("print('x')\n", encoding="utf-8")
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+
+    big_diff = "diff --git a/x.py b/x.py\n" + ("+line\n" * 50_000)
+    seen: list[dict] = []
+
+    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+        # Populate agent.calls with the prompt/kwargs for this attempt.
+        make_run(agent)
+        prompt, _limits, kwargs = agent.calls[-1]
+        seen.append({"prompt": prompt, "kwargs": kwargs})
+        if len(seen) == 1:
+            raise RuntimeError(_TOKEN_LIMIT_MSG)
+        return _StubAgentRunResult(
+            ReviewVerdict(verdict="APPROVE", comments="ok on truncated diff")
+        )
+
+    monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", fake_run_agent)
+
+    verdict = run_review_agent(
+        settings=s,
+        diff=big_diff,
+        spec="Fix x",
+        repo_dir=tmp_path,
+        reference_files=["x.py"],
+    )
+
+    assert isinstance(verdict, ReviewVerdict)
+    assert verdict.verdict == "APPROVE"
+    assert len(seen) == 2
+
+    # First attempt carries preseed message_history (prompt is None).
+    assert "message_history" in seen[0]["kwargs"]
+    # Degraded retry drops preseed and passes a string prompt with the
+    # truncation note, and the diff it carries is much smaller.
+    assert "message_history" not in seen[1]["kwargs"]
+    degraded_prompt = seen[1]["prompt"]
+    assert isinstance(degraded_prompt, str)
+    assert "heavily truncated" in degraded_prompt
+    assert len(degraded_prompt) < len(big_diff)
+
+
+def test_token_limit_persists_yields_needs_discussion(tmp_path, monkeypatch):
+    """When the degraded retry ALSO hits a token-limit error, the stage
+    must not crash: a best-effort NEEDS_DISCUSSION verdict is returned
+    whose comment explains the truncation."""
+    agent = _FakeAgent()
+    _patch_agent(monkeypatch, agent)
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+
+    calls: list[str] = []
+
+    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+        calls.append(what)
+        raise RuntimeError(_TOKEN_LIMIT_MSG)
+
+    monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", fake_run_agent)
+
+    verdict = run_review_agent(
+        settings=s,
+        diff="diff --git a/x b/x\n" + ("+x\n" * 1000),
+        spec="Fix x",
+    )
+
+    assert isinstance(verdict, ReviewVerdict)
+    assert verdict.verdict == "NEEDS_DISCUSSION"
+    assert verdict.auto_merge_eligible is False
+    assert "context" in verdict.comments.lower()
+    # Initial attempt + one degraded retry.
+    assert len(calls) == 2
+
+
+def test_non_token_exception_propagates(tmp_path, monkeypatch):
+    """A non-token-limit exception is NOT swallowed by the degraded path —
+    it propagates exactly as before (one run_agent call, no retry)."""
+    agent = _FakeAgent()
+    _patch_agent(monkeypatch, agent)
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+
+    calls: list[str] = []
+
+    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+        calls.append(what)
+        raise RuntimeError("some unrelated boom")
+
+    monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", fake_run_agent)
+
+    with pytest.raises(RuntimeError, match="some unrelated boom"):
+        run_review_agent(settings=s, diff="diff --git a/x b/x", spec="Fix x")
+    assert len(calls) == 1

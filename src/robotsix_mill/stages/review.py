@@ -289,6 +289,22 @@ class ReviewStage(Stage):
             log.info("%s: empty diff — approving without review", ticket.id)
             return Outcome(State.DOCUMENTING, "empty diff (no-op implementation)")
 
+        # Derive modified paths from the UNTRUNCATED diff so middle
+        # truncation (below) never drops a ``+++ b/<path>`` header and
+        # silently shrinks the preseed file set. The agent receives the
+        # bounded diff; the preseed still covers every modified file.
+        modified_paths = _paths_from_diff(diff)
+
+        # Bound the combined diff before it reaches the review prompt. The
+        # raw ``git diff origin/<target>...HEAD`` can balloon to megabytes
+        # (divergent base, generated/lockfile churn, accumulated branch
+        # history) regardless of how few lines the intended change touches,
+        # overflowing even a 1M-token model context. Middle-truncate so both
+        # early and late files keep representation. 0 disables the cap.
+        from ..core.text_utils import head_tail_keep
+
+        diff = head_tail_keep(diff, s.review_diff_max_chars, label="git-diff")
+
         spec = ws.read_description()
 
         prior_context = _build_prior_context(ticket, ctx, ws)
@@ -297,7 +313,7 @@ class ReviewStage(Stage):
         # the reviewer otherwise burns one read_file round-trip per file
         # to verify claims, which is most of its observation count on
         # any non-trivial diff. See fs_tools.build_preseed_history.
-        modified_paths = _paths_from_diff(diff)
+        # ``modified_paths`` was derived above from the untruncated diff.
 
         # A board screenshot (captured by the smoke gate for UI-touching
         # tickets) lands at artifacts/board.png. When present, hand it to
