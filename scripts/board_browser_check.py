@@ -255,7 +255,20 @@ def run_browser_check() -> int:
 
     Returns ``0`` when the board renders correctly, ``1`` otherwise.
     Browser, server, and temp data dir are always torn down.
+
+    SKIPs (rc 0) when Playwright is not installed: the network-isolated
+    test-gate sandbox has no Playwright/Chromium, and the deferred import
+    inside ``_drive_browser`` would otherwise surface as a FAIL rc=1
+    ("No module named 'playwright'"), red-gating every runtime-UI ticket
+    and luring implement agents into re-applying this guard out-of-scope
+    on each pass (live ledger-poisoning loop, 2026-06-10/11).
     """
+    import importlib.util
+
+    if importlib.util.find_spec("playwright") is None:
+        print("board browser smoke check: SKIP — playwright not installed")
+        return 0
+
     import uvicorn
 
     from robotsix_mill.config import RepoConfig, ReposRegistry, Settings
