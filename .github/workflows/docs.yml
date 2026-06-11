@@ -23,12 +23,12 @@ jobs:
       # into .git/config, so persist-credentials: false would break it.
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4  # zizmor: ignore[artipacked]
 
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6
         with:
-          python-version: "3.14"
+          version: "0.8.15"
 
       - name: Install docs deps
-        run: pip install -e '.[docs]'
+        run: uv sync --frozen --extra docs
 
       - name: Configure Git
         run: |
@@ -39,7 +39,7 @@ jobs:
         run: |
           for i in 1 2 3 4; do
             echo "Attempt $i/4..."
-            if mkdocs gh-deploy --force; then
+            if uv run --frozen mkdocs gh-deploy --force; then
               echo "Deploy succeeded on attempt $i/4"
               exit 0
             fi
