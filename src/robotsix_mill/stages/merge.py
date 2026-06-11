@@ -328,8 +328,12 @@ class MergeStage(Stage):
         aggregated in priority order:
 
         * Any ``closed_unmerged`` -> BLOCKED.
-        * Any ``conflicting`` -> BLOCKED (per-repo rebase auto-recovery is
-          still parked for a follow-up).
+        * Any ``conflicting`` -> run the rebase agent on ONE conflicting repo
+          this poll (bounded by a per-repo attempt counter), force-push, and
+          re-poll; exhausting the counter -> BLOCKED. A multi-repo ticket has a
+          single state, so this recovery runs inline during the
+          IMPLEMENT_COMPLETE poll rather than via the single-repo REBASING
+          state.
         * Any ``failing_ci`` -> run the CI-fix agent on ONE failing repo this
           poll (bounded by a per-repo attempt counter), push, and re-poll;
           exhausting the counter -> BLOCKED. A multi-repo ticket has a single
@@ -441,12 +445,8 @@ class MergeStage(Stage):
 
         conflicting = [r for r in statuses if r["status"] == "conflicting"]
         if conflicting:
-            first = conflicting[0]
-            return Outcome(
-                State.BLOCKED,
-                f"PR for {first['repo_id']} conflicting: {first['url']} — "
-                "resumable (multi-repo rebase auto-recovery is not yet wired)",
-            )
+            # Rebase one conflicting repo per poll; the rest re-check next cycle.
+            return self._multi_repo_rebase(ticket, ctx, conflicting[0])
 
         failing = [r for r in statuses if r["status"] == "failing_ci"]
         if failing:
@@ -651,6 +651,133 @@ class MergeStage(Stage):
         _write_counter(counter_path, attempt)
         log.warning(
             "%s: multi-repo ci-fix attempt %d/%d failed for %s — retrying next poll",
+            ticket.id,
+            attempt,
+            max_attempts,
+            repo_id,
+        )
+        return Outcome(ticket.state)
+
+    def _multi_repo_rebase(
+        self, ticket: Ticket, ctx: StageContext, status: dict
+    ) -> Outcome:
+        """Run the rebase agent on one multi-repo PR that is conflicting.
+
+        Mirrors the single-repo rebase path (:meth:`_handle_conflict` and
+        friends) but inline (a multi-repo ticket has one state, so it cannot
+        reuse the REBASING state cycle). Bounded by a per-repo attempt counter;
+        exhausting the cap -> BLOCKED. Returns the ticket's current state
+        (re-poll) while making progress.
+        """
+        s = ctx.settings
+        repo_id = status["repo_id"]
+        branch = status["branch"]
+        ws = ctx.service.workspace(ticket)
+        repo_dir = ws.dir / "repos" / repo_id
+        if not (repo_dir / ".git").exists():
+            return Outcome(
+                State.BLOCKED,
+                f"clone for {repo_id} missing — re-run implement",
+            )
+        try:
+            rc = get_repo_config(repo_id)
+        except ConfigError as e:
+            return Outcome(
+                State.BLOCKED, f"unknown repo_id '{repo_id}': {e} — resumable"
+            )
+
+        counter_path = ws.artifacts_dir / f"rebase_{repo_id}.count"
+        attempt = _read_counter(counter_path) + 1
+        max_attempts = s.rebase_max_attempts
+        if attempt > max_attempts:
+            _write_counter(counter_path, 0)
+            return Outcome(
+                State.BLOCKED,
+                f"rebase for {repo_id} failed after {max_attempts} attempt(s) — "
+                "manual conflict resolution required",
+            )
+
+        target = target_branch_for(s, rc)
+        log.info(
+            "%s: multi-repo PR conflicting for %s — rebase attempt %d/%d onto %s",
+            ticket.id,
+            repo_id,
+            attempt,
+            max_attempts,
+            target,
+        )
+
+        ok = False
+        try:
+            # Attribute the agent's cost/traces to the ticket's session, and
+            # to the TARGET repo's Langfuse project, not an orphan trace.
+            with tracing.start_ticket_root_span(ticket.id, "rebase", repo_config=rc):
+                git_ops.fetch(
+                    Path(repo_dir),
+                    remote_url=_resolve_remote_url(s, rc),
+                    token=github_token(s, repo_config=rc),
+                    branch=target,
+                )
+                mem_path = s.memory_file_for("rebase", rc.board_id)
+                result = run_rebase_agent(
+                    settings=s,
+                    repo_dir=str(repo_dir),
+                    branch=branch,
+                    target=target,
+                    memory=load_memory(mem_path),
+                )
+                ok = result.status == "DONE"
+                if result.updated_memory:
+                    persist_memory(mem_path, result.updated_memory)
+        except Exception as e:  # noqa: BLE001
+            log.exception(
+                "%s: multi-repo rebase crashed for %s: %s", ticket.id, repo_id, e
+            )
+            ok = False
+
+        if ok:
+            # A rebase that produced no new commits (remote already current)
+            # is a no-op: GitHub may still be recomputing mergeability, or the
+            # base is stale. Count it (don't reset) so the attempt cap bounds
+            # the loop rather than letting it spin.
+            try:
+                local = git_ops.head_sha(repo_dir)
+                remote = git_ops.remote_branch_sha(repo_dir, branch)
+            except Exception:  # noqa: BLE001 — be safe: assume changes
+                local, remote = None, "force-push"
+            if local is not None and remote == local:
+                _write_counter(counter_path, attempt)
+                log.info(
+                    "%s: multi-repo rebase for %s made no changes (attempt %d/%d)",
+                    ticket.id,
+                    repo_id,
+                    attempt,
+                    max_attempts,
+                )
+                return Outcome(ticket.state)
+            try:
+                git_ops.push(
+                    repo_dir,
+                    branch=branch,
+                    remote_url=_resolve_remote_url(s, rc),
+                    token=github_token(s, repo_config=rc),
+                )
+            except Exception as e:  # noqa: BLE001
+                _write_counter(counter_path, attempt)
+                return Outcome(
+                    State.BLOCKED,
+                    f"rebase for {repo_id} succeeded but force-push failed: {e}",
+                )
+            _write_counter(counter_path, 0)
+            log.info(
+                "%s: multi-repo rebase pushed for %s — re-poll", ticket.id, repo_id
+            )
+            return Outcome(ticket.state)
+
+        # Agent failed — record the attempt and re-poll.
+        _write_counter(counter_path, attempt)
+        log.warning(
+            "%s: multi-repo rebase attempt %d/%d failed for %s — retrying next poll",
             ticket.id,
             attempt,
             max_attempts,
