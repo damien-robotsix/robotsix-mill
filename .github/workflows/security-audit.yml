@@ -21,6 +21,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          # Audits only read the checked-out tree; no git push.
+          persist-credentials: false
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
@@ -86,6 +89,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          # Audits only read the checked-out tree; no git push.
+          persist-credentials: false
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
@@ -147,3 +153,39 @@ jobs:
             --allow-only="MIT;MIT License;Apache-2.0;Apache Software License;BSD License;BSD-2-Clause;BSD-3-Clause;3-Clause BSD License;ISC;ISC License (ISCL);PSF-2.0;Python Software Foundation License;Mozilla Public License 2.0 (MPL 2.0);MPL-2.0;The Unlicense (Unlicense);Apache-2.0 OR BSD-3-Clause;Apache-2.0 OR BSD-2-Clause;MIT OR Apache-2.0;MIT AND PSF-2.0;MPL-2.0 AND MIT;Apache-2.0 AND CNRI-Python" \
             --ignore-packages "${ignore_packages[@]}" \
             --fail-on="GPL;AGPL;LGPL"
+
+  workflow-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          # zizmor only reads the checked-out workflow files; no git push.
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.14"
+
+      - name: Create virtual environment
+        run: python -m venv .venv
+
+      - name: Install zizmor
+        run: .venv/bin/pip install "zizmor==1.25.2"
+
+      # zizmor statically audits the GitHub Actions workflows for
+      # supply-chain risks (over-permissioned jobs, template-injection
+      # sinks, unpinned/risky `uses:`, credential persistence). It exits
+      # non-zero (10 + severity rank) once a finding meets/exceeds its
+      # default severity threshold, which gates the job — do NOT swallow
+      # the exit code with `|| true`. The online audits authenticate via
+      # GH_TOKEN. No job-level `permissions:` block: the job inherits the
+      # workflow's top-level `permissions: contents: read` (a job-level
+      # block would replace it entirely), which is sufficient for checkout
+      # plus zizmor's GitHub-API audits. Surfacing results via SARIF to the
+      # code-scanning dashboard is a possible follow-up — it would need
+      # `security-events: write`, so it is deferred; the job already
+      # surfaces findings by failing the PR check.
+      - name: Audit GitHub Actions workflows
+        run: .venv/bin/zizmor .github/workflows/
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

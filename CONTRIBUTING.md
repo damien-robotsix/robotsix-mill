@@ -236,6 +236,7 @@ All enforced by [`.pre-commit-config.yaml`](.pre-commit-config.yaml):
 | hadolint | v2.14.0 | `--failure-threshold warning` (advisory/non-gating); config from `.hadolint.yaml` |
 | pre-commit-hooks | v5.0.0 | trailing-whitespace, end-of-file-fixer, check-yaml, check-json, check-toml, check-merge-conflict, detect-private-key, check-added-large-files (500 KB max) |
 | detect-secrets | v1.5.0 | `--baseline .secrets.baseline`; blocks new secrets not in the allowlist |
+| zizmor | v1.25.2 | `--offline`; audits GitHub Actions workflows for supply-chain risks |
 
 Install with `.venv/bin/pre-commit install`. Run manually:
 `pre-commit run --all-files`.
