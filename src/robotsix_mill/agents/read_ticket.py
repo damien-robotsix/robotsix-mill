@@ -19,8 +19,10 @@ import re
 from ..config import Settings
 
 # Ticket ID format: YYYYMMDDTHHMMSSZ-slug-hex4
-# timestamp (16 chars), dash, 1+ segments of [a-z0-9-], dash, 4 hex chars.
-_TICKET_ID_RE = re.compile(r"^\d{8}T\d{6}Z-[a-z0-9]+(?:-[a-z0-9]+)*-[a-f0-9]{4}$")
+# timestamp (16 chars), dash, slug body, dash, 4 hex chars. The slug body may
+# contain consecutive dashes for legacy IDs minted before _slug stripped
+# dashes after truncation (e.g. '...split-worker--f2d4').
+_TICKET_ID_RE = re.compile(r"^\d{8}T\d{6}Z-[a-z0-9-]+-[a-f0-9]{4}$")
 
 # Output budgets (chars). The description is capped individually; the whole
 # rendered Markdown is capped again at the end so a long history/comment run
