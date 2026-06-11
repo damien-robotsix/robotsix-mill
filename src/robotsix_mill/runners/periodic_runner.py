@@ -225,6 +225,12 @@ class PeriodicPassConfig:
     A callable ``(settings, repo_config) -> str | None`` wraps
     ``github_token()`` with fallback."""
 
+    requires_repo: bool = False
+    """When ``True``, the pass needs a working tree to do useful work.
+    If the clone is unavailable (``repo_dir`` resolves to ``None``),
+    ``run_periodic_pass`` short-circuits before invoking the LLM — a
+    repo-less pass for these agents only produces hallucinated output."""
+
 
 # ---------------------------------------------------------------------------
 # Core runner function
@@ -322,6 +328,24 @@ def run_periodic_pass(
                 config.label,
                 (e.stderr or "")[:200],
             )
+
+    # Deterministic short-circuit: a pass that needs a working tree but has
+    # no clone (forge_remote_url falsy, or git_ops.clone raised) cannot read
+    # the repo, so the agent would only fabricate file paths from training
+    # data — guaranteed wasted spend. Skip the LLM invocation entirely and
+    # return a no-op result. Memory is loaded inside run_agent_pass (skipped
+    # here), so no on-disk memory write happens on this path.
+    if config.requires_repo and repo_dir is None:
+        log.warning(
+            "%s pass skipped: repo clone unavailable (repo_dir is None); "
+            "not invoking LLM",
+            config.label,
+        )
+        return config.result_dataclass(
+            updated_memory="",
+            drafts_created=[],
+            session_id=session_id,
+        )
 
     log.info("%s pass starting (session %s)", config.label, session_id)
 
@@ -463,6 +487,7 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         workspace_subdir="module_curator_workspace",
         result_dataclass=ModuleCuratorPassResult,
         clone_token_fn=_clone_token,
+        requires_repo=True,
     ),
     "test_gap": PeriodicPassConfig(
         label="test_gap",
