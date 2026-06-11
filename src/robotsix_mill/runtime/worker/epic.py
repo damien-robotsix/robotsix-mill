@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ...core.states import State
 
@@ -81,12 +81,95 @@ def _validate_epic_state(settings, epic_id: str):
     return svc, epic
 
 
+def _resolve_delivery(
+    svc: Any, ticket_id: str, _seen: set[str] | None = None
+) -> dict[str, Any]:
+    """Classify a ticket's *delivery* state by scanning its history.
+
+    Returns a small dict with at least ``delivered`` (bool), ``label``
+    (human-readable), and ``canonical`` (resolved dedup-chain id or
+    ``None``). A ticket counts as *delivered* only when it has a terminal
+    ``DONE`` event whose note is **not** a non-implementation close (i.e.
+    the genuine ``"merged: …"`` path). Dedup-closed tickets are followed
+    to their canonical ticket — a dedup chain whose end never merged is
+    *not* delivered. The function never raises and guards against
+    cycles/self-reference via the ``_seen`` set.
+    """
+    from ...stages.refine.helpers import (
+        DEDUP_ALREADY_DONE_PREFIX,
+        DEDUP_DUPLICATE_PREFIX,
+        NON_IMPLEMENTATION_CLOSE_PREFIXES,
+    )
+
+    if _seen is None:
+        _seen = set()
+    if ticket_id in _seen or len(_seen) > 20:
+        return {"delivered": False, "label": "not delivered", "canonical": None}
+    _seen.add(ticket_id)
+
+    ticket = svc.get(ticket_id)
+    if ticket is None:
+        return {"delivered": False, "label": "not delivered", "canonical": None}
+
+    try:
+        history = svc.history(ticket_id)
+    except Exception:
+        history = []
+
+    # Last event with state DONE is the terminal delivery decision.
+    done_event = None
+    for ev in history or []:
+        if getattr(ev, "state", None) is State.DONE:
+            done_event = ev
+
+    if done_event is None:
+        # Never reached DONE — unstarted (DRAFT) or in-progress.
+        is_draft = getattr(ticket, "state", None) is State.DRAFT
+        return {
+            "delivered": False,
+            "label": "unstarted" if is_draft else "in_progress",
+            "canonical": None,
+        }
+
+    note = getattr(done_event, "note", None) or ""
+    matched_prefix = next(
+        (p for p in NON_IMPLEMENTATION_CLOSE_PREFIXES if note.startswith(p)),
+        None,
+    )
+    if matched_prefix is None:
+        # A genuine DONE that is not a non-implementation close → merged.
+        return {"delivered": True, "label": "merged", "canonical": None}
+
+    # Non-implementation close. For dedup closes, follow the chain to the
+    # canonical ticket and inherit its delivery verdict.
+    if matched_prefix in (DEDUP_DUPLICATE_PREFIX, DEDUP_ALREADY_DONE_PREFIX):
+        canonical = note[len(matched_prefix) :].split(":", 1)[0].strip()
+        if canonical and canonical != ticket_id and canonical not in _seen:
+            sub = _resolve_delivery(svc, canonical, _seen)
+            sub_label = "merged" if sub["delivered"] else "not delivered"
+            return {
+                "delivered": sub["delivered"],
+                "label": f"dedup-closed → {canonical} ({sub_label})",
+                "canonical": canonical,
+            }
+        # Missing / self / looping canonical → not delivered.
+        return {
+            "delivered": False,
+            "label": f"dedup-closed → {canonical or '?'} (not delivered)",
+            "canonical": canonical or None,
+        }
+
+    # Freshness/obsolescence non-implementation close — shipped nothing.
+    return {"delivered": False, "label": "closed (not delivered)", "canonical": None}
+
+
 def _build_child_summaries(svc, epic_id: str) -> list[dict]:
     """Build the per-child summary dicts passed to the epic-status agent.
 
     Each child's description is read and truncated to 500 chars (with a
     ``"\\n...(truncated)"`` suffix); the summary carries ``id``,
-    ``title``, ``state``, ``description`` and ``depends_on``.
+    ``title``, ``state``, ``description``, ``depends_on`` and
+    ``delivery`` (a delivery-evidence label from :func:`_resolve_delivery`).
     """
     from ...core.service import TicketService
 
@@ -102,6 +185,7 @@ def _build_child_summaries(svc, epic_id: str) -> list[dict]:
                 "state": child.state.value,
                 "description": child_desc,
                 "depends_on": TicketService._parse_depends_on(child),
+                "delivery": _resolve_delivery(svc, child.id)["label"],
             }
         )
     return child_summaries
@@ -301,7 +385,17 @@ def _reconcile_child_changes(svc, epic_id: str, result) -> None:
 
     # --- child_closures ------------------------------------------------
     if result.child_closures:
-        for child_id in result.child_closures:
+        # Normalize to (child_id, covering_id) pairs. The agent should
+        # emit a ``dict`` mapping child -> covering merged sibling, but a
+        # legacy bare list (no named sibling) is accepted and each entry
+        # is treated as a closure with NO covering sibling (so it is
+        # refused by the verification gate below).
+        if isinstance(result.child_closures, dict):
+            closure_pairs = list(result.child_closures.items())
+        else:
+            closure_pairs = [(cid, None) for cid in result.child_closures]
+
+        for child_id, covering_id in closure_pairs:
             if not isinstance(child_id, str) or not child_id.strip():
                 log.warning(
                     "epic %s: child_closures entry %r is not a non-empty string, skipping",
@@ -313,15 +407,48 @@ def _reconcile_child_changes(svc, epic_id: str, result) -> None:
             if child is None:
                 continue
             try:
+                # Verify a genuinely-merged covering sibling before
+                # obsoleting an unstarted child. Without this gate a
+                # dedup-close or an unrelated sibling merge would wipe
+                # un-delivered Tier-1 work (incident on epic 4564).
+                covering = covering_id.strip() if isinstance(covering_id, str) else ""
+                if not covering:
+                    log.warning(
+                        "epic %s: closure of child %s refused — no covering "
+                        "sibling named",
+                        epic_id,
+                        child_id,
+                    )
+                    continue
+                if covering == child_id:
+                    log.warning(
+                        "epic %s: closure of child %s refused — covering "
+                        "sibling equals the child itself",
+                        epic_id,
+                        child_id,
+                    )
+                    continue
+                delivery = _resolve_delivery(svc, covering)
+                if not delivery.get("delivered"):
+                    log.warning(
+                        "epic %s: closure of child %s refused — covering "
+                        "sibling %s is not a merged delivery (%s)",
+                        epic_id,
+                        child_id,
+                        covering,
+                        delivery.get("label"),
+                    )
+                    continue
                 svc.transition(
                     child_id,
                     S.CLOSED,
-                    note="Obsoleted by epic re-evaluation after sibling merge",
+                    note=f"Obsoleted: scope delivered by merged sibling {covering}",
                 )
                 log.info(
-                    "epic %s: closed child %s (obsoleted by sibling merge)",
+                    "epic %s: closed child %s (scope delivered by merged sibling %s)",
                     epic_id,
                     child_id,
+                    covering,
                 )
             except Exception:
                 log.exception(

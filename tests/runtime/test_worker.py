@@ -1242,15 +1242,24 @@ class _FakeEpicService:
     """Lightweight stand-in for ``TicketService`` used by the epic-reeval
     helpers; records every mutating call in ``calls``."""
 
-    def __init__(self, children=None, descriptions=None):
+    def __init__(self, children=None, descriptions=None, tickets=None, histories=None):
         self.children = children or []
         # obj.id -> description string returned by workspace().read_description
         self.descriptions = descriptions or {}
+        # id -> ticket object returned by get(); id -> list of events by history()
+        self.tickets = tickets or {}
+        self.histories = histories or {}
         self.calls = []
 
     def list_children(self, epic_id):
         self.calls.append(("list_children", epic_id))
         return self.children
+
+    def get(self, ticket_id):
+        return self.tickets.get(ticket_id)
+
+    def history(self, ticket_id):
+        return self.histories.get(ticket_id, [])
 
     def workspace(self, obj):
         return _FakeWorkspace(self.descriptions.get(obj.id, ""), self.calls)
@@ -1299,6 +1308,48 @@ def test_build_child_summaries_truncates_and_shapes():
     # Long description truncated to 500 chars + suffix; short one untouched.
     assert summaries[0]["description"] == "x" * 500 + "\n...(truncated)"
     assert summaries[1]["description"] == "short"
+
+
+def test_build_child_summaries_populates_distinct_delivery_labels():
+    from types import SimpleNamespace
+    from robotsix_mill.runtime.worker import _build_child_summaries
+
+    children = [
+        SimpleNamespace(
+            id="M", title="merged", state=SimpleNamespace(value="done"), depends_on=None
+        ),
+        SimpleNamespace(
+            id="A", title="dedup", state=SimpleNamespace(value="done"), depends_on=None
+        ),
+        SimpleNamespace(
+            id="U",
+            title="unstarted",
+            state=SimpleNamespace(value="draft"),
+            depends_on=None,
+        ),
+    ]
+    svc = _FakeEpicService(
+        children=children,
+        descriptions={"M": "m", "A": "a", "U": "u"},
+        tickets={
+            "M": _ns_ticket("M", State.DONE),
+            "A": _ns_ticket("A", State.DONE),
+            "U": _ns_ticket("U", State.DRAFT),
+            "B": _ns_ticket("B", State.DRAFT),
+        },
+        histories={
+            "M": [_ev(State.DONE, "merged: http://x/pr/1")],
+            "A": [_ev(State.DONE, "duplicate of B: dupe")],
+        },
+    )
+
+    summaries = {s["id"]: s["delivery"] for s in _build_child_summaries(svc, "E1")}
+
+    assert summaries["M"] == "merged"
+    assert summaries["U"] == "unstarted"
+    assert "dedup" in summaries["A"].lower()
+    # The three labels are distinguishable.
+    assert len({summaries["M"], summaries["A"], summaries["U"]}) == 3
 
 
 def test_handle_epic_decision_close():
@@ -1382,6 +1433,194 @@ def test_handle_epic_decision_close_with_new_children_downgrades():
 
     # close + new_children downgrades to keep_open → no transition occurs.
     assert result.decision == "keep_open"
+    assert not any(c[0] == "transition" for c in svc.calls)
+
+
+# -----------------------------------------------------------------------
+# Delivery classification + epic-reeval obsoletion guard (epic 4564)
+# -----------------------------------------------------------------------
+
+
+def _ns_ticket(tid, state):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(id=tid, state=state)
+
+
+def _ev(state, note=None):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(state=state, note=note)
+
+
+def test_resolve_delivery_merged():
+    from robotsix_mill.runtime.worker import _resolve_delivery
+
+    svc = _FakeEpicService(
+        tickets={"M": _ns_ticket("M", State.DONE)},
+        histories={"M": [_ev(State.DONE, "merged: http://x/pr/1")]},
+    )
+    res = _resolve_delivery(svc, "M")
+    assert res["delivered"] is True
+    assert res["label"] == "merged"
+
+
+def test_resolve_delivery_unstarted():
+    from robotsix_mill.runtime.worker import _resolve_delivery
+
+    svc = _FakeEpicService(
+        tickets={"D": _ns_ticket("D", State.DRAFT)},
+        histories={"D": []},
+    )
+    res = _resolve_delivery(svc, "D")
+    assert res["delivered"] is False
+    assert res["label"] == "unstarted"
+
+
+def test_resolve_delivery_dedup_follows_chain_to_merged():
+    from robotsix_mill.runtime.worker import _resolve_delivery
+
+    svc = _FakeEpicService(
+        tickets={
+            "A": _ns_ticket("A", State.DONE),
+            "B": _ns_ticket("B", State.DONE),
+        },
+        histories={
+            "A": [_ev(State.DONE, "duplicate of B: same scope")],
+            "B": [_ev(State.DONE, "merged: http://x/pr/2")],
+        },
+    )
+    res = _resolve_delivery(svc, "A")
+    assert res["delivered"] is True
+    assert res["canonical"] == "B"
+    assert "B" in res["label"]
+
+
+def test_resolve_delivery_dedup_chain_not_delivered():
+    from robotsix_mill.runtime.worker import _resolve_delivery
+
+    svc = _FakeEpicService(
+        tickets={
+            "A": _ns_ticket("A", State.DONE),
+            "B": _ns_ticket("B", State.DRAFT),
+        },
+        histories={
+            "A": [_ev(State.DONE, "duplicate of B: same scope")],
+            "B": [],
+        },
+    )
+    res = _resolve_delivery(svc, "A")
+    assert res["delivered"] is False
+    assert res["canonical"] == "B"
+
+
+def test_resolve_delivery_cyclic_dedup_does_not_raise():
+    from robotsix_mill.runtime.worker import _resolve_delivery
+
+    svc = _FakeEpicService(
+        tickets={"A": _ns_ticket("A", State.DONE)},
+        histories={"A": [_ev(State.DONE, "duplicate of A: self ref")]},
+    )
+    res = _resolve_delivery(svc, "A")
+    assert res["delivered"] is False
+
+
+def test_resolve_delivery_missing_ticket():
+    from robotsix_mill.runtime.worker import _resolve_delivery
+
+    svc = _FakeEpicService()
+    res = _resolve_delivery(svc, "gone")
+    assert res["delivered"] is False
+
+
+def _closure_svc(child_id, covering):
+    """Build a fake service with a DRAFT child plus a covering sibling."""
+    tickets = {child_id: _ns_ticket(child_id, State.DRAFT)}
+    histories = {}
+    for cid, (state, note) in covering.items():
+        tickets[cid] = _ns_ticket(cid, state)
+        histories[cid] = [_ev(state, note)] if note is not None else []
+    return _FakeEpicService(tickets=tickets, histories=histories)
+
+
+def test_reconcile_closes_draft_with_merged_covering_sibling():
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+    from robotsix_mill.runtime.worker import _reconcile_child_changes
+
+    svc = _closure_svc("C1", {"S1": (State.DONE, "merged: http://x/pr/9")})
+    result = EpicStatusResult(decision="keep_open", child_closures={"C1": "S1"})
+
+    _reconcile_child_changes(svc, "E1", result)
+
+    transitions = [c for c in svc.calls if c[0] == "transition"]
+    assert len(transitions) == 1
+    _, tid, state, note = transitions[0]
+    assert tid == "C1"
+    assert state == State.CLOSED
+    assert "S1" in note
+    assert "Obsoleted by epic re-evaluation after sibling merge" not in note
+
+
+@pytest.mark.parametrize(
+    "covering, closures",
+    [
+        # dedup-closed covering sibling whose canonical never merged
+        ({"S1": (State.DONE, "duplicate of Z: dupe")}, {"C1": "S1"}),
+        # unstarted covering sibling
+        ({"S1": (State.DRAFT, None)}, {"C1": "S1"}),
+        # self-reference
+        ({}, {"C1": "C1"}),
+        # unnamed covering sibling (legacy bare list)
+        ({}, ["C1"]),
+    ],
+)
+def test_reconcile_refuses_closure_without_merged_sibling(covering, closures):
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+    from robotsix_mill.runtime.worker import _reconcile_child_changes
+
+    svc = _closure_svc("C1", covering)
+    result = EpicStatusResult(decision="keep_open", child_closures=closures)
+
+    _reconcile_child_changes(svc, "E1", result)
+
+    assert not any(c[0] == "transition" for c in svc.calls)
+
+
+def test_reconcile_refuses_closure_missing_covering_ticket():
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+    from robotsix_mill.runtime.worker import _reconcile_child_changes
+
+    # Covering sibling id not present in tickets at all.
+    svc = _FakeEpicService(tickets={"C1": _ns_ticket("C1", State.DRAFT)})
+    result = EpicStatusResult(decision="keep_open", child_closures={"C1": "ghost"})
+
+    _reconcile_child_changes(svc, "E1", result)
+
+    assert not any(c[0] == "transition" for c in svc.calls)
+
+
+def test_reconcile_incident_4564_unstarted_children_survive():
+    """Reproduces epic 4564: A dedup-closed onto B; B/C/D unstarted; sibling
+    E merged unrelated scope. A scope-blind closure of B/C/D (legacy list,
+    no covering sibling) must NOT obsolete them."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+    from robotsix_mill.runtime.worker import _reconcile_child_changes
+
+    svc = _FakeEpicService(
+        tickets={
+            "B": _ns_ticket("B", State.DRAFT),
+            "C": _ns_ticket("C", State.DRAFT),
+            "D": _ns_ticket("D", State.DRAFT),
+            "E": _ns_ticket("E", State.DONE),
+        },
+        histories={"E": [_ev(State.DONE, "merged: http://x/pr/unrelated")]},
+    )
+    # Scope-blind closure of the unstarted children with no covering sibling.
+    result = EpicStatusResult(decision="keep_open", child_closures=["B", "C", "D"])
+
+    _reconcile_child_changes(svc, "E1", result)
+
+    # None of the unstarted Tier-1 children are obsoleted.
     assert not any(c[0] == "transition" for c in svc.calls)
 
 
