@@ -83,6 +83,29 @@ def timeout_http_client(settings: Settings):
     return client
 
 
+def build_openrouter_model(settings: Settings, model_name: str):
+    """Construct a cost-instrumented OpenRouter model + its http client.
+
+    Wraps the ``timeout_http_client → CostInstrumentedOpenRouterModel(
+    OpenRouterProvider(api_key=..., http_client=...))`` chain shared by
+    the agents that build a model directly (web_research, web_knowledge,
+    trace_inspector, consult_expert). Caller owns closing the client
+    (pair with :func:`_aclose_async_client`)."""
+    from pydantic_ai.providers.openrouter import OpenRouterProvider
+
+    from .openrouter_cost import CostInstrumentedOpenRouterModel
+
+    client = timeout_http_client(settings)
+    model = CostInstrumentedOpenRouterModel(
+        model_name,
+        provider=OpenRouterProvider(
+            api_key=get_secrets().openrouter_api_key,
+            http_client=client,
+        ),
+    )
+    return model, client
+
+
 class AgentHandle:
     """Wraps a pydantic-ai Agent with its httpx client so callers can
     deterministically close the client after use.

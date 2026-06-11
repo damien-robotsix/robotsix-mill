@@ -74,12 +74,10 @@ async def run_consult_expert(
 
     # lazy: keep core import-light / the suite hermetic
     from pydantic_ai import Agent, PromptedOutput
-    from pydantic_ai.providers.openrouter import OpenRouterProvider
     from pydantic_ai.usage import UsageLimits
 
-    from .base import _aclose_async_client, timeout_http_client
+    from .base import _aclose_async_client, build_openrouter_model
     from .fs_tools import build_fs_tools
-    from .openrouter_cost import CostInstrumentedOpenRouterModel
 
     # 1. Load expert definition.
     from .expert_manager import ExpertManager
@@ -144,14 +142,7 @@ async def run_consult_expert(
         ro_tools.append(make_explore_tool(settings, repo_dir))
 
     model_name = definition.model or settings.model
-    client = timeout_http_client(settings)
-    model = CostInstrumentedOpenRouterModel(
-        model_name,
-        provider=OpenRouterProvider(
-            api_key=get_secrets().openrouter_api_key,
-            http_client=client,
-        ),
-    )
+    model, client = build_openrouter_model(settings, model_name)
     agent = Agent(
         model=model,
         system_prompt=system_prompt,

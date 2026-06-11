@@ -342,21 +342,12 @@ async def run_web_knowledge(
 
     # Lazy: keep the test suite hermetic, the core import-light.
     from pydantic_ai import Agent
-    from pydantic_ai.providers.openrouter import OpenRouterProvider
     from pydantic_ai.usage import UsageLimits
 
-    from .base import _aclose_async_client, timeout_http_client
-    from .openrouter_cost import CostInstrumentedOpenRouterModel
+    from .base import _aclose_async_client, build_openrouter_model
     from .retry import acall_with_retry
 
-    client = timeout_http_client(settings)
-    model = CostInstrumentedOpenRouterModel(
-        settings.web_knowledge_model,
-        provider=OpenRouterProvider(
-            api_key=get_secrets().openrouter_api_key,
-            http_client=client,
-        ),
-    )
+    model, client = build_openrouter_model(settings, settings.web_knowledge_model)
 
     index = _build_index(settings)
     agent = Agent(
