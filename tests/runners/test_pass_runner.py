@@ -1108,25 +1108,59 @@ def test_format_recent_proposals_empty():
 
 
 def test_format_recent_proposals_single():
-    """Single ticket renders one line with [STATE] short_id | title."""
+    """Single ticket renders one line with the FULL [STATE] id | title."""
     t = _FakeTicket("abc123def456", State.DRAFT, "Fix bug in thing")
     result = _format_recent_proposals([t])
     lines = result.split("\n")
     assert lines[0] == "<recent_proposals>"
-    assert "[draft] abc123d | Fix bug in thing" in lines[1]
+    assert "[draft] abc123def456 | Fix bug in thing" in lines[1]
     assert lines[2] == "</recent_proposals>"
 
 
 def test_format_recent_proposals_multiple():
-    """Multiple tickets render multiple lines, order preserved."""
+    """Multiple tickets render multiple lines, order preserved, full ids."""
     t1 = _FakeTicket("11111112222222", State.DRAFT, "First")
     t2 = _FakeTicket("22222223333333", State.CLOSED, "Second")
     result = _format_recent_proposals([t1, t2])
     lines = result.split("\n")
     assert lines[0] == "<recent_proposals>"
-    assert "[draft] 1111111 | First" in lines[1]
-    assert "[closed] 2222222 | Second" in lines[2]
+    assert "[draft] 11111112222222 | First" in lines[1]
+    assert "[closed] 22222223333333 | Second" in lines[2]
     assert lines[3] == "</recent_proposals>"
+
+
+def test_format_recent_proposals_full_id_roundtrips_read_ticket_regex():
+    """A canonical-format ticket id survives rendering unchanged and still
+    matches ``read_ticket._TICKET_ID_RE`` — the bug this ticket fixes was
+    truncating the id to a 7-char prefix the regex rejects."""
+    from robotsix_mill.agents.read_ticket import _TICKET_ID_RE
+
+    canonical = "20250331T142315Z-add-billing-endpoint-3a1f"
+    assert _TICKET_ID_RE.match(canonical) is not None
+    t = _FakeTicket(canonical, State.DRAFT, "Add billing endpoint")
+    result = _format_recent_proposals([t])
+    assert canonical in result
+    # The rendered id (between "[draft] " and " | ") must still match.
+    rendered_id = result.split("\n")[1].split("] ", 1)[1].split(" | ", 1)[0]
+    assert rendered_id == canonical
+    assert _TICKET_ID_RE.match(rendered_id) is not None
+
+
+def test_render_board_snapshot_emits_full_id():
+    """_render_board_snapshot emits the full t.id (not a 7-char prefix),
+    and a canonical-format id still matches read_ticket's regex."""
+    from robotsix_mill.runners.periodic_runner import _render_board_snapshot
+    from robotsix_mill.agents.read_ticket import _TICKET_ID_RE
+
+    assert _render_board_snapshot([]) == "(no tickets on the board)"
+
+    canonical = "20250331T142315Z-add-billing-endpoint-3a1f"
+    t = _FakeTicket(canonical, State.DRAFT, "Add billing endpoint")
+    result = _render_board_snapshot([t])
+    assert result == f"[draft] {canonical} | Add billing endpoint"
+    rendered_id = result.split("] ", 1)[1].split(" | ", 1)[0]
+    assert rendered_id == canonical
+    assert _TICKET_ID_RE.match(rendered_id) is not None
 
 
 def test_format_recent_proposals_states_roundtrip():

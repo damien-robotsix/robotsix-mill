@@ -265,15 +265,16 @@ def strip_ephemeral_sections(memory_text: str) -> str:
 def _format_recent_proposals(tickets: list[Ticket]) -> str:
     """Format a ``<recent_proposals>`` block for agent prompt injection.
 
-    One line per ticket: ``[STATE] short_id | title``, most recent first.
+    One line per ticket: ``[STATE] id | title``, most recent first.
+    The full ``t.id`` is emitted so the agent can pass it straight to
+    ``read_ticket`` (which rejects truncated IDs).
     """
     if not tickets:
         return "<recent_proposals>\n(no recent proposals)\n</recent_proposals>"
     lines = ["<recent_proposals>"]
     for t in tickets:
-        short_id = t.id[:7]
         state_val = t.state.value
-        lines.append(f"[{state_val}] {short_id} | {t.title}")
+        lines.append(f"[{state_val}] {t.id} | {t.title}")
     lines.append("</recent_proposals>")
     return "\n".join(lines)
 

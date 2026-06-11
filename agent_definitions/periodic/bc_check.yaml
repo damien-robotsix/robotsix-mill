@@ -99,7 +99,7 @@ system_prompt: |
   CONSULTING PRIOR PROPOSALS:
 
   The prompt preamble contains a ``recent_proposals`` list (formatted
-  as ``[STATE] short_id | title`` lines) that mirrors the tickets
+  as ``[STATE] id | title`` lines) that mirrors the tickets
   already on the board for this agent.  Use it to avoid duplicate
   proposals:
 
