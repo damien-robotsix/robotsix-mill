@@ -21,7 +21,6 @@ from typing import Any
 from robotsix_llmio.openrouter.model import (
     _get_cost_from_response,
     _inject_usage_include,
-    _resolve_model_settings,
     record_openrouter_cost,
 )
 from robotsix_llmio.openrouter_deepseek.model import (
@@ -40,33 +39,11 @@ __all__ = [
     "record_openrouter_cost",
     "_get_cost_from_response",
     "_inject_usage_include",
-    "_inject_provider_pin",
     "_PINNED_PROVIDER",
     "_PIN_MODEL_PREFIX",
 ]
 
 _FLASH_MARKER = "flash"
-
-
-def _inject_provider_pin(args: tuple, kwargs: dict, model_name: str) -> None:
-    """Interim substring-based DeepSeek pin (compat with the pre-extraction
-    behaviour). The library applies the pin per-instance instead; this function
-    remains for direct callers/tests that pass a model name."""
-    if not model_name.startswith(_PIN_MODEL_PREFIX):
-        return
-    settings = _resolve_model_settings(args, kwargs)
-    if settings is None:
-        return
-    extra_body = dict(settings.get("extra_body") or {})
-    if "provider" in extra_body:
-        return
-    extra_body["provider"] = {"only": [_PINNED_PROVIDER], "allow_fallbacks": False}
-    if "reasoning" not in extra_body:
-        if _FLASH_MARKER in model_name:
-            extra_body["reasoning"] = {"enabled": False}
-        else:
-            extra_body["reasoning"] = {"effort": "xhigh"}
-    settings["extra_body"] = extra_body
 
 
 class CostInstrumentedOpenRouterModel(OpenRouterDeepseekModel):
