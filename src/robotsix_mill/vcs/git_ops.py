@@ -260,7 +260,7 @@ def fetch(repo: Path, *, remote_url: str, token: str | None, branch: str) -> Non
     )
 
 
-def branch_is_ahead_of_main(repo: Path) -> bool:
+def branch_is_ahead_of_main(repo: Path, target_branch: str = "main") -> bool:
     """Return True when HEAD has commits not in origin/main.
 
     Counts commits on HEAD that are NOT on ``origin/main`` (the
@@ -282,13 +282,20 @@ def branch_is_ahead_of_main(repo: Path) -> bool:
     would rather hit the forge API than block a real change.
     """
     try:
-        _git(repo, "fetch", "origin", "main")
+        _git(repo, "fetch", "origin", target_branch)
     except subprocess.CalledProcessError:
         # fetch failed — assume ahead so we don't block a real change
         return True
 
     result = subprocess.run(
-        ["git", "-C", str(repo), "rev-list", "--count", "origin/main..HEAD"],
+        [
+            "git",
+            "-C",
+            str(repo),
+            "rev-list",
+            "--count",
+            f"origin/{target_branch}..HEAD",
+        ],
         capture_output=True,
         text=True,
     )
@@ -301,7 +308,7 @@ def branch_is_ahead_of_main(repo: Path) -> bool:
         return True
 
 
-def branch_has_net_diff(repo: Path) -> bool:
+def branch_has_net_diff(repo: Path, target_branch: str = "main") -> bool:
     """Return True when HEAD has a non-empty content diff vs ``origin/main``.
 
     Uses the three-dot ``git diff --quiet origin/main...HEAD`` semantic
@@ -319,13 +326,13 @@ def branch_has_net_diff(repo: Path) -> bool:
     would rather hit the forge API than silently DONE a real change.
     """
     try:
-        _git(repo, "fetch", "origin", "main")
+        _git(repo, "fetch", "origin", target_branch)
     except subprocess.CalledProcessError:
         return True
 
     # `git diff --quiet` exits 0 when there is NO diff, 1 when there is one.
     result = subprocess.run(
-        ["git", "-C", str(repo), "diff", "--quiet", "origin/main...HEAD"],
+        ["git", "-C", str(repo), "diff", "--quiet", f"origin/{target_branch}...HEAD"],
         capture_output=True,
         text=True,
     )
@@ -338,7 +345,7 @@ def branch_has_net_diff(repo: Path) -> bool:
     return True
 
 
-def branch_is_behind_main(repo: Path) -> bool:
+def branch_is_behind_main(repo: Path, target_branch: str = "main") -> bool:
     """Return True when ``origin/main`` has commits not on HEAD.
 
     Counts commits on ``origin/main`` that are NOT on HEAD (the
@@ -353,11 +360,18 @@ def branch_is_behind_main(repo: Path) -> bool:
     transient git error; the genuine-failure path (ci_fix) runs instead.
     """
     try:
-        _git(repo, "fetch", "origin", "main")
+        _git(repo, "fetch", "origin", target_branch)
     except subprocess.CalledProcessError:
         return False
     result = subprocess.run(
-        ["git", "-C", str(repo), "rev-list", "--count", "HEAD..origin/main"],
+        [
+            "git",
+            "-C",
+            str(repo),
+            "rev-list",
+            "--count",
+            f"HEAD..origin/{target_branch}",
+        ],
         capture_output=True,
         text=True,
     )

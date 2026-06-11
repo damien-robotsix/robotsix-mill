@@ -49,7 +49,7 @@ from ..agents.ci_fixing import run_ci_fix_agent
 from .ci_fix import _pr_changed_paths
 from ..agents.rebasing import run_rebase_agent
 from ..agents.review_revision import run_review_revision_agent
-from ..config import RepoConfig, get_repo_config
+from ..config import RepoConfig, get_repo_config, target_branch_for
 from ..config_loader import ConfigError
 from ..core.models import Ticket
 from ..core.states import State
@@ -156,34 +156,42 @@ def _workspace_repo_dir(ctx, ticket) -> str | None:
     return str(repo)
 
 
-def _verify_merge_ancestor(repo_dir: str | None, sha: str, ticket_id: str) -> bool:
-    """Verify that commit *sha* is an ancestor of origin/main.
+def _verify_merge_ancestor(
+    repo_dir: str | None,
+    sha: str,
+    ticket_id: str,
+    target_branch: str = "main",
+) -> bool:
+    """Verify that commit *sha* is an ancestor of origin/<target_branch>.
 
-    Fetches origin/main to ensure the local ref is current, then runs
-    ``git merge-base --is-ancestor <sha> origin/main``.  When the
-    direct ancestry check fails (exit 1), falls back to squash-merge
-    detection: greps the origin/main log for *ticket_id*.
+    Fetches origin/<target_branch> to ensure the local ref is current,
+    then runs ``git merge-base --is-ancestor <sha> origin/<target_branch>``.
+    When the direct ancestry check fails (exit 1), falls back to
+    squash-merge detection: greps the origin/<target_branch> log for
+    *ticket_id*.
 
     Returns True when the merge is confirmed (ancestor or squash-
     merge found).  Returns False only when the check runs and
-    confirms the commit is NOT on origin/main.  When the repo is
-    unavailable or a git error occurs, returns True (best-effort —
-    do not block the pipeline on transient tooling issues).
+    confirms the commit is NOT on origin/<target_branch>.  When the
+    repo is unavailable or a git error occurs, returns True
+    (best-effort — do not block the pipeline on transient tooling
+    issues).
     """
     if repo_dir is None or not sha:
         # Nothing to verify — best-effort allow.
         return True
     try:
         subprocess.run(
-            ["git", "-C", repo_dir, "fetch", "origin", "main"],
+            ["git", "-C", repo_dir, "fetch", "origin", target_branch],
             check=True,
             capture_output=True,
             text=True,
         )
     except subprocess.CalledProcessError:
         log.warning(
-            "%s: git fetch origin main failed — allowing merge (best-effort)",
+            "%s: git fetch origin %s failed — allowing merge (best-effort)",
             ticket_id,
+            target_branch,
         )
         return True
 
@@ -195,13 +203,13 @@ def _verify_merge_ancestor(repo_dir: str | None, sha: str, ticket_id: str) -> bo
             "merge-base",
             "--is-ancestor",
             sha,
-            "origin/main",
+            f"origin/{target_branch}",
         ],
         capture_output=True,
         text=True,
     )
     if result.returncode == 0:
-        return True  # sha is an ancestor of origin/main
+        return True  # sha is an ancestor of origin/<target_branch>
     if result.returncode == 1:
         # Not a direct ancestor — maybe it was a squash-merge.
         grep = subprocess.run(
@@ -210,7 +218,7 @@ def _verify_merge_ancestor(repo_dir: str | None, sha: str, ticket_id: str) -> bo
                 "-C",
                 repo_dir,
                 "log",
-                "origin/main",
+                f"origin/{target_branch}",
                 "--oneline",
                 "--fixed-strings",
                 f"--grep={ticket_id}",
@@ -220,17 +228,20 @@ def _verify_merge_ancestor(repo_dir: str | None, sha: str, ticket_id: str) -> bo
         )
         if grep.returncode == 0 and grep.stdout.strip():
             log.info(
-                "%s: commit %s is not an ancestor of origin/main, "
+                "%s: commit %s is not an ancestor of origin/%s, "
                 "but a commit referencing this ticket was found on "
-                "origin/main — treating as squash-merged",
+                "origin/%s — treating as squash-merged",
                 ticket_id,
                 sha[:8],
+                target_branch,
+                target_branch,
             )
             return True
         log.info(
-            "%s: commit %s is NOT an ancestor of origin/main — merge not confirmed",
+            "%s: commit %s is NOT an ancestor of origin/%s — merge not confirmed",
             ticket_id,
             sha[:8],
+            target_branch,
         )
         return False
     # Any other exit code — git error, best-effort allow.
@@ -959,7 +970,8 @@ class MergeStage(Stage):
         if pr.get("merged"):
             sha = pr.get("sha", "")
             repo_dir = _workspace_repo_dir(ctx, ticket)
-            if _verify_merge_ancestor(repo_dir, sha, ticket.id):
+            target = target_branch_for(s, ctx.repo_config)
+            if _verify_merge_ancestor(repo_dir, sha, ticket.id, target):
                 ctx.service.workspace(ticket).artifacts_dir.joinpath(
                     "merge.md"
                 ).write_text(f"merged: {pr.get('url', '')}\n", encoding="utf-8")
@@ -968,13 +980,14 @@ class MergeStage(Stage):
                 return Outcome(State.DONE, f"merged: {pr.get('url', '')}")
             log.warning(
                 "%s: PR reported merged but commit %s is not an ancestor of "
-                "origin/main — falling back to IMPLEMENT_COMPLETE for investigation",
+                "origin/%s — falling back to IMPLEMENT_COMPLETE for investigation",
                 ticket.id,
                 sha[:8] if sha else "(none)",
+                target,
             )
             return Outcome(
                 State.IMPLEMENT_COMPLETE,
-                f"PR reported merged but merge not confirmed on origin/main: {pr.get('url', '')}",
+                f"PR reported merged but merge not confirmed on origin/{target}: {pr.get('url', '')}",
             )
         if pr.get("state") == "closed":
             return Outcome(
@@ -1022,7 +1035,8 @@ class MergeStage(Stage):
             )
             if result.get("merged"):
                 repo_dir = _workspace_repo_dir(ctx, ticket)
-                if _verify_merge_ancestor(repo_dir, feature_tip_sha, ticket.id):
+                target = target_branch_for(s, ctx.repo_config)
+                if _verify_merge_ancestor(repo_dir, feature_tip_sha, ticket.id, target):
                     ctx.service.workspace(ticket).artifacts_dir.joinpath(
                         "merge.md"
                     ).write_text(
@@ -1037,13 +1051,14 @@ class MergeStage(Stage):
                     )
                 log.warning(
                     "%s: auto-merge reported success but commit %s is not an "
-                    "ancestor of origin/main — falling back to IMPLEMENT_COMPLETE",
+                    "ancestor of origin/%s — falling back to IMPLEMENT_COMPLETE",
                     ticket.id,
                     feature_tip_sha[:8] if feature_tip_sha else "(none)",
+                    target,
                 )
                 return Outcome(
                     State.IMPLEMENT_COMPLETE,
-                    f"auto-merge reported success but merge not confirmed on origin/main: {pr.get('url', '')}",
+                    f"auto-merge reported success but merge not confirmed on origin/{target}: {pr.get('url', '')}",
                 )
             # Forge rejected the merge.
             reason_text = f"forge merge failed: {result.get('reason', 'unknown')}"
@@ -1142,7 +1157,9 @@ class MergeStage(Stage):
             # routes to ci_fix (a genuine, ticket-owned failure). Skipped when
             # the workspace clone is gone (None) — fall straight to ci_fix.
             repo_dir = _workspace_repo_dir(ctx, ticket)
-            if repo_dir is not None and git_ops.branch_is_behind_main(Path(repo_dir)):
+            if repo_dir is not None and git_ops.branch_is_behind_main(
+                Path(repo_dir), target_branch_for(s, ctx.repo_config)
+            ):
                 log.info(
                     "%s: CI failing on a stale base (branch behind main) → "
                     "REBASING before ci_fix",
@@ -1346,7 +1363,7 @@ class MergeStage(Stage):
 
         counter_path, attempt, max_attempts = self._read_rebase_attempt(ctx, ticket, s)
 
-        target = s.forge_target_branch
+        target = target_branch_for(s, ctx.repo_config)
         log.info(
             "%s: PR conflicting — rebase attempt %d/%d onto %s",
             ticket.id,

@@ -39,6 +39,7 @@ from ..agents.testing import (
     run_test_agent,
     smoke_paths_match,
 )
+from ..config import target_branch_for
 from ..core.models import SourceKind, Ticket
 from ..core.states import State
 from ..forge.auth import _resolve_remote_url, github_token
@@ -458,6 +459,7 @@ class ImplementStage(Stage):
         scope creep (REJECT), or ambiguous (ESCALATE).  Otherwise any
         out-of-scope file immediately blocks the ticket.
         """
+        target = target_branch_for(settings, ctx.repo_config)
         if not file_map:
             return _ScopeGuardrailResult(
                 action="skip_iteration",
@@ -465,7 +467,7 @@ class ImplementStage(Stage):
                 feedback=current_feedback,
             )
 
-        changed = git_ops.introduced_files(repo_dir, settings.forge_target_branch)
+        changed = git_ops.introduced_files(repo_dir, target)
         out_of_scope = [f for f in changed if f not in file_map]
         if not out_of_scope:
             log.info(
@@ -490,7 +492,7 @@ class ImplementStage(Stage):
         # registers NEW paths that are NOT in the file_map (an unrelated
         # new module), leave it out_of_scope so it is still flagged.
         if MODULES_YAML in out_of_scope:
-            added = _modules_yaml_added_paths(repo_dir, settings.forge_target_branch)
+            added = _modules_yaml_added_paths(repo_dir, target)
             if added and added <= file_map:
                 file_map.add(MODULES_YAML)
                 out_of_scope = [f for f in out_of_scope if f != MODULES_YAML]
@@ -529,7 +531,7 @@ class ImplementStage(Stage):
         for f in out_of_scope:
             (
                 binary_artifacts
-                if _is_binary_artifact(repo_dir, f, settings.forge_target_branch)
+                if _is_binary_artifact(repo_dir, f, target)
                 else text_out_of_scope
             ).append(f)
 
@@ -617,7 +619,7 @@ class ImplementStage(Stage):
                     "-C",
                     str(repo_dir),
                     "diff",
-                    f"origin/{settings.forge_target_branch}",
+                    f"origin/{target}",
                     "--",
                     path,
                 ],
@@ -752,9 +754,7 @@ class ImplementStage(Stage):
                     len(out_of_scope),
                     ", ".join(out_of_scope),
                 )
-                git_ops.restore_paths(
-                    repo_dir, settings.forge_target_branch, out_of_scope
-                )
+                git_ops.restore_paths(repo_dir, target, out_of_scope)
                 return _ScopeGuardrailResult(
                     action="skip_iteration",
                     file_map=file_map,
@@ -770,7 +770,7 @@ class ImplementStage(Stage):
             # tree BEFORE finalize commits, so the WIP commit (and every
             # resumed run off it) starts from the spec'd scope only.
             # Handles both unstaged and already-WIP-committed pollution.
-            git_ops.restore_paths(repo_dir, settings.forge_target_branch, out_of_scope)
+            git_ops.restore_paths(repo_dir, target, out_of_scope)
             ImplementStage._finalize(
                 ctx,
                 ticket,
@@ -1062,6 +1062,7 @@ class ImplementStage(Stage):
         extra_roots: list[Path] | None,
     ) -> _SinglePassResult:
         """Run the test gate, apply ``ValidationResult.decide``, route the pass."""
+        target = target_branch_for(settings, ctx.repo_config)
         passed, diag = run_test_agent(
             settings=settings,
             repo_dir=repo_dir,
@@ -1080,9 +1081,7 @@ class ImplementStage(Stage):
                 load_repo_smoke_command(repo_dir) or settings.smoke_command
             ).strip()
             if smoke_cmd:
-                changed = git_ops.introduced_files(
-                    repo_dir, settings.forge_target_branch
-                )
+                changed = git_ops.introduced_files(repo_dir, target)
                 smoke_paths = load_repo_smoke_paths(repo_dir)
                 if smoke_paths_match(changed, smoke_paths):
                     smoke_passed, smoke_diag = run_smoke_agent(
@@ -1150,7 +1149,7 @@ class ImplementStage(Stage):
             # Treat that as a normal proceed instead of a no-change
             # bypass; deliver will pick it up.
             if (
-                not ImplementStage._any_repo_has_changes(repo_dir, extra_roots)
+                not ImplementStage._any_repo_has_changes(repo_dir, extra_roots, target)
                 and no_change_needed
                 and no_change_rationale.strip()
             ):
@@ -1216,7 +1215,7 @@ class ImplementStage(Stage):
                     outcome=Outcome(State.DONE, f"no change needed — {short}"),
                 )
             if (
-                not ImplementStage._any_repo_has_changes(repo_dir, extra_roots)
+                not ImplementStage._any_repo_has_changes(repo_dir, extra_roots, target)
                 and not resuming
             ):
                 # Silent no-change on a fresh run (agent didn't signal):
@@ -1302,7 +1301,7 @@ class ImplementStage(Stage):
             # handoff to review — anchored deterministically on the
             # edit-tool-call path args cross-referenced against the net
             # diff (no NL/symbol parsing).
-            changed = git_ops.introduced_files(repo_dir, settings.forge_target_branch)
+            changed = git_ops.introduced_files(repo_dir, target)
             if extra_roots:
                 for repo_path in extra_roots:
                     # Mirror _any_repo_has_changes: the primary repo is
@@ -1310,12 +1309,7 @@ class ImplementStage(Stage):
                     if repo_path == repo_dir:
                         continue
                     changed = list(
-                        set(changed)
-                        | set(
-                            git_ops.introduced_files(
-                                repo_path, settings.forge_target_branch
-                            )
-                        )
+                        set(changed) | set(git_ops.introduced_files(repo_path, target))
                     )
             missing = short_circuit_verify.detect_missing_claimed_files(
                 changed_files=changed,
@@ -1328,7 +1322,7 @@ class ImplementStage(Stage):
                     "[Diagnostic] Your summary / thread-reply claims edits to "
                     f"the following file(s) — {file_list} — but they are ABSENT "
                     "from the net diff vs "
-                    f"origin/{settings.forge_target_branch}. An edit-tool-call "
+                    f"origin/{target}. An edit-tool-call "
                     "targeted each of them and your summary names them as fixed, "
                     "yet the working tree does not contain those changes (edits "
                     "reverted, written outside the clone, or never applied). "
@@ -1650,11 +1644,12 @@ class ImplementStage(Stage):
         """
         ws = ctx.service.workspace(ticket)
         cache_path = ws.artifacts_dir / "baseline_check.json"
+        target = target_branch_for(settings, ctx.repo_config)
 
         # Resolve the current base-branch SHA. Prefer the remote ref
         # (origin/<branch>) — the local branch may be stale, and we must test
         # the SAME commit we report as base_sha (see checkout below).
-        remote_sha = git_ops.remote_branch_sha(repo_dir, settings.forge_target_branch)
+        remote_sha = git_ops.remote_branch_sha(repo_dir, target)
         base_sha = remote_sha or git_ops.head_sha(repo_dir)
 
         # --- idempotency guard (per ticket, per base commit) ---
@@ -1666,7 +1661,7 @@ class ImplementStage(Stage):
         # covers BOTH the cache-hit-failing and fresh-fail paths and avoids
         # re-running the test agent on re-entry. Proceed instead; any genuine
         # residual failure is caught downstream as a normal gate result.
-        fix_title = ImplementStage._baseline_fix_title(settings, base_sha)
+        fix_title = ImplementStage._baseline_fix_title(settings, base_sha, target)
         resolved_fix_id = ImplementStage._baseline_fix_already_resolved(
             ctx, ticket, fix_title
         )
@@ -1715,7 +1710,7 @@ class ImplementStage(Stage):
         # producing phantom "pre-existing failures on main" (e.g. a fix that
         # already landed reported as still-broken) that poison the gate. When
         # the remote branch is absent, fall back to the branch name.
-        git_ops.checkout(repo_dir, remote_sha or settings.forge_target_branch)
+        git_ops.checkout(repo_dir, remote_sha or target)
         try:
             # retry_on_failure: one flaky test on main must not fabricate
             # "pre-existing test failures", block the ticket, and spawn a
@@ -1746,24 +1741,20 @@ class ImplementStage(Stage):
             ticket,
             repo_dir,
             branch,
-            f"pre-existing test failures on {settings.forge_target_branch} "
-            f"({base_sha[:8]}): {diag[:400]}",
+            f"pre-existing test failures on {target} ({base_sha[:8]}): {diag[:400]}",
             ok=False,
             extra_roots=None,
         )
         return ImplementStage._spawn_baseline_fix(ctx, ticket, diag, base_sha, settings)
 
     @staticmethod
-    def _baseline_fix_title(settings, base_sha: str) -> str:
+    def _baseline_fix_title(settings, base_sha: str, target_branch: str) -> str:
         """Deterministic title for the baseline-fix ticket of *base_sha*.
 
         Shared by :meth:`_run_baseline_check` (idempotency guard) and
         :meth:`_spawn_baseline_fix` (spawn/dedup) so the two cannot drift.
         """
-        return (
-            f"baseline: pre-existing test failures — "
-            f"{settings.forge_target_branch} {base_sha[:8]}"
-        )
+        return f"baseline: pre-existing test failures — {target_branch} {base_sha[:8]}"
 
     @staticmethod
     def _baseline_fix_already_resolved(ctx, ticket, fix_title) -> str | None:
@@ -1794,13 +1785,13 @@ class ImplementStage(Stage):
         helper so the current ticket auto-resumes when the fix reaches
         DONE instead of dead-ending on ``BLOCKED``.
         """
+        target = target_branch_for(settings, ctx.repo_config)
         block_reason = (
-            f"pre-existing test failures on {settings.forge_target_branch} "
-            f"({base_sha[:8]}): {diag[:400]}"
+            f"pre-existing test failures on {target} ({base_sha[:8]}): {diag[:400]}"
         )
-        title = ImplementStage._baseline_fix_title(settings, base_sha)
+        title = ImplementStage._baseline_fix_title(settings, base_sha, target)
         description = (
-            f"## Pre-existing test failures on {settings.forge_target_branch}\n\n"
+            f"## Pre-existing test failures on {target}\n\n"
             f"**Base SHA:** {base_sha}\n\n"
             f"**Diagnosis:** {diag}\n\n"
             f"**Detected by:** implement baseline check for {ticket.id}\n"
@@ -1965,20 +1956,26 @@ class ImplementStage(Stage):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _any_repo_has_changes(repo_dir: Path, extra_roots: list[Path] | None) -> bool:
+    def _any_repo_has_changes(
+        repo_dir: Path,
+        extra_roots: list[Path] | None,
+        target_branch: str = "main",
+    ) -> bool:
         """Return True if any repo has uncommitted changes or is ahead of main.
 
         Used by the two exit-path guards so multi-repo tickets don't
         misroute to DONE/BLOCKED when only the primary repo was checked.
         """
-        if git_ops.has_changes(repo_dir) or git_ops.branch_is_ahead_of_main(repo_dir):
+        if git_ops.has_changes(repo_dir) or git_ops.branch_is_ahead_of_main(
+            repo_dir, target_branch
+        ):
             return True
         if extra_roots:
             for repo_path in extra_roots:
                 if repo_path == repo_dir:
                     continue
                 if git_ops.has_changes(repo_path) or git_ops.branch_is_ahead_of_main(
-                    repo_path
+                    repo_path, target_branch
                 ):
                     return True
         return False
@@ -2128,6 +2125,7 @@ class ImplementStage(Stage):
         repo_dir = ws.dir / "repo"
         branch = f"{settings.branch_prefix}{ticket.id}"
         remote_url = _resolve_remote_url(settings, ctx.repo_config)
+        target = target_branch_for(settings, ctx.repo_config)
 
         # Resume iff a prior run left this ticket's clone + branch behind.
         resuming = (repo_dir / ".git").exists() and git_ops.branch_exists(
@@ -2146,7 +2144,7 @@ class ImplementStage(Stage):
                 git_ops.clone(
                     remote_url,
                     repo_dir,
-                    settings.forge_target_branch,
+                    target,
                     token,
                 )
             except subprocess.CalledProcessError as e:
@@ -2171,14 +2169,13 @@ class ImplementStage(Stage):
             _rebase_token = None
         if not git_ops.try_rebase_onto(
             repo_dir,
-            settings.forge_target_branch,
+            target,
             remote_url=_resolve_remote_url(settings, ctx.repo_config),
             token=_rebase_token,
         ):
             return Outcome(
                 State.REBASING,
-                f"rebase onto origin/{settings.forge_target_branch} "
-                "failed — handing to rebase agent",
+                f"rebase onto origin/{target} failed — handing to rebase agent",
             )
 
         # Hard invariant: NEVER run the agent / sandbox without a
@@ -2198,7 +2195,7 @@ class ImplementStage(Stage):
                 git_ops.clone(
                     remote_url,
                     repo_dir,
-                    settings.forge_target_branch,
+                    target,
                     token,
                 )
                 git_ops.create_branch(repo_dir, branch)

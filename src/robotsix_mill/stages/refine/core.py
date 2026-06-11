@@ -11,6 +11,7 @@ import subprocess
 from pathlib import Path
 
 from ...agents import refining
+from ...config import target_branch_for
 from ...core.models import Ticket
 from ...core.states import State
 from ...forge.auth import github_token
@@ -179,7 +180,7 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
             git_ops.clone(
                 remote_url,
                 cand,
-                s.forge_target_branch,
+                target_branch_for(s, ctx.repo_config),
                 token,
             )
             return cand

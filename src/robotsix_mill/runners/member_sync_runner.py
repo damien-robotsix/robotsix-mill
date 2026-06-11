@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 
-from ..config import RepoConfig, Settings
+from ..config import RepoConfig, Settings, target_branch_for
 from ..workspace_member_sync import MemberSyncResult, sync_workspace_members
 from ..workspace_members import detect_workspace_members
 from .periodic_runner import _forge_token
@@ -67,7 +67,7 @@ def run_member_sync_pass(
             git_ops.clone(
                 forge_remote_url,
                 cand,
-                settings.forge_target_branch,
+                target_branch_for(settings, repo_config),
                 _forge_token(settings, repo_config),
             )
             clone_dir = cand

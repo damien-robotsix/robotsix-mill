@@ -3790,7 +3790,9 @@ def test_baseline_gate_proceeds_when_dependency_fix_done(
         lambda **kw: (False, "pre-existing failure"),
     )
 
-    fix_title = ImplementStage._baseline_fix_title(ctx.settings, base_sha)
+    fix_title = ImplementStage._baseline_fix_title(
+        ctx.settings, base_sha, ctx.settings.forge_target_branch
+    )
     fix = ctx.service.create(
         fix_title,
         "Repair the red base.",
@@ -3849,7 +3851,9 @@ def test_baseline_gate_spawns_when_dependency_fix_for_different_sha(
     # the title computed for the real base, so the guard does not fire.
     other_sha = "deadbeef" + "0" * 32
     fix = ctx.service.create(
-        ImplementStage._baseline_fix_title(ctx.settings, other_sha),
+        ImplementStage._baseline_fix_title(
+            ctx.settings, other_sha, ctx.settings.forge_target_branch
+        ),
         "Repair some other red base.",
         source=SourceKind.IMPLEMENT_BASELINE_DEPENDENCY,
     )

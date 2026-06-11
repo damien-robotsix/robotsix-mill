@@ -182,7 +182,11 @@ def test_implement_complete_ci_failing_behind_main_rebases_before_ci_fix(
     _ci_failing_mergeable(monkeypatch)
     # Workspace clone present + behind main.
     monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
-    monkeypatch.setattr(merge_mod.git_ops, "branch_is_behind_main", lambda repo: True)
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": True,
+    )
     out = MergeStage().run(_implement_complete(ctx), ctx)
     assert out.next_state is State.REBASING
 
@@ -195,7 +199,11 @@ def test_implement_complete_ci_failing_up_to_date_goes_to_ci_fix(tmp_path, monke
     ctx = _gh(tmp_path)
     _ci_failing_mergeable(monkeypatch)
     monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
-    monkeypatch.setattr(merge_mod.git_ops, "branch_is_behind_main", lambda repo: False)
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": False,
+    )
     out = MergeStage().run(_implement_complete(ctx), ctx)
     assert out.next_state is State.FIXING_CI
 

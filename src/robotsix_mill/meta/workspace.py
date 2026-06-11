@@ -16,7 +16,7 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..config import Settings, get_repos_config
+from ..config import Settings, get_repos_config, target_branch_for
 from ..forge.auth import github_token
 from ..vcs import git_ops
 
@@ -65,7 +65,7 @@ def build_meta_workspace(
             git_ops.clone(
                 rc.forge_remote_url,
                 dest,
-                settings.forge_target_branch,
+                target_branch_for(settings, rc),
                 token,
             )
             clones.append(dest)

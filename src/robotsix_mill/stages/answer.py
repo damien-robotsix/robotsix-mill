@@ -12,6 +12,7 @@ import logging
 import subprocess
 
 from ..agents import answering
+from ..config import target_branch_for
 from ..core.models import Ticket
 from ..core.states import State
 from ..forge.auth import _resolve_remote_url, github_token
@@ -59,7 +60,7 @@ class AnswerStage(Stage):
                     git_ops.clone(
                         remote_url,
                         cand,
-                        s.forge_target_branch,
+                        target_branch_for(s, ctx.repo_config),
                         token,
                     )
                     repo_dir = cand
