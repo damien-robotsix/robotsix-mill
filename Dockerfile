@@ -181,14 +181,18 @@ COPY . /app
 
 # Layer dev tooling (pytest, mypy, ruff, bandit) on top of the
 # site-packages inherited from base.
-ARG INSTALL_EXTRAS=dev,tracing
 # Plain pip here (not uv): the base stage copies the builder's site-packages
 # but NOT its /usr/local/bin/uv launcher, so a fresh `pip install uv` sees uv
 # already satisfied and never recreates the binary → "uv: not found". pip is
 # present and the editable install over inherited deps is cheap. (See PR #491.)
-# The dev extra's `robotsix-modules` is a git dependency (like robotsix-llmio),
-# which pip resolves natively — git is available from the base stage.
-RUN pip install --no-cache-dir --root-user-action=ignore -e ".[dev,tracing]" \
+# Dev tooling moved from the `dev` extra to PEP 735 [dependency-groups]
+# (#1166); `pip install ".[dev,...]"` then silently installed NOTHING for the
+# vanished extra, shipping a :dev image without pytest — which is the
+# sandbox image (mill.local.yaml pins sandbox.image: robotsix/mill:dev), so
+# every board's test gate broke at once (2026-06-11). `--group dev` is the
+# pip ≥25.1 way to install a dependency-group; the group's
+# `robotsix-modules` git dependency resolves natively (git in base stage).
+RUN pip install --no-cache-dir --root-user-action=ignore -e ".[tracing]" --group dev \
     && chown -R mill:mill /app
 
 # Entrypoint runs as root, joins the host's docker.sock group, then
