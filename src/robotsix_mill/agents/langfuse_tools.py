@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ..config import Settings
+    from ..config import RepoConfig, Settings
     from .trace_inspector import TraceFinding
 
 log = logging.getLogger(__name__)
@@ -223,11 +223,18 @@ def _build_langfuse_tools(settings: Settings, repo_config=None):
     ]
 
 
-def make_cost_inspect_tool(settings: Settings, repo_dir: Path | None = None):
+def make_cost_inspect_tool(
+    settings: Settings,
+    repo_dir: Path | None = None,
+    repo_config: RepoConfig | None = None,
+):
     """Build the ``inspect_cost`` tool closure.
 
     When *repo_dir* is provided the tool is registered (repo-scoped,
-    same gate as ``langfuse_inspect_trace``).  The tool returns a
+    same gate as ``langfuse_inspect_trace``).  When *repo_config* is
+    not ``None`` its Langfuse credentials are used for the read calls;
+    otherwise the global :class:`Secrets` fallback applies.  The tool
+    returns a
     compact per-trace cost breakdown with provider attribution so the
     refine agent can surface discrepancies like "openrouter traces
     show $0 while the session total is non-zero" without guessing
@@ -250,8 +257,11 @@ def make_cost_inspect_tool(settings: Settings, repo_dir: Path | None = None):
         """
         from ..langfuse.client import session_cost, session_traces
 
-        total = session_cost(settings, session_id)
-        traces = session_traces(settings, session_id)
+        kwargs: dict = {}
+        if repo_config is not None:
+            kwargs["repo_config"] = repo_config
+        total = session_cost(settings, session_id, **kwargs)
+        traces = session_traces(settings, session_id, **kwargs)
 
         if traces is None:
             return (
@@ -349,7 +359,11 @@ def render_trace_findings(
     return "\n".join(parts)
 
 
-def make_langfuse_inspect_tool(settings: Settings, repo_dir: Path | None = None):
+def make_langfuse_inspect_tool(
+    settings: Settings,
+    repo_dir: Path | None = None,
+    repo_config: RepoConfig | None = None,
+):
     """Build the ``langfuse_inspect_trace`` tool closure.
 
     When *repo_dir* is provided, the trace-inspector sub-agent gets
@@ -357,6 +371,10 @@ def make_langfuse_inspect_tool(settings: Settings, repo_dir: Path | None = None)
     ``explore``) so its findings can be grounded in the actual code.
     When ``None``, the sub-agent runs tool-less (same as the existing
     retrospect ``trace_inspect`` path).
+
+    When *repo_config* is not ``None`` its Langfuse credentials are
+    used to fetch the trace and resolve the inspector's read client;
+    otherwise the global :class:`Secrets` fallback applies.
     """
 
     def langfuse_inspect_trace(trace_id: str) -> str:
@@ -375,7 +393,10 @@ def make_langfuse_inspect_tool(settings: Settings, repo_dir: Path | None = None)
         from ..langfuse.client import fetch_trace_detail
         from .trace_inspector import run_trace_inspector
 
-        detail = fetch_trace_detail(settings, trace_id)
+        kwargs: dict = {}
+        if repo_config is not None:
+            kwargs["repo_config"] = repo_config
+        detail = fetch_trace_detail(settings, trace_id, **kwargs)
         if detail is None:
             return f"trace {trace_id} unavailable"
 
@@ -384,6 +405,7 @@ def make_langfuse_inspect_tool(settings: Settings, repo_dir: Path | None = None)
             settings=settings,
             trace_data=trace_data,
             repo_dir=repo_dir,
+            **kwargs,
         )
 
         return render_trace_findings(result.findings, trace_id, result.error or None)

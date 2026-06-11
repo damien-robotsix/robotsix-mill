@@ -23,7 +23,7 @@ import yaml as _yaml
 
 from pydantic import BaseModel, Field, model_validator
 
-from ..config import Settings
+from ..config import RepoConfig, Settings
 from .prompt_blocks import section
 
 # Strips the ``## Tool: `explore``` section (through to the next
@@ -704,6 +704,7 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
     title: str,
     draft: str,
     repo_dir: Path | None = None,
+    repo_config: RepoConfig | None = None,
     reviewer_comments: str | None = None,
     memory: str = "",
     epic_context: str = "",
@@ -800,15 +801,19 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
     # Langfuse read tools — always available (four simple closures).
     from .langfuse_tools import _build_langfuse_tools
 
-    tools.extend(_build_langfuse_tools(settings))
+    tools.extend(_build_langfuse_tools(settings, repo_config=repo_config))
 
     # Langfuse trace-inspect sub-agent — only when repo_dir is provided,
     # since its value is grounding findings in the actual source code.
     if repo_dir is not None:
         from .langfuse_tools import make_langfuse_inspect_tool, make_cost_inspect_tool
 
-        tools.append(make_langfuse_inspect_tool(settings, repo_dir))
-        tools.append(make_cost_inspect_tool(settings, repo_dir))
+        tools.append(
+            make_langfuse_inspect_tool(settings, repo_dir, repo_config=repo_config)
+        )
+        tools.append(
+            make_cost_inspect_tool(settings, repo_dir, repo_config=repo_config)
+        )
 
     overrides = _build_refine_overrides(
         definition,
