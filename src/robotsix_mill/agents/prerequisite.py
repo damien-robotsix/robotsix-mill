@@ -172,8 +172,7 @@ def _sandbox_batch_check(
     # Decode + exec the stdlib-only script via base64 so no shell quoting
     # of the multi-line source is needed.
     command = (
-        "python3 -c \"import base64; "
-        f"exec(base64.b64decode('{encoded}').decode())\""
+        f"python3 -c \"import base64; exec(base64.b64decode('{encoded}').decode())\""
     )
     try:
         rc, output = sandbox.run(
@@ -184,9 +183,7 @@ def _sandbox_batch_check(
             sandbox_image=sandbox_image,
         )
     except sandbox.SandboxError:
-        log.warning(
-            "prerequisite: sandbox unavailable — proceeding", exc_info=True
-        )
+        log.warning("prerequisite: sandbox unavailable — proceeding", exc_info=True)
         return [], "sandbox unavailable"
 
     fail_indices: set[int] = set()
@@ -201,9 +198,7 @@ def _sandbox_batch_check(
         return [d["directive"] for d in directives], None
 
     unmet = [
-        directives[i]["directive"]
-        for i in range(len(directives))
-        if i in fail_indices
+        directives[i]["directive"] for i in range(len(directives)) if i in fail_indices
     ]
     return unmet, None
 
