@@ -58,6 +58,7 @@ def test_sourcekind_member_count():
         "CI",
         "HEALTH",
         "CONFIG_SYNC",
+        "MEMBER_SYNC",
         "TEST_GAP",
         "AGENT_CHECK",
         "BC_CHECK",

@@ -276,6 +276,11 @@ periodic:
     interval_seconds: 86400       # seconds between passes (min 60 enforced in worker)
     memory_path: null             # defaults to <data_dir>/config_sync_memory.md
 
+  # -- member-sync — deterministic vcs2l workspace-member discovery/registration
+  member_sync:
+    enabled: true                 # enable periodic member-sync passes
+    interval_seconds: 86400       # seconds between passes (min 60 enforced in worker)
+
   # -- survey agent — discovers OSS projects; proposes improvements --------
   survey:
     model: *default_model           # survey agent model

@@ -285,6 +285,24 @@ config_sync_pass = _make_background_pass(
 router.post("/config-sync", status_code=202)(config_sync_pass)
 
 
+member_sync_pass = _make_background_pass(
+    kind="member-sync",
+    runner_module="robotsix_mill.runners.member_sync_runner",
+    runner_func="run_member_sync_pass",
+    docstring="""Kick off a workspace member-sync pass in the BACKGROUND.
+
+    The deterministic member-sync pass clones the managed repo, detects
+    its vcs2l workspace members from ``repos.yaml``, and upserts them into
+    ``config/repos.yaml`` (registering new members, refreshing existing
+    ones, flagging vanished ones for removal).""",
+    summary_builder=lambda r: (
+        f"+{len(r.added)} added, {len(r.updated)} updated, "
+        f"{len(r.flagged_for_removal)} flagged"
+    ),
+)
+router.post("/member-sync", status_code=202)(member_sync_pass)
+
+
 # -- handlers with custom summary builders -------------------------------
 
 cost_reconciliation_pass = _make_background_pass(
