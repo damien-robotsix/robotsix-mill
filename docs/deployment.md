@@ -13,6 +13,7 @@ running `mill` container — no manual rebuilds or restarts needed.
 |---|---|
 | `DOCKERHUB_USERNAME` | Docker Hub username for pushing images |
 | `DOCKERHUB_TOKEN` | Docker Hub access token (or password) |
+| `DEPS_BUMP_TOKEN` | PAT used by `deps-bump.yml` to open the weekly `uv.lock` bump PR so its CI runs (a PR created with the default `GITHUB_TOKEN` triggers no workflows) |
 
 Set these in the repository **Settings → Secrets and variables →
 Actions**. The publish workflow fires on push to `main` and on manual

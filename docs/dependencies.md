@@ -41,6 +41,12 @@ library repos):
    the existing `ci.yml` on `pull_request`, running the **full pytest
    suite** (including `tests/agents/test_retry.py`).
 
+   > **Note:** the bump PR's CI fires only because the PR is opened with
+   > the `DEPS_BUMP_TOKEN` PAT. A PR created with the default
+   > `GITHUB_TOKEN` does **not** trigger workflow runs (GitHub's
+   > recursion guard), so without the PAT the gate would be silently
+   > bypassed.
+
 Net effect: a new shared-lib commit can reach mill **only** through the
 bump PR, whose CI runs the full suite. A semantic change that breaks
 mill's contract surfaces in the bump PR (red CI blocks the merge) — it
