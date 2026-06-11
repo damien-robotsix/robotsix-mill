@@ -26,6 +26,13 @@ jobs:
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6
         with:
           version: "0.8.15"
+          # Pin the interpreter patch: the locked griffelib 2.0.2 calls
+          # typing._eval_type(prefer_fwd_module=...), which newer 3.14.x
+          # patches removed — an unpinned uv-managed Python broke this
+          # job (TypeError: unexpected keyword argument) while the same
+          # lock builds fine on 3.14.5. Re-evaluate when bumping the
+          # mkdocstrings/griffelib constraint.
+          python-version: "3.14.5"
 
       - name: Install docs deps
         run: uv sync --frozen --extra docs
