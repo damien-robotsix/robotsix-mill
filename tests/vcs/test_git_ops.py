@@ -3,7 +3,15 @@ from pathlib import Path
 
 import pytest
 
-from robotsix_mill.vcs import git_ops
+import robotsix_mill.config as _cfg
+from robotsix_mill.config import (
+    RepoConfig,
+    ReposRegistry,
+    Settings,
+    _reset_repos_config,
+    target_branch_for,
+)
+from robotsix_mill.vcs import clone_all_repos, git_ops
 
 
 # ---------------------------------------------------------------------------
@@ -1131,3 +1139,95 @@ class TestWorkingBranchRegression:
         diff = git_ops.diff_base(dest, "develop")
         assert "diff --git" in diff
         assert "feat.txt" in diff
+
+    # -- Config-driven resolution: RepoConfig.working_branch must drive the
+    # -- branch that clone/baseline/deliver target (instead of falling back
+    # -- to 'main', which does not exist on these forks).
+
+    @staticmethod
+    def _repo_config(repo_id, *, working_branch, forge_remote_url=None):
+        return RepoConfig(
+            repo_id=repo_id,
+            board_id="meta",
+            langfuse_project_name=f"p-{repo_id}",
+            langfuse_public_key=f"pk-{repo_id}",
+            langfuse_secret_key=f"sk-{repo_id}",
+            working_branch=working_branch,
+            forge_remote_url=forge_remote_url,
+        )
+
+    def test_refine_clone_path_targets_working_branch(self, tmp_path):
+        """End-to-end refine/meta clone path: a repo whose only branch is
+        'lyrical' (no 'main') is cloned successfully precisely because its
+        RepoConfig.working_branch is set. ``clone_all_repos`` runs the same
+        ``git_ops.clone(url, dest, target_branch_for(s, rc), token)`` chain
+        the refine clone (stages/refine/core.py) uses."""
+        remote = _make_custom_branch_repo(tmp_path, "lyrical")
+        settings = Settings(data_dir=str(tmp_path / "data"))
+
+        # With working_branch set, resolution targets 'lyrical' and clone wins.
+        rc = self._repo_config(
+            "fork", working_branch="lyrical", forge_remote_url=remote
+        )
+        assert target_branch_for(settings, rc) == "lyrical"
+        _reset_repos_config()
+        _cfg._repos_config = ReposRegistry(repos={"fork": rc})
+        try:
+            result = clone_all_repos(settings)
+        finally:
+            _reset_repos_config()
+        assert "fork" in result
+        assert (result["fork"] / ".git").is_dir()
+
+        # Negative control: without working_branch, resolution falls back to
+        # 'main' (absent on the fork), so the clone fails — the motivating bug.
+        rc_no_wb = self._repo_config(
+            "fork", working_branch=None, forge_remote_url=remote
+        )
+        assert target_branch_for(settings, rc_no_wb) == "main"
+        _reset_repos_config()
+        _cfg._repos_config = ReposRegistry(repos={"fork": rc_no_wb})
+        try:
+            result_no_wb = clone_all_repos(settings)
+        finally:
+            _reset_repos_config()
+        assert "fork" not in result_no_wb
+
+    def test_implement_baseline_resolution_targets_working_branch(self, tmp_path):
+        """Implement-baseline scope guardrail resolves the diff target via
+        ``target_branch_for`` then calls ``git_ops.introduced_files`` against
+        it (stages/implement.py). With working_branch='lyrical' that resolves
+        to 'lyrical', and introduced files are detected against that base."""
+        remote = _make_custom_branch_repo(tmp_path, "lyrical")
+        settings = Settings(data_dir=str(tmp_path / "data"))
+        rc = self._repo_config("fork", working_branch="lyrical")
+
+        target = target_branch_for(settings, rc)
+        assert target == "lyrical"
+
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, target)
+        git_ops.create_branch(dest, "feature")
+        (dest / "introduced.txt").write_text("baseline work")
+
+        assert "introduced.txt" in git_ops.introduced_files(dest, target)
+
+    def test_deliver_resolution_targets_working_branch(self, tmp_path):
+        """Deliver resolves the PR target branch via ``target_branch_for``
+        then guards on ahead-of-target (stages/deliver.py). With
+        working_branch='lyrical' the branch is measured ahead of 'lyrical',
+        not 'main'."""
+        remote = _make_custom_branch_repo(tmp_path, "lyrical")
+        settings = Settings(data_dir=str(tmp_path / "data"))
+        rc = self._repo_config("fork", working_branch="lyrical")
+
+        target = target_branch_for(settings, rc)
+        assert target == "lyrical"
+
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, target)
+        git_ops.create_branch(dest, "feature")
+        (dest / "delivered.txt").write_text("deliver work")
+        git_ops.commit_all(dest, "feature commit")
+
+        assert git_ops.branch_is_ahead_of_main(dest, target_branch=target) is True
