@@ -1,6 +1,6 @@
 """Claude→DeepSeek model fallback: retry locally, then fall back.
 
-Covers the FallbackAgentHandle wrapper, the run_agent/arun_agent orchestration
+Covers the FallbackAgentHandle wrapper, the run_agent orchestration
 (primary's local retries exhausted → fallback), and build_agent's wiring.
 """
 
@@ -14,7 +14,7 @@ import pytest
 
 from robotsix_mill.agents import base
 from robotsix_mill.agents.fallback import FallbackAgentHandle
-from robotsix_mill.agents.retry import arun_agent, run_agent
+from robotsix_mill.agents.retry import run_agent
 from robotsix_mill.config import Settings
 
 
@@ -112,25 +112,6 @@ def test_run_agent_primary_success_skips_fallback():
     out = run_agent(h, lambda x: x.run_sync("ok"), what="t", sleep=_noop_sleep)
     assert out == "primary:ok"
     assert built["n"] == 0  # fallback never built
-
-
-# --- arun_agent (async) -----------------------------------------------------
-
-
-async def test_arun_agent_falls_back_after_primary_terminal_failure():
-    primary = _Handle("primary", fail=True, exc=ValueError("dead"))
-    fb = _Handle("deepseek")
-    h = FallbackAgentHandle(primary, lambda: fb)
-
-    out = await arun_agent(h, lambda x: x.run("go"), what="t")
-    assert out == "deepseek:go"
-    assert primary.calls == 1 and fb.calls == 1
-
-
-async def test_arun_agent_plain_handle_runs_primary():
-    h = _Handle("primary")
-    out = await arun_agent(h, lambda x: x.run("hi"), what="t")
-    assert out == "primary:hi"
 
 
 # --- build_agent wiring -----------------------------------------------------
