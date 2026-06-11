@@ -336,6 +336,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "gates.review_feedback_enabled": "review_feedback_enabled",
     "gates.review_revision_model": "review_revision_model",
     "gates.auto_merge_enabled": "auto_merge_enabled",
+    "gates.comments_after_body": "comments_after_body",
     "gates.refine_triage_enabled": "refine_triage_enabled",
     "gates.maintenance_triage_enabled": "maintenance_triage_enabled",
     "gates.spec_review_enabled": "spec_review_enabled",

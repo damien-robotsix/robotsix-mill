@@ -162,6 +162,7 @@ gates:
   review_model: deepseek/deepseek-v4-pro   # review agent model — full tier as the last automated merge gate; must match core.models.review above
   review_max_rounds: 3                     # max CODE_REVIEW round-trips before escalate
   auto_merge_enabled: false                # auto-merge green PR via forge API (opt-in)
+  comments_after_body: false               # board drawer renders description.md after comments with a Hide toggle (opt-in)
   review_feedback_enabled: false           # enable autonomous review-revision (opt-in — implements changes requested by human reviewers)
   review_revision_model: *default_model    # review-revision agent model
   pr_summary_enabled: false               # generate structured PR body from diff via cheap LLM (opt-in)
