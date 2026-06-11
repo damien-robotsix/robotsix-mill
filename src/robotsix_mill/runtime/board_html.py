@@ -103,6 +103,7 @@ BOARD_HTML = """<!doctype html><html><head><meta charset="utf-8">
     <button onclick="runCostAnalyst()" data-agent="cost_analyst">Cost Analyst</button>
     <button onclick="runRunHealth()" data-agent="run_health">Run Health</button>
     <button onclick="runConfigSync()" data-agent="config_sync">Config Sync</button>
+    <button onclick="runMemberSync()" data-agent="member_sync">Member Sync</button>
     <button onclick="runRoadmapSync()" data-agent="roadmap_sync">Roadmap Sync</button>
     <button onclick="runTraceReview()" data-agent="trace_review">Trace Review</button>
     <button onclick="runModuleCurator()" data-agent="module_curator">Module Curator</button>
