@@ -128,7 +128,10 @@ jobs:
         # annotation to encourage incremental burndown. Non-blocking.
         env:
           UV_PROJECT_ENVIRONMENT: system
-        run: uv run mypy-baseline suggest --exit-zero
+        # CI checks out in detached HEAD with only the remote-tracking
+        # ref available, so point suggest's git-diff at origin/main
+        # (the default "main" is not a local branch here).
+        run: uv run mypy-baseline suggest --exit-zero --default-branch origin/main
 
       - name: Mypy (static type check)
         if: ${{ !inputs.mypy-advisory }}
