@@ -44,6 +44,7 @@ tools:
   - langfuse_session_cost
   - langfuse_inspect_trace
   - inspect_cost
+  - query_app_logs
 
 # Single internet gateway: the web_knowledge sub-agent owns the
 # mill-global Markdown knowledge base at <data_dir>/web_knowledge/

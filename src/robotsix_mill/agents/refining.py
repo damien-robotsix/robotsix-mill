@@ -693,7 +693,12 @@ def _build_refine_overrides(
     if deployed_log_summary:
         base_prompt = overrides.get("system_prompt", definition.system_prompt)
         overrides["system_prompt"] = (
-            base_prompt + "\n\n## Deployed system logs\n\n" + deployed_log_summary
+            base_prompt
+            + "\n\n## Deployed system logs\n\n"
+            + deployed_log_summary
+            + "\n\nYou may also call `query_app_logs` with keywords drawn "
+            "from the ticket and a recency window (`since_hours`) to pull "
+            "relevant log excerpts instead of reading whole files."
         )
     return overrides
 
@@ -713,6 +718,7 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
     current_ticket_id: str = "",
     language_instructions: str = "",
     deployed_log_summary: str = "",
+    deployed_log_dir: Path | None = None,
     screenshot_paths: list[Path] | None = None,
 ) -> RefineResult:
     """Return a structured ``RefineResult``. When ``repo_dir`` is given
@@ -809,6 +815,15 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
 
         tools.append(make_langfuse_inspect_tool(settings, repo_dir))
         tools.append(make_cost_inspect_tool(settings, repo_dir))
+
+    # Deployed-log query tool — only when a deployed log folder is
+    # configured and resolved to an existing directory (the resolution
+    # happens in the refine orchestration). The static summary orients
+    # the agent; this tool lets it drill into specific log lines.
+    if deployed_log_dir is not None:
+        from .log_tools import make_log_query_tool
+
+        tools.append(make_log_query_tool(deployed_log_dir))
 
     overrides = _build_refine_overrides(
         definition,

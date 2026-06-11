@@ -618,6 +618,7 @@ _VALID_TOOL_NAMES = frozenset(
         "langfuse_session_cost",
         "langfuse_inspect_trace",
         "inspect_cost",
+        "query_app_logs",
         "create_repo",
         "fork_repo",
         "post_findings",
