@@ -199,11 +199,59 @@ def test_run_board_cleanup_pass_injects_board_and_returns_result(tmp_path, monke
     assert result.proposed_actions[0]["action_type"] == "close"
 
 
+def test_run_board_cleanup_pass_skips_agent_on_empty_board(tmp_path, monkeypatch):
+    """An empty board short-circuits: the agent is never invoked and a no-op
+    BoardCleanupPassResult is returned."""
+    settings = _make_settings(tmp_path)
+
+    def fake_agent(*args, **kwargs):
+        raise AssertionError("run_board_cleanup_agent must not be called")
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.board_cleanup.run_board_cleanup_agent", fake_agent
+    )
+
+    result = run_board_cleanup_pass("sid", _test_repo_config(), settings=settings)
+
+    assert isinstance(result, BoardCleanupPassResult)
+    assert result.session_id == "sid"
+    assert result.drafts_created == []
+    assert result.proposed_actions == []
+
+
+def test_run_board_cleanup_pass_skips_agent_on_fetch_failure(tmp_path, monkeypatch):
+    """When recent_tickets() raises, the board falls back to [] and the agent
+    is still not invoked — a no-op result is returned."""
+    settings = _make_settings(tmp_path)
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("DB not initialised")
+
+    monkeypatch.setattr(TicketService, "recent_tickets", boom)
+
+    def fake_agent(*args, **kwargs):
+        raise AssertionError("run_board_cleanup_agent must not be called")
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.board_cleanup.run_board_cleanup_agent", fake_agent
+    )
+
+    result = run_board_cleanup_pass("sid", _test_repo_config(), settings=settings)
+
+    assert isinstance(result, BoardCleanupPassResult)
+    assert result.drafts_created == []
+    assert result.proposed_actions == []
+
+
 def test_run_board_cleanup_pass_honors_memory_path_override(tmp_path, monkeypatch):
     """When board_cleanup_memory_path is set, the runner persists the
     agent's memory to that pinned path instead of the per-repo default."""
     override = tmp_path / "pinned" / "board_cleanup_memory.md"
     settings = _make_settings(tmp_path, board_cleanup_memory_path=str(override))
+    # A non-empty board so the agent (and thus memory persistence) actually runs.
+    TicketService(settings, board_id="test-board").create(
+        "A ticket", "body", source=SourceKind.USER
+    )
 
     def fake_agent(*, settings, memory, recent_proposals, verified_proposals, **kw):
         return bc_agent.BoardCleanupResult(updated_memory="pinned-memory")
