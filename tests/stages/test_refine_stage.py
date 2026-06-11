@@ -3271,9 +3271,7 @@ def _set_repo_log_folder(ctx, folder: str):
     """Set ``deployed_log_folder`` on the ctx's central RepoConfig — the
     value now lives in mill's ``config/repos.yaml``, not the managed
     repo's committed ``.robotsix-mill/config.yaml``."""
-    ctx.repo_config = ctx.repo_config.model_copy(
-        update={"deployed_log_folder": folder}
-    )
+    ctx.repo_config = ctx.repo_config.model_copy(update={"deployed_log_folder": folder})
 
 
 def _capture_refine_kwargs(captured, spec_markdown="## Problem\nFix it"):
