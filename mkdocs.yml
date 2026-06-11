@@ -37,6 +37,7 @@ nav:
       - Agent YAML schema: agent-yaml-schema.md
       - Meta board: meta-board.md
   - Operations:
+      - Board operations: board-operations.md
       - Cost controls & resilience: cost-and-resilience.md
       - Notifications: notifications.md
       - Ticket provenance: ticket-provenance.md
