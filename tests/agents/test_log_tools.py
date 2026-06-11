@@ -63,6 +63,35 @@ def test_empty_keywords_returns_recent_lines(tmp_path):
     assert "gamma" in out
 
 
+def test_empty_keywords_surfaces_most_recent_not_oldest(tmp_path):
+    """For a file longer than max_lines, the *most recent* (trailing)
+    lines must be returned, not the oldest of the window."""
+    _write(tmp_path / "app.log", "".join(f"line {i}\n" for i in range(100)))
+    tool = make_log_query_tool(tmp_path)
+    out = tool(max_lines=5)
+    returned = [ln for ln in out.splitlines() if ln.startswith("app.log:")]
+    assert len(returned) == 5
+    # The genuinely-recent tail (lines 95-99) is surfaced; the oldest
+    # lines (0-1) are truncated, not the recent ones.
+    assert "app.log: line 99" in returned
+    assert "app.log: line 95" in returned
+    assert "app.log: line 0" not in out
+    assert "... (truncated, 95 more lines)" in out
+
+
+def test_keyword_mode_returns_most_recent_matches(tmp_path):
+    """Keyword filtering must surface the most recent matching lines,
+    not the earliest ones."""
+    _write(tmp_path / "app.log", "".join(f"ERROR boom {i}\n" for i in range(40)))
+    tool = make_log_query_tool(tmp_path)
+    out = tool(keywords="boom", max_lines=3)
+    returned = [ln for ln in out.splitlines() if ln.startswith("app.log:")]
+    assert len(returned) == 3
+    assert "app.log: ERROR boom 39" in returned
+    assert "app.log: ERROR boom 0" not in out
+    assert "... (truncated, 37 more matching lines)" in out
+
+
 def test_missing_dir_returns_graceful_string(tmp_path):
     tool = make_log_query_tool(tmp_path / "does-not-exist")
     out = tool(keywords="boom")

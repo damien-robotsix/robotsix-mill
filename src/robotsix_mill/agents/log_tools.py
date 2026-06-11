@@ -145,6 +145,12 @@ def make_log_query_tool(log_dir: Path):  # noqa: C901 — nested closure's recen
 
             candidates.sort(key=lambda c: c[0], reverse=True)
 
+            # Collect newest-first: candidates are sorted newest file first,
+            # and within each file the most recent lines are at the end, so we
+            # iterate each file's window back-to-front. This keeps the genuinely
+            # recent lines and counts the older overflow as truncated — the
+            # opposite of iterating front-to-back, which would surface a file's
+            # oldest lines and drop its recent ones.
             collected: list[str] = []
             extra = 0
             for _mtime, entry in candidates:
@@ -154,7 +160,7 @@ def make_log_query_tool(log_dir: Path):  # noqa: C901 — nested closure's recen
                         file_lines = deque(f, maxlen=_MAX_LINES_PER_FILE)
                 except OSError:
                     continue
-                for raw in file_lines:
+                for raw in reversed(file_lines):
                     line = raw.rstrip("\n")
                     if terms and not any(t in line.lower() for t in terms):
                         continue
@@ -171,9 +177,14 @@ def make_log_query_tool(log_dir: Path):  # noqa: C901 — nested closure's recen
                     )
                 return f"No log lines found in files from the last {since_hours}h."
 
+            # ``collected`` is newest-first; present it chronologically
+            # (oldest of the recent window first, most recent last).
+            collected.reverse()
+
             out = "\n".join(collected)
             if extra:
-                out += f"\n... (truncated, {extra} more matching lines)"
+                label = "matching lines" if terms else "lines"
+                out += f"\n... (truncated, {extra} more {label})"
             return out
         except Exception as exc:  # never raise out of a tool closure
             log.warning("query_app_logs failed: %s", exc)
