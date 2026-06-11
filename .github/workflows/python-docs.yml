@@ -61,7 +61,21 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: system
           DOCS_INSTALL_ARGS: ${{ inputs.docs-install-args }}
-        run: uv sync --frozen $DOCS_INSTALL_ARGS
+          RETRIES: ${{ inputs.retries }}
+        run: |
+          for i in $(seq 1 "$RETRIES"); do
+            echo "Attempt $i/$RETRIES..."
+            if uv sync --frozen $DOCS_INSTALL_ARGS; then
+              echo "Install succeeded on attempt $i/$RETRIES"
+              exit 0
+            fi
+            if [ "$i" -lt "$RETRIES" ]; then
+              echo "Attempt $i/$RETRIES failed — retrying in 10s..."
+              sleep 10
+            fi
+          done
+          echo "All $RETRIES attempts failed."
+          exit 1
 
       - name: Configure Git
         run: |
