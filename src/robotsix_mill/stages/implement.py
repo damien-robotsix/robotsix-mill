@@ -1106,9 +1106,7 @@ class ImplementStage(Stage):
                     ws = ctx.service.workspace(ticket)
                     src_png = repo_dir / "artifacts" / "board.png"
                     if src_png.exists():
-                        shutil.move(
-                            str(src_png), str(ws.artifacts_dir / "board.png")
-                        )
+                        shutil.move(str(src_png), str(ws.artifacts_dir / "board.png"))
                     if not smoke_passed:
                         passed = False
                         diag = smoke_diag
