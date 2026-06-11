@@ -86,11 +86,13 @@ class GitLabForge(Forge):
                 "adapter; cross_repo_target is GitHub-only"
             )
         s = self.settings
+        from ..config import target_branch_for  # lazy: avoid import cycle
+
         project_path = _parse_gitlab_project_path(self._remote_url)
         return self._create_mr(
             project_path=project_path,
             source_branch=source_branch,
-            target_branch=s.forge_target_branch,
+            target_branch=target_branch_for(s, self._repo_config),
             title=title,
             description=body,
         )
