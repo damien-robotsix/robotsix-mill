@@ -108,9 +108,7 @@ def test_file_path_body_match(settings):
 def test_fingerprint_title_match_without_file_path(settings):
     _seed(
         settings,
-        title=(
-            "tool_error — claude code returned an error result success"
-        ),
+        title=("tool_error — claude code returned an error result success"),
         body="unrelated body that does not name any code locus",
     )
     match = find_prior_matching_ticket(

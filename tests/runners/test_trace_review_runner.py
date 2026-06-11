@@ -918,10 +918,7 @@ class TestPreFilingDedup:
         # here since target_files=[]).
         self._seed_prior_ticket(
             settings,
-            title=(
-                "tool_error — claude code returned an "
-                "error result success"
-            ),
+            title=("tool_error — claude code returned an error result success"),
             body="unrelated body that does not name any code locus",
         )
         finding = self._finding(
