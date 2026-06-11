@@ -296,6 +296,16 @@ if the file is group/other-readable).
 5. Access it in code: `settings.my_new_field` for settings,
    `get_secrets().my_new_secret` for secrets.
 
+Steps 2–4 are enforced deterministically by
+`scripts/check_config_sync.py`, which runs as a blocking CI step
+("Validate config sync") and as the `validate-config-sync` pre-commit
+hook. It fails if a `_YAML_PATH_TO_ALIAS` key has no matching
+`mill.defaults.yaml` leaf (or vice-versa), if a mapping value names a
+non-existent `Settings` field/alias, or if `secrets.example.yaml`
+drifts from the `Secrets` model. Intentional gaps live in the script's
+inline-commented exception sets. (Doc-table drift is not gated here —
+the heuristic `config_sync` agent still covers that.)
+
 Environment variable naming convention: use `Field(alias=...)` on the
 Pydantic model with a `MILL_` prefix + uppercase with underscores
 (e.g. `Field(alias="MILL_MY_NEW_FIELD")`).  The `_YAML_PATH_TO_ALIAS`

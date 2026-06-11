@@ -55,6 +55,11 @@ jobs:
           uv run robotsix-modules validate docs/modules.yaml
           uv run python scripts/validate_module_paths.py
 
+      - name: Validate config sync
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+        run: uv run python scripts/check_config_sync.py
+
       - name: Ruff (lint + format check)
         env:
           UV_PROJECT_ENVIRONMENT: system

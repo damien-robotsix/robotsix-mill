@@ -7,7 +7,7 @@
 #  config/mill.production.yaml (host-mounted, gitignored).  Secrets live in
 #  config/secrets.yaml (separate file, separate model).
 #
-#  Field count: 115 unique values across 17 logical groups.
+#  Field count: 130 unique values across 17 logical groups.
 #  See docs/rfc-config-v2.md for architecture rationale.
 # =============================================================================
 
@@ -88,6 +88,20 @@ core:
     reference_files_max_total_lines: 3000  # max total lines across selected reference files
     dedup_lookback_days: 7               # days back closed tickets are dup candidates
 
+  # -- direct core.* engine toggles (defaults mirror the Settings fields) ---
+  llm_backend: deepseek                 # deepseek (OpenRouter) | claude (Claude SDK) backend
+  claude_sdk_agents: []                 # agent names routed to the Claude SDK backend (empty = none)
+  claude_sdk_vision_enabled: false      # allow image input on Claude-SDK-routed agents
+  enable_repo_creation: false           # allow the new-repo meta flow to create repositories
+  lint_on_edit: true                    # run ruff after each agent file edit
+  meta_periodic: false                  # enable the cross-repo meta-agent pass
+  meta_interval_seconds: 86400          # seconds between meta-agent passes
+  cost_analyst_periodic: false          # enable the cross-repo cost-analyst pass
+  cost_analyst_interval_seconds: 86400  # seconds between cost-analyst passes
+  cost_analyst_window_hours: 168        # look-back window (hours) for cost aggregation
+  cost_analyst_top_stages: 6            # number of top-cost stages to report
+  cost_analyst_target_repo_id: robotsix-mill  # board repo for cost-analyst proposals
+
 # ---------------------------------------------------------------------------
 #  forge — delivery platform configuration
 # ---------------------------------------------------------------------------
@@ -152,6 +166,7 @@ gates:
   pr_summary_enabled: false               # generate structured PR body from diff via cheap LLM (opt-in)
   pr_summary_model: deepseek/deepseek-v4-flash  # model for PR summary (cheap, one-shot) — DeepSeek so the provider pin (DeepSeek-only) covers every model
   refine_triage_enabled: true              # cheap triage before full refine (skip if precise)
+  maintenance_triage_enabled: true         # cheap triage before a full maintenance pass
   spec_review_enabled: false               # post-refinement spec narrative stripping
   scope_triage_enabled: true               # cheap scope-violation triage (EXPAND/REJECT/ESCALATE)
 
@@ -185,6 +200,8 @@ pipeline:
   retrospect_spawn_agented_proposals: true           # allow retrospect to propose AGENT.md additions
   prune_clone_on_close: true                         # delete workspace repo/ clone on ticket close
   max_archived_tickets: 100                          # max terminal-state tickets retained (0 = no purge)
+  trace_review_target_repo_id: ""                    # route all trace-review drafts to this board (empty = source-repo routing)
+  ci_patterns_path: null                             # override path to the CI failure-patterns file (null = derive from data_dir)
 
   # per-agent memory ledger path overrides (null = derive from data_dir)
   retrospect_memory_path: null            # defaults to <data_dir>/retrospect_memory.md

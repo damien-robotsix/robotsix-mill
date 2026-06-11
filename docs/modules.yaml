@@ -624,6 +624,7 @@ modules:
       - tests/script_loader.py
       - tests/test_docs_nav.py
       - tests/test_modules_yaml_paths.py
+      - tests/test_check_config_sync.py
     dependencies: []
 
   # -------------------------------------------------------------------
