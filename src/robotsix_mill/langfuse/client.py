@@ -10,12 +10,13 @@ without failing.
 
 from __future__ import annotations
 
-import base64
 import logging
 import re
 import time
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
+
+from robotsix_llmio.core import LangfuseReadClient
 
 from ..config import RepoConfig, Settings, get_secrets
 
@@ -29,49 +30,74 @@ _COST_TTL_SECONDS = 60.0
 _cost_cache: dict[str, tuple[float, float]] = {}  # id -> (cost, monotonic)
 
 
+def _build_read_client(
+    settings: Settings, repo_config: RepoConfig | None = None
+) -> LangfuseReadClient | None:
+    """Build a :class:`LangfuseReadClient` from mill's credential sources,
+    or ``None`` when Langfuse is unconfigured.
+
+    The shared client (``robotsix_llmio.core``) owns the Langfuse REST
+    read-protocol kernel — Basic auth, base-URL default, and paginated
+    GETs.  Mill only decides *which* credentials to feed it: a per-repo
+    override when *repo_config* is given, else the global
+    :class:`Secrets` singleton (kept for backward compatibility during
+    the transition to per-repo credentials)."""
+    if repo_config is None:
+        if not settings.tracing_enabled:
+            return None
+        secrets = get_secrets()
+        public_key = secrets.langfuse_public_key
+        secret_key = secrets.langfuse_secret_key
+        base_url = secrets.langfuse_base_url
+    else:
+        public_key = repo_config.langfuse_public_key
+        secret_key = repo_config.langfuse_secret_key
+        base_url = repo_config.langfuse_base_url
+        if not (public_key and secret_key):
+            return None
+    return LangfuseReadClient(
+        public_key=public_key or "",
+        secret_key=secret_key or "",
+        base_url=base_url,
+    )
+
+
+def _parse_iso(value: str) -> datetime:
+    """Naive-UTC parse of a Langfuse ISO-8601 timestamp.
+
+    Delegates to the shared kernel's
+    :meth:`LangfuseReadClient.parse_timestamp` (which tolerates a
+    trailing ``Z``) and drops the tzinfo so the result can be compared
+    against the naive bucket boundaries used by the aggregators."""
+    return LangfuseReadClient.parse_timestamp(value).replace(tzinfo=None)
+
+
 def _langfuse_api_get(
     settings: Settings,
     path: str,
     params: dict | None = None,
     repo_config: RepoConfig | None = None,
 ):
-    """Low-level authenticated GET to the Langfuse public API.
+    """Single authenticated GET to the Langfuse public API.
 
-    When *repo_config* is provided, its credentials are used for auth
-    and base URL.  When ``None``, the global :class:`Secrets` singleton
-    is used as a fallback for backward compatibility during the
-    transition to per-repo credentials.
+    The shared :class:`LangfuseReadClient` owns auth-header construction
+    and base-URL resolution; this helper layers mill's single-shot
+    (non-paginated) GET — used for trace-detail fetches and the
+    session endpoints — on top.
 
     Returns the JSON-decoded response body, or ``None`` when Langfuse is
     unconfigured / unreachable / the request fails."""
-    if repo_config is None and not settings.tracing_enabled:
+    client = _build_read_client(settings, repo_config)
+    if client is None:
         return None
-    if repo_config is not None and not (
-        repo_config.langfuse_public_key and repo_config.langfuse_secret_key
-    ):
-        return None
-    if repo_config is not None:
-        host = (repo_config.langfuse_base_url or "https://cloud.langfuse.com").rstrip(
-            "/"
-        )
-        auth = base64.b64encode(
-            f"{repo_config.langfuse_public_key}:{repo_config.langfuse_secret_key}".encode()
-        ).decode()
-    else:
-        host = (get_secrets().langfuse_base_url or "https://cloud.langfuse.com").rstrip(
-            "/"
-        )
-        auth = base64.b64encode(
-            f"{get_secrets().langfuse_public_key}:{get_secrets().langfuse_secret_key}".encode()
-        ).decode()
     try:
         import httpx
 
         with httpx.Client(timeout=20) as c:
             r = c.get(
-                f"{host}{path}",
+                client.url(path),
                 params=params or {},
-                headers={"Authorization": f"Basic {auth}"},
+                headers={"Authorization": client.auth_header()},
             )
         if r.status_code != 200:
             return None
@@ -461,36 +487,17 @@ def list_all_traces_since(
     or any HTTP / JSON error occurs — the caller must treat ``[]`` as
     "no data available."
     """
-    if repo_config is None and not settings.tracing_enabled:
-        return []
-    if repo_config is not None and not (
-        repo_config.langfuse_public_key and repo_config.langfuse_secret_key
-    ):
+    client = _build_read_client(settings, repo_config)
+    if client is None:
         return []
     try:
         all_traces: list[dict] = []
-        page = 1
-        while True:
-            body = _langfuse_api_get(
-                settings,
-                "/api/public/traces",
-                params={
-                    "fromTimestamp": from_timestamp,
-                    "limit": 50,
-                    "page": page,
-                },
-                repo_config=repo_config,
-            )
-            if body is None:
-                log.warning("Langfuse trace list failed on page %d", page)
-                return []
-            data = body.get("data", [])
-            all_traces.extend(data)
-            meta = body.get("meta", {})
-            total_pages = meta.get("totalPages", 1)
-            if page >= total_pages:
-                break
-            page += 1
+        for page in client.iter_pages(
+            "/api/public/traces",
+            params={"fromTimestamp": from_timestamp, "limit": 50},
+            error_label="trace list",
+        ):
+            all_traces.extend(page)
         return all_traces
     except Exception:  # noqa: BLE001 — never crash the caller
         log.exception("failed to list Langfuse traces since %s", from_timestamp)
@@ -508,31 +515,22 @@ def _fetch_traces_for_tickets(
     """
     PAGE_SIZE = 100
     MAX_PAGES = 100
+    client = _build_read_client(settings, repo_config)
+    if client is None:
+        return []
     all_traces: list[dict] = []
     seen_sessions: set[str] = set()
 
     try:
-        page = 1
-        while page <= MAX_PAGES:
-            body = _langfuse_api_get(
-                settings,
+        for page_num, page in enumerate(
+            client.iter_pages(
                 "/api/public/traces",
-                params={
-                    "limit": PAGE_SIZE,
-                    "page": page,
-                    "orderBy": "timestamp.desc",
-                },
-                repo_config=repo_config,
-            )
-            if body is None:
-                log.warning(
-                    "_fetch_traces_for_tickets: Langfuse request failed on page %d",
-                    page,
-                )
-                break
-
-            data = body.get("data", [])
-            for t in data:
+                params={"limit": PAGE_SIZE, "orderBy": "timestamp.desc"},
+                error_label="_fetch_traces_for_tickets",
+            ),
+            start=1,
+        ):
+            for t in page:
                 all_traces.append(t)
                 sid = (t.get("sessionId") or "").strip()
                 if sid:
@@ -540,12 +538,8 @@ def _fetch_traces_for_tickets(
 
             if len(seen_sessions) >= max_tickets:
                 break
-
-            meta = body.get("meta", {})
-            total_pages = meta.get("totalPages", 1)
-            if page >= total_pages:
+            if page_num >= MAX_PAGES:
                 break
-            page += 1
 
     except Exception:
         log.exception("_fetch_traces_for_tickets failed")
@@ -579,38 +573,27 @@ def _fetch_traces_time_window(
     )
 
     PAGE_SIZE = 100
+    client = _build_read_client(settings, repo_config)
+    if client is None:
+        return None
     all_traces: list[dict] = []
 
     try:
-        page = 1
-        while page <= max_pages:
-            body = _langfuse_api_get(
-                settings,
+        for page_num, page in enumerate(
+            client.iter_pages(
                 "/api/public/traces",
                 params={
                     "fromTimestamp": from_timestamp,
                     "limit": PAGE_SIZE,
-                    "page": page,
                     "orderBy": "timestamp.desc",
                 },
-                repo_config=repo_config,
-            )
-            if body is None:
-                log.warning(
-                    "%s: Langfuse request failed on page %d",
-                    caller_name,
-                    page,
-                )
-                return None
-
-            data = body.get("data", [])
-            all_traces.extend(data)
-
-            meta = body.get("meta", {})
-            total_pages = meta.get("totalPages", 1)
-            if page >= total_pages:
+                error_label=caller_name,
+            ),
+            start=1,
+        ):
+            all_traces.extend(page)
+            if page_num >= max_pages:
                 break
-            page += 1
 
     except Exception:
         log.exception("%s failed", caller_name)
@@ -693,9 +676,7 @@ def aggregate_cost_trend(
             if not ts_str:
                 continue
             try:
-                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).replace(
-                    tzinfo=None
-                )
+                ts = _parse_iso(ts_str)
                 timestamps.append(ts)
             except ValueError, TypeError:
                 continue
@@ -747,18 +728,14 @@ def aggregate_cost_trend(
             if not ts_str:
                 continue
             try:
-                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).replace(
-                    tzinfo=None
-                )
+                ts = _parse_iso(ts_str)
             except ValueError, TypeError:
                 continue
 
             cost = float(t.get("totalCost") or 0)
             assigned = None
             for key in bucket_keys:
-                bucket_dt = datetime.fromisoformat(key.replace("Z", "+00:00")).replace(
-                    tzinfo=None
-                )
+                bucket_dt = _parse_iso(key)
                 if bucket_dt <= ts:
                     assigned = key
                 else:
@@ -830,10 +807,9 @@ def aggregate_cost_trend(
         if not ts_str:
             continue
         try:
-            # Parse timestamp; Langfuse returns ISO-8601
-            ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-            # Replace tzinfo to naive for comparison with naive bucket boundaries
-            ts_naive = ts.replace(tzinfo=None)
+            # Parse timestamp; Langfuse returns ISO-8601 (naive for
+            # comparison with naive bucket boundaries).
+            ts_naive = _parse_iso(ts_str)
         except ValueError, TypeError:
             continue
 
@@ -842,9 +818,7 @@ def aggregate_cost_trend(
         # Find the right bucket: the last bucket whose start <= trace timestamp
         assigned = None
         for key in bucket_keys:
-            bucket_dt = datetime.fromisoformat(key.replace("Z", "+00:00")).replace(
-                tzinfo=None
-            )
+            bucket_dt = _parse_iso(key)
             if bucket_dt <= ts_naive:
                 assigned = key
             else:
