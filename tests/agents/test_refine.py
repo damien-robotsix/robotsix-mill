@@ -2840,6 +2840,19 @@ def test_sendback_prompt_includes_reviewer_feedback_reference():
     assert "backend↔frontend boundary" not in REVIEWER_SENDBACK_PROMPT
 
 
+def test_sendback_prompt_warns_against_reclosing_threads():
+    """Regression: the sendback prompt must explicitly instruct the
+    model not to re-close an already-closed thread, and to treat
+    'already closed' results as success rather than retry."""
+    from robotsix_mill.agents.refining import REVIEWER_SENDBACK_PROMPT
+
+    assert "Do NOT call" in REVIEWER_SENDBACK_PROMPT
+    assert "close_thread" in REVIEWER_SENDBACK_PROMPT
+    assert "already resolved" in REVIEWER_SENDBACK_PROMPT
+    assert "treat that as success" in REVIEWER_SENDBACK_PROMPT
+    assert "do not retry" in REVIEWER_SENDBACK_PROMPT.lower()
+
+
 def test_memory_prompt_forbids_per_ticket_diary():
     """The refine system prompt and reviewer-sendback prompt must
     instruct the agent to record general repo knowledge only — not

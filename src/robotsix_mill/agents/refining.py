@@ -447,7 +447,10 @@ Each comment in ``<reviewer_feedback>`` includes a thread id
 - ``reply_to_thread(thread_id, body)`` — reply to a comment thread.
 - ``close_thread(comment_id)`` — close a top-level thread (marks it
   resolved; only call when you have fully addressed the issue in the
-  revised spec).
+  revised spec). Do NOT call ``close_thread`` again for the same
+  ``comment_id`` once it has returned success (``Thread closed ...``).
+  If it returns ``Thread already closed ... is already resolved``,
+  treat that as success — the thread is already resolved, do not retry.
 
 For each reviewer comment:
 - If your spec revision fully addresses it: call
