@@ -83,6 +83,35 @@ def _workspace_ticket_id_for_path(path: str) -> str | None:
     return None
 
 
+def _periodic_pass_workspace_subdirs() -> set[str]:
+    """Return the canonical set of periodic-pass workspace subdir names.
+
+    Derived from the single source of truth ``PERIODIC_PASS_CONFIGS`` in
+    :mod:`robotsix_mill.runners.periodic_runner`, so every current and
+    future periodic pass is covered without a hardcoded list. Uses a
+    lazy import (mirroring the ``_verify_prior_proposals`` seam in
+    :func:`_file_findings_as_tickets`) to avoid import-ordering coupling.
+    """
+    from .periodic_runner import PERIODIC_PASS_CONFIGS
+
+    return {cfg.workspace_subdir for cfg in PERIODIC_PASS_CONFIGS.values()}
+
+
+def _is_periodic_pass_workspace_path(path: str) -> bool:
+    """Return ``True`` when *path*'s leading segment is a periodic-pass
+    workspace subdir.
+
+    Growth-flag ``path`` values are POSIX paths relative to the scanned
+    board root (e.g. ``"health_workspace/repo/.git/objects/"``), so the
+    periodic-pass clone subdir is always the first segment. Matching the
+    leading segment alone is sufficient — the repo_id-vs-board_id
+    distinction is irrelevant. Returns ``False`` for ``"big.log"`` and
+    for per-ticket ``"workspaces/<ticket_id>/..."`` paths.
+    """
+    first_segment = path.split("/", 1)[0]
+    return first_segment in _periodic_pass_workspace_subdirs()
+
+
 @dataclass
 class OrphanWorkspace:
     """A workspace directory whose ticket no longer exists in the DB."""
@@ -1107,6 +1136,10 @@ def _file_findings_as_tickets(
 
     ordered = _order_findings(oversized, growth_flags, unbounded, orphans_by_board)
 
+    # Single per-sweep cap spanning ALL growth classes: the cap counts
+    # only drafts actually ``created`` across the unified ``_order_findings``
+    # list (orphan → growth → oversized → unbounded). There is no
+    # per-class cap; dedup-skipped in-flight findings do not consume slots.
     cap = settings.data_dir_audit_max_drafts_per_pass
     created: list[dict] = []
     for gap_id, title, body in ordered:
@@ -1218,6 +1251,20 @@ def _scan_growth_deltas(settings: Settings) -> tuple[list[dict], int]:
             active_ids = None
             kept: list[dict] = []
             for flag in board_flags:
+                # Periodic-pass clones (e.g. ``health_workspace/repo/``)
+                # are wiped and re-cloned every pass, so their .git
+                # churn produces large deltas every run. Suppress
+                # unconditionally — no active/terminal distinction
+                # applies to these transient clones.
+                if _is_periodic_pass_workspace_path(flag["path"]):
+                    log.info(
+                        "data_dir_audit: suppressing growth flag for "
+                        "periodic-pass workspace board=%r path=%s delta=%dB",
+                        board_id,
+                        flag["path"],
+                        int(flag["delta_bytes"]),
+                    )
+                    continue
                 tid = _workspace_ticket_id_for_path(flag["path"])
                 if tid is not None:
                     if active_ids is None:
