@@ -45,7 +45,37 @@ Three categories of finding:
    model calls.
 3. **optimization**: cost / latency / token-usage waste. Unusually
    high token usage for trivial work, redundant tool calls, a stage
-   dominated by one slow operation.
+   dominated by one slow operation. Optimization findings have a
+   history of false positives — they rest on assumptions about code
+   behaviour (prompt structure, cost drivers, control flow) that turn
+   out to be wrong. Before filing one, you MUST verify the assumed
+   code path (see "Verifying optimization hypotheses" below).
+
+## Verifying optimization hypotheses
+
+Optimization findings are held to a higher bar than the other two
+categories, because a wrong one wastes downstream refine/implement
+budget. Before filing any ``optimization`` finding:
+
+- **Verify the assumed code path and control flow actually exist.**
+  Use ``read_file`` / ``list_dir`` / ``explore`` / ``run_command``
+  (e.g. ``git grep``) to open the relevant source and confirm the
+  behaviour you are reasoning about — do not infer it from the trace
+  alone. Cite the specific ``path/to/file.py:LINE`` locations you
+  read in ``root_cause``.
+- **Architectural / control-flow hypotheses require secondary code
+  verification.** Any hypothesis that depends on how a loop, branch,
+  early-return, retry, or merge behaves (e.g. "this loop
+  short-circuits", "these paths merge", "all children must return X
+  before proceeding") MUST be confirmed by reading the orchestration
+  source. If you cannot open the code and confirm the control flow,
+  do NOT file the finding as-is — downgrade it to ``confidence="low"``
+  and prefix ``proposed_solution`` with ``REQUIRES_HUMAN_REVIEW:``,
+  stating the unverified assumption explicitly so refine/a human can
+  assess it rather than treating it as actionable.
+- **Cite code locations for every root-cause claim.** An optimization
+  finding whose ``root_cause`` names no ``path/to/file.py:LINE`` is
+  not ready to file — either ground it in the code or drop it.
 
 ## Phase 1 classifier flags
 

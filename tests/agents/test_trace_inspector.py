@@ -5,6 +5,7 @@ import json
 
 import robotsix_mill.agents.trace_inspector as trace_inspector_mod
 from robotsix_mill.agents.trace_inspector import (
+    _SYSTEM_PROMPT,
     TraceInspectResult,
     make_trace_inspect_tool,
 )
@@ -63,6 +64,22 @@ def _fake_trace_with_errors() -> str:
         ],
     }
     return json.dumps(trace)
+
+
+def test_system_prompt_requires_optimization_code_verification():
+    """Optimization findings must be gated on secondary code verification.
+
+    Guards the trace-review false-positive fix: the prompt must tell the
+    inspector to verify the assumed code path, cite code locations for
+    root-cause claims, and downgrade unverifiable architectural /
+    control-flow hypotheses to REQUIRES_HUMAN_REVIEW rather than auto-file.
+    """
+    prompt = _SYSTEM_PROMPT
+    assert "Verifying optimization hypotheses" in prompt
+    assert "REQUIRES_HUMAN_REVIEW" in prompt
+    assert "control-flow" in prompt or "control flow" in prompt
+    # Root-cause claims for optimizations must cite concrete code locations.
+    assert "path/to/file.py:LINE" in prompt
 
 
 def _fake_trace_clean() -> str:
