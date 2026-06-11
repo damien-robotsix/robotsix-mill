@@ -176,6 +176,29 @@ def test_basic_pipeline(settings, monkeypatch, tmp_path):
     assert mocks["run_agent"].call_args[1]["what"] == "audit"
 
 
+def test_verification_gate_injected_unconditionally(settings, monkeypatch, tmp_path):
+    """The verification gate is appended to every detector's prompt,
+    regardless of the include_forge_url flag."""
+    mocks = _setup_patches(monkeypatch)
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="module_curator",
+        model_setting="fallback",
+        max_gaps=5,
+        repo_dir=tmp_path,
+        memory="mem",
+        recent_proposals="props",
+        prompt_tail="Tail.",
+        include_forge_url=False,
+    )
+
+    prompt = mocks["agent"].run_sync.call_args[0][0]
+    assert "verify every concrete claim against the live tree" in prompt
+    assert "resolves to ZERO existing files" in prompt
+    assert "`path/to/file.py:LINE`" in prompt
+
+
 # ---------------------------------------------------------------------------
 # repo_dir=None: no tools
 # ---------------------------------------------------------------------------

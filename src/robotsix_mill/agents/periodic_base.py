@@ -17,6 +17,27 @@ from pydantic import BaseModel, Field
 from ..config import Settings
 from ..runners.pass_runner import ProposedActionItem
 
+# Uniform verification gate appended to every periodic detector's prompt.
+# Modelled on the trace-review optimization gate (PR #1135) in
+# ``trace_inspector.py`` but generalized to every proposal type, so a
+# detector cannot file a draft on inference from logs/traces/git output
+# alone — it must ground each concrete claim in the live tree first.
+_VERIFICATION_GATE: str = (
+    "\n\nBEFORE filing ANY draft, verify every concrete claim against the live "
+    "tree using the tools already available to you (`read_file`, `list_dir`, "
+    "`explore`/`parallel_explore`, and `run_command` when present):\n"
+    "- Stale-path / cleanup / 'file no longer exists' claims: confirm the path "
+    "or glob truly resolves to ZERO existing files before claiming it is "
+    "missing or stale; conversely confirm a flagged file is genuinely "
+    "unclaimed before proposing reclassification.\n"
+    "- Optimization / refactoring / code-citation claims: open the cited source "
+    "and confirm the code and control flow you reason about actually exist; "
+    "cite the specific `path/to/file.py:LINE` you read.\n"
+    "A claim you cannot ground in a verified path or location is NOT ready to "
+    "file — drop it rather than filing on inference from logs, traces, or git "
+    "output alone."
+)
+
 
 def load_periodic_system_prompt(name: str) -> str:
     """Load a periodic agent's static system prompt from its YAML
@@ -243,6 +264,9 @@ def run_periodic_agent(
         'severity threshold"). This is how an operator verifies a 0-draft run '
         "was legitimate rather than a no-op — never leave it empty."
     )
+    # Require every concrete claim to be grounded in the live tree before a
+    # draft is filed — applied uniformly to all periodic detectors.
+    prompt += _VERIFICATION_GATE
 
     # ------------------------------------------------------------------
     # Step 6 — run with retry
