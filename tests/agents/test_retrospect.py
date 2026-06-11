@@ -1310,3 +1310,117 @@ def test_run_retrospect_agent_reprompts_once_on_unstructured_output(
     assert len(calls) == 2
     assert calls[0] == "retrospect"
     assert "re-prompt" in calls[1]
+
+
+# --- insufficient-audit-data guard -----------------------------------------
+
+
+import pytest  # noqa: E402
+
+from robotsix_mill.agents.retrospecting import (  # noqa: E402
+    _NO_LANGFUSE_PLACEHOLDER,
+    _NO_TRACES_PLACEHOLDER,
+)
+
+
+@pytest.mark.parametrize(
+    "langfuse_summary",
+    [None, _NO_LANGFUSE_PLACEHOLDER, _NO_TRACES_PLACEHOLDER, "   ", ""],
+)
+def test_guard_fires_on_no_audit_data(tmp_path, monkeypatch, langfuse_summary):
+    """No Langfuse data + empty history + empty comments → short-circuit
+    a deterministic result WITHOUT touching the LLM."""
+
+    def boom_build(*a, **kw):
+        raise AssertionError("build_agent_from_definition must not be called")
+
+    def boom_run(*a, **kw):
+        raise AssertionError("run_agent must not be called")
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.base.build_agent_from_definition", boom_build
+    )
+    monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", boom_run)
+
+    s = Settings(data_dir=str(tmp_path / "data"))
+    out = retrospecting.run_retrospect_agent(
+        settings=s,
+        ticket_summary="some ticket description that is NOT run evidence",
+        history_text="",
+        langfuse_summary=langfuse_summary,
+        comments_text="",
+    )
+    assert isinstance(out, RetrospectResult)
+    assert out.propose_draft is False
+    assert out.follow_up_title is None
+    assert out.follow_up_body is None
+    assert out.draft_title is None
+    assert out.draft_body is None
+    assert out.draft_gap_id is None
+    assert out.updated_memory == ""
+    assert out.memory_delta is None
+    assert out.memory_edits is None
+    assert out.agented_md_proposals is None
+    assert out.findings.strip()
+    assert out.conclusion.strip()
+    assert "insufficient" in out.conclusion.lower()
+
+
+def test_guard_does_not_fire_for_workflow_only_review(tmp_path, monkeypatch):
+    """Langfuse absent but history present → supported workflow-only mode;
+    the agent path IS taken."""
+    monkeypatch.setattr(
+        "robotsix_mill.agents.base.build_agent_from_definition",
+        lambda settings, definition, **kw: object(),
+    )
+
+    calls: list[str] = []
+
+    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+        calls.append(what)
+        return _StubAgentRunResult(
+            RetrospectResult(findings="ran", conclusion="closed")
+        )
+
+    monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", fake_run_agent)
+
+    s = Settings(data_dir=str(tmp_path / "data"))
+    out = retrospecting.run_retrospect_agent(
+        settings=s,
+        ticket_summary="t",
+        history_text="ticket went DRAFT -> READY -> ... -> DONE",
+        langfuse_summary=None,
+        comments_text="",
+    )
+    assert isinstance(out, RetrospectResult)
+    assert calls, "the agent path must be taken for workflow-only review"
+
+
+def test_guard_does_not_fire_when_langfuse_present(tmp_path, monkeypatch):
+    """Real Langfuse summary but empty history/comments → guard does NOT
+    fire; the agent path IS taken."""
+    monkeypatch.setattr(
+        "robotsix_mill.agents.base.build_agent_from_definition",
+        lambda settings, definition, **kw: object(),
+    )
+
+    calls: list[str] = []
+
+    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+        calls.append(what)
+        return _StubAgentRunResult(
+            RetrospectResult(findings="ran", conclusion="closed")
+        )
+
+    monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", fake_run_agent)
+
+    s = Settings(data_dir=str(tmp_path / "data"))
+    out = retrospecting.run_retrospect_agent(
+        settings=s,
+        ticket_summary="t",
+        history_text="",
+        langfuse_summary="span A: 1200 tokens; span B: 800 tokens; total $0.04",
+        comments_text="",
+    )
+    assert isinstance(out, RetrospectResult)
+    assert calls, "the agent path must be taken when Langfuse data is present"
