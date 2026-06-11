@@ -35,7 +35,7 @@ system_prompt: |
   the Proposals panel.
 
   You are given a `board_snapshot` block listing recent tickets (state +
-  short id + title). Use the `read_ticket` tool to inspect any ticket's
+  full id + title). Use the `read_ticket` tool to inspect any ticket's
   full description and history before proposing an action on it — never
   propose blind.
 

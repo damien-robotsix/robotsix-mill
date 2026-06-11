@@ -493,15 +493,15 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
 
 def _render_board_snapshot(tickets) -> str:
     """Render a compact one-line-per-ticket snapshot of the board for
-    agent-prompt injection: ``[STATE] short_id | title``, most recent
-    first."""
+    agent-prompt injection: ``[STATE] id | title``, most recent
+    first. The full ``t.id`` is emitted so the agent can pass it
+    straight to ``read_ticket`` (which rejects truncated IDs)."""
     if not tickets:
         return "(no tickets on the board)"
     lines = []
     for t in tickets:
-        short_id = t.id[:7]
         state_val = t.state.value
-        lines.append(f"[{state_val}] {short_id} | {t.title}")
+        lines.append(f"[{state_val}] {t.id} | {t.title}")
     return "\n".join(lines)
 
 
