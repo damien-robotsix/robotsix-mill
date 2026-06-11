@@ -2863,9 +2863,10 @@ def test_multi_repo_one_pr_closed_unmerged_blocks(tmp_path, monkeypatch):
     assert "https://github.com/o/b/pull/2" in out.note
 
 
-def test_multi_repo_one_pr_conflicting_blocks(tmp_path, monkeypatch):
-    """One PR green, one open + mergeable=False → BLOCKED naming the
-    conflicting repo and referencing the parked auto-recovery."""
+def test_multi_repo_conflicting_with_clone_runs_rebase(tmp_path, monkeypatch):
+    """A conflicting repo WITH a workspace clone runs the rebase agent on that
+    repo's clone, force-pushes the rebased branch to the per-repo remote, and
+    re-polls (same state) — the multi-repo rebase auto-recovery."""
     ctx = _gh(tmp_path)
     remote_a = "https://github.com/o/a.git"
     remote_b = "https://github.com/o/b.git"
@@ -2874,12 +2875,7 @@ def test_multi_repo_one_pr_conflicting_blocks(tmp_path, monkeypatch):
     _route_by_remote(
         monkeypatch,
         pr_responses={
-            remote_a: {
-                "merged": False,
-                "state": "open",
-                "url": "https://github.com/o/a/pull/1",
-                "mergeable": True,
-            },
+            remote_a: {"merged": True, "state": "closed", "url": "u-a"},
             remote_b: {
                 "merged": False,
                 "state": "open",
@@ -2887,22 +2883,146 @@ def test_multi_repo_one_pr_conflicting_blocks(tmp_path, monkeypatch):
                 "mergeable": False,
             },
         },
-        ci_responses={
-            remote_a: {"conclusion": "success", "failing": []},
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    repo_b_dir = ctx.service.workspace(t).dir / "repos" / "repo-b"
+    (repo_b_dir / ".git").mkdir(parents=True)
+
+    captured = {}
+    from robotsix_mill.stages import merge as merge_mod
+
+    def fake_rebase(*, settings, repo_dir, branch, target, memory):
+        captured["repo_dir"] = repo_dir
+        captured["branch"] = branch
+        captured["target"] = target
+
+        class _R:
+            status = "DONE"
+            updated_memory = ""
+
+        return _R()
+
+    monkeypatch.setattr(merge_mod, "run_rebase_agent", fake_rebase)
+    monkeypatch.setattr(
+        merge_mod.tracing,
+        "start_ticket_root_span",
+        lambda *a, **k: contextlib.nullcontext(),
+    )
+    monkeypatch.setattr(merge_mod.git_ops, "fetch", lambda *a, **k: None)
+    monkeypatch.setattr(merge_mod.git_ops, "head_sha", lambda d: "newsha")
+    monkeypatch.setattr(merge_mod.git_ops, "remote_branch_sha", lambda d, b: "oldsha")
+    pushed = {}
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "push",
+        lambda repo_dir, *, branch, remote_url, token: pushed.update(
+            {"branch": branch, "remote": remote_url}
+        ),
+    )
+
+    _write_pr_urls(
+        ctx,
+        t,
+        [
+            {"repo_id": "repo-a", "branch": branch, "url": "u-a"},
+            {
+                "repo_id": "repo-b",
+                "branch": branch,
+                "url": "https://github.com/o/b/pull/2",
+            },
+        ],
+    )
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert captured["repo_dir"].endswith("repos/repo-b")
+    assert captured["branch"] == branch
+    assert pushed["branch"] == branch
+    assert pushed["remote"] == remote_b
+    counter = ctx.service.workspace(t).artifacts_dir / "rebase_repo-b.count"
+    assert merge_mod._read_counter(counter) == 0
+
+
+def test_multi_repo_conflicting_without_clone_blocks(tmp_path, monkeypatch):
+    """A conflicting repo whose clone is missing → BLOCKED naming the repo."""
+    ctx = _gh(tmp_path)
+    remote_a = "https://github.com/o/a.git"
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-a", remote_a), ("repo-b", remote_b)])
+
+    _route_by_remote(
+        monkeypatch,
+        pr_responses={
+            remote_a: {"merged": True, "state": "closed", "url": "u-a"},
+            remote_b: {
+                "merged": False,
+                "state": "open",
+                "url": "https://github.com/o/b/pull/2",
+                "mergeable": False,
+            },
         },
     )
 
     t = _make_meta_ticket(ctx)
     branch = f"mill/{t.id}"
+    # No clone materialised for repo-b.
     _write_pr_urls(
         ctx,
         t,
         [
+            {"repo_id": "repo-a", "branch": branch, "url": "u-a"},
             {
-                "repo_id": "repo-a",
+                "repo_id": "repo-b",
                 "branch": branch,
-                "url": "https://github.com/o/a/pull/1",
+                "url": "https://github.com/o/b/pull/2",
             },
+        ],
+    )
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "clone for repo-b missing — re-run implement" in out.note
+
+
+def test_multi_repo_rebase_attempt_cap_blocks(tmp_path, monkeypatch):
+    """Exhausting the per-repo rebase attempt counter → BLOCKED naming the
+    repo + attempt count, and resets the counter for a future resume."""
+    ctx = _gh(tmp_path)
+    remote_a = "https://github.com/o/a.git"
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-a", remote_a), ("repo-b", remote_b)])
+
+    _route_by_remote(
+        monkeypatch,
+        pr_responses={
+            remote_a: {"merged": True, "state": "closed", "url": "u-a"},
+            remote_b: {
+                "merged": False,
+                "state": "open",
+                "url": "https://github.com/o/b/pull/2",
+                "mergeable": False,
+            },
+        },
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    repo_b_dir = ctx.service.workspace(t).dir / "repos" / "repo-b"
+    (repo_b_dir / ".git").mkdir(parents=True)
+
+    from robotsix_mill.stages import merge as merge_mod
+
+    # Pre-seed the counter at the cap so the next attempt exceeds it.
+    counter = ctx.service.workspace(t).artifacts_dir / "rebase_repo-b.count"
+    merge_mod._write_counter(counter, ctx.settings.rebase_max_attempts)
+
+    _write_pr_urls(
+        ctx,
+        t,
+        [
+            {"repo_id": "repo-a", "branch": branch, "url": "u-a"},
             {
                 "repo_id": "repo-b",
                 "branch": branch,
@@ -2914,7 +3034,8 @@ def test_multi_repo_one_pr_conflicting_blocks(tmp_path, monkeypatch):
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.BLOCKED
     assert "repo-b" in out.note
-    assert "rebase auto-recovery is not yet wired" in out.note
+    assert "attempt" in out.note
+    assert merge_mod._read_counter(counter) == 0
 
 
 def test_multi_repo_one_pr_failing_ci_missing_clone_blocks(tmp_path, monkeypatch):
