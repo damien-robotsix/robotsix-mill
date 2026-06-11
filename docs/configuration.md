@@ -427,9 +427,9 @@ robotsix-llmio Claude Agent SDK transport.
 | `core.limits.transient_retries` | `MILL_TRANSIENT_RETRIES` | `4` | Max retries for transient LLM-call failures (429, 5xx, timeouts) |
 | `core.limits.transient_backoff_base` | `MILL_TRANSIENT_BACKOFF_BASE` | `2.0` | Base seconds for exponential backoff at LLM-call level (jittered) |
 | `core.limits.transient_backoff_cap` | `MILL_TRANSIENT_BACKOFF_CAP` | `30.0` | Max seconds between LLM-call retries |
-| `core.limits.stage_retry_max_attempts` | `MILL_STAGE_RETRY_MAX_ATTEMPTS` | `5` | Max automatic retries for transient stage-level failures (git outage, provider 5xx, connection refused) |
-| `core.limits.stage_retry_base_delay` | `MILL_STAGE_RETRY_BASE_DELAY` | `30.0` | Base seconds for stage-level exponential backoff |
-| `core.limits.stage_retry_max_delay` | `MILL_STAGE_RETRY_MAX_DELAY` | `300.0` | Max seconds between stage-level retries |
+| `core.limits.stage_retry_max_attempts` | `MILL_STAGE_RETRY_MAX_ATTEMPTS` | `3` | Max automatic retries for transient stage-level failures (git outage, provider 5xx, connection refused) |
+| `core.limits.stage_retry_base_delay` | `MILL_STAGE_RETRY_BASE_DELAY` | `2.0` | Base seconds for stage-level exponential backoff |
+| `core.limits.stage_retry_max_delay` | `MILL_STAGE_RETRY_MAX_DELAY` | `30.0` | Max seconds between stage-level retries |
 | `core.limits.rate_limit_backoff_base` | `MILL_RATE_LIMIT_BACKOFF_BASE` | `30.0` | Base seconds for rate-limit backoff (longer window) |
 | `core.limits.rate_limit_backoff_cap` | `MILL_RATE_LIMIT_BACKOFF_CAP` | `120.0` | Max seconds between rate-limit retries |
 | `core.limits.rate_limit_fallback_retries` | `MILL_RATE_LIMIT_FALLBACK_RETRIES` | `3` | Consecutive rate-limit failures before switching to fallback model |
