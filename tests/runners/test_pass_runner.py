@@ -1945,6 +1945,64 @@ def test_strip_preserves_prose_after_table():
     assert "Real cross-ticket pattern" in out and "thing to monitor" in out
 
 
+def test_strip_removes_recent_proposals_block_only_content():
+    """A standalone ``<recent_proposals>`` block is stripped even when it is
+    the ONLY ephemeral content (exercises the updated fast-path guard that no
+    longer short-circuits on the XML-block-only case)."""
+
+    mem = (
+        "<recent_proposals>\n"
+        "[DRAFT] 20260530Tc57b | Split big module\n"
+        "[DONE] 20260530Td88a | Add tests\n"
+        "</recent_proposals>\n"
+    )
+    out = strip_ephemeral_sections(mem)
+    assert "<recent_proposals>" not in out
+    assert "20260530Tc57b" not in out
+    assert out == ""
+
+
+def test_strip_recent_proposals_preserves_surrounding_prose():
+    """The echoed ``<recent_proposals>`` block is removed but the
+    cross-ticket prose around it survives."""
+
+    mem = (
+        "## Patterns\n\nReal observation worth keeping.\n\n"
+        "<recent_proposals>\n[DRAFT] 20260530Tc57b | Split big module\n"
+        "</recent_proposals>\n\n"
+        "Another thing to monitor.\n"
+    )
+    out = strip_ephemeral_sections(mem)
+    assert "<recent_proposals>" not in out
+    assert "20260530Tc57b" not in out
+    assert "## Patterns" in out and "Real observation worth keeping" in out
+    assert "Another thing to monitor" in out
+
+
+def test_strip_recent_proposals_noop_without_block():
+    """Memory with no ephemeral content (no table, no XML block) is returned
+    unchanged."""
+
+    assert strip_ephemeral_sections("## Patterns\nfoo\n") == "## Patterns\nfoo\n"
+
+
+def test_persist_memory_strips_echoed_recent_proposals(tmp_path):
+    """An echoed ``<recent_proposals>`` block never lands in the written
+    ledger file."""
+
+    memory_file = tmp_path / "memory.md"
+    persist_memory(
+        memory_file,
+        "## Patterns\n\nKeep this.\n\n"
+        "<recent_proposals>\n[DRAFT] 20260530Tc57b | Split\n"
+        "</recent_proposals>\n",
+    )
+    written = memory_file.read_text(encoding="utf-8")
+    assert "<recent_proposals>" not in written
+    assert "20260530Tc57b" not in written
+    assert "Keep this." in written
+
+
 def test_agent_summary_threads_to_pass_result(tmp_path):
     """The agent's `summary` flows to AgentPassResult.summary, so the run
     registry can show what a 0-draft run actually examined."""
