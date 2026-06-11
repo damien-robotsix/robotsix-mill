@@ -624,9 +624,7 @@ class GitHubForge(Forge):
         )
 
     # --- HTTP seam (monkeypatched in tests) ---
-    def _fetch_alerts_for_ref(
-        self, *, owner: str, repo: str, ref: str
-    ) -> list[dict]:
+    def _fetch_alerts_for_ref(self, *, owner: str, repo: str, ref: str) -> list[dict]:
         """Fetch raw open code-scanning alerts for a single *ref* (best-effort).
 
         Degrades to ``[]`` on 403/404 (code-scanning off / token lacks the
