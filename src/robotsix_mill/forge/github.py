@@ -623,16 +623,19 @@ class GitHubForge(Forge):
             head_sha=head_sha,
         )
 
-    def list_code_scanning_alerts(self, *, source_branch: str) -> list[dict]:
-        owner, repo = self._owner_repo
+    # --- HTTP seam (monkeypatched in tests) ---
+    def _fetch_alerts_for_ref(
+        self, *, owner: str, repo: str, ref: str
+    ) -> list[dict]:
+        """Fetch raw open code-scanning alerts for a single *ref* (best-effort).
+
+        Degrades to ``[]`` on 403/404 (code-scanning off / token lacks the
+        security-events scope) or any other error — never fatal.
+        """
         try:
             r = self._http.get(
                 f"/repos/{owner}/{repo}/code-scanning/alerts",
-                params={
-                    "ref": f"refs/heads/{source_branch}",
-                    "state": "open",
-                    "per_page": 50,
-                },
+                params={"ref": ref, "state": "open", "per_page": 50},
             )
             # 404 = code-scanning not enabled / no alerts endpoint; 403 =
             # token lacks the security-events scope. Either way: no signal,
@@ -643,8 +646,41 @@ class GitHubForge(Forge):
             raw = r.json()
         except Exception:  # noqa: BLE001 — best-effort enrichment, never fatal
             return []
+        return raw if isinstance(raw, list) else []
+
+    def list_code_scanning_alerts(self, *, source_branch: str) -> list[dict]:
+        owner, repo = self._owner_repo
+        # A CodeQL workflow that only triggers on ``pull_request`` (the common
+        # case) files its alerts under the PR merge ref ``refs/pull/{N}/merge``,
+        # NOT ``refs/heads/{branch}`` — a feature-branch push never runs that
+        # analysis. Resolve the PR for this branch and query BOTH the merge ref
+        # and the branch ref, unioning the results (de-duped on the raw alert
+        # ``number``) so both workflow shapes are covered. Resolving the PR is
+        # best-effort: any failure degrades to the branch-ref-only query.
+        try:
+            pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
+        except Exception:  # noqa: BLE001 — best-effort; fall back to branch ref
+            pr = None
+        refs = [f"refs/heads/{source_branch}"]
+        if pr is not None:
+            refs.insert(0, f"refs/pull/{pr['number']}/merge")
+
+        seen: set[int] = set()
+        raw_alerts: list[dict] = []
+        for ref in refs:
+            for a in self._fetch_alerts_for_ref(owner=owner, repo=repo, ref=ref):
+                # Dedupe on the raw GitHub alert number BEFORE the parse loop
+                # (the parsed dict drops the number). Alerts without a number
+                # (defensive) are kept as-is.
+                num = a.get("number") if isinstance(a, dict) else None
+                if num is not None:
+                    if num in seen:
+                        continue
+                    seen.add(num)
+                raw_alerts.append(a)
+
         out: list[dict] = []
-        for a in raw if isinstance(raw, list) else []:
+        for a in raw_alerts:
             rule = a.get("rule") or {}
             inst = a.get("most_recent_instance") or {}
             loc = inst.get("location") or {}
