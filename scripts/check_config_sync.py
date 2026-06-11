@@ -72,11 +72,6 @@ _DEFAULTS_KEYS_NOT_IN_ALIAS: frozenset[str] = frozenset(
         # infrastructure wiring, not a per-run override surface).
         "sandbox.network",
         "sandbox.proxy_url",
-        # History-compression budget knobs: documented defaults with no
-        # corresponding Settings field (consumed by the tool-output
-        # compression path, not via Settings()). Retained, not deleted.
-        "core.limits.history_max_tokens",
-        "core.limits.history_keep_last",
     }
 )
 

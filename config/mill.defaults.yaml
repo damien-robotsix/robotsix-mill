@@ -45,7 +45,7 @@ core:
     doc_classifier: *cheap_model                          # doc-diff classifier gate (fast + cheap)
     rate_limit_fallback: ""                               # empty = disabled; switch when rate-limit exhausted
 
-  # -- request caps, concurrency, retry, and timeouts (19 fields) -----------
+  # -- request caps, concurrency, retry, and timeouts (17 fields) -----------
   limits:
     coordinator_requests: 200          # per-ticket request cap for implement (coordinator)
     test_requests: 16                  # per-call cap for test-distillation sub-agent
@@ -78,8 +78,6 @@ core:
     rate_limit_backoff_base: 30.0      # base seconds for rate-limit backoff (longer window)
     rate_limit_backoff_cap: 120.0      # max seconds between rate-limit retries
     rate_limit_fallback_retries: 3     # consecutive rate-limit failures before switching model
-    history_max_tokens: 102400         # estimated token budget before compressing older tool outputs
-    history_keep_last: 5               # most-recent tool outputs to keep fully expanded after compression
 
   # -- memory ledgers, reference files, and dedup lookback (6 fields) ------
   memory:
