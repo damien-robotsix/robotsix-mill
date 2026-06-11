@@ -58,6 +58,21 @@ h1 {
 .card { position: relative; }
 
 /* ============================================================
+   Suppress robotsix-board's per-card move-to control
+
+   robotsix-board renders a `<form class="board-card-move">` (a target-
+   column <select> + submit) on every card, posting to
+   /board/move/{id}/{status}. On the mill board all 22 columns are
+   automated pipeline stages owned by the agent workflow / TicketService,
+   so a manual per-card move is misleading and can drop a ticket into a
+   state inconsistent with the pipeline. The library exposes no config
+   flag to suppress the form and rebuilds it on every refresh, so we hide
+   it via CSS. board-mill.css loads after board.css so this wins the
+   cascade with no !important needed.
+   ============================================================ */
+.board-card-move { display: none; }
+
+/* ============================================================
    Source badges (mill-specific ticket origins)
    ============================================================ */
 .src-badge {
