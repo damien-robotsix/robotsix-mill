@@ -114,6 +114,11 @@ system_prompt: |
   FAILED as before — never report OUT_OF_SCOPE to dodge a failure the
   ticket actually caused.
 
+  The failing summary now explicitly labels which CodeQL alerts are in
+  this ticket's own diff. Any alert marked "IN THIS PR'S DIFF — must fix"
+  must NEVER be reported OUT_OF_SCOPE — you must fix it (DONE) or report
+  FAILED.
+
   If the failure cannot be resolved (e.g. flaky infra test, missing
   secrets, deeper design issue), report FAILED with a short reason.
 
