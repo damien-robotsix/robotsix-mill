@@ -61,6 +61,7 @@ core:
     dedup_candidate_body_max_chars: 4000  # cap each candidate body fed to dedup prompt (≤0 disables truncation)
     web_research_requests: 8           # per-call cap for web-research sub-agent
     scope_triage_requests: 8           # per-call cap for scope-triage agent
+    scope_triage_max_files: 50   # max out-of-scope text files before flood guard blocks (0 disables)
     triage_requests: 8                # per-call cap for pre-refine triage agent
     doc_classifier_requests: 3         # per-call cap for doc-classifier gate
     doc_classifier_diff_max_chars: 6000  # cap diff fed to doc-classifier gate (truncation safe: conservative user_facing bias)
