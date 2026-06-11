@@ -34,6 +34,11 @@ jobs:
           # mkdocstrings/griffelib constraint.
           python-version: "3.14.5"
 
+      # setup-uv only exports UV_PYTHON; it does not install the pinned
+      # interpreter ("No interpreter found for Python 3.14.5").
+      - name: Install pinned Python
+        run: uv python install 3.14.5
+
       - name: Install docs deps
         run: uv sync --frozen --extra docs
 
