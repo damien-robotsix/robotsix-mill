@@ -72,14 +72,95 @@ def _format_code_scanning_alerts(alerts: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _partition_alerts_by_diff(
+    alerts: list[dict], changed_paths: set[str]
+) -> tuple[list[dict], list[dict]]:
+    """Split open code-scanning alerts into (in_scope, out_of_scope).
+
+    An alert is IN SCOPE when its repo-relative ``path`` is among the PR's
+    changed files; otherwise it is an out-of-scope candidate. Alerts with an
+    empty/missing ``path`` are treated as out-of-scope (cannot prove they are
+    in the diff).
+    """
+    in_scope: list[dict] = []
+    out_of_scope: list[dict] = []
+    for a in alerts:
+        path = a.get("path", "")
+        if path and path in changed_paths:
+            in_scope.append(a)
+        else:
+            out_of_scope.append(a)
+    return in_scope, out_of_scope
+
+
+def _pr_changed_paths(forge, branch: str) -> set[str]:
+    # Best-effort: if pr_files cannot be fetched, the set is empty → no alert
+    # is provably in-diff → the stage falls back to today's behaviour (may
+    # spawn). This is the conservative direction and is intentional.
+    try:
+        return {f.get("path", "") for f in forge.pr_files(source_branch=branch)} - {""}
+    except Exception:  # noqa: BLE001 — best-effort; degrade to empty set
+        return set()
+
+
+def _alert_loc(a: dict) -> str:
+    """Return the ``path`` or ``path:line`` location string for an alert."""
+    loc = a.get("path", "")
+    if a.get("line"):
+        loc += f":{a['line']}"
+    return loc
+
+
+def _format_alert_refs(alerts: list[dict]) -> str:
+    """Render alerts as a compact ``rule @ path:line`` semicolon list."""
+    return "; ".join(f"{a.get('rule', '')} @ {_alert_loc(a)}" for a in alerts)
+
+
+def _format_labelled_alerts(in_scope: list[dict], out_of_scope: list[dict]) -> str:
+    """Render code-scanning alerts split into in-diff / untouched sections.
+
+    Each alert is explicitly marked so the agent (and any downstream fixer)
+    sees which alerts it MUST fix in-scope versus which may be out of scope.
+    """
+    if not in_scope and not out_of_scope:
+        return ""
+    lines = ["**Code-scanning alerts (CodeQL — these are NOT in the job logs):**"]
+    if in_scope:
+        lines.append(
+            "The following CodeQL alert(s) are located in THIS PR's own changed "
+            "files and MUST be fixed in-scope — do NOT report OUT_OF_SCOPE for "
+            "them:"
+        )
+        for a in in_scope:
+            sev = a.get("severity") or "?"
+            lines.append(
+                f"- [{sev}] `{a.get('rule', '')}` {_alert_loc(a)}: "
+                f"{a.get('message', '')} — IN THIS PR'S DIFF — must fix"
+            )
+    if out_of_scope:
+        lines.append("Alert(s) in untouched files (may be out of scope):")
+        for a in out_of_scope:
+            sev = a.get("severity") or "?"
+            lines.append(
+                f"- [{sev}] `{a.get('rule', '')}` {_alert_loc(a)}: "
+                f"{a.get('message', '')} — untouched file (out-of-scope candidate)"
+            )
+    return "\n".join(lines)
+
+
 def _build_failing_summary(
-    failing: list[dict], log_text: str = "", alerts: list[dict] | None = None
+    failing: list[dict],
+    log_text: str = "",
+    alerts: list[dict] | None = None,
+    changed_paths: set[str] | None = None,
 ) -> str:
     """Build a markdown summary from the failing check list.
 
     When *log_text* is provided (non-empty), it is included under a
     **Job logs:** heading. When *alerts* (open code-scanning/CodeQL alerts)
     are provided they are listed too — they don't appear in the job logs.
+    When *changed_paths* is provided, the alerts are partitioned against the
+    PR's own diff and rendered with explicit in-scope / out-of-scope labels.
     """
     parts = []
     for i, chk in enumerate(failing):
@@ -97,7 +178,11 @@ def _build_failing_summary(
                     loc += f":{a['start_line']}"
                 parts.append(f"- [{a['level']}] {loc}: {a['message']}")
         parts.append("")
-    alert_block = _format_code_scanning_alerts(alerts or [])
+    if changed_paths is None:
+        alert_block = _format_code_scanning_alerts(alerts or [])
+    else:
+        in_scope, out_of_scope = _partition_alerts_by_diff(alerts or [], changed_paths)
+        alert_block = _format_labelled_alerts(in_scope, out_of_scope)
     if alert_block:
         parts.append(alert_block)
         parts.append("")
@@ -248,9 +333,11 @@ class CIFixStage(Stage):
         # failure, not on every PR poll — this stage runs infrequently).
         log_text = ""
         alerts: list[dict] = []
+        changed_paths: set[str] = set()
         try:
             forge = get_forge(s, repo_config=ctx.repo_config)
             alerts = forge.list_code_scanning_alerts(source_branch=branch)
+            changed_paths = _pr_changed_paths(forge, branch)
             pr = forge.pr_status(source_branch=branch)
             head_sha = (pr or {}).get("sha", "")
             if head_sha:
@@ -266,7 +353,7 @@ class CIFixStage(Stage):
         except Exception:  # noqa: BLE001 — best-effort enrichment
             log.warning("%s: failed to fetch job logs / alerts", ticket.id)
 
-        return _build_failing_summary(failing, log_text, alerts)
+        return _build_failing_summary(failing, log_text, alerts, changed_paths)
 
     def _enforce_cycle_ceiling(
         self, ticket: Ticket, ctx: StageContext, failing_summary: str
@@ -402,6 +489,25 @@ class CIFixStage(Stage):
             return None
         return result
 
+    def _partition_open_alerts(
+        self, ctx: StageContext, branch: str
+    ) -> tuple[list[dict], list[dict]]:
+        """Fetch open code-scanning alerts + PR changed files and partition.
+
+        All forge calls are best-effort: any failure degrades to "no in-scope
+        alerts" (empty in_scope) so a forge outage falls back to the existing
+        spawn path rather than crashing the stage.
+        """
+        s = ctx.settings
+        try:
+            forge = get_forge(s, repo_config=ctx.repo_config)
+            alerts = forge.list_code_scanning_alerts(source_branch=branch)
+            changed_paths = _pr_changed_paths(forge, branch)
+            return _partition_alerts_by_diff(alerts, changed_paths)
+        except Exception:  # noqa: BLE001 — best-effort; degrade to no in-scope
+            log.warning("ci-fix in-diff alert guard failed; falling back")
+            return [], []
+
     def _handle_out_of_scope(
         self,
         ticket: Ticket,
@@ -420,6 +526,31 @@ class CIFixStage(Stage):
         review / merge).
         """
         s = ctx.settings
+
+        # Deterministic in-diff guard: the LLM's OUT_OF_SCOPE verdict must not
+        # be the only safety net. If ANY open code-scanning alert lives in this
+        # PR's own diff, the verdict is wrong for at least those — do NOT spawn
+        # a dependency fixer; route back to re-run the agent against the
+        # in-scope-labelled summary instead.
+        in_scope_alerts, out_of_scope_alerts = self._partition_open_alerts(ctx, branch)
+
+        if in_scope_alerts:
+            # OUT_OF_SCOPE is wrong for these alerts — suppress the spawn and
+            # re-run the ci-fix agent (now driven by the in-scope-labelled
+            # failing_summary). Do NOT reset the cycle counters: the hard
+            # ceiling in _enforce_cycle_ceiling bounds an agent that keeps
+            # refusing, so the loop stays safe.
+            try:
+                ctx.service.add_history_note(
+                    ticket.id,
+                    "ci-fix suppressed out-of-scope spawn: the following CodeQL "
+                    "alert(s) are located in THIS PR's own changed files and "
+                    "must be fixed in-scope: " + _format_alert_refs(in_scope_alerts),
+                )
+            except Exception:  # noqa: BLE001 — history note is best-effort
+                log.warning("%s: failed to record in-scope-alert note", ticket.id)
+            return Outcome(State.IMPLEMENT_COMPLETE)
+
         artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
         refresh_path = artifacts_dir / _CI_REFRESH_COUNTER
 
@@ -469,6 +600,13 @@ class CIFixStage(Stage):
             f"**Required change area:** {result.required_change_area}\n\n"
             f"**Why out of scope:** {result.out_of_scope_reason}\n"
         )
+        if out_of_scope_alerts:
+            # Name the specific out-of-scope rule ids + paths so the dependency
+            # fixer knows exactly which alerts to address (AC3).
+            description += (
+                "\n**Out-of-scope code-scanning alert(s):** "
+                f"{_format_alert_refs(out_of_scope_alerts)}\n"
+            )
         block_reason = "CI failure is out of scope for this ticket"
 
         outcome = dependency_fix.spawn_dependency_fix(

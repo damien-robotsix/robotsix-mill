@@ -14,6 +14,7 @@ from robotsix_mill.stages.ci_fix import (
     _read_counter,
     _write_counter,
     _build_failing_summary,
+    _partition_alerts_by_diff,
 )
 from robotsix_mill.agents.ci_fixing import CiFixResult
 
@@ -1031,8 +1032,18 @@ def test_build_failing_summary_includes_codeql_alerts():
 # ---------------------------------------------------------------------------
 
 
-def _oos_forge(monkeypatch):
-    """Wire the forge seams for an OUT_OF_SCOPE run (failing CI + a sha)."""
+def _oos_forge(
+    monkeypatch,
+    *,
+    alert_paths=("src/pkg/__init__.py",),
+    pr_paths=("src/other.py",),
+):
+    """Wire the forge seams for an OUT_OF_SCOPE run (failing CI + a sha).
+
+    Also wires the code-scanning + pr_files seams the deterministic in-diff
+    guard consumes. By default the alert path is NOT among the PR's changed
+    files (all-untouched), so the guard falls through to the spawn path.
+    """
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
@@ -1048,6 +1059,28 @@ def _oos_forge(monkeypatch):
         "pr_status",
         lambda self, *, source_branch: {"sha": "abc123"},
     )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_code_scanning_alerts",
+        lambda self, *, source_branch: [
+            {
+                "rule": "py/clear-text-logging",
+                "severity": "high",
+                "path": p,
+                "line": 3,
+                "message": "alert",
+            }
+            for p in alert_paths
+        ],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [
+            {"path": p, "status": "modified", "additions": 1, "deletions": 0}
+            for p in pr_paths
+        ],
+    )
 
 
 def _oos_result(**over):
@@ -1060,6 +1093,104 @@ def _oos_result(**over):
     )
     kwargs.update(over)
     return CiFixResult(**kwargs)
+
+
+def test_partition_alerts_by_diff_splits_in_and_out_of_scope():
+    """In-diff alerts land in in_scope; untouched and empty-path alerts land
+    in out_of_scope (AC2)."""
+    in_diff = {"rule": "py/x", "path": "src/a.py", "line": 1}
+    untouched = {"rule": "py/y", "path": "src/b.py", "line": 2}
+    no_path = {"rule": "py/z", "path": "", "line": 3}
+    missing_path = {"rule": "py/w", "line": 4}
+    changed = {"src/a.py", "src/c.py"}
+
+    in_scope, out_of_scope = _partition_alerts_by_diff(
+        [in_diff, untouched, no_path, missing_path], changed
+    )
+    assert in_scope == [in_diff]
+    assert out_of_scope == [untouched, no_path, missing_path]
+
+
+def test_build_failing_summary_labels_in_diff_alert():
+    """When changed_paths is provided, in-diff alerts are labelled 'must fix'
+    with the rule id + path:line and the explicit in-scope directive (AC3)."""
+    out = _build_failing_summary(
+        failing=[{"name": "CodeQL"}],
+        log_text="",
+        alerts=[
+            {
+                "rule": "py/unused-global-variable",
+                "severity": "warning",
+                "path": "src/pkg/mod.py",
+                "line": 12,
+                "message": "unused",
+            }
+        ],
+        changed_paths={"src/pkg/mod.py"},
+    )
+    assert "py/unused-global-variable" in out
+    assert "src/pkg/mod.py:12" in out
+    assert (
+        "are located in THIS PR's own changed files and MUST be fixed in-scope" in out
+    )
+    assert "IN THIS PR'S DIFF — must fix" in out
+
+
+def test_all_in_diff_alerts_suppress_dependency_fixer(tmp_path, monkeypatch):
+    """All alerts inside the PR's own diff → no dependency fixer spawned, route
+    back to IMPLEMENT_COMPLETE for an in-scope re-run, no force-push (AC1)."""
+    ctx = _gh(tmp_path)
+    _oos_forge(
+        monkeypatch,
+        alert_paths=("src/pkg/mod.py",),
+        pr_paths=("src/pkg/mod.py",),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: _oos_result(),
+    )
+    push_calls = []
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        lambda *a, **k: push_calls.append(1),
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY) == []
+    assert push_calls == []
+
+
+def test_out_of_scope_description_names_untouched_alert(tmp_path, monkeypatch):
+    """The spawned out-of-scope ticket's description names the untouched
+    alert's rule id + path (AC3)."""
+    ctx = _gh(tmp_path)
+    _oos_forge(
+        monkeypatch,
+        alert_paths=("src/untouched.py",),
+        pr_paths=("src/other.py",),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: _oos_result(),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        lambda *a, **k: None,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    fix = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)[0]
+    desc = ctx.service.workspace(fix).read_description()
+    assert "py/clear-text-logging" in desc
+    assert "src/untouched.py" in desc
 
 
 def test_out_of_scope_spawns_fix_ticket_and_parks(tmp_path, monkeypatch):
