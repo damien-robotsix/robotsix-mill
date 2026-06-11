@@ -528,13 +528,14 @@ Each periodic agent shares this pattern:
 | `periodic.<name>.memory_path` | `MILL_<NAME>_MEMORY_PATH` | `None` | Override path for memory ledger ² ³ |
 
 Periodic agents: `audit`, `board_cleanup`, `trace_health`, `health`, `test_gap`,
-`agent_check`, `survey`, `ci_monitor`, `config_sync`, `bc_check`,
+`agent_check`, `survey`, `ci_monitor`, `config_sync`, `member_sync`, `bc_check`,
 `completeness_check`, `cost_reconciliation`, `module_curator`.
 
 > ¹ `survey` is the exception — its default is `enabled: true`.
 >
-> ² `trace_health` and `ci_monitor` do **not** have a `memory_path`
-> field — they write no per-agent memory ledger.
+> ² `trace_health`, `ci_monitor`, and `member_sync` do **not** have a
+> `memory_path` field — they write no per-agent memory ledger
+> (`member_sync` is a deterministic pass with no LLM agent).
 >
 > `bc_check` and `completeness_check` are **env-var-only** (no YAML mapping yet).
 > Set `MILL_BC_CHECK_PERIODIC=true`, `MILL_COMPLETENESS_CHECK_PERIODIC=true`, etc.

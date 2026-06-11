@@ -1,17 +1,64 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
-from ...config import RepoConfig, get_repos_config
+from ...config import RepoConfig, Settings, get_repos_config
 from .. import tracing
 
 from ._base import _WorkerBase
 from .epic import _branch_is_stale
 
 log = logging.getLogger("robotsix_mill.worker")
+
+
+# ---------------------------------------------------------------------------
+# Member-sync event-trigger state helpers
+# ---------------------------------------------------------------------------
+#
+# The supervisor fires member-sync out-of-band when a managed repo's vcs2l
+# manifest (``repos.yaml``) content changes between cycles. There is no
+# inotify/webhook infrastructure — change-detection is poll-cycle
+# content-hash only. State persists at ``<data_dir>/<repo_id>/
+# member_sync_repos_hash`` (mirrors trace_review_runner's tiny state-file
+# helpers). A missing ``repos.yaml`` hashes to ``""`` (a sentinel that
+# never triggers a fire).
+
+
+def _member_sync_hash_path(settings: Settings, repo_id: str) -> Path:
+    return settings.data_dir / repo_id / "member_sync_repos_hash"
+
+
+def _hash_repos_yaml(clone_dir: Path) -> str:
+    """Return the sha256 of ``<clone_dir>/repos.yaml``, or ``""`` when the
+    file is absent/unreadable (the sentinel — never fires a sync)."""
+    p = Path(clone_dir) / "repos.yaml"
+    if not p.exists():
+        return ""
+    try:
+        return hashlib.sha256(p.read_bytes()).hexdigest()
+    except OSError:
+        return ""
+
+
+def _load_repos_yaml_hash(settings: Settings, repo_id: str) -> str:
+    p = _member_sync_hash_path(settings, repo_id)
+    if not p.exists():
+        return ""
+    try:
+        return p.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def _save_repos_yaml_hash(settings: Settings, repo_id: str, value: str) -> None:
+    p = _member_sync_hash_path(settings, repo_id)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(value, encoding="utf-8")
 
 
 class PeriodicPassesMixin(_WorkerBase):
@@ -192,21 +239,25 @@ class PeriodicPassesMixin(_WorkerBase):
                     session_id=session_id,
                     repo_config=repo_config,
                 )
+            # Deterministic passes (e.g. member_sync) return results without a
+            # ``drafts_created`` field — tolerate its absence so they record an
+            # ``ok`` run rather than a spurious error.
+            drafts = getattr(result, "drafts_created", None) or []
             log.info(
                 "%s pass (%s) completed, created %d draft(s)",
                 label.capitalize(),
                 repo_label,
-                len(result.drafts_created),
+                len(drafts),
             )
             if reg and run_id:
                 runner_summary = (getattr(result, "summary", "") or "").strip()
-                n = len(result.drafts_created)
+                n = len(drafts)
                 if runner_summary:
                     # The agent's own account + the draft count, so the count is
                     # always visible alongside its reasoning.
                     summary = f"{runner_summary} | {n} draft(s) filed"
                 else:
-                    draft_ids = [d["id"] for d in result.drafts_created[:5]]
+                    draft_ids = [d["id"] for d in drafts[:5]]
                     summary = (
                         f"Created {n} drafts: "
                         f"{', '.join(draft_ids)}"
@@ -598,6 +649,7 @@ class PeriodicPassesMixin(_WorkerBase):
         from ...agents.bespoke_loader import load_bespoke_definitions
         from ...agents.periodic_loader import discover_periodic_workflows
         from ...runners.audit_runner import _clone_token
+        from ...runners.member_sync_runner import run_member_sync_pass
         from ...vcs import git_ops
 
         settings = self.ctx.settings
@@ -688,6 +740,42 @@ class PeriodicPassesMixin(_WorkerBase):
                                 "bespoke supervisor (%s): refresh failed",
                                 board_id,
                             )
+
+                    # Event-trigger: fire member-sync out-of-band when this
+                    # repo's vcs2l manifest (repos.yaml) content changed since
+                    # the last cycle. Poll-cycle content-hash only (no
+                    # inotify/webhook). Best-effort — never crash the loop.
+                    try:
+                        if settings.member_sync_periodic:
+                            current_hash = _hash_repos_yaml(clone_dir)
+                            stored_hash = _load_repos_yaml_hash(
+                                settings, repo_config.repo_id
+                            )
+                            # A missing manifest hashes to "" (sentinel) which
+                            # never differs-into-a-fire; only a real content
+                            # change triggers the out-of-band pass.
+                            if current_hash and current_hash != stored_hash:
+                                log.info(
+                                    "periodic supervisor (%s): repos.yaml "
+                                    "changed — firing member-sync out-of-band",
+                                    board_id,
+                                )
+                                await self._fire_periodic_pass(
+                                    "member_sync",
+                                    run_member_sync_pass,
+                                    repo_config,
+                                )
+                                # Persist only after a successful fire.
+                                _save_repos_yaml_hash(
+                                    settings,
+                                    repo_config.repo_id,
+                                    current_hash,
+                                )
+                    except Exception:  # noqa: BLE001 — must not crash supervisor
+                        log.exception(
+                            "periodic supervisor (%s): member-sync trigger failed",
+                            board_id,
+                        )
 
                     # Build the DESIRED set of loops keyed by a namespaced
                     # id, each carrying a comparison object (for respawn) and

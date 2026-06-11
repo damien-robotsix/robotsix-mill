@@ -425,6 +425,9 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.config_sync.enabled": "config_sync_periodic",
     "periodic.config_sync.interval_seconds": "config_sync_interval_seconds",
     "periodic.config_sync.memory_path": "config_sync_memory_path",
+    # -- periodic.member_sync (deterministic — no model, no memory_path) --
+    "periodic.member_sync.enabled": "member_sync_periodic",
+    "periodic.member_sync.interval_seconds": "member_sync_interval_seconds",
     # -- periodic.ci_monitor (global cap only — enabled/interval are per-repo) --
     "periodic.ci_monitor.log_max_bytes": "ci_log_max_bytes",
     # -- periodic.timeout_escalation --

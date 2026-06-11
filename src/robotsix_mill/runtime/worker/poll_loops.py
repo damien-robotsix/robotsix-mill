@@ -233,6 +233,7 @@ class PollLoopsMixin(_WorkerBase):
     _SCHEDULE_ONLY_RUNNERS: dict[str, str] = {
         "trace_review": "robotsix_mill.runners.trace_review_runner:run_trace_review_pass",
         "config_sync": "robotsix_mill.runners.config_sync_runner:run_config_sync_pass",
+        "member_sync": "robotsix_mill.runners.member_sync_runner:run_member_sync_pass",
         "cost_reconciliation": (
             "robotsix_mill.runners.cost_reconciliation_runner:run_cost_reconciliation_pass"
         ),

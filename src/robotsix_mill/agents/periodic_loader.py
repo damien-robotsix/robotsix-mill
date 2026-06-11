@@ -83,6 +83,7 @@ _BUILTIN_KINDS: dict[str, str] = {
     # Schedule-only passes (no prompt yaml / deterministic runner).
     "trace_review": "schedule_only",
     "config_sync": "schedule_only",
+    "member_sync": "schedule_only",
     "cost_reconciliation": "schedule_only",
     "data_dir_audit": "schedule_only",
     # Non-LLM maintenance loops.

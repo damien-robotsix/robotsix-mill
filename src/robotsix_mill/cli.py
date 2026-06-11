@@ -71,6 +71,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Config-sync pass",
         "format": "memory_drafts",
     },
+    "member-sync": {
+        "module": "runners.member_sync_runner",
+        "function": "run_member_sync_pass",
+        "label": "Member-sync pass",
+        "format": "member_sync",
+    },
     "trace-health": {
         "module": "runners.trace_health_runner",
         "function": "run_trace_health_check",
@@ -218,6 +224,33 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
             else:
                 rc = repos.repos[repo_id]
             result = func(session_id=session_id, repo_config=rc, settings=Settings())
+        elif cmd == "member-sync":
+            from .runtime.tracing import make_session_id
+            from .config import get_repos_config
+
+            session_id = make_session_id(cmd)
+            repos = get_repos_config()
+            repo_id = getattr(args, "repo_id", None)
+            if repo_id is None:
+                if len(repos.repos) == 1:
+                    rc = next(iter(repos.repos.values()))
+                else:
+                    print(
+                        "member-sync: --repo-id is required (multiple repos "
+                        f"configured). Known repos: {sorted(repos.repos.keys())}",
+                        file=sys.stderr,
+                    )
+                    return 2
+            elif repo_id not in repos.repos:
+                print(
+                    f"member-sync: unknown repo '{repo_id}'. "
+                    f"Known repos: {sorted(repos.repos.keys())}",
+                    file=sys.stderr,
+                )
+                return 2
+            else:
+                rc = repos.repos[repo_id]
+            result = func(session_id=session_id, repo_config=rc)
         else:
             from .runtime.tracing import make_session_id
 
@@ -263,6 +296,19 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                     indent=2,
                 )
             )
+        elif entry["format"] == "member_sync":
+            print(
+                json.dumps(
+                    {
+                        "added": result.added,
+                        "updated": result.updated,
+                        "flagged_for_removal": result.flagged_for_removal,
+                        "filed_tickets": result.filed_tickets,
+                        "skipped": result.skipped,
+                    },
+                    indent=2,
+                )
+            )
         else:
             print(
                 json.dumps(
@@ -303,6 +349,23 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                     )
             else:
                 print("No integrity breaks found.")
+        elif entry["format"] == "member_sync":
+            print("Member-sync pass complete.")
+            print(
+                f"Added: {len(result.added)} | "
+                f"Updated: {len(result.updated)} | "
+                f"Flagged for removal: {len(result.flagged_for_removal)} | "
+                f"Skipped: {len(result.skipped)}"
+            )
+            if result.added:
+                print(f"  Added: {', '.join(result.added)}")
+            if result.updated:
+                print(f"  Updated: {', '.join(result.updated)}")
+            if result.flagged_for_removal:
+                print(f"  Flagged: {', '.join(result.flagged_for_removal)}")
+            if result.filed_tickets:
+                for rid, tid in result.filed_tickets.items():
+                    print(f"  Build-out ticket {tid} filed for {rid}")
         else:
             print(f"{entry['label']} complete.")
             print(f"Memory updated: {len(result.updated_memory)} chars")
@@ -767,6 +830,21 @@ def main(argv: list[str] | None = None) -> int:
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",
+    )
+
+    # --- member-sync command ---
+    p_member_sync = sub.add_parser(
+        "member-sync",
+        help="run a workspace member-sync (vcs2l manifest) pass",
+    )
+    p_member_sync.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+    p_member_sync.add_argument(
+        "--repo-id",
+        help="master repo to sync members from (required if multiple repos)",
     )
 
     # --- bc-check command ---

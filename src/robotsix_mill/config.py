@@ -1221,6 +1221,16 @@ class Settings(BaseSettings):
     # enforced at 60s in the worker loop.
     config_sync_interval_seconds: int = Field(default=86400)
 
+    # --- member-sync (deterministic workspace-member discovery/registration) ---
+    # Opt-in periodic member-sync pass. Default true: workspace members are
+    # auto-discovered from each managed repo's vcs2l manifest and registered
+    # in config/repos.yaml. Deterministic — no model, no memory ledger.
+    member_sync_periodic: bool = Field(default=True)
+    # Seconds between automatic member-sync passes when
+    # MILL_MEMBER_SYNC_PERIODIC=true. Default 86400 (1 day). Minimum
+    # enforced at 60s in the worker loop.
+    member_sync_interval_seconds: int = Field(default=86400)
+
     # --- meta-agent (cross-repo extraction/alignment survey) ---
     # Master switch for the daily meta-agent pass. Defaults to False
     # (off) — the operator must register the meta board in repos.yaml

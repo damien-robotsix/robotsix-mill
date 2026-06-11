@@ -31,6 +31,7 @@ class SourceKind(StrEnum):
     CI = "ci"
     HEALTH = "health"
     CONFIG_SYNC = "config_sync"
+    MEMBER_SYNC = "member_sync"
     TEST_GAP = "test_gap"
     AGENT_CHECK = "agent_check"
     BC_CHECK = "bc_check"
