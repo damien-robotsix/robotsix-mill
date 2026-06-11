@@ -379,6 +379,7 @@ class RefineAgentMixin:
         # --- deployed log folder (refine-only) ---
         deployed_log_folder_str = load_deployed_log_folder(repo_dir)
         deployed_log_summary = ""
+        deployed_log_dir: Path | None = None
         if deployed_log_folder_str is not None:
             log_path = Path(deployed_log_folder_str)
             if not log_path.is_absolute():
@@ -401,6 +402,7 @@ class RefineAgentMixin:
                 deployed_log_summary = _build_deployed_log_summary(
                     log_path, deployed_log_folder_str
                 )
+                deployed_log_dir = log_path
             else:
                 log.warning(
                     "%s: deployed_log_folder '%s' (resolved to '%s') "
@@ -426,6 +428,7 @@ class RefineAgentMixin:
                 current_ticket_id=ticket.id,
                 language_instructions=language_instructions,
                 deployed_log_summary=deployed_log_summary,
+                deployed_log_dir=deployed_log_dir,
                 screenshot_paths=ws.list_screenshots(),
             )
         except RuntimeError as e:  # e.g. OPENROUTER_API_KEY not set
