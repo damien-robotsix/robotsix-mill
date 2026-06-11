@@ -9,10 +9,10 @@ BIN    := $(VENV)/bin
 $(BIN)/activate:
 	$(PYTHON) -m venv $(VENV)
 
-# Editable install with dev (+tracing) extras into a local venv.
+# Editable install with the dev group (+tracing extra) into a local venv.
 # Uses uv sync with the committed uv.lock for reproducible installs.
 install:
-	uv sync --frozen --extra dev --extra tracing
+	uv sync --frozen --extra tracing
 
 test: install
 	$(BIN)/python -m pytest -q --cov=robotsix_mill --cov-report=term-missing --cov-fail-under=70
@@ -33,12 +33,12 @@ docker:
 
 # Live-preview docs at http://127.0.0.1:8000
 docs-serve: install
-	$(BIN)/pip install -q -e '.[docs]'
+	uv sync --frozen --group docs
 	$(BIN)/mkdocs serve
 
 # Build static site into site/
 docs-build: install
-	$(BIN)/pip install -q -e '.[docs]'
+	uv sync --frozen --group docs
 	$(BIN)/mkdocs build
 
 clean:

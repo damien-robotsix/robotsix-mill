@@ -162,9 +162,10 @@ def _has_buildout_placeholder(clone: Path) -> bool:
 def _robotsix_deps_of(clone: Path) -> tuple[str, set[str]]:
     """Return ``(package_name, {robotsix-* dependency names})`` for a clone.
 
-    Parses ``pyproject.toml`` ``[project]`` dependencies + optional groups.
-    Best-effort: a missing/unparsable file yields the clone name and no
-    deps. Names are lowercased for stable matching.
+    Parses ``pyproject.toml`` ``[project]`` dependencies + optional
+    groups + PEP 735 ``[dependency-groups]``. Best-effort: a
+    missing/unparsable file yields the clone name and no deps. Names are
+    lowercased for stable matching.
     """
     import re
     import tomllib
@@ -180,6 +181,9 @@ def _robotsix_deps_of(clone: Path) -> tuple[str, set[str]]:
     pkg = str(proj.get("name", clone.name)).lower()
     dep_strs = list(proj.get("dependencies", []) or [])
     for grp in (proj.get("optional-dependencies", {}) or {}).values():
+        dep_strs.extend(grp or [])
+    # PEP 735 dependency-groups live at the top level, not under [project].
+    for grp in (data.get("dependency-groups", {}) or {}).values():
         dep_strs.extend(grp or [])
     found = {
         m.group(1).lower()

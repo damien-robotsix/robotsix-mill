@@ -41,6 +41,12 @@ tracing = [
     "opentelemetry-sdk",
     "opentelemetry-exporter-otlp-proto-http",
 ]
+
+# Internal CI/contributor tooling — NOT published package extras. PEP 735
+# dependency-groups are resolved into uv.lock but never leak into the shipped
+# wheel/sdist metadata (unlike [project.optional-dependencies]), so they can't
+# be pulled into a runtime/audit environment via `pip install robotsix-mill[dev]`.
+[dependency-groups]
 # ruff is PINNED (== not >=): CI runs `uv run ruff`, which otherwise resolves
 # the latest release while the sandbox image + local envs sit on an older one
 # — so `ruff format --check` flip-flops and turns CI red on formatting the
@@ -50,10 +56,15 @@ tracing = [
 # (github.com/damien-robotsix/robotsix-modules) consumed via a git dependency,
 # exactly like robotsix-llmio. Used only via pre-commit / CI (the
 # `robotsix-modules validate` step + the validate-module-taxonomy hook); no
-# Python import in mill. CI/dev-only, so it stays in the dev extra (out of the
+# Python import in mill. CI/dev-only, so it stays in the dev group (out of the
 # pip-based audit install and the runtime image).
 dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "bandit[toml]>=1.8", "mypy>=1.15", "ruff==0.15.15", "deptry>=0.25", "robotsix-modules @ git+https://github.com/damien-robotsix/robotsix-modules@main"]
 docs = ["mkdocs-material>=9", "mkdocstrings[python]>=0.27"]
+
+[tool.uv]
+# `uv sync` pulls the dev group automatically, so CI/contributors don't need
+# an explicit `--group dev` on every sync.
+default-groups = ["dev"]
 
 [project.scripts]
 robotsix-mill = "robotsix_mill.cli:main"

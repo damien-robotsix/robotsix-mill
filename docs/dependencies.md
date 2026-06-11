@@ -8,7 +8,7 @@ dependencies in [`pyproject.toml`](../pyproject.toml):
 | `robotsix-llmio[openrouter_deepseek,claude_sdk]` | `dependencies` | OpenRouter model construction, DeepSeek pin, per-tier reasoning, cost, retry/transient classification (`agents/retry.py`, `agents/openrouter_cost.py` are thin shims). |
 | `robotsix-board` | `dependencies` | Kanban-board frontend. Its line historically **lacked** an explicit `@main` ref (it resolved to the default branch implicitly); now normalized to `@main` to match the others — cosmetic, uv pins the resolved commit either way. |
 | `robotsix-yaml-config` | `dependencies` | Shared YAML config-cascade library. |
-| `robotsix-modules` | `dev` extra only | Module-taxonomy JSON Schema + validation CLI. **Dev/CI-only** — used by the `robotsix-modules validate` step and the pre-commit hook; never imported by mill at runtime. |
+| `robotsix-modules` | `dev` group only | Module-taxonomy JSON Schema + validation CLI. **Dev/CI-only** — used by the `robotsix-modules validate` step and the pre-commit hook; never imported by mill at runtime. Lives in the PEP 735 `[dependency-groups]` `dev` group, not a published package extra. |
 
 All four are referenced as `git+https://…@main`. Left unpinned, every
 *fresh* install re-resolves `@main` to whatever the latest commit is,

@@ -21,7 +21,10 @@ jobs:
     with:
       python-version: "3.14"
       uv-version: "0.8.15"
-      install-extras: "dev tracing"
+      # `dev` is now a PEP 735 dependency-group, not a package extra; it is
+      # pulled in automatically by `[tool.uv] default-groups = ["dev"]` on
+      # every `uv sync`, so only the genuine `tracing` extra is listed here.
+      install-extras: "tracing"
       cov-package: "robotsix_mill"
       coverage-threshold: 70
       pytest-args: -m "not docker"
@@ -47,7 +50,9 @@ jobs:
           version: "0.8.15"
 
       - name: Install dev deps
-        run: uv sync --frozen --extra dev --extra tracing
+        # `dev` is a PEP 735 dependency-group pulled in automatically via
+        # `[tool.uv] default-groups = ["dev"]`; only `tracing` stays an extra.
+        run: uv sync --frozen --extra tracing
         env:
           UV_PROJECT_ENVIRONMENT: system
 
