@@ -143,6 +143,31 @@ def test_truncated_ticket_id_returns_error(settings):
     assert "invalid ticket_id format" not in result
 
 
+def test_legacy_double_dash_ticket_id_accepted(settings):
+    """A legacy ID minted before _slug stripped dashes after truncation
+    carries a double-dash before the hash; it must still pass the format
+    guard (the row is in the DB and must stay readable)."""
+    from robotsix_mill.agents.read_ticket import _TICKET_ID_RE
+
+    tool = make_read_ticket_tool(settings)
+
+    legacy = "20260609T232401Z-refactor-oversized-modules-split-worker--f2d4"
+    result = tool(legacy)
+    # Passes the format guard — no "invalid format"; only a not-found miss.
+    assert "invalid ticket_id format" not in result
+    assert _TICKET_ID_RE.match(legacy) is not None
+
+    # The relaxed regex still rejects genuine malformations:
+    assert _TICKET_ID_RE.match("") is None  # empty
+    # no timestamp prefix
+    assert _TICKET_ID_RE.match("refactor-oversized-worker-f2d4") is None
+    # no trailing 4-hex hash
+    assert (
+        _TICKET_ID_RE.match("20260609T232401Z-refactor-oversized-modules-split-worker")
+        is None
+    )
+
+
 # ---------------------------------------------------------------------------
 # AC 5 — No write paths reachable
 # ---------------------------------------------------------------------------

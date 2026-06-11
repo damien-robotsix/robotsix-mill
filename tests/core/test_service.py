@@ -7,9 +7,29 @@ from robotsix_mill.core.service import (
     TransitionError,
     _event_hash,
     _prev_hash_for,
+    _slug,
 )
 from robotsix_mill.core.states import State, can_transition
 from robotsix_mill.core.models import SourceKind
+
+
+def test_slug_strips_dash_exposed_at_truncation_boundary():
+    """A title whose post-substitution slug exceeds 40 chars with a dash
+    sitting on the truncation boundary must not yield a trailing dash, so
+    the resulting ticket ID stays parseable by read_ticket."""
+    from secrets import token_hex
+
+    from robotsix_mill.agents.read_ticket import _TICKET_ID_RE
+
+    title = "refactor oversized modules split worker into pieces"
+    slug = _slug(title)
+    # Reproduces the boundary case: pre-truncation slug ends ...worker-...
+    assert slug == "refactor-oversized-modules-split-worker"
+    assert not slug.startswith("-")
+    assert not slug.endswith("-")
+
+    ticket_id = f"20260609T232401Z-{slug}-{token_hex(2)}"
+    assert _TICKET_ID_RE.match(ticket_id) is not None
 
 
 def test_create_writes_db_and_workspace(service):

@@ -105,7 +105,7 @@ _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 
 def _slug(text: str) -> str:
-    return _SLUG_RE.sub("-", text.lower()).strip("-")[:40] or "ticket"
+    return _SLUG_RE.sub("-", text.lower()).strip("-")[:40].strip("-") or "ticket"
 
 
 def _parse_depends_on_str(raw: str | None) -> list[str]:
