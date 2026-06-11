@@ -168,6 +168,7 @@ reference are covered in [docs/configuration.md](docs/configuration.md).
 - [docs/inquiry-to-task.md](docs/inquiry-to-task.md) — Convert an answered inquiry into an actionable task ticket
 - [docs/security.md](docs/security.md) — Security model
 - [docs/agents.md](docs/agents.md) — Full agent catalog
+- [docs/board-operations.md](docs/board-operations.md) — Board UI and automated column transitions
 - [docs/agent-yaml-schema.md](docs/agent-yaml-schema.md) — Field reference for `agent_definitions/*.yaml` files
 - [docs/expert-yaml-schema.md](docs/expert-yaml-schema.md) — Field reference for `expert_definitions/*.yaml` files
 - [docs/approval-gate.md](docs/approval-gate.md) — Human approval gate after refine
