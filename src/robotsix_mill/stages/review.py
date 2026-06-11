@@ -14,6 +14,7 @@ import logging
 import re
 
 from ..agents.reviewing import ReviewAsk, ReviewVerdict, run_review_agent
+from ..config import target_branch_for
 from ..core.models import Ticket
 from ..core.states import State
 from ._implemented_repos import combined_diff, implemented_repos
@@ -264,7 +265,7 @@ class ReviewStage(Stage):
                 "no repository clone to review (re-run implement)",
             )
 
-        target_branch = s.forge_target_branch
+        target_branch = target_branch_for(s, ctx.repo_config)
 
         # Compute the combined diff across every implemented clone. Each
         # repo is fetched with a freshly-minted token for ITS forge (the

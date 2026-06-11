@@ -7,7 +7,7 @@ import re
 import time
 from pathlib import Path
 
-from ...config import RepoConfig, get_repos_config
+from ...config import RepoConfig, get_repos_config, target_branch_for
 from ...core.models import SourceKind
 from ..run_registry import RunRegistry
 
@@ -473,6 +473,7 @@ class PollLoopsMixin(_WorkerBase):
         while True:
             for rc in repo_configs:
                 repo_label = rc.repo_id
+                target = target_branch_for(settings, rc)
                 interval = max(60, rc.ci_monitor_interval_seconds)
 
                 # Honour per-repo interval.
@@ -512,7 +513,7 @@ class PollLoopsMixin(_WorkerBase):
                     # 3. List completed workflow runs on the target branch.
                     forge = get_forge(settings, repo_config=rc)
                     runs = forge.list_workflow_runs(
-                        branch=settings.forge_target_branch,
+                        branch=target,
                     )
 
                     # 4. Only the LATEST run per workflow reflects current
@@ -533,9 +534,7 @@ class PollLoopsMixin(_WorkerBase):
 
                         wf_name = run.get("name", "unknown")
                         run_id_val = run.get("id")
-                        title = (
-                            f"CI failure: {wf_name} on {settings.forge_target_branch}"
-                        )
+                        title = f"CI failure: {wf_name} on {target}"
 
                         # One OPEN ci ticket per workflow: if a non-terminal
                         # source=ci ticket with this title already exists,
@@ -558,7 +557,7 @@ class PollLoopsMixin(_WorkerBase):
                             repo_label,
                             wf_name,
                             run_id_val,
-                            settings.forge_target_branch,
+                            target,
                         )
 
                         # Fetch job logs.
@@ -574,7 +573,7 @@ class PollLoopsMixin(_WorkerBase):
                         # Build draft body.
                         body_parts = [
                             f"**Workflow:** {wf_name}",
-                            f"**Branch:** {settings.forge_target_branch}",
+                            f"**Branch:** {target}",
                             f"**Run:** [{run_id_val}]({run.get('html_url', '')})",
                             f"**Commit:** `{run.get('head_sha', '')}`",
                             f"**Created:** {run.get('created_at', '')}",

@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..config import RepoConfig, Settings
+from ..config import RepoConfig, Settings, target_branch_for
 from ..core.models import SourceKind, Ticket
 from ..core.service import TicketService
 from ..forge import get_forge
@@ -317,8 +317,9 @@ def _clone_or_reuse(
     repo_config: RepoConfig | None,
 ) -> Path | None:
     """Clone the repo into a roadmap-sync workspace, or refresh an
-    existing clone to ``origin/<forge_target_branch>`` so this run
-    sees the latest ROADMAP.md on main.
+    existing clone to the repo's resolved target branch (per-repo when
+    configured, else ``settings.forge_target_branch``) so this run
+    sees the latest ROADMAP.md on that branch.
 
     Returns the clone path, or ``None`` when no remote is configured
     / clone fails. Best-effort throughout — every failure path logs
@@ -334,7 +335,7 @@ def _clone_or_reuse(
         token = github_token(settings, repo_config=repo_config)
     except RuntimeError:
         token = None
-    target = settings.forge_target_branch
+    target = target_branch_for(settings, repo_config)
 
     if (cand / ".git").exists():
         # Refresh the clone so we read the latest ROADMAP.md on main.

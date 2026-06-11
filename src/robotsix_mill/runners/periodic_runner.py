@@ -17,7 +17,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable
 
-from ..config import RepoConfig, get_secrets
+from ..config import RepoConfig, get_secrets, target_branch_for
 from ..core.models import SourceKind
 from ..core.service import TicketService
 from ..forge.auth import github_token
@@ -318,7 +318,7 @@ def run_periodic_pass(
             git_ops.clone(
                 forge_remote_url,
                 cand,
-                settings.forge_target_branch,
+                target_branch_for(settings, repo_config),
                 token_fn(settings, repo_config),
             )
             repo_dir = cand

@@ -56,7 +56,7 @@ from pathlib import Path
 
 from ..agents.base import build_agent
 from ..agents.retry import run_agent
-from ..config import get_repo_config
+from ..config import get_repo_config, target_branch_for
 from ..config_loader import ConfigError
 from ..core.models import Ticket
 from ..core.states import State
@@ -228,6 +228,7 @@ class DeliverStage(Stage):
         ws = ctx.service.workspace(ticket)
         repo_dir = ws.dir / "repo"
         branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
+        target = target_branch_for(s, ctx.repo_config)
         if not (repo_dir / ".git").exists() or not git_ops.branch_exists(
             repo_dir, branch
         ):
@@ -253,12 +254,12 @@ class DeliverStage(Stage):
                     "%s: forge reports no commits between %s and the branch — "
                     "routing to DONE (nothing to deliver)",
                     ticket.id,
-                    s.forge_target_branch,
+                    target,
                 )
                 return Outcome(
                     State.DONE,
                     "no change needed — the forge reports no commits between "
-                    f"{s.forge_target_branch} and the branch; there is nothing "
+                    f"{target} and the branch; there is nothing "
                     "to deliver",
                 )
             return sub_outcome
@@ -270,7 +271,7 @@ class DeliverStage(Stage):
             return Outcome(
                 State.DONE,
                 "no change needed — branch contains no new commits vs "
-                f"{s.forge_target_branch}; the spec was already satisfied "
+                f"{target}; the spec was already satisfied "
                 "by the current codebase",
             )
 
@@ -313,6 +314,7 @@ class DeliverStage(Stage):
 
         opened: list[dict] = []
         skipped: list[str] = []
+        skipped_targets: dict[str, str] = {}
 
         for entry in touched_repos:
             repo_id = entry.get("repo_id", "")
@@ -329,6 +331,9 @@ class DeliverStage(Stage):
                     f"unknown repo_id '{repo_id}' in touched_repos.json — "
                     f"resumable: {e}",
                 )
+
+            # Per-repo target branch (each repo may override working_branch).
+            target = target_branch_for(s, rc)
 
             # Workspace clone must still be present from implement's pass.
             if not (repo_dir / ".git").exists() or not git_ops.branch_exists(
@@ -355,11 +360,12 @@ class DeliverStage(Stage):
                 # commits to ship for this repo. Record so the
                 # summary artifact can name it.
                 skipped.append(repo_id)
+                skipped_targets[repo_id] = target
                 log.info(
                     "%s: skipped %s — no commits ahead of %s",
                     ticket.id,
                     repo_id,
-                    s.forge_target_branch,
+                    target,
                 )
                 continue
 
@@ -375,8 +381,7 @@ class DeliverStage(Stage):
             # downstream).
             return Outcome(
                 State.DONE,
-                "no change needed — all touched repos already at "
-                f"{s.forge_target_branch}",
+                f"no change needed — all touched repos already at {target}",
             )
 
         # Build the deliver.md summary with one line per touched repo.
@@ -390,7 +395,7 @@ class DeliverStage(Stage):
                 lines.append(f"  - {rid}: branch={br}, PR={url}")
             elif rid in skipped:
                 lines.append(
-                    f"  - {rid}: SKIPPED (no commits vs {s.forge_target_branch})"
+                    f"  - {rid}: SKIPPED (no commits vs {skipped_targets[rid]})"
                 )
         (ws.artifacts_dir / "deliver.md").write_text(
             "\n".join(lines) + "\n", encoding="utf-8"
@@ -432,6 +437,7 @@ class DeliverStage(Stage):
             ]
         """
         repo_label = repo_config.repo_id if repo_config is not None else "default"
+        target = target_branch_for(s, repo_config)
 
         # Cross-repo target: when configured, the branch is pushed to the
         # fork and the PR is opened fork→upstream (see CrossRepoTarget).
@@ -462,8 +468,8 @@ class DeliverStage(Stage):
         #      a no-op. ``branch_has_net_diff`` is what actually
         #      matches the forge's own emptiness test.
         if not git_ops.branch_is_ahead_of_main(
-            repo_dir
-        ) or not git_ops.branch_has_net_diff(repo_dir):
+            repo_dir, target
+        ) or not git_ops.branch_has_net_diff(repo_dir, target):
             return None, None
 
         # Cross-repo auto-fork: ensure the fork exists before pushing to
@@ -501,7 +507,7 @@ class DeliverStage(Stage):
         body: str
         if s.pr_summary_enabled:
             try:
-                diff = git_ops.diff_base(repo_dir, s.forge_target_branch)
+                diff = git_ops.diff_base(repo_dir, target)
                 if not diff.strip():
                     body = spec[:8000]
                 else:

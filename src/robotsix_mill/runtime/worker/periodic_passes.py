@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ...config import RepoConfig, Settings, get_repos_config
+from ...config import RepoConfig, Settings, get_repos_config, target_branch_for
 from .. import tracing
 
 from ._base import _WorkerBase
@@ -477,7 +477,7 @@ class PeriodicPassesMixin(_WorkerBase):
                             b,
                             now=now,
                             max_age_days=settings.stale_branch_max_age_days,
-                            target_branch=settings.forge_target_branch,
+                            target_branch=target_branch_for(settings, repo_config),
                             open_pr=open_pr,
                             prefix_only=settings.stale_branch_cleanup_prefix_only,
                             branch_prefix=settings.branch_prefix,
@@ -655,6 +655,7 @@ class PeriodicPassesMixin(_WorkerBase):
         settings = self.ctx.settings
         interval = max(60, settings.bespoke_discovery_interval_seconds)
         board_id = repo_config.board_id
+        target = target_branch_for(settings, repo_config)
         forge_url = repo_config.forge_remote_url or settings.forge_remote_url
         repo_data_dir = settings.data_dir / repo_config.repo_id
         periodic_ws = repo_data_dir / "periodic_workspace"
@@ -703,7 +704,7 @@ class PeriodicPassesMixin(_WorkerBase):
                             git_ops.clone(
                                 forge_url,
                                 clone_dir,
-                                settings.forge_target_branch,
+                                target,
                                 _clone_token(settings, repo_config),
                             )
                         except Exception:  # noqa: BLE001 — supervisor must survive
@@ -717,7 +718,7 @@ class PeriodicPassesMixin(_WorkerBase):
                                 clone_dir,
                                 remote_url=forge_url,
                                 token=_clone_token(settings, repo_config),
-                                branch=settings.forge_target_branch,
+                                branch=target,
                             )
                             # Hard-reset to the remote so newly committed
                             # .robotsix-mill/ YAMLs land immediately.
@@ -730,7 +731,7 @@ class PeriodicPassesMixin(_WorkerBase):
                                     str(clone_dir),
                                     "reset",
                                     "--hard",
-                                    f"origin/{settings.forge_target_branch}",
+                                    f"origin/{target}",
                                 ],
                                 check=False,
                                 capture_output=True,

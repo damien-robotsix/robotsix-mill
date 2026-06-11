@@ -551,6 +551,172 @@ class TestBranchIsAheadOfMain:
         result = git_ops.branch_is_ahead_of_main(dest)
         assert result is True
 
+    def test_ahead_of_custom_branch(self, tmp_path):
+        """Test branch_is_ahead_of_main with a custom target_branch
+        (non-main). Creates a develop branch and tests against it."""
+        # Build a repo with 'develop' as the default branch
+        seed = tmp_path / "seed"
+        seed.mkdir()
+        _git(seed, "init", "-q")
+        _git(seed, "config", "user.email", "t@t")
+        _git(seed, "config", "user.name", "t")
+        (seed / "README.md").write_text("seed\n")
+        _git(seed, "add", "-A")
+        _git(seed, "commit", "-q", "-m", "init")
+        _git(seed, "branch", "-M", "develop")
+        bare = tmp_path / "remote.git"
+        subprocess.run(
+            ["git", "clone", "--bare", "-q", str(seed), str(bare)],
+            check=True,
+            capture_output=True,
+        )
+        remote = f"file://{bare}"
+
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "develop")
+        git_ops.create_branch(dest, "feature")
+        (dest / "new.txt").write_text("ahead commit")
+        git_ops.commit_all(dest, "ahead commit")
+        # Test with target_branch="develop"
+        result = git_ops.branch_is_ahead_of_main(dest, target_branch="develop")
+        assert result is True
+
+
+# ===========================================================================
+# 13. changed_files — integration (real git)
+# ===========================================================================
+
+
+# ===========================================================================
+# 12a. branch_has_net_diff — integration (real git, custom target_branch)
+# ===========================================================================
+
+
+class TestBranchHasNetDiff:
+    def test_no_diff_returns_false(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        # Checkout feature (same as main), no new commits
+        result = git_ops.branch_has_net_diff(dest)
+        assert result is False
+
+    def test_with_net_diff_returns_true(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "new.txt").write_text("diff content")
+        git_ops.commit_all(dest, "add new.txt")
+        result = git_ops.branch_has_net_diff(dest)
+        assert result is True
+
+    def test_with_custom_target_branch(self, tmp_path):
+        """Test branch_has_net_diff with custom target_branch (non-main).
+        Creates a develop branch and tests against it."""
+        # Build a repo with 'develop' as the default branch
+        seed = tmp_path / "seed"
+        seed.mkdir()
+        _git(seed, "init", "-q")
+        _git(seed, "config", "user.email", "t@t")
+        _git(seed, "config", "user.name", "t")
+        (seed / "README.md").write_text("seed\n")
+        _git(seed, "add", "-A")
+        _git(seed, "commit", "-q", "-m", "init")
+        _git(seed, "branch", "-M", "develop")
+        bare = tmp_path / "remote.git"
+        subprocess.run(
+            ["git", "clone", "--bare", "-q", str(seed), str(bare)],
+            check=True,
+            capture_output=True,
+        )
+        remote = f"file://{bare}"
+
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "develop")
+        git_ops.create_branch(dest, "feature")
+        (dest / "new.txt").write_text("diff content")
+        git_ops.commit_all(dest, "add new.txt")
+        # Test with target_branch="develop"
+        result = git_ops.branch_has_net_diff(dest, target_branch="develop")
+        assert result is True
+
+
+# ===========================================================================
+# 12b. branch_is_behind_main — integration (real git, custom target_branch)
+# ===========================================================================
+
+
+class TestBranchIsBehindMain:
+    def test_not_behind_when_same_commit(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        # Checkout feature (same as main), no commits ahead on main
+        result = git_ops.branch_is_behind_main(dest)
+        assert result is False
+
+    def test_behind_when_main_advanced(self, tmp_path):
+        """Test that branch_is_behind_main returns True when origin/main
+        has commits not on HEAD."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        # Capture the base-commit branch (before main moves on).
+        git_ops.create_branch(dest, "feature")
+        # Switch back to main and add a NEW commit, then push so
+        # origin/main is ahead of the feature branch.
+        _git(dest, "checkout", "main")
+        (dest / "main_added.txt").write_text("landed on main after branch was cut")
+        git_ops.commit_all(dest, "main moves on")
+        _git(dest, "push", "origin", "main")
+        # Switch back to the feature branch — it now has commits behind
+        # origin/main.
+        _git(dest, "checkout", "feature")
+        assert git_ops.branch_is_behind_main(dest) is True
+
+    def test_with_custom_target_branch(self, tmp_path):
+        """Test branch_is_behind_main with custom target_branch (non-main).
+        Creates a develop branch and tests against it."""
+        # Build a repo with 'develop' as the default branch
+        seed = tmp_path / "seed"
+        seed.mkdir()
+        _git(seed, "init", "-q")
+        _git(seed, "config", "user.email", "t@t")
+        _git(seed, "config", "user.name", "t")
+        (seed / "README.md").write_text("seed\n")
+        _git(seed, "add", "-A")
+        _git(seed, "commit", "-q", "-m", "init")
+        _git(seed, "branch", "-M", "develop")
+        bare = tmp_path / "remote.git"
+        subprocess.run(
+            ["git", "clone", "--bare", "-q", str(seed), str(bare)],
+            check=True,
+            capture_output=True,
+        )
+        remote = f"file://{bare}"
+
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "develop")
+        # Capture the base-commit branch (before develop moves on).
+        git_ops.create_branch(dest, "feature")
+        # Switch back to develop and add a NEW commit, then push so
+        # origin/develop is ahead of the feature branch.
+        _git(dest, "checkout", "develop")
+        (dest / "develop_added.txt").write_text(
+            "landed on develop after branch was cut"
+        )
+        git_ops.commit_all(dest, "develop moves on")
+        _git(dest, "push", "origin", "develop")
+        # Switch back to the feature branch — it now has commits behind
+        # origin/develop.
+        _git(dest, "checkout", "feature")
+        # Test with target_branch="develop"
+        result = git_ops.branch_is_behind_main(dest, target_branch="develop")
+        assert result is True
+
 
 # ===========================================================================
 # 13. changed_files — integration (real git)
@@ -875,3 +1041,93 @@ class TestIgnoredPaths:
     def test_empty_input(self, tmp_path):
         dest = self._repo_with_ignored_subtree(tmp_path)
         assert git_ops.ignored_paths(dest, []) == []
+
+
+# ===========================================================================
+# Regression test: repo with non-main default branch + working_branch config
+# ===========================================================================
+
+
+def _make_custom_branch_repo(tmp_path: Path, branch_name: str) -> str:
+    """Create a bare repo with a non-main default branch.
+    Branch name becomes the initial branch instead of 'main'."""
+    seed = tmp_path / "seed"
+    seed.mkdir()
+    _git(seed, "init", "-q")
+    _git(seed, "config", "user.email", "t@t")
+    _git(seed, "config", "user.name", "t")
+    (seed / "README.md").write_text("seed\n")
+    _git(seed, "add", "-A")
+    _git(seed, "commit", "-q", "-m", "init")
+    _git(seed, "branch", "-M", branch_name)
+    bare = tmp_path / "remote.git"
+    subprocess.run(
+        ["git", "clone", "--bare", "-q", str(seed), str(bare)],
+        check=True,
+        capture_output=True,
+    )
+    return f"file://{bare}"
+
+
+class TestWorkingBranchRegression:
+    def test_clone_baseline_deliver_with_custom_working_branch(self, tmp_path):
+        """Regression test for per-repo working_branch: when a repo config
+        specifies a non-main working_branch (e.g. 'lyrical'), clone/baseline/deliver
+        operations target that branch instead of 'main' (which doesn't exist)."""
+        # Create a repo with 'lyrical' as the default branch
+        remote = _make_custom_branch_repo(tmp_path, "lyrical")
+
+        # Test clone with the custom branch
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "lyrical")
+        assert (dest / ".git").is_dir()
+        assert (dest / "README.md").exists()
+
+        # Test that branch comparison functions work with custom branch
+        git_ops.create_branch(dest, "feature")
+        (dest / "new.txt").write_text("feature work")
+        git_ops.commit_all(dest, "feature commit")
+
+        # These should all work with target_branch="lyrical"
+        assert git_ops.branch_is_ahead_of_main(dest, target_branch="lyrical") is True
+        assert git_ops.branch_has_net_diff(dest, target_branch="lyrical") is True
+
+        # Add another commit to the base branch and verify detection
+        _git(dest, "checkout", "lyrical")
+        (dest / "lyrical_added.txt").write_text("base branch commit")
+        git_ops.commit_all(dest, "base advance")
+        _git(dest, "push", "origin", "lyrical")
+        _git(dest, "checkout", "feature")
+
+        # After main (lyrical) advances, feature should be behind
+        assert git_ops.branch_is_behind_main(dest, target_branch="lyrical") is True
+
+    def test_changed_files_with_custom_branch(self, tmp_path):
+        """Test that changed_files works correctly with a custom target_branch."""
+        # Create a repo with 'rolling' as the default branch
+        remote = _make_custom_branch_repo(tmp_path, "rolling")
+
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "rolling")
+        git_ops.create_branch(dest, "feature")
+        (dest / "new.txt").write_text("new file")
+
+        # changed_files with custom branch should detect the new file
+        files = git_ops.changed_files(dest, "rolling")
+        assert "new.txt" in files
+
+    def test_diff_base_with_custom_branch(self, tmp_path):
+        """Test that diff_base works with a custom target_branch."""
+        # Create a repo with 'develop' as the default branch
+        remote = _make_custom_branch_repo(tmp_path, "develop")
+
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "develop")
+        git_ops.create_branch(dest, "feature")
+        (dest / "feat.txt").write_text("feature diff")
+        git_ops.commit_all(dest, "feature commit")
+
+        # diff_base with custom branch should show the diff
+        diff = git_ops.diff_base(dest, "develop")
+        assert "diff --git" in diff
+        assert "feat.txt" in diff

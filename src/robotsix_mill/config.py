@@ -1987,6 +1987,14 @@ def get_repo_config(repo_id: str) -> RepoConfig:
         raise ConfigError(f"Unknown repo: '{repo_id}'. Known repos: {sorted_keys}")
 
 
+def target_branch_for(settings: Settings, repo_config: RepoConfig | None) -> str:
+    """Effective target branch: repo_config.working_branch when set,
+    else settings.forge_target_branch (zero change for existing boards)."""
+    if repo_config is not None and repo_config.working_branch:
+        return repo_config.working_branch
+    return settings.forge_target_branch
+
+
 def _reset_repos_config() -> None:
     """Clear the cached :class:`ReposRegistry` singleton (for tests)."""
     global _repos_config

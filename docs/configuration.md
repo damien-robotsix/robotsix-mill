@@ -700,6 +700,7 @@ Set `MILL_REPOS_FILE=""` to disable repos config entirely. Template:
 |----------|----------|---------|-------------|
 | `repos.<id>.board_id` | yes | — | Board identifier for per-repo board isolation |
 | `repos.<id>.forge_remote_url` | no | `FORGE_REMOTE_URL` | Per-repo forge remote URL for push/PR/merge operations |
+| `repos.<id>.working_branch` | no | — | Per-repo target branch for clone/baseline/deliver operations. When set, overrides the global `forge_target_branch`. Use this for repos whose default branch is not `main` (e.g. `rolling`, `lyrical`, `develop`). Automatically populated by member-sync from the manifest `version` field. |
 | `repos.<id>.langfuse.project_name` | yes | — | Langfuse project name for this repo's traces |
 | `repos.<id>.langfuse.public_key` | yes | — | Langfuse public key for this repo's project |
 | `repos.<id>.langfuse.secret_key` | yes | — | Langfuse secret key for this repo's project |
@@ -708,6 +709,45 @@ Set `MILL_REPOS_FILE=""` to disable repos config entirely. Template:
 Each repo ID must be unique and non-empty. The `board_id` must also be
 non-empty. The registry validates that every entry's `repo_id` matches
 its YAML key.
+
+### Per-repo branch configuration
+
+Every stage that clones, bases PRs, or rebases work (refine, implement,
+deliver, merge, CI monitor, etc.) resolves the **effective target branch**
+for each repo using this rule:
+
+1. If `repos.<id>.working_branch` is set in `config/repos.yaml`, **use that**.
+2. Otherwise, use the global `forge_target_branch` setting (default `main`).
+
+This allows repos with non-main default branches to be fully onboarded:
+
+```yaml
+# config/repos.yaml
+repos:
+  ros2-example-interfaces:
+    board_id: "example-interfaces"
+    forge_remote_url: "https://github.com/damien-robotsix/example_interfaces.git"
+    working_branch: lyrical  # This repo's default branch is 'lyrical', not 'main'
+    langfuse:
+      project_name: "example-interfaces"
+      public_key: "pk-lf-..."
+      secret_key: "sk-lf-..."
+```
+
+With this configuration, the mill will:
+- Clone against `origin/lyrical` instead of `origin/main`
+- Run baseline tests on the `lyrical` branch
+- Open PRs into `lyrical` (not `main`)
+- Rebase work onto `lyrical`
+
+When `working_branch` is absent, every repo uses the global default,
+preserving backward compatibility with existing deployments.
+
+#### Common use cases
+
+- **Cross-repo contributions**: when a managed repo forks or contributes to an upstream repo that uses a different default branch (e.g. ROS 2 repos use `rolling` or `lyrical` instead of `main`)
+- **Workspace member auto-registration**: member-sync automatically populates `working_branch` from each member's vcs2l manifest `version` field
+- **Development branches**: when a repo is in active development on a non-default branch and tickets should target that branch until release
 
 ### Workspace member auto-registration
 

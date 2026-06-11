@@ -17,6 +17,7 @@ import re
 from pathlib import Path
 
 from ..agents.documenting import DocClassifierResult, DocResult
+from ..config import target_branch_for
 from ..core.models import Ticket
 from ..notify import send_notification
 from ..core.states import State
@@ -66,7 +67,7 @@ class DocumentStage(Stage):
                 "no repository clone (re-run implement)",
             )
 
-        target_branch = s.forge_target_branch
+        target_branch = target_branch_for(s, ctx.repo_config)
 
         # Primary clone roots the doc agent's file tools; the rest (for a
         # multi-repo ticket) are passed as extra_roots so cross-repo

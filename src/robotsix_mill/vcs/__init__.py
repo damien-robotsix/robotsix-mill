@@ -7,7 +7,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from ..config import get_repos_config
+from ..config import get_repos_config, target_branch_for
 from ..forge.auth import github_token
 
 from . import git_ops
@@ -50,7 +50,7 @@ def clone_all_repos(settings) -> dict[str, Path]:
             git_ops.clone(
                 repo_config.forge_remote_url,
                 dest,
-                settings.forge_target_branch,
+                target_branch_for(settings, repo_config),
                 token,
             )
             result[repo_id] = dest
