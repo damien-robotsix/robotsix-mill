@@ -23,8 +23,8 @@ log = logging.getLogger("robotsix_mill.agents.fallback")
 class FallbackAgentHandle:
     """Primary handle + lazy fallback builder.
 
-    ``run_agent``/``arun_agent`` detect the fallback via the public
-    ``fallback_builder`` attribute and call :meth:`build_fallback` only after the
+    ``run_agent`` detects the fallback via the public
+    ``fallback_builder`` attribute and calls :meth:`build_fallback` only after the
     primary's local retries fail. Everything else delegates to the primary.
     """
 
@@ -67,7 +67,7 @@ class FallbackAgentHandle:
 
         The async counterpart to :meth:`run_sync`: it awaits and
         delegates to the primary's ``run`` and does not consult the
-        fallback — ``arun_agent`` orchestrates the fallback rebuild
+        fallback — the caller orchestrates the fallback rebuild
         only after the primary's local retries fail.
 
         Args:

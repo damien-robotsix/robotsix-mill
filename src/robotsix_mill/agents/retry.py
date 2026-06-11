@@ -95,7 +95,6 @@ __all__ = [
     "call_with_retry",
     "acall_with_retry",
     "run_agent",
-    "arun_agent",
     "is_transient",
     "is_rate_limited",
     "_status",
@@ -221,36 +220,3 @@ def run_agent(
         is_transient_fallback=is_transient,
         should_fallback=lambda _e: True,
     )
-
-
-async def arun_agent(
-    agent: Any,
-    make_run: Callable[[Any], Awaitable[T]],
-    *,
-    settings: object | None = None,
-    what: str = "model call",
-    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
-) -> T:
-    """Async sibling of :func:`run_agent`. *make_run* returns an awaitable, e.g.
-    ``lambda h: h.run(prompt, ...)``. Retries the primary on the running event
-    loop, then — on terminal failure — the lazily-built fallback handle."""
-    builder = getattr(agent, "fallback_builder", None)
-    if builder is None:
-        return await acall_with_retry(lambda: make_run(agent), what=what, sleep=sleep)
-    try:
-        return await acall_with_retry(lambda: make_run(agent), what=what, sleep=sleep)
-    except Exception as primary_exc:  # noqa: BLE001 — re-raised, chained below
-        log.warning(
-            "%s: primary failed after local retries (%s) — falling back to the "
-            "secondary model",
-            what,
-            type(primary_exc).__name__,
-        )
-        try:
-            return await acall_with_retry(
-                lambda: make_run(agent.build_fallback()),
-                what=f"{what} (fallback)",
-                sleep=sleep,
-            )
-        except Exception as fb_exc:  # noqa: BLE001
-            raise fb_exc from primary_exc
