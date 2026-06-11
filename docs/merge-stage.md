@@ -67,6 +67,32 @@ The rebase agent uses the same sandboxed shell + file tools as the
 implement agent, scoped to the ticket's clone. It never pushes, opens
 PRs, or interacts with the forge.
 
+### Multi-repo conflict handling
+
+A multi-repo ticket may have conflicts on individual repos while others
+remain mergeable. The merge stage handles this by running the rebase
+agent **inline** during the polling loop, one conflicting repo per poll
+(bounded by a per-repo attempt counter).
+
+Unlike the single-repo path (which uses the `REBASING` state), a
+multi-repo ticket has a single state (`IMPLEMENT_COMPLETE`), so conflict
+recovery must run inline:
+
+- When one or more repos report `mergeable: False`, the merge stage
+  invokes the rebase agent on the first conflicting repo's workspace
+  clone.
+- On success the rebased branch is force-pushed to that repo's remote,
+  and the ticket remains in `IMPLEMENT_COMPLETE` to re-poll.
+- The remaining conflicting repos are picked up on the next poll (one at
+  a time, so agents can stabilize the repo between attempts).
+- On failure after exhausting retries (per-repo attempt counter) the
+  ticket escalates to `BLOCKED` (resumable).
+
+This mirrors the single-repo path but runs synchronously during the poll
+cycle rather than as a deferred state machine. The rebase attempt counter
+is tracked **per-repo** (e.g., `rebase_repo-b.count`) so each repo gets a
+fresh budget if it later becomes conflicting again.
+
 ## Auto-fix of failing remote CI
 
 When a PR has **failing** remote CI checks (GitHub Actions), the merge
