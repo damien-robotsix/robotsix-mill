@@ -57,6 +57,33 @@ residual growth** — live tickets, large artifacts, or non-terminal
 accumulation — rather than churn residue from already-closed tickets, so
 it warrants investigation instead of a routine acknowledge.
 
+## Automatic suppression of growth flags in active workspaces
+
+While a ticket is **active** (exists in the board DB AND is not in a
+terminal state), its workspace directory — most notably the `repo/` clone
+and `repo/.git/objects/` — is expected to grow as the agent commits work.
+This growth is transient runtime data, not a source-repo defect, and
+should never be filed as a noise ticket.
+
+The data-dir audit pass automatically suppresses growth-delta flags
+whose path lies inside an active per-ticket workspace. **No configuration
+is required** — the suppression is always-on. When a growth flag is
+suppressed, an INFO-level log entry is emitted with the details
+(`board`, `ticket_id`, `path`, `delta_bytes`).
+
+**Behavior notes:**
+- A growth flag is suppressed only if it is **both** inside a
+  `workspaces/<ticket_id>/` directory **and** that ticket exists in the
+  board DB in a non-terminal state (e.g. `DRAFT`, `DONE`, `BLOCKED`).
+- Growth inside a **terminal-state** ticket's workspace (e.g.
+  `CLOSED`) is NOT suppressed — that is handled by the separate
+  GC/prune logic above.
+- Growth inside an **orphan** workspace (no matching ticket row) is NOT
+  suppressed — those are flagged for the orphan detector to handle.
+- The state snapshot written to `data_dir_audit_state.json` is
+  unaffected by suppression — all paths are recorded regardless, and
+  suppression only filters which flags are returned/filed.
+
 ## See also
 
 - [index.md](index.md) — documentation home
