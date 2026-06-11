@@ -100,7 +100,7 @@ jobs:
         if: ${{ inputs.run-trufflehog && inputs.trufflehog-pr-diff && github.event_name == 'pull_request' }}
         # Pin: human follow-up — confirm/refresh this SHA against the
         # intended trufflesecurity/trufflehog release (resolved offline).
-        uses: trufflesecurity/trufflehog@853e1e8d249fd1e29d0fcc7280d29b03df3d643d  # v3.88.0
+        uses: trufflesecurity/trufflehog@853e1e8d249fd1e29d0fcc7280d29b03df3d643d  # v3.88.4
         with:
           base: ${{ github.event.pull_request.base.sha }}
           head: ${{ github.event.pull_request.head.sha }}
@@ -110,7 +110,7 @@ jobs:
         if: ${{ inputs.run-trufflehog && !inputs.trufflehog-pr-diff }}
         # Pin: human follow-up — confirm/refresh this SHA against the
         # intended trufflesecurity/trufflehog release (resolved offline).
-        uses: trufflesecurity/trufflehog@853e1e8d249fd1e29d0fcc7280d29b03df3d643d  # v3.88.0
+        uses: trufflesecurity/trufflehog@853e1e8d249fd1e29d0fcc7280d29b03df3d643d  # v3.88.4
         with:
           path: ./
           extra_args: ${{ inputs.trufflehog-extra-args }}
