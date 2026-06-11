@@ -145,7 +145,7 @@ def _build_batch_script(directives: list[dict]) -> str:
 
 
 def _sandbox_batch_check(
-    directives: list[dict],
+    directives: list[dict[str, str]],
     repo_dir: Path,
     settings: Settings,
     sandbox_image: str | None,
@@ -210,7 +210,7 @@ def run_prerequisite_check(
     runner=_default_runner,
     settings: Settings | None = None,
     sandbox_image: str | None = None,
-) -> dict:
+) -> dict[str, list[str] | str]:
     """Verify external symbol/import prerequisites declared in *spec*.
 
     Returns ``{"unmet": [<directive strings>], "reason": <summary>}``.
@@ -256,7 +256,7 @@ def run_prerequisite_check(
     # Split the total budget evenly so the gate stays bounded regardless
     # of how many directives are declared.
     per_check_timeout = max(1.0, _TOTAL_TIMEOUT_S / len(directives))
-    unmet: list[str] = []
+    unmet = []
     for d in directives:
         try:
             rc = runner(d["code"], repo_dir, per_check_timeout)
