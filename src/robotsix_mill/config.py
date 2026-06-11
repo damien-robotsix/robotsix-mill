@@ -1760,6 +1760,14 @@ class RepoConfig(BaseModel):
     # against ITS Langfuse project. Unset → account-level activity reconcile.
     openrouter_api_key: str | None = None
     forge_remote_url: str | None = None
+    # Optional path to the live deployment's log directory for this repo.
+    # This is a deployment-specific host path (canonically absolute), so it
+    # lives here in the operator's central, gitignored ``config/repos.yaml``
+    # — NOT the managed repo's committed ``.robotsix-mill/config.yaml`` — to
+    # avoid leaking deployment layout into the repo. When set and pointing at
+    # an existing directory, the refine agent gets read access to it
+    # (extra_roots + log-query tool). ``None``/empty → no log access.
+    deployed_log_folder: str | None = None
     # Optional pinned working branch. When set, member repos branch from
     # and open PRs into this branch (e.g. "lyrical") instead of the fork's
     # default branch. Populated from the vcs2l manifest `version` by the
@@ -1926,6 +1934,9 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             if isinstance(repo_data, dict)
             else None,
             forge_remote_url=repo_data.get("forge_remote_url")
+            if isinstance(repo_data, dict)
+            else None,
+            deployed_log_folder=repo_data.get("deployed_log_folder")
             if isinstance(repo_data, dict)
             else None,
             working_branch=repo_data.get("working_branch")

@@ -1205,6 +1205,24 @@ class TestLoadReposConfig:
         assert rc.ci_monitor_enabled is False
         assert rc.ci_monitor_interval_seconds == 7200
 
+    def test_yaml_parses_deployed_log_folder(self, tmp_path):
+        """``load_repos_config()`` parses the optional per-repo
+        ``deployed_log_folder`` host path; absent → ``None``."""
+        from robotsix_mill.config import load_repos_config
+
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text(
+            "repos:\n"
+            "  repo-a:\n"
+            "    board_id: board-a\n"
+            "    deployed_log_folder: /var/log/repo-a\n"
+            "  repo-b:\n"
+            "    board_id: board-b\n"
+        )
+        rr = load_repos_config(str(repos_file))
+        assert rr.repos["repo-a"].deployed_log_folder == "/var/log/repo-a"
+        assert rr.repos["repo-b"].deployed_log_folder is None
+
     def test_meta_block_builds_dedicated_repo_config(self, tmp_path):
         """A top-level ``meta:`` block with langfuse keys → ``rr.meta`` is a
         RepoConfig for the synthetic meta board, kept OUT of ``repos``."""

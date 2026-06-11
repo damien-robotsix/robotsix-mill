@@ -45,12 +45,15 @@ not carry its own keys. There is **no chaining** (you cannot point at a
 repo that itself inherits) and **no self-reference**. This is the field
 member-sync sets automatically for auto-registered workspace members.
 
-### Deployed logs (in the managed repo's `<repo>/.robotsix-mill/config.yaml`)
+### Deployed logs (in mill's central `config/repos.yaml`)
 
-The managed repo declares its deployed-log folder in its **own
-committed** `.robotsix-mill/config.yaml` — alongside the sibling
-`test_command`, `smoke_command`/`smoke_paths`, `languages`, and
-`extra_sandbox_packages` fields:
+The operator declares a repo's deployed-log folder as a per-repo key in
+mill's central, **gitignored** `config/repos.yaml` — alongside
+`board_id` / `forge_remote_url` / `langfuse:`. The value is a
+deployment-specific host path, so it must **not** be committed into the
+managed repo (the old repo-owned `.robotsix-mill/config.yaml` key is
+deprecated and ignored — a deprecation warning is logged if it is still
+present):
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -67,9 +70,9 @@ The actual mechanism, not an idealized one:
   `config/secrets.yaml`) — it is never committed. Keys are read from
   `RepoConfig` at call time, not stamped onto the global `Secrets`
   singleton.
-- **The managed repo's committed `.robotsix-mill/config.yaml` carries
-  only the non-secret `deployed_log_folder` path** — never any Langfuse
-  key. Langfuse stays central in `config/repos.yaml`.
+- **`deployed_log_folder` lives in `config/repos.yaml` too** — it is a
+  deployment-specific host path, kept central with the (also gitignored)
+  Langfuse keys rather than committed into the managed repo.
 - Use **`langfuse_from`** to avoid duplicating keys across a workspace's
   member repos — one project, inherited.
 - **No `${ENV_VAR}` interpolation.** `config/repos.yaml` does **not**
@@ -89,10 +92,9 @@ Using robotsix-auto-mail as the example:
    workspace member that should share its master's project, set
    `langfuse_from: <master-repo-id>` instead and omit the `langfuse:`
    block.
-2. **Commit `deployed_log_folder` to the repo's
-   `.robotsix-mill/config.yaml`.** Point it at the directory the live
-   deployment writes its logs to (absolute, or relative to the repo
-   root).
+2. **Set `deployed_log_folder` in the repo's `config/repos.yaml`
+   entry.** Point it at the directory the live deployment writes its
+   logs to (absolute, or relative to the repo root).
 3. **Ensure the deployment writes its logs to that folder** where mill
    can read it (i.e. the path resolves to an existing directory in the
    environment refine runs in).
@@ -109,19 +111,12 @@ repos:
   robotsix-auto-mail:
     board_id: "auto-mail"
     forge_remote_url: "https://github.com/robotsix/robotsix-auto-mail.git"
+    deployed_log_folder: /var/log/robotsix-auto-mail
     langfuse:
       project_name: "robotsix-auto-mail"
       public_key: "pk-lf-..."
       secret_key: "sk-lf-..."
       base_url: "https://cloud.langfuse.com"  # optional — defaults to cloud
-```
-
-`<repo>/.robotsix-mill/config.yaml` — committed in the managed repo,
-carrying only the non-secret log path:
-
-```yaml
-# robotsix-auto-mail/.robotsix-mill/config.yaml
-deployed_log_folder: /var/log/robotsix-auto-mail
 ```
 
 ---
@@ -151,7 +146,8 @@ global `Secrets`.
 
 Built by `make_log_query_tool` in
 `src/robotsix_mill/agents/log_tools.py`. It is injected **only** when
-the repo's `deployed_log_folder` resolves to an existing directory. Its
+the repo's `deployed_log_folder` (from `config/repos.yaml`) resolves to
+an existing directory. Its
 parameters:
 
 | Parameter | Default | Meaning |

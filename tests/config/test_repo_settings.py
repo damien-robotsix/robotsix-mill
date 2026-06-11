@@ -13,13 +13,13 @@ import logging
 from types import SimpleNamespace
 
 from robotsix_mill.repo_settings import (
-    load_deployed_log_folder,
     load_extra_sandbox_packages,
     load_repo_languages,
     load_repo_smoke_command,
     load_repo_smoke_paths,
     load_repo_test_command,
     resolve_language_instructions,
+    warn_if_deprecated_log_folder,
 )
 
 
@@ -306,37 +306,36 @@ def test_smoke_paths_malformed_yaml_returns_empty(tmp_path, caplog):
     assert any("read/parse error" in r.message for r in caplog.records)
 
 
-# --- deployed_log_folder ---------------------------------------------------
+# --- deployed_log_folder (deprecated repo-owned key) -----------------------
+# The key now lives in mill's central config/repos.yaml (RepoConfig). The
+# repo-owned key is no longer read; a committed key only triggers a
+# deprecation warning.
 
 
-def test_deployed_log_folder_none_repo_dir_returns_none():
-    assert load_deployed_log_folder(None) is None
-
-
-def test_deployed_log_folder_missing_file_returns_none(tmp_path):
-    assert load_deployed_log_folder(tmp_path) is None
-
-
-def test_deployed_log_folder_missing_key_returns_none(tmp_path, caplog):
-    _write_config(tmp_path, "test_command: pytest\n")
+def test_warn_if_deprecated_log_folder_none_repo_dir_no_warn(caplog):
     with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
-        assert load_deployed_log_folder(tmp_path) is None
-    # Plain absence of the key must not warn.
+        warn_if_deprecated_log_folder(None)
     assert not any("deployed_log_folder" in r.message for r in caplog.records)
 
 
-def test_deployed_log_folder_empty_value_returns_none(tmp_path):
-    _write_config(tmp_path, 'deployed_log_folder: "   "\n')
-    assert load_deployed_log_folder(tmp_path) is None
-
-
-def test_deployed_log_folder_non_string_warns_and_returns_none(tmp_path, caplog):
-    _write_config(tmp_path, "deployed_log_folder:\n  - /var/log/app\n")
+def test_warn_if_deprecated_log_folder_missing_file_no_warn(tmp_path, caplog):
     with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
-        assert load_deployed_log_folder(tmp_path) is None
-    assert any("deployed_log_folder" in r.message for r in caplog.records)
+        warn_if_deprecated_log_folder(tmp_path)
+    assert not any("deployed_log_folder" in r.message for r in caplog.records)
 
 
-def test_deployed_log_folder_present_is_stripped(tmp_path):
-    _write_config(tmp_path, 'deployed_log_folder: "  /var/log/app  "\n')
-    assert load_deployed_log_folder(tmp_path) == "/var/log/app"
+def test_warn_if_deprecated_log_folder_absent_key_no_warn(tmp_path, caplog):
+    _write_config(tmp_path, "test_command: pytest\n")
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+        warn_if_deprecated_log_folder(tmp_path)
+    assert not any("deployed_log_folder" in r.message for r in caplog.records)
+
+
+def test_warn_if_deprecated_log_folder_present_key_warns(tmp_path, caplog):
+    _write_config(tmp_path, "deployed_log_folder: /var/log/app\n")
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+        warn_if_deprecated_log_folder(tmp_path)
+    assert any(
+        "deployed_log_folder" in r.message and "deprecated" in r.message
+        for r in caplog.records
+    )

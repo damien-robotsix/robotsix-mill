@@ -268,13 +268,17 @@ MILL_CONFIG_FILE=config/mill.production.yaml docker compose up -d
 
 ### Deployed log folder (`deployed_log_folder`)
 
-A managed repo can point the refine agent at its live deployment's log
-directory by committing a single field to its own
-`.robotsix-mill/config.yaml`:
+The operator can point the refine agent at a repo's live deployment log
+directory by setting a single per-repo field in mill's central,
+gitignored `config/repos.yaml` (alongside `board_id` / `forge_remote_url`
+/ `langfuse:`):
 
 ```yaml
-# .robotsix-mill/config.yaml
-deployed_log_folder: /var/log/robotsix-auto-mail
+# config/repos.yaml
+repos:
+  robotsix-auto-mail:
+    board_id: "..."
+    deployed_log_folder: /var/log/robotsix-auto-mail
 ```
 
 - `deployed_log_folder` — a path (string) to the live deployment's log
@@ -283,10 +287,11 @@ deployed_log_folder: /var/log/robotsix-auto-mail
   logged for relative paths). It is **opt-in**: when absent — or when it
   does not resolve to an existing directory — the log tooling is
   silently skipped. When it resolves, it drives the refine agent's
-  `query_app_logs` tool plus an injected log summary. This field carries
-  only the non-secret path; Langfuse keys stay central in
-  `config/repos.yaml`. See [observability.md](observability.md) for the
-  full story.
+  `query_app_logs` tool plus an injected log summary. Because the value
+  is a deployment-specific host path, it lives in the operator's central
+  config — **not** the managed repo's committed
+  `.robotsix-mill/config.yaml` (the repo-owned key is deprecated and
+  ignored). See [observability.md](observability.md) for the full story.
 
 ### Set up secrets
 

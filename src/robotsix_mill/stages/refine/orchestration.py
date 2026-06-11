@@ -371,13 +371,21 @@ class RefineAgentMixin:
 
         from ...repo_settings import (
             resolve_language_instructions,
-            load_deployed_log_folder,
+            warn_if_deprecated_log_folder,
         )
 
         language_instructions = resolve_language_instructions(s, repo_dir)
 
         # --- deployed log folder (refine-only) ---
-        deployed_log_folder_str = load_deployed_log_folder(repo_dir)
+        # Deployment-specific host path: sourced from the operator's central
+        # ``config/repos.yaml`` (RepoConfig), NOT the managed repo's committed
+        # ``.robotsix-mill/config.yaml`` (a host path must not be committed).
+        warn_if_deprecated_log_folder(repo_dir)
+        deployed_log_folder_str = (
+            ctx.repo_config.deployed_log_folder if ctx.repo_config else None
+        )
+        if deployed_log_folder_str is not None:
+            deployed_log_folder_str = deployed_log_folder_str.strip() or None
         deployed_log_summary = ""
         deployed_log_dir: Path | None = None
         if deployed_log_folder_str is not None:
