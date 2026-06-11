@@ -549,6 +549,14 @@ robotsix-llmio Claude Agent SDK transport.
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `stages.review.prior_context_max_chars` | `MILL_REVIEW_PRIOR_CONTEXT_MAX_CHARS` | `8000` | Max characters of the re-review prior-context block (prior review comments + the implement rebuttal) fed to the review agent. Each component is tail-kept (most-recent content survives) so multi-round reviews don't re-pay for the entire accumulated history. Set to `0` to disable the cap. |
+| `review_diff_max_chars` | `MILL_REVIEW_DIFF_MAX_CHARS` | `200_000` | Max characters of the combined git diff injected into the review prompt. The raw `git diff origin/<target>...HEAD` can balloon to megabytes (divergent base, generated/lockfile churn, branch history) regardless of how few lines the intended change touches, overflowing even a 1M-token model context. When the diff exceeds this limit it is **middle-truncated** (head + tail kept, middle dropped, with a marker stating how many characters were omitted) so both early and late files get representation. ~200K chars ≈ 50K tokens, leaving room for spec + prior context + preseed + tools + the output reservation. Set to `0` to disable the cap (unbounded diffs). |
+
+**Graceful token-exhaustion handling.** If a token-limit error is hit on
+the first review pass, the review is retried once with no preseed and a
+hard-truncated diff (~40K chars). If that retry also overflows, the
+stage returns a `NEEDS_DISCUSSION` verdict with an explanatory comment
+rather than crashing — a human can review the PR directly or split the
+change into smaller diffs.
 
 ### 12. Periodic agents
 
