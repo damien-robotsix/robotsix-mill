@@ -966,3 +966,65 @@ def test_prior_context_under_cap_verbatim(ctx_factory):
     assert "truncated:" not in block
     assert "short feedback" in block
     assert "brief rebuttal" in block
+
+
+# --- Diff bounding (review_diff_max_chars) -----------------------------
+
+
+def _capture_review(monkeypatch) -> dict:
+    """Patch ``run_review_agent`` to capture its kwargs; return the dict."""
+    captured: dict = {}
+
+    def _fake_review(*, settings, diff, spec, **kwargs):
+        captured["diff"] = diff
+        captured["spec"] = spec
+        captured.update(kwargs)
+        return ReviewVerdict(verdict="APPROVE", comments="ok")
+
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
+    return captured
+
+
+def test_oversized_diff_is_truncated_before_agent(ctx_factory, monkeypatch):
+    """An oversized combined diff is middle-truncated via head_tail_keep
+    (marker present, length bounded) before reaching run_review_agent;
+    modified_paths derivation still works off the diff content."""
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL="file:///dummy",
+        review_enabled="true",
+        review_diff_max_chars="2000",
+    )
+    t = _ticket(ctx)
+
+    # Add a large file so the combined diff exceeds the 2000-char cap.
+    ws = ctx.service.workspace(t)
+    repo_dir = ws.dir / "repo"
+    (repo_dir / "big.txt").write_text("X" * 50_000 + "\n", encoding="utf-8")
+    _git(repo_dir, "add", "-A")
+    _git(repo_dir, "commit", "-q", "-m", "add big file")
+
+    captured = _capture_review(monkeypatch)
+    ReviewStage().run(t, ctx)
+
+    diff = captured["diff"]
+    assert "[... git-diff truncated:" in diff
+    assert "omitted from the middle" in diff
+    # Length bounded by the cap plus the (short) marker line.
+    assert len(diff) <= 2000 + 200
+    # Path parsing survives truncation: the preseed file set still names
+    # every modified file (derived from the untruncated diff).
+    assert set(captured["reference_files"]) >= {"big.txt", "feature.txt"}
+
+
+def test_small_diff_passes_through_unchanged(ctx_factory, monkeypatch):
+    """A normal small diff (under the default cap) reaches the agent
+    verbatim — no truncation marker."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+
+    captured = _capture_review(monkeypatch)
+    ReviewStage().run(t, ctx)
+
+    diff = captured["diff"]
+    assert "feature.txt" in diff
+    assert "truncated:" not in diff

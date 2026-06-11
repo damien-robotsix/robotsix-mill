@@ -86,3 +86,46 @@ def tail_keep(text: str, max_chars: int, *, label: str = "content") -> str:
         kept = text[cut_point:]  # fallback (no newline found)
     omitted = original_size - len(kept)
     return f"[... {label} truncated: {omitted} chars omitted]\n\n{kept}"
+
+
+def head_tail_keep(text: str, max_chars: int, *, label: str = "content") -> str:
+    """Keep a head slice and a tail slice of *text*, dropping the middle.
+
+    If ``max_chars == 0`` or ``len(text) <= max_chars`` the string is
+    returned unchanged. Otherwise the budget is split ~60% head / 40%
+    tail; each slice is advanced to a line boundary so kept lines are
+    complete, and the two are joined by an explicit marker line
+    ``[... <label> truncated: N chars omitted from the middle ...]``.
+
+    Head+tail (not pure head or tail) is the correct primitive for
+    git diffs: both the early and late files in the diff get
+    representation, unlike :func:`tail_keep` (keeps only the end) or
+    :func:`truncate_at_boundary` (keeps only the start).
+
+    Returns:
+        The (possibly middle-truncated) string.
+    """
+    if max_chars == 0 or len(text) <= max_chars:
+        return text
+
+    head_budget = (max_chars * 6) // 10
+    tail_budget = max_chars - head_budget
+
+    # Head slice: cut at or before head_budget, retreat to the last
+    # newline so the last kept line is complete.
+    head_cut = head_budget
+    nl_idx = text.rfind("\n", 0, head_cut)
+    head = text[: nl_idx + 1] if nl_idx != -1 else text[:head_cut]
+
+    # Tail slice: keep the last tail_budget chars, advance to the next
+    # newline so the first kept line is complete.
+    tail_start = len(text) - tail_budget
+    nl_idx = text.find("\n", tail_start)
+    tail = text[nl_idx + 1 :] if nl_idx != -1 else text[tail_start:]
+
+    omitted = len(text) - len(head) - len(tail)
+    return (
+        f"{head}"
+        f"\n\n[... {label} truncated: {omitted} chars omitted from the middle ...]\n\n"
+        f"{tail}"
+    )

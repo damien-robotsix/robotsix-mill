@@ -109,6 +109,28 @@ class ReviewVerdict(BaseModel):
     )
 
 
+# Substrings that identify a provider context-window / token-limit
+# overflow (case-insensitive match on the exception message). These
+# surface as unhandled exceptions from the model call — unlike transient
+# rate-limit errors, retrying the same prompt won't help, so the review
+# path catches them and degrades. Mirrors the precedent in
+# ``trace_inspector.run_trace_inspector`` (the ``"maximum context length"``
+# branch).
+_TOKEN_LIMIT_SIGNALS = (
+    "maximum context length",
+    "context length",
+    "token limit",
+    "context_length_exceeded",
+    "tokens requested",
+)
+
+
+def _is_token_limit_error(exc: BaseException) -> bool:
+    """True when *exc*'s message matches a known token-limit signal."""
+    msg = str(exc).lower()
+    return any(sig in msg for sig in _TOKEN_LIMIT_SIGNALS)
+
+
 def run_review_agent(
     *,
     settings: Settings,
@@ -198,67 +220,149 @@ def run_review_agent(
     )
     try:
         from .prompt_blocks import section
-
-        user_prompt = ""
-        if prior_context is not None:
-            user_prompt += f"{prior_context}\n\n"
-        user_prompt += section("ticket-spec", spec) + "\n\n" + section("git-diff", diff)
-        limits = UsageLimits(request_limit=settings.review_request_limit)
-        run_kwargs: dict = {"usage_limits": limits}
-        run_user_prompt: str | list[Any] | None = user_prompt
-        # Build the synthetic message_history AFTER the user_prompt is
-        # finalized so the prompt can be prepended cleanly BEFORE the
-        # preload tool calls; see fs_tools.build_preseed_history.
-        if reference_files and repo_dir is not None:
-            from .fs_tools import build_preseed_history
-
-            preseed = build_preseed_history(
-                repo_dir,
-                list(reference_files),
-                user_prompt=user_prompt,
-            )
-            if preseed:
-                run_kwargs["message_history"] = preseed
-                run_user_prompt = None
-        # Attach a board screenshot as a vision image ONLY when the review
-        # agent is routed to the Claude SDK backend AND that backend can
-        # actually view inline images (the capability gate — default OFF,
-        # because the installed llmio bridge silently mishandles
-        # BinaryContent and stalls the CLI for 1200s). DeepSeek has no
-        # vision either. A missing/unreadable file degrades silently to the
-        # text-only path — never crash review.
-        if (
-            screenshot_path is not None
-            and _use_claude_sdk(settings, definition.name)
-            and claude_sdk_supports_inline_image(settings)
-        ):
-            run_user_prompt = _maybe_attach_screenshot(run_user_prompt, screenshot_path)
-        result = run_agent(
-            agent,
-            lambda h: h.run_sync(run_user_prompt, **run_kwargs),
-            settings=settings,
-            what="review",
-        )
         from .structured_output_guard import reprompt_if_unstructured
 
-        result = reprompt_if_unstructured(
-            result=result,
-            agent=agent,
-            expected_type=ReviewVerdict,
-            reprompt_message=(
-                "Your last response did not produce a structured ReviewVerdict. "
-                "Reply now with a JSON object containing the required fields: "
-                "verdict (one of APPROVE, REQUEST_CHANGES, NEEDS_DISCUSSION), "
-                "comments, and request_changes."
-            ),
-            settings=settings,
-            what="review (re-prompt after prose-only)",
-            run_kwargs={"usage_limits": limits},
-            require_no_tool_calls=False,
-        )
+        limits = UsageLimits(request_limit=settings.review_request_limit)
+
+        def _attempt(
+            *,
+            diff_text: str,
+            use_preseed: bool,
+            note: str | None,
+        ) -> object:
+            """Build the prompt and run one review pass, returning the
+            agent's (possibly re-prompted) output. Raises on token-limit
+            overflow so the caller can decide whether to degrade."""
+            user_prompt = ""
+            if note:
+                user_prompt += f"{note}\n\n"
+            if prior_context is not None:
+                user_prompt += f"{prior_context}\n\n"
+            user_prompt += (
+                section("ticket-spec", spec) + "\n\n" + section("git-diff", diff_text)
+            )
+            run_kwargs: dict = {"usage_limits": limits}
+            run_user_prompt: str | list[Any] | None = user_prompt
+            # Build the synthetic message_history AFTER the user_prompt is
+            # finalized so the prompt can be prepended cleanly BEFORE the
+            # preload tool calls; see fs_tools.build_preseed_history.
+            if use_preseed and reference_files and repo_dir is not None:
+                from .fs_tools import build_preseed_history
+
+                preseed = build_preseed_history(
+                    repo_dir,
+                    list(reference_files),
+                    user_prompt=user_prompt,
+                )
+                if preseed:
+                    run_kwargs["message_history"] = preseed
+                    run_user_prompt = None
+            # Attach a board screenshot as a vision image ONLY when the
+            # review agent is routed to the Claude SDK backend AND that
+            # backend can actually view inline images (the capability gate
+            # — default OFF, because the installed llmio bridge silently
+            # mishandles BinaryContent and stalls the CLI for 1200s).
+            # DeepSeek has no vision either. A missing/unreadable file
+            # degrades silently to the text-only path — never crash review.
+            if (
+                screenshot_path is not None
+                and _use_claude_sdk(settings, definition.name)
+                and claude_sdk_supports_inline_image(settings)
+            ):
+                run_user_prompt = _maybe_attach_screenshot(
+                    run_user_prompt, screenshot_path
+                )
+            result = run_agent(
+                agent,
+                lambda h: h.run_sync(run_user_prompt, **run_kwargs),
+                settings=settings,
+                what="review",
+            )
+            result = reprompt_if_unstructured(
+                result=result,
+                agent=agent,
+                expected_type=ReviewVerdict,
+                reprompt_message=(
+                    "Your last response did not produce a structured "
+                    "ReviewVerdict. Reply now with a JSON object containing "
+                    "the required fields: verdict (one of APPROVE, "
+                    "REQUEST_CHANGES, NEEDS_DISCUSSION), comments, and "
+                    "request_changes."
+                ),
+                settings=settings,
+                what="review (re-prompt after prose-only)",
+                run_kwargs={"usage_limits": limits},
+                require_no_tool_calls=False,
+            )
+            return result.output
+
+        output = _run_with_degraded_retry(_attempt, diff=diff, settings=settings)
     finally:
         _safe_close(agent)
-    return _coerce_verdict(result.output)
+    return _coerce_verdict(output)
+
+
+def _run_with_degraded_retry(
+    attempt: Any,
+    *,
+    diff: str,
+    settings: Settings,
+) -> object:
+    """Run *attempt* (one review pass), degrading on token-limit overflow.
+
+    Calls ``attempt(diff_text=, use_preseed=, note=)``. On a context-window
+    / token-limit error, retry once with NO preseed and a hard-truncated
+    diff. If that ALSO overflows, return a best-effort NEEDS_DISCUSSION
+    :class:`ReviewVerdict` rather than crashing the stage — graceful
+    degradation is the contract. Non token-limit exceptions propagate
+    unchanged, so run_agent's transient retry and the caller's handling
+    apply exactly as before.
+    """
+    try:
+        return attempt(diff_text=diff, use_preseed=True, note=None)
+    except Exception as exc:
+        if not _is_token_limit_error(exc):
+            raise
+        log.warning(
+            "review: context-window/token-limit error (%s); retrying with "
+            "reduced context (no preseed, hard-truncated diff)",
+            exc,
+        )
+
+    from ..core.text_utils import head_tail_keep
+
+    # Hard-truncate to a small fixed budget. ``or 40_000`` keeps the cap
+    # real when review_diff_max_chars is 0 (uncapped).
+    degraded_budget = min(settings.review_diff_max_chars or 40_000, 40_000)
+    degraded_diff = head_tail_keep(diff, degraded_budget, label="git-diff")
+    note = (
+        "NOTE: the git diff below was heavily truncated due to its size — "
+        "base your verdict on the visible portion and flag uncertainty "
+        "rather than assuming the omitted middle is fine."
+    )
+    try:
+        return attempt(diff_text=degraded_diff, use_preseed=False, note=note)
+    except Exception as exc2:
+        if not _is_token_limit_error(exc2):
+            raise
+        # Still overflowing after aggressive truncation — do NOT crash the
+        # stage. Return a best-effort NEEDS_DISCUSSION so review completes
+        # and the ticket isn't silently blocked.
+        log.warning(
+            "review: token-limit error persists after degraded retry (%s); "
+            "returning NEEDS_DISCUSSION",
+            exc2,
+        )
+        return ReviewVerdict(
+            verdict="NEEDS_DISCUSSION",
+            comments=(
+                "The git diff exceeded the review model's context window even "
+                f"after truncation (~{len(diff)} chars). An automated verdict "
+                "is unavailable — a human should review this PR directly, or "
+                "the change should be split into smaller diffs."
+            ),
+            auto_merge_eligible=False,
+        )
 
 
 def _maybe_attach_screenshot(

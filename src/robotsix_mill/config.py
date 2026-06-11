@@ -732,6 +732,15 @@ class Settings(BaseSettings):
     # round reviews don't re-pay for the entire accumulated history. 0
     # disables the cap.
     review_prior_context_max_chars: int = Field(default=8000, ge=0)
+    # Maximum characters of the combined git diff injected into the review
+    # prompt. The raw ``git diff origin/<target>...HEAD`` can balloon to
+    # megabytes (divergent base, generated/lockfile churn, branch history)
+    # regardless of how few lines the intended change touches, overflowing
+    # even a 1M-token model context. Middle-truncated (head+tail) so both
+    # early and late files get representation. ~200K chars ≈ 50K tokens
+    # leaves ample room for spec + prior context + preseed + tools + the
+    # output reservation. 0 disables the cap.
+    review_diff_max_chars: int = Field(default=200_000, ge=0)
     # How many model requests the scope-triage agent may make per
     # invocation (main call + any tool calls). Default 8: the agent is
     # tool-less, but structured-output retries (schema mismatch, output
