@@ -71,7 +71,6 @@ repos:
       - id: validate-config-sync
         name: Validate config surface is in sync
         entry: python scripts/check_config_sync.py
-        language: python
-        additional_dependencies: ["pyyaml>=6"]
+        language: system
         files: ^(config/mill\.defaults\.yaml|config/secrets\.example\.yaml|src/robotsix_mill/config\.py|src/robotsix_mill/config_loader\.py)$
         pass_filenames: false
