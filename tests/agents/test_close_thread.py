@@ -89,6 +89,19 @@ def test_already_closed_is_idempotent_success(settings, monkeypatch):
     assert "already resolved" in result
 
 
+def test_toolinfo_description_mentions_idempotency(settings):
+    """The close_thread ToolInfo description must mention idempotency
+    so the model understands 'already closed' is success, not retry."""
+    # Trigger registration by creating the tool.
+    make_close_thread_tool(settings, "test-agent")
+    infos = [t for t in ToolRegistry.list_tools() if t.name == "close_thread"]
+    assert len(infos) == 1
+    desc = infos[0].description.lower()
+    assert "idempotent" in desc
+    assert "already closed" in desc
+    assert "do not retry" in desc
+
+
 def test_service_keyerror_returns_error_string(settings, monkeypatch):
     """When TicketService.close_thread raises KeyError, the tool
     returns a formatted error string."""
