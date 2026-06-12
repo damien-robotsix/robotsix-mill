@@ -44,6 +44,7 @@ import json
 import logging
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from ..agents.ci_fixing import run_ci_fix_agent
 from .ci_fix import _pr_changed_paths
@@ -53,7 +54,7 @@ from ..config import RepoConfig, get_repo_config, target_branch_for
 from ..config_loader import ConfigError
 from ..core.models import Ticket
 from ..core.states import State
-from ..forge import get_forge
+from ..forge import Forge, get_forge
 from ..forge.auth import _resolve_remote_url, github_token
 from ..runners.pass_runner import load_memory, persist_memory
 from ..runtime import tracing
@@ -253,7 +254,7 @@ def _verify_merge_ancestor(
     return True
 
 
-def _latest_failing_workflows(runs: list[dict]) -> set[str]:
+def _latest_failing_workflows(runs: list[dict[str, Any]]) -> set[str]:
     """Reduce a list of workflow-run dicts to the set of currently
     failing workflow names.
 
@@ -262,7 +263,7 @@ def _latest_failing_workflows(runs: list[dict]) -> set[str]:
     red one for the same workflow (and vice-versa). Returns the names
     of those latest-per-workflow runs whose ``conclusion`` is
     ``"failure"`` (blank names are dropped)."""
-    latest: dict = {}
+    latest: dict[Any, dict[str, Any]] = {}
     for run in runs:
         wid = run.get("workflow_id")
         if wid not in latest or run.get("created_at", "") > latest[wid].get(
@@ -1225,7 +1226,9 @@ class MergeStage(Stage):
         self._maybe_comment(ticket, ctx, "CI pending — will auto-merge when green")
         return Outcome(State.WAITING_AUTO_MERGE)
 
-    def _main_branch_ci_debt(self, *, forge, pr, target_branch) -> set[str]:
+    def _main_branch_ci_debt(
+        self, *, forge: Forge, pr: dict[str, Any] | None, target_branch: str
+    ) -> set[str]:
         """Return the failing-workflow names explained by pre-existing main debt,
         or an empty set when the failure is NOT (fully) main debt. Best-effort:
         any error / missing data → empty set (never block on uncertainty)."""
