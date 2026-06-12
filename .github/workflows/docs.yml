@@ -19,6 +19,11 @@ jobs:
     uses: ./.github/workflows/python-docs.yml
     with:
       docs-install-args: "--group docs"
-      python-version: "3.14"
+      # Pin to a concrete 3.14.x patch: a bare "3.14" lets setup-python
+      # auto-resolve the newest patch from its manifest, which has drifted
+      # ahead of the locked griffelib 2.0.2 and broke mkdocstrings
+      # collection on every push. 3.14.5 is the latest patch verified
+      # compatible with the locked docs toolchain.
+      python-version: "3.14.5"
       uv-version: "0.8.15"
       retries: "4"
