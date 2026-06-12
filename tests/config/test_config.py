@@ -1574,7 +1574,10 @@ class TestDedupModelValidator:
 
         with caplog.at_level(logging.WARNING):
             s = Settings(dedup_model="opus")
-        assert "dedup_model='opus' does not look like a cheap flash-class model" in caplog.text
+        assert (
+            "dedup_model='opus' does not look like a cheap flash-class model"
+            in caplog.text
+        )
         # The value is preserved — never rejected
         assert s.dedup_model == "opus"
 

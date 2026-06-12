@@ -13,8 +13,6 @@ import logging
 from pathlib import Path
 
 from pydantic import field_validator, model_validator
-
-log = logging.getLogger(__name__)
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -27,6 +25,8 @@ from ._settings_periodic import _PeriodicSettings
 from ._settings_stages import _StagesSettings
 from .secrets import get_secrets
 from .yaml_source import YamlSettingsSource
+
+log = logging.getLogger(__name__)
 
 
 class Settings(
