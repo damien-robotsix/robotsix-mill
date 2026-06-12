@@ -382,7 +382,7 @@ def fetch(url: str, *, settings: Settings) -> tuple[int, str]:
         r = subprocess.run(
             argv,
             capture_output=True,
-            text=True,
+            text=False,          # was text=True — avoid UnicodeDecodeError
             timeout=settings.web_fetch_timeout + 15,
         )
     except FileNotFoundError as e:
@@ -391,11 +391,14 @@ def fetch(url: str, *, settings: Settings) -> tuple[int, str]:
         subprocess.run(["docker", "rm", "-f", name], capture_output=True, text=True)
         return 124, f"fetch timed out after {settings.web_fetch_timeout}s"
 
+    # Decode stdout/stderr with replacement for non-UTF-8 bytes
+    stderr = r.stderr.decode("utf-8", errors="replace") if r.stderr else ""
+    body = r.stdout.decode("utf-8", errors="replace") if r.stdout else ""
+
     if r.returncode == 125:
-        raise SandboxError(f"docker run failed: {(r.stderr or '').strip()[:300]}")
-    body = r.stdout or ""
+        raise SandboxError(f"docker run failed: {stderr.strip()[:300]}")
     if len(body) > settings.web_fetch_max_bytes:
         body = body[: settings.web_fetch_max_bytes] + "\n... [truncated]"
     if r.returncode != 0:
-        body = f"(curl exit {r.returncode}) {(r.stderr or '').strip()[:300]}\n{body}"
+        body = f"(curl exit {r.returncode}) {stderr.strip()[:300]}\n{body}"
     return r.returncode, body

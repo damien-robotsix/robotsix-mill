@@ -171,7 +171,7 @@ def test_fetch_argv_is_locked_down(tmp_path, monkeypatch):
 
     def fake_run(argv, **kw):
         seen["argv"] = argv
-        return subprocess.CompletedProcess(argv, 0, stdout="hello", stderr="")
+        return subprocess.CompletedProcess(argv, 0, stdout=b"hello", stderr=b"")
 
     monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
     rc, body = sandbox.fetch("https://docs.example/api", settings=s)
@@ -184,6 +184,26 @@ def test_fetch_argv_is_locked_down(tmp_path, monkeypatch):
     assert "no-new-privileges" in a
     assert "-v" not in a  # NO repo/data mount in the fetch container
     assert a[-2:] == ["--", "https://docs.example/api"]  # URL is argv, not shell
+
+
+def test_fetch_survives_non_utf8_body(tmp_path, monkeypatch):
+    """Non-UTF-8 bytes (Latin-1, Shift-JIS, binary) in the curl response
+    must NOT crash sandbox.fetch().  Instead, undecodable bytes are
+    replaced with \ufffd and the agent gets a usable text string."""
+    s = _settings(tmp_path)
+
+    # Invalid UTF-8: 0xff, 0xfe, 0xe9 are all illegal leading bytes
+    raw = b'\xff\xfe\xe9 and some text'
+    monkeypatch.setattr(
+        sandbox.subprocess, "run",
+        lambda argv, **kw: subprocess.CompletedProcess(argv, 0, stdout=raw, stderr=b""),
+    )
+    rc, body = sandbox.fetch("https://broken.example/encoding", settings=s)
+    assert rc == 0
+    assert isinstance(body, str)
+    # Replacement characters present; valid ASCII tail preserved
+    assert "\ufffd" in body
+    assert "and some text" in body
 
 
 def test_fetch_image_config_default():
