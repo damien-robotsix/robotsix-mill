@@ -44,6 +44,7 @@ import json
 import logging
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from ..agents.ci_fixing import run_ci_fix_agent
 from .ci_fix import _pr_changed_paths
@@ -53,7 +54,7 @@ from ..config import RepoConfig, get_repo_config, target_branch_for
 from ..config_loader import ConfigError
 from ..core.models import Ticket
 from ..core.states import State
-from ..forge import get_forge
+from ..forge import Forge, get_forge
 from ..forge.auth import _resolve_remote_url, github_token
 from ..runners.pass_runner import load_memory, persist_memory
 from ..runtime import tracing
@@ -251,6 +252,29 @@ def _verify_merge_ancestor(
         sha[:8],
     )
     return True
+
+
+def _latest_failing_workflows(runs: list[dict[str, Any]]) -> set[str]:
+    """Reduce a list of workflow-run dicts to the set of currently
+    failing workflow names.
+
+    The latest completed run per ``workflow_id`` wins (compared by the
+    ``created_at`` string), so a later green run supersedes an earlier
+    red one for the same workflow (and vice-versa). Returns the names
+    of those latest-per-workflow runs whose ``conclusion`` is
+    ``"failure"`` (blank names are dropped)."""
+    latest: dict[Any, dict[str, Any]] = {}
+    for run in runs:
+        wid = run.get("workflow_id")
+        if wid not in latest or run.get("created_at", "") > latest[wid].get(
+            "created_at", ""
+        ):
+            latest[wid] = run
+    return {
+        (r.get("name") or "").strip()
+        for r in latest.values()
+        if r.get("conclusion") == "failure" and (r.get("name") or "").strip()
+    }
 
 
 class MergeStage(Stage):
@@ -1202,6 +1226,32 @@ class MergeStage(Stage):
         self._maybe_comment(ticket, ctx, "CI pending — will auto-merge when green")
         return Outcome(State.WAITING_AUTO_MERGE)
 
+    def _main_branch_ci_debt(
+        self, *, forge: Forge, pr: dict[str, Any] | None, target_branch: str
+    ) -> set[str]:
+        """Return the failing-workflow names explained by pre-existing main debt,
+        or an empty set when the failure is NOT (fully) main debt. Best-effort:
+        any error / missing data → empty set (never block on uncertainty)."""
+        try:
+            head_sha = (pr or {}).get("sha", "")
+            if not head_sha:
+                return set()
+            pr_failing = _latest_failing_workflows(
+                forge.list_workflow_runs(head_sha=head_sha)
+            )
+            if not pr_failing:
+                return set()
+            main_failing = _latest_failing_workflows(
+                forge.list_workflow_runs(branch=target_branch)
+            )
+            # Pre-existing debt iff EVERY workflow failing on the PR is also
+            # failing on main.
+            if main_failing and pr_failing <= main_failing:
+                return pr_failing & main_failing
+            return set()
+        except Exception:  # noqa: BLE001 — best-effort; fall through to normal retry
+            return set()
+
     def _poll_implement_complete(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Poll PR status for a ticket in IMPLEMENT_COMPLETE.
 
@@ -1276,6 +1326,31 @@ class MergeStage(Stage):
 
         conclusion = ci_status.get("conclusion")
         if conclusion == "failure":
+            # Pre-existing main-branch CI debt detection (gated). When EVERY
+            # workflow failing on the PR head is ALSO failing on the merge
+            # target, the failure was not introduced by this PR and cannot be
+            # fixed by it — rebasing onto a red main can't help, so block before
+            # the branch-behind-main rebase decision below.
+            if s.auto_merge_main_debt_detection_enabled:
+                debt = self._main_branch_ci_debt(
+                    forge=get_forge(s, repo_config=ctx.repo_config),
+                    pr=pr,
+                    target_branch=target_branch_for(s, ctx.repo_config),
+                )
+                if debt:
+                    names = ", ".join(sorted(debt))
+                    log.warning(
+                        "%s: CI failure is pre-existing main debt (%s) → BLOCKED",
+                        ticket.id,
+                        names,
+                    )
+                    return Outcome(
+                        State.BLOCKED,
+                        f"CI blocked by pre-existing target-branch debt: workflow(s) "
+                        f"{names} are failing on the merge target too and were not "
+                        f"introduced by this PR. Operator must stabilise the target "
+                        f"branch's CI before this can merge.",
+                    )
             # Rebase BEFORE ci_fix when the branch is behind main. A repo-wide
             # gate (ruff/mypy/lint over the whole tree) often fails on code that
             # isn't this ticket's diff — the branch was cut from an older main

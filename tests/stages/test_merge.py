@@ -4040,3 +4040,202 @@ def test_waiting_auto_merge_no_repo_proceeds_to_done(tmp_path, monkeypatch):
 
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.DONE
+
+
+# ============================================================
+# Pre-existing main-branch CI debt detection
+# ============================================================
+
+
+def _run(workflow_id, name, conclusion, created_at, head_sha="abc"):
+    """Build a workflow-run dict as list_workflow_runs returns them."""
+    return {
+        "id": f"{workflow_id}-{created_at}",
+        "name": name,
+        "workflow_id": workflow_id,
+        "head_sha": head_sha,
+        "conclusion": conclusion,
+        "html_url": "https://example/run",
+        "created_at": created_at,
+    }
+
+
+def _patch_failing_pr(monkeypatch, sha="abc"):
+    """PR open + mergeable with failing CI and a resolvable head SHA."""
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "sha": sha,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "failure", "failing": []},
+    )
+
+
+def _patch_workflow_runs(monkeypatch, *, pr_runs, main_runs):
+    """Route list_workflow_runs by which kwarg the caller passes."""
+
+    def fake(self, *, branch=None, head_sha=None):
+        if head_sha is not None:
+            return pr_runs
+        return main_runs
+
+    monkeypatch.setattr(github.GitHubForge, "list_workflow_runs", fake)
+
+
+def test_latest_failing_workflows_picks_most_recent_run():
+    """Latest completed run per workflow_id wins (later green supersedes
+    earlier red, and vice-versa)."""
+    from robotsix_mill.stages.merge import _latest_failing_workflows
+
+    runs = [
+        # workflow 1: later run is green → not failing.
+        _run(1, "tests", "failure", "2026-06-11T10:00:00Z"),
+        _run(1, "tests", "success", "2026-06-11T11:00:00Z"),
+        # workflow 2: later run is red → failing.
+        _run(2, "lint", "success", "2026-06-11T10:00:00Z"),
+        _run(2, "lint", "failure", "2026-06-11T11:00:00Z"),
+    ]
+    assert _latest_failing_workflows(runs) == {"lint"}
+
+
+def test_implement_complete_blocks_on_shared_main_debt(tmp_path, monkeypatch):
+    """Every PR-failing workflow is also failing on main → BLOCKED, reason
+    names the workflow(s)."""
+    ctx = _gh(tmp_path)
+    _patch_failing_pr(monkeypatch)
+    _patch_workflow_runs(
+        monkeypatch,
+        pr_runs=[_run(1, "lint", "failure", "2026-06-11T11:00:00Z")],
+        main_runs=[_run(1, "lint", "failure", "2026-06-11T11:00:00Z")],
+    )
+    out = MergeStage().run(_implement_complete(ctx), ctx)
+    assert out.next_state is State.BLOCKED
+    assert "lint" in out.note
+
+
+def test_implement_complete_pr_specific_failure_retries(tmp_path, monkeypatch):
+    """A workflow failing on the PR but green on main is a genuine,
+    PR-introduced failure → existing retry behaviour (FIXING_CI), not BLOCKED."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    _patch_failing_pr(monkeypatch)
+    _patch_workflow_runs(
+        monkeypatch,
+        pr_runs=[_run(1, "lint", "failure", "2026-06-11T11:00:00Z")],
+        main_runs=[_run(1, "lint", "success", "2026-06-11T11:00:00Z")],
+    )
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": False,
+    )
+    out = MergeStage().run(_implement_complete(ctx), ctx)
+    assert out.next_state is State.FIXING_CI
+
+
+def test_implement_complete_no_block_when_main_green(tmp_path, monkeypatch):
+    """No failing workflows on main → unchanged behaviour (no BLOCKED)."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    _patch_failing_pr(monkeypatch)
+    _patch_workflow_runs(
+        monkeypatch,
+        pr_runs=[_run(1, "lint", "failure", "2026-06-11T11:00:00Z")],
+        main_runs=[_run(1, "lint", "success", "2026-06-11T11:00:00Z")],
+    )
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": False,
+    )
+    out = MergeStage().run(_implement_complete(ctx), ctx)
+    assert out.next_state is State.FIXING_CI
+
+
+def test_implement_complete_no_sha_falls_through(tmp_path, monkeypatch):
+    """PR head has no resolvable SHA → helper returns empty, normal retry."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    # PR with NO sha key + failing CI.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "failure", "failing": []},
+    )
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": False,
+    )
+    out = MergeStage().run(_implement_complete(ctx), ctx)
+    assert out.next_state is State.FIXING_CI
+
+
+def test_implement_complete_list_workflow_runs_raises_falls_through(
+    tmp_path, monkeypatch
+):
+    """list_workflow_runs raising → best-effort empty set, normal retry, no
+    exception escapes."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    _patch_failing_pr(monkeypatch)
+
+    def boom(self, *, branch=None, head_sha=None):
+        raise RuntimeError("forge down")
+
+    monkeypatch.setattr(github.GitHubForge, "list_workflow_runs", boom)
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": False,
+    )
+    out = MergeStage().run(_implement_complete(ctx), ctx)
+    assert out.next_state is State.FIXING_CI
+
+
+def test_implement_complete_main_debt_detection_disabled(tmp_path, monkeypatch):
+    """Flag off → even fully-shared debt does NOT block; prior behaviour."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path, auto_merge_main_debt_detection_enabled=False)
+    _patch_failing_pr(monkeypatch)
+    _patch_workflow_runs(
+        monkeypatch,
+        pr_runs=[_run(1, "lint", "failure", "2026-06-11T11:00:00Z")],
+        main_runs=[_run(1, "lint", "failure", "2026-06-11T11:00:00Z")],
+    )
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": False,
+    )
+    out = MergeStage().run(_implement_complete(ctx), ctx)
+    assert out.next_state is State.FIXING_CI

@@ -620,6 +620,14 @@ class Settings(BaseSettings):
     # merge its own green PR via the forge API without waiting for a
     # human. Default False (opt-in).
     auto_merge_enabled: bool = Field(default=False)
+    # When True (default), the single-repo auto-merge decision detects
+    # pre-existing main-branch CI debt: if every workflow failing on the
+    # PR head is ALSO failing on the merge target, the failure was not
+    # introduced by this PR and the ticket is routed to BLOCKED instead
+    # of cycling rebase/ci-fix retries. Safe-by-default — it only ever
+    # fires when main is demonstrably red on the same workflow(s); the
+    # flag exists so an operator can disable it.
+    auto_merge_main_debt_detection_enabled: bool = Field(default=True)
     # When True, the board's ticket detail drawer renders description.md
     # below the comments with a collapsible "Hide" toggle (the frontend
     # reads ``gatesCache.comments_after_body``). Default False (opt-in).
