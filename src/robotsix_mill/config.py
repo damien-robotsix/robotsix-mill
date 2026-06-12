@@ -1200,6 +1200,19 @@ class Settings(BaseSettings):
     # closures are kept for post-mortems. Default 7 days.
     # Override with MILL_DATA_DIR_AUDIT_PRUNE_CLOSED_AGE_SECONDS.
     data_dir_audit_prune_closed_age_seconds: int = Field(default=604_800, ge=0)
+    # Default-on GC: prune the reproducible git clones (``repo/`` and
+    # ``repos/``) inside workspaces of terminal-state tickets at the
+    # start of each data-dir audit pass, before size measurement.
+    # Clones are the heavy tail of workspaces/ growth; description.md,
+    # artifacts/ and screenshots/ are preserved for post-mortems
+    # (unlike the whole-workspace prune_closed above).
+    # Override with MILL_DATA_DIR_AUDIT_PRUNE_TERMINAL_CLONES.
+    data_dir_audit_prune_terminal_clones: bool = Field(default=True)
+    # Minimum age (seconds since the ticket entered its terminal state)
+    # before its clones are pruned. Clones are cheap to recreate, so
+    # the guard is short. Default 1 day.
+    # Override with MILL_DATA_DIR_AUDIT_PRUNE_TERMINAL_CLONES_AGE_SECONDS.
+    data_dir_audit_prune_terminal_clones_age_seconds: int = Field(default=86_400, ge=0)
 
     # --- completeness_check agent (feature-wiring completeness) ---
     # Model for the completeness-check agent. Defaults to the same
