@@ -586,7 +586,31 @@ def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResul
                 f"\n# Repository clone URL\n{remote_url}\n"
                 "(pass this EXACT url to clone_repo — do not guess remotes)\n"
             )
-        user_prompt = f"{repo_context}\n# Title\n{ticket.title}\n\n# Draft\n{draft}"
+        investigation_guidance = (
+            "\n# Investigation guidance\n"
+            "- **Prefer direct tools over explore.** For simple file-existence "
+            "checks or single-symbol lookups, use ``list_dir`` and ``read_file`` "
+            "directly — do NOT delegate them to ``explore``. ``explore`` spawns a "
+            "full sub-agent; it is for genuinely complex, multi-step questions that "
+            "require navigating several files.\n"
+            "- **Narrow explore questions.** When you do use ``explore``, ask a "
+            'TIGHT, specific question (e.g. "confirm modules/foo/bar.py exists and '
+            'exports class Baz") rather than an open-ended scan (e.g. "find all '
+            'files that could cause import errors"). The sub-agent has a small '
+            "budget; broad questions exhaust it.\n"
+            "- **Use run_command for grep/find.** Pattern searches should use "
+            "``run_command(\"grep -rn 'symbol' src/\")`` — never fall back to "
+            "reading files one-by-one when a single grep covers the same ground.\n"
+            "- **Verify ``::: `` directives locally.** When the task involves "
+            "``docs/reference/*.md`` mkdocstrings ``::: module.path`` directives, "
+            "read those .md files yourself with ``read_file``, extract the module "
+            "paths, then verify each with ``list_dir`` on its parent — do not hand "
+            "the whole tree to ``explore``.\n"
+        )
+        user_prompt = (
+            f"{repo_context}{investigation_guidance}"
+            f"\n# Title\n{ticket.title}\n\n# Draft\n{draft}"
+        )
 
         # 7. Run the agent — with an explicit request cap (the implicit
         # pydantic-ai default of 50 is what blocked the data-dir audit
