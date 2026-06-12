@@ -293,6 +293,13 @@ async def _process_ticket_inner(
                 timeout,
             )
             note = f"stage {stage_name} timed out after {timeout}s"[:200]
+            if root_io is not None:
+                root_io.set_output(
+                    {
+                        "error": f"stage {stage_name} timed out after {timeout}s",
+                        "next_state": "BLOCKED",
+                    }
+                )
             await _block_ticket_and_notify(ticket_id, ctx, stage_name, note, trace_id)
             return
         except NotImplementedError as e:
@@ -303,9 +310,13 @@ async def _process_ticket_inner(
                 ticket.state,
                 ticket_id,
             )
+            if root_io is not None:
+                root_io.set_output({"error": f"stub: {e}"})
             _post_trace_event(ctx, ticket_id, trace_id, stage_name)
             return
         except Exception as e:  # noqa: BLE001 — any failure fails the ticket
+            if root_io is not None:
+                root_io.set_output({"error": f"{type(e).__name__}: {str(e)[:200]}"})
             await _handle_stage_error(ticket_id, ctx, stage_name, e, trace_id)
             return
         # Stage finished without raising — any prior transient-retry
