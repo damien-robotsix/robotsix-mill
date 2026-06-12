@@ -161,6 +161,21 @@ h1 {
 }
 .merge-btn:disabled { opacity: .5; cursor: default; }
 .merge-btn:disabled:hover { background: #16a34a; }
+/* In-flight action lock (lockWhile in board-mill.js): the clicked
+   button and its whole group — incl. the opposite of an Approve/Reject
+   pair — are disabled until the request settles. */
+.approve-btn:disabled,
+.reject-btn:disabled,
+.redraft-btn:disabled,
+.del-btn:disabled,
+.prio-btn:disabled,
+.add-comment-btn:disabled,
+.toggle-body-btn:disabled {
+  opacity: .5;
+  cursor: wait;
+  pointer-events: none;
+}
+button.btn-busy { cursor: progress; }
 .merge-btn.merging {
   opacity: 0.85;
   cursor: default;
