@@ -71,8 +71,11 @@ def run_test_gap_agent(
         clipped to ``MAX_GAPS`` (5) entries, plus the updated memory
         ledger.
     """
+    from pydantic_ai.usage import UsageLimits
+
     from .periodic_base import run_periodic_agent
 
+    limits = UsageLimits(request_limit=settings.test_gap_request_limit)
     return run_periodic_agent(
         settings=settings,
         definition_name="test_gap",
@@ -85,4 +88,5 @@ def run_test_gap_agent(
         verified_proposals=verified_proposals,
         prompt_tail="Perform the test-gap inspection and return your result.",
         include_forge_url=True,
+        usage_limits=limits,
     )
