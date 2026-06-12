@@ -321,20 +321,22 @@ def run(  # noqa: C901 — extra-packages loading adds one branch; tightly-coupl
         r = subprocess.run(
             argv,
             capture_output=True,
-            text=True,
+            text=False,
             timeout=settings.command_timeout,
         )
     except FileNotFoundError as e:
         raise SandboxError("docker CLI not found in the mill image") from e
     except subprocess.TimeoutExpired:
         # the `docker run` client was killed; force-remove the container
-        subprocess.run(["docker", "rm", "-f", name], capture_output=True, text=True)
+        subprocess.run(["docker", "rm", "-f", name], capture_output=True, text=False)
         return 124, f"command timed out after {settings.command_timeout}s"
 
+    stdout = r.stdout.decode("utf-8", errors="replace") if r.stdout else ""
+    stderr = r.stderr.decode("utf-8", errors="replace") if r.stderr else ""
     # 125 == docker daemon/usage error (not the command's own exit code)
     if r.returncode == 125:
-        raise SandboxError(f"docker run failed: {(r.stderr or '').strip()[:300]}")
-    return r.returncode, _truncate((r.stdout or "") + (r.stderr or ""))
+        raise SandboxError(f"docker run failed: {stderr.strip()[:300]}")
+    return r.returncode, _truncate(stdout + stderr)
 
 
 def fetch(url: str, *, settings: Settings) -> tuple[int, str]:
