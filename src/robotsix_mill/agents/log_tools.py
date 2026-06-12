@@ -17,53 +17,9 @@ from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 
-log = logging.getLogger(__name__)
+from ..core.constants import BINARY_EXTENSIONS
 
-# Mirror the deployed-log-summary traversal: skip files whose extension is
-# a known binary type so the tool never dumps binary noise.
-_BINARY_EXTENSIONS = frozenset(
-    {
-        ".gz",
-        ".zip",
-        ".tar",
-        ".bz2",
-        ".xz",
-        ".7z",
-        ".rar",
-        ".pkl",
-        ".pickle",
-        ".db",
-        ".sqlite",
-        ".sqlite3",
-        ".png",
-        ".jpg",
-        ".jpeg",
-        ".gif",
-        ".bmp",
-        ".svg",
-        ".ico",
-        ".pdf",
-        ".doc",
-        ".docx",
-        ".xls",
-        ".xlsx",
-        ".ppt",
-        ".pptx",
-        ".mp3",
-        ".mp4",
-        ".wav",
-        ".avi",
-        ".mov",
-        ".pyc",
-        ".pyo",
-        ".so",
-        ".dll",
-        ".exe",
-        ".bin",
-        ".dat",
-        ".elf",
-    }
-)
+log = logging.getLogger(__name__)
 
 # Per-file read cap so a single huge rotated log can't blow up memory: we
 # only ever keep this many trailing lines from each file in the window.
@@ -127,7 +83,7 @@ def make_log_query_tool(log_dir: Path):  # noqa: C901 — nested closure's recen
             for entry in sorted(log_dir.rglob("*")):
                 if not entry.is_file():
                     continue
-                if entry.suffix.lower() in _BINARY_EXTENSIONS:
+                if entry.suffix.lower() in BINARY_EXTENSIONS:
                     continue
                 try:
                     mtime = entry.stat().st_mtime

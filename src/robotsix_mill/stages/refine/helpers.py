@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ...agents import refining
+from ...core.constants import BINARY_EXTENSIONS
 from ...core.models import Ticket
 from ...core.states import State
 from ..base import StageContext
@@ -117,50 +118,7 @@ _TEXT_SAFE_EXTENSIONS = frozenset(
     }
 )
 
-# File extensions that are likely binary — preview with caution.
-_BINARY_EXTENSIONS = frozenset(
-    {
-        ".gz",
-        ".zip",
-        ".tar",
-        ".bz2",
-        ".xz",
-        ".7z",
-        ".rar",
-        ".pkl",
-        ".pickle",
-        ".db",
-        ".sqlite",
-        ".sqlite3",
-        ".png",
-        ".jpg",
-        ".jpeg",
-        ".gif",
-        ".bmp",
-        ".svg",
-        ".ico",
-        ".pdf",
-        ".doc",
-        ".docx",
-        ".xls",
-        ".xlsx",
-        ".ppt",
-        ".pptx",
-        ".mp3",
-        ".mp4",
-        ".wav",
-        ".avi",
-        ".mov",
-        ".pyc",
-        ".pyo",
-        ".so",
-        ".dll",
-        ".exe",
-        ".bin",
-        ".dat",
-        ".elf",
-    }
-)
+# ``BINARY_EXTENSIONS`` is imported from ``...core.constants`` above.
 
 _MAX_SUMMARY_ENTRIES = 20
 _PREVIEW_MAX_FILE_SIZE = 512 * 1024  # 512 KB
@@ -216,7 +174,7 @@ def _build_deployed_log_summary(path: Path, config_path: str) -> str:
 
         # Regular file
         suffix = entry.suffix.lower()
-        if suffix in _BINARY_EXTENSIONS:
+        if suffix in BINARY_EXTENSIONS:
             lines.append(
                 f"- `{entry.name}` ({size}, {mtime}) — "
                 f"binary file, use `read_file` for raw content"
