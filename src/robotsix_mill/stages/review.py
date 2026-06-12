@@ -12,11 +12,16 @@ from __future__ import annotations
 import json
 import logging
 import re
+from pathlib import Path
 
 from ..agents.reviewing import ReviewAsk, ReviewVerdict, run_review_agent
 from ..config import target_branch_for
+from ..config.repos import get_repos_config
 from ..core.models import Ticket
 from ..core.states import State
+from ..forge.auth import github_token
+from ..forge.github import _parse_owner_repo
+from ..vcs import git_ops
 from ._implemented_repos import combined_diff, implemented_repos
 from .base import Outcome, Stage, StageContext
 
@@ -56,6 +61,34 @@ def _paths_from_diff(diff: str) -> list[str]:
             seen.add(path)
             out.append(path)
     return out
+
+
+_WORKFLOW_RE = re.compile(
+    r"uses:\s*([^/\s]+(?:/(?!\.github/(?:workflows|actions)/)[^/\s]+)?)"
+    r"/\.github/(?:workflows|actions)/[^@\s]+",
+    re.IGNORECASE,
+)
+
+
+def _workflow_refs_from_diff(diff: str) -> set[str]:
+    """Extract ``owner/repo`` references from reusable-workflow ``uses:`` lines.
+
+    Matches external references (``uses: owner/repo/.github/workflows/...``
+    or single-org shorthand ``uses: org/.github/workflows/...``).  Relative
+    paths (``./``) and Docker references (``docker://...``) are ignored.
+    Returns a deduplicated set.
+
+    >>> _workflow_refs_from_diff('uses: my-org/my-repo/.github/workflows/ci.yml@v1')
+    {'my-org/my-repo'}
+    >>> _workflow_refs_from_diff('uses: robotsix-mill/.github/workflows/deps-bump.yml@main')
+    {'robotsix-mill'}
+    >>> _workflow_refs_from_diff('uses: ./github/workflows/local.yml')
+    set()
+    """
+    refs: set[str] = set()
+    for m in _WORKFLOW_RE.finditer(diff):
+        refs.add(m.group(1))
+    return refs
 
 
 def _load_file_map(ws) -> set[str] | None:
@@ -328,6 +361,85 @@ class ReviewStage(Stage):
         board_png = ws.artifacts_dir / "board.png"
         screenshot_path = board_png if board_png.exists() else None
 
+        # ── cross-repo reusable-workflow access ──────────────────────
+        # When the diff references sibling-repo workflows via ``uses:``,
+        # clone those repos so the review agent can verify their
+        # interface via read_file.  Clones land under .review-roots/
+        # (ephemeral — discarded with the workspace).  Gracefully skip
+        # repos that can't be found or cloned.
+        extra_roots: list[Path] | None = None
+
+        workflow_refs = _workflow_refs_from_diff(diff)
+        if workflow_refs:
+            # Exclude the current repo — the agent already has repo_dir.
+            current_remote = ctx.repo_config.forge_remote_url or s.forge_remote_url
+            if current_remote:
+                try:
+                    current_owner, current_repo = _parse_owner_repo(current_remote)
+                    current_slug = f"{current_owner}/{current_repo}"
+                    workflow_refs.discard(current_slug)
+                except Exception:
+                    log.debug(
+                        "%s: cannot parse current repo remote, skipping exclusion",
+                        ticket.id,
+                    )
+
+            if workflow_refs:
+                clone_roots: list[Path] = []
+
+                # 1) Already-available meta-layout clones
+                meta_repos_dir = ws.dir / "repos"
+                if meta_repos_dir.is_dir():
+                    for child in meta_repos_dir.iterdir():
+                        if child.is_dir():
+                            clone_roots.append(child)
+
+                # 2) Resolve remaining refs via repos config & clone
+                try:
+                    all_repos = get_repos_config().repos
+                except Exception:
+                    all_repos = {}
+
+                for repo_id, rc in all_repos.items():
+                    remote = rc.forge_remote_url
+                    if not remote:
+                        continue
+                    try:
+                        owner, repo = _parse_owner_repo(remote)
+                    except Exception:
+                        log.debug(
+                            "%s: cannot parse remote %s, skipping",
+                            ticket.id,
+                            remote,
+                        )
+                        continue
+                    slug = f"{owner}/{repo}"
+                    if slug not in workflow_refs:
+                        continue
+
+                    dest = ws.dir / ".review-roots" / repo_id
+                    if dest.is_dir():
+                        clone_roots.append(dest)
+                        workflow_refs.discard(slug)
+                        continue
+
+                    try:
+                        token = github_token(s, repo_config=rc)
+                        git_ops.clone(remote, dest, s.forge_target_branch, token)
+                        clone_roots.append(dest)
+                        workflow_refs.discard(slug)
+                    except Exception:
+                        log.warning(
+                            "%s: failed to clone %s for cross-repo review",
+                            ticket.id,
+                            slug,
+                        )
+
+                if clone_roots:
+                    extra_roots = clone_roots
+
+        # ── end cross-repo setup ─────────────────────────────────────
+
         # Run the blind review agent.
         try:
             verdict: ReviewVerdict = run_review_agent(
@@ -338,6 +450,7 @@ class ReviewStage(Stage):
                 repo_dir=repo_dir,
                 reference_files=modified_paths,
                 screenshot_path=screenshot_path,
+                extra_roots=extra_roots,
             )
         except Exception as e:
             log.exception("%s: review agent error", ticket.id)

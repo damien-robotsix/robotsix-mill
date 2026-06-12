@@ -105,6 +105,7 @@ def test_approve_transitions_to_deliverable(ctx_factory, monkeypatch):
         repo_dir=None,
         reference_files=None,
         screenshot_path=None,
+        extra_roots=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(verdict="APPROVE", comments="lgtm")
@@ -133,6 +134,7 @@ def test_request_changes_transitions_to_ready(ctx_factory, monkeypatch):
         repo_dir=None,
         reference_files=None,
         screenshot_path=None,
+        extra_roots=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(verdict="REQUEST_CHANGES", comments="X is broken")
@@ -168,6 +170,7 @@ def test_needs_discussion_pauses_for_user_reply(ctx_factory, monkeypatch):
         repo_dir=None,
         reference_files=None,
         screenshot_path=None,
+        extra_roots=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(verdict="NEEDS_DISCUSSION", comments="questionable design")
@@ -204,6 +207,7 @@ def test_blind_review_only_diff_and_spec(ctx_factory, monkeypatch):
         repo_dir=None,
         reference_files=None,
         screenshot_path=None,
+        extra_roots=None,
     ):
         captured["diff"] = diff
         captured["spec"] = spec
@@ -240,6 +244,7 @@ def test_agent_error_blocks_resumable(ctx_factory, monkeypatch):
         repo_dir=None,
         reference_files=None,
         screenshot_path=None,
+        extra_roots=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         raise RuntimeError("model unavailable")
@@ -274,6 +279,7 @@ def test_empty_diff_approves_without_agent(ctx_factory, monkeypatch):
         repo_dir=None,
         reference_files=None,
         screenshot_path=None,
+        extra_roots=None,
     ):
         agent_called.append(1)
         return ReviewVerdict(verdict="APPROVE", comments="")
@@ -319,6 +325,7 @@ def test_writes_review_artifact_on_approve(ctx_factory, monkeypatch):
         repo_dir=None,
         reference_files=None,
         screenshot_path=None,
+        extra_roots=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(
@@ -353,6 +360,7 @@ def test_writes_review_artifact_on_request_changes(ctx_factory, monkeypatch):
         repo_dir=None,
         reference_files=None,
         screenshot_path=None,
+        extra_roots=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(
@@ -387,6 +395,7 @@ def test_comment_multiline_collapse(ctx_factory, monkeypatch):
         repo_dir=None,
         reference_files=None,
         screenshot_path=None,
+        extra_roots=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(
@@ -419,6 +428,7 @@ def test_comment_truncation(ctx_factory, monkeypatch):
         repo_dir=None,
         reference_files=None,
         screenshot_path=None,
+        extra_roots=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(
@@ -456,6 +466,7 @@ def test_comment_empty_returns_no_details(ctx_factory, monkeypatch):
         repo_dir=None,
         reference_files=None,
         screenshot_path=None,
+        extra_roots=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(
@@ -507,6 +518,7 @@ def test_request_changes_under_cap(ctx_factory, monkeypatch):
         repo_dir=None,
         reference_files=None,
         screenshot_path=None,
+        extra_roots=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(verdict="REQUEST_CHANGES", comments="fix X")
@@ -547,6 +559,7 @@ def test_request_changes_at_cap_escalates(ctx_factory, monkeypatch):
         repo_dir=None,
         reference_files=None,
         screenshot_path=None,
+        extra_roots=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(verdict="REQUEST_CHANGES", comments="still broken")
@@ -585,6 +598,7 @@ def test_approve_resets_counter(ctx_factory, monkeypatch):
         repo_dir=None,
         reference_files=None,
         screenshot_path=None,
+        extra_roots=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(verdict="APPROVE", comments="lgtm")
@@ -616,6 +630,7 @@ def test_needs_discussion_preserves_counter(ctx_factory, monkeypatch):
         repo_dir=None,
         reference_files=None,
         screenshot_path=None,
+        extra_roots=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(verdict="NEEDS_DISCUSSION", comments="questionable")

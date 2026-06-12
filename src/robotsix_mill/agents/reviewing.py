@@ -141,6 +141,7 @@ def run_review_agent(
     repo_dir: Path | None = None,
     reference_files: list[str] | None = None,
     screenshot_path: Path | None = None,
+    extra_roots: list[Path] | None = None,
 ) -> ReviewVerdict:
     """Run a blind review of *diff* against *spec*.
 
@@ -169,6 +170,12 @@ def run_review_agent(
     the diff so the common case (reviewer wants every modified file)
     skips all its read_file round-trips.
 
+    When *extra_roots* is provided, those directories are added as
+    secondary sandbox roots so the agent can also ``read_file`` and
+    ``list_dir`` inside cloned sibling repositories (e.g. to verify
+    reusable-workflow interfaces referenced in the diff). Paths outside
+    *repo_dir* and outside every *extra_roots* entry are still rejected.
+
     When *screenshot_path* is provided AND the file exists AND the review
     agent is routed to the Claude SDK backend (vision-capable), the PNG
     is read and attached as a ``pydantic_ai.BinaryContent`` image on the
@@ -196,7 +203,7 @@ def run_review_agent(
     if repo_dir is not None:
         from .fs_tools import build_fs_tools
 
-        all_fs_tools = build_fs_tools(repo_dir, settings)
+        all_fs_tools = build_fs_tools(repo_dir, settings, extra_roots=extra_roots)
         # run_command is deliberately NOT included — even sandboxed, executing
         # shell is not read-only. The reviewer can verify file content via
         # read_file + list_dir without arbitrary command execution.
