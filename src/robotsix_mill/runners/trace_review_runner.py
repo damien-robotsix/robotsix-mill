@@ -278,13 +278,17 @@ def _classify_trace(
             flags.append(f"repeated_tool {tool_name} ({count})")
             break  # one is enough to trigger
 
-    # Incomplete trace detection: when the last observation is a tool
-    # call (name doesn't start with "chat "), the trace ended before
-    # the model could synthesise a final answer. Sort by endTime so
-    # ordering is deterministic even when Langfuse reorders.
-    if observations:
+    # Incomplete trace detection: only GENERATION observations represent
+    # LLM model output. SPAN/EVENT observations (root spans, agent spans,
+    # tool calls) are parent containers whose endTime spans their children,
+    # so they always sort last and must not trigger incomplete_trace. Among
+    # the GENERATION observations, the trace is incomplete only when the
+    # latest one is not a "chat " completion (the synthesis step). Sort by
+    # endTime so ordering is deterministic even when Langfuse reorders.
+    gen_obs = [o for o in observations if o.get("type") == "GENERATION"]
+    if gen_obs:
         sorted_obs = sorted(
-            observations,
+            gen_obs,
             key=lambda o: o.get("endTime") or o.get("startTime") or "",
         )
         last_obs = sorted_obs[-1]
