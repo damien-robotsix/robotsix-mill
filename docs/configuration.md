@@ -412,7 +412,7 @@ robotsix-llmio Claude Agent SDK transport.
 | `core.limits.maintenance_requests` | `MILL_MAINTENANCE_REQUEST_LIMIT` | `60` | Per-call request cap for the maintenance agent |
 | — (env-var only) | `MILL_DOC_REQUEST_LIMIT` | `4` | Per-run request cap for the document agent |
 | `core.limits.doc_classifier_requests` | `MILL_DOC_CLASSIFIER_REQUEST_LIMIT` | `3` | Per-call request cap for the doc-classifier gate |
-| — (env-var only) | `MILL_REVIEW_REQUEST_LIMIT` | `20` | Per-run request cap for the review agent |
+| `core.limits.review_requests` | `MILL_REVIEW_REQUEST_LIMIT` | `40` | Per-run request cap for the review agent |
 
 ### 3. Worker pool & retry
 
