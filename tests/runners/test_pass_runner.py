@@ -12,6 +12,7 @@ from robotsix_mill.runners.pass_runner import (
     _format_recent_proposals,
     _render_verified_table,
     _test_file_exists_for_gap,
+    _source_module_exists_for_gap,
     _module_curator_premise_check,
     strip_ephemeral_sections,
     ProposedActionItem,
@@ -752,6 +753,12 @@ def test_test_file_absent_creates_ticket(tmp_path, monkeypatch):
     db.init_db(settings, board_id="test-board")
     service = TicketService(settings, board_id="test-board")
 
+    # The source module must exist on disk so the source-module guard does
+    # not suppress the draft (we are testing the test-file-absent path).
+    src_module = tmp_path / "src" / "robotsix_mill" / "agents" / "nonexistent.py"
+    src_module.parent.mkdir(parents=True, exist_ok=True)
+    src_module.write_text("# source module\n", encoding="utf-8")
+
     memory_file = tmp_path / "memory.md"
     memory_file.write_text("mem", encoding="utf-8")
 
@@ -1393,6 +1400,164 @@ def test_test_file_exists_for_gap_non_routes_runtime_module_no_fallback(tmp_path
         )
         is False
     )
+
+
+# ------------------------------------------------------------------ _source_module_exists_for_gap direct tests
+
+
+def test_source_module_exists_for_gap_present_at_root(tmp_path):
+    """Module present at the repo root → True."""
+    module = tmp_path / "agents" / "coding.py"
+    module.parent.mkdir(parents=True, exist_ok=True)
+    module.write_text("# source\n", encoding="utf-8")
+    assert (
+        _source_module_exists_for_gap(
+            tmp_path, "test gap: add unit tests for agents/coding.py"
+        )
+        is True
+    )
+
+
+def test_source_module_exists_for_gap_present_under_src(tmp_path):
+    """Module present under src/<pkg>/ resolves via the package-root form."""
+    module = (
+        tmp_path / "src" / "robotsix_mill" / "stages" / "refine" / "orchestration.py"
+    )
+    module.parent.mkdir(parents=True, exist_ok=True)
+    module.write_text("# source\n", encoding="utf-8")
+    assert (
+        _source_module_exists_for_gap(
+            tmp_path, "test gap: add unit tests for stages/refine/orchestration.py"
+        )
+        is True
+    )
+
+
+def test_source_module_exists_for_gap_full_src_prefixed_path(tmp_path):
+    """The full src/robotsix_mill/-prefixed form resolves at the repo root."""
+    module = tmp_path / "src" / "robotsix_mill" / "agents" / "coding.py"
+    module.parent.mkdir(parents=True, exist_ok=True)
+    module.write_text("# source\n", encoding="utf-8")
+    assert (
+        _source_module_exists_for_gap(
+            tmp_path,
+            "test gap: add unit tests for src/robotsix_mill/agents/coding.py",
+        )
+        is True
+    )
+
+
+def test_source_module_exists_for_gap_absent(tmp_path):
+    """Module absent from every candidate location → False."""
+    (tmp_path / "src" / "robotsix_mill").mkdir(parents=True, exist_ok=True)
+    assert (
+        _source_module_exists_for_gap(
+            tmp_path,
+            "test gap: add unit tests for stages/refine/orchestration.py",
+        )
+        is False
+    )
+
+
+def test_source_module_exists_for_gap_non_matching_title(tmp_path):
+    """A title that does not match the test-gap pattern passes through (True)."""
+    assert _source_module_exists_for_gap(tmp_path, "some other title") is True
+
+
+def test_source_module_exists_for_gap_non_py(tmp_path):
+    """A module path that does not end in .py passes through (True)."""
+    assert (
+        _source_module_exists_for_gap(
+            tmp_path, "test gap: add unit tests for something weird"
+        )
+        is True
+    )
+
+
+def test_source_module_exists_for_gap_strips_line_range(tmp_path):
+    """A trailing :NN-NN line-range suffix is stripped before resolution."""
+    module = tmp_path / "src" / "robotsix_mill" / "agents" / "coding.py"
+    module.parent.mkdir(parents=True, exist_ok=True)
+    module.write_text("# source\n", encoding="utf-8")
+    assert (
+        _source_module_exists_for_gap(
+            tmp_path, "test gap: add unit tests for agents/coding.py:10-42"
+        )
+        is True
+    )
+
+
+# ------------------------------------------------------------------ source-module guard end-to-end
+
+
+def test_absent_source_module_suppresses_test_gap_draft(tmp_path):
+    """A test-gap draft whose source module is absent from the cloned tree
+    (cross-repo misrouting) is suppressed — no ticket filed."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=["test gap: add unit tests for stages/refine/orchestration.py"],
+        draft_bodies=["Add tests for orchestration.py"],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.TEST_GAP,
+        service=service,
+        settings=settings,
+        repo_dir=tmp_path,
+    )
+
+    assert result.drafts_created == []
+    assert service.list() == []
+
+    db.reset_engine()
+
+
+def test_present_source_module_files_test_gap_draft(tmp_path):
+    """A test-gap draft whose source module DOES exist under src/<pkg>/ is
+    filed normally — legitimate gaps still create tickets."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    module = (
+        tmp_path / "src" / "robotsix_mill" / "stages" / "refine" / "orchestration.py"
+    )
+    module.parent.mkdir(parents=True, exist_ok=True)
+    module.write_text("# source\n", encoding="utf-8")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=["test gap: add unit tests for stages/refine/orchestration.py"],
+        draft_bodies=["Add tests for orchestration.py"],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.TEST_GAP,
+        service=service,
+        settings=settings,
+        repo_dir=tmp_path,
+    )
+
+    assert len(result.drafts_created) == 1
+    assert len(service.list()) == 1
+
+    db.reset_engine()
 
 
 # ------------------------------------------------------------------ load_memory additional edge cases

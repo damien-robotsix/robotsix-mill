@@ -440,6 +440,64 @@ def _test_file_exists_for_gap(repo_dir: Path, title: str) -> bool:
     return False
 
 
+def _source_module_exists_for_gap(repo_dir: Path, title: str) -> bool:
+    """Return ``True`` when the **source** module a test-gap draft names
+    actually exists in the audited repo's cloned tree.
+
+    This is the inverse of ``_test_file_exists_for_gap``: that helper
+    suppresses a draft when the expected *test* file already exists, while
+    this one suppresses a draft when the *source* module is **absent** from
+    the cloned tree — a cross-repo misrouting guard. The test-gap detector
+    occasionally hallucinates module paths from its own knowledge of the mill
+    codebase rather than strictly from the audited tree, filing
+    ``test gap: add unit tests for <module>`` drafts for modules that exist
+    only in another repository.
+
+    Parses titles of the form ``test gap: add unit tests for <module_path>``
+    with the same regex as ``_test_file_exists_for_gap``. Returns ``True``
+    (conservative: do **not** suppress) on any parse failure — i.e. when the
+    title does not match the test-gap pattern, or ``<module_path>`` does not
+    end in ``.py``. The module is resolved flexibly against *repo_dir*,
+    returning ``True`` if any candidate location is an existing file:
+
+    * ``repo_dir / module_path`` (path already relative to the repo root,
+      possibly already including a ``src/<pkg>/`` prefix).
+    * ``repo_dir / "src" / <pkg> / module_path`` for each immediate
+      subdirectory ``<pkg>`` of ``repo_dir / "src"`` (handles the common case
+      where the agent emits the path relative to the package source root,
+      e.g. ``stages/refine/orchestration.py`` →
+      ``src/robotsix_mill/stages/refine/orchestration.py``).
+
+    Returns ``False`` only when the module resolves to none of the candidate
+    locations.
+    """
+    m = re.match(r"^test gap: add unit tests for (.+)", title)
+    if not m:
+        return True
+
+    module_path = m.group(1).strip()
+    # Strip a trailing :NN / :NN-NN line-range suffix if present.
+    module_path = re.sub(r":\d+(?:-\d+)?$", "", module_path).strip()
+
+    # Must end with .py to name a source module — otherwise pass through.
+    if not module_path.endswith(".py"):
+        return True
+
+    # Candidate 1: path already relative to the repo root (possibly already
+    # including a src/<pkg>/ prefix).
+    if (repo_dir / module_path).is_file():
+        return True
+
+    # Candidate 2: path relative to a package source root under src/.
+    src_dir = repo_dir / "src"
+    if src_dir.is_dir():
+        for pkg in src_dir.iterdir():
+            if pkg.is_dir() and (pkg / module_path).is_file():
+                return True
+
+    return False
+
+
 def _module_curator_premise_check(
     repo_dir: Path, title: str, body: str
 ) -> tuple[str, str] | None:
@@ -661,6 +719,19 @@ def run_agent_pass(
             if _test_file_exists_for_gap(repo_dir, title):
                 log.warning(
                     "%s draft skipped — test file(s) already exist on disk: %s",
+                    source_label,
+                    title,
+                )
+                continue
+        # Source-module-existence guard: skip a TEST_GAP draft whose source
+        # module is absent from the audited tree (inverse of the test-file
+        # check above — a cross-repo misrouting guard). HEALTH drafts target a
+        # tests/<dir>/ subdirectory, not a single source module, so they are
+        # deliberately excluded.
+        if source_label == SourceKind.TEST_GAP and repo_dir is not None:
+            if not _source_module_exists_for_gap(repo_dir, title):
+                log.warning(
+                    "%s draft suppressed — source module absent from audited tree: %s",
                     source_label,
                     title,
                 )
