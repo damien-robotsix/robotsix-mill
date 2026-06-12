@@ -684,7 +684,10 @@ class TestRunCoordinator:
         )
         prompt = self.captured["system_prompt"]
         assert prompt.startswith(definition.system_prompt)
-        assert f"\n\nThe repository root (CWD for all run_command calls) is: {tmp_path}" in prompt
+        assert (
+            f"\n\nThe repository root (CWD for all run_command calls) is: {tmp_path}"
+            in prompt
+        )
 
     # -- language_instructions -------------------------------------------
 
@@ -727,7 +730,10 @@ class TestRunCoordinator:
         self._run(settings, tmp_path, language_instructions="")
         prompt = self.captured["system_prompt"]
         assert prompt.startswith(definition.system_prompt)
-        assert f"\n\nThe repository root (CWD for all run_command calls) is: {tmp_path}" in prompt
+        assert (
+            f"\n\nThe repository root (CWD for all run_command calls) is: {tmp_path}"
+            in prompt
+        )
         # No language conventions block when language_instructions is empty.
         assert "## Language conventions" not in prompt
 
