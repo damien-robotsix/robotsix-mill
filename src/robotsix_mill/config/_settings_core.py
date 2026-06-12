@@ -247,6 +247,12 @@ class _CoreSettings(BaseModel):
     # 80 gives headroom; per-run cost ~$0.29 stays well under the
     # per-ticket $ backstop.
     audit_request_limit: int = Field(default=80, ge=1)
+    # Per-call cap for the test-gap agent's tool loop. The test-gap
+    # agent does broad work (explore storms scanning the full repo for
+    # test-coverage gaps) and can saturate the pydantic-ai default of
+    # 50 calls on a genuine run — 80 gives headroom matching the audit
+    # agent's budget for a similar broad-scan workload.
+    test_gap_request_limit: int = Field(default=80, ge=1)
     doc_request_limit: int = Field(default=8)
     # Cheap classifier gate that runs *before* the full doc agent.
     doc_classifier_model: str = Field(default="deepseek/deepseek-v4-flash")
