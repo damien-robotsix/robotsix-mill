@@ -130,7 +130,7 @@ class ImplementationLogicMixin(_ImplementStageBase):
                 from ...runtime.transient_errors import classify_stage_error
 
                 if classify_stage_error(e.cause) == "transient":
-                    raise e.cause
+                    raise e.cause from e
             return _AgentRunOutcome(
                 failure=_SinglePassResult(
                     next_action="return",

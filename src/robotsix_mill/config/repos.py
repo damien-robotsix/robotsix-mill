@@ -367,9 +367,11 @@ def get_repo_config(repo_id: str) -> RepoConfig:
     registry = get_repos_config()
     try:
         return registry.repos[repo_id]
-    except KeyError:
+    except KeyError as err:
         sorted_keys = sorted(registry.repos.keys())
-        raise ConfigError(f"Unknown repo: '{repo_id}'. Known repos: {sorted_keys}")
+        raise ConfigError(
+            f"Unknown repo: '{repo_id}'. Known repos: {sorted_keys}"
+        ) from err
 
 
 def target_branch_for(settings: Settings, repo_config: RepoConfig | None) -> str:

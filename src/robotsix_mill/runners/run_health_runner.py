@@ -256,7 +256,9 @@ def _file_drafts(
     service = TicketService(settings, board_id=board_id)
     seen_titles, seen_gaps = _existing_markers(service)
     created: list[dict] = []
-    triples = list(zip(result.draft_titles, result.draft_bodies, result.gap_ids))
+    triples = list(
+        zip(result.draft_titles, result.draft_bodies, result.gap_ids, strict=True)
+    )
     for title, body, gap_id in triples[:MAX_PROPOSALS]:
         key = normalize(title)[:60]
         gid = (gap_id or "").strip()

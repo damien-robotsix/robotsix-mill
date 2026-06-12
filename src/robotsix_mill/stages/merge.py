@@ -85,7 +85,7 @@ def _load_pr_urls(ws_artifacts_dir: Path) -> list[dict] | None:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as e:
-        raise ValueError(f"pr_urls.json could not be parsed: {e}")
+        raise ValueError(f"pr_urls.json could not be parsed: {e}") from e
     if not isinstance(data, list):
         raise ValueError("pr_urls.json is not a JSON list")
     return data

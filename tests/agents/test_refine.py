@@ -3035,8 +3035,8 @@ def test_refine_keeps_original_title_when_agent_returns_empty(
         monkeypatch.setattr(
             refining,
             "run_refine_agent",
-            lambda **_: RefineResult(
-                split=False, spec_markdown="## Problem\nx\n", title=empty_title
+            lambda _title=empty_title, **_: RefineResult(
+                split=False, spec_markdown="## Problem\nx\n", title=_title
             ),
         )
 

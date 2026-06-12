@@ -137,7 +137,7 @@ def validate_candidate(
             board_id=rc.board_id,
         )
     except ValueError as e:
-        raise HTTPException(400, str(e))
+        raise HTTPException(400, str(e)) from e
     maybe_enqueue(ticket, worker)
 
     updated = update_status(

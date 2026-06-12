@@ -8,6 +8,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from pydantic import ValidationError
+
 from robotsix_mill.agents.expert_loader import (
     ExpertDefinition,
     ExpertMemoryConfig,
@@ -75,7 +77,7 @@ def test_memory_config_partial_overrides():
 
 def test_memory_config_extra_forbid():
     """Unknown keys are rejected."""
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         ExpertMemoryConfig.model_validate(
             {
                 "max_memory_chars": 8000,
@@ -110,7 +112,7 @@ def test_expert_definition_model_validation():
 
 def test_expert_definition_extra_fields_rejected():
     """Unknown top-level keys → ValidationError."""
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         ExpertDefinition.model_validate(
             {
                 "domain": "test-domain",

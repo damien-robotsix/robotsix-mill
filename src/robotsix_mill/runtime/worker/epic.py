@@ -520,7 +520,7 @@ def _run_epic_reprocess(epic_id: str, comment_body: str, settings) -> None:
 
         new_titles: list[str] = []
         new_bodies: list[str] = []
-        for title, body in zip(result.child_titles, result.child_bodies):
+        for title, body in zip(result.child_titles, result.child_bodies, strict=True):
             if title.strip().lower() in existing_titles_lower:
                 log.debug("epic %s: skipping duplicate child '%s'", epic_id, title)
                 continue
@@ -552,7 +552,9 @@ def _run_epic_reprocess(epic_id: str, comment_body: str, settings) -> None:
         )
 
         created_ids: list[str] = []
-        for title, body, dup_note in zip(new_titles, new_bodies, overlap_notes):
+        for title, body, dup_note in zip(
+            new_titles, new_bodies, overlap_notes, strict=True
+        ):
             if dup_note:
                 log.warning(
                     "epic %s: child '%s' flagged as possible duplicate — %s",

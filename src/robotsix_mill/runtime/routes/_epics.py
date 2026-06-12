@@ -75,7 +75,7 @@ def create_epic(
             board_id=board_id or None,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     return enrich_ticket_read(ticket, settings, svc)
 
 
@@ -195,7 +195,10 @@ def generate_children(
 
                 created_ids: list[str] = []
                 for title, body, dup_note in zip(
-                    child_titles, child_bodies, overlap_notes
+                    child_titles,
+                    child_bodies,
+                    overlap_notes,
+                    strict=True,
                 ):
                     if dup_note:
                         log.warning(

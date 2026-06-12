@@ -725,6 +725,7 @@ class RefineAgentMixin:
                     child_titles,
                     child_bodies,
                     overlap_notes,
+                    strict=True,
                 ):
                     if dup_note:
                         log.warning(
@@ -905,7 +906,7 @@ class RefineAgentMixin:
 
         # Create child tickets.
         child_ids: list[str] = []
-        for i, child in enumerate(valid_children):
+        for _i, child in enumerate(valid_children):
             child_ticket = ctx.service.create(
                 title=child["title"],
                 description=child["spec_markdown"],

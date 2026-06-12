@@ -345,7 +345,7 @@ def test_sandbox_injects_pythonpath_for_src_layout(tmp_path, monkeypatch):
     sandbox.run("pytest -q", repo_dir=repo, settings=s)
 
     a = seen["argv"]
-    pairs = list(zip(a, a[1:]))
+    pairs = list(zip(a, a[1:], strict=False))
     assert ("-e", "PYTHONPATH=src") in pairs, (
         f"-e PYTHONPATH=src not found as a flag pair in argv: {a}"
     )

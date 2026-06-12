@@ -371,7 +371,7 @@ def test_run_periodic_pass_imports_agent_module_lazily(tmp_path, monkeypatch):
     fake_module = MagicMock()
     # The agent function must be callable so partial() works.
     fake_agent_fn = MagicMock()
-    setattr(fake_module, "run_audit_agent", fake_agent_fn)
+    fake_module.run_audit_agent = fake_agent_fn
 
     def fake_import_module(name, package=None):
         import_calls.append((name, package))
