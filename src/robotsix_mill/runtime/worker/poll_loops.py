@@ -5,7 +5,7 @@ import json
 import logging
 import re
 import time
-from datetime import datetime, timezone
+from datetime import timezone
 from pathlib import Path
 
 from ...config import RepoConfig, get_repos_config, target_branch_for
@@ -15,11 +15,6 @@ from ..run_registry import RunRegistry
 from ._base import _WorkerBase
 
 log = logging.getLogger("robotsix_mill.worker")
-
-_CI_DEDUP_WINDOW_SECONDS = 40 * 60  # consolidate recurring CI failures
-# for the same workflow+branch within
-# this window of the canonical ticket's
-# last activity
 
 
 class PollLoopsMixin(_WorkerBase):
@@ -552,11 +547,15 @@ class PollLoopsMixin(_WorkerBase):
                         # recurring failures into the canonical ticket via a
                         # comment instead of filing a new ticket. The canonical
                         # ticket is identified by the stable body markers
-                        # (which survive a title rename), and only when its
-                        # last activity is within the freshness window.
+                        # (which survive a title rename). Consolidation applies
+                        # indefinitely to any non-terminal matching canonical —
+                        # recurring CI failures legitimately recur over
+                        # hours/days. The closed/done terminal state is the
+                        # natural boundary: once the failure is resolved the
+                        # canonical is closed, and a genuinely new recurrence
+                        # afterward correctly files a fresh ticket.
                         wf_marker = f"**Workflow:** {wf_name}"
                         branch_marker = f"**Branch:** {target}"
-                        now_dt = datetime.now(timezone.utc)
                         canonical = None
                         canonical_activity = None
                         for t in existing:
@@ -586,10 +585,6 @@ class PollLoopsMixin(_WorkerBase):
                                     c_at = c_at.replace(tzinfo=timezone.utc)
                                 if c_at > last_activity:
                                     last_activity = c_at
-                            if (
-                                now_dt - last_activity
-                            ).total_seconds() > _CI_DEDUP_WINDOW_SECONDS:
-                                continue
                             if (
                                 canonical_activity is None
                                 or last_activity > canonical_activity

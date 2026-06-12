@@ -715,8 +715,10 @@ def test_consolidates_recurrence_into_renamed_canonical(tmp_path, monkeypatch):
     assert "300:newsha" in state["seen"]
 
 
-def test_outside_window_files_new_ticket(tmp_path, monkeypatch):
-    """A canonical whose last activity predates the window → new ticket filed."""
+def test_aged_canonical_still_consolidates(tmp_path, monkeypatch):
+    """A canonical whose last activity is 60+ min old still consolidates the
+    recurrence — there is no freshness window, only the terminal-state
+    boundary."""
     ctx = _ctx(
         tmp_path,
         FORGE_KIND="github",
@@ -724,12 +726,12 @@ def test_outside_window_files_new_ticket(tmp_path, monkeypatch):
         FORGE_TOKEN="tok",
     )
     target = target_branch_for(ctx.settings, ctx.repo_config)
-    _make_canonical_ci_ticket(
+    canonical = _make_canonical_ci_ticket(
         ctx,
         wf_name="Docs",
         target=target,
         title="Root-cause recurring Docs failures",
-        created_minutes_ago=60,  # older than the 40-min window, no comments
+        created_minutes_ago=60,  # aged well past the old 40-min window
     )
 
     _make_fake_forge(
@@ -757,15 +759,23 @@ def test_outside_window_files_new_ticket(tmp_path, monkeypatch):
     monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
     _run_one_cycle(worker, monkeypatch)
 
-    # A new CI ticket IS filed (now two: canonical + fresh).
+    # No new CI ticket — the aged canonical absorbed the recurrence.
     ci_tickets = [t for t in ctx.service.list() if t.source == "ci"]
-    assert len(ci_tickets) == 2
-    assert any(t.title == f"CI failure: Docs on {target}" for t in ci_tickets)
+    assert len(ci_tickets) == 1
+    assert ci_tickets[0].id == canonical.id
+    assert not any(t.title == f"CI failure: Docs on {target}" for t in ci_tickets)
+
+    # A consolidation comment referencing the new run/commit was added.
+    comments = ctx.service.list_comments(canonical.id)
+    assert any("99" in c.body and "newsha" in c.body for c in comments)
 
 
 def test_comment_refreshes_window_across_recurrences(tmp_path, monkeypatch):
-    """Two sequential recurrences both consolidate because the consolidation
-    comment refreshes the freshness window past the original created_at."""
+    """Two sequential recurrences both consolidate into the one canonical.
+
+    Consolidation no longer depends on any freshness window — the aged
+    canonical absorbs each new-commit recurrence regardless of activity age.
+    """
     ctx = _ctx(
         tmp_path,
         FORGE_KIND="github",
@@ -778,15 +788,7 @@ def test_comment_refreshes_window_across_recurrences(tmp_path, monkeypatch):
         wf_name="Docs",
         target=target,
         title="Root-cause recurring Docs failures",
-        created_minutes_ago=60,  # >40 min: created_at alone is outside window
-    )
-    # An earlier consolidation comment 30 min ago keeps the ticket alive into
-    # the first cycle's window.
-    _seed_comment(
-        ctx,
-        canonical.id,
-        "Run [1](http://run/1) also failed ...",
-        datetime.now(timezone.utc) - timedelta(minutes=30),
+        created_minutes_ago=60,
     )
 
     state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
