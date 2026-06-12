@@ -79,8 +79,12 @@ def _trace(**overrides):
 
 
 def _obs(name: str, **overrides):
+    # Model real Langfuse data: "chat …" names are GENERATION (LLM
+    # model calls); everything else defaults to a SPAN (tool-call /
+    # container observation). Callers may override ``type``.
     base = {
         "name": name,
+        "type": "GENERATION" if name.startswith("chat ") else "SPAN",
         "input": None,
         "output": None,
         "level": None,
@@ -298,20 +302,44 @@ class TestClassifier:
         )
         assert "incomplete_trace" not in flags.flags
 
-    def test_incomplete_trace_when_last_obs_is_tool_call(self, settings):
-        """Last observation is a tool call (not chat) → incomplete_trace."""
+    def test_incomplete_trace_when_last_gen_is_not_chat(self, settings):
+        """Latest GENERATION is not a "chat " completion → incomplete_trace.
+
+        A trailing tool-call SPAN does not count; the trace is incomplete
+        because the most recent GENERATION never produced a final answer.
+        """
         obs = [
-            _obs("chat deepseek-v4"),
-            _obs("read_file"),
+            _obs("chat deepseek-v4", endTime="2026-05-30T12:00:10+00:00"),
+            _obs(
+                "summary",
+                type="GENERATION",
+                endTime="2026-05-30T12:00:20+00:00",
+            ),
+            _obs("read_file", endTime="2026-05-30T12:00:30+00:00"),
         ]
         flags = _classify_trace(_trace(), settings, observations=obs)
         assert "incomplete_trace" in flags.flags
 
-    def test_no_incomplete_trace_when_last_obs_is_chat(self, settings):
-        """Last observation is a chat generation → no incomplete_trace."""
+    def test_no_incomplete_trace_when_last_gen_is_chat(self, settings):
+        """Latest GENERATION is a chat completion → no incomplete_trace,
+        even with a trailing tool-call SPAN."""
         obs = [
-            _obs("read_file"),
-            _obs("chat deepseek-v4"),
+            _obs("read_file", endTime="2026-05-30T12:00:05+00:00"),
+            _obs("chat deepseek-v4", endTime="2026-05-30T12:00:10+00:00"),
+        ]
+        flags = _classify_trace(_trace(), settings, observations=obs)
+        assert "incomplete_trace" not in flags.flags
+
+    def test_incomplete_trace_suppressed_for_trailing_tool_span(self, settings):
+        """Reported false positive: a "chat …" GENERATION plus a root/agent
+        SPAN whose endTime sorts strictly later must NOT flag incomplete."""
+        obs = [
+            _obs("chat haiku", endTime="2026-06-12T11:37:21.879+00:00"),
+            _obs(
+                "retrospect",
+                type="SPAN",
+                endTime="2026-06-12T11:37:21.983+00:00",
+            ),
         ]
         flags = _classify_trace(_trace(), settings, observations=obs)
         assert "incomplete_trace" not in flags.flags
@@ -350,13 +378,23 @@ class TestClassifier:
         assert "incomplete_trace" in flags.flags
         assert "restart_correlated" not in flags.flags
 
-    def test_restart_correlated_with_observations_and_last_tool_call(self, settings):
-        """restart_correlated fires via observation path when last obs is a
-        tool call and timestamps align."""
+    def test_restart_correlated_with_observations_and_incomplete_gen(self, settings):
+        """restart_correlated fires via observation path when the latest
+        GENERATION is incomplete (non-"chat ") and timestamps align.
+
+        The trailing ``run_command`` SPAN supplies the latest endTime for
+        restart correlation (via the unfiltered ``_extract_trace_end_time``)
+        but does not itself drive ``incomplete_trace``.
+        """
         started = datetime(2026, 5, 30, 12, 0, 0, tzinfo=timezone.utc)
         obs_end = datetime(2026, 5, 30, 12, 0, 45, tzinfo=timezone.utc)
         obs = [
             _obs("chat deepseek-v4", endTime="2026-05-30T12:00:10+00:00"),
+            _obs(
+                "summary",
+                type="GENERATION",
+                endTime="2026-05-30T12:00:20+00:00",
+            ),
             _obs("run_command", endTime=obs_end.isoformat()),
         ]
         flags = _classify_trace(
@@ -542,9 +580,10 @@ class TestRunTraceReviewPass:
         )
         assert result.traces_flagged == 1
         assert "classifier_flags" in captured
-        # Forwarded verbatim from the classifier's _TraceFlags.flags
-        # (the lone tool error plus the incomplete-trace tail flag).
-        assert captured["classifier_flags"] == ["tool_errors (1)", "incomplete_trace"]
+        # Forwarded verbatim from the classifier's _TraceFlags.flags. The
+        # lone observation is a tool-call SPAN (no GENERATION), so only the
+        # tool-error flag fires — the incomplete-trace tail flag does not.
+        assert captured["classifier_flags"] == ["tool_errors (1)"]
 
     def test_dedup_against_existing_open_trace_review_ticket(
         self,
