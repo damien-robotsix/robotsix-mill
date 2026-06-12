@@ -69,7 +69,12 @@ jobs:
           name: python-package-distributions
           path: dist/
 
-      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2
+      # superfluous-actions: this advisory suggests `gh release upload`
+      # in a script step. We keep softprops/action-gh-release because it
+      # attaches the built distributions to the triggering release event
+      # without the caller having to thread a tag name through this
+      # reusable workflow. Pinned by SHA; advisory is informational only.
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2  # zizmor: ignore[superfluous-actions]
         with:
           files: dist/*
 
@@ -85,4 +90,4 @@ jobs:
           name: python-package-distributions
           path: dist/
 
-      - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # v1
+      - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # v1.14.0
