@@ -807,6 +807,21 @@ def test_validation_result_decide_retry():
     assert vr.iterations_used == 1
 
 
+def test_validation_result_decide_escalate():
+    """A failing gate on the last allowed attempt routes to escalate —
+    no LLM involvement, the bound is enforced here."""
+    vr = ValidationResult.decide(
+        passed=False,
+        iterations=3,
+        max_iters=3,
+        feedback="still broken",
+    )
+    assert vr.next_action == "escalate"
+    assert vr.passed is False
+    assert vr.failure_summary == "still broken"
+    assert vr.iterations_used == 3
+
+
 def test_test_agent_distill_injects_file_map_scope(tmp_path, monkeypatch):
     """When artifacts/file_map.json exists alongside repo_dir, the distill
     sub-agent's user message includes a 'Declared file scope' block listing
@@ -961,13 +976,20 @@ def test_test_agent_distill_explicit_file_map_override(tmp_path, monkeypatch):
     monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
     monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
 
-    explicit_map = ["only/this/file.py"]
-    passed, fb = testing.run_test_agent(
-        settings=s, repo_dir=tmp_path, file_map=explicit_map,
-    )
-    assert passed is False
+    try:
+        explicit_map = ["only/this/file.py"]
+        passed, fb = testing.run_test_agent(
+            settings=s, repo_dir=tmp_path, file_map=explicit_map,
+        )
+        assert passed is False
 
-    prompt = cap.get("prompt", "")
-    assert "Declared file scope (prefer fixes within these files):" in prompt
-    assert "  - only/this/file.py" in prompt
-    assert "should/be/ignored.py" not in prompt
+        prompt = cap.get("prompt", "")
+        assert "Declared file scope (prefer fixes within these files):" in prompt
+        assert "  - only/this/file.py" in prompt
+        assert "should/be/ignored.py" not in prompt
+    finally:
+        fp = artifacts_dir / "file_map.json"
+        if fp.exists():
+            fp.unlink()
+        if artifacts_dir.exists():
+            artifacts_dir.rmdir()
