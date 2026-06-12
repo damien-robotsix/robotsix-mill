@@ -1,0 +1,362 @@
+"""Read-only query surface of :class:`TicketService` (``_QueryMixin``)."""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Iterable, Sequence
+from typing import TYPE_CHECKING
+
+from sqlmodel import select
+
+from .. import db
+from ...config import Settings
+from ..models import (
+    Comment,
+    ProposedAction,
+    ProposedActionStatus,
+    SourceKind,
+    Ticket,
+    TicketEvent,
+)
+from ..states import State
+from ._base import _ServiceBase
+from ._helpers import _parse_depends_on_str
+
+if TYPE_CHECKING:
+    from ...config import RepoConfig
+
+log = logging.getLogger("robotsix_mill.service")
+
+
+class _QueryMixin(_ServiceBase):
+    """Read-only access: lookups, listings, history, and proposed-action reads."""
+
+    # --- reads ---
+    def get(self, ticket_id: str) -> Ticket | None:
+        """Look up a :class:`Ticket` by id, or return ``None``.
+
+        With per-repo DBs, callers that don't carry a ``board_id``
+        (most prominently the agent tools at
+        ``agents/read_ticket.py``, ``close_thread.py``,
+        ``reply_thread.py``) need a single ID-based lookup that
+        works across every repo. When ``self.board_id`` is empty,
+        fan out: try the default DB first (legacy / repo-less rows),
+        then each registered repo's DB until we find the ticket.
+        """
+        if not self.board_id:
+            return self._get_anywhere(ticket_id)
+        with db.session(self.settings, self.board_id) as s:
+            ticket = s.get(Ticket, ticket_id)
+        if ticket is not None:
+            self._resolve_board_id(ticket)
+            return ticket
+        # Bound-board miss — fall back to fanout. With per-repo DBs
+        # the worker's & routes' default service is pinned to the
+        # first repo, so any ticket in another repo's DB would 404
+        # without this fallback.
+        return self._get_anywhere(ticket_id)
+
+    def _get_anywhere(self, ticket_id: str) -> Ticket | None:
+        """Search every per-repo DB for *ticket_id*. Ticket IDs are
+        globally unique so the first hit is the answer.
+
+        Discovers candidate boards two ways so we don't miss any:
+        1. From the registered :class:`ReposRegistry` (production path
+           — repos.yaml configured).
+        2. By scanning ``data_dir`` for ``<board>/mill.db`` files
+           (robust to test setups that don't register repos but write
+           per-board DBs via the migration / direct-board service).
+        """
+        from ...config import get_repos_config
+
+        candidates: list[str] = []
+        try:
+            for rc in get_repos_config().repos.values():
+                if rc.board_id and rc.board_id not in candidates:
+                    candidates.append(rc.board_id)
+        except Exception:
+            pass
+        # Disk-scan fallback for boards not in the registry.
+        try:
+            for sub in self.settings.data_dir.iterdir():
+                if sub.is_dir() and (sub / "mill.db").exists():
+                    if sub.name not in candidates:
+                        candidates.append(sub.name)
+        except OSError:
+            pass
+        for board_id in candidates:
+            with db.session(self.settings, board_id) as s:
+                ticket = s.get(Ticket, ticket_id)
+                if ticket is not None:
+                    self._resolve_board_id(ticket)
+                    return ticket
+        return None
+
+    def list(
+        self,
+        state: State | None = None,
+        exclude_states: Iterable[State] | None = None,
+    ) -> list[Ticket]:
+        """List tickets, optionally filtered by *state* or excluding
+        *exclude_states* (e.g. terminal CLOSED/DONE for a fast board).
+
+        Results are ordered by ``created_at`` ascending.
+        """
+        with db.session(self.settings, self.board_id) as s:
+            stmt = select(Ticket).order_by(Ticket.created_at)
+            if state is not None:
+                stmt = stmt.where(Ticket.state == state)
+            if exclude_states:
+                stmt = stmt.where(Ticket.state.notin_(list(exclude_states)))
+            tickets = list(s.exec(stmt).all())
+        for t in tickets:
+            self._resolve_board_id(t)
+        return tickets
+
+    def _board_for(self, ticket_id: str) -> str:
+        """Resolve the actual board that holds *ticket_id*.
+
+        Returns ``self.board_id`` when the bound DB has the row, else
+        fans out via ``_get_anywhere`` and returns the discovered
+        board.  Raises ``ValueError`` when the ticket cannot be found
+        in any configured board and ``self.board_id`` is empty.
+        """
+        if self.board_id:
+            with db.session(self.settings, self.board_id) as s:
+                if s.get(Ticket, ticket_id) is not None:
+                    return self.board_id
+        t = self._get_anywhere(ticket_id)
+        if t is not None:
+            return t.board_id or self.board_id or ""
+        if self.board_id:
+            return self.board_id
+        raise ValueError(f"Ticket {ticket_id} not found in any configured board")
+
+    def _resolve_board_id(self, ticket: Ticket) -> None:
+        """Assign *ticket* a ``board_id`` when it is missing (legacy rows).
+
+        Legacy tickets (created before multi-repo support) have an empty
+        ``board_id``.  They are assigned ``settings.default_repo_id`` at
+        read time when it is configured.  When ``default_repo_id`` is
+        also empty the ticket is left as-is (the operator must configure
+        the default before multi-repo routing can work for legacy rows).
+        """
+        if ticket.board_id:
+            return
+        default = self.settings.default_repo_id
+        if default:
+            ticket.board_id = default
+
+    def history(self, ticket_id: str) -> list[TicketEvent]:
+        """Return the :class:`TicketEvent` log for *ticket_id*, ordered by ``at``."""
+        board = self._board_for(ticket_id)
+        with db.session(self.settings, board) as s:
+            stmt = (
+                select(TicketEvent)
+                .where(TicketEvent.ticket_id == ticket_id)
+                .order_by(TicketEvent.at)
+            )
+            return list(s.exec(stmt).all())
+
+    def recent_proposals_for(
+        self,
+        source: SourceKind,
+        limit: int = 100,
+    ) -> list[Ticket]:
+        """Return up to *limit* tickets from *source*, most recent first."""
+        with db.session(self.settings, self.board_id) as s:
+            stmt = (
+                select(Ticket)
+                .where(Ticket.source == source)
+                .order_by(Ticket.created_at.desc())
+                .limit(limit)
+            )
+            return list(s.exec(stmt).all())
+
+    def recent_tickets(
+        self,
+        limit: int = 100,
+        *,
+        sources: Sequence[SourceKind] | None = None,
+        board_id: str | None = None,
+    ) -> list[Ticket]:
+        """Return up to *limit* tickets, most recent first.
+
+        Source-agnostic counterpart to :meth:`recent_proposals_for`:
+        ``sources=None`` returns recent tickets across ALL sources,
+        while a sequence unions the listed source kinds. *board_id*
+        overrides the service's own board when given.
+        """
+        board = board_id if board_id is not None else self.board_id
+        with db.session(self.settings, board) as s:
+            stmt = select(Ticket)
+            if sources is not None:
+                stmt = stmt.where(Ticket.source.in_(list(sources)))
+            stmt = stmt.order_by(Ticket.created_at.desc()).limit(limit)
+            return list(s.exec(stmt).all())
+
+    def list_proposed_actions(
+        self,
+        source: str | None = None,
+        *,
+        status: ProposedActionStatus | None = None,
+        exclude_status: ProposedActionStatus | None = ProposedActionStatus.PENDING,
+    ) -> list[ProposedAction]:
+        """Return ``ProposedAction`` rows on this board, newest first.
+
+        Three optional, orthogonal filters:
+
+        * ``source`` — restrict to one producing agent label.
+        * ``status`` — keep ONLY rows in this status.
+        * ``exclude_status`` — drop rows in this status; **defaults to
+          ``PENDING``** so the pass-runner verification path
+          (``list_proposed_actions(source=...)``) gets decided rows only.
+          The GET ``/proposed-actions?status=`` route passes
+          ``exclude_status=None`` to filter purely by ``status``.
+        """
+        with db.session(self.settings, self.board_id) as s:
+            stmt = select(ProposedAction)
+            if source is not None:
+                stmt = stmt.where(ProposedAction.source == source)
+            if status is not None:
+                stmt = stmt.where(ProposedAction.status == status)
+            if exclude_status is not None:
+                stmt = stmt.where(ProposedAction.status != exclude_status)
+            stmt = stmt.order_by(ProposedAction.created_at.desc())
+            return list(s.exec(stmt).all())
+
+    def get_proposed_action(self, action_id: int) -> ProposedAction | None:
+        """Single-row lookup by primary key; returns ``None`` on miss."""
+        with db.session(self.settings, self.board_id) as s:
+            return s.get(ProposedAction, action_id)
+
+    def list_children(self, ticket_id: str) -> list[Ticket]:
+        """Return all tickets whose ``parent_id`` equals *ticket_id*."""
+        with db.session(self.settings, self._board_for(ticket_id)) as s:
+            stmt = select(Ticket).where(Ticket.parent_id == ticket_id)
+            return list(s.exec(stmt).all())
+
+    def cumulative_cost(
+        self,
+        ticket_id: str,
+        settings: Settings,
+        *,
+        blocking: bool = True,
+        repo_config: "RepoConfig | None" = None,
+    ) -> float:
+        """Return the cumulative cost of *ticket_id* and all descendants (recursive).
+
+        Uses the same blocking/cache-only mode as the caller — blocking
+        for per-ticket detail views, cache-only for the polled /tickets list.
+
+        When *repo_config* is provided, its Langfuse credentials are used
+        for the cost lookup (per-repo isolation).
+        """
+        from ...langfuse.client import session_cost, session_cost_cached
+
+        cost_fn = (
+            (lambda sid: session_cost(settings, sid, repo_config=repo_config))
+            if blocking
+            else session_cost_cached
+        )
+
+        total = cost_fn(ticket_id)
+        for descendant in self._all_descendants(ticket_id):
+            total += cost_fn(descendant.id)
+        return total
+
+    def _all_descendants(self, ticket_id: str) -> list[Ticket]:
+        """Return every descendant of *ticket_id* at any depth (BFS, cycle-safe)."""
+        result: list[Ticket] = []
+        visited: set[str] = {ticket_id}
+        queue: list[str] = [ticket_id]
+        with db.session(self.settings, self._board_for(ticket_id)) as s:
+            while queue:
+                parent = queue.pop(0)
+                children = list(
+                    s.exec(select(Ticket).where(Ticket.parent_id == parent)).all()
+                )
+                for child in children:
+                    if child.id not in visited:
+                        visited.add(child.id)
+                        result.append(child)
+                        queue.append(child.id)
+        return result
+
+    def get_epic_context(self, ticket: Ticket) -> str:
+        """Return the epic description wrapped in an ``epic-context``
+        fenced block if *ticket* has a parent whose ``kind`` is
+        ``"epic"``, or ``""`` otherwise."""
+        if ticket.parent_id is None:
+            return ""
+        parent = self.get(ticket.parent_id)
+        if parent is None or parent.kind != "epic":
+            return ""
+        desc = self.workspace(parent).read_description()
+        if not desc:
+            return ""
+        from ...agents.prompt_blocks import section
+
+        return section("epic-context", desc)
+
+    # --- dependency helpers ---
+
+    @staticmethod
+    def _parse_depends_on(ticket: Ticket) -> list[str]:
+        """Parse the JSON list of dependency IDs from *ticket*."""
+        return _parse_depends_on_str(ticket.depends_on)
+
+    def unmet_dependencies(self, ticket: Ticket) -> list[str]:
+        """Return the subset of *ticket*'s ``depends_on`` IDs that are
+        NOT in a terminal state (CLOSED or DONE).
+
+        * A missing/deleted dep ID is treated as satisfied (warning).
+        * A dep that itself directly depends on *ticket* (cycle A↔B) is
+          treated as satisfied (warning).
+        """
+        dep_ids = self._parse_depends_on(ticket)
+        if not dep_ids:
+            return []
+
+        unmet: list[str] = []
+        for dep_id in dep_ids:
+            dep_ticket = self.get(dep_id)
+            if dep_ticket is None:
+                log.debug(
+                    "ticket %s: dependency %s not found — treating as satisfied",
+                    ticket.id,
+                    dep_id,
+                )
+                continue
+
+            # Direct cycle: A → B, B → A
+            dep_deps = self._parse_depends_on(dep_ticket)
+            if ticket.id in dep_deps:
+                log.debug(
+                    "ticket %s: direct cycle with dependency %s — treating as satisfied",
+                    ticket.id,
+                    dep_id,
+                )
+                continue
+
+            if dep_ticket.state in (State.CLOSED, State.DONE):
+                continue
+
+            unmet.append(dep_id)
+
+        return unmet
+
+    # --- comments ---
+    def list_comments(self, ticket_id: str) -> list[Comment]:
+        """Return all comments for *ticket_id*, ordered oldest-first.
+        Raises ``KeyError`` if the ticket does not exist."""
+        with db.session(self.settings, self._board_for(ticket_id)) as s:
+            ticket = s.get(Ticket, ticket_id)
+            if ticket is None:
+                raise KeyError(ticket_id)
+            stmt = (
+                select(Comment)
+                .where(Comment.ticket_id == ticket_id)
+                .order_by(Comment.created_at)
+            )
+            return list(s.exec(stmt).all())
