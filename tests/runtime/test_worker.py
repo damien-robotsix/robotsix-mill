@@ -703,6 +703,10 @@ async def test_transient_retry_succeeds(ctx, service, monkeypatch):
             return Outcome(State.HUMAN_ISSUE_APPROVAL, "refined on retry")
 
     monkeypatch.setitem(registry.STAGES, "refine", FlakyRefine())
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.transient_errors.network_available",
+        lambda host, **kw: True,
+    )
     ctx.settings.stage_retry_max_attempts = 3
     ctx.settings.stage_retry_base_delay = 0.001
     ctx.settings.stage_retry_max_delay = 0.001
