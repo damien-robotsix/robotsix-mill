@@ -2,6 +2,7 @@
 
 import json
 import time
+from datetime import datetime, timedelta, timezone
 
 
 from robotsix_mill.config import (
@@ -9,8 +10,10 @@ from robotsix_mill.config import (
     ReposRegistry,
     Settings,
     _reset_repos_config,
+    target_branch_for,
 )
 from robotsix_mill.core import db
+from robotsix_mill.core.models import Comment, SourceKind, Ticket
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.runtime.worker import Worker
@@ -597,3 +600,238 @@ def test_existing_pr_ci_fix_path_still_works(tmp_path, monkeypatch):
     out = CFS().run(t, ctx)
     assert out.next_state is State.IMPLEMENT_COMPLETE
     assert push_seen["branch"] == f"mill/{t.id}"
+
+
+# ---------------------------------------------------------------------------
+# Composite (workflow, branch) consolidation dedup.
+# ---------------------------------------------------------------------------
+
+
+def _run_one_cycle(worker, monkeypatch):
+    """Drive exactly one CI monitor poll cycle then cancel the loop."""
+    import asyncio
+
+    loop = asyncio.new_event_loop()
+
+    async def _run():
+        async def _fast_sleep(s):
+            if s >= 1:
+                raise asyncio.CancelledError()
+
+        monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
+        try:
+            await worker._ci_monitor_poll_loop()
+        except asyncio.CancelledError:
+            pass
+
+    loop.run_until_complete(_run())
+    loop.close()
+
+
+def _set_ticket_created_at(ctx, ticket_id, when):
+    with db.session(ctx.settings, "test-board") as s:
+        t = s.get(Ticket, ticket_id)
+        t.created_at = when
+        s.add(t)
+        s.commit()
+
+
+def _seed_comment(ctx, ticket_id, body, when):
+    with db.session(ctx.settings, "test-board") as s:
+        c = Comment(ticket_id=ticket_id, body=body, author="user")
+        c.created_at = when
+        s.add(c)
+        s.commit()
+
+
+def _make_canonical_ci_ticket(ctx, wf_name, target, title, created_minutes_ago):
+    """Create a non-terminal source=ci ticket carrying the body markers but
+    with a renamed title, aged *created_minutes_ago* in the past."""
+    body = (
+        f"**Workflow:** {wf_name}\n"
+        f"**Branch:** {target}\n"
+        f"**Run:** [1](http://run/1)\n"
+        f"**Commit:** `old-sha`\n"
+    )
+    t = ctx.service.create(title=title, description=body, source=SourceKind.CI)
+    when = datetime.now(timezone.utc) - timedelta(minutes=created_minutes_ago)
+    _set_ticket_created_at(ctx, t.id, when)
+    return t
+
+
+def test_consolidates_recurrence_into_renamed_canonical(tmp_path, monkeypatch):
+    """A new-commit recurrence folds into a renamed canonical via a comment."""
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    target = target_branch_for(ctx.settings, ctx.repo_config)
+    canonical = _make_canonical_ci_ticket(
+        ctx,
+        wf_name="Docs",
+        target=target,
+        title="Root-cause recurring Docs failures",
+        created_minutes_ago=10,
+    )
+
+    _make_fake_forge(
+        monkeypatch,
+        runs=[
+            {
+                "id": 99,
+                "name": "Docs",
+                "workflow_id": 300,
+                "head_sha": "newsha",
+                "conclusion": "failure",
+                "html_url": "http://run/99",
+                "created_at": "2026-06-12T09:00:00Z",
+            },
+        ],
+        logs="boom\n",
+    )
+
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    if state_path.exists():
+        state_path.unlink()
+
+    worker = Worker(ctx)
+    worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
+    _run_one_cycle(worker, monkeypatch)
+
+    # No new CI ticket — only the canonical remains.
+    ci_tickets = [t for t in ctx.service.list() if t.source == "ci"]
+    assert len(ci_tickets) == 1
+    assert ci_tickets[0].id == canonical.id
+
+    # A consolidation comment referencing the new run/commit was added.
+    comments = ctx.service.list_comments(canonical.id)
+    assert any("99" in c.body and "newsha" in c.body for c in comments)
+
+    # The new commit key is recorded in seen.
+    state = json.loads(state_path.read_text("utf-8"))
+    assert "300:newsha" in state["seen"]
+
+
+def test_outside_window_files_new_ticket(tmp_path, monkeypatch):
+    """A canonical whose last activity predates the window → new ticket filed."""
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    target = target_branch_for(ctx.settings, ctx.repo_config)
+    _make_canonical_ci_ticket(
+        ctx,
+        wf_name="Docs",
+        target=target,
+        title="Root-cause recurring Docs failures",
+        created_minutes_ago=60,  # older than the 40-min window, no comments
+    )
+
+    _make_fake_forge(
+        monkeypatch,
+        runs=[
+            {
+                "id": 99,
+                "name": "Docs",
+                "workflow_id": 300,
+                "head_sha": "newsha",
+                "conclusion": "failure",
+                "html_url": "http://run/99",
+                "created_at": "2026-06-12T09:00:00Z",
+            },
+        ],
+        logs="boom\n",
+    )
+
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    if state_path.exists():
+        state_path.unlink()
+
+    worker = Worker(ctx)
+    worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
+    _run_one_cycle(worker, monkeypatch)
+
+    # A new CI ticket IS filed (now two: canonical + fresh).
+    ci_tickets = [t for t in ctx.service.list() if t.source == "ci"]
+    assert len(ci_tickets) == 2
+    assert any(t.title == f"CI failure: Docs on {target}" for t in ci_tickets)
+
+
+def test_comment_refreshes_window_across_recurrences(tmp_path, monkeypatch):
+    """Two sequential recurrences both consolidate because the consolidation
+    comment refreshes the freshness window past the original created_at."""
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    target = target_branch_for(ctx.settings, ctx.repo_config)
+    canonical = _make_canonical_ci_ticket(
+        ctx,
+        wf_name="Docs",
+        target=target,
+        title="Root-cause recurring Docs failures",
+        created_minutes_ago=60,  # >40 min: created_at alone is outside window
+    )
+    # An earlier consolidation comment 30 min ago keeps the ticket alive into
+    # the first cycle's window.
+    _seed_comment(
+        ctx,
+        canonical.id,
+        "Run [1](http://run/1) also failed ...",
+        datetime.now(timezone.utc) - timedelta(minutes=30),
+    )
+
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    if state_path.exists():
+        state_path.unlink()
+
+    forge = _make_fake_forge(monkeypatch, logs="boom\n")
+    worker = Worker(ctx)
+    worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
+
+    # Cycle 1: recurrence on commit shaA.
+    forge.runs = [
+        {
+            "id": 50,
+            "name": "Docs",
+            "workflow_id": 300,
+            "head_sha": "shaA",
+            "conclusion": "failure",
+            "html_url": "http://run/50",
+            "created_at": "2026-06-12T08:37:00Z",
+        },
+    ]
+    _run_one_cycle(worker, monkeypatch)
+
+    # Cycle 2: recurrence on a new commit shaB — relies on cycle 1's comment
+    # (now) keeping the window fresh.
+    forge.runs = [
+        {
+            "id": 51,
+            "name": "Docs",
+            "workflow_id": 300,
+            "head_sha": "shaB",
+            "conclusion": "failure",
+            "html_url": "http://run/51",
+            "created_at": "2026-06-12T09:00:00Z",
+        },
+    ]
+    _run_one_cycle(worker, monkeypatch)
+
+    # Still only the canonical CI ticket — zero duplicates filed.
+    ci_tickets = [t for t in ctx.service.list() if t.source == "ci"]
+    assert len(ci_tickets) == 1
+    assert ci_tickets[0].id == canonical.id
+
+    comments = ctx.service.list_comments(canonical.id)
+    assert any("50" in c.body and "shaA" in c.body for c in comments)
+    assert any("51" in c.body and "shaB" in c.body for c in comments)

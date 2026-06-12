@@ -5,15 +5,21 @@ import json
 import logging
 import re
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from ...config import RepoConfig, get_repos_config, target_branch_for
-from ...core.models import SourceKind
+from ...core.models import Comment, SourceKind
 from ..run_registry import RunRegistry
 
 from ._base import _WorkerBase
 
 log = logging.getLogger("robotsix_mill.worker")
+
+_CI_DEDUP_WINDOW_SECONDS = 40 * 60  # consolidate recurring CI failures
+# for the same workflow+branch within
+# this window of the canonical ticket's
+# last activity
 
 
 class PollLoopsMixin(_WorkerBase):
@@ -536,22 +542,92 @@ class PollLoopsMixin(_WorkerBase):
                         run_id_val = run.get("id")
                         title = f"CI failure: {wf_name} on {target}"
 
-                        # One OPEN ci ticket per workflow: if a non-terminal
-                        # source=ci ticket with this title already exists,
-                        # don't duplicate.
-                        if any(
-                            t.source == SourceKind.CI
-                            and t.title == title
-                            and t.state.value not in ("closed", "done")
-                            for t in existing
-                        ):
-                            continue
-
-                        # Also avoid re-filing for the exact same failing
-                        # commit.
+                        # Cheap first guard: avoid re-filing or re-commenting
+                        # for the exact same failing commit.
                         key = f"{wf}:{run.get('head_sha')}"
                         if key in seen:
                             continue
+
+                        # Robust (workflow, branch) dedup: consolidate
+                        # recurring failures into the canonical ticket via a
+                        # comment instead of filing a new ticket. The canonical
+                        # ticket is identified by the stable body markers
+                        # (which survive a title rename), and only when its
+                        # last activity is within the freshness window.
+                        wf_marker = f"**Workflow:** {wf_name}"
+                        branch_marker = f"**Branch:** {target}"
+                        now_dt = datetime.now(timezone.utc)
+                        canonical = None
+                        canonical_activity = None
+                        for t in existing:
+                            if t.source != SourceKind.CI:
+                                continue
+                            if t.state.value in ("closed", "done"):
+                                continue
+                            body_text = service.workspace(t).read_description() or ""
+                            if wf_marker not in body_text:
+                                continue
+                            if branch_marker not in body_text:
+                                continue
+                            # last-activity = max(created_at, latest comment).
+                            last_activity = t.created_at
+                            if last_activity.tzinfo is None:
+                                last_activity = last_activity.replace(
+                                    tzinfo=timezone.utc
+                                )
+                            comments: list[Comment] = []
+                            try:
+                                comments = service.list_comments(t.id)
+                            except Exception:
+                                comments = []
+                            for c in comments:
+                                c_at = c.created_at
+                                if c_at.tzinfo is None:
+                                    c_at = c_at.replace(tzinfo=timezone.utc)
+                                if c_at > last_activity:
+                                    last_activity = c_at
+                            if (
+                                now_dt - last_activity
+                            ).total_seconds() > _CI_DEDUP_WINDOW_SECONDS:
+                                continue
+                            if (
+                                canonical_activity is None
+                                or last_activity > canonical_activity
+                            ):
+                                canonical = t
+                                canonical_activity = last_activity
+
+                        if canonical is not None:
+                            log.info(
+                                "CI monitor (%s): recurring failure — %s "
+                                "(run %s) on %s, consolidating into %s",
+                                repo_label,
+                                wf_name,
+                                run_id_val,
+                                target,
+                                canonical.id,
+                            )
+                            comment_body = (
+                                f"Run [{run_id_val}]({run.get('html_url', '')}) "
+                                f"also failed at commit "
+                                f"`{run.get('head_sha', '')}` on "
+                                f"{run.get('created_at', '')} "
+                                f"({wf_name} on {target})."
+                            )
+                            try:
+                                service.add_comment(canonical.id, body=comment_body)
+                            except Exception:
+                                log.warning(
+                                    "CI monitor: failed to add consolidation "
+                                    "comment to %s for run %s",
+                                    canonical.id,
+                                    run_id_val,
+                                )
+                            # Mark the commit as handled regardless, so a
+                            # transient comment failure does not loop-spam.
+                            seen[key] = now
+                            continue
+
                         log.info(
                             "CI monitor (%s): new failure — %s (run %s) on %s",
                             repo_label,
