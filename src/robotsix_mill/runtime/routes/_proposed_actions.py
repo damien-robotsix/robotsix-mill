@@ -6,7 +6,9 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from ...config import Settings
 from ...core.models import ProposedAction, ProposedActionStatus
+from ...core.service import TicketService
 from ..deps import get_service, get_settings
 from ._repo_helpers import _resolve_board_id
 
@@ -101,9 +103,9 @@ def _resolve_service_for_action(
     action_id: int,
     repo_id: str | None,
     request: Request,
-    settings,
-    default_svc,
-):
+    settings: Settings,
+    default_svc: TicketService,
+) -> TicketService:
     """Return the TicketService that owns *action_id*, or raise 404.
 
     When *repo_id* is a specific repo (not ``None`` / ``"all"``),
@@ -146,9 +148,9 @@ def _resolve_service_for_action(
 def approve_proposed_action(
     action_id: int,
     repo_id: str | None = None,
-    request: Request = None,
-    svc=Depends(get_service),
-    settings=Depends(get_settings),
+    request: Request = None,  # type: ignore[assignment]  # injected by FastAPI
+    svc: TicketService = Depends(get_service),
+    settings: Settings = Depends(get_settings),
 ) -> ProposedAction:
     """Approve a pending action (transitions to APPROVED then
     executes).  404 on unknown id, 400 if not PENDING.
@@ -170,9 +172,9 @@ def approve_proposed_action(
 def reject_proposed_action(
     action_id: int,
     repo_id: str | None = None,
-    request: Request = None,
-    svc=Depends(get_service),
-    settings=Depends(get_settings),
+    request: Request = None,  # type: ignore[assignment]  # injected by FastAPI
+    svc: TicketService = Depends(get_service),
+    settings: Settings = Depends(get_settings),
 ) -> ProposedAction:
     """Reject a pending action (transitions to REJECTED, no
     execution).  404 on unknown id, 400 if not PENDING.
