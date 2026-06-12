@@ -30,6 +30,7 @@ report_issue: false
 read_ticket: true
 
 output_type: CompletenessCheckResult
+max_tokens: 8192
 retries: 4
 
 # Module path for the agent and its output type.
