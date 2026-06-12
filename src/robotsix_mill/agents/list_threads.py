@@ -43,7 +43,7 @@ def make_list_threads_tool(settings: Settings, agent_name: str):
 
         threads = [c for c in comments if c.parent_id is None]
         if not threads:
-            return "(no threads)"
+            return "(no threads — do not call reply_to_thread as there is nothing to reply to)"
 
         lines: list[str] = []
         for c in threads:
