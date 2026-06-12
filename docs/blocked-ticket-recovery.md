@@ -34,10 +34,26 @@ was blocked *from* is recorded. You can recover in three ways:
 
   Use the CLI or API — the board no longer exposes a dedicated button.
 
+- **Migrate to another board** (the ticket was filed on the wrong
+  board — its fix targets a different repo):
+  ```
+  POST /tickets/{id}/migrate  {"repo_id": "robotsix-llmio", "note": "fix targets the llmio wrapper"}
+  ```
+  Moves the ticket — body, history, comments, workspace — to the target
+  board and lands it in `DRAFT` there, so that board's refine stage
+  re-triages it with the right repo context. Repo-specific state is
+  reset (branch, `repo/` clone, cached `baseline_check.json`).
+  Allowed from `draft`/`ready`/`blocked`/`errored`/`maintenance`;
+  epics and parent-linked tickets are rejected. The maintenance agent
+  uses the same path automatically (`migrate_to_board` in its result)
+  when an investigation concludes the change belongs to another
+  registered repo — instead of blocking the ticket on a board where it
+  can never be implemented.
+
 No raw database editing is ever needed to recover a blocked ticket.
 
 Implemented in `service.py:resume_blocked`, `service.py:mark_done`,
-and `states.py:TRANSITIONS`.
+`service.py:migrate`, and `states.py:TRANSITIONS`.
 
 ## Common block reasons
 

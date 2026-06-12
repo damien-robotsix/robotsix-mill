@@ -17,7 +17,7 @@ from collections.abc import Callable, Iterable, Sequence
 from datetime import datetime, timezone
 from secrets import token_hex
 
-from sqlmodel import select
+from sqlmodel import col, select
 
 from . import db
 from ..config import Settings
@@ -466,6 +466,222 @@ class TicketService:
             ignore_errors=True,
         )
         return True
+
+    # States from which a cross-board migration is safe: no stage is
+    # actively producing repo-bound artifacts and no PR is in flight.
+    _MIGRATABLE_STATES: set[State] = {
+        State.DRAFT,
+        State.READY,
+        State.BLOCKED,
+        State.ERRORED,
+        State.MAINTENANCE,
+    }
+
+    def migrate(
+        self, ticket_id: str, target_board: str, note: str | None = None
+    ) -> Ticket:
+        """Move a ticket to another board: its row, history events,
+        comments, proposed actions, and workspace directory.
+
+        The migrated ticket lands in ``DRAFT`` on the target board so
+        its refine stage re-triages it with the right repo context.
+        Repo-specific baggage is reset: ``branch``, retry state,
+        ``review_rounds``, ``blocked_from``/``paused_from``, the
+        ``repo/``/``repos/`` clones, and the cached
+        ``baseline_check.json`` (stale verdicts from the old repo must
+        not replay on the new one). The history hash chain is preserved
+        verbatim and extended with a migration event.
+
+        *target_board* accepts a board id or a repo id (``"meta"``
+        included). Raises :class:`KeyError` when the ticket does not
+        exist and :class:`ValueError` for an unknown target, a same-board
+        move, an epic / parent-linked ticket, or a state outside
+        ``_MIGRATABLE_STATES``.
+        """
+        from ..config import get_repos_config
+
+        if not target_board:
+            raise ValueError("migrate: target board is required")
+
+        # Resolve repo-id → board-id and validate against the registry.
+        # "meta" is the synthetic cross-repo board (not in repos).
+        known: dict[str, str] = {"meta": "meta"}
+        try:
+            for rid, rc in get_repos_config().repos.items():
+                known[rid] = rc.board_id
+                known[rc.board_id] = rc.board_id
+        except Exception:
+            pass
+        dst_board = known.get(target_board)
+        if dst_board is None:
+            raise ValueError(
+                f"migrate: unknown target board {target_board!r}. "
+                f"Known boards: {sorted(set(known.values()))}"
+            )
+
+        src_board = self._board_for(ticket_id)
+        if dst_board == src_board:
+            raise ValueError(f"migrate: {ticket_id} is already on board {src_board!r}")
+
+        # --- snapshot everything from the source DB (no mutation yet) ---
+        with db.session(self.settings, src_board) as s:
+            ticket = s.get(Ticket, ticket_id)
+            if ticket is None:
+                raise KeyError(ticket_id)
+            if ticket.kind == "epic":
+                raise ValueError("migrate: epics cannot be migrated")
+            if ticket.parent_id:
+                raise ValueError(
+                    f"migrate: {ticket_id} is linked to parent "
+                    f"{ticket.parent_id!r} on board {src_board!r} — unlink first"
+                )
+            if (
+                s.exec(
+                    select(Ticket).where(Ticket.parent_id == ticket_id).limit(1)
+                ).first()
+                is not None
+            ):
+                raise ValueError(
+                    f"migrate: {ticket_id} has child tickets — migrate or unlink them first"
+                )
+            state = State(ticket.state)
+            if state not in self._MIGRATABLE_STATES:
+                allowed = ", ".join(sorted(st.value for st in self._MIGRATABLE_STATES))
+                raise ValueError(
+                    f"migrate: {ticket_id} is {state.value!r} — only "
+                    f"[{allowed}] tickets can be migrated"
+                )
+            ticket_data = ticket.model_dump()
+            event_data = [
+                ev.model_dump()
+                for ev in s.exec(
+                    select(TicketEvent)
+                    .where(TicketEvent.ticket_id == ticket_id)
+                    .order_by(col(TicketEvent.id))
+                ).all()
+            ]
+            comment_data = [
+                c.model_dump()
+                for c in s.exec(
+                    select(Comment)
+                    .where(Comment.ticket_id == ticket_id)
+                    .order_by(col(Comment.id))
+                ).all()
+            ]
+            action_data = [
+                a.model_dump()
+                for a in s.exec(
+                    select(ProposedAction)
+                    .where(ProposedAction.target_ticket_id == ticket_id)
+                    .order_by(col(ProposedAction.id))
+                ).all()
+            ]
+
+        # --- move the workspace directory (fail early, before any DB write) ---
+        src_ws = self.settings.workspaces_dir_for(src_board) / ticket_id
+        dst_root = self.settings.workspaces_dir_for(dst_board)
+        dst_ws = dst_root / ticket_id
+        if dst_ws.exists():
+            raise ValueError(f"migrate: workspace already exists at {dst_ws}")
+        dst_root.mkdir(parents=True, exist_ok=True)
+        ws_moved = src_ws.exists()
+        if ws_moved:
+            shutil.move(str(src_ws), str(dst_ws))
+        else:
+            dst_ws.mkdir(parents=True, exist_ok=True)
+        # Drop repo-specific leftovers: clones target the OLD repo and a
+        # cached baseline verdict would replay against the wrong tree.
+        shutil.rmtree(dst_ws / "repo", ignore_errors=True)
+        shutil.rmtree(dst_ws / "repos", ignore_errors=True)
+        (dst_ws / "artifacts" / "baseline_check.json").unlink(missing_ok=True)
+
+        migration_note = f"migrated from board {src_board!r} to {dst_board!r}"
+        if state is not State.DRAFT:
+            migration_note += f" (was {state.value})"
+        if note:
+            migration_note += f": {note}"
+
+        # --- insert into the target DB ---
+        try:
+            with db.session(self.settings, dst_board) as s:
+                ticket_data.update(
+                    state=State.DRAFT,
+                    board_id=dst_board,
+                    workspace_path=str(dst_ws),
+                    branch=None,
+                    blocked_from=None,
+                    paused_from=None,
+                    review_rounds=0,
+                    retry_attempt=0,
+                    last_transient_error=None,
+                    next_retry_at=None,
+                    updated_at=datetime.now(timezone.utc),
+                )
+                s.add(Ticket(**ticket_data))
+                for ev in event_data:
+                    ev["id"] = None  # fresh autoincrement in the target DB
+                    s.add(TicketEvent(**ev))
+                # Comments self-reference via parent_id — remap as we go
+                # (a parent's id always precedes its replies').
+                id_map: dict[int, int] = {}
+                for cd in comment_data:
+                    old_id = cd["id"]
+                    cd["id"] = None
+                    if cd.get("parent_id") is not None:
+                        cd["parent_id"] = id_map.get(cd["parent_id"])
+                    comment = Comment(**cd)
+                    s.add(comment)
+                    s.flush()
+                    if comment.id is None:  # pragma: no cover - flush assigns the pk
+                        raise RuntimeError("migrate: comment id missing after flush")
+                    id_map[old_id] = comment.id
+                for ad in action_data:
+                    ad["id"] = None
+                    s.add(ProposedAction(**ad))
+                s.flush()
+                s.add(
+                    _make_event(
+                        s,
+                        ticket_id=ticket_id,
+                        state=State.DRAFT,
+                        note=migration_note,
+                    )
+                )
+                s.commit()
+        except Exception:
+            # Roll the workspace back so the source board stays intact.
+            if ws_moved:
+                shutil.move(str(dst_ws), str(src_ws))
+            else:
+                shutil.rmtree(dst_ws, ignore_errors=True)
+            raise
+
+        # --- remove from the source DB (the target copy is committed) ---
+        with db.session(self.settings, src_board) as s:
+            for action in s.exec(
+                select(ProposedAction).where(
+                    ProposedAction.target_ticket_id == ticket_id
+                )
+            ).all():
+                s.delete(action)
+            for comment in s.exec(
+                select(Comment).where(Comment.ticket_id == ticket_id)
+            ).all():
+                s.delete(comment)
+            for src_ev in s.exec(
+                select(TicketEvent).where(TicketEvent.ticket_id == ticket_id)
+            ).all():
+                s.delete(src_ev)
+            src_ticket = s.get(Ticket, ticket_id)
+            if src_ticket is not None:
+                s.delete(src_ticket)
+            s.commit()
+
+        log.info("migrate: %s %s -> %s", ticket_id, src_board, dst_board)
+        migrated = self.get(ticket_id)
+        if migrated is None:  # pragma: no cover - defensive
+            raise RuntimeError(f"migrate: {ticket_id} vanished during migration")
+        return migrated
 
     def _maybe_purge_archived(self) -> None:
         """Purge oldest terminal tickets when the cap is exceeded.

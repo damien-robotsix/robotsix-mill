@@ -234,6 +234,13 @@ class TicketTransition(SQLModel):
     note: str | None = None
 
 
+class TicketMigrate(SQLModel):
+    """API request shape for migrating a ticket to another board."""
+
+    repo_id: str
+    note: str | None = None
+
+
 class TicketRead(SQLModel):
     """API response shape for reading a ticket, including computed fields like unmet_deps and PR URL."""
 

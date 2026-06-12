@@ -24,11 +24,16 @@ from ...core.models import (
     SourceKind,
     TicketCreate,
     TicketEvent,
+    TicketMigrate,
     TicketRead,
     TicketTransition,
 )
+from ...config import RepoConfig, ReposRegistry, Settings
+from ...core.models import Ticket
+from ...core.service import TicketService
 from ...core.states import STAGE_FOR_STATE, State
 from ...forge import get_forge
+from ..worker import Worker
 from ..deps import (
     enrich_ticket_read,
     get_service,
@@ -43,7 +48,7 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _repo_config_for_ticket(ticket, repos):
+def _repo_config_for_ticket(ticket: Ticket, repos: ReposRegistry) -> RepoConfig | None:
     """Resolve the ``RepoConfig`` for *ticket*'s ``board_id``.
 
     Returns ``None`` when the ticket has no ``board_id`` or the
@@ -452,6 +457,34 @@ def transition(
         raise HTTPException(404, "ticket not found") from None
     maybe_enqueue(ticket, worker)  # human unblock re-triggers the chain
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
+    return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
+
+
+@router.post("/tickets/{ticket_id}/migrate", response_model=TicketRead)
+def migrate_ticket(
+    ticket_id: str,
+    body: TicketMigrate,
+    request: Request,
+    svc: TicketService = Depends(get_service),
+    worker: Worker = Depends(get_worker),
+    settings: Settings = Depends(get_settings),
+) -> TicketRead:
+    """Move a ticket to another board (row, history, comments, workspace).
+
+    For tickets filed on the wrong board (the fix belongs to a
+    different repo). The migrated ticket lands in DRAFT on the target
+    board so its refine stage re-triages it there.
+    """
+    repos = request.app.state.repos
+    board_id = _resolve_board_id(body.repo_id, repos)
+    try:
+        ticket = svc.migrate(ticket_id, board_id, note=body.note)
+    except KeyError:
+        raise HTTPException(404, "ticket not found") from None
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+    maybe_enqueue(ticket, worker)  # draft → refine on the new board
+    repo_config = _repo_config_for_ticket(ticket, repos)
     return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
 
 

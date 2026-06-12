@@ -41,9 +41,32 @@ class MaintenanceStage(Stage):
         log.info("Running maintenance agent for %s", ticket.id)
         result = run_maintenance_agent(ticket, ctx)
 
-        # Redirect takes precedence — an investigation may conclude the
-        # ticket actually needs code implementation, not an operational
-        # action.  Hand the ticket to the implement pipeline.
+        # Migration takes precedence — the investigation concluded the
+        # ticket belongs to another board (the change targets a
+        # different repo). Move it there as a DRAFT so the target
+        # board's refine re-triages it, instead of blocking it on a
+        # board where it can never be implemented.
+        if result.migrate_to_board:
+            try:
+                ctx.service.migrate(
+                    ticket.id, result.migrate_to_board, note=result.note
+                )
+            except (KeyError, ValueError) as exc:
+                return Outcome(
+                    State.BLOCKED,
+                    note=(
+                        f"migration to board {result.migrate_to_board!r} "
+                        f"failed: {exc} — {result.note or 'no note'}"
+                    ),
+                )
+            # migrate() already landed the ticket in DRAFT on the target
+            # board (with a history event); the worker sees the state
+            # matches and skips the redundant transition.
+            return Outcome(State.DRAFT, note=result.note)
+
+        # Redirect — an investigation may conclude the ticket actually
+        # needs code implementation, not an operational action.  Hand
+        # the ticket to the implement pipeline.
         if result.redirect_to is not None:
             return Outcome(result.redirect_to, note=result.note)
 

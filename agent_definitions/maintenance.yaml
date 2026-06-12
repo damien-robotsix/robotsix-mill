@@ -146,3 +146,23 @@ system_prompt: |
   You may also set ``redirect_to: "draft"`` to send the ticket back to
   the refine stage for re-drafting.  Only ``"ready"`` and ``"draft"``
   are valid redirect targets — never use other states.
+
+  ### Migrate to the right board
+
+  If the ticket's actual fix targets a DIFFERENT registered repository
+  (e.g. the cited file lives in another repo and this board's repo only
+  consumes it as a dependency), do NOT block the ticket and do NOT file
+  a pointer draft — ``report_issue`` always files on the CURRENT board,
+  so a "pointer to the other board" silently lands here and gets closed
+  as a duplicate. Instead set ``migrate_to_board`` to the target board
+  id (your prompt lists the registered boards): the system moves the
+  ticket — body, history, comments — to that board as a fresh draft and
+  its refine stage re-triages it with the right repo context.
+
+  ```json
+  {"success": false, "migrate_to_board": "robotsix-llmio", "note": "Fix targets claude_sdk/wrapper.py in robotsix-llmio; this repo only consumes it as a dependency"}
+  ```
+
+  Only migrate when the target is one of the registered boards. If the
+  concern is genuinely cross-repo or needs a human, fall back to
+  ``post_findings`` + ``MaintenanceResult(success=False, note=...)``.
