@@ -57,7 +57,7 @@ from pathlib import Path
 from ..agents.base import build_agent
 from ..agents.retry import run_agent
 from ..config import get_repo_config, target_branch_for
-from ..config_loader import ConfigError
+from ..config import ConfigError
 from ..core.models import Ticket
 from ..core.states import State
 from ..forge import get_forge

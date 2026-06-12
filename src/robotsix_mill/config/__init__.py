@@ -26,6 +26,7 @@ time.
 
 from __future__ import annotations
 
+from ..config_loader import ConfigError
 from .repos import (
     CrossRepoTarget,
     RepoConfig,
@@ -54,6 +55,7 @@ _secrets: Secrets | None = None
 _repos_config: ReposRegistry | None = None
 
 __all__ = [
+    "ConfigError",
     "YamlSettingsSource",
     "Settings",
     "load_settings",

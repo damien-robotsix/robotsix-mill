@@ -41,14 +41,14 @@ local.
 | Component | Where | Responsibility |
 |---|---|---|
 | **Management plane** | `core/` | SQLModel/SQLite domain model: `Ticket`, `Comment`, `State`, `TicketService` business logic, workspace paths, datetime/text helpers. |
-| **Runtime / worker** | `runtime/` | FastAPI HTTP API (`api.py`), the event-driven worker pool and stage-chain loop (`worker.py`), run registry, tracing, board HTML/static assets, and API routes. |
+| **Runtime / worker** | `runtime/` | FastAPI HTTP API (`api.py`), the event-driven worker pool and stage-chain loop (`worker/`), run registry, tracing, board HTML/static assets, and API routes. |
 | **Stages** | `stages/` | One orchestrator per lifecycle step. Each stage binds a `State` to its agent(s), manages the workspace and pause/resume state, and decides the next transition. `registry.py` maps states → stages. |
 | **Agents** | `agents/` | All LLM-based agents (coding, reviewing, documenting, refining, auditing, …) plus the agent-builder infra (`base.py`), the tool registry, and LLM-callable tool factories. |
 | **Forge** | `forge/` | Pluggable git-forge adapter (`base.py` contract; `github.py`, `gitlab.py` backends). Opens PRs/MRs, comments, reads PR status, handles forge auth. |
 | **VCS** | `vcs/` | Thin `git` CLI wrappers (`git_ops.py`) for per-ticket clone / branch / commit / push. |
 | **Runners** | `runners/` | Glue layer above agents: periodic and one-shot passes (audit, health, trace-health, copy-paste, …) plus shared `pass_runner` / `periodic_runner` infrastructure. |
 | **Sandbox** | `sandbox.py` | Containerized command execution — every agent command runs in a disposable, network-less sibling Docker container. |
-| **Config / CLI** | `config.py`, `cli.py` | `Settings`/`RepoConfig` loaded from YAML + env; `robotsix-mill` is a thin HTTP client CLI over the management API. |
+| **Config / CLI** | `config/`, `cli.py` | `Settings`/`RepoConfig` loaded from YAML + env; `robotsix-mill` is a thin HTTP client CLI over the management API. |
 | **Tracing** | `langfuse/` | Optional Langfuse client for session cost tracking and trace fetching; a no-op unless per-repo credentials are configured. |
 | **Notifications** | `notify.py` | Best-effort ntfy push on human-attention states. |
 | **Meta-pass** | `meta/` | Cross-repo survey agent that clones every registered repo and files extraction / alignment proposals. |
@@ -77,7 +77,7 @@ local.
 
 - **Runtime service** — `entrypoint.sh` execs `robotsix-mill serve`,
   which starts the FastAPI app (`runtime/api.py::create_app`) and the
-  event-driven `Worker` (`runtime/worker.py`) under uvicorn. This is the
+  event-driven `Worker` (`runtime/worker/`) under uvicorn. This is the
   long-lived process and the primary interface (board at `:8077`).
 - **CLI** — `cli.py` (`robotsix-mill`), a thin HTTP client for ticket /
   epic / repo / audit / trace-health operations.

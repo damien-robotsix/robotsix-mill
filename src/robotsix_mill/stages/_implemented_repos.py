@@ -97,7 +97,7 @@ def combined_diff(
     attribute hunks to the right repository.
     """
     from ..config import get_repo_config
-    from ..config_loader import ConfigError
+    from ..config import ConfigError
 
     multi = len(repos) > 1
     parts: list[str] = []

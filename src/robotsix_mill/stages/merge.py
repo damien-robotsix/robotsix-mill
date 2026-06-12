@@ -51,7 +51,7 @@ from .ci_fix import _pr_changed_paths
 from ..agents.rebasing import run_rebase_agent
 from ..agents.review_revision import run_review_revision_agent
 from ..config import RepoConfig, get_repo_config, target_branch_for
-from ..config_loader import ConfigError
+from ..config import ConfigError
 from ..core.models import Ticket
 from ..core.states import State
 from ..forge import Forge, get_forge

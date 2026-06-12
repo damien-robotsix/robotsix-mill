@@ -311,7 +311,7 @@ if the file is group/other-readable).
 
 ### Add a new setting
 
-1. Add the field to the Pydantic model in `src/robotsix_mill/config.py`
+1. Add the field to the Pydantic model in `src/robotsix_mill/config/`
    (in the appropriate group class if grouped, or on `Settings` directly).
 2. Add the default value to `config/mill.defaults.yaml` under the
    correct YAML key path.
