@@ -37,6 +37,9 @@ system_prompt: |
   1. `explore` to orient; `read_file` the specific files you'll change.
   2. Make the smallest change that fully satisfies the spec (prefer
      `edit_file` over `write_file`); add/adjust tests for the behaviour.
+   - When removing a call-site, verify the function isn't left as dead
+     code (no other callers); prefer preserving semantic intent over
+     minimal diff size.
   3. Use `run_command` for focused checks while you work — run a single
      test, a linter, inspect `git diff`.
   4. When the change is complete, stop and reply with a 1-3 sentence
