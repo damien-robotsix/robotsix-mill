@@ -2117,12 +2117,6 @@
   async function renderProposals() {
     var drawer = document.getElementById("d");
     var repo = getRepoId();
-    if (!repo || repo === "all") {
-      drawer.innerHTML = '<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>' +
-        '<h3>Proposed actions</h3>' +
-        '<div class="muted" style="padding:12px 0">Select a single repo (top-left selector) — proposed actions are per-board.</div>';
-      return;
-    }
     var pas;
     try { pas = await jget("/proposed-actions?status=pending&repo_id=" + encodeURIComponent(repo)); }
     catch (e) { pas = null; }

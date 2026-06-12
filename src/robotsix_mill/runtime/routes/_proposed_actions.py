@@ -6,7 +6,9 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from ...config import Settings
 from ...core.models import ProposedAction, ProposedActionStatus
+from ...core.service import TicketService
 from ..deps import get_service, get_settings
 from ._repo_helpers import _resolve_board_id
 
@@ -97,18 +99,66 @@ def get_proposed_action(
     raise HTTPException(404, f"proposed action {action_id} not found")
 
 
+def _resolve_service_for_action(
+    action_id: int,
+    repo_id: str | None,
+    request: Request,
+    settings: Settings,
+    default_svc: TicketService,
+) -> TicketService:
+    """Return the TicketService that owns *action_id*, or raise 404.
+
+    When *repo_id* is a specific repo (not ``None`` / ``"all"``),
+    resolves to that board's service directly.  Otherwise tries the
+    default service, then all registered boards, then the ``"meta"``
+    board.
+    """
+    from ...core.service import TicketService as _TicketService
+
+    repos = request.app.state.repos
+
+    if repo_id and repo_id != "all":
+        board_id = _resolve_board_id(repo_id, repos)
+        return _TicketService(settings, board_id=board_id)
+
+    # Try the default service first.
+    if default_svc.get_proposed_action(action_id) is not None:
+        return default_svc
+
+    # Fan out to other boards.
+    for rc in repos.repos.values():
+        if rc.board_id == default_svc.board_id:
+            continue
+        s = _TicketService(settings, board_id=rc.board_id)
+        if s.get_proposed_action(action_id) is not None:
+            return s
+
+    # Try the meta board.
+    s = _TicketService(settings, board_id="meta")
+    if s.get_proposed_action(action_id) is not None:
+        return s
+
+    raise HTTPException(404, f"proposed action {action_id} not found")
+
+
 @router.post(
     "/proposed-actions/{action_id}/approve",
     response_model=ProposedAction,
 )
 def approve_proposed_action(
     action_id: int,
-    svc=Depends(get_service),
+    repo_id: str | None = None,
+    request: Request = None,  # type: ignore[assignment]  # injected by FastAPI
+    svc: TicketService = Depends(get_service),
+    settings: Settings = Depends(get_settings),
 ) -> ProposedAction:
     """Approve a pending action (transitions to APPROVED then
-    executes).  404 on unknown id, 400 if not PENDING."""
+    executes).  404 on unknown id, 400 if not PENDING.
+
+    Accepts optional ``?repo_id=`` to disambiguate across boards."""
+    service = _resolve_service_for_action(action_id, repo_id, request, settings, svc)
     try:
-        return svc.approve_proposed_action(action_id)
+        return service.approve_proposed_action(action_id)
     except KeyError:
         raise HTTPException(404, f"proposed action {action_id} not found") from None
     except ValueError as e:
@@ -121,12 +171,18 @@ def approve_proposed_action(
 )
 def reject_proposed_action(
     action_id: int,
-    svc=Depends(get_service),
+    repo_id: str | None = None,
+    request: Request = None,  # type: ignore[assignment]  # injected by FastAPI
+    svc: TicketService = Depends(get_service),
+    settings: Settings = Depends(get_settings),
 ) -> ProposedAction:
     """Reject a pending action (transitions to REJECTED, no
-    execution).  404 on unknown id, 400 if not PENDING."""
+    execution).  404 on unknown id, 400 if not PENDING.
+
+    Accepts optional ``?repo_id=`` to disambiguate across boards."""
+    service = _resolve_service_for_action(action_id, repo_id, request, settings, svc)
     try:
-        return svc.reject_proposed_action(action_id)
+        return service.reject_proposed_action(action_id)
     except KeyError:
         raise HTTPException(404, f"proposed action {action_id} not found") from None
     except ValueError as e:

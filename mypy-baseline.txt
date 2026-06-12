@@ -958,10 +958,6 @@ src/robotsix_mill/runtime/routes/_proposed_actions.py:0: error: Incompatible def
 src/robotsix_mill/runtime/routes/_proposed_actions.py:0: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
 src/robotsix_mill/runtime/routes/_proposed_actions.py:0: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
 src/robotsix_mill/runtime/routes/_proposed_actions.py:0: error: Returning Any from function declared to return "ProposedAction"  [no-any-return]
-src/robotsix_mill/runtime/routes/_proposed_actions.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
-src/robotsix_mill/runtime/routes/_proposed_actions.py:0: error: Returning Any from function declared to return "ProposedAction"  [no-any-return]
-src/robotsix_mill/runtime/routes/_proposed_actions.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
-src/robotsix_mill/runtime/routes/_proposed_actions.py:0: error: Returning Any from function declared to return "ProposedAction"  [no-any-return]
 src/robotsix_mill/runtime/routes/_passes.py:0: error: Missing type arguments for generic type "list"  [type-arg]
 src/robotsix_mill/runtime/routes/_passes.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/runtime/routes/_passes.py:0: error: Missing type arguments for generic type "dict"  [type-arg]

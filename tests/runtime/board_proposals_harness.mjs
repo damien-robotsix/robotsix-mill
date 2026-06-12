@@ -289,13 +289,21 @@ await test("toggleProposals is mutually exclusive with other panels", async () =
 // renderProposals
 // ----------------------------------------------------------------------
 
-await test("renderProposals guards on all-repos / empty repo", async () => {
+// With the guard removed (per ticket spec), renderProposals should
+// fetch proposals even in "all" / empty-repo mode — the backend
+// already supports repo_id=all aggregation.
+await test("renderProposals fetches proposals in all-repos / empty-repo mode", async () => {
   for (const repo of ["all", ""]) {
     reset(repo);
+    responder = () => ({ status: 200, responseText: "[]" });
     await ctx.renderProposals();
-    assert.equal(listRequests().length, 0, "no /proposed-actions request for repo=" + JSON.stringify(repo));
-    assert.ok(dEl.innerHTML.includes("Select a single repo"), "should render the per-board hint");
-    assert.ok(dEl.innerHTML.includes("Proposed actions"), "should render the panel title");
+    const encoded = encodeURIComponent(repo);
+    const url = "/proposed-actions?status=pending&repo_id=" + encoded;
+    const gets = requests.filter((r) => r.method === "GET" && r.url === url);
+    assert.equal(gets.length, 1, "one GET for repo=" + JSON.stringify(repo));
+    assert.ok(dEl.innerHTML.includes("No pending proposed actions."), "empty-state renders");
+    assert.ok(dEl.innerHTML.includes("Proposed actions"), "panel title renders");
+    assert.ok(!dEl.innerHTML.includes("Select a single repo"), "no per-board hint for all-repos mode");
   }
 });
 
