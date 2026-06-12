@@ -328,11 +328,14 @@ class ReviewStage(Stage):
             log.info("%s: empty diff — approving without review", ticket.id)
             return Outcome(State.DOCUMENTING, "empty diff (no-op implementation)")
 
-        # Derive modified paths from the UNTRUNCATED diff so middle
-        # truncation (below) never drops a ``+++ b/<path>`` header and
-        # silently shrinks the preseed file set. The agent receives the
-        # bounded diff; the preseed still covers every modified file.
+        # Derive modified paths AND workflow refs from the UNTRUNCATED
+        # diff so middle truncation (below) never drops a ``+++ b/<path>``
+        # header or a ``uses:`` line and silently shrinks the preseed file
+        # set or the cross-repo clone set. The agent receives the bounded
+        # diff; the preseed and extra_roots still cover every referenced
+        # file and repo.
         modified_paths = _paths_from_diff(diff)
+        workflow_refs = _workflow_refs_from_diff(diff)
 
         # Bound the combined diff before it reaches the review prompt. The
         # raw ``git diff origin/<target>...HEAD`` can balloon to megabytes
@@ -367,9 +370,12 @@ class ReviewStage(Stage):
         # interface via read_file.  Clones land under .review-roots/
         # (ephemeral — discarded with the workspace).  Gracefully skip
         # repos that can't be found or cloned.
+        #
+        # *workflow_refs* was derived above from the UNTRUNCATED diff
+        # (same reasoning as modified_paths — truncation would silently
+        # drop ``uses:`` lines from the middle of the diff).
         extra_roots: list[Path] | None = None
 
-        workflow_refs = _workflow_refs_from_diff(diff)
         if workflow_refs:
             # Exclude the current repo — the agent already has repo_dir.
             current_remote = ctx.repo_config.forge_remote_url or s.forge_remote_url
@@ -387,14 +393,12 @@ class ReviewStage(Stage):
             if workflow_refs:
                 clone_roots: list[Path] = []
 
-                # 1) Already-available meta-layout clones
-                meta_repos_dir = ws.dir / "repos"
-                if meta_repos_dir.is_dir():
-                    for child in meta_repos_dir.iterdir():
-                        if child.is_dir():
-                            clone_roots.append(child)
-
-                # 2) Resolve remaining refs via repos config & clone
+                # Resolve refs via repos config: for each referenced
+                # owner/repo, pick up an existing clone (meta-layout
+                # or prior .review-roots clone) or clone fresh.
+                # Only repos whose slug matches a workflow_ref are
+                # included — unlike the earlier version that blindly
+                # added every meta-layout child directory.
                 try:
                     all_repos = get_repos_config().repos
                 except Exception:
@@ -417,17 +421,24 @@ class ReviewStage(Stage):
                     if slug not in workflow_refs:
                         continue
 
+                    # 1) Already cloned in .review-roots (prior pass)
                     dest = ws.dir / ".review-roots" / repo_id
                     if dest.is_dir():
                         clone_roots.append(dest)
-                        workflow_refs.discard(slug)
                         continue
 
+                    # 2) Already cloned in meta-layout
+                    meta_dest = ws.dir / "repos" / repo_id
+                    if meta_dest.is_dir():
+                        clone_roots.append(meta_dest)
+                        continue
+
+                    # 3) Clone fresh, respecting per-repo branch override
                     try:
                         token = github_token(s, repo_config=rc)
-                        git_ops.clone(remote, dest, s.forge_target_branch, token)
+                        branch = target_branch_for(s, rc)
+                        git_ops.clone(remote, dest, branch, token)
                         clone_roots.append(dest)
-                        workflow_refs.discard(slug)
                     except Exception:
                         log.warning(
                             "%s: failed to clone %s for cross-repo review",

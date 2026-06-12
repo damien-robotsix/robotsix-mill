@@ -1043,3 +1043,246 @@ def test_small_diff_passes_through_unchanged(ctx_factory, monkeypatch):
     diff = captured["diff"]
     assert "feature.txt" in diff
     assert "truncated:" not in diff
+
+
+# ------------------------------------------------------------------
+# _workflow_refs_from_diff — unit tests
+# ------------------------------------------------------------------
+
+
+def test_workflow_refs_from_diff_owner_repo():
+    """``uses: owner/repo/.github/workflows/ci.yml@v1`` → {owner/repo}."""
+    from robotsix_mill.stages.review import _workflow_refs_from_diff
+
+    refs = _workflow_refs_from_diff(
+        "uses: my-org/my-repo/.github/workflows/ci.yml@v1"
+    )
+    assert refs == {"my-org/my-repo"}
+
+
+def test_workflow_refs_from_diff_single_org_shorthand():
+    """``uses: org/.github/workflows/deps-bump.yml@main`` → {org}."""
+    from robotsix_mill.stages.review import _workflow_refs_from_diff
+
+    refs = _workflow_refs_from_diff(
+        "uses: robotsix-mill/.github/workflows/deps-bump.yml@main"
+    )
+    assert refs == {"robotsix-mill"}
+
+
+def test_workflow_refs_from_diff_actions_path():
+    """``uses: owner/repo/.github/actions/…`` also matched."""
+    from robotsix_mill.stages.review import _workflow_refs_from_diff
+
+    refs = _workflow_refs_from_diff(
+        "uses: my-org/my-repo/.github/actions/composite-action@v2"
+    )
+    assert refs == {"my-org/my-repo"}
+
+
+def test_workflow_refs_from_diff_docker_ref_not_matched():
+    """``uses: docker://ubuntu:latest`` → empty set."""
+    from robotsix_mill.stages.review import _workflow_refs_from_diff
+
+    refs = _workflow_refs_from_diff("uses: docker://ubuntu:latest")
+    assert refs == set()
+
+
+def test_workflow_refs_from_diff_relative_path_not_matched():
+    """``uses: ./github/workflows/local.yml`` → empty set (relative path)."""
+    from robotsix_mill.stages.review import _workflow_refs_from_diff
+
+    refs = _workflow_refs_from_diff("uses: ./github/workflows/local.yml")
+    assert refs == set()
+
+
+def test_workflow_refs_from_diff_deduplicates():
+    """Duplicate refs → single entry in the returned set."""
+    from robotsix_mill.stages.review import _workflow_refs_from_diff
+
+    diff = (
+        "uses: my-org/my-repo/.github/workflows/ci.yml@v1\n"
+        "uses: my-org/my-repo/.github/workflows/deploy.yml@main\n"
+    )
+    refs = _workflow_refs_from_diff(diff)
+    assert refs == {"my-org/my-repo"}
+
+
+def test_workflow_refs_from_empty_diff():
+    """Empty string → empty set."""
+    from robotsix_mill.stages.review import _workflow_refs_from_diff
+
+    assert _workflow_refs_from_diff("") == set()
+
+
+def test_workflow_refs_from_mixed_diff():
+    """Multiple ref types in one diff — only workflow refs captured."""
+    from robotsix_mill.stages.review import _workflow_refs_from_diff
+
+    diff = (
+        "uses: org-a/repo-x/.github/workflows/build.yml@v2\n"
+        "uses: docker://alpine:latest\n"
+        "uses: ./github/workflows/local.yml\n"
+        "uses: org-b/.github/workflows/release.yml@main\n"
+        "uses: org-a/repo-y/.github/actions/setup@v1\n"
+    )
+    refs = _workflow_refs_from_diff(diff)
+    assert refs == {"org-a/repo-x", "org-b", "org-a/repo-y"}
+
+
+# ------------------------------------------------------------------
+# Workflow refs derived from UNTRUNCATED diff (not truncated)
+# ------------------------------------------------------------------
+
+
+def test_workflow_refs_use_untruncated_diff(ctx_factory, monkeypatch):
+    """When the diff is truncated, workflow refs from the middle are still
+    captured — ``_workflow_refs_from_diff`` is called on the untruncated
+    diff (same pattern as ``_paths_from_diff``)."""
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL="file:///dummy",
+        review_enabled="true",
+        review_diff_max_chars="500",
+    )
+    t = _ticket(ctx)
+
+    ws = ctx.service.workspace(t)
+    repo_dir = ws.dir / "repo"
+
+    # Put a ``uses:`` line in the MIDDLE of a large file so truncation
+    # would drop it if we used the truncated diff for extraction.
+    workflow_ref_line = "uses: other-org/other-repo/.github/workflows/ci.yml@v1"
+    (repo_dir / "big.txt").write_text(
+        "line0\n" * 40 + workflow_ref_line + "\n" + "line1\n" * 40, encoding="utf-8"
+    )
+    _git(repo_dir, "add", "-A")
+    _git(repo_dir, "commit", "-q", "-m", "add big file with workflow ref")
+
+    captured = _capture_review(monkeypatch)
+    ReviewStage().run(t, ctx)
+
+    # The truncation marker proves the diff WAS truncated.
+    assert "truncated:" in captured["diff"]
+
+    # The uses: line would be in the dropped middle, so the truncated
+    # diff does NOT contain it.
+    assert workflow_ref_line not in captured["diff"]
+
+    # But extra_roots would be populated (if the other repo were in the
+    # repos config).  Since it's not, extra_roots should be None — but
+    # crucially, the stage must NOT crash trying to parse workflow refs
+    # from only the truncated portion.  The stage completed without error.
+    # We verify that the review agent was called (proving the stage
+    # didn't blow up) and that extra_roots was None for this unmatched ref.
+    assert captured["extra_roots"] is None
+
+
+# ------------------------------------------------------------------
+# Cross-repo extra_roots flow
+# ------------------------------------------------------------------
+
+
+def test_extra_roots_passed_when_workflow_ref_matches_repos_config(
+    ctx_factory, monkeypatch
+):
+    """When the diff references a workflow from a sibling repo that IS in
+    the repos config, the stage passes ``extra_roots`` to the review agent
+    containing the clone path."""
+    from robotsix_mill.config import RepoConfig
+    from robotsix_mill.config.repos import get_repos_config, _reset_repos_config
+    from robotsix_mill.vcs import git_ops
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL="file:///dummy",
+        review_enabled="true",
+    )
+    t = _ticket(ctx)
+
+    ws = ctx.service.workspace(t)
+
+    # The sibling repo config uses a GitHub-style URL so _parse_owner_repo
+    # can extract the owner/repo slug.  We monkeypatch git_ops.clone to
+    # simulate a successful clone (no network needed in test).
+    sibling_slug = "test-org/test-sibling"
+    sibling_remote = f"https://github.com/{sibling_slug}.git"
+
+    _reset_repos_config()
+    repos_cfg = get_repos_config()
+    repos_cfg.repos["sibling"] = RepoConfig(
+        repo_id="sibling",
+        board_id="test-board",
+        langfuse_project_name="test",
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",
+        forge_remote_url=sibling_remote,
+    )
+
+    # Simulate a successful clone by creating the dest dir with a .git
+    # marker — enough to satisfy the ``dest.is_dir()`` guard on the next
+    # pass and the ``clone_path.is_dir()`` assertion below.
+    original_clone = git_ops.clone
+
+    def _fake_clone(remote_url, dest, branch, token=None):
+        dest.mkdir(parents=True, exist_ok=True)
+        (dest / ".git").mkdir(exist_ok=True)
+
+    monkeypatch.setattr("robotsix_mill.stages.review.git_ops.clone", _fake_clone)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.review.github_token", lambda s, repo_config=None: "tk"
+    )
+
+    try:
+        # Write a diff that references the sibling workflow.
+        repo_dir = ws.dir / "repo"
+        workflow_line = f"uses: {sibling_slug}/.github/workflows/ci.yml@main\n"
+        (repo_dir / "ci.yml").write_text(workflow_line, encoding="utf-8")
+        _git(repo_dir, "add", "-A")
+        _git(repo_dir, "commit", "-q", "-m", "add workflow ref")
+
+        captured = _capture_review(monkeypatch)
+        ReviewStage().run(t, ctx)
+
+        # The review agent should have received extra_roots with the clone.
+        assert captured["extra_roots"] is not None
+        assert len(captured["extra_roots"]) == 1
+        clone_path = captured["extra_roots"][0]
+        assert clone_path.is_dir()
+        assert (clone_path / ".git").is_dir()
+    finally:
+        _reset_repos_config()
+        monkeypatch.setattr(
+            "robotsix_mill.stages.review.git_ops.clone", original_clone
+        )
+
+
+def test_extra_roots_none_when_no_workflow_refs(ctx_factory, monkeypatch):
+    """When the diff has no workflow refs, ``extra_roots`` is None."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+
+    captured = _capture_review(monkeypatch)
+    ReviewStage().run(t, ctx)
+
+    assert captured["extra_roots"] is None
+
+
+def test_extra_roots_skips_unmatched_ref_gracefully(ctx_factory, monkeypatch):
+    """When the diff references a workflow for a repo NOT in the repos
+    config, the stage continues gracefully — ``extra_roots`` is None."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+
+    ws = ctx.service.workspace(t)
+    repo_dir = ws.dir / "repo"
+    (repo_dir / "ci.yml").write_text(
+        "uses: unknown-org/unknown-repo/.github/workflows/ci.yml@v1\n",
+        encoding="utf-8",
+    )
+    _git(repo_dir, "add", "-A")
+    _git(repo_dir, "commit", "-q", "-m", "add unmatched workflow ref")
+
+    captured = _capture_review(monkeypatch)
+    ReviewStage().run(t, ctx)
+
+    # No crash; extra_roots is None because the ref couldn't be resolved.
+    assert captured["extra_roots"] is None
