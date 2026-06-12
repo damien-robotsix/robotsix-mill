@@ -359,20 +359,20 @@ Every setting below shows:
 | `core.models.refine` | `MILL_REFINE_MODEL` | `deepseek/deepseek-v4-pro` | Refine agent — authors engineering specs from drafts |
 | `core.models.answer` | `MILL_ANSWER_MODEL` | `deepseek/deepseek-v4-pro` | Answer agent — investigative Q&A via repo + web + traces |
 | `core.models.ask_to_ticket` | `MILL_ASK_TO_TICKET_MODEL` | `deepseek/deepseek-v4-pro` | Ask-to-ticket agent — drafts task tickets from answered inquiries' Q&A |
-| `core.models.retrospect` | `MILL_RETROSPECT_MODEL` | `deepseek/deepseek-v4-pro` | Retrospect agent — audits finished tickets; proposes improvements |
-| `core.models.audit` | `MILL_AUDIT_MODEL` | `deepseek/deepseek-v4-pro` | Audit agent — meta-audit for quality/security coverage gaps |
+| `core.models.retrospect` | `MILL_RETROSPECT_MODEL` | `deepseek/deepseek-v4-flash` | Retrospect agent — audits finished tickets; proposes improvements |
+| `core.models.audit` | `MILL_AUDIT_MODEL` | `deepseek/deepseek-v4-flash` | Audit agent — meta-audit for quality/security coverage gaps |
 | `core.models.dedup` | `MILL_DEDUP_MODEL` | `deepseek/deepseek-v4-pro` | Dedup agent — pre-refine duplicate/already-done check |
 | `core.models.obsolescence` | `MILL_OBSOLESCENCE_MODEL` | `deepseek/deepseek-v4-flash` | Obsolescence agent — pre-refine gap re-validation check |
 | `core.models.web_research` | `MILL_WEB_RESEARCH_MODEL` | `deepseek/deepseek-v4-pro` | Web-research sub-agent — web lookups, conclusion only |
 | `core.models.review` | `MILL_REVIEW_MODEL` | `deepseek/deepseek-v4-pro` | Review agent — blind dual-model diff audit (opt-in) |
 | `core.models.review_revision` | `MILL_REVIEW_REVISION_MODEL` | `deepseek/deepseek-v4-pro` | Review-revision agent — autonomously implements changes requested by human reviewers (opt-in) |
-| `core.models.trace_inspector` | `MILL_TRACE_INSPECTOR_MODEL` | `deepseek/deepseek-v4-pro` | Trace-inspector sub-agent — inspects full Langfuse observation tree |
-| `core.models.test_gap` | `MILL_TEST_GAP_MODEL` | `deepseek/deepseek-v4-pro` | Test-gap agent — identifies modules with zero dedicated tests |
-| `core.models.agent_check` | `MILL_AGENT_CHECK_MODEL` | `deepseek/deepseek-v4-pro` | Agent-check agent — audits agent definitions for coherence |
-| `core.models.health` | `MILL_HEALTH_MODEL` | `deepseek/deepseek-v4-pro` | Health agent — codebase-health across 6 dimensions |
-| `core.models.survey` | `MILL_SURVEY_MODEL` | `deepseek/deepseek-v4-pro` | Survey agent — discovers OSS projects; proposes improvements |
+| `core.models.trace_inspector` | `MILL_TRACE_INSPECTOR_MODEL` | `deepseek/deepseek-v4-flash` | Trace-inspector sub-agent — inspects full Langfuse observation tree |
+| `core.models.test_gap` | `MILL_TEST_GAP_MODEL` | `deepseek/deepseek-v4-flash` | Test-gap agent — identifies modules with zero dedicated tests |
+| `core.models.agent_check` | `MILL_AGENT_CHECK_MODEL` | `deepseek/deepseek-v4-flash` | Agent-check agent — audits agent definitions for coherence |
+| `core.models.health` | `MILL_HEALTH_MODEL` | `deepseek/deepseek-v4-flash` | Health agent — codebase-health across 6 dimensions |
+| `core.models.survey` | `MILL_SURVEY_MODEL` | `deepseek/deepseek-v4-flash` | Survey agent — discovers OSS projects; proposes improvements |
 | `core.models.rate_limit_fallback` | `MILL_RATE_LIMIT_FALLBACK_MODEL` | `""` (disabled) | Fallback model when rate-limit retries exhausted |
-| `core.models.doc` | `MILL_DOC_MODEL` | `deepseek/deepseek-v4-pro` | Documentation agent |
+| `core.models.doc` | `MILL_DOC_MODEL` | `deepseek/deepseek-v4-flash` | Documentation agent |
 | `core.models.doc_classifier` | `MILL_DOC_CLASSIFIER_MODEL` | `deepseek/deepseek-v4-flash` | Doc-diff classifier gate — cheap pre-check before full doc agent |
 | `core.models.triage` | `MILL_TRIAGE_MODEL` | `deepseek/deepseek-v4-flash` | Pre-refine triage — fast/cheap classification |
 | `core.models.auto_approve` | `MILL_AUTO_APPROVE_MODEL` | `deepseek/deepseek-v4-flash` | Model for the auto-approve triage call (must be fast and cheap) |
