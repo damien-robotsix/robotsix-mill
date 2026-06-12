@@ -397,7 +397,7 @@ def _serve(args: argparse.Namespace, settings: Settings) -> int:
 
     from .runtime.api import create_app
     from .config import get_repos_config
-    from .config_loader import ConfigError
+    from .config import ConfigError
 
     if args.repo_id:
         # Single-repo override for tests/dev.
@@ -439,7 +439,7 @@ def _serve(args: argparse.Namespace, settings: Settings) -> int:
 
 def _repos_list(args: argparse.Namespace, settings: Settings) -> int:
     from .config import get_repos_config
-    from .config_loader import ConfigError
+    from .config import ConfigError
 
     try:
         repos = get_repos_config()
@@ -474,7 +474,7 @@ def _resolve_repo_id(
         return args.repo_id
 
     from .config import get_repos_config
-    from .config_loader import ConfigError as _ConfigError
+    from .config import ConfigError as _ConfigError
 
     try:
         repos = get_repos_config()

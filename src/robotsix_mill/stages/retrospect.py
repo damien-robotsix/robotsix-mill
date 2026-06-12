@@ -18,7 +18,7 @@ from ..langfuse import client as langfuse_client
 from ..agents import retrospecting
 from ..agents.retrospecting import MemoryEdit, RetrospectResult
 from ..config import Settings, get_repo_config
-from ..config_loader import ConfigError
+from ..config import ConfigError
 from ..core.models import SourceKind, Ticket
 from ..core.states import State
 from ..core.text_noop import is_noop_report
