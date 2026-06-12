@@ -12,6 +12,7 @@ sees the full log; its history stays short.
 from __future__ import annotations
 
 import fnmatch
+import json
 import re
 from pathlib import Path, PurePath
 
@@ -121,6 +122,7 @@ def run_test_agent(
     repo_dir: Path,
     repo_config: RepoConfig | None = None,
     retry_on_failure: bool = False,
+    file_map: list[str] | None = None,
 ) -> tuple[bool, str]:
     """Run the test command in the sandbox. Return ``(passed,
     feedback)``. On pass, feedback is a short confirmation; on fail it
@@ -138,6 +140,16 @@ def run_test_agent(
     iteration anyway, and doubling every red gate run would be pure
     cost.
 
+    ``file_map``: an optional list of file paths the implement agent is
+    permitted to change. When ``None``, auto-discovered from
+    ``repo_dir.parent / "artifacts" / "file_map.json"`` (the sibling
+    convention of :class:`~robotsix_mill.core.workspace.Workspace`).
+    Injected into the distill sub-agent's user message as a soft scope
+    hint so the cheap model prefers fixes within declared scope —
+    avoiding wasted implement iterations that the scope guardrail would
+    REJECT. No effect when the test passes or when the failure is an
+    ENV-ERROR (handled deterministically without the distill LLM).
+
     Test command resolution (highest precedence first): the per-repo
     ``.robotsix-mill/config.yaml`` ``test_command`` committed in the
     clone wins when set (a managed repo owns its command), else
@@ -146,6 +158,16 @@ def run_test_agent(
     suite (doc-only, etc.) need no opt-out flag. (``repo_config`` no
     longer carries a per-repo ``test_command``; it moved to the repo's
     own ``.robotsix-mill/config.yaml``.)"""
+    if file_map is None:
+        fm_path = repo_dir.parent / "artifacts" / "file_map.json"
+        if fm_path.exists():
+            try:
+                raw = json.loads(fm_path.read_text(encoding="utf-8"))
+                if raw:
+                    file_map = [entry["file"] for entry in raw]
+            except (json.JSONDecodeError, KeyError, OSError):
+                pass  # malformed or unreadable → treat as no file_map
+
     from .. import sandbox
 
     cmd = ((load_repo_test_command(repo_dir) or "") or settings.test_command).strip()
@@ -211,7 +233,7 @@ def run_test_agent(
         # one a fix ticket will be written against).
         rc, out = rc2, out2
 
-    return False, _distill_failure(settings, repo_dir, rc, out)
+    return False, _distill_failure(settings, repo_dir, rc, out, file_map=file_map)
 
 
 def smoke_paths_match(changed_files: list[str], smoke_paths: list[str]) -> bool:
@@ -250,6 +272,7 @@ def run_smoke_agent(
     repo_dir: Path,
     repo_config: RepoConfig | None = None,
     retry_on_failure: bool = False,
+    file_map: list[str] | None = None,
 ) -> tuple[bool, str]:
     """Run the smoke command in the sandbox. Return ``(passed,
     feedback)``. Closely mirrors :func:`run_test_agent`: on pass the
@@ -265,7 +288,20 @@ def run_smoke_agent(
     command no-ops.
 
     ``retry_on_failure``: re-run the smoke command ONCE before distilling
-    a failure (mirrors the test-gate flake guard)."""
+    a failure (mirrors the test-gate flake guard).
+
+    ``file_map``: mirrors :func:`run_test_agent` — auto-discovered from
+    the sibling ``artifacts/file_map.json`` when ``None``."""
+    if file_map is None:
+        fm_path = repo_dir.parent / "artifacts" / "file_map.json"
+        if fm_path.exists():
+            try:
+                raw = json.loads(fm_path.read_text(encoding="utf-8"))
+                if raw:
+                    file_map = [entry["file"] for entry in raw]
+            except (json.JSONDecodeError, KeyError, OSError):
+                pass
+
     from .. import sandbox
 
     cmd = ((load_repo_smoke_command(repo_dir) or "") or settings.smoke_command).strip()
@@ -311,14 +347,22 @@ def run_smoke_agent(
             )
         rc, out = rc2, out2
 
-    return False, _distill_failure(settings, repo_dir, rc, out)
+    return False, _distill_failure(settings, repo_dir, rc, out, file_map=file_map)
 
 
-def _distill_failure(settings: Settings, repo_dir: Path, rc: int, out: str) -> str:
+def _distill_failure(settings: Settings, repo_dir: Path, rc: int, out: str, *, file_map: list[str] | None = None) -> str:
     """Distill a raw failing-test log into a short, actionable diagnosis
     via a CHEAP model. Degrades to the raw tail when no model key is set
     or the distill agent errors."""
     tail = out[-6000:]
+
+    scope_note = ""
+    if file_map:
+        file_list = "\n".join(f"  - {f}" for f in file_map)
+        scope_note = (
+            f"\n\nDeclared file scope (prefer fixes within these files):\n{file_list}"
+        )
+
     if not get_secrets().openrouter_api_key:
         return f"tests failed (rc={rc}); raw tail:\n{tail[-1500:]}"
 
@@ -352,7 +396,7 @@ def _distill_failure(settings: Settings, repo_dir: Path, rc: int, out: str) -> s
         result = run_agent(
             agent,
             lambda h: h.run_sync(
-                f"<test_output rc={rc}>\n{tail}\n</test_output>",
+                f"<test_output rc={rc}>\n{tail}\n</test_output>{scope_note}",
                 usage_limits=limits,
             ),
             settings=settings,
