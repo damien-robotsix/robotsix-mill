@@ -299,7 +299,7 @@ def _spec_is_degenerate(spec: str | None) -> bool:
     norm = " ".join(re.sub(r"[^a-z0-9 ]+", " ", text.lower()).split())
     if not norm:
         return True
-    return any(norm == p or norm.startswith(p + " ") for p in _PLACEHOLDER_SPEC_PHRASES)
+    return any(p in norm for p in _PLACEHOLDER_SPEC_PHRASES)
 
 
 # --- external-fix claim detection (live re-verification gate) ---------------
