@@ -158,6 +158,7 @@ modules:
       - tests/runtime/test_board_refresh_filter_js.py
       - tests/runtime/board_refresh_filter_harness.mjs
       - tests/runtime/test_board_browser_smoke.py
+      - tests/runtime/test_board_adapter.py
       - tests/runtime/test_board_assets.py
       - tests/runtime/test_broadcaster.py
     dependencies: [config, core, forge, stages]
