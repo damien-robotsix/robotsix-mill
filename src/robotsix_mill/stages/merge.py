@@ -976,10 +976,28 @@ class MergeStage(Stage):
         if conclusion == "success":
             if eligible:
                 # CI green + eligible → auto-merge now.
+                feature_tip_sha = pr.get("sha", "")
                 result = get_forge(s, repo_config=ctx.repo_config).merge_pr(
                     source_branch=branch
                 )
                 if result.get("merged"):
+                    repo_dir = _workspace_repo_dir(ctx, ticket)
+                    target = target_branch_for(s, ctx.repo_config)
+                    if not _verify_merge_ancestor(
+                        repo_dir, feature_tip_sha, ticket.id, target
+                    ):
+                        log.warning(
+                            "%s: auto-merge reported success but commit %s is not an "
+                            "ancestor of origin/%s — falling back to HUMAN_MR_APPROVAL",
+                            ticket.id,
+                            feature_tip_sha[:8] if feature_tip_sha else "(none)",
+                            target,
+                        )
+                        return Outcome(
+                            State.HUMAN_MR_APPROVAL,
+                            "auto-merge reported success but merge not confirmed on origin/%s"
+                            % target,
+                        )
                     ctx.service.workspace(ticket).artifacts_dir.joinpath(
                         "merge.md"
                     ).write_text(
