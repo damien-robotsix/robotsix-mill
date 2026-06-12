@@ -35,7 +35,7 @@ def test_argv_is_isolated(tmp_path, monkeypatch):
 
     def fake_run(argv, **kw):
         seen["argv"] = argv
-        return subprocess.CompletedProcess(argv, 0, stdout="ok", stderr="")
+        return subprocess.CompletedProcess(argv, 0, stdout=b"ok", stderr=b"")
 
     # _repo_mount now checks repo_dir.exists(); mock it so the test
     # focuses on argv construction, not filesystem existence.
@@ -177,7 +177,7 @@ def test_sandbox_never_exposes_management_plane(tmp_path, monkeypatch):
 
     def fake_run(argv, **kw):
         seen["argv"] = argv
-        return subprocess.CompletedProcess(argv, 0, "", "")
+        return subprocess.CompletedProcess(argv, 0, b"", b"")
 
     # _repo_mount now checks host_src.exists(); mock it so the test
     # focuses on isolation semantics, not filesystem existence.
