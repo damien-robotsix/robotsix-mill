@@ -186,9 +186,9 @@ class _CoreSettings(BaseModel):
     # the exponential-backoff delay between attempts inside the worker
     # loop.  Test-friendly: keep the defaults small enough for tests to
     # override without needing long sleeps.
-    stage_retry_max_attempts: int = Field(default=3)
+    stage_retry_max_attempts: int = Field(default=5)
     stage_retry_base_delay: float = Field(default=2.0)
-    stage_retry_max_delay: float = Field(default=30.0)
+    stage_retry_max_delay: float = Field(default=60.0)
     # Backoff for UsageLimitExceeded (pydantic-ai budget cap).  These
     # are longer than transient backoff because OpenRouter/provider
     # rate-limit windows are typically ~60s.  When
