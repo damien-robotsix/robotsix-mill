@@ -83,7 +83,10 @@ def test_no_threads_returns_placeholder(settings, monkeypatch):
     list_threads = make_list_threads_tool(settings, "test-agent")
     result = list_threads()
 
-    assert result == "(no threads — do not call reply_to_thread as there is nothing to reply to)"
+    assert (
+        result
+        == "(no threads — do not call reply_to_thread as there is nothing to reply to)"
+    )
 
 
 def test_no_comments_returns_placeholder(settings, monkeypatch):
@@ -103,7 +106,10 @@ def test_no_comments_returns_placeholder(settings, monkeypatch):
     list_threads = make_list_threads_tool(settings, "test-agent")
     result = list_threads()
 
-    assert result == "(no threads — do not call reply_to_thread as there is nothing to reply to)"
+    assert (
+        result
+        == "(no threads — do not call reply_to_thread as there is nothing to reply to)"
+    )
 
 
 def test_no_session_returns_error(settings, monkeypatch):
