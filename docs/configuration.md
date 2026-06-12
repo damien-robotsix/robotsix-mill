@@ -408,7 +408,7 @@ robotsix-llmio Claude Agent SDK transport.
 | `core.limits.scope_triage_max_files` | `MILL_SCOPE_TRIAGE_MAX_FILES` | `50` | Max out-of-scope text files before the scope-triage flood guard blocks (0 disables) |
 | `core.limits.refine_requests` | `MILL_REFINE_REQUEST_LIMIT` | `80` | Per-call request cap for the refine agent |
 | `core.limits.maintenance_requests` | `MILL_MAINTENANCE_REQUEST_LIMIT` | `60` | Per-call request cap for the maintenance agent |
-| — (env-var only) | `MILL_DOC_REQUEST_LIMIT` | `4` | Per-run request cap for the document agent |
+| — (env-var only) | `MILL_DOC_REQUEST_LIMIT` | `8` | Per-run request cap for the document agent |
 | `core.limits.doc_classifier_requests` | `MILL_DOC_CLASSIFIER_REQUEST_LIMIT` | `3` | Per-call request cap for the doc-classifier gate |
 | `core.limits.review_requests` | `MILL_REVIEW_REQUEST_LIMIT` | `40` | Per-run request cap for the review agent |
 
