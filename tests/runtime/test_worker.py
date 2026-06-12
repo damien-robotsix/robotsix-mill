@@ -1642,3 +1642,93 @@ def test_stage_rank_covers_every_pipeline_state():
         f"(would be starved at default rank {Worker._DEFAULT_STAGE_RANK}): "
         f"{missing}"
     )
+
+
+async def test_network_outage_parks_without_consuming_retry(ctx, service, monkeypatch):
+    """A stage failing with a DNS-outage signature while the probe host
+    is unresolvable is PARKED: next_retry_at set, retry budget never
+    consumed, no BLOCKED transition — repeated failures (an outage far
+    longer than stage_retry_max_attempts) keep parking instead of
+    exhausting into a block."""
+    import subprocess
+
+    class DnsBoom(Stage):
+        name = "refine"
+        input_state = State.DRAFT
+
+        def run(self, _ticket, _ctx):
+            raise subprocess.CalledProcessError(
+                128,
+                "git",
+                stderr=(
+                    "fatal: unable to access 'https://github.com/x/y/': "
+                    "Could not resolve host: github.com"
+                ),
+            )
+
+    monkeypatch.setitem(registry.STAGES, "refine", DnsBoom())
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.transient_errors.network_available",
+        lambda host, **kw: False,
+    )
+    t = service.create("x")
+    for _ in range(ctx.settings.stage_retry_max_attempts + 2):
+        await process_ticket(t.id, ctx)
+        r = service.get(t.id)
+        assert r.state is State.DRAFT, "outage must never block the ticket"
+        assert r.retry_attempt == 1, "retry budget must not be consumed"
+        assert r.next_retry_at is not None
+        assert "network outage" in (r.last_transient_error or "")
+        # Simulate the backoff elapsing so the next loop iteration
+        # re-dispatches instead of short-circuiting on next_retry_at.
+        service.set_retry_state(
+            t.id,
+            retry_attempt=r.retry_attempt,
+            last_transient_error=r.last_transient_error,
+            next_retry_at=None,
+        )
+
+
+async def test_network_error_with_connectivity_uses_bounded_retries(
+    ctx, service, monkeypatch
+):
+    """The same DNS-flavored error WITHOUT a confirmed outage (probe
+    host resolves) goes through the normal bounded transient retry —
+    and blocks once attempts are exhausted."""
+    import subprocess
+
+    class DnsBoom(Stage):
+        name = "refine"
+        input_state = State.DRAFT
+
+        def run(self, _ticket, _ctx):
+            raise subprocess.CalledProcessError(
+                128,
+                "git",
+                stderr=(
+                    "fatal: unable to access 'https://github.com/x/y/': "
+                    "Could not resolve host: github.com"
+                ),
+            )
+
+    monkeypatch.setitem(registry.STAGES, "refine", DnsBoom())
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.transient_errors.network_available",
+        lambda host, **kw: True,
+    )
+    t = service.create("x")
+    for expected_attempt in range(1, ctx.settings.stage_retry_max_attempts + 1):
+        await process_ticket(t.id, ctx)
+        r = service.get(t.id)
+        assert r.state is State.DRAFT
+        assert r.retry_attempt == expected_attempt
+        assert "network outage" not in (r.last_transient_error or "")
+        service.set_retry_state(
+            t.id,
+            retry_attempt=r.retry_attempt,
+            last_transient_error=r.last_transient_error,
+            next_retry_at=None,
+        )
+    await process_ticket(t.id, ctx)
+    r = service.get(t.id)
+    assert r.state is State.BLOCKED, "exhausted retries must still block"

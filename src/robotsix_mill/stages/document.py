@@ -79,9 +79,15 @@ class DocumentStage(Stage):
         try:
             diff = combined_diff(s, ctx.repo_config, repos, target_branch)
         except Exception as e:
+            from ..runtime.transient_errors import reraise_if_transient
+            from ..vcs.git_ops import redact_credentials
+
+            reraise_if_transient(e)
+            # str(CalledProcessError) reprs the full argv — including
+            # the tokenized fetch URL. Redact before it hits the note.
             return Outcome(
                 State.BLOCKED,
-                f"failed to compute diff: {e}",
+                f"failed to compute diff: {redact_credentials(str(e))}",
             )
 
         # Empty diff → nothing to document, pass through.

@@ -185,13 +185,23 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
             )
             return cand
         except subprocess.CalledProcessError as e:
+            # A transient clone failure (5xx, connection refused, DNS
+            # outage) must reach the worker's stage-retry / outage
+            # parking instead of hard-blocking — see the 2026-06-12
+            # network shutdown that mass-blocked refine tickets here.
+            from ...runtime.transient_errors import reraise_if_transient
+
+            reraise_if_transient(e)
             # Escalate clone failure to BLOCKED — running refine
             # with no repo grounds the agent's system prompt
             # against tools that aren't registered (the
             # `tools=[]` path in refining.py:385). The result is
             # an inconsistent, tool-less refine that wastes
             # tokens. Surface the cause to the operator instead.
-            reason = f"refine clone failed: {(e.stderr or '').strip()[:200]}"
+            reason = (
+                "refine clone failed: "
+                + git_ops.redact_credentials((e.stderr or "").strip())[:200]
+            )
             log.warning("%s: %s", ticket.id, reason)
             # The diagnostic used to be posted as a comment; the
             # transition note carries the same info and v1 keeps

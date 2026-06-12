@@ -7,7 +7,9 @@ retries. This module classifies errors at the stage-runner level.
 from __future__ import annotations
 
 import re
+import socket
 import subprocess
+import time
 
 import httpx
 
@@ -40,6 +42,17 @@ _GIT_FATAL_TRANSIENT_RE = re.compile(
 _GIT_WORKSPACE_GONE_RE = re.compile(
     r"(fatal: not a git repository"
     r"|fatal: cannot change to .*No such file or directory)"
+)
+
+# Host-resolution failure signatures: the network (or its DNS) is gone,
+# not just one endpoint hiccuping. Matched against git stderr and
+# exception text anywhere in the cause chain.
+_NETWORK_DOWN_RE = re.compile(
+    r"(Could not resolve host"
+    r"|Temporary failure in name resolution"
+    r"|Name or service not known"
+    r"|getaddrinfo failed"
+    r"|Network is unreachable)"
 )
 
 _MAX_CHAIN_WALK = 10
@@ -80,6 +93,77 @@ def _is_transient_called_process_error(exc: BaseException) -> bool:
         or _GIT_FATAL_TRANSIENT_RE.search(stderr)
         or _GIT_WORKSPACE_GONE_RE.search(stderr)
     )
+
+
+def _matches_network_down(exc: BaseException) -> bool:
+    if isinstance(exc, socket.gaierror):
+        return True
+    if isinstance(exc, httpx.ConnectError):
+        return True
+    if isinstance(exc, subprocess.CalledProcessError):
+        stderr = exc.stderr
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode("utf-8", errors="replace")
+        if stderr and _NETWORK_DOWN_RE.search(stderr):
+            return True
+    return bool(_NETWORK_DOWN_RE.search(str(exc)))
+
+
+def is_network_down_error(exc: BaseException) -> bool:
+    """Return True when *exc* looks like a GLOBAL network/DNS outage.
+
+    Distinct from plain "transient": a 503 from one forge is endpoint
+    trouble worth bounded retries, but a host-resolution failure means
+    every network-touching stage on every board is about to fail the
+    same way. The worker pairs this with :func:`network_available` to
+    park tickets without consuming their retry budget — otherwise an
+    outage longer than the ~1-minute retry envelope mass-blocks the
+    whole board. Walks the cause chain like :func:`classify_stage_error`.
+    """
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    for _ in range(_MAX_CHAIN_WALK):
+        if current is None or id(current) in seen:
+            break
+        seen.add(id(current))
+        if _matches_network_down(current):
+            return True
+        if current.__cause__ is not None and id(current.__cause__) not in seen:
+            current = current.__cause__
+        elif current.__context__ is not None and id(current.__context__) not in seen:
+            current = current.__context__
+        else:
+            break
+    return False
+
+
+# Cached connectivity probe — every concurrently-failing ticket asks the
+# same question within seconds of each other. ``at`` starts at -inf so
+# the FIRST call always probes: time.monotonic() is seconds-since-boot
+# on Linux, so a small sentinel like 0.0 would read as "fresh cache"
+# during the first cache window after boot.
+_probe_cache: dict[str, float | bool] = {"at": float("-inf"), "ok": True}
+
+
+def network_available(host: str, *, cache_seconds: float = 30.0) -> bool:
+    """Cheap cached check that *host* resolves (DNS reachability).
+
+    Resolution is the cheapest end-to-end signal for "is the network
+    there at all" and matches the failure mode that motivates the check
+    (``Could not resolve host``). Results are cached *cache_seconds* so
+    a burst of failing tickets costs one lookup.
+    """
+    now = time.monotonic()
+    if now - float(_probe_cache["at"]) < cache_seconds:
+        return bool(_probe_cache["ok"])
+    try:
+        socket.getaddrinfo(host, 443)
+        ok = True
+    except OSError:
+        ok = False
+    _probe_cache["at"] = now
+    _probe_cache["ok"] = ok
+    return ok
 
 
 def reraise_if_transient(exc: BaseException) -> None:

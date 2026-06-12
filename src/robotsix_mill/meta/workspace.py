@@ -42,6 +42,7 @@ def build_meta_workspace(
     """
     repos_config = get_repos_config()
     clones: list[Path] = []
+    last_clone_error: subprocess.CalledProcessError | None = None
 
     for repo_id in repo_ids:
         rc = repos_config.repos.get(repo_id)
@@ -70,11 +71,20 @@ def build_meta_workspace(
             )
             clones.append(dest)
         except subprocess.CalledProcessError as e:
+            last_clone_error = e
             log.warning(
                 "build_meta_workspace: clone failed for %r: %s",
                 repo_id,
                 (e.stderr or "")[:200],
             )
+
+    # Every clone failed: when the failure is transient (forge 5xx, DNS
+    # outage) raise it so the worker retries / outage-parks instead of
+    # the caller hard-blocking on "no repo cloned".
+    if not clones and last_clone_error is not None:
+        from ..runtime.transient_errors import reraise_if_transient
+
+        reraise_if_transient(last_clone_error)
 
     repo_dir = clones[0] if clones else None
     return repo_dir, clones
@@ -105,7 +115,10 @@ def build_triaged_meta_workspace(
 
     try:
         repo_ids = required_repos_for(settings=ctx.settings, spec=spec)
-    except Exception:
+    except Exception as e:
+        from ..runtime.transient_errors import reraise_if_transient
+
+        reraise_if_transient(e)
         log.warning("%s: meta repo-triage failed", ticket.id, exc_info=True)
         ctx.service.add_comment(
             ticket.id,

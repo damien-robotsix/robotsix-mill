@@ -14,14 +14,17 @@ from pathlib import Path
 _CREDENTIAL_IN_URL = re.compile(r"://[^@/\s']+@")
 
 
-def redact_credentials(text: str) -> str:
+def redact_credentials(text: str | bytes) -> str:
     """Strip ``user:token@`` userinfo from any URL embedded in *text*.
 
     Error paths that repr a failed git command (``CalledProcessError``
     includes the full argv) would otherwise echo the tokenized remote —
     ``https://oauth2:ghs_…@github.com/…`` — into ticket notes and
     Langfuse traces. Run every git-command error string through this
-    before it leaves the process."""
+    before it leaves the process. Accepts bytes (CalledProcessError
+    stderr is bytes when the command ran without ``text=True``)."""
+    if isinstance(text, bytes):
+        text = text.decode("utf-8", errors="replace")
     return _CREDENTIAL_IN_URL.sub("://***@", text)
 
 
