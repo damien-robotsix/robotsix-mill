@@ -735,6 +735,106 @@ class TestYamlLoading:
         with pytest.raises(ConfigError, match="YAML parse error"):
             load_secrets_yaml(str(secrets_file))
 
+    # -- load_yaml_config edge cases -----------------------------------
+
+    def test_load_yaml_config_empty_config_file(self):
+        """``load_yaml_config(config_file="")`` treats explicit empty
+        string as "no production file" and does NOT raise."""
+        from robotsix_mill.config_loader import load_yaml_config
+
+        result = load_yaml_config(config_file="")
+        assert isinstance(result, dict)
+        assert result  # non-empty (real defaults loaded)
+
+    def test_load_yaml_config_malformed_defaults_raises(self, tmp_path, monkeypatch):
+        """Malformed YAML in the defaults file raises ``ConfigError``."""
+        from robotsix_mill.config_loader import ConfigError, load_yaml_config
+        import robotsix_mill.config_loader as cl
+
+        defaults = tmp_path / "bad_defaults.yaml"
+        defaults.write_text("{ invalid: yaml: : }")
+        monkeypatch.setattr(cl, "_DEFAULTS_FILE", defaults)
+        with pytest.raises(ConfigError, match="YAML parse error"):
+            load_yaml_config()
+
+    def test_load_yaml_config_malformed_local_raises(self, tmp_path, monkeypatch):
+        """Malformed YAML in the local overlay raises ``ConfigError``."""
+        from robotsix_mill.config_loader import ConfigError, load_yaml_config
+        import robotsix_mill.config_loader as cl
+        import shutil
+
+        local_dir = tmp_path / "config"
+        local_dir.mkdir()
+        defaults = local_dir / "mill.defaults.yaml"
+        shutil.copy("config/mill.defaults.yaml", defaults)
+        local = local_dir / "mill.local.yaml"
+        local.write_text("{ invalid: yaml: : }")
+        monkeypatch.setattr(cl, "_DEFAULTS_FILE", defaults)
+        monkeypatch.setattr(cl, "_LOCAL_FILE", local)
+        with pytest.raises(ConfigError, match="YAML parse error"):
+            load_yaml_config()
+
+    def test_load_yaml_config_three_layer_cascade(self, tmp_path, monkeypatch):
+        """Defaults + local + production deep-merge: local overrides
+        defaults, production overrides local."""
+        from robotsix_mill.config_loader import load_yaml_config
+        import robotsix_mill.config_loader as cl
+        import shutil
+
+        local_dir = tmp_path / "config"
+        local_dir.mkdir()
+        defaults = local_dir / "mill.defaults.yaml"
+        shutil.copy("config/mill.defaults.yaml", defaults)
+        local = local_dir / "mill.local.yaml"
+        local.write_text("core:\n  limits:\n    max_fix_iterations: 99\n")
+        prod = local_dir / "mill.production.yaml"
+        prod.write_text("core:\n  limits:\n    max_fix_iterations: 50\n")
+        monkeypatch.setattr(cl, "_DEFAULTS_FILE", defaults)
+        monkeypatch.setattr(cl, "_LOCAL_FILE", local)
+        config = load_yaml_config(config_file=str(prod))
+        assert config["core"]["limits"]["max_fix_iterations"] == 50
+
+    def test_load_yaml_config_skip_local_with_production(self, tmp_path, monkeypatch):
+        """``skip_local=True`` with a production file skips the local
+        overlay but includes production."""
+        from robotsix_mill.config_loader import load_yaml_config
+        import robotsix_mill.config_loader as cl
+        import shutil
+
+        local_dir = tmp_path / "config"
+        local_dir.mkdir()
+        defaults = local_dir / "mill.defaults.yaml"
+        shutil.copy("config/mill.defaults.yaml", defaults)
+        local = local_dir / "mill.local.yaml"
+        local.write_text("core:\n  limits:\n    max_fix_iterations: 99\n")
+        prod = local_dir / "mill.production.yaml"
+        prod.write_text("core:\n  limits:\n    max_fix_iterations: 50\n")
+        monkeypatch.setattr(cl, "_DEFAULTS_FILE", defaults)
+        monkeypatch.setattr(cl, "_LOCAL_FILE", local)
+        config = load_yaml_config(config_file=str(prod), skip_local=True)
+        # Production override (50) is applied; local override (99) is skipped.
+        # The real defaults value is 8.
+        assert config["core"]["limits"]["max_fix_iterations"] == 50
+
+    # -- load_secrets_yaml edge cases ----------------------------------
+
+    def test_load_secrets_yaml_empty_string_path(self):
+        """``load_secrets_yaml("")`` returns ``{}`` (explicit no-file)."""
+        from robotsix_mill.config_loader import load_secrets_yaml
+
+        assert load_secrets_yaml("") == {}
+
+    def test_load_secrets_yaml_env_var_overrides_default(self, tmp_path, monkeypatch):
+        """``MILL_SECRETS_FILE`` env var pointing to a valid temp YAML
+        file is used instead of the default ``config/secrets.yaml``."""
+        from robotsix_mill.config_loader import load_secrets_yaml
+
+        secrets_file = tmp_path / "custom_secrets.yaml"
+        secrets_file.write_text("openrouter_api_key: sk-from-env\n")
+        monkeypatch.setenv("MILL_SECRETS_FILE", str(secrets_file))
+        result = load_secrets_yaml()
+        assert result == {"openrouter_api_key": "sk-from-env"}
+
 
 # ---------------------------------------------------------------------------
 # 8. Secrets model
@@ -945,6 +1045,51 @@ class TestLoadReposYaml:
         assert "my-repo" in result
         assert "meta" not in result
 
+    # -- legacy / edge-case paths ---------------------------------------
+
+    def test_legacy_flat_format(self, tmp_path):
+        """YAML document without a ``repos:`` top-level key — the
+        document itself IS the repo mapping (with ``meta`` filtered out)."""
+        from robotsix_mill.config_loader import load_repos_yaml
+
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text(
+            "my-repo:\n"
+            "  board_id: my-board\n"
+            "  langfuse:\n"
+            "    public_key: pk-1\n"
+            "other-repo:\n"
+            "  board_id: other-board\n"
+            "meta:\n"
+            "  langfuse:\n"
+            "    public_key: pk-meta\n"
+        )
+        result = load_repos_yaml(str(repos_file))
+        assert result == {
+            "my-repo": {"board_id": "my-board", "langfuse": {"public_key": "pk-1"}},
+            "other-repo": {"board_id": "other-board"},
+        }
+        assert "meta" not in result
+
+    def test_non_dict_repos_value_raises(self, tmp_path):
+        """A ``repos:`` key whose value is a string (not a mapping)
+        raises ``ConfigError``."""
+        from robotsix_mill.config_loader import ConfigError, load_repos_yaml
+
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text("repos: not-a-mapping\n")
+        with pytest.raises(ConfigError, match="Expected a mapping under 'repos'"):
+            load_repos_yaml(str(repos_file))
+
+    def test_empty_repos_dict(self, tmp_path):
+        """``repos: {}`` returns an empty dict (not an error)."""
+        from robotsix_mill.config_loader import load_repos_yaml
+
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text("repos: {}\n")
+        result = load_repos_yaml(str(repos_file))
+        assert result == {}
+
 
 class TestLoadMetaYaml:
     """Tests for ``config_loader.load_meta_yaml``."""
@@ -982,6 +1127,33 @@ class TestLoadMetaYaml:
 
         repos_file = tmp_path / "repos.yaml"
         repos_file.write_text("repos:\n  my-repo:\n    board_id: my-board\n")
+        assert load_meta_yaml(str(repos_file)) == {}
+
+    # -- edge-case paths ------------------------------------------------
+
+    def test_empty_string_path_returns_empty(self):
+        """``load_meta_yaml("")`` returns ``{}`` (explicit no-file)."""
+        from robotsix_mill.config_loader import load_meta_yaml
+
+        assert load_meta_yaml("") == {}
+
+    def test_malformed_yaml_raises(self, tmp_path):
+        """Malformed YAML raises ``ConfigError``."""
+        from robotsix_mill.config_loader import ConfigError, load_meta_yaml
+
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text("{ invalid: yaml: : }")
+        with pytest.raises(ConfigError, match="YAML parse error"):
+            load_meta_yaml(str(repos_file))
+
+    def test_meta_not_dict_returns_empty(self, tmp_path):
+        """A ``meta:`` value that is a string (not a mapping) returns ``{}``."""
+        from robotsix_mill.config_loader import load_meta_yaml
+
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text(
+            "repos:\n  my-repo:\n    board_id: my-board\nmeta: not-a-mapping\n"
+        )
         assert load_meta_yaml(str(repos_file)) == {}
 
 
