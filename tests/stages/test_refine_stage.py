@@ -1270,6 +1270,13 @@ def test_refiner_placeholder_spec_falls_back_to_draft(ctx_factory, monkeypatch):
         "> see description",
         "TBD",
         "TODO",
+        # The 2026-06-11 incident: a bare pointer with a leading article
+        # and surrounding punctuation/verb prefixes that the old
+        # exact/prefix match missed but substring containment catches.
+        "<the spec above>",
+        "(the spec above)",
+        "as per the spec above",
+        "The spec above.",
     ],
 )
 def test_spec_is_degenerate_true(spec):
