@@ -523,7 +523,9 @@ class TestRunDocAgent:
         # Explore tool.
         monkeypatch.setattr(
             "robotsix_mill.agents.explore.make_explore_tool",
-            lambda settings, repo_dir, extra_roots=None, **kwargs: _dummy_fs_tool("explore"),
+            lambda settings, repo_dir, extra_roots=None, **kwargs: _dummy_fs_tool(
+                "explore"
+            ),
         )
         # Memory — no existing ledger by default.
         monkeypatch.setattr(
@@ -573,7 +575,9 @@ class TestRunDocAgent:
         )
         monkeypatch.setattr(
             "robotsix_mill.agents.explore.make_explore_tool",
-            lambda settings, repo_dir, extra_roots=None, **kwargs: _dummy_fs_tool("explore"),
+            lambda settings, repo_dir, extra_roots=None, **kwargs: _dummy_fs_tool(
+                "explore"
+            ),
         )
         monkeypatch.setattr(
             "robotsix_mill.runners.pass_runner.load_memory",
@@ -624,7 +628,9 @@ class TestRunDocAgent:
         )
         monkeypatch.setattr(
             "robotsix_mill.agents.explore.make_explore_tool",
-            lambda settings, repo_dir, extra_roots=None, **kwargs: _dummy_fs_tool("explore"),
+            lambda settings, repo_dir, extra_roots=None, **kwargs: _dummy_fs_tool(
+                "explore"
+            ),
         )
         monkeypatch.setattr(
             "robotsix_mill.runners.pass_runner.load_memory",
@@ -668,7 +674,9 @@ class TestRunDocAgent:
         )
         monkeypatch.setattr(
             "robotsix_mill.agents.explore.make_explore_tool",
-            lambda settings, repo_dir, extra_roots=None, **kwargs: _dummy_fs_tool("explore"),
+            lambda settings, repo_dir, extra_roots=None, **kwargs: _dummy_fs_tool(
+                "explore"
+            ),
         )
         monkeypatch.setattr(
             "robotsix_mill.runners.pass_runner.load_memory",
@@ -791,7 +799,9 @@ class TestRunDocAgent:
         )
         monkeypatch.setattr(
             "robotsix_mill.agents.explore.make_explore_tool",
-            lambda settings, repo_dir, extra_roots=None, **kwargs: _dummy_fs_tool("explore"),
+            lambda settings, repo_dir, extra_roots=None, **kwargs: _dummy_fs_tool(
+                "explore"
+            ),
         )
         monkeypatch.setattr(
             "robotsix_mill.runners.pass_runner.load_memory",
@@ -835,7 +845,9 @@ class TestRunDocAgent:
         )
         monkeypatch.setattr(
             "robotsix_mill.agents.explore.make_explore_tool",
-            lambda settings, repo_dir, extra_roots=None, **kwargs: _dummy_fs_tool("explore"),
+            lambda settings, repo_dir, extra_roots=None, **kwargs: _dummy_fs_tool(
+                "explore"
+            ),
         )
         monkeypatch.setattr(
             "robotsix_mill.runners.pass_runner.load_memory",
@@ -879,7 +891,9 @@ class TestRunDocAgent:
         )
         monkeypatch.setattr(
             "robotsix_mill.agents.explore.make_explore_tool",
-            lambda settings, repo_dir, extra_roots=None, **kwargs: _dummy_fs_tool("explore"),
+            lambda settings, repo_dir, extra_roots=None, **kwargs: _dummy_fs_tool(
+                "explore"
+            ),
         )
         monkeypatch.setattr(
             "robotsix_mill.runners.pass_runner.load_memory",
