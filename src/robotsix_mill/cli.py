@@ -474,7 +474,7 @@ def _resolve_repo_id(
         return args.repo_id
 
     from .config import get_repos_config
-    from .config_loader import ConfigError as _ConfigError
+    from .config import ConfigError as _ConfigError
 
     try:
         repos = get_repos_config()
