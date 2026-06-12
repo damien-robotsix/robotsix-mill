@@ -17,13 +17,10 @@ SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 REPO="$(dirname "$SCRIPT_DIR")"
 STATE_DIR="$(dirname "$REPO")"          # runtime files live outside the repo
 
-# Bake the just-deployed commit's short SHA into the image as the
-# per-deploy static-asset cache-busting token (compose build.args ->
-# Dockerfile ARG/ENV -> asset_version()). Same commit => same token.
+# Pass the docker group id as a build arg so the container can
+# access the host's docker socket with matching group membership.
 export DOCKER_GID
-export MILL_BUILD_SHA
 DOCKER_GID=$(getent group docker | cut -d: -f3)
-MILL_BUILD_SHA=$(git -C "$REPO" rev-parse --short HEAD)
 
 exec robotsix-autoupdate \
   --repo "$REPO" \
