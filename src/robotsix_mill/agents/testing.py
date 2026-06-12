@@ -116,6 +116,87 @@ def _env_error_diag(rc: int, out: str) -> str | None:
     )
 
 
+def _load_file_map(repo_dir: Path) -> list[str] | None:
+    """Load the file_map from ``artifacts/file_map.json``, or ``None``."""
+    fm_path = repo_dir.parent / "artifacts" / "file_map.json"
+    if not fm_path.exists():
+        return None
+    try:
+        raw = json.loads(fm_path.read_text(encoding="utf-8"))
+        if not raw:
+            return None
+        return [entry["file"] for entry in raw]
+    except json.JSONDecodeError, KeyError, OSError:
+        return None
+
+
+def _evaluate_gate_result(
+    *,
+    settings: Settings,
+    repo_dir: Path,
+    cmd: str,
+    rc: int,
+    out: str,
+    retry_on_failure: bool,
+    sandbox_image: str | None,
+    file_map: list[str] | None,
+    success_msg: str,
+    retry_success_msg: str,
+    is_test_gate: bool = False,
+) -> tuple[bool, str]:
+    """Evaluate the result of a gate command (test or smoke).
+
+    Handles the common post-run logic: rc==0 pass, rc==5 no-tests
+    (test gate only), environmental errors, flake retry, and
+    distillation.
+    """
+    if rc == 0:
+        return True, success_msg
+
+    # pytest exits 5 when it collects ZERO tests ("no tests ran"). A suite
+    # with no tests yet is not a regression — most importantly, it must NOT
+    # poison the baseline check of a freshly-scaffolded repo (which ships an
+    # empty tests/ dir) and block every ticket on its board. Treat the
+    # pytest no-tests signal as passing.
+    if is_test_gate and rc == 5 and "no tests ran" in out.lower():
+        return True, "no tests collected (pytest rc=5) — treated as passing"
+
+    # Environmental failure: a binary referenced by the gate command is not
+    # installed / not on PATH (``rc=127`` or an explicit command-not-found
+    # signature). This is NOT fixable by editing code, so skip the distill
+    # LLM and return a STABLE, byte-identical diagnosis carrying a fixed
+    # marker and the binary name. The stability is load-bearing: the
+    # implement fix-loop circuit breaker fires when the same diagnosis
+    # repeats, capping unfixable env failures instead of burning every
+    # fix iteration. Conservative by design — only rc 127 or a real
+    # command-not-found signature triggers this; a normal assertion
+    # failure (rc 1) still flows to the distill agent below.
+    env_diag = _env_error_diag(rc, out)
+    if env_diag is not None:
+        return False, env_diag
+
+    if retry_on_failure:
+        from .. import sandbox as _sandbox
+
+        try:
+            rc2, out2 = _sandbox.run(
+                cmd,
+                repo_dir=repo_dir,
+                settings=settings,
+                install_project=True,
+                sandbox_image=sandbox_image,
+            )
+        except _sandbox.SandboxError as e:
+            return False, f"sandbox unavailable on flake re-run: {e}"
+        if rc2 == 0:
+            return True, retry_success_msg
+        # Both runs red — distill the SECOND output (fresher, and the
+        # one a fix ticket will be written against).
+        rc, out = rc2, out2
+
+    return False, _distill_failure(settings, repo_dir, rc, out, file_map=file_map)
+
+
 def run_test_agent(
     *,
     settings: Settings,
@@ -159,14 +240,7 @@ def run_test_agent(
     longer carries a per-repo ``test_command``; it moved to the repo's
     own ``.robotsix-mill/config.yaml``.)"""
     if file_map is None:
-        fm_path = repo_dir.parent / "artifacts" / "file_map.json"
-        if fm_path.exists():
-            try:
-                raw = json.loads(fm_path.read_text(encoding="utf-8"))
-                if raw:
-                    file_map = [entry["file"] for entry in raw]
-            except (json.JSONDecodeError, KeyError, OSError):
-                pass  # malformed or unreadable → treat as no file_map
+        file_map = _load_file_map(repo_dir)
 
     from .. import sandbox
 
@@ -188,52 +262,23 @@ def run_test_agent(
         )
     except sandbox.SandboxError as e:
         return False, f"sandbox unavailable: {e}"
-    if rc == 0:
-        return True, "all tests passed"
 
-    # pytest exits 5 when it collects ZERO tests ("no tests ran"). A suite
-    # with no tests yet is not a regression — most importantly, it must NOT
-    # poison the baseline check of a freshly-scaffolded repo (which ships an
-    # empty tests/ dir) and block every ticket on its board. Treat the
-    # pytest no-tests signal as passing.
-    if rc == 5 and "no tests ran" in out.lower():
-        return True, "no tests collected (pytest rc=5) — treated as passing"
-
-    # Environmental failure: a binary referenced by the gate command is not
-    # installed / not on PATH (``rc=127`` or an explicit command-not-found
-    # signature). This is NOT fixable by editing code, so skip the distill
-    # LLM and return a STABLE, byte-identical diagnosis carrying a fixed
-    # marker and the binary name. The stability is load-bearing: the
-    # implement fix-loop circuit breaker fires when the same diagnosis
-    # repeats, capping unfixable env failures instead of burning every
-    # fix iteration. Conservative by design — only rc 127 or a real
-    # command-not-found signature triggers this; a normal assertion
-    # failure (rc 1) still flows to the distill agent below.
-    env_diag = _env_error_diag(rc, out)
-    if env_diag is not None:
-        return False, env_diag
-
-    if retry_on_failure:
-        try:
-            rc2, out2 = sandbox.run(
-                cmd,
-                repo_dir=repo_dir,
-                settings=settings,
-                install_project=True,
-                sandbox_image=image,
-            )
-        except sandbox.SandboxError as e:
-            return False, f"sandbox unavailable on flake re-run: {e}"
-        if rc2 == 0:
-            return True, (
-                f"tests passed on re-run (first run failed rc={rc} — flaky); "
-                "treated as passing"
-            )
-        # Both runs red — distill the SECOND output (fresher, and the
-        # one a fix ticket will be written against).
-        rc, out = rc2, out2
-
-    return False, _distill_failure(settings, repo_dir, rc, out, file_map=file_map)
+    return _evaluate_gate_result(
+        settings=settings,
+        repo_dir=repo_dir,
+        cmd=cmd,
+        rc=rc,
+        out=out,
+        retry_on_failure=retry_on_failure,
+        sandbox_image=image,
+        file_map=file_map,
+        success_msg="all tests passed",
+        retry_success_msg=(
+            f"tests passed on re-run (first run failed rc={rc} — flaky); "
+            "treated as passing"
+        ),
+        is_test_gate=True,
+    )
 
 
 def smoke_paths_match(changed_files: list[str], smoke_paths: list[str]) -> bool:
@@ -293,14 +338,7 @@ def run_smoke_agent(
     ``file_map``: mirrors :func:`run_test_agent` — auto-discovered from
     the sibling ``artifacts/file_map.json`` when ``None``."""
     if file_map is None:
-        fm_path = repo_dir.parent / "artifacts" / "file_map.json"
-        if fm_path.exists():
-            try:
-                raw = json.loads(fm_path.read_text(encoding="utf-8"))
-                if raw:
-                    file_map = [entry["file"] for entry in raw]
-            except (json.JSONDecodeError, KeyError, OSError):
-                pass
+        file_map = _load_file_map(repo_dir)
 
     from .. import sandbox
 
@@ -318,39 +356,33 @@ def run_smoke_agent(
         )
     except sandbox.SandboxError as e:
         return False, f"sandbox unavailable: {e}"
-    if rc == 0:
-        return True, "smoke passed"
 
-    # Environmental failure (missing binary / not on PATH): stable,
-    # LLM-free diagnosis so the implement fix-loop circuit breaker can
-    # fire. Same carve-out as the test gate; the pytest ``rc==5`` no-tests
-    # carve-out is test-suite-specific and intentionally NOT applied here.
-    env_diag = _env_error_diag(rc, out)
-    if env_diag is not None:
-        return False, env_diag
-
-    if retry_on_failure:
-        try:
-            rc2, out2 = sandbox.run(
-                cmd,
-                repo_dir=repo_dir,
-                settings=settings,
-                install_project=True,
-                sandbox_image=image,
-            )
-        except sandbox.SandboxError as e:
-            return False, f"sandbox unavailable on flake re-run: {e}"
-        if rc2 == 0:
-            return True, (
-                f"smoke passed on re-run (first run failed rc={rc} — flaky); "
-                "treated as passing"
-            )
-        rc, out = rc2, out2
-
-    return False, _distill_failure(settings, repo_dir, rc, out, file_map=file_map)
+    return _evaluate_gate_result(
+        settings=settings,
+        repo_dir=repo_dir,
+        cmd=cmd,
+        rc=rc,
+        out=out,
+        retry_on_failure=retry_on_failure,
+        sandbox_image=image,
+        file_map=file_map,
+        success_msg="smoke passed",
+        retry_success_msg=(
+            f"smoke passed on re-run (first run failed rc={rc} — flaky); "
+            "treated as passing"
+        ),
+        is_test_gate=False,
+    )
 
 
-def _distill_failure(settings: Settings, repo_dir: Path, rc: int, out: str, *, file_map: list[str] | None = None) -> str:
+def _distill_failure(
+    settings: Settings,
+    repo_dir: Path,
+    rc: int,
+    out: str,
+    *,
+    file_map: list[str] | None = None,
+) -> str:
     """Distill a raw failing-test log into a short, actionable diagnosis
     via a CHEAP model. Degrades to the raw tail when no model key is set
     or the distill agent errors."""
