@@ -3363,3 +3363,55 @@ def test_deployed_log_folder_present_dir_wires_tool(ctx_factory, monkeypatch, tm
     assert captured["deployed_log_dir"] == logs.resolve()
     assert captured["extra_roots"] == [logs.resolve()]
     assert captured["deployed_log_summary"]
+
+
+def test_clone_failure_transient_reraises_for_worker_retry(ctx_factory, monkeypatch):
+    """A TRANSIENT clone failure (DNS outage / forge 5xx) must escape the
+    stage so the worker's retry / outage-parking handles it — blocking
+    here is what mass-parked tickets in the 2026-06-12 network shutdown."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///nonexistent", require_approval="false")
+    t = _ticket(ctx, body="Add endpoint")
+
+    _apply_default_mocks(
+        monkeypatch,
+        clone=lambda remote_url, dest, branch, token: (_ for _ in ()).throw(
+            subprocess.CalledProcessError(
+                128,
+                "git",
+                stderr=(
+                    b"fatal: unable to access 'https://github.com/x/y/': "
+                    b"Could not resolve host: github.com"
+                ),
+            )
+        ),
+    )
+
+    with pytest.raises(subprocess.CalledProcessError):
+        RefineStage().run(t, ctx)
+
+
+def test_clone_failure_note_redacts_credentials(ctx_factory, monkeypatch):
+    """A fatal clone failure whose stderr echoes the tokenized remote
+    must not leak the token into the BLOCKED note."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///nonexistent", require_approval="false")
+    t = _ticket(ctx, body="Add endpoint")
+
+    _apply_default_mocks(
+        monkeypatch,
+        clone=lambda remote_url, dest, branch, token: (_ for _ in ()).throw(
+            subprocess.CalledProcessError(
+                128,
+                "git",
+                stderr=(
+                    b"remote: Repository not found.\n"
+                    b"fatal: repository 'https://oauth2:ghs_secret123@github.com/x/y/' not found"
+                ),
+            )
+        ),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert "ghs_secret123" not in (out.note or "")
+    assert "://***@" in (out.note or "")
