@@ -201,7 +201,7 @@ def run_doc_agent(
         board_id=board_id,  # so report_issue can file a blocker on the board
         system_prompt=system_prompt,
         tools=[
-            make_explore_tool(settings, repo_dir, extra_roots=extra_roots),
+            make_explore_tool(settings, repo_dir, extra_roots=extra_roots, pre_seeded_paths=reference_files),
             *(
                 t
                 for t in fs
