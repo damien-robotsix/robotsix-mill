@@ -32,6 +32,8 @@ import os
 import re
 import shutil
 from collections import defaultdict
+from collections.abc import Callable
+from typing import Any
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -406,6 +408,9 @@ class DataDirAuditPassResult:
     # Number of terminal-state ticket workspaces removed by the opt-in
     # prune_closed GC step (0 when the knob is disabled).
     closed_pruned: int = 0
+    # Number of repo/ + repos/ clone dirs removed from terminal-ticket
+    # workspaces by the default-on terminal-clone GC step.
+    clones_pruned: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -812,33 +817,6 @@ def _terminal_close_times(
     return terminal_ids, close_times
 
 
-def _active_workspace_ticket_ids(settings: Settings, board_id: str) -> set[str]:
-    """Return ids of *active* per-ticket workspaces for *board_id*.
-
-    A workspace is active when its directory name has a live Ticket row
-    in the board DB (an absent row means an **orphan**, handled by
-    :func:`find_orphan_workspaces`) AND that ticket is NOT terminal (a
-    terminal-but-unpruned workspace is a GC concern handled by
-    :func:`_prune_closed_workspaces`). Growth confined to an active
-    workspace is expected transient runtime data and is suppressed
-    upstream of filing.
-    """
-    workspaces_dir = settings.workspaces_dir_for(board_id)
-    if not workspaces_dir.exists():
-        return set()
-    candidates = _workspace_candidates(workspaces_dir)
-    if not candidates:
-        return set()
-    candidate_ids = [name for name, _ in candidates]
-    existing: set[str] = set()
-    with db.session(settings, board_id) as s:
-        for start in range(0, len(candidate_ids), _BATCH_SIZE):
-            chunk = candidate_ids[start : start + _BATCH_SIZE]
-            existing.update(s.exec(select(Ticket.id).where(Ticket.id.in_(chunk))).all())
-    terminal_ids, _ = _terminal_close_times(settings, board_id, candidate_ids)
-    return existing - terminal_ids
-
-
 def _prune_board_workspaces(
     settings: Settings,
     board_id: str,
@@ -910,6 +888,298 @@ def _prune_closed_workspaces(settings: Settings) -> int:
             )
             continue
     return total_removed
+
+
+# ---------------------------------------------------------------------------
+# Default-on GC: prune reproducible clones inside terminal-ticket workspaces
+# ---------------------------------------------------------------------------
+
+# Workspace subdirs holding reproducible git clones: the single-repo
+# implement clone and the multi-repo (meta) clone tree. Everything else
+# in the workspace (description.md, artifacts/, screenshots/) is a
+# post-mortem record and is never touched by this GC.
+_CLONE_SUBDIRS = ("repo", "repos")
+
+
+def _remove_workspace_clones(board_id: str, ticket_id: str, ws_path: Path) -> int:
+    """Delete the clone subdirs of one workspace; return dirs removed."""
+    removed = 0
+    for sub in _CLONE_SUBDIRS:
+        clone = ws_path / sub
+        if not clone.is_dir():
+            continue
+        shutil.rmtree(clone, ignore_errors=True)
+        if not clone.exists():
+            removed += 1
+            log.info(
+                "data_dir_audit: pruned terminal-ticket clone "
+                "board=%r ticket=%s path=%s",
+                board_id,
+                ticket_id,
+                clone,
+            )
+    return removed
+
+
+def _prune_board_terminal_clones(
+    settings: Settings,
+    board_id: str,
+    now: datetime,
+    age_threshold_seconds: int,
+) -> int:
+    """Remove clone subdirs inside terminal-ticket workspaces for one board.
+
+    Mirrors :func:`_prune_board_workspaces` but deletes only the
+    ``repo/`` / ``repos/`` clone dirs, preserving the rest of the
+    workspace. Returns the number of clone dirs removed.
+    """
+    workspaces_dir = settings.workspaces_dir_for(board_id)
+    if not workspaces_dir.exists():
+        return 0
+
+    candidates = _workspace_candidates(workspaces_dir)
+    if not candidates:
+        return 0
+
+    candidate_ids = [name for name, _ in candidates]
+    terminal_ids, close_times = _terminal_close_times(settings, board_id, candidate_ids)
+
+    removed = 0
+    for name, path in candidates:
+        if name not in terminal_ids:
+            continue
+        close_time = close_times.get(name) or _close_time_from_ticket_id(name)
+        if close_time is None:
+            continue
+        if (now - close_time).total_seconds() < age_threshold_seconds:
+            continue
+        removed += _remove_workspace_clones(board_id, name, path)
+    if removed:
+        log.info(
+            "data_dir_audit: board=%r pruned %d terminal-ticket clone(s)",
+            board_id,
+            removed,
+        )
+    return removed
+
+
+def _prune_terminal_clones(settings: Settings) -> int:
+    """Remove ``repo/`` / ``repos/`` clones from terminal-ticket
+    workspaces across all boards. Returns the number of clone dirs
+    removed."""
+    now = _now()
+    age_threshold_seconds = settings.data_dir_audit_prune_terminal_clones_age_seconds
+    total_removed = 0
+    for board_id in _boards_from_disk(settings):
+        try:
+            total_removed += _prune_board_terminal_clones(
+                settings, board_id, now, age_threshold_seconds
+            )
+        except Exception:
+            log.warning(
+                "data_dir_audit: board=%r — terminal-clone prune failed",
+                board_id,
+                exc_info=True,
+            )
+            continue
+    return total_removed
+
+
+# ---------------------------------------------------------------------------
+# Growth classification + breakdown
+# ---------------------------------------------------------------------------
+
+# Classifications for growth-flag paths and their contributors. A path
+# is "self-healing" when the system already reclaims or reports it
+# through another channel, so a growth ticket would be pure noise.
+_GROWTH_CLASS_ACTIVE = "active ticket workspace (transient)"
+_GROWTH_CLASS_TERMINAL = "terminal ticket workspace (clone GC reclaims)"
+_GROWTH_CLASS_ORPHAN = "orphan workspace (reported by the orphan check)"
+_GROWTH_CLASS_PERIODIC = "periodic-pass clone (re-cloned every pass)"
+_GROWTH_CLASS_OTHER = "other"
+
+# Fraction of a directory's growth that must be attributable to
+# self-healing categories for the aggregate flag to be suppressed —
+# e.g. ``workspaces/`` growing only because active tickets grew.
+_EXPLAINED_SUPPRESS_FRACTION = 0.9
+
+# Top-N contributors listed in a filed growth ticket's breakdown.
+_BREAKDOWN_TOP_N = 8
+
+
+def _workspace_ticket_states(
+    settings: Settings, board_id: str, ticket_ids: set[str]
+) -> dict[str, str]:
+    """Map each id in *ticket_ids* to ``"active"`` / ``"terminal"`` /
+    ``"orphan"`` (no DB row) via batched ``IN`` selects."""
+    states: dict[str, str] = {tid: "orphan" for tid in ticket_ids}
+    ids = sorted(ticket_ids)
+    with db.session(settings, board_id) as s:
+        for start in range(0, len(ids), _BATCH_SIZE):
+            chunk = ids[start : start + _BATCH_SIZE]
+            rows = s.exec(
+                select(Ticket.id, Ticket.state).where(Ticket.id.in_(chunk))
+            ).all()
+            for tid, state in rows:
+                states[tid] = (
+                    "terminal" if State(state) in _TERMINAL_STATES else "active"
+                )
+    return states
+
+
+def _classify_growth_path(path: str, ticket_states: dict[str, str]) -> str:
+    """Classify a growth path against the workspace/periodic taxonomy."""
+    if _is_periodic_pass_workspace_path(path):
+        return _GROWTH_CLASS_PERIODIC
+    tid = _workspace_ticket_id_for_path(path)
+    if tid is None:
+        return _GROWTH_CLASS_OTHER
+    state = ticket_states.get(tid, "orphan")
+    if state == "active":
+        return _GROWTH_CLASS_ACTIVE
+    if state == "terminal":
+        return _GROWTH_CLASS_TERMINAL
+    return _GROWTH_CLASS_ORPHAN
+
+
+def _immediate_child_growth(
+    prior: dict[str, dict[str, Any]],
+    current: dict[str, dict[str, Any]],
+    parent: str,
+) -> list[dict[str, Any]]:
+    """Positive growth deltas of *parent*'s immediate children.
+
+    *parent* must be a directory key (trailing ``/``). A child absent
+    from *prior* counts with its full current size — new data is
+    growth too, even though :func:`_compute_growth_deltas` only flags
+    paths present in both snapshots. Returns
+    ``[{"path": ..., "delta_bytes": ...}, ...]`` sorted descending.
+    """
+    out: list[dict[str, Any]] = []
+    for key, info in current.items():
+        if key == parent or not key.startswith(parent):
+            continue
+        rest = key[len(parent) :].rstrip("/")
+        if not rest or "/" in rest:
+            continue
+        prior_size = prior.get(key, {}).get("size_bytes", 0)
+        delta = info["size_bytes"] - prior_size
+        if delta > 0:
+            out.append({"path": key, "delta_bytes": delta})
+    out.sort(key=lambda d: int(d["delta_bytes"]), reverse=True)
+    return out
+
+
+def _annotate_and_filter_growth_flags(
+    settings: Settings,
+    board_id: str,
+    flags: list[dict[str, Any]],
+    prior: dict[str, dict[str, Any]],
+    current: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Suppress self-healing growth flags; attach a breakdown to the rest.
+
+    Suppression rules (each logged):
+
+    - periodic-pass workspace paths — wiped and re-cloned every pass;
+    - paths inside ACTIVE ticket workspaces — expected transient
+      runtime data (e.g. the ``repo/`` clone);
+    - paths inside TERMINAL ticket workspaces when the terminal-clone
+      GC is enabled — it reclaims them on the next pass;
+    - paths inside ORPHAN workspaces — the orphan check files its own
+      finding with the full directory size;
+    - directory flags whose growth is ``>= _EXPLAINED_SUPPRESS_FRACTION``
+      attributable to the above categories via their immediate children
+      — e.g. the aggregate ``workspaces/`` dir growing only because the
+      (individually suppressed) per-ticket workspaces inside it grew.
+
+    Surviving flags gain ``breakdown`` (top contributors, classified)
+    and ``explained_pct`` so the filed ticket is self-diagnosing
+    without requiring data-dir access from any agent.
+    """
+    child_cache = {
+        flag["path"]: _immediate_child_growth(prior, current, flag["path"])
+        for flag in flags
+        if flag["path"].endswith("/")
+    }
+    ticket_states = _growth_ticket_states(settings, board_id, flags, child_cache)
+    prune_terminal = settings.data_dir_audit_prune_terminal_clones
+
+    def _self_healing(cls: str) -> bool:
+        if cls == _GROWTH_CLASS_TERMINAL:
+            return prune_terminal
+        return cls != _GROWTH_CLASS_OTHER
+
+    kept: list[dict[str, Any]] = []
+    for flag in flags:
+        path = flag["path"]
+        delta = int(flag["delta_bytes"])
+        cls = _classify_growth_path(path, ticket_states)
+        if _self_healing(cls):
+            log.info(
+                "data_dir_audit: suppressing growth flag board=%r path=%s "
+                "delta=%dB (%s)",
+                board_id,
+                path,
+                delta,
+                cls,
+            )
+            continue
+        children = child_cache.get(path, [])
+        explained = _classify_children(children, ticket_states, _self_healing)
+        explained_pct = min(100.0, (explained / delta) * 100) if delta > 0 else 0.0
+        if children and explained_pct >= _EXPLAINED_SUPPRESS_FRACTION * 100:
+            log.info(
+                "data_dir_audit: suppressing growth flag board=%r path=%s "
+                "delta=%dB (%.0f%% attributable to self-healing workspace "
+                "churn)",
+                board_id,
+                path,
+                delta,
+                explained_pct,
+            )
+            continue
+        flag["breakdown"] = children[:_BREAKDOWN_TOP_N]
+        flag["explained_pct"] = round(explained_pct, 1)
+        kept.append(flag)
+    return kept
+
+
+def _growth_ticket_states(
+    settings: Settings,
+    board_id: str,
+    flags: list[dict[str, Any]],
+    child_cache: dict[str, list[dict[str, Any]]],
+) -> dict[str, str]:
+    """One batched state lookup covering every ticket id seen in flag
+    paths or their immediate children."""
+    tids: set[str] = set()
+    for flag in flags:
+        tid = _workspace_ticket_id_for_path(flag["path"])
+        if tid is not None:
+            tids.add(tid)
+    for children in child_cache.values():
+        for child in children:
+            ctid = _workspace_ticket_id_for_path(child["path"])
+            if ctid is not None:
+                tids.add(ctid)
+    return _workspace_ticket_states(settings, board_id, tids) if tids else {}
+
+
+def _classify_children(
+    children: list[dict[str, Any]],
+    ticket_states: dict[str, str],
+    self_healing: Callable[[str], bool],
+) -> int:
+    """Stamp each child's classification in place; return the summed
+    growth of the self-healing ones."""
+    explained = 0
+    for child in children:
+        ccls = _classify_growth_path(child["path"], ticket_states)
+        child["classification"] = ccls
+        if self_healing(ccls):
+            explained += int(child["delta_bytes"])
+    return explained
 
 
 # ---------------------------------------------------------------------------
@@ -996,9 +1266,39 @@ def _build_growth_finding(flag: dict) -> tuple[str, str, str]:
         f"({current_size} bytes)\n"
         f"- **Delta:** +{_human_bytes(delta_bytes)} ({delta_bytes} bytes), "
         f"+{delta_pct}%\n"
-        f"- **Threshold exceeded:** {threshold_exceeded}\n\n"
-        f"Investigate why this path grew by {_human_bytes(delta_bytes)} "
-        "since the last audit pass.\n"
+        f"- **Threshold exceeded:** {threshold_exceeded}\n"
+    )
+
+    breakdown = flag.get("breakdown") or []
+    if breakdown:
+        body += (
+            "\n## Growth breakdown (top contributors)\n\n"
+            "| Path | Growth | Classification |\n"
+            "|---|---|---|\n"
+        )
+        for item in breakdown:
+            body += (
+                f"| `{_trim_path(item['path'])}` "
+                f"| +{_human_bytes(int(item['delta_bytes']))} "
+                f"| {item.get('classification', _GROWTH_CLASS_OTHER)} |\n"
+            )
+        explained_pct = flag.get("explained_pct")
+        if explained_pct is not None:
+            body += (
+                f"\n~{explained_pct}% of this growth is attributable to "
+                "self-healing categories (reclaimed by the audit GC or "
+                "reported through their own findings).\n"
+            )
+
+    body += (
+        "\nThe audit pass reclaims clone and workspace churn automatically; "
+        "this finding was filed because the growth could NOT be fully "
+        "attributed to self-healing categories. If a contributor above "
+        "(focus on `other` rows) is an artifact that mill code writes "
+        "without bound, spec a code fix capping or rotating that writer. "
+        "If this is one-off operational data, close this ticket with a "
+        "note — no agent has host data-dir access, so manual cleanup "
+        "cannot be delegated to the pipeline.\n"
     )
     return gap_id, title, body
 
@@ -1242,50 +1542,37 @@ def _scan_growth_deltas(settings: Settings) -> tuple[list[dict], int]:
         # naturally — only currently-existing paths are written).
         _save_growth_state(state_path, current)
 
-        # Suppress growth flags whose path lies inside an active
-        # (live, non-terminal) per-ticket workspace — that growth is
-        # expected transient runtime data (e.g. the repo/ clone) and
-        # should never be filed. The active set is computed lazily,
-        # only when a flag is actually a workspace path.
+        # Suppress self-healing growth flags (periodic clones, active /
+        # terminal / orphan ticket workspaces, and aggregate dirs whose
+        # growth those explain) and attach a classified breakdown to
+        # the survivors so a filed ticket is self-diagnosing.
         if board_flags:
-            active_ids = None
-            kept: list[dict] = []
-            for flag in board_flags:
-                # Periodic-pass clones (e.g. ``health_workspace/repo/``)
-                # are wiped and re-cloned every pass, so their .git
-                # churn produces large deltas every run. Suppress
-                # unconditionally — no active/terminal distinction
-                # applies to these transient clones.
-                if _is_periodic_pass_workspace_path(flag["path"]):
-                    log.info(
-                        "data_dir_audit: suppressing growth flag for "
-                        "periodic-pass workspace board=%r path=%s delta=%dB",
-                        board_id,
-                        flag["path"],
-                        int(flag["delta_bytes"]),
-                    )
-                    continue
-                tid = _workspace_ticket_id_for_path(flag["path"])
-                if tid is not None:
-                    if active_ids is None:
-                        active_ids = _active_workspace_ticket_ids(settings, board_id)
-                    if tid in active_ids:
-                        log.info(
-                            "data_dir_audit: suppressing growth flag for active "
-                            "workspace board=%r ticket=%s path=%s delta=%dB",
-                            board_id,
-                            tid,
-                            flag["path"],
-                            int(flag["delta_bytes"]),
-                        )
-                        continue
-                kept.append(flag)
-            board_flags = kept
+            board_flags = _annotate_and_filter_growth_flags(
+                settings, board_id, board_flags, prior, current
+            )
 
         if board_flags:
             boards_with_flags += 1
             all_growth_flags.extend(board_flags)
     return all_growth_flags, boards_with_flags
+
+
+def _orphan_summary_line(
+    orphans_by_board: dict[str, list[OrphanWorkspace]],
+    total_orphans: int,
+) -> str:
+    """Render the orphan-workspaces summary line."""
+    word = "workspace" if total_orphans == 1 else "workspaces"
+    orphan_line = f"{total_orphans} orphan {word}"
+    if total_orphans > 0 and orphans_by_board:
+        flat = [o for items in orphans_by_board.values() for o in items]
+        if flat:
+            biggest = max(flat, key=lambda o: o.dir_size_bytes)
+            path = _trim_path(
+                f".data/{biggest.board_id}/workspaces/{biggest.ticket_id}"
+            )
+            orphan_line += f" (largest: {path}, {_human_bytes(biggest.dir_size_bytes)})"
+    return orphan_line
 
 
 def _build_summary(
@@ -1298,6 +1585,7 @@ def _build_summary(
     total_orphans: int,
     drafts_created: list[dict],
     closed_pruned: int = 0,
+    clones_pruned: int = 0,
 ) -> str:
     """Render a multi-line summary for the runs panel.
 
@@ -1312,8 +1600,10 @@ def _build_summary(
 
     if not oversized and not all_growth_flags and not findings and total_orphans == 0:
         base = header + " No issues found."
+        if clones_pruned > 0:
+            base += f"\nTerminal-ticket clones pruned: {clones_pruned}."
         if closed_pruned > 0:
-            return base + f"\nClosed workspaces pruned: {closed_pruned}."
+            base += f"\nClosed workspaces pruned: {closed_pruned}."
         return base
 
     lines: list[str] = [header]
@@ -1346,22 +1636,15 @@ def _build_summary(
             f"({path}: {_human_bytes(current)}, cap: {_human_bytes(cap)})"
         )
 
-    word = "workspace" if total_orphans == 1 else "workspaces"
-    orphan_line = f"{total_orphans} orphan {word}"
-    if total_orphans > 0 and orphans_by_board:
-        flat = [o for items in orphans_by_board.values() for o in items]
-        if flat:
-            biggest = max(flat, key=lambda o: o.dir_size_bytes)
-            path = _trim_path(
-                f".data/{biggest.board_id}/workspaces/{biggest.ticket_id}"
-            )
-            orphan_line += f" (largest: {path}, {_human_bytes(biggest.dir_size_bytes)})"
-    lines.append(orphan_line)
+    lines.append(_orphan_summary_line(orphans_by_board, total_orphans))
 
     if drafts_created:
         n = len(drafts_created)
         word = "draft" if n == 1 else "drafts"
         lines.append(f"Filed {n} {word}.")
+
+    if clones_pruned > 0:
+        lines.append(f"Terminal-ticket clones pruned: {clones_pruned}.")
 
     if closed_pruned > 0:
         lines.append(f"Closed workspaces pruned: {closed_pruned}.")
@@ -1402,7 +1685,14 @@ def run_data_dir_audit_pass(
     # tmp_path-rooted instance.
     settings = Settings()
 
-    # Opt-in GC (this ticket): prune workspace dirs of terminal-state
+    # Default-on GC: prune reproducible repo/ + repos/ clones inside
+    # terminal-ticket workspaces BEFORE size measurement, so reclaimed
+    # space never flags growth. Preserves description.md / artifacts/.
+    clones_pruned = 0
+    if settings.data_dir_audit_prune_terminal_clones:
+        clones_pruned = _prune_terminal_clones(settings)
+
+    # Opt-in GC: prune whole workspace dirs of terminal-state
     # tickets BEFORE size measurement, so every downstream measurement
     # (oversized / growth / orphan) and therefore every filed alert
     # reflects the post-GC state. Default-off via the knob.
@@ -1466,6 +1756,7 @@ def run_data_dir_audit_pass(
         total_orphans,
         drafts_created,
         closed_pruned=closed_pruned,
+        clones_pruned=clones_pruned,
     )
 
     log.info("data-dir audit pass done: %s", summary)
@@ -1479,4 +1770,5 @@ def run_data_dir_audit_pass(
         findings=findings,
         growth_flags=all_growth_flags,
         closed_pruned=closed_pruned,
+        clones_pruned=clones_pruned,
     )

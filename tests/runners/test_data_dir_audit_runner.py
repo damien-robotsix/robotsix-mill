@@ -2065,21 +2065,53 @@ def test_growth_suppressed_for_active_workspace(tmp_path, monkeypatch, caplog):
     ws_prefix = f"workspaces/{ticket_id}"
     assert not any(f["path"].startswith(ws_prefix) for f in result.growth_flags)
     assert any(
-        "suppressing growth flag for active workspace" in rec.message
+        "suppressing growth flag" in rec.message
+        and "active ticket workspace" in rec.message
         for rec in caplog.records
     )
     db.reset_engine()
 
 
-def test_growth_not_suppressed_for_terminal_workspace(tmp_path, monkeypatch):
-    """Growth inside a terminal-ticket workspace is NOT suppressed (GC
-    is handled elsewhere)."""
+def test_growth_suppressed_for_terminal_workspace_when_clone_gc_on(
+    tmp_path, monkeypatch
+):
+    """With the (default-on) terminal-clone GC, growth inside a
+    terminal-ticket workspace is suppressed — the GC reclaims it on
+    the next pass instead of filing an unactionable ticket."""
     s = _make_settings(tmp_path)
     monkeypatch.setattr(
         "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
     )
     board_id = "test-board"
     ticket_id = "20260101T000000Z-closed-bbbb"
+    _make_workspace_dir(s, board_id, ticket_id)
+    _insert_closed_ticket(
+        s,
+        board_id,
+        ticket_id,
+        closed_at=_now() - timedelta(days=30),
+        state=State.CLOSED,
+    )
+
+    run_data_dir_audit_pass()  # baseline
+    _grow_workspace_file(s, board_id, ticket_id)
+
+    result = run_data_dir_audit_pass()
+
+    ws_prefix = f"workspaces/{ticket_id}"
+    assert not any(f["path"].startswith(ws_prefix) for f in result.growth_flags)
+    db.reset_engine()
+
+
+def test_growth_kept_for_terminal_workspace_when_clone_gc_off(tmp_path, monkeypatch):
+    """With the terminal-clone GC disabled, terminal-workspace growth
+    still flags (nothing reclaims it)."""
+    s = _make_settings(tmp_path, data_dir_audit_prune_terminal_clones=False)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
+    )
+    board_id = "test-board"
+    ticket_id = "20260101T000000Z-closed-dddd"
     _make_workspace_dir(s, board_id, ticket_id)
     _insert_closed_ticket(
         s,
@@ -2147,7 +2179,8 @@ def test_growth_suppressed_for_periodic_pass_workspace(tmp_path, monkeypatch, ca
         f["path"].startswith("health_workspace/") for f in result.growth_flags
     )
     assert any(
-        "suppressing growth flag for periodic-pass workspace" in rec.message
+        "suppressing growth flag" in rec.message
+        and "periodic-pass clone" in rec.message
         for rec in caplog.records
     )
     db.reset_engine()
@@ -2234,9 +2267,10 @@ def test_cross_class_cap_counts_across_classes(tmp_path):
     db.reset_engine()
 
 
-def test_growth_not_suppressed_for_orphan_workspace(tmp_path, monkeypatch):
-    """Growth inside an orphan workspace (no Ticket row) is NOT
-    suppressed."""
+def test_growth_suppressed_for_orphan_workspace(tmp_path, monkeypatch):
+    """Growth inside an orphan workspace (no Ticket row) is suppressed —
+    the orphan check files its own finding with the full dir size, so a
+    growth ticket on the same path would be redundant noise."""
     s = _make_settings(tmp_path)
     monkeypatch.setattr(
         "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
@@ -2252,5 +2286,212 @@ def test_growth_not_suppressed_for_orphan_workspace(tmp_path, monkeypatch):
     result = run_data_dir_audit_pass()
 
     ws_prefix = f"workspaces/{ticket_id}"
-    assert any(f["path"].startswith(ws_prefix) for f in result.growth_flags)
+    assert not any(f["path"].startswith(ws_prefix) for f in result.growth_flags)
     db.reset_engine()
+
+
+# ---------------------------------------------------------------------------
+# Terminal-clone GC — repo/ + repos/ inside terminal-ticket workspaces
+# ---------------------------------------------------------------------------
+
+
+def _make_workspace_with_clones(settings: Settings, board_id: str, ticket_id: str):
+    """Workspace with description + artifacts + both clone subdirs."""
+    ws_dir = _make_workspace_dir(settings, board_id, ticket_id)
+    (ws_dir / "artifacts").mkdir(exist_ok=True)
+    (ws_dir / "artifacts" / "retrospect.md").write_text("kept\n")
+    _write_bytes(ws_dir / "repo" / ".git" / "objects.bin", 1_000)
+    _write_bytes(ws_dir / "repos" / "other-repo" / ".git" / "objects.bin", 1_000)
+    return ws_dir
+
+
+def test_prune_terminal_clones_removes_clones_keeps_artifacts(tmp_path, monkeypatch):
+    """The default-on clone GC removes repo/ + repos/ of an old terminal
+    ticket but preserves description.md and artifacts/."""
+    s = _make_settings(tmp_path)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
+    )
+    board_id = "test-board"
+    ticket_id = "20260101T000000Z-closed-eeee"
+    ws_dir = _make_workspace_with_clones(s, board_id, ticket_id)
+    _insert_closed_ticket(
+        s,
+        board_id,
+        ticket_id,
+        closed_at=_now() - timedelta(days=30),
+        state=State.CLOSED,
+    )
+
+    result = run_data_dir_audit_pass()
+
+    assert result.clones_pruned == 2
+    assert not (ws_dir / "repo").exists()
+    assert not (ws_dir / "repos").exists()
+    assert (ws_dir / "description.md").exists()
+    assert (ws_dir / "artifacts" / "retrospect.md").exists()
+    assert "Terminal-ticket clones pruned: 2." in result.summary
+    db.reset_engine()
+
+
+def test_prune_terminal_clones_age_guard_and_active_kept(tmp_path, monkeypatch):
+    """Recently-closed and active tickets keep their clones."""
+    s = _make_settings(tmp_path)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
+    )
+    board_id = "test-board"
+    recent = "20260101T000000Z-recent-ffff"
+    active = "20260101T000000Z-active-0000"
+    ws_recent = _make_workspace_with_clones(s, board_id, recent)
+    ws_active = _make_workspace_with_clones(s, board_id, active)
+    _insert_closed_ticket(s, board_id, recent, closed_at=_now(), state=State.CLOSED)
+    _insert_ticket(s, board_id, active)
+
+    result = run_data_dir_audit_pass()
+
+    assert result.clones_pruned == 0
+    assert (ws_recent / "repo").exists()
+    assert (ws_active / "repo").exists()
+    db.reset_engine()
+
+
+def test_prune_terminal_clones_knob_off_is_noop(tmp_path, monkeypatch):
+    """With the knob disabled, no clones are touched."""
+    s = _make_settings(tmp_path, data_dir_audit_prune_terminal_clones=False)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
+    )
+    board_id = "test-board"
+    ticket_id = "20260101T000000Z-closed-1111"
+    ws_dir = _make_workspace_with_clones(s, board_id, ticket_id)
+    _insert_closed_ticket(
+        s,
+        board_id,
+        ticket_id,
+        closed_at=_now() - timedelta(days=30),
+        state=State.CLOSED,
+    )
+
+    result = run_data_dir_audit_pass()
+
+    assert result.clones_pruned == 0
+    assert (ws_dir / "repo").exists()
+    db.reset_engine()
+
+
+# ---------------------------------------------------------------------------
+# Growth breakdown + explained-aggregate suppression
+# ---------------------------------------------------------------------------
+
+
+def test_aggregate_workspaces_growth_suppressed_when_explained(
+    tmp_path, monkeypatch, caplog
+):
+    """The aggregate ``workspaces/`` dir flag is suppressed when its
+    growth is fully attributable to (individually suppressed) active
+    ticket workspaces — the exact live failure of ticket 0ea7."""
+    s = _make_settings(tmp_path)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
+    )
+    board_id = "test-board"
+    ticket_id = "20260101T000000Z-active-2222"
+    _make_workspace_dir(s, board_id, ticket_id)
+    _insert_ticket(s, board_id, ticket_id)
+
+    run_data_dir_audit_pass()  # baseline
+    _grow_workspace_file(s, board_id, ticket_id)
+
+    with caplog.at_level(logging.INFO, logger="robotsix_mill.data_dir_audit"):
+        result = run_data_dir_audit_pass()
+
+    # Neither the per-ticket path NOR the aggregate workspaces/ dir flags.
+    assert not any(f["path"].startswith("workspaces/") for f in result.growth_flags)
+    assert any("self-healing workspace churn" in rec.message for rec in caplog.records)
+    db.reset_engine()
+
+
+def test_unexplained_growth_keeps_flag_with_breakdown(tmp_path, monkeypatch):
+    """Growth outside any workspace taxonomy survives suppression and
+    carries a classified breakdown for the filed ticket."""
+    s = _make_settings(tmp_path)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
+    )
+    board_id = "test-board"
+    db.init_db(s, board_id)
+    _write_bytes(s.data_dir / board_id / "logs" / "app.log", 100)
+
+    run_data_dir_audit_pass()  # baseline
+    _write_bytes(s.data_dir / board_id / "logs" / "app.log", 20_000_000)
+
+    result = run_data_dir_audit_pass()
+
+    dir_flags = [f for f in result.growth_flags if f["path"] == "logs/"]
+    assert dir_flags, result.growth_flags
+    flag = dir_flags[0]
+    assert flag["explained_pct"] == 0.0
+    assert flag["breakdown"]
+    assert flag["breakdown"][0]["path"] == "logs/app.log"
+    assert flag["breakdown"][0]["classification"] == "other"
+    db.reset_engine()
+
+
+def test_build_growth_finding_renders_breakdown_table():
+    """The filed ticket body contains the breakdown table and the
+    self-diagnosis guidance instead of a bare 'investigate' ask."""
+    from robotsix_mill.runners.data_dir_audit_runner import _build_growth_finding
+
+    flag = {
+        "check": "growth_delta",
+        "path": "logs/",
+        "board_id": "test-board",
+        "current_size_bytes": 21_000_000,
+        "prior_size_bytes": 1_000_000,
+        "delta_bytes": 20_000_000,
+        "delta_pct": 2000.0,
+        "threshold_exceeded": "both",
+        "explained_pct": 12.5,
+        "breakdown": [
+            {
+                "path": "logs/app.log",
+                "delta_bytes": 17_500_000,
+                "classification": "other",
+            },
+            {
+                "path": "logs/cache/",
+                "delta_bytes": 2_500_000,
+                "classification": "periodic-pass clone (re-cloned every pass)",
+            },
+        ],
+    }
+    gap_id, title, body = _build_growth_finding(flag)
+
+    assert gap_id == "growth:test-board:logs/"
+    assert "## Growth breakdown (top contributors)" in body
+    assert "`logs/app.log`" in body
+    assert "| other |" in body
+    assert "~12.5% of this growth is attributable" in body
+    assert "Investigate why this path grew" not in body
+    assert "spec a code fix" in body
+
+
+def test_build_growth_finding_without_breakdown_still_guides():
+    """A flag with no breakdown (file path, no children) renders the
+    guidance footer without a breakdown section."""
+    from robotsix_mill.runners.data_dir_audit_runner import _build_growth_finding
+
+    flag = {
+        "check": "growth_delta",
+        "path": "big.log",
+        "board_id": "test-board",
+        "current_size_bytes": 21_000_000,
+        "prior_size_bytes": 1_000_000,
+        "delta_bytes": 20_000_000,
+        "delta_pct": 2000.0,
+        "threshold_exceeded": "both",
+    }
+    _gap_id, _title, body = _build_growth_finding(flag)
+    assert "## Growth breakdown" not in body
+    assert "spec a code fix" in body
