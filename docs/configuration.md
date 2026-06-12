@@ -416,7 +416,6 @@ robotsix-llmio Claude Agent SDK transport.
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `core.limits.max_concurrency` | `MILL_MAX_CONCURRENCY` | `4` | Max parallel tickets in the worker pool |
 | `core.limits.max_fix_iterations` | `MILL_MAX_FIX_ITERATIONS` | `8` | Max implement→test fix loop iterations before BLOCK |
 | `core.limits.max_stuck_cycles` | `MILL_MAX_STUCK_CYCLES` | `3` | Re-entries to same stage without progress before BLOCK |
 | `core.limits.max_spend_usd_per_ticket` | `MILL_MAX_SPEND_USD_PER_TICKET` | `20.0` | Dollar cap per ticket (0.0 = disabled) |
