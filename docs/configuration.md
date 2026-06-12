@@ -371,8 +371,6 @@ Every setting below shows:
 | `core.models.agent_check` | `MILL_AGENT_CHECK_MODEL` | `deepseek/deepseek-v4-pro` | Agent-check agent — audits agent definitions for coherence |
 | `core.models.health` | `MILL_HEALTH_MODEL` | `deepseek/deepseek-v4-pro` | Health agent — codebase-health across 6 dimensions |
 | `core.models.survey` | `MILL_SURVEY_MODEL` | `deepseek/deepseek-v4-pro` | Survey agent — discovers OSS projects; proposes improvements |
-| `core.models.bc_check` | `MILL_BC_CHECK_MODEL` | `deepseek/deepseek-v4-pro` | BC-check agent — backward-compatibility scanner |
-| `core.models.completeness_check` | `MILL_COMPLETENESS_CHECK_MODEL` | `deepseek/deepseek-v4-pro` | Completeness-check agent — feature-wiring completeness scanner |
 | `core.models.rate_limit_fallback` | `MILL_RATE_LIMIT_FALLBACK_MODEL` | `""` (disabled) | Fallback model when rate-limit retries exhausted |
 | `core.models.doc` | `MILL_DOC_MODEL` | `deepseek/deepseek-v4-pro` | Documentation agent |
 | `core.models.doc_classifier` | `MILL_DOC_CLASSIFIER_MODEL` | `deepseek/deepseek-v4-flash` | Doc-diff classifier gate — cheap pre-check before full doc agent |
@@ -584,8 +582,6 @@ Periodic agents: `audit`, `board_cleanup`, `trace_health`, `health`, `test_gap`,
 > `memory_path` field — they write no per-agent memory ledger
 > (`member_sync` is a deterministic pass with no LLM agent).
 >
-> `bc_check` and `completeness_check` are **env-var-only** (no YAML mapping yet).
-> Set `MILL_BC_CHECK_PERIODIC=true`, `MILL_COMPLETENESS_CHECK_PERIODIC=true`, etc.
 >
 > ³ In multi-repo mode, the default memory file path is
 > `<data_dir>/<repo_id>/<agent>_memory.md` — each repo gets its own
@@ -599,6 +595,8 @@ Additional fields:
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
+| `periodic.bc_check.model` | `MILL_BC_CHECK_MODEL` | `deepseek/deepseek-v4-flash` | BC-check agent model — backward-compatibility scanner |
+| `periodic.completeness_check.model` | `MILL_COMPLETENESS_CHECK_MODEL` | `deepseek/deepseek-v4-flash` | Completeness-check agent model — feature-wiring completeness scanner |
 | `periodic.board_cleanup.model` | `MILL_BOARD_CLEANUP_MODEL` | `deepseek/deepseek-v4-flash` | Board-cleanup agent model (read-only board hygiene proposer, flash sufficient) |
 | `periodic.board_cleanup.enabled` | `MILL_BOARD_CLEANUP_PERIODIC` | `true` | Enable periodic board-cleanup passes |
 | `periodic.board_cleanup.interval_seconds` | `MILL_BOARD_CLEANUP_INTERVAL_SECONDS` | `86400` | Seconds between board-cleanup passes |
@@ -610,17 +608,18 @@ Additional fields:
 
 #### Env-var-only periodic agents
 
-`bc_check` and `completeness_check` have no YAML mapping yet — set them via
-environment variables only:
+`bc_check` and `completeness_check` model, enabled, interval, and memory_path
+fields are available as YAML paths (`periodic.bc_check.*`, `periodic.completeness_check.*`)
+and as environment variables:
 
 | Env var | Default | Description |
 |---------|---------|-------------|
 | `MILL_BC_CHECK_PERIODIC` | `false` | Enable periodic backward-compatibility inspection |
 | `MILL_BC_CHECK_INTERVAL_SECONDS` | `86400` | Seconds between bc-check passes |
-| `MILL_BC_CHECK_MODEL` | `deepseek/deepseek-v4-pro` | BC-check agent model |
+| `MILL_BC_CHECK_MODEL` | `deepseek/deepseek-v4-flash` | BC-check agent model |
 | `MILL_COMPLETENESS_CHECK_PERIODIC` | `false` | Enable periodic feature-wiring completeness inspection |
 | `MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS` | `86400` | Seconds between completeness-check passes |
-| `MILL_COMPLETENESS_CHECK_MODEL` | `deepseek/deepseek-v4-pro` | Completeness-check agent model |
+| `MILL_COMPLETENESS_CHECK_MODEL` | `deepseek/deepseek-v4-flash` | Completeness-check agent model |
 
 ### 13. Skills
 
