@@ -834,11 +834,14 @@ def test_test_agent_distill_injects_file_map_scope(tmp_path, monkeypatch):
     artifacts_dir = tmp_path.parent / "artifacts"
     artifacts_dir.mkdir(parents=True, exist_ok=True)
     import json as _json
+
     artifacts_dir.joinpath("file_map.json").write_text(
-        _json.dumps([
-            {"file": "tests/cli/test_config.py"},
-            {"file": "src/robotsix_mill/config.py"},
-        ]),
+        _json.dumps(
+            [
+                {"file": "tests/cli/test_config.py"},
+                {"file": "src/robotsix_mill/config.py"},
+            ]
+        ),
         encoding="utf-8",
     )
 
@@ -945,6 +948,7 @@ def test_test_agent_distill_explicit_file_map_override(tmp_path, monkeypatch):
     artifacts_dir = tmp_path.parent / "artifacts"
     artifacts_dir.mkdir(parents=True, exist_ok=True)
     import json as _json
+
     artifacts_dir.joinpath("file_map.json").write_text(
         _json.dumps([{"file": "should/be/ignored.py"}]),
         encoding="utf-8",
@@ -979,7 +983,9 @@ def test_test_agent_distill_explicit_file_map_override(tmp_path, monkeypatch):
     try:
         explicit_map = ["only/this/file.py"]
         passed, fb = testing.run_test_agent(
-            settings=s, repo_dir=tmp_path, file_map=explicit_map,
+            settings=s,
+            repo_dir=tmp_path,
+            file_map=explicit_map,
         )
         assert passed is False
 
