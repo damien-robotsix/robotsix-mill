@@ -18,7 +18,7 @@ modules:
       RepoConfig/ReposRegistry, YAML config loading, and secrets management.
       Every other module depends on this.
     paths:
-      - src/robotsix_mill/config.py
+      - src/robotsix_mill/config/*.py
       - src/robotsix_mill/config_loader.py
       - src/robotsix_mill/repo_settings.py
       - src/robotsix_mill/workspace_members.py
