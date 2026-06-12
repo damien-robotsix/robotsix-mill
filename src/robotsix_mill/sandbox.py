@@ -382,7 +382,7 @@ def fetch(url: str, *, settings: Settings) -> tuple[int, str]:
         r = subprocess.run(
             argv,
             capture_output=True,
-            text=False,          # was text=True — avoid UnicodeDecodeError
+            text=False,  # was text=True — avoid UnicodeDecodeError
             timeout=settings.web_fetch_timeout + 15,
         )
     except FileNotFoundError as e:

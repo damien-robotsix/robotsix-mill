@@ -193,9 +193,10 @@ def test_fetch_survives_non_utf8_body(tmp_path, monkeypatch):
     s = _settings(tmp_path)
 
     # Invalid UTF-8: 0xff, 0xfe, 0xe9 are all illegal leading bytes
-    raw = b'\xff\xfe\xe9 and some text'
+    raw = b"\xff\xfe\xe9 and some text"
     monkeypatch.setattr(
-        sandbox.subprocess, "run",
+        sandbox.subprocess,
+        "run",
         lambda argv, **kw: subprocess.CompletedProcess(argv, 0, stdout=raw, stderr=b""),
     )
     rc, body = sandbox.fetch("https://broken.example/encoding", settings=s)
