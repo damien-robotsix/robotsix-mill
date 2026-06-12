@@ -682,7 +682,9 @@ class TestRunCoordinator:
         definition = load_agent_definition(
             Path(__file__).parent.parent.parent / "agent_definitions" / "implement.yaml"
         )
-        assert self.captured["system_prompt"] == definition.system_prompt
+        prompt = self.captured["system_prompt"]
+        assert prompt.startswith(definition.system_prompt)
+        assert f"\n\nThe repository root (CWD for all run_command calls) is: {tmp_path}" in prompt
 
     # -- language_instructions -------------------------------------------
 
@@ -723,7 +725,11 @@ class TestRunCoordinator:
             Path(__file__).parent.parent.parent / "agent_definitions" / "implement.yaml"
         )
         self._run(settings, tmp_path, language_instructions="")
-        assert self.captured["system_prompt"] == definition.system_prompt
+        prompt = self.captured["system_prompt"]
+        assert prompt.startswith(definition.system_prompt)
+        assert f"\n\nThe repository root (CWD for all run_command calls) is: {tmp_path}" in prompt
+        # No language conventions block when language_instructions is empty.
+        assert "## Language conventions" not in prompt
 
     # -- usage_limits ----------------------------------------------------
 

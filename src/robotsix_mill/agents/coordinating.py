@@ -300,6 +300,7 @@ def run_coordinator(
     prompt = definition.system_prompt
     if language_instructions:
         prompt += "\n\n## Language conventions\n\n" + language_instructions
+    prompt += f"\n\nThe repository root (CWD for all run_command calls) is: {repo_dir}"
     overrides["system_prompt"] = prompt
 
     from .consult_expert import make_consult_expert_tool
