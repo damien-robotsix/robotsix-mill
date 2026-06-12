@@ -413,7 +413,7 @@ class ReviewStage(Stage):
                     "(they run after it merges):",
                     "",
                 ]
-                for nid, ask in zip(new_ids, out_of_scope):
+                for nid, ask in zip(new_ids, out_of_scope, strict=True):
                     desc = ask.description.splitlines()[0][:120]
                     lines.append(f"- `{nid}` — {desc}")
                 ctx.service.add_comment(

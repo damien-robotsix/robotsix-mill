@@ -1751,7 +1751,7 @@ def test_migrate_moves_ticket_history_and_workspace(settings, migrate_env):
     assert hist[0].note == "created"
     assert "migrated from board 'test-board' to 'other-board'" in hist[-1].note
     assert "belongs there" in hist[-1].note
-    for prev, cur in zip(hist, hist[1:]):
+    for prev, cur in zip(hist, hist[1:], strict=False):
         assert cur.prev_hash == prev.hash
 
     # Comments moved.

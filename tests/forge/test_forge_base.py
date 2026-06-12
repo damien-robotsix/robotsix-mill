@@ -2,6 +2,8 @@
 
 import pytest
 
+from pydantic import ValidationError
+
 from robotsix_mill.config import Settings
 from robotsix_mill.forge import _detect_forge_kind, get_forge
 from robotsix_mill.forge.github import GitHubForge
@@ -79,7 +81,7 @@ class TestGetForgeAuto:
     def test_auto_no_remote_url_raises(self):
         """forge_kind=auto without forge_remote_url raises ValidationError
         from the cross-field validator (not from get_forge)."""
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             Settings(FORGE_KIND="auto")
 
     def test_explicit_github_still_works(self):

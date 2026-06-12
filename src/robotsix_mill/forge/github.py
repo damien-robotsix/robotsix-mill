@@ -1349,7 +1349,7 @@ def _statuses_to_check_runs(statuses_data: dict) -> list[dict]:
         ctx = st.get("context", "")
         by_context.setdefault(ctx, []).append(st)
     runs = []
-    for ctx, items in by_context.items():
+    for ctx, _items in by_context.items():
         # overall state: "success", "failure", "pending"
         state = statuses_data.get("state", "success")
         conclusion = state if state != "pending" else None

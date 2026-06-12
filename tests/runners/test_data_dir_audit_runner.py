@@ -264,7 +264,7 @@ def test_top_n_limit(tmp_path):
     result = find_largest_items(data_dir, top_n=10, threshold_bytes=0)
     assert len(result) == 10
     # Verify descending by size
-    for prev, cur in zip(result, result[1:]):
+    for prev, cur in zip(result, result[1:], strict=False):
         assert prev["size_bytes"] >= cur["size_bytes"]
 
 

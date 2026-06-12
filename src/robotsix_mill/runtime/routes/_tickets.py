@@ -85,7 +85,7 @@ def create_ticket(
             board_id=board_id or None,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     maybe_enqueue(ticket, worker)  # "directly taken in charge"
     return enrich_ticket_read(ticket, settings, svc)
 
@@ -586,7 +586,7 @@ def merge_now(
     try:
         pr_entries = _load_pr_urls(svc.workspace(ticket).artifacts_dir)
     except ValueError as e:
-        raise HTTPException(409, f"pr_urls.json corrupted: {e}")
+        raise HTTPException(409, f"pr_urls.json corrupted: {e}") from e
 
     if pr_entries:
         merged_urls: list[str] = []

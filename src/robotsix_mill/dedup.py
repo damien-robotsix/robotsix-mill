@@ -524,7 +524,7 @@ def find_child_overlaps(
 
         # (normalized title, extracted path set) for each accepted sibling.
         accepted: list[tuple[str, set[str]]] = []
-        for i, (title, body) in enumerate(zip(child_titles, child_bodies)):
+        for i, (title, body) in enumerate(zip(child_titles, child_bodies, strict=True)):
             paths = _extract_paths(body)
             concern_tokens = _extract_concern_tokens(title + "\n" + body)
             note: str | None = None

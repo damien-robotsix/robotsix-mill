@@ -919,10 +919,10 @@ def test_auto_approve_audit_source_also_short_circuits(
         )
         triage_calls: list = []
 
-        def fail_if_called(**_):
-            triage_calls.append(True)
+        def fail_if_called(_calls=triage_calls, _src=source, **_):
+            _calls.append(True)
             raise AssertionError(
-                f"triage_auto_approve must not be called for {source}",
+                f"triage_auto_approve must not be called for {_src}",
             )
 
         _apply_default_mocks(

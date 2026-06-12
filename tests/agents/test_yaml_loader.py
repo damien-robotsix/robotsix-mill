@@ -8,6 +8,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from pydantic import ValidationError
+
 from robotsix_mill.agents.yaml_loader import (
     AgentDefinition,
     _resolve_env_vars,
@@ -561,7 +563,7 @@ def test_agent_definition_model_validation():
 
 def test_agent_definition_extra_fields_rejected():
     """Unknown keys → ValidationError."""
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         AgentDefinition.model_validate(
             {
                 "name": "test",
@@ -808,7 +810,8 @@ def test_report_issue_consistency(monkeypatch):
                 f"{yf.name}: has output_type={ad.output_type!r} AND "
                 f"report_issue=true. Agents with structured output should "
                 f"typically set report_issue: false to avoid double-drafting. "
-                f"If this is intentional, add '{ad.name}' to KNOWN_EXCEPTIONS."
+                f"If this is intentional, add '{ad.name}' to KNOWN_EXCEPTIONS.",
+                stacklevel=2,
             )
 
 
@@ -847,7 +850,7 @@ def test_interval_and_interval_seconds_mutually_exclusive(tmp_path):
         'name: demo\nmodel: deepseek/v\nsystem_prompt: "x"\n'
         "interval: 1d\ninterval_seconds: 86400\n",
     )
-    with pytest.raises(Exception):  # pydantic.ValidationError
+    with pytest.raises(ValidationError):  # pydantic.ValidationError
         load_agent_definition(p)
 
 
@@ -857,7 +860,7 @@ def test_interval_malformed_raises_validation_error(tmp_path):
         tmp_path,
         'name: demo\nmodel: deepseek/v\nsystem_prompt: "x"\ninterval: 1x\n',
     )
-    with pytest.raises(Exception):  # pydantic.ValidationError
+    with pytest.raises(ValidationError):  # pydantic.ValidationError
         load_agent_definition(p)
 
 

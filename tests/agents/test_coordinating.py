@@ -533,7 +533,7 @@ class TestRunCoordinator:
         assert len(req.parts) == 3
 
         # Parallel ToolCallParts — one per file, in input order.
-        for part, path in zip(resp.parts, ("a.py", "b.py", "c.py")):
+        for part, path in zip(resp.parts, ("a.py", "b.py", "c.py"), strict=True):
             assert isinstance(part, ToolCallPart)
             assert part.tool_name == "read_file"
             assert part.args == {"path": path, "offset": 1, "limit": None}
@@ -543,6 +543,7 @@ class TestRunCoordinator:
         for part, (path, content) in zip(
             req.parts,
             [("a.py", "A"), ("b.py", "B"), ("c.py", "C")],
+            strict=True,
         ):
             assert isinstance(part, ToolReturnPart)
             assert part.tool_name == "read_file"

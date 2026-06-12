@@ -111,7 +111,7 @@ exclude_dirs = ["tests/"]
 skips = ["B101"]
 
 [tool.ruff.lint]
-extend-select = ["S", "DTZ001", "DTZ002", "DTZ003", "C90"]
+extend-select = ["S", "DTZ001", "DTZ002", "DTZ003", "C90", "B"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
@@ -221,6 +221,16 @@ max-complexity = 10
 # input) — same safe git-subprocess pattern as git_ops above.
 "src/robotsix_mill/meta/agent.py" = ["S603", "S607"]
 "src/robotsix_mill/meta/todo_scan.py" = ["S603", "S607"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's Depends/Body/File/Query default-argument pattern is deliberate;
+# B008 (function-call-in-default) is a false positive for these.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Body",
+    "fastapi.File",
+]
 
 [tool.deptry]
 known_first_party = ["robotsix_mill"]
