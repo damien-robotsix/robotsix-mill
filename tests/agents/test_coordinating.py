@@ -781,15 +781,17 @@ class TestRunCoordinator:
         tmp_path,
     ):
         """When ``previous_attempt_summary`` is set but ``feedback`` is
-        None, the ``<previous_attempt>`` block is NOT injected (it is
-        only relevant on retries)."""
+        None, the ``<previous_attempt>`` block IS injected (needed for
+        the flash fallback path where the pro model wrote edits but
+        produced malformed output)."""
         self._run(
             settings,
             tmp_path,
             previous_attempt_summary="prior summary text",
         )
         prompt: str = self.captured["user_prompt"]
-        assert "````previous-attempt" not in prompt
+        assert "````previous-attempt" in prompt
+        assert "prior summary text" in prompt
 
     # -- reference_files edge cases -------------------------------------
 
