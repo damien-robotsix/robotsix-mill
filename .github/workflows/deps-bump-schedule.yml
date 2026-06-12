@@ -1,0 +1,22 @@
+name: Bump shared-lib lockfile (scheduled)
+
+on:
+  schedule:
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  bump:
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/deps-bump.yml
+    secrets:
+      DEPS_BUMP_TOKEN: ${{ secrets.DEPS_BUMP_TOKEN }}

@@ -33,8 +33,10 @@ library repos):
    [ci-policy.md](ci-policy.md)).
 
 3. **Bump.** A scheduled workflow
-   ([`deps-bump.yml`](../.github/workflows/deps-bump.yml)) runs weekly
-   (cron) and on `workflow_dispatch`. It executes `uv lock --upgrade`
+   ([`deps-bump-schedule.yml`](../.github/workflows/deps-bump-schedule.yml))
+   calls the reusable
+   [`deps-bump.yml`](../.github/workflows/deps-bump.yml) weekly (cron)
+   and on `workflow_dispatch`. It executes `uv lock --upgrade`
    (refreshing git refs to the latest `@main` commits) and, if `uv.lock`
    changed, opens a PR via a SHA-pinned `peter-evans/create-pull-request`
    action with labels `dependencies` and `automated`. That PR triggers
@@ -58,7 +60,7 @@ can never land silently on `main`.
 ## Trade-offs
 
 - **Adoption latency.** A genuinely-wanted library change waits for the
-  next bump PR (up to a week, or trigger `deps-bump.yml` manually via
+  next bump PR (up to a week, or trigger `deps-bump-schedule.yml` manually via
   `workflow_dispatch`). This is the cost of gating; left unpinned, the
   change arrives instantly but ungated.
 - **Double-merge for coordinated cross-repo changes.** A change that
