@@ -1048,10 +1048,11 @@ def test_refine_triage_skip_bypasses_agent(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_refine_triage_skip_no_paths_falls_through_to_refine(ctx_factory, monkeypatch):
+def test_refine_triage_skip_no_paths_writes_empty_file_map(ctx_factory, monkeypatch):
     """When triage returns SKIP but the draft has no backtick-quoted
-    file paths, do NOT write an empty file_map — fall through to the
-    refine agent instead so it can produce a proper file_map."""
+    file paths (e.g. top-level config like pyproject.toml with no '/'
+    directory separator), write an empty file_map.json ([]) and return
+    the SKIP Outcome — do NOT fall through to the expensive refine agent."""
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="true")
     # Draft with no backtick-quoted paths (bare filename with no
     # directory separator won't match the regex).
@@ -1061,13 +1062,7 @@ def test_refine_triage_skip_no_paths_falls_through_to_refine(ctx_factory, monkey
     monkeypatch.setattr(
         refining,
         "run_refine_agent",
-        lambda *a, **k: (
-            refine_called.append(1),
-            RefineResult(
-                spec_markdown="## Problem\nDone",
-                file_map=[refining.FileMapEntry(file="src/bar.py", note="main module")],
-            ),
-        )[-1],
+        lambda *a, **k: (refine_called.append(1), None)[1],
     )
     monkeypatch.setattr(
         refining,
@@ -1086,16 +1081,16 @@ def test_refine_triage_skip_no_paths_falls_through_to_refine(ctx_factory, monkey
 
     out = RefineStage().run(t, ctx)
 
-    # Refine agent WAS called — not bypassed.
-    assert len(refine_called) == 1
+    # Refine agent was NOT called — bypassed entirely.
+    assert len(refine_called) == 0
     assert out.next_state is State.READY
+    assert "triage SKIP" in out.note
     ws = ctx.service.workspace(t)
-    # file_map.json was written by the refine agent, not an empty [].
+    # Empty file_map.json was written by the SKIP fallthrough.
     file_map_path = ws.artifacts_dir / "file_map.json"
     assert file_map_path.exists()
     file_map = json.loads(file_map_path.read_text(encoding="utf-8"))
-    assert len(file_map) == 1
-    assert file_map[0]["file"] == "src/bar.py"
+    assert file_map == []
 
 
 # ---------------------------------------------------------------------------
