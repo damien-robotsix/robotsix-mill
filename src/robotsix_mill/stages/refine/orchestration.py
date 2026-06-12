@@ -307,17 +307,21 @@ class RefineAgentMixin:
                         if auto_note:
                             note += f" | {auto_note}"
                         return Outcome(next_state, note)
-                    # No paths extracted — fall through to the refine
-                    # agent (do NOT write an empty file_map).  The
-                    # refine agent will explore the codebase and
-                    # produce a proper file_map with real file
-                    # exploration behind it.
-                    log.info(
-                        "%s: triage SKIP but no file paths in draft "
-                        "— falling through to refine agent for "
-                        "file_map",
+                    # No paths extracted — write empty file_map so implement
+                    # treats this as scope-free mode rather than "refine broken".
+                    file_map_path = ws.artifacts_dir / "file_map.json"
+                    if not file_map_path.exists():
+                        file_map_path.write_text("[]", encoding="utf-8")
+                    next_state, auto_note = _resolve_next_state(
+                        ctx,
+                        draft,
                         ticket.id,
+                        source=ticket.source,
                     )
+                    note = f"triage SKIP: {triage.reason}"
+                    if auto_note:
+                        note += f" | {auto_note}"
+                    return Outcome(next_state, note)
             except Exception:
                 log.warning(
                     "%s: triage failed, falling through to full refine",
