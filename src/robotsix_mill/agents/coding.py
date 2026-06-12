@@ -19,6 +19,7 @@ import logging
 from pathlib import Path
 
 from ..config import Settings
+from ..vcs.git_ops import _git
 
 log = logging.getLogger("robotsix_mill.coding")
 
@@ -135,6 +136,28 @@ def run_implement_agent(
             "falling back to deepseek/deepseek-v4-flash",
             settings.model,
         )
+        # Capture partial progress: the pro model may have written valid
+        # edits before its structured output was rejected.  Tell the flash
+        # model what's already on disk so it doesn't redo the work.
+        flash_previous_summary = previous_attempt_summary
+        try:
+            changed = _git(repo_dir, "diff", "--name-only")
+        except Exception:
+            changed = ""
+        if changed:
+            fnames = [f for f in changed.split("\n") if f]
+            partial = (
+                "The primary model made uncommitted changes to these "
+                "files: " + ", ".join(fnames) + ". "
+                "Any edits the primary model wrote are already on disk "
+                "— do NOT redo them. Verify the acceptance criteria "
+                "against the current code; if already satisfied, set "
+                "no_change_needed=true."
+            )
+            if flash_previous_summary:
+                flash_previous_summary = flash_previous_summary + "\n\n" + partial
+            else:
+                flash_previous_summary = partial
         try:
             result = run_coordinator(
                 settings=settings,
@@ -146,7 +169,7 @@ def run_implement_agent(
                 epic_context=epic_context,
                 reference_files=reference_files,
                 message_history=message_history,
-                previous_attempt_summary=previous_attempt_summary,
+                previous_attempt_summary=flash_previous_summary,
                 board_id=board_id,
                 current_ticket_id=current_ticket_id,
                 language_instructions=language_instructions,

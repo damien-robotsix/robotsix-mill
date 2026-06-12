@@ -351,19 +351,19 @@ def run_coordinator(
             + "\n\n"
             + section("memory", memory or "(empty — start a new ledger)")
         )
+        if previous_attempt_summary:
+            # Inject prior summary before the feedback block so the
+            # model doesn't undo its prior correct work.
+            user_prompt = (
+                section(
+                    "previous-attempt",
+                    "Your previous edit pass produced this summary "
+                    "(already on disk):\n"
+                    f"{previous_attempt_summary}",
+                )
+                + "\n\n"
+            ) + user_prompt
         if feedback:
-            if previous_attempt_summary:
-                # Inject prior summary before the feedback block so the
-                # model doesn't undo its prior correct work.
-                user_prompt = (
-                    section(
-                        "previous-attempt",
-                        "Your previous edit pass produced this summary "
-                        "(already on disk):\n"
-                        f"{previous_attempt_summary}",
-                    )
-                    + "\n\n"
-                ) + user_prompt
             if feedback.startswith("[REVIEW"):
                 # Review feedback — prepend to the spec so the coordinator
                 # addresses the flagged issues first.
