@@ -36,8 +36,12 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from sqlmodel import select
+
+if TYPE_CHECKING:
+    from ..agents.trace_inspector import TraceFinding
 
 from ..config import RepoConfig, Settings
 from ..core.db import session as db_session
@@ -368,6 +372,88 @@ def _existing_open_titles(service: TicketService, board_id: str) -> set[str]:
 
 
 # ---------------------------------------------------------------------------
+# Path-existence guard (deterministic, code-grounded)
+# ---------------------------------------------------------------------------
+
+
+def _resolve_target_repo_dir(
+    settings: Settings,
+    target_repo_id: str,
+) -> Path | None:
+    """Best-effort resolve a local checkout of *target_repo_id* whose
+    source the findings reference, for deterministic path verification.
+
+    Reuses any persistent workspace clone already on disk under
+    ``<data_dir>/<repo_id>/<workspace>/repo`` (e.g. the roadmap-sync
+    workspace); it NEVER clones. When no checkout is present the
+    function returns ``None`` so every downstream path check degrades
+    to a no-op — best-effort, never blocks a legitimate filing.
+    """
+    if not target_repo_id:
+        return None
+    try:
+        repo_root = settings.data_dir / target_repo_id
+        if not repo_root.is_dir():
+            return None
+        for workspace in sorted(repo_root.iterdir()):
+            cand = workspace / "repo"
+            if (cand / ".git").exists():
+                return cand
+    except Exception:  # noqa: BLE001 — resolution is best-effort
+        log.debug("trace-review: repo_dir resolution failed", exc_info=True)
+    return None
+
+
+def _finding_cites_only_missing_paths(
+    finding: TraceFinding,
+    repo_dir: Path | None,
+) -> tuple[bool, list[str]]:
+    """Return ``(suppress, missing)`` for a single finding.
+
+    ``suppress`` is True ONLY when the finding cites at least one
+    concrete source path AND none of the cited paths resolve on HEAD —
+    the documented false-positive mode (a finding about existing code
+    that names files which do not exist). Cited paths are
+    ``finding.target_files`` plus paths parsed from the finding text
+    via :func:`freshness.extract_cited_paths`.
+
+    Best-effort and exception-safe: when ``repo_dir`` is unresolved,
+    no concrete path is cited, or any resolution/IO error occurs, the
+    function returns ``(False, [])`` so filing proceeds unchanged.
+    """
+    if repo_dir is None:
+        return False, []
+    try:
+        from ..agents.freshness import _resolve_path, extract_cited_paths
+
+        text = f"{finding.symptom}\n{finding.root_cause}\n{finding.proposed_solution}"
+        cited = list(finding.target_files or []) + extract_cited_paths(text)
+        # De-duplicate while preserving order.
+        seen: set[str] = set()
+        paths: list[str] = []
+        for raw in cited:
+            if raw and raw not in seen:
+                seen.add(raw)
+                paths.append(raw)
+        if not paths:
+            return False, []
+
+        missing: list[str] = []
+        any_exists = False
+        for raw in paths:
+            _, exists, _, _ = _resolve_path(raw, repo_dir)
+            if exists:
+                any_exists = True
+            else:
+                missing.append(raw)
+        if not any_exists:
+            return True, missing
+    except Exception:  # noqa: BLE001 — guard never blocks a legitimate filing
+        log.debug("trace-review: path-existence guard failed", exc_info=True)
+    return False, []
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -409,6 +495,7 @@ def run_trace_review_pass(
     # target board when set; fall back to the source repo's board only
     # in legacy deployments that haven't picked a target yet.
     target_board_id = source_board_id
+    target_repo_id = repo_config.repo_id
     if settings.trace_review_target_repo_id:
         try:
             from ..config import get_repos_config
@@ -417,6 +504,7 @@ def run_trace_review_pass(
             target_rc = registry.get(settings.trace_review_target_repo_id)
             if target_rc is not None:
                 target_board_id = target_rc.board_id
+                target_repo_id = settings.trace_review_target_repo_id
             else:
                 log.warning(
                     "trace-review: configured target repo %r not "
@@ -429,6 +517,12 @@ def run_trace_review_pass(
                 "trace-review: target-repo lookup failed; using source board",
             )
     service = TicketService(settings, board_id=target_board_id)
+    # Best-effort local checkout of the TARGET repo (whose source the
+    # findings reference) so the inspector's path-verification gate and
+    # the deterministic guard below can read files. ``None`` when no
+    # checkout is resolvable — every path check then degrades to a
+    # no-op.
+    repo_dir = _resolve_target_repo_dir(settings, target_repo_id)
     from ..langfuse.client import list_all_traces_since, fetch_trace_detail
     from ..agents.trace_inspector import run_trace_inspector
 
@@ -526,7 +620,7 @@ def run_trace_review_pass(
         result = run_trace_inspector(
             settings=settings,
             trace_data=json.dumps(detail or trace, default=str),
-            repo_dir=None,
+            repo_dir=repo_dir,
             memory="",
             model_name=settings.trace_review_model,
             started_at=_process_started_at,
@@ -555,6 +649,20 @@ def run_trace_review_pass(
                     max_drafts,
                 )
                 break
+            # Deterministic path-existence guard: suppress findings
+            # that cite source paths none of which exist on HEAD (the
+            # documented false-positive mode — e.g. a fictional
+            # ``robotsix_llmio/...`` path). No-op when repo_dir is
+            # unresolved or the finding cites no concrete path.
+            suppress, missing = _finding_cites_only_missing_paths(finding, repo_dir)
+            if suppress:
+                log.info(
+                    "trace-review: suppressing finding for trace %s — all "
+                    "cited source paths missing on HEAD: %s",
+                    trace_id[:8],
+                    ", ".join(missing),
+                )
+                continue
             title = f"{finding.category} — {finding.symptom[:90]}"
             prior = find_prior_matching_ticket(
                 service,
