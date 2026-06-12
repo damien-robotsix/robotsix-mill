@@ -75,12 +75,20 @@ def is_transient(exc: BaseException) -> bool:
     query-timeout failures on the Claude path. The two sets don't overlap in
     practice, so OR-ing them keeps local retries correct for whichever backend
     actually ran — previously only OpenRouter errors were retried, so a Claude
-    CLI hiccup or query timeout skipped local retry entirely."""
-    return (
-        _is_openrouter_transient(exc)
-        or _is_claude_sdk_transient(exc)
-        or _is_claude_sdk_degenerate_result(exc)
-    )
+    CLI hiccup or query timeout skipped local retry entirely.
+
+    The degenerate Claude SDK ``success`` result (``is_error=True`` with
+    ``subtype='success'``) is checked first as a fast-fail: it is a structural
+    misconfiguration, not a transient network issue. Retrying it burns calls
+    that all fail identically; instead it must fail fast so the fallback
+    mechanism (or caller) can react immediately."""
+    if _is_claude_sdk_degenerate_result(exc):
+        log.warning(
+            "fast-fail: Claude SDK degenerate 'success' result detected — "
+            "not retrying (structural, not transient)"
+        )
+        return False
+    return _is_openrouter_transient(exc) or _is_claude_sdk_transient(exc)
 
 
 # NOTE: is_deepseek_reasoning_roundtrip_error was removed from robotsix-llmio
