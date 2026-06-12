@@ -28,8 +28,12 @@ from ...core.models import (
     TicketRead,
     TicketTransition,
 )
+from ...config import RepoConfig, ReposRegistry, Settings
+from ...core.models import Ticket
+from ...core.service import TicketService
 from ...core.states import STAGE_FOR_STATE, State
 from ...forge import get_forge
+from ..worker import Worker
 from ..deps import (
     enrich_ticket_read,
     get_service,
@@ -44,7 +48,7 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _repo_config_for_ticket(ticket, repos):
+def _repo_config_for_ticket(ticket: Ticket, repos: ReposRegistry) -> RepoConfig | None:
     """Resolve the ``RepoConfig`` for *ticket*'s ``board_id``.
 
     Returns ``None`` when the ticket has no ``board_id`` or the
@@ -461,9 +465,9 @@ def migrate_ticket(
     ticket_id: str,
     body: TicketMigrate,
     request: Request,
-    svc=Depends(get_service),
-    worker=Depends(get_worker),
-    settings=Depends(get_settings),
+    svc: TicketService = Depends(get_service),
+    worker: Worker = Depends(get_worker),
+    settings: Settings = Depends(get_settings),
 ) -> TicketRead:
     """Move a ticket to another board (row, history, comments, workspace).
 

@@ -17,7 +17,7 @@ from collections.abc import Callable, Iterable, Sequence
 from datetime import datetime, timezone
 from secrets import token_hex
 
-from sqlmodel import select
+from sqlmodel import col, select
 
 from . import db
 from ..config import Settings
@@ -557,7 +557,7 @@ class TicketService:
                 for ev in s.exec(
                     select(TicketEvent)
                     .where(TicketEvent.ticket_id == ticket_id)
-                    .order_by(TicketEvent.id)
+                    .order_by(col(TicketEvent.id))
                 ).all()
             ]
             comment_data = [
@@ -565,7 +565,7 @@ class TicketService:
                 for c in s.exec(
                     select(Comment)
                     .where(Comment.ticket_id == ticket_id)
-                    .order_by(Comment.id)
+                    .order_by(col(Comment.id))
                 ).all()
             ]
             action_data = [
@@ -573,7 +573,7 @@ class TicketService:
                 for a in s.exec(
                     select(ProposedAction)
                     .where(ProposedAction.target_ticket_id == ticket_id)
-                    .order_by(ProposedAction.id)
+                    .order_by(col(ProposedAction.id))
                 ).all()
             ]
 
@@ -632,6 +632,8 @@ class TicketService:
                     comment = Comment(**cd)
                     s.add(comment)
                     s.flush()
+                    if comment.id is None:  # pragma: no cover - flush assigns the pk
+                        raise RuntimeError("migrate: comment id missing after flush")
                     id_map[old_id] = comment.id
                 for ad in action_data:
                     ad["id"] = None
@@ -666,10 +668,10 @@ class TicketService:
                 select(Comment).where(Comment.ticket_id == ticket_id)
             ).all():
                 s.delete(comment)
-            for ev in s.exec(
+            for src_ev in s.exec(
                 select(TicketEvent).where(TicketEvent.ticket_id == ticket_id)
             ).all():
-                s.delete(ev)
+                s.delete(src_ev)
             src_ticket = s.get(Ticket, ticket_id)
             if src_ticket is not None:
                 s.delete(src_ticket)
