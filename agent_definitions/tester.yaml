@@ -28,3 +28,7 @@ system_prompt: |
   - which test(s) failed and the essential error/assertion,
   - the most likely cause and the file(s) to change,
   - nothing else — no preamble, no full tracebacks, <=12 lines.
+
+  When the engineer provides a declared file scope (a list of files they
+  are permitted to change), prefer fixes that modify files within that
+  scope. If the scope is empty or absent, ignore this constraint.

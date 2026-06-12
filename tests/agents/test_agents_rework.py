@@ -820,3 +820,182 @@ def test_validation_result_decide_escalate():
     assert vr.passed is False
     assert vr.failure_summary == "still broken"
     assert vr.iterations_used == 3
+
+
+def test_test_agent_distill_injects_file_map_scope(tmp_path, monkeypatch):
+    """When artifacts/file_map.json exists alongside repo_dir, the distill
+    sub-agent's user message includes a 'Declared file scope' block listing
+    the in-scope file paths (soft hint)."""
+    from robotsix_mill import sandbox
+
+    s = _settings(tmp_path, test_command="pytest", test_model="test/cheap")
+
+    # Write file_map.json at repo_dir.parent / "artifacts" / "file_map.json"
+    artifacts_dir = tmp_path.parent / "artifacts"
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    import json as _json
+
+    artifacts_dir.joinpath("file_map.json").write_text(
+        _json.dumps(
+            [
+                {"file": "tests/cli/test_config.py"},
+                {"file": "src/robotsix_mill/config.py"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        sandbox,
+        "run",
+        lambda cmd, *, repo_dir, settings, **kwargs: (
+            1,
+            "E   assert 1 == 2\n" * 50,
+        ),
+    )
+    cap = {}
+
+    class FakeModel:
+        def __init__(self, name, **kw):
+            cap["model"] = name
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            cap["name"] = kw.get("name")
+
+        def run_sync(self, prompt, *, usage_limits=None, **kw):
+            cap["prompt"] = prompt
+            return type("R", (), {"output": "fix the assertion"})()
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+
+    try:
+        passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
+        assert passed is False
+        assert fb == "fix the assertion"
+
+        prompt = cap.get("prompt", "")
+        assert "Declared file scope (prefer fixes within these files):" in prompt
+        assert "  - tests/cli/test_config.py" in prompt
+        assert "  - src/robotsix_mill/config.py" in prompt
+    finally:
+        # Clean up to avoid leaking into the next test (tmp_path.parent is
+        # shared across tests in the same session).
+        fp = artifacts_dir / "file_map.json"
+        if fp.exists():
+            fp.unlink()
+        if artifacts_dir.exists():
+            artifacts_dir.rmdir()
+
+
+def test_test_agent_distill_no_file_map_unaffected(tmp_path, monkeypatch):
+    """When artifacts/file_map.json does NOT exist, the user message sent
+    to the distill sub-agent is unchanged — no scope block appended."""
+    from robotsix_mill import sandbox
+
+    # Ensure no leftover artifacts from other tests.
+    artifacts_dir = tmp_path.parent / "artifacts"
+    fp = artifacts_dir / "file_map.json"
+    if fp.exists():
+        fp.unlink()
+
+    s = _settings(tmp_path, test_command="pytest", test_model="test/cheap")
+
+    monkeypatch.setattr(
+        sandbox,
+        "run",
+        lambda cmd, *, repo_dir, settings, **kwargs: (
+            1,
+            "E   assert 1 == 2\n" * 50,
+        ),
+    )
+    cap = {}
+
+    class FakeModel:
+        def __init__(self, name, **kw):
+            cap["model"] = name
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            pass
+
+        def run_sync(self, prompt, *, usage_limits=None, **kw):
+            cap["prompt"] = prompt
+            return type("R", (), {"output": "fix the assertion"})()
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+
+    passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
+    assert passed is False
+    assert fb == "fix the assertion"
+
+    prompt = cap.get("prompt", "")
+    assert "Declared file scope" not in prompt
+
+
+def test_test_agent_distill_explicit_file_map_override(tmp_path, monkeypatch):
+    """Passing file_map= explicitly bypasses auto-discovery; the explicit
+    list appears in the scope block regardless of artifacts/file_map.json."""
+    from robotsix_mill import sandbox
+
+    s = _settings(tmp_path, test_command="pytest", test_model="test/cheap")
+
+    # Write a DIFFERENT file_map.json (should be ignored when explicit passed)
+    artifacts_dir = tmp_path.parent / "artifacts"
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    import json as _json
+
+    artifacts_dir.joinpath("file_map.json").write_text(
+        _json.dumps([{"file": "should/be/ignored.py"}]),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        sandbox,
+        "run",
+        lambda cmd, *, repo_dir, settings, **kwargs: (
+            1,
+            "E   assert 1 == 2\n" * 50,
+        ),
+    )
+    cap = {}
+
+    class FakeModel:
+        def __init__(self, name, **kw):
+            pass
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            pass
+
+        def run_sync(self, prompt, *, usage_limits=None, **kw):
+            cap["prompt"] = prompt
+            return type("R", (), {"output": "fix the assertion"})()
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+
+    try:
+        explicit_map = ["only/this/file.py"]
+        passed, fb = testing.run_test_agent(
+            settings=s,
+            repo_dir=tmp_path,
+            file_map=explicit_map,
+        )
+        assert passed is False
+
+        prompt = cap.get("prompt", "")
+        assert "Declared file scope (prefer fixes within these files):" in prompt
+        assert "  - only/this/file.py" in prompt
+        assert "should/be/ignored.py" not in prompt
+    finally:
+        fp = artifacts_dir / "file_map.json"
+        if fp.exists():
+            fp.unlink()
+        if artifacts_dir.exists():
+            artifacts_dir.rmdir()
