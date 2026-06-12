@@ -8,6 +8,7 @@ and the inspector seam so no LLM / network is involved.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
@@ -972,3 +973,118 @@ class TestPreFilingDedup:
         )
         # The fingerprint substring match suppresses the new draft.
         assert result.drafts_created == []
+
+
+class TestPathExistenceGuard:
+    """Deterministic guard that suppresses findings whose cited source
+    paths all fail to resolve on HEAD (the documented false-positive
+    mode), without over-blocking findings that cite real or no paths."""
+
+    # tests/runners/test_trace_review_runner.py → repo root.
+    _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+    _MISSING_PATH = (
+        "src/robotsix_llmio/agents/claude_sdk/ticket_pipeline/stages/dedup.py"
+    )
+    _EXISTING_PATH = "src/robotsix_mill/agents/dedup.py"
+
+    def _patch_seams(self, monkeypatch, finding):
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.list_all_traces_since",
+            lambda *a, **kw: [_trace(totalCost=0.10)],
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
+            lambda *a, **kw: {
+                "observations": [
+                    _obs("run_command", output="error: command failed"),
+                ]
+            },
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.trace_inspector.run_trace_inspector",
+            lambda **kw: TraceInspectResult(findings=[finding]),
+        )
+
+    def _resolve_to_repo_root(self, monkeypatch):
+        monkeypatch.setattr(
+            "robotsix_mill.runners.trace_review_runner._resolve_target_repo_dir",
+            lambda *a, **kw: self._REPO_ROOT,
+        )
+
+    def test_finding_with_only_missing_path_is_suppressed(self, settings, monkeypatch):
+        self._resolve_to_repo_root(monkeypatch)
+        finding = TraceFinding(
+            category="optimization",
+            symptom="dedup stage is slow",
+            root_cause=f"the loop in {self._MISSING_PATH} re-scans every ticket",
+            proposed_solution=f"add an early-return guard in {self._MISSING_PATH}",
+            target_files=[self._MISSING_PATH],
+            confidence="medium",
+        )
+        self._patch_seams(monkeypatch, finding)
+        result = run_trace_review_pass(
+            session_id="sess-missing-path",
+            repo_config=_test_repo_config(),
+        )
+        assert result.traces_flagged == 1
+        # No draft — the only cited path does not exist on HEAD.
+        assert result.drafts_created == []
+
+    def test_finding_with_existing_path_is_filed(self, settings, monkeypatch):
+        self._resolve_to_repo_root(monkeypatch)
+        finding = TraceFinding(
+            category="optimization",
+            symptom="dedup stage is slow",
+            root_cause=f"the loop in {self._EXISTING_PATH} re-scans every ticket",
+            proposed_solution=f"add an early-return guard in {self._EXISTING_PATH}",
+            target_files=[self._EXISTING_PATH],
+            confidence="medium",
+        )
+        self._patch_seams(monkeypatch, finding)
+        result = run_trace_review_pass(
+            session_id="sess-existing-path",
+            repo_config=_test_repo_config(),
+        )
+        # The cited path exists → guard does not over-block.
+        assert len(result.drafts_created) == 1
+
+    def test_finding_with_no_cited_paths_is_filed(self, settings, monkeypatch):
+        self._resolve_to_repo_root(monkeypatch)
+        finding = TraceFinding(
+            category="agent_limitation",
+            symptom="agent looped without converging",
+            root_cause="the model retried the same approach repeatedly",
+            proposed_solution="add a convergence check to break the loop",
+            target_files=[],
+            confidence="medium",
+        )
+        self._patch_seams(monkeypatch, finding)
+        result = run_trace_review_pass(
+            session_id="sess-no-paths",
+            repo_config=_test_repo_config(),
+        )
+        # Guard is inert when no concrete path is cited.
+        assert len(result.drafts_created) == 1
+
+    def test_guard_is_noop_when_repo_dir_unresolved(self, settings, monkeypatch):
+        # Resolver returns None (no checkout on disk) → guard no-op,
+        # so even a finding citing a non-existent path is filed exactly
+        # as before this guard existed.
+        monkeypatch.setattr(
+            "robotsix_mill.runners.trace_review_runner._resolve_target_repo_dir",
+            lambda *a, **kw: None,
+        )
+        finding = TraceFinding(
+            category="optimization",
+            symptom="dedup stage is slow",
+            root_cause=f"the loop in {self._MISSING_PATH} re-scans every ticket",
+            proposed_solution=f"add an early-return guard in {self._MISSING_PATH}",
+            target_files=[self._MISSING_PATH],
+            confidence="medium",
+        )
+        self._patch_seams(monkeypatch, finding)
+        result = run_trace_review_pass(
+            session_id="sess-unresolved",
+            repo_config=_test_repo_config(),
+        )
+        assert len(result.drafts_created) == 1
