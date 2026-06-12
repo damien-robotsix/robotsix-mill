@@ -138,8 +138,11 @@ def is_network_down_error(exc: BaseException) -> bool:
 
 
 # Cached connectivity probe — every concurrently-failing ticket asks the
-# same question within seconds of each other.
-_probe_cache: dict[str, float | bool] = {"at": 0.0, "ok": True}
+# same question within seconds of each other. ``at`` starts at -inf so
+# the FIRST call always probes: time.monotonic() is seconds-since-boot
+# on Linux, so a small sentinel like 0.0 would read as "fresh cache"
+# during the first cache window after boot.
+_probe_cache: dict[str, float | bool] = {"at": float("-inf"), "ok": True}
 
 
 def network_available(host: str, *, cache_seconds: float = 30.0) -> bool:

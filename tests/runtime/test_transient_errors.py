@@ -470,7 +470,7 @@ def test_is_network_down_error_rejects_endpoint_errors():
 def test_network_available_probes_and_caches(monkeypatch):
     import robotsix_mill.runtime.transient_errors as te
 
-    monkeypatch.setattr(te, "_probe_cache", {"at": 0.0, "ok": True})
+    monkeypatch.setattr(te, "_probe_cache", {"at": float("-inf"), "ok": True})
     calls = {"n": 0}
 
     def fake_getaddrinfo(host, port):
@@ -486,6 +486,6 @@ def test_network_available_probes_and_caches(monkeypatch):
 def test_network_available_true_when_host_resolves(monkeypatch):
     import robotsix_mill.runtime.transient_errors as te
 
-    monkeypatch.setattr(te, "_probe_cache", {"at": 0.0, "ok": False})
+    monkeypatch.setattr(te, "_probe_cache", {"at": float("-inf"), "ok": False})
     monkeypatch.setattr("socket.getaddrinfo", lambda host, port: [("ok",)])
     assert te.network_available("github.com", cache_seconds=300.0) is True
