@@ -40,6 +40,17 @@ const source = fs
 const requests = [];
 let responder = () => ({ status: 200, responseText: "null" });
 const alerts = [];
+// XHRs parked by a {defer: true} responder; scenarios resolve them
+// manually via resolveDeferred() to observe mid-flight UI state.
+const deferredXhrs = [];
+
+function resolveDeferred(status, responseText) {
+  const x = deferredXhrs.shift();
+  if (!x) throw new Error("no deferred XHR to resolve");
+  x.status = status;
+  x.responseText = responseText;
+  x.onload();
+}
 
 function makeEl(id) {
   const set = new Set();
@@ -152,6 +163,10 @@ class XMLHttpRequestStub {
       resp = responder(this.method, this.url, body);
     } catch (_e) {
       resp = null;
+    }
+    if (resp && resp.defer) {
+      deferredXhrs.push(this);
+      return;
     }
     if (resp == null) {
       this.status = 0;
@@ -487,6 +502,84 @@ await test("rejectProposal alerts and does not re-render on non-ok", async () =>
   assert.ok(alerts[0].includes("Reject failed"), "alert mentions reject failure");
   const listGet = requests.find((r) => r.method === "GET" && r.url.includes("/proposed-actions?status=pending"));
   assert.ok(!listGet, "failed reject must NOT re-render (no list GET)");
+});
+
+// ----------------------------------------------------------------------
+// lockWhile — in-flight button locking (Approve/Reject pair)
+// ----------------------------------------------------------------------
+
+// A stub Approve/Reject pair sharing a .pa-buttons group. closest()
+// resolves the button itself for "button" and the group for
+// ".pa-buttons"; querySelectorAll("button") returns the pair.
+function makeButtonPair() {
+  const group = {};
+  function btn() {
+    const set = new Set();
+    return {
+      disabled: false,
+      classList: {
+        add: (c) => set.add(c),
+        remove: (c) => set.delete(c),
+        contains: (c) => set.has(c),
+      },
+      closest: (selq) => (selq === "button" ? null : group), // patched below
+    };
+  }
+  const approveBtn = btn();
+  const rejectBtn = btn();
+  approveBtn.closest = (selq) => (selq === "button" ? approveBtn : selq === ".pa-buttons" ? group : null);
+  rejectBtn.closest = (selq) => (selq === "button" ? rejectBtn : selq === ".pa-buttons" ? group : null);
+  group.querySelectorAll = (selq) => (selq === "button" ? [approveBtn, rejectBtn] : []);
+  return { approveBtn, rejectBtn };
+}
+
+await test("approveProposal disables BOTH pair buttons while in flight", async () => {
+  reset("repo1");
+  const { approveBtn, rejectBtn } = makeButtonPair();
+  windowStub.event = { target: approveBtn };
+  responder = (method, url) => {
+    if (url.includes("/approve")) return { defer: true };
+    return { status: 200, responseText: "[]" };
+  };
+  const p = ctx.approveProposal("7");
+  await flush();
+  assert.equal(approveBtn.disabled, true, "clicked button disabled in flight");
+  assert.equal(rejectBtn.disabled, true, "OPPOSITE pair button disabled in flight");
+  assert.ok(approveBtn.classList.contains("btn-busy"), "clicked button marked busy");
+  assert.equal(rejectBtn.classList.contains("btn-busy"), false, "sibling not marked busy");
+  resolveDeferred(200, "null");
+  await p;
+  assert.equal(approveBtn.disabled, false, "clicked button restored after settle");
+  assert.equal(rejectBtn.disabled, false, "pair button restored after settle");
+  assert.equal(approveBtn.classList.contains("btn-busy"), false, "busy mark removed");
+  windowStub.event = undefined;
+});
+
+await test("lockWhile restores the pair on failure too", async () => {
+  reset("repo1");
+  const { approveBtn, rejectBtn } = makeButtonPair();
+  windowStub.event = { target: rejectBtn };
+  responder = (method, url) => {
+    if (url.includes("/reject")) return { defer: true };
+    return { status: 200, responseText: "[]" };
+  };
+  const p = ctx.rejectProposal("8");
+  await flush();
+  assert.equal(approveBtn.disabled, true, "opposite button disabled in flight");
+  resolveDeferred(500, "boom");
+  await p;
+  assert.equal(approveBtn.disabled, false, "opposite button restored after failure");
+  assert.equal(rejectBtn.disabled, false, "clicked button restored after failure");
+  assert.equal(alerts.length, 1, "failure alert still raised");
+  windowStub.event = undefined;
+});
+
+await test("actions run unlocked when no originating event exists", async () => {
+  reset("repo1");
+  windowStub.event = undefined;
+  responder = () => ({ status: 200, responseText: "[]" });
+  await ctx.approveProposal("9"); // must not throw without window.event
+  assert.equal(alerts.length, 0, "no alert — action completed without a button");
 });
 
 // ----------------------------------------------------------------------

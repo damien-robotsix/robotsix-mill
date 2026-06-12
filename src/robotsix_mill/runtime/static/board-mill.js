@@ -688,22 +688,65 @@
       '<button class="del-btn" title="Delete ticket" style="position:static;opacity:1;margin-left:4px;margin-top:5px;display:inline-block" onclick="event.stopPropagation();del_(' + jsq(t.id) + ')">✕</button>';
   }
 
+  // In-flight button locking. Wraps an action so the clicked button AND
+  // its sibling action buttons are greyed out until the request settles.
+  // Locking the whole group (not just the clicked button) is deliberate:
+  // for opposing pairs (Approve/Reject, Close/Reopen) a slow POST must
+  // not let the user fire the opposite action mid-flight. The clicked
+  // button is resolved from window.event — the inline onclick handlers
+  // don't pass `this` — so it MUST be captured synchronously, before the
+  // first await. When no event is available (programmatic call, tests)
+  // the action runs unlocked.
+  function _actionGroupButtons() {
+    var ev = window.event;
+    var t = ev && ev.target;
+    var btn = t && t.closest ? t.closest("button") : null;
+    if (!btn) return { btn: null, all: [] };
+    var group =
+      btn.closest(".pa-buttons") ||
+      btn.closest("#ticket-action-buttons") ||
+      btn.parentElement;
+    var all = group && group.querySelectorAll
+      ? Array.prototype.slice.call(group.querySelectorAll("button"))
+      : [btn];
+    return { btn: btn, all: all.length ? all : [btn] };
+  }
+
+  async function lockWhile(fn) {
+    var g = _actionGroupButtons();
+    var prev = g.all.map(function (b) { return b.disabled; });
+    g.all.forEach(function (b) { b.disabled = true; });
+    if (g.btn && g.btn.classList) g.btn.classList.add("btn-busy");
+    try {
+      return await fn();
+    } finally {
+      // If the action re-rendered the panel these nodes are detached and
+      // the restore is a harmless no-op on the old elements.
+      if (g.btn && g.btn.classList) g.btn.classList.remove("btn-busy");
+      g.all.forEach(function (b, i) { b.disabled = prev[i]; });
+    }
+  }
+
   async function togglePriority(id, want) {
-    var r = await jpost("/tickets/" + id + "/priority", { priority: want === "true" || want === true });
-    if (!r.ok) { var e = await r.text(); alert("priority toggle failed: " + e); return; }
-    refresh();
-    if (sel === id) open_(id);
+    await lockWhile(async function () {
+      var r = await jpost("/tickets/" + id + "/priority", { priority: want === "true" || want === true });
+      if (!r.ok) { var e = await r.text(); alert("priority toggle failed: " + e); return; }
+      refresh();
+      if (sel === id) open_(id);
+    });
   }
 
   async function convertToTicket(id) {
-    var comment = prompt("Add a comment to guide the new ticket (optional):");
-    if (comment === null) return;
-    var r = await jpost("/tickets/" + id + "/convert-to-task", { comment: comment.trim() });
-    if (!r.ok) { var e = await r.text(); alert("convert to ticket failed: " + e); return; }
-    var nt = await r.json();
-    refresh();
-    if (nt && nt.id) open_(nt.id);
-    else if (sel === id) open_(id);
+    await lockWhile(async function () {
+      var comment = prompt("Add a comment to guide the new ticket (optional):");
+      if (comment === null) return;
+      var r = await jpost("/tickets/" + id + "/convert-to-task", { comment: comment.trim() });
+      if (!r.ok) { var e = await r.text(); alert("convert to ticket failed: " + e); return; }
+      var nt = await r.json();
+      refresh();
+      if (nt && nt.id) open_(nt.id);
+      else if (sel === id) open_(id);
+    });
   }
 
   async function generateChildren(id) {
@@ -1045,9 +1088,11 @@
   // Ticket actions
   // =========================================================================
   async function approve(id) {
-    var r = await jpost("/tickets/" + id + "/approve");
-    if (!r.ok) { var e = await r.text(); alert("approve failed: " + e); }
-    else refresh();
+    await lockWhile(async function () {
+      var r = await jpost("/tickets/" + id + "/approve");
+      if (!r.ok) { var e = await r.text(); alert("approve failed: " + e); }
+      else refresh();
+    });
   }
 
   async function mergePR(id) {
@@ -1060,64 +1105,78 @@
   }
 
   async function requestChanges(id) {
-    var body = prompt("Send this ticket back to draft. What needs to change?\n(your comment goes to the refine agent so it can re-process with this feedback.)");
-    if (body === null) return;
-    if (!body.trim()) {
-      var existing = await jget("/tickets/" + id + "/comments");
-      if (!existing || !existing.length) { alert("A comment is required when requesting changes"); return; }
-    }
-    var r = await jpost("/tickets/" + id + "/request-changes", { body: body.trim() });
-    if (!r.ok) { var e = await r.text(); alert("request-changes failed: " + e); }
-    else { refresh(); if (sel === id) open_(id); }
+    await lockWhile(async function () {
+      var body = prompt("Send this ticket back to draft. What needs to change?\n(your comment goes to the refine agent so it can re-process with this feedback.)");
+      if (body === null) return;
+      if (!body.trim()) {
+        var existing = await jget("/tickets/" + id + "/comments");
+        if (!existing || !existing.length) { alert("A comment is required when requesting changes"); return; }
+      }
+      var r = await jpost("/tickets/" + id + "/request-changes", { body: body.trim() });
+      if (!r.ok) { var e = await r.text(); alert("request-changes failed: " + e); }
+      else { refresh(); if (sel === id) open_(id); }
+    });
   }
 
   async function redraft(id) {
-    var body = prompt("Start this ticket over from scratch? Branch, comments, and history will be discarded and folded into a clean draft. Add a note (optional):");
-    if (body === null) return;
-    var r = await jpost("/tickets/" + id + "/redraft", { body: body.trim() });
-    if (!r.ok) { var e = await r.text(); alert("redraft failed: " + e); }
-    else { refresh(); if (sel === id) open_(id); }
+    await lockWhile(async function () {
+      var body = prompt("Start this ticket over from scratch? Branch, comments, and history will be discarded and folded into a clean draft. Add a note (optional):");
+      if (body === null) return;
+      var r = await jpost("/tickets/" + id + "/redraft", { body: body.trim() });
+      if (!r.ok) { var e = await r.text(); alert("redraft failed: " + e); }
+      else { refresh(); if (sel === id) open_(id); }
+    });
   }
 
   async function del_(id) {
-    if (!confirm("Delete ticket " + id + "? This is irreversible (row, history, workspace).")) return;
-    var r = await jdel("/tickets/" + id);
-    if (!r.ok && r.status !== 204) { var e = await r.text(); alert("delete failed: " + e); }
-    else refresh();
+    await lockWhile(async function () {
+      if (!confirm("Delete ticket " + id + "? This is irreversible (row, history, workspace).")) return;
+      var r = await jdel("/tickets/" + id);
+      if (!r.ok && r.status !== 204) { var e = await r.text(); alert("delete failed: " + e); }
+      else refresh();
+    });
   }
 
   async function addComment(id) {
-    var body = prompt("Add a comment to this ticket:");
-    if (body === null) return;
-    if (!body.trim()) return;
-    var r = await jpost("/tickets/" + id + "/comments", { body: body.trim() });
-    if (!r.ok) { var e = await r.text(); alert("add comment failed: " + e); }
-    else if (sel === id) open_(id);
+    await lockWhile(async function () {
+      var body = prompt("Add a comment to this ticket:");
+      if (body === null) return;
+      if (!body.trim()) return;
+      var r = await jpost("/tickets/" + id + "/comments", { body: body.trim() });
+      if (!r.ok) { var e = await r.text(); alert("add comment failed: " + e); }
+      else if (sel === id) open_(id);
+    });
   }
 
   async function replyToThread(threadId, ticketId) {
-    var body = prompt("Reply to this thread:");
-    if (body === null) return;
-    if (!body.trim()) return;
-    var r = await jpost("/tickets/" + ticketId + "/comments", { body: body.trim(), parent_id: threadId });
-    if (!r.ok) { var e = await r.text(); alert("reply failed: " + e); }
-    else if (sel === ticketId) open_(ticketId);
+    await lockWhile(async function () {
+      var body = prompt("Reply to this thread:");
+      if (body === null) return;
+      if (!body.trim()) return;
+      var r = await jpost("/tickets/" + ticketId + "/comments", { body: body.trim(), parent_id: threadId });
+      if (!r.ok) { var e = await r.text(); alert("reply failed: " + e); }
+      else if (sel === ticketId) open_(ticketId);
+    });
   }
 
   async function closeThread(commentId, ticketId) {
-    var tid = ticketId || sel;
-    var url = "/comments/" + commentId + "/close" + (tid ? "?ticket_id=" + encodeURIComponent(tid) : "");
-    var r = await jpost(url);
-    if (!r.ok) { var e = await r.text(); alert("close thread failed: " + e); }
-    else if (tid) open_(tid);
+    await lockWhile(async function () {
+      var tid = ticketId || sel;
+      var url = "/comments/" + commentId + "/close" + (tid ? "?ticket_id=" + encodeURIComponent(tid) : "");
+      var r = await jpost(url);
+      if (!r.ok) { var e = await r.text(); alert("close thread failed: " + e); }
+      else if (tid) open_(tid);
+    });
   }
 
   async function reopenThread(commentId, ticketId) {
-    var tid = ticketId || sel;
-    var url = "/comments/" + commentId + "/reopen" + (tid ? "?ticket_id=" + encodeURIComponent(tid) : "");
-    var r = await jpost(url);
-    if (!r.ok) { var e = await r.text(); alert("reopen thread failed: " + e); }
-    else if (tid) open_(tid);
+    await lockWhile(async function () {
+      var tid = ticketId || sel;
+      var url = "/comments/" + commentId + "/reopen" + (tid ? "?ticket_id=" + encodeURIComponent(tid) : "");
+      var r = await jpost(url);
+      if (!r.ok) { var e = await r.text(); alert("reopen thread failed: " + e); }
+      else if (tid) open_(tid);
+    });
   }
 
   // =========================================================================
@@ -2153,17 +2212,21 @@
   }
 
   async function approveProposal(id) {
-    var repo = getRepoId();
-    var r = await jpost("/proposed-actions/" + encodeURIComponent(id) + "/approve?repo_id=" + encodeURIComponent(repo));
-    if (!r.ok) { alert("Approve failed: " + await r.text()); return; }
-    await renderProposals();
+    await lockWhile(async function () {
+      var repo = getRepoId();
+      var r = await jpost("/proposed-actions/" + encodeURIComponent(id) + "/approve?repo_id=" + encodeURIComponent(repo));
+      if (!r.ok) { alert("Approve failed: " + await r.text()); return; }
+      await renderProposals();
+    });
   }
 
   async function rejectProposal(id) {
-    var repo = getRepoId();
-    var r = await jpost("/proposed-actions/" + encodeURIComponent(id) + "/reject?repo_id=" + encodeURIComponent(repo));
-    if (!r.ok) { alert("Reject failed: " + await r.text()); return; }
-    await renderProposals();
+    await lockWhile(async function () {
+      var repo = getRepoId();
+      var r = await jpost("/proposed-actions/" + encodeURIComponent(id) + "/reject?repo_id=" + encodeURIComponent(repo));
+      if (!r.ok) { alert("Reject failed: " + await r.text()); return; }
+      await renderProposals();
+    });
   }
 
   // =========================================================================
