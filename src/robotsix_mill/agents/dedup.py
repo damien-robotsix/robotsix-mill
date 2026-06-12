@@ -155,11 +155,13 @@ def run_dedup_check(
         fs = build_fs_tools(repo_dir, settings)
         tools = [t for t in fs if t.__name__ in ("read_file", "list_dir")]
 
+    model_name = definition.model or settings.dedup_model
+    log.info("dedup check using model: %s", model_name)
     agent = build_agent_from_definition(
         settings,
         definition,
         tools=tools,
-        model_name=definition.model or settings.dedup_model,
+        model_name=model_name,
     )
     # request_limit must be passed via usage_limits=UsageLimits(...),
     # NOT as a bare run_sync kwarg — the bare kwarg raises

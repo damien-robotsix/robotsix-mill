@@ -1564,6 +1564,48 @@ class TestValidationInvalid:
 # ---------------------------------------------------------------------------
 
 
+class TestDedupModelValidator:
+    """Validator warns when dedup_model does not look like a cheap
+    flash-class model, but never rejects."""
+
+    def test_non_flash_model_logs_warning(self, caplog):
+        """A non-flash dedup_model emits a WARNING log."""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            s = Settings(dedup_model="opus")
+        assert (
+            "dedup_model='opus' does not look like a cheap flash-class model"
+            in caplog.text
+        )
+        # The value is preserved — never rejected
+        assert s.dedup_model == "opus"
+
+    def test_flash_model_no_warning(self, caplog):
+        """A flash-class dedup_model emits no warning."""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            Settings(dedup_model="deepseek/deepseek-v4-flash")
+        assert "does not look like a cheap flash-class model" not in caplog.text
+
+    def test_empty_string_no_warning(self, caplog):
+        """An empty dedup_model (means 'use default' downstream) emits no warning."""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            Settings(dedup_model="")
+        assert "does not look like a cheap flash-class model" not in caplog.text
+
+    def test_whitespace_only_no_warning(self, caplog):
+        """A whitespace-only dedup_model emits no warning."""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            Settings(dedup_model="   ")
+        assert "does not look like a cheap flash-class model" not in caplog.text
+
+
 class TestFactories:
     """Integration tests for ``load_settings()`` and ``load_secrets()``."""
 
