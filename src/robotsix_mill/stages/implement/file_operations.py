@@ -113,7 +113,13 @@ class FileOperationsMixin(_ImplementStageBase):
                     token,
                 )
             except subprocess.CalledProcessError as e:
-                return Outcome(State.BLOCKED, f"clone failed: {e.stderr[:300]}")
+                from ...runtime.transient_errors import reraise_if_transient
+
+                reraise_if_transient(e)
+                return Outcome(
+                    State.BLOCKED,
+                    "clone failed: " + git_ops.redact_credentials(e.stderr or "")[:300],
+                )
             git_ops.create_branch(repo_dir, branch)
 
         # Refresh against current origin/<target> so the agent never
@@ -165,10 +171,13 @@ class FileOperationsMixin(_ImplementStageBase):
                 )
                 git_ops.create_branch(repo_dir, branch)
             except subprocess.CalledProcessError as e:
+                from ...runtime.transient_errors import reraise_if_transient
+
+                reraise_if_transient(e)
                 return Outcome(
                     State.BLOCKED,
-                    "repo clone missing and re-clone failed — "
-                    f"resumable: {(e.stderr or '')[:200]}",
+                    "repo clone missing and re-clone failed — resumable: "
+                    + git_ops.redact_credentials(e.stderr or "")[:200],
                 )
         ctx.service.set_branch(ticket.id, branch)
         return (repo_dir, branch, resuming)

@@ -102,13 +102,49 @@ async def _handle_stage_error(
     :func:`_block_ticket_and_notify` (transient-exhausted or fatal).
     """
     log.exception("%s: %s failed", stage_name, ticket_id)
-    from ..transient_errors import classify_stage_error
+    from ..transient_errors import (
+        classify_stage_error,
+        is_network_down_error,
+        network_available,
+    )
     from ..stage_retry import compute_retry_delay
 
     classification = classify_stage_error(error)
     if classification == "transient":
         ticket = ctx.service.get(ticket_id)
         if ticket is None:
+            return
+        # Global network outage: every network-touching stage is about
+        # to fail identically, and an outage longer than the bounded
+        # retry envelope (~1 min) would mass-block the board. Park the
+        # ticket WITHOUT consuming a retry attempt; it re-polls until
+        # connectivity returns, then normal bounded retries apply.
+        if is_network_down_error(error) and not network_available(
+            ctx.settings.network_probe_host
+        ):
+            outage_delay = ctx.settings.network_outage_retry_seconds
+            next_at_dt = datetime.fromtimestamp(
+                datetime.now(timezone.utc).timestamp() + outage_delay,
+                tz=timezone.utc,
+            )
+            ctx.service.set_retry_state(
+                ticket_id,
+                # Floor at 1 so the board shows the retry chip; never
+                # incremented here, so parking can't exhaust the budget.
+                retry_attempt=max(ticket.retry_attempt, 1),
+                last_transient_error=(
+                    "network outage (parked, retry budget untouched): " + repr(error)
+                )[:200],
+                next_retry_at=next_at_dt,
+            )
+            log.warning(
+                "%s: %s network outage (%s unresolvable) — parked, re-checking in %ds",
+                stage_name,
+                ticket_id,
+                ctx.settings.network_probe_host,
+                outage_delay,
+            )
+            _post_trace_event(ctx, ticket_id, trace_id, stage_name)
             return
         attempt = ticket.retry_attempt + 1
         max_attempts = ctx.settings.stage_retry_max_attempts

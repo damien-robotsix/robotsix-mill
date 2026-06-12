@@ -189,6 +189,14 @@ class _CoreSettings(BaseModel):
     stage_retry_max_attempts: int = Field(default=3)
     stage_retry_base_delay: float = Field(default=2.0)
     stage_retry_max_delay: float = Field(default=30.0)
+    # Global-network-outage parking. When a stage fails with a
+    # host-resolution error AND this probe host doesn't resolve either,
+    # the worker re-schedules the ticket WITHOUT consuming a retry
+    # attempt — an outage longer than the bounded stage-retry envelope
+    # must not mass-block the board. The ticket re-polls every
+    # network_outage_retry_seconds until connectivity returns.
+    network_probe_host: str = Field(default="github.com")
+    network_outage_retry_seconds: int = Field(default=120, ge=1)
     # Backoff for UsageLimitExceeded (pydantic-ai budget cap).  These
     # are longer than transient backoff because OpenRouter/provider
     # rate-limit windows are typically ~60s.  When

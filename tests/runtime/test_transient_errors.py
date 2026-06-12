@@ -420,3 +420,72 @@ def test_real_git_error_stays_fatal():
         1, ["git", "status"], stderr="error: pathspec 'x' did not match any file(s)"
     )
     assert classify_stage_error(e) == "fatal"
+
+
+# ---------------------------------------------------------------------------
+# Network-outage detection (is_network_down_error / network_available)
+# ---------------------------------------------------------------------------
+
+
+def test_is_network_down_error_git_dns_failure():
+    from robotsix_mill.runtime.transient_errors import (
+        classify_stage_error,
+        is_network_down_error,
+    )
+
+    e = subprocess.CalledProcessError(
+        128,
+        "git",
+        stderr=(
+            "fatal: unable to access 'https://github.com/x/y/': "
+            "Could not resolve host: github.com"
+        ),
+    )
+    assert is_network_down_error(e)
+    # Still transient for the normal classifier too.
+    assert classify_stage_error(e) == "transient"
+
+
+def test_is_network_down_error_gaierror_in_cause_chain():
+    import socket
+
+    from robotsix_mill.runtime.transient_errors import is_network_down_error
+
+    inner = socket.gaierror(-3, "Temporary failure in name resolution")
+    outer = RuntimeError("wrapped")
+    outer.__cause__ = inner
+    assert is_network_down_error(outer)
+
+
+def test_is_network_down_error_rejects_endpoint_errors():
+    from robotsix_mill.runtime.transient_errors import is_network_down_error
+
+    e = subprocess.CalledProcessError(
+        1, "git", stderr="The requested URL returned error: 503"
+    )
+    assert not is_network_down_error(e)
+    assert not is_network_down_error(RuntimeError("plain failure"))
+
+
+def test_network_available_probes_and_caches(monkeypatch):
+    import robotsix_mill.runtime.transient_errors as te
+
+    monkeypatch.setattr(te, "_probe_cache", {"at": 0.0, "ok": True})
+    calls = {"n": 0}
+
+    def fake_getaddrinfo(host, port):
+        calls["n"] += 1
+        raise OSError("no dns")
+
+    monkeypatch.setattr("socket.getaddrinfo", fake_getaddrinfo)
+    assert te.network_available("github.com", cache_seconds=300.0) is False
+    assert te.network_available("github.com", cache_seconds=300.0) is False
+    assert calls["n"] == 1, "second call within the cache window must not probe"
+
+
+def test_network_available_true_when_host_resolves(monkeypatch):
+    import robotsix_mill.runtime.transient_errors as te
+
+    monkeypatch.setattr(te, "_probe_cache", {"at": 0.0, "ok": False})
+    monkeypatch.setattr("socket.getaddrinfo", lambda host, port: [("ok",)])
+    assert te.network_available("github.com", cache_seconds=300.0) is True
