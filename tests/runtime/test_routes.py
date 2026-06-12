@@ -1550,3 +1550,73 @@ def test_convert_to_task_leaves_inquiry_unchanged(client, service, monkeypatch):
     assert refreshed.title == orig_title
     assert refreshed.state == orig_state
     assert service.workspace(refreshed).read_description() == orig_answer
+
+
+# -- POST /tickets/{id}/migrate ------------------------------------------
+
+
+@pytest.fixture
+def migrate_client(settings):
+    """TestClient over TWO boards, with the repos-config singleton
+    aligned so ``TicketService.migrate`` validates the same registry
+    the routes resolve against."""
+    import robotsix_mill.config as _cfg
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+    from robotsix_mill.core import db as _db
+
+    registry = ReposRegistry(
+        repos={
+            "test-repo": RepoConfig(
+                repo_id="test-repo",
+                board_id="test-board",
+                langfuse_project_name="proj-a",
+                langfuse_public_key="pk-a",
+                langfuse_secret_key="sk-a",
+            ),
+            "other-repo": RepoConfig(
+                repo_id="other-repo",
+                board_id="other-board",
+                langfuse_project_name="proj-b",
+                langfuse_public_key="pk-b",
+                langfuse_secret_key="sk-b",
+            ),
+        }
+    )
+    _cfg._repos_config = registry
+    _db.init_db(settings, board_id="other-board")
+    with TestClient(create_app(registry, settings)) as c:
+        yield c
+    _cfg._repos_config = None
+
+
+def test_migrate_ticket_happy_path(migrate_client, service):
+    """POST /tickets/{id}/migrate moves the ticket to the target board
+    and returns it as a DRAFT there."""
+    t = service.create("Misrouted", "fix belongs to other-repo")
+
+    r = migrate_client.post(
+        f"/tickets/{t.id}/migrate",
+        json={"repo_id": "other-repo", "note": "belongs there"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["board_id"] == "other-board"
+    assert data["state"] == "draft"
+
+    r2 = migrate_client.get(f"/tickets/{t.id}/history")
+    assert any("migrated from board" in (e["note"] or "") for e in r2.json())
+
+
+def test_migrate_ticket_unknown_repo_400(migrate_client, service):
+    t = service.create("Misrouted", "body")
+    r = migrate_client.post(
+        f"/tickets/{t.id}/migrate", json={"repo_id": "no-such-repo"}
+    )
+    assert r.status_code == 400
+
+
+def test_migrate_ticket_404(migrate_client):
+    r = migrate_client.post(
+        "/tickets/nonexistent/migrate", json={"repo_id": "other-repo"}
+    )
+    assert r.status_code == 404

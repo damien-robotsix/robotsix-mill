@@ -24,6 +24,7 @@ from ...core.models import (
     SourceKind,
     TicketCreate,
     TicketEvent,
+    TicketMigrate,
     TicketRead,
     TicketTransition,
 )
@@ -452,6 +453,34 @@ def transition(
         raise HTTPException(404, "ticket not found") from None
     maybe_enqueue(ticket, worker)  # human unblock re-triggers the chain
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
+    return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
+
+
+@router.post("/tickets/{ticket_id}/migrate", response_model=TicketRead)
+def migrate_ticket(
+    ticket_id: str,
+    body: TicketMigrate,
+    request: Request,
+    svc=Depends(get_service),
+    worker=Depends(get_worker),
+    settings=Depends(get_settings),
+) -> TicketRead:
+    """Move a ticket to another board (row, history, comments, workspace).
+
+    For tickets filed on the wrong board (the fix belongs to a
+    different repo). The migrated ticket lands in DRAFT on the target
+    board so its refine stage re-triages it there.
+    """
+    repos = request.app.state.repos
+    board_id = _resolve_board_id(body.repo_id, repos)
+    try:
+        ticket = svc.migrate(ticket_id, board_id, note=body.note)
+    except KeyError:
+        raise HTTPException(404, "ticket not found") from None
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+    maybe_enqueue(ticket, worker)  # draft → refine on the new board
+    repo_config = _repo_config_for_ticket(ticket, repos)
     return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
 
 

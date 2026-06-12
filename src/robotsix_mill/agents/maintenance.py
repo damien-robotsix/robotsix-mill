@@ -114,6 +114,10 @@ class MaintenanceResult(BaseModel):
     success: bool
     note: str | None = None
     redirect_to: State | None = None
+    # Board id (or repo id) the ticket actually belongs to. When set,
+    # the stage migrates the ticket to that board instead of blocking —
+    # the fix for misrouted tickets whose change targets another repo.
+    migrate_to_board: str | None = None
 
     @field_validator("redirect_to", mode="before")
     @classmethod
@@ -561,6 +565,22 @@ def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResul
 
         remote_url = _resolve_remote_url(ctx.settings, ctx.repo_config)
         repo_context = f"# Board\n{ticket.board_id}\n"
+        # List the registered boards so the agent can name a valid
+        # migrate_to_board target when the ticket is misrouted.
+        try:
+            from ..config import get_repos_config
+
+            board_ids = sorted(
+                {rc.board_id for rc in get_repos_config().repos.values()}
+            )
+            if board_ids:
+                repo_context += (
+                    "\n# Registered boards (valid migrate_to_board targets)\n"
+                    + "\n".join(f"- {b}" for b in board_ids)
+                    + "\n"
+                )
+        except Exception:
+            log.debug("could not list registered boards for prompt", exc_info=True)
         if remote_url:
             repo_context += (
                 f"\n# Repository clone URL\n{remote_url}\n"

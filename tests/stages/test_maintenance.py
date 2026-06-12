@@ -45,6 +45,7 @@ class TestMaintenanceStage:
             mock_result.success = True
             mock_result.note = "repo created"
             mock_result.redirect_to = None
+            mock_result.migrate_to_board = None
             mock_run.return_value = mock_result
 
             outcome = stage.run(ticket, ctx)
@@ -68,6 +69,7 @@ class TestMaintenanceStage:
             mock_result.success = False
             mock_result.note = "fork failed: rate limited"
             mock_result.redirect_to = None
+            mock_result.migrate_to_board = None
             mock_run.return_value = mock_result
 
             outcome = stage.run(ticket, ctx)
@@ -90,6 +92,7 @@ class TestMaintenanceStage:
             mock_result.success = True
             mock_result.note = "Needs code fix in repo X"
             mock_result.redirect_to = State.READY
+            mock_result.migrate_to_board = None
             mock_run.return_value = mock_result
 
             outcome = stage.run(ticket, ctx)
@@ -112,6 +115,7 @@ class TestMaintenanceStage:
             mock_result.success = False
             mock_result.note = "Investigation: not operational, needs code"
             mock_result.redirect_to = State.READY
+            mock_result.migrate_to_board = None
             mock_run.return_value = mock_result
 
             outcome = stage.run(ticket, ctx)
@@ -133,6 +137,7 @@ class TestMaintenanceStage:
             mock_result.success = True
             mock_result.note = "Needs re-drafting"
             mock_result.redirect_to = State.DRAFT
+            mock_result.migrate_to_board = None
             mock_run.return_value = mock_result
 
             outcome = stage.run(ticket, ctx)
@@ -155,11 +160,89 @@ class TestMaintenanceStage:
             mock_result.success = True
             mock_result.note = "repo created"
             mock_result.redirect_to = None
+            mock_result.migrate_to_board = None
             mock_run.return_value = mock_result
 
             outcome = stage.run(ticket, ctx)
 
             assert outcome.next_state == State.DONE
             assert outcome.note == "repo created"
+        finally:
+            _remove_mock_maintenance_agent()
+
+    def test_run_migrate_to_board(self):
+        """When the agent sets migrate_to_board, the stage migrates the
+        ticket and returns DRAFT (matching the post-migration state so
+        the worker skips the redundant transition)."""
+        stage = MaintenanceStage()
+        ticket = MagicMock()
+        ticket.id = "t-1"
+        ctx = MagicMock()
+
+        mock_run = _inject_mock_maintenance_agent()
+        try:
+            mock_result = MagicMock()
+            mock_result.success = False
+            mock_result.note = "fix lives in robotsix-llmio"
+            mock_result.redirect_to = None
+            mock_result.migrate_to_board = "robotsix-llmio"
+            mock_run.return_value = mock_result
+
+            outcome = stage.run(ticket, ctx)
+
+            ctx.service.migrate.assert_called_once_with(
+                "t-1", "robotsix-llmio", note="fix lives in robotsix-llmio"
+            )
+            assert outcome.next_state == State.DRAFT
+            assert outcome.note == "fix lives in robotsix-llmio"
+        finally:
+            _remove_mock_maintenance_agent()
+
+    def test_run_migrate_takes_precedence_over_redirect(self):
+        """migrate_to_board wins over redirect_to when both are set."""
+        stage = MaintenanceStage()
+        ticket = MagicMock()
+        ticket.id = "t-2"
+        ctx = MagicMock()
+
+        mock_run = _inject_mock_maintenance_agent()
+        try:
+            mock_result = MagicMock()
+            mock_result.success = True
+            mock_result.note = "belongs elsewhere"
+            mock_result.redirect_to = State.READY
+            mock_result.migrate_to_board = "board-b"
+            mock_run.return_value = mock_result
+
+            outcome = stage.run(ticket, ctx)
+
+            ctx.service.migrate.assert_called_once()
+            assert outcome.next_state == State.DRAFT
+        finally:
+            _remove_mock_maintenance_agent()
+
+    def test_run_migrate_failure_falls_back_to_blocked(self):
+        """A failed migration (unknown board, epic, ...) blocks the
+        ticket with a note explaining why."""
+        stage = MaintenanceStage()
+        ticket = MagicMock()
+        ticket.id = "t-3"
+        ctx = MagicMock()
+        ctx.service.migrate.side_effect = ValueError("unknown target board 'nope'")
+
+        mock_run = _inject_mock_maintenance_agent()
+        try:
+            mock_result = MagicMock()
+            mock_result.success = False
+            mock_result.note = "should move"
+            mock_result.redirect_to = None
+            mock_result.migrate_to_board = "nope"
+            mock_run.return_value = mock_result
+
+            outcome = stage.run(ticket, ctx)
+
+            assert outcome.next_state == State.BLOCKED
+            assert "unknown target board" in outcome.note
+            assert "should move" in outcome.note
         finally:
             _remove_mock_maintenance_agent()

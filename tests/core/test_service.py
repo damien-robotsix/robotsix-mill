@@ -1679,3 +1679,135 @@ def test_board_for_comment_returns_bound_board_when_ticket_id_given(service):
     # _board_for_comment with ticket_id → delegates to _board_for
     result = service._board_for_comment(1, ticket_id=t.id)
     assert result == "test-board"
+
+
+# ---------------------------------------------------------------------------
+# Cross-board migration
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def migrate_env(settings, service):
+    """Register two boards (test-board + other-board) in the repos
+    config singleton and init the target DB, so ``migrate`` can
+    validate its target. Returns (service, other_service)."""
+    import robotsix_mill.config as _cfg
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+    from robotsix_mill.core import db as _db
+
+    _cfg._repos_config = ReposRegistry(
+        repos={
+            "test-repo": RepoConfig(
+                repo_id="test-repo",
+                board_id="test-board",
+                langfuse_project_name="proj-a",
+                langfuse_public_key="pk-a",
+                langfuse_secret_key="sk-a",
+            ),
+            "other-repo": RepoConfig(
+                repo_id="other-repo",
+                board_id="other-board",
+                langfuse_project_name="proj-b",
+                langfuse_public_key="pk-b",
+                langfuse_secret_key="sk-b",
+            ),
+        }
+    )
+    _db.init_db(settings, board_id="other-board")
+    other = TicketService(settings, board_id="other-board")
+    yield service, other
+    _cfg._repos_config = None
+
+
+def test_migrate_moves_ticket_history_and_workspace(settings, migrate_env):
+    service, other = migrate_env
+    t = service.create("Misrouted fix", "fix belongs to the other repo")
+    service.add_comment(t.id, "a human remark")
+    src_ws = settings.workspaces_dir_for("test-board") / t.id
+
+    migrated = service.migrate(t.id, "other-board", note="belongs there")
+
+    assert migrated.board_id == "other-board"
+    assert migrated.state is State.DRAFT
+    # Row moved: gone from the source DB, present in the target DB.
+    from robotsix_mill.core import db as _db
+    from robotsix_mill.core.models import Ticket as TicketModel
+
+    with _db.session(settings, "test-board") as s:
+        assert s.get(TicketModel, t.id) is None
+    with _db.session(settings, "other-board") as s:
+        assert s.get(TicketModel, t.id) is not None
+
+    # Workspace moved with its description.
+    dst_ws = settings.workspaces_dir_for("other-board") / t.id
+    assert not src_ws.exists()
+    assert migrated.workspace_path == str(dst_ws)
+    assert other.workspace(migrated).read_description() == (
+        "fix belongs to the other repo"
+    )
+
+    # History preserved + migration event appended, hash chain intact.
+    hist = other.history(t.id)
+    assert hist[0].note == "created"
+    assert "migrated from board 'test-board' to 'other-board'" in hist[-1].note
+    assert "belongs there" in hist[-1].note
+    for prev, cur in zip(hist, hist[1:]):
+        assert cur.prev_hash == prev.hash
+
+    # Comments moved.
+    comments = other.list_comments(t.id)
+    assert [c.body for c in comments] == ["a human remark"]
+
+
+def test_migrate_accepts_repo_id_and_resets_block_state(migrate_env):
+    service, other = migrate_env
+    t = service.create("Blocked elsewhere", "body")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="not actionable here")
+    migrated = service.migrate(t.id, "other-repo")
+    assert migrated.board_id == "other-board"
+    assert migrated.state is State.DRAFT
+    assert migrated.blocked_from is None
+    assert "(was blocked)" in other.history(t.id)[-1].note
+
+
+def test_migrate_prunes_repo_clone_and_baseline_cache(settings, migrate_env):
+    service, _ = migrate_env
+    t = service.create("With clone", "body")
+    ws = service.workspace(t)
+    (ws.repo_dir / ".git").mkdir(parents=True)
+    (ws.artifacts_dir / "baseline_check.json").write_text("{}")
+    (ws.artifacts_dir / "draft-original.md").write_text("keep me")
+
+    service.migrate(t.id, "other-board")
+
+    dst_ws = settings.workspaces_dir_for("other-board") / t.id
+    assert not (dst_ws / "repo").exists()
+    assert not (dst_ws / "artifacts" / "baseline_check.json").exists()
+    assert (dst_ws / "artifacts" / "draft-original.md").read_text() == "keep me"
+
+
+def test_migrate_rejects_bad_targets_and_states(migrate_env):
+    service, _ = migrate_env
+    t = service.create("t", "b")
+    with pytest.raises(ValueError, match="unknown target board"):
+        service.migrate(t.id, "no-such-board")
+    with pytest.raises(ValueError, match="already on board"):
+        service.migrate(t.id, "test-board")
+    with pytest.raises(KeyError):
+        service.migrate("nonexistent-id", "other-board")
+
+    epic = service.create("an epic", kind="epic")
+    with pytest.raises(ValueError, match="epics cannot be migrated"):
+        service.migrate(epic.id, "other-board")
+
+    child = service.create("child", parent_id=epic.id)
+    with pytest.raises(ValueError, match="linked to parent"):
+        service.migrate(child.id, "other-board")
+
+    # In-flight states refuse migration.
+    busy = service.create("busy", "b")
+    service.transition(busy.id, State.READY)
+    service.transition(busy.id, State.DELIVERABLE)
+    with pytest.raises(ValueError, match="can be migrated"):
+        service.migrate(busy.id, "other-board")
