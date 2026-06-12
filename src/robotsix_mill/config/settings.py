@@ -9,9 +9,12 @@ cross-field validators. Split out of the former monolithic ``config.py``.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from pydantic import field_validator, model_validator
+
+log = logging.getLogger(__name__)
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -290,6 +293,19 @@ class Settings(
     def _validate_trace_review_interval(cls, v: int) -> int:
         if v < 3600:
             raise ValueError("trace_review_interval_seconds must be ≥ 3600")
+        return v
+
+    # -- dedup_model cheapness check -----------------------------------
+
+    @field_validator("dedup_model")
+    @classmethod
+    def _validate_dedup_model_is_cheap(cls, v: str) -> str:
+        if v.strip() and "flash" not in v.casefold():
+            log.warning(
+                "dedup_model=%r does not look like a cheap flash-class model "
+                "— dedup is designed as a cheap pre-refine call",
+                v,
+            )
         return v
 
     # -- cross-field checks --------------------------------------------
