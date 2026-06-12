@@ -36,6 +36,12 @@ system_prompt: |
   impact, test/CI-only changes, lint/format changes, type annotation fixes,
   dependency bumps that don't change user-visible behavior, model/field
   renames with no API impact, or prompt/skill changes for agents.
+  Bug fixes that correct defective behavior — even when the fix changes
+  user-visible output — are still internal-only, because the user
+  experiences the corrected behaviour, not a new feature to learn about.
+  Users don't need documentation for a bug fix.  Examples include
+  duplicate-ticket consolidation, dedup-logic changes, and stale-check
+  removal.
 
   Be CONSERVATIVE: if you are unsure, classify as user-facing.
   A wrong "internal-only" that skips needed docs is the only real risk.
