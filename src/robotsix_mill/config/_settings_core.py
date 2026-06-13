@@ -225,8 +225,9 @@ class _CoreSettings(BaseModel):
     # ticket 5353 — despite the delegate-to-explore prompt bias);
     # per-run cost is negligible (~$0.03–0.09), and the ticket-level
     # spend cap is the real backstop.
-    # Note: ``review_request_limit`` stays at 40 — the two limits
-    # intentionally diverge.
+    # Note: ``review_request_limit`` is also 80 (bumped from 40 — it has
+    # no explore sub-agent and was saturating on test-heavy diffs; see its
+    # field comment and ticket bc6d).
     refine_request_limit: int = Field(default=80, ge=1)
     # Per-call cap for the maintenance agent's tool loop. Maintenance
     # tickets are operational one-offs (clone + inspect + post
