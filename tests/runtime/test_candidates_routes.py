@@ -47,6 +47,14 @@ def client(settings, repos_registry):
 
 
 @pytest.fixture
+def multi_repo_client(settings, two_repo_registry):
+    # Multi-repo mode: no single_repo_id, so /candidates?repo_id=all
+    # aggregates across every registered repo.
+    with TestClient(create_app(two_repo_registry, settings)) as c:
+        yield c
+
+
+@pytest.fixture
 def candidates_file(settings):
     """Write the file at the path retrospect would use (the board dir)."""
     p = settings.data_dir / "test-board" / "AGENT_CANDIDATES.md"
@@ -142,6 +150,55 @@ def test_reject_marks_status_no_ticket(client, candidates_file, service):
 def test_reject_unknown_candidate_404(client, candidates_file):
     r = client.post("/candidates/deadbeef/reject?repo_id=test-repo")
     assert r.status_code == 404
+
+
+def test_list_candidates_all_aggregates_across_repos(multi_repo_client, settings):
+    """repo_id=all flattens every repo's pending candidates, each tagged
+    with its owning repo_id."""
+    pa = settings.data_dir / "board-a" / "AGENT_CANDIDATES.md"
+    pa.parent.mkdir(parents=True, exist_ok=True)
+    pa.write_text(_BLOCK)
+    pb = settings.data_dir / "board-b" / "AGENT_CANDIDATES.md"
+    pb.parent.mkdir(parents=True, exist_ok=True)
+    pb.write_text(_BLOCK2)
+
+    r = multi_repo_client.get("/candidates?repo_id=all")
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data) == 2
+    by_repo = {c["repo_id"]: c for c in data}
+    assert set(by_repo) == {"repo-a", "repo-b"}
+    assert by_repo["repo-a"]["section"] == "## Project layout"
+    assert by_repo["repo-b"]["section"] == "## Testing conventions"
+    for c in data:
+        assert c["status"] == "pending"
+
+
+def test_list_candidates_all_filters_pending_by_default(multi_repo_client, settings):
+    """An acted-on candidate is hidden by default but returned with
+    include_acted=true, even in 'all' mode."""
+    pa = settings.data_dir / "board-a" / "AGENT_CANDIDATES.md"
+    pa.parent.mkdir(parents=True, exist_ok=True)
+    pa.write_text(_BLOCK)
+    pb = settings.data_dir / "board-b" / "AGENT_CANDIDATES.md"
+    pb.parent.mkdir(parents=True, exist_ok=True)
+    pb.write_text(_BLOCK2)
+
+    # Reject repo-a's candidate so it's no longer pending.
+    cid_a = next(
+        c["candidate_id"]
+        for c in multi_repo_client.get("/candidates?repo_id=all").json()
+        if c["repo_id"] == "repo-a"
+    )
+    multi_repo_client.post(f"/candidates/{cid_a}/reject?repo_id=repo-a")
+
+    pending = multi_repo_client.get("/candidates?repo_id=all").json()
+    assert [c["repo_id"] for c in pending] == ["repo-b"]
+
+    full = multi_repo_client.get("/candidates?repo_id=all&include_acted=true").json()
+    assert len(full) == 2
+    acted = next(c for c in full if c["repo_id"] == "repo-a")
+    assert acted["status"] == "rejected"
 
 
 def test_only_other_candidate_remains_pending_after_validate(client, candidates_file):

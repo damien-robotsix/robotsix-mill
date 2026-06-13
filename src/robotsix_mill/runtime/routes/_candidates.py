@@ -43,9 +43,10 @@ class CandidateRead(BaseModel):
     source_ticket: str
     status: str
     filed_ticket: str | None
+    repo_id: str
 
 
-def _to_read(c: Candidate) -> CandidateRead:
+def _to_read(c: Candidate, repo_id: str) -> CandidateRead:
     return CandidateRead(
         candidate_id=c.candidate_id,
         section=c.section,
@@ -55,6 +56,7 @@ def _to_read(c: Candidate) -> CandidateRead:
         source_ticket=c.source_ticket,
         status=c.status,
         filed_ticket=c.filed_ticket,
+        repo_id=repo_id,
     )
 
 
@@ -77,8 +79,8 @@ def _resolve_board(repo_id: str, request: Request):
     response_model=list[CandidateRead],
 )
 def list_candidates(
-    repo_id: str,
     request: Request,
+    repo_id: str = "",
     include_acted: bool = False,
     settings=Depends(get_settings),
 ) -> list[CandidateRead]:
@@ -87,13 +89,30 @@ def list_candidates(
     By default returns only pending entries — validated and rejected
     candidates are kept in the file as an audit trail but the UI
     shouldn't re-surface them. Pass ``include_acted=true`` to fetch
-    everything."""
+    everything.
+
+    When ``repo_id`` is ``"all"`` (or empty) the candidates from every
+    repo are aggregated into a single flat list, each tagged with its
+    owning ``repo_id`` so the UI can target validate/reject at the
+    correct per-board file. The synthetic ``"meta"`` board is skipped —
+    it has no candidates file."""
+    if not repo_id or repo_id == "all":
+        out: list[CandidateRead] = []
+        for rc in request.app.state.repos.repos.values():
+            if rc.repo_id == "meta":
+                continue
+            path = candidates_path(settings.data_dir, rc.board_id)
+            cands = load_candidates(path)
+            if not include_acted:
+                cands = [c for c in cands if c.status == "pending"]
+            out.extend(_to_read(c, rc.repo_id) for c in cands)
+        return out
     rc = _resolve_board(repo_id, request)
     path = candidates_path(settings.data_dir, rc.board_id)
     cands = load_candidates(path)
     if not include_acted:
         cands = [c for c in cands if c.status == "pending"]
-    return [_to_read(c) for c in cands]
+    return [_to_read(c, rc.repo_id) for c in cands]
 
 
 @router.post(
@@ -167,7 +186,7 @@ def validate_candidate(
             status="validated",
             filed_ticket=ticket.id,
         )
-    return _to_read(updated)
+    return _to_read(updated, rc.repo_id)
 
 
 @router.post(
@@ -188,4 +207,4 @@ def reject_candidate(
     updated = update_status(path, candidate_id, new_status="rejected")
     if updated is None:
         raise HTTPException(404, "candidate not found")
-    return _to_read(updated)
+    return _to_read(updated, rc.repo_id)

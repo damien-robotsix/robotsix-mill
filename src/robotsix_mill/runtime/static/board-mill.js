@@ -2238,10 +2238,13 @@
     if (!btn || !badge) return;
     var reset = function() { badge.style.display = "none"; badge.textContent = ""; btn.style.borderColor = "#3a2a4b"; btn.style.boxShadow = ""; };
     var repo = getRepoId();
-    if (!repo || repo === "all" || repo === "meta") { btn.style.display = "none"; reset(); return; }
+    if (repo === "meta") { btn.style.display = "none"; reset(); return; }
     btn.style.display = "";
     try {
-      var cands = await jget("/candidates?repo_id=" + encodeURIComponent(repo));
+      var candsUrl = (!repo || repo === "all")
+        ? "/candidates?repo_id=all"
+        : "/candidates?repo_id=" + encodeURIComponent(repo);
+      var cands = await jget(candsUrl);
       if (!Array.isArray(cands)) return;
       if (cands.length > 0) {
         badge.textContent = "⚠ " + cands.length;
@@ -2264,21 +2267,20 @@
     var repo = getRepoId();
     var escLocal = function(s) { var d = document.createElement("div"); d.textContent = s; return d.innerHTML; };
     var drawer = document.getElementById("d");
-    if (!repo || repo === "all") {
-      drawer.innerHTML = '<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>' +
-        '<h3>AGENT.md candidates</h3>' +
-        '<div class="muted" style="padding:12px 0">Select a single repo (top-left selector) — candidates are per-board.</div>';
-      return;
-    }
+    var isAll = !repo || repo === "all";
+    var headerLabel = isAll ? "All repos" : escLocal(repo);
     drawer.innerHTML = '<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>' +
-      '<h3>AGENT.md candidates · ' + escLocal(repo) + '</h3>' +
+      '<h3>AGENT.md candidates · ' + headerLabel + '</h3>' +
       '<div class="muted" style="margin-bottom:10px;font-size:11px">' +
       'Retrospect proposes rules for the audited repo\'s <code>AGENT.md</code>. ' +
       'Validate to file a draft ticket that edits <code>AGENT.md</code> on this repo; ' +
       'reject to dismiss.</div>' +
       '<div id="candidates-list">loading…</div>';
     var cands;
-    try { cands = await jget("/candidates?repo_id=" + encodeURIComponent(repo)); }
+    var candsUrl = isAll
+      ? "/candidates?repo_id=all"
+      : "/candidates?repo_id=" + encodeURIComponent(repo);
+    try { cands = await jget(candsUrl); }
     catch (e) {
       document.getElementById("candidates-list").innerHTML =
         '<div class="muted" style="padding:12px 0;color:#f87171">failed to load candidates: ' + escLocal(String(e)) + '</div>';
@@ -2291,8 +2293,10 @@
     }
     var html = '';
     cands.forEach(function(c) {
-      html += '<div class="candidate-card" id="cand-' + escLocal(c.candidate_id) + '" style="border:1px solid #2c313d;border-radius:6px;padding:10px 12px;margin-bottom:10px;background:#1d212c">' +
-       '<div style="font-size:11px;color:#9ca3af;margin-bottom:4px">' + escLocal(c.section) + ' · proposed ' + escLocal(c.proposed_at) + '</div>' +
+      html += '<div class="candidate-card" id="cand-' + escLocal(c.candidate_id) + '" data-repo="' + escLocal(c.repo_id) + '" style="border:1px solid #2c313d;border-radius:6px;padding:10px 12px;margin-bottom:10px;background:#1d212c">' +
+       '<div style="font-size:11px;color:#9ca3af;margin-bottom:4px">' +
+       (isAll ? '<span class="repo-badge">' + escLocal(c.repo_id) + '</span> · ' : '') +
+       escLocal(c.section) + ' · proposed ' + escLocal(c.proposed_at) + '</div>' +
        '<blockquote style="margin:4px 0 8px 0;padding:6px 10px;border-left:3px solid #7c3aed;background:#1a1d27;color:#e2e4eb;font-size:13px;line-height:1.4">' +
        escLocal(c.rule) + '</blockquote>' +
        '<div style="font-size:11px;color:#9ca3af;margin-bottom:8px"><strong>Rationale:</strong> ' + escLocal(c.rationale) + '</div>' +
@@ -2309,8 +2313,8 @@
   }
 
   async function validateCandidate(cid) {
-    var repo = getRepoId();
     var card = document.getElementById("cand-" + cid);
+    var repo = card ? card.getAttribute("data-repo") : getRepoId();
     if (card) { card.style.opacity = '0.5'; card.querySelectorAll("button").forEach(function(b) { b.disabled = true; }); }
     try {
       var r = await fetch("/candidates/" + encodeURIComponent(cid) + "/validate?repo_id=" + encodeURIComponent(repo), { method: "POST" });
@@ -2330,7 +2334,8 @@
 
   async function rejectCandidate(cid) {
     if (!confirm("Reject this candidate? It stays in the file as audit trail but won't be surfaced again.")) return;
-    var repo = getRepoId();
+    var card = document.getElementById("cand-" + cid);
+    var repo = card ? card.getAttribute("data-repo") : getRepoId();
     try {
       var r = await fetch("/candidates/" + encodeURIComponent(cid) + "/reject?repo_id=" + encodeURIComponent(repo), { method: "POST" });
       if (!r.ok) { alert("Reject failed: " + await r.text()); return; }
