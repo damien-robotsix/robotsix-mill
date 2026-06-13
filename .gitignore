@@ -23,6 +23,7 @@ config/mill.production.yaml
 _epic
 dist/
 build/
+site/
 docker-compose.override.yml
 # Transient board browser smoke screenshot. The implement gate writes it
 # to <clone>/artifacts/board.png and moves it out to the workspace; this
