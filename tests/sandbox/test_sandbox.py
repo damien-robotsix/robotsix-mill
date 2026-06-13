@@ -290,7 +290,7 @@ def test_docker_daemon_error_raises(tmp_path, monkeypatch):
     s = _settings(tmp_path)
 
     def fake_run(argv, **kw):
-        return subprocess.CompletedProcess(argv, 125, stdout="", stderr="no daemon")
+        return subprocess.CompletedProcess(argv, 125, stdout="", stderr=b"no daemon")
 
     monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
     with pytest.raises(sandbox.SandboxError):
