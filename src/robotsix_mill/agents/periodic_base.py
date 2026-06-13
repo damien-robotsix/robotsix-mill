@@ -39,6 +39,27 @@ _VERIFICATION_GATE: str = (
 )
 
 
+def _count_active_proposals(recent_proposals: str) -> int:
+    """Parse the ``<recent_proposals>`` block and return the number of
+    proposals whose state is *not* a terminal/resolved state.
+
+    Terminal states are ``done`` and ``closed`` — every other state
+    value (``draft``, ``ready``, ``blocked``, ``human_issue_approval``,
+    etc.) counts as active.
+    """
+    if not recent_proposals or "(no recent proposals)" in recent_proposals:
+        return 0
+
+    active = 0
+    for line in recent_proposals.splitlines():
+        # Lines look like:  [state_value] ticket_id | title
+        if line.startswith("[") and "] " in line:
+            state = line[1:].split("]", 1)[0].strip()
+            if state not in ("done", "closed"):
+                active += 1
+    return active
+
+
 def load_periodic_system_prompt(name: str) -> str:
     """Load a periodic agent's static system prompt from its YAML
     definition without env-var resolution.
@@ -224,6 +245,21 @@ def run_periodic_agent(
         system_prompt = apply_overlay(
             definition.system_prompt,
             load_overlay(repo_dir, definition_name),
+        )
+
+    # ------------------------------------------------------------------
+    # Step 3½ — warn when the detector has active proposals on the board
+    # ------------------------------------------------------------------
+    active_count = _count_active_proposals(recent_proposals)
+    if active_count > 0:
+        system_prompt += (
+            "\n\n## ⚠️ Active Proposals\n\n"
+            f"There are currently **{active_count}** active proposal(s) from this "
+            "detector on the board (states other than `done` / `closed`). "
+            "Review the `<recent_proposals>` block in your prompt before "
+            "filing any new draft. Filing many concurrent proposals dilutes "
+            "focus — ensure your proposal either supersedes or meaningfully "
+            "supplements those already in flight."
         )
 
     # ------------------------------------------------------------------
