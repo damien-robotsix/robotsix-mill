@@ -575,6 +575,41 @@ async def test_reconcile_sweep_enqueues_meta_board_tickets(ctx, monkeypatch):
     assert t.id in w._pending  # meta board was swept
 
 
+@pytest.mark.asyncio
+async def test_reconcile_sweep_re_enqueues_parked_human_mr_approval(
+    ctx, service, monkeypatch
+):
+    """Regression (76f7): a ticket parked at HUMAN_MR_APPROVAL must be
+    re-enqueued by the periodic reconcile sweep so a CHANGES_REQUESTED
+    review submitted AFTER parking is detected. HUMAN_MR_APPROVAL is in
+    STAGE_FOR_STATE, so the sweep re-invokes the merge stage (and thus
+    _handle_human_mr_approval) on every pass — proving the scheduler, not
+    just a direct MergeStage().run() call, re-processes parked tickets."""
+    t = service.create("awaiting human merge", "body")
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+    ):
+        service.transition(t.id, st)
+    assert service.get(t.id).state is State.HUMAN_MR_APPROVAL
+    w = Worker(ctx)
+
+    calls = [0]
+
+    async def fake_sleep(_):
+        calls[0] += 1
+        if calls[0] >= 2:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr("robotsix_mill.runtime.worker.asyncio.sleep", fake_sleep)
+    with pytest.raises(asyncio.CancelledError):
+        await w._poll_loop()
+
+    assert t.id in w._pending  # parked ticket was re-enqueued for re-poll
+
+
 # --- startup-aware periodic pass (last-run aware) ----------------------
 
 

@@ -620,8 +620,10 @@ def test_human_mr_approval_changes_requested_while_parked_routes_to_addressing_r
 def test_human_mr_approval_body_only_changes_requested_is_actionable(
     tmp_path, monkeypatch
 ):
-    """A CHANGES_REQUESTED review with only a summary body (no inline comments,
-    synthesized as path='' / line=None) is actionable — not dropped as a no-op."""
+    """A CHANGES_REQUESTED review with an EMPTY comments list is still
+    actionable: the merge stage synthesizes ONE comment from the review body
+    (path='' / line=None), persists it, and routes to ADDRESSING_REVIEW —
+    instead of dropping it as a no-op."""
     ctx = _gh(tmp_path, review_feedback_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge,
@@ -638,14 +640,8 @@ def test_human_mr_approval_body_only_changes_requested_is_actionable(
         "pr_review_status",
         lambda self, *, source_branch: {
             "state": "CHANGES_REQUESTED",
-            "comments": [
-                {
-                    "body": "Please rework the whole approach.",
-                    "path": "",
-                    "line": None,
-                    "review_state": "CHANGES_REQUESTED",
-                }
-            ],
+            "body": "Please rework the whole approach.",
+            "comments": [],
             "files": [],
         },
     )
@@ -654,6 +650,14 @@ def test_human_mr_approval_body_only_changes_requested_is_actionable(
     assert out.next_state is State.ADDRESSING_REVIEW
     review_json = ctx.service.workspace(t).artifacts_dir / "review_feedback.json"
     assert review_json.exists()
+    persisted = json.loads(review_json.read_text(encoding="utf-8"))
+    # A comment was synthesized from the review body so the agent has
+    # something to act on.
+    assert len(persisted["comments"]) == 1
+    synthesized = persisted["comments"][0]
+    assert synthesized["body"] == "Please rework the whole approach."
+    assert synthesized["path"] == ""
+    assert synthesized["line"] is None
 
 
 # --- REBASING path: clean rebase → IMPLEMENT_COMPLETE ---
