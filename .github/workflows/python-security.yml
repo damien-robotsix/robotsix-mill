@@ -134,7 +134,7 @@ jobs:
           for v in $PIP_AUDIT_IGNORE_VULNS; do
             ignore="$ignore --ignore-vuln $v"
           done
-          uv run pip-audit -r "$PIP_AUDIT_REQUIREMENTS_FILE" $ignore
+          uv run --with pip-audit pip-audit -r "$PIP_AUDIT_REQUIREMENTS_FILE" $ignore
 
       - name: pip-audit (synced environment)
         if: ${{ inputs.run-pip-audit && inputs.pip-audit-requirements-file == '' }}
@@ -146,13 +146,13 @@ jobs:
           for v in $PIP_AUDIT_IGNORE_VULNS; do
             ignore="$ignore --ignore-vuln $v"
           done
-          uv run pip-audit $ignore
+          uv run --with pip-audit pip-audit $ignore
 
       - name: Generate SBOM (CycloneDX)
         if: always()
         env:
           UV_PROJECT_ENVIRONMENT: system
-        run: uv run pip-audit --format cyclonedx-json --output sbom.json || true
+        run: uv run --with pip-audit pip-audit --format cyclonedx-json --output sbom.json || true
 
       - name: Upload SBOM artifact
         if: always()
