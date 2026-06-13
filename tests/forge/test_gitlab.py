@@ -499,14 +499,16 @@ def test_check_status_pipeline_failure(tmp_path, monkeypatch):
     }
     pipeline = {"id": 100, "status": "failed"}
     failed_jobs = [
-        {"name": "build", "stage": "test"},
-        {"name": "lint", "stage": "test"},
+        {"id": 200, "name": "build", "stage": "test"},
+        {"id": 201, "name": "lint", "stage": "test"},
     ]
     get_map = {
         "merge_requests/7/pipelines": _make_response(200, [pipeline]),
         "merge_requests": _make_response(200, [mr]),
         "projects/ns%2Fproject": _make_response(200, project_json),
         "pipelines/100/jobs": _make_response(200, failed_jobs),
+        "jobs/200/trace": _make_response(200, None, "\x1b[31mbuild failed: boom\x1b[0m"),
+        "jobs/201/trace": _make_response(200, None, "lint failed: nope"),
     }
     _mock_httpx(monkeypatch, get_map=get_map)
 
@@ -516,6 +518,10 @@ def test_check_status_pipeline_failure(tmp_path, monkeypatch):
     assert len(result["failing"]) == 2
     assert result["failing"][0]["name"] == "build"
     assert result["failing"][0]["annotations"] == []
+    # Trace is fetched, ANSI-stripped, and surfaced as summary/text detail.
+    assert result["failing"][0]["summary"] == "build failed: boom"
+    assert result["failing"][0]["text"] == "build failed: boom"
+    assert result["failing"][1]["summary"] == "lint failed: nope"
 
 
 def test_check_status_pipeline_pending(tmp_path, monkeypatch):
