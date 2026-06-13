@@ -28,6 +28,7 @@ nav:
       - Epic dedup: epic-dedup.md
       - Inquiry to task: inquiry-to-task.md
       - Proposed actions: proposed-actions.md
+      - "AGENT.md candidates": agent-md-candidates.md
       - Scope triage: scope-triage.md
   - Agents & Internals:
       - Audit agent: audit-agent.md
