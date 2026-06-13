@@ -429,9 +429,15 @@ class GitLabForge(Forge):
     def _pr_review_status(self, *, project_path: str, mr_iid: int) -> dict:
         """Aggregate review state from MR approvals + general/inline notes.
 
-        State heuristic (the simpler documented option): ``"APPROVED"`` when
-        the MR approvals object reports ``approved``, ``"COMMENTED"`` when any
-        non-system notes exist, else ``"PENDING"``.
+        Five-state heuristic derived from the approvals object plus the
+        notes already fetched by :meth:`_mr_notes` (no extra HTTP call).
+        Precedence (first match wins): an unresolved blocking discussion
+        (a resolvable note that is not resolved) → ``"CHANGES_REQUESTED"``
+        regardless of approval; else ``"APPROVED"`` when the approvals
+        object reports ``approved``; else ``"DISMISSED"`` when a system
+        note records a revoked approval (best-effort, from the note body,
+        e.g. "unapproved this merge request"); else ``"COMMENTED"`` when
+        any non-system notes exist; else ``"PENDING"``.
         """
         pid = self._resolve_project_id(project_path)
 
@@ -445,8 +451,21 @@ class GitLabForge(Forge):
         notes = self._mr_notes(project_path=project_path, mr_iid=mr_iid)
         relevant = [n for n in notes if n.get("system") is False]
 
-        if approved:
+        # An unresolved blocking discussion → reviewer wants changes.
+        unresolved = any(n.get("resolvable") and not n.get("resolved") for n in notes)
+        # A previously-granted approval that was later revoked (best-effort,
+        # from GitLab's system note body, e.g. "unapproved this merge request").
+        unapproved = any(
+            n.get("system") is True and "unapproved" in (n.get("body") or "").lower()
+            for n in notes
+        )
+
+        if unresolved:
+            state = "CHANGES_REQUESTED"
+        elif approved:
             state = "APPROVED"
+        elif unapproved:
+            state = "DISMISSED"
         elif relevant:
             state = "COMMENTED"
         else:

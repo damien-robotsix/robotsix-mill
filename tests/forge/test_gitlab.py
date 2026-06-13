@@ -1452,6 +1452,55 @@ def test_pr_review_status_pending_when_no_notes(tmp_path, monkeypatch):
     assert result == {"state": "PENDING", "comments": [], "files": []}
 
 
+def test_pr_review_status_changes_requested_unresolved_thread(tmp_path, monkeypatch):
+    """An unresolved resolvable note → CHANGES_REQUESTED, even if approved."""
+    project_json = {"id": 42}
+    mr = {"iid": 7, "web_url": "http://x"}
+    notes = [
+        {
+            "id": 1,
+            "system": False,
+            "author": {"username": "a"},
+            "body": "please fix",
+            "resolvable": True,
+            "resolved": False,
+        },
+    ]
+    get_map = {
+        "merge_requests/7/approvals": _make_response(200, {"approved": True}),
+        "merge_requests/7/notes": _make_response(200, notes),
+        "merge_requests/7/changes": _make_response(200, {"changes": []}),
+        "merge_requests": _make_response(200, [mr]),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.pr_review_status(source_branch="feature/x")
+    # Unresolved blocking thread takes precedence over approval.
+    assert result["state"] == "CHANGES_REQUESTED"
+
+
+def test_pr_review_status_dismissed_when_approval_revoked(tmp_path, monkeypatch):
+    """No approval, no unresolved notes, but a revoked-approval system note
+    → DISMISSED."""
+    project_json = {"id": 42}
+    mr = {"iid": 7, "web_url": "http://x"}
+    notes = [{"id": 1, "system": True, "body": "unapproved this merge request"}]
+    get_map = {
+        "merge_requests/7/approvals": _make_response(200, {"approved": False}),
+        "merge_requests/7/notes": _make_response(200, notes),
+        "merge_requests/7/changes": _make_response(200, {"changes": []}),
+        "merge_requests": _make_response(200, [mr]),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.pr_review_status(source_branch="feature/x")
+    assert result["state"] == "DISMISSED"
+
+
 # ---------------------------------------------------------------------------
 # list_workflow_runs
 # ---------------------------------------------------------------------------
