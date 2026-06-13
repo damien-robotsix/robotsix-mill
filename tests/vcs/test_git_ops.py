@@ -1282,14 +1282,11 @@ class TestReconcileWithRemotePr:
         assert git_ops.head_sha(dest) == remote_sha
 
         # The human commit must be in the log.
-        log = (
-            subprocess.run(
-                ["git", "-C", str(dest), "log", "--oneline", "--format=%s"],
-                capture_output=True,
-                text=True,
-            )
-            .stdout.strip()
-        )
+        log = subprocess.run(
+            ["git", "-C", str(dest), "log", "--oneline", "--format=%s"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
         assert "human fix" in log
 
         # The local commit should also be in the log (the human built on

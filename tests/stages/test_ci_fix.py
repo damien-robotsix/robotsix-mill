@@ -586,7 +586,9 @@ def test_fix_failure_retries_next_poll(tmp_path, monkeypatch):
     def fake_push(*a, **k):
         push_calls.append(1)
 
-    monkeypatch.setattr("robotsix_mill.stages.ci_fix.git_ops.push_with_lease", fake_push)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease", fake_push
+    )
 
     t = _fixing_ci(ctx)
     _setup_repo(ctx, t)
@@ -746,7 +748,9 @@ def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
     def fake_push(repo, branch, remote_url, token):
         push_args.update(branch=branch, remote_url=remote_url, token=token)
 
-    monkeypatch.setattr("robotsix_mill.stages.ci_fix.git_ops.push_with_lease", fake_push)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease", fake_push
+    )
 
     t = _fixing_ci(ctx)
     _setup_repo(ctx, t)
