@@ -75,7 +75,9 @@ def _periodic_pass_workspace_subdirs() -> set[str]:
     """
     from ..periodic_runner import PERIODIC_PASS_CONFIGS
 
-    return {cfg.workspace_subdir for cfg in PERIODIC_PASS_CONFIGS.values()}
+    return {cfg.workspace_subdir for cfg in PERIODIC_PASS_CONFIGS.values()} | {
+        "periodic_workspace"
+    }
 
 
 def _is_periodic_pass_workspace_path(path: str) -> bool:

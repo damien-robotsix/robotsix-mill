@@ -2113,6 +2113,8 @@ def test_is_periodic_pass_workspace_path():
     """Unit cases for ``_is_periodic_pass_workspace_path``."""
     assert _is_periodic_pass_workspace_path("health_workspace/repo/.git/objects/")
     assert _is_periodic_pass_workspace_path("survey_workspace/repo")
+    # Aggregate periodic workspace clone (persists across ticks).
+    assert _is_periodic_pass_workspace_path("periodic_workspace/repo/src/foo/")
     # Plain top-level file → False.
     assert not _is_periodic_pass_workspace_path("big.log")
     # Per-ticket workspace path → False (handled by the b844 branch).
