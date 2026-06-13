@@ -172,7 +172,9 @@ def _enumerate_boards(settings: Settings) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def _record_entry(entry: Path, board_dir: Path, result: dict[str, dict[str, Any]]) -> None:
+def _record_entry(
+    entry: Path, board_dir: Path, result: dict[str, dict[str, Any]]
+) -> None:
     """Add a single filesystem *entry* to *result* if it qualifies.
 
     Symlinks, unreadable entries, and the audit state file itself are
