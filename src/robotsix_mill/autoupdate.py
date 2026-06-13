@@ -346,14 +346,61 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
             check=False,
         )
         if cp_merge.returncode != 0:
+            # ff-only failed → the local branch has diverged from the remote
+            # (a squash-merged commit, a stray local commit, or — the usual
+            # culprit — the checkout was left on a feature branch). Without a
+            # deploy-branch contract this freezes the host indefinitely: every
+            # run hits this line and skips the build.
+            #
+            # When --ensure-branch was given, the branch is a deploy MIRROR by
+            # contract, so reconcile by hard-resetting to the fetched remote
+            # tip rather than skipping. Uncommitted tracked changes were
+            # already guarded above (the run returns early), and the discarded
+            # commit stays recoverable via the reflog — so log the old SHA.
+            if not args.ensure_branch:
+                _log(
+                    log_path,
+                    "ERROR: ff-only merge failed (local diverged?) — skipping "
+                    "(pass --ensure-branch to reconcile a deploy mirror)",
+                    to_stderr=True,
+                )
+                if env_backup:
+                    shutil.copy2(env_backup, str(repo / ".env"))
+                return 1
+
+            cp_head = _run(
+                ["git", "-C", str(repo), "rev-parse", "HEAD"],
+                log_path,
+                check=False,
+            )
+            local_sha = cp_head.stdout.strip()[:9] if cp_head.returncode == 0 else "?"
             _log(
                 log_path,
-                "ERROR: ff-only merge failed (local diverged?) — skipping",
-                to_stderr=True,
+                f"ff-only merge failed; reconciling {args.ensure_branch} to "
+                f"{remote_name}/{remote_branch} (discarding diverged local "
+                f"{local_sha} — recoverable via reflog)",
             )
-            if env_backup:
-                shutil.copy2(env_backup, str(repo / ".env"))
-            return 1
+            cp_reset = _run(
+                [
+                    "git",
+                    "-C",
+                    str(repo),
+                    "reset",
+                    "--hard",
+                    f"{remote_name}/{remote_branch}",
+                ],
+                log_path,
+                check=False,
+            )
+            if cp_reset.returncode != 0:
+                _log(
+                    log_path,
+                    "ERROR: reset --hard to remote tip failed — skipping",
+                    to_stderr=True,
+                )
+                if env_backup:
+                    shutil.copy2(env_backup, str(repo / ".env"))
+                return 1
 
         # -- restore .env ----------------------------------------------------
         if env_backup:
