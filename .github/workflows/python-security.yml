@@ -129,7 +129,7 @@ jobs:
           for p in $PIP_AUDIT_IGNORE_PACKAGES; do
             no_emit="$no_emit --no-emit-package $p"
           done
-          uv export --frozen $no_emit -o "$PIP_AUDIT_REQUIREMENTS_FILE"
+          uv export --frozen --no-emit-project $no_emit -o "$PIP_AUDIT_REQUIREMENTS_FILE"
           ignore=""
           for v in $PIP_AUDIT_IGNORE_VULNS; do
             ignore="$ignore --ignore-vuln $v"
