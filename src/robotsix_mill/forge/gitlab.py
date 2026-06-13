@@ -6,6 +6,7 @@ stage (it owns the repo dir); this only does the API call.
 from __future__ import annotations
 
 import re
+from typing import Any
 
 import httpx
 
@@ -717,7 +718,7 @@ class GitLabForge(Forge):
             )
         return result
 
-    def _merge_mr(self, project_path: str, mr_iid: int) -> dict:
+    def _merge_mr(self, project_path: str, mr_iid: int) -> dict[str, Any]:
         """PUT /projects/:id/merge_requests/:iid/merge with MWPS + squash."""
         pid = self._resolve_project_id(project_path)
         payload = {
@@ -752,7 +753,7 @@ class GitLabForge(Forge):
         except Exception as e:
             return {"merged": False, "reason": str(e)}
 
-    def _rebase_mr(self, project_path: str, mr_iid: int) -> dict:
+    def _rebase_mr(self, project_path: str, mr_iid: int) -> dict[str, Any]:
         """PUT /projects/:id/merge_requests/:iid/rebase to merge the target
         branch tip into the MR branch so its pipeline re-runs against the
         current base."""
