@@ -507,7 +507,9 @@ def test_check_status_pipeline_failure(tmp_path, monkeypatch):
         "merge_requests": _make_response(200, [mr]),
         "projects/ns%2Fproject": _make_response(200, project_json),
         "pipelines/100/jobs": _make_response(200, failed_jobs),
-        "jobs/200/trace": _make_response(200, None, "\x1b[31mbuild failed: boom\x1b[0m"),
+        "jobs/200/trace": _make_response(
+            200, None, "\x1b[31mbuild failed: boom\x1b[0m"
+        ),
         "jobs/201/trace": _make_response(200, None, "lint failed: nope"),
     }
     _mock_httpx(monkeypatch, get_map=get_map)
