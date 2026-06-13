@@ -24,9 +24,11 @@ on:
         type: string
         default: "4"
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+# No workflow-level concurrency here: in a called workflow `github.workflow`
+# resolves to the CALLER's workflow name, so any caller using the common
+# `${{ github.workflow }}-${{ github.ref }}` group gets "deadlock was detected
+# for concurrency group ... between a top level workflow and 'deploy'" and the
+# run fails with zero jobs. Callers own concurrency.
 
 permissions:
   contents: read
