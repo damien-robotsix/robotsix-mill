@@ -1054,9 +1054,7 @@ def test_workflow_refs_from_diff_owner_repo():
     """``uses: owner/repo/.github/workflows/ci.yml@v1`` → {owner/repo}."""
     from robotsix_mill.stages.review import _workflow_refs_from_diff
 
-    refs = _workflow_refs_from_diff(
-        "uses: my-org/my-repo/.github/workflows/ci.yml@v1"
-    )
+    refs = _workflow_refs_from_diff("uses: my-org/my-repo/.github/workflows/ci.yml@v1")
     assert refs == {"my-org/my-repo"}
 
 
@@ -1250,9 +1248,7 @@ def test_extra_roots_passed_when_workflow_ref_matches_repos_config(
         assert (clone_path / ".git").is_dir()
     finally:
         _reset_repos_config()
-        monkeypatch.setattr(
-            "robotsix_mill.stages.review.git_ops.clone", original_clone
-        )
+        monkeypatch.setattr("robotsix_mill.stages.review.git_ops.clone", original_clone)
 
 
 def test_extra_roots_none_when_no_workflow_refs(ctx_factory, monkeypatch):
