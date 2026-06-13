@@ -811,7 +811,17 @@ class RetrospectStage(Stage):
             from ..runtime.transient_errors import reraise_if_transient
 
             reraise_if_transient(e)
-            return Outcome(State.BLOCKED, f"retrospect failed — resumable: {e}")
+            # Non-transient failure: the defensive PR-merge check already
+            # confirmed all PRs are merged, so the deliverable is done.
+            # Degrade to CLOSED instead of BLOCKED — the ticket's work is
+            # delivered; only the post-merge audit failed.
+            (ws.artifacts_dir / "retrospect.md").write_text(
+                f"# Retrospect\nretrospect failed — {e!r}\n",
+                encoding="utf-8",
+            )
+            if s.prune_clone_on_close:
+                prune_clone(ws)
+            return Outcome(State.CLOSED, f"retrospect failed — {e!r}")
 
         # Resolve the memory document to persist across the three output
         # paths (full rewrite / append-only delta / no change), stripping

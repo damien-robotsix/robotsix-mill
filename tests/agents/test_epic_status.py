@@ -43,6 +43,17 @@ async def test_hook_fires_on_done_for_epic_parent(ctx, service, monkeypatch):
 
     monkeypatch.setitem(registry.STAGES, "merge", DoneStage())
 
+    # Prevent the real retrospect stage from running after merge — it
+    # would transition DONE→CLOSED and fire the epic hook a second time.
+    class NoopRetrospectStage(Stage):
+        name = "retrospect"
+        input_state = State.DONE
+
+        def run(self, _t, _c):
+            return Outcome(State.DONE, "no-op")
+
+    monkeypatch.setitem(registry.STAGES, "retrospect", NoopRetrospectStage())
+
     epic = service.create("My Epic", "Big goal", kind="epic")
     child = service.create("Child", "do the thing", parent_id=epic.id)
     for st in (
