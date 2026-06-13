@@ -15,7 +15,10 @@ from robotsix_mill.agents import (
     retry,
     yaml_loader,
 )
-from robotsix_mill.agents.periodic_base import run_periodic_agent
+from robotsix_mill.agents.periodic_base import (
+    _count_active_proposals,
+    run_periodic_agent,
+)
 from robotsix_mill.config import Settings
 
 
@@ -575,3 +578,141 @@ def test_definition_override_bypasses_builtin_load_and_overlay(
     _, kwargs = mocks["build_agent_from_definition"].call_args
     assert kwargs["system_prompt"] == "MERGED REPO PROMPT"
     assert kwargs["model_name"] == "repo-model"
+
+
+# ---------------------------------------------------------------------------
+# _count_active_proposals
+# ---------------------------------------------------------------------------
+
+
+def test_count_active_proposals_empty_block():
+    """Empty block (no recent proposals) → 0."""
+    block = "<recent_proposals>\n(no recent proposals)\n</recent_proposals>"
+    assert _count_active_proposals(block) == 0
+
+
+def test_count_active_proposals_all_terminal():
+    """Only done/closed states → 0."""
+    block = (
+        "<recent_proposals>\n"
+        "[done] 20250101T000000Z-old-ticket-a1b2 | Some done ticket\n"
+        "[closed] 20250101T000000Z-old-ticket-c3d4 | Some closed ticket\n"
+        "</recent_proposals>"
+    )
+    assert _count_active_proposals(block) == 0
+
+
+def test_count_active_proposals_mixed():
+    """Mix of active + terminal → counts only active."""
+    block = (
+        "<recent_proposals>\n"
+        "[draft] 20250101T000000Z-t1-a1b2 | Draft ticket\n"
+        "[done] 20250101T000000Z-t2-c3d4 | Done ticket\n"
+        "[blocked] 20250101T000000Z-t3-e5f6 | Blocked ticket\n"
+        "[closed] 20250101T000000Z-t4-g7h8 | Closed ticket\n"
+        "[ready] 20250101T000000Z-t5-i9j0 | Ready ticket\n"
+        "</recent_proposals>"
+    )
+    assert _count_active_proposals(block) == 3  # draft, blocked, ready
+
+
+def test_count_active_proposals_all_active():
+    """Only active states (draft, ready, blocked, human_issue_approval, etc.) → counts all."""
+    block = (
+        "<recent_proposals>\n"
+        "[draft] 20250101T000000Z-t1-a1b2 | Draft\n"
+        "[ready] 20250101T000000Z-t2-c3d4 | Ready\n"
+        "[blocked] 20250101T000000Z-t3-e5f6 | Blocked\n"
+        "[human_issue_approval] 20250101T000000Z-t4-g7h8 | HIA\n"
+        "[code_review] 20250101T000000Z-t5-i9j0 | CR\n"
+        "</recent_proposals>"
+    )
+    assert _count_active_proposals(block) == 5
+
+
+def test_count_active_proposals_empty_string():
+    """Empty string → 0."""
+    assert _count_active_proposals("") == 0
+
+
+def test_count_active_proposals_warning_injected(settings, monkeypatch, tmp_path):
+    """When recent_proposals contains active proposals, the system prompt
+    includes the Active Proposals warning block."""
+    mocks = _setup_patches(monkeypatch)
+
+    active_block = (
+        "<recent_proposals>\n"
+        "[draft] 20250101T000000Z-t1-a1b2 | Draft ticket\n"
+        "[ready] 20250101T000000Z-t2-c3d4 | Ready ticket\n"
+        "</recent_proposals>"
+    )
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="audit",
+        model_setting="fallback",
+        max_gaps=5,
+        repo_dir=tmp_path,
+        memory="mem",
+        recent_proposals=active_block,
+        prompt_tail="Tail.",
+    )
+
+    _, build_kwargs = mocks["build_agent_from_definition"].call_args
+    prompt = build_kwargs["system_prompt"]
+    assert "## ⚠️ Active Proposals" in prompt
+    assert "There are currently **2** active proposal(s)" in prompt
+    assert "states other than `done` / `closed`" in prompt
+
+
+def test_count_active_proposals_no_warning_when_none_active(
+    settings, monkeypatch, tmp_path
+):
+    """When all proposals are terminal, the system prompt does NOT include
+    the Active Proposals warning."""
+    mocks = _setup_patches(monkeypatch)
+
+    terminal_block = (
+        "<recent_proposals>\n"
+        "[done] 20250101T000000Z-t1-a1b2 | Done ticket\n"
+        "[closed] 20250101T000000Z-t2-c3d4 | Closed ticket\n"
+        "</recent_proposals>"
+    )
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="audit",
+        model_setting="fallback",
+        max_gaps=5,
+        repo_dir=tmp_path,
+        memory="mem",
+        recent_proposals=terminal_block,
+        prompt_tail="Tail.",
+    )
+
+    _, build_kwargs = mocks["build_agent_from_definition"].call_args
+    prompt = build_kwargs["system_prompt"]
+    assert "## ⚠️ Active Proposals" not in prompt
+
+
+def test_count_active_proposals_no_warning_empty_proposals(
+    settings, monkeypatch, tmp_path
+):
+    """When recent_proposals is the empty placeholder, the system prompt
+    does NOT include the Active Proposals warning."""
+    mocks = _setup_patches(monkeypatch)
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="audit",
+        model_setting="fallback",
+        max_gaps=5,
+        repo_dir=tmp_path,
+        memory="mem",
+        recent_proposals="<recent_proposals>\n(no recent proposals)\n</recent_proposals>",
+        prompt_tail="Tail.",
+    )
+
+    _, build_kwargs = mocks["build_agent_from_definition"].call_args
+    prompt = build_kwargs["system_prompt"]
+    assert "## ⚠️ Active Proposals" not in prompt
