@@ -146,7 +146,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
     log_path = state_dir / f"{prefix}.log"
     deployed_sha_path = state_dir / f".{prefix}-deployed-sha"
     deferral_path = state_dir / f".{prefix}-deferrals"
-    lock_path = Path(f"/tmp/{prefix}.lock")
+    lock_path = Path(f"/tmp/{prefix}.lock")  # nosec B108 — world-readable flock guard, same path the bash autoupdater used; contains no data
 
     # -- parse remote --------------------------------------------------------
     # "<remote>/<branch>" — split at the FIRST slash so branch names that
@@ -519,7 +519,7 @@ def _idle_check(cmd: str, timeout: int = 15) -> bool:
     try:
         cp = subprocess.run(
             cmd,
-            shell=True,
+            shell=True,  # nosec B602 — operator-supplied --idle-check-cmd from local config, an opaque shell string by design (no untrusted input)
             capture_output=True,
             text=True,
             timeout=timeout,
