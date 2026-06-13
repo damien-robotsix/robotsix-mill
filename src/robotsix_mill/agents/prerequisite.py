@@ -19,6 +19,10 @@ small and conservative, like ``_SOURCE_EXTENSIONS`` in ``freshness.py``:
   ``from <module> import <Name>`` succeeds.
 
 Lines that don't match either form are ignored (forward-compatible).
+
+Directives whose module top-level package matches the target repo's own
+package name are skipped (treated as met, with a log line) — same-repo
+symbols are deliverables, not prerequisites.
 """
 
 from __future__ import annotations
@@ -28,6 +32,7 @@ import logging
 import re
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from .. import sandbox
@@ -56,7 +61,55 @@ _IMPORT_RE = re.compile(r"^import\s+([\w.]+)$")
 _SYMBOL_RE = re.compile(r"^symbol\s+(\w+)\s+from\s+([\w.]+)$")
 
 
-def parse_prerequisites(spec: str) -> list[dict]:
+def _top_level_module(dotted: str) -> str:
+    """Return the top-level package of a dotted module path.
+
+    ``robotsix_auto_mail.db`` → ``robotsix_auto_mail``.
+    ``os.path`` → ``os``.
+    A bare ``foo`` → ``foo``.
+    """
+    return dotted.split(".")[0]
+
+
+def _repo_package_names(repo_dir: Path) -> set[str]:
+    """Derive the target repo's own Python package name(s).
+
+    Reads ``pyproject.toml`` → ``[project].name`` (distribution name,
+    e.g. ``robotsix-auto-mail``) and converts to the import name form
+    (e.g. ``robotsix_auto_mail``).  Also discovers top-level packages
+    under ``src/`` as a fallback when ``pyproject.toml`` is absent.
+
+    Returns an empty set when the package name cannot be determined.
+    """
+    names: set[str] = set()
+    pp = repo_dir / "pyproject.toml"
+    if pp.is_file():
+        try:
+            import tomllib
+
+            data = tomllib.loads(pp.read_text(encoding="utf-8"))
+            proj = data.get("project", {}) or {}
+            pkg_name = str(proj.get("name", ""))
+            if pkg_name:
+                names.add(pkg_name.replace("-", "_").lower())
+        except Exception:
+            log.debug(
+                "prerequisite: could not read package name from %s",
+                pp,
+                exc_info=True,
+            )
+
+    # Fallback: top-level directories under src/ that look like packages.
+    src_dir = repo_dir / "src"
+    if src_dir.is_dir():
+        for child in src_dir.iterdir():
+            if child.is_dir() and (child / "__init__.py").is_file():
+                names.add(child.name.lower())
+
+    return names
+
+
+def parse_prerequisites(spec: str) -> list[dict[str, str]]:
     """Extract prerequisite directives from *spec*.
 
     Returns a list of ``{"directive": <normalized str>, "code": <python
@@ -73,7 +126,7 @@ def parse_prerequisites(spec: str) -> list[dict]:
     if not fence:
         return []
 
-    directives: list[dict] = []
+    directives: list[dict[str, str]] = []
     for line in fence.group(1).splitlines():
         line = line.strip()
         if not line:
@@ -124,7 +177,7 @@ def _default_runner(code: str, repo_dir: Path, timeout: float) -> int:
     return proc.returncode
 
 
-def _build_batch_script(directives: list[dict]) -> str:
+def _build_batch_script(directives: list[dict[str, str]]) -> str:
     """Build a single stdlib-only Python script that checks every directive.
 
     Each directive runs in its OWN ``try/except ImportError`` block (no
@@ -203,11 +256,65 @@ def _sandbox_batch_check(
     return unmet, None
 
 
+def _filter_same_repo(
+    directives: list[dict[str, str]], repo_pkgs: set[str]
+) -> list[dict[str, str]]:
+    """Return only the directives whose top-level module is NOT a
+    same-repo package, logging each skipped directive at INFO level."""
+    external: list[dict[str, str]] = []
+    for d in directives:
+        code = d["code"]
+        # Extract the module path: "import foo.bar" → "foo.bar",
+        # "from foo.bar import Baz" → "foo.bar".
+        if code.startswith("import "):
+            mod_path = code[7:]
+        elif code.startswith("from "):
+            mod_path = code[5 : code.index(" import")]
+        else:
+            mod_path = ""
+        top = _top_level_module(mod_path)
+        if repo_pkgs and top in repo_pkgs:
+            log.info(
+                "prerequisite: skipping same-repo directive `%s` "
+                "(top-level %r matches repo packages %s)",
+                d["directive"],
+                top,
+                repo_pkgs,
+            )
+            continue
+        external.append(d)
+    return external
+
+
+def _run_individual_checks(
+    external: list[dict[str, str]],
+    repo_dir: Path,
+    runner: Callable[[str, Path, float], int],
+) -> list[str]:
+    """Run each directive one at a time via *runner*, returning the
+    ``unmet`` list."""
+    per_check_timeout = max(1.0, _TOTAL_TIMEOUT_S / len(external)) if external else 1.0
+    unmet = []
+    for d in external:
+        try:
+            rc = runner(d["code"], repo_dir, per_check_timeout)
+        except Exception:
+            log.warning(
+                "prerequisite: check for `%s` errored — treating as met",
+                d["directive"],
+                exc_info=True,
+            )
+            continue
+        if rc != 0:
+            unmet.append(d["directive"])
+    return unmet
+
+
 def run_prerequisite_check(
     spec: str,
     repo_dir: Path | None,
     *,
-    runner=_default_runner,
+    runner: Callable[[str, Path, float], int] = _default_runner,
     settings: Settings | None = None,
     sandbox_image: str | None = None,
 ) -> dict[str, list[str] | str]:
@@ -234,15 +341,24 @@ def run_prerequisite_check(
     if repo_dir is None:
         return {"unmet": [], "reason": "no repo — cannot verify prerequisites"}
 
+    # Skip directives whose top-level module matches the target repo's
+    # own package — same-repo symbols are deliverables, not prerequisites.
+    repo_pkgs = _repo_package_names(repo_dir)
+    external = _filter_same_repo(directives, repo_pkgs)
+
+    if not external:
+        return {
+            "unmet": [],
+            "reason": f"all {len(directives)} prerequisite(s) are same-repo — skipped",
+        }
+
     # Production path: when the runner is the default AND settings are
     # available, verify against the TARGET repo's own environment — the
     # sandbox installs its declared deps (``pip install .``) before the
     # batch check runs, so cross-repo symbols resolve correctly. The
     # whole batch runs in a single container (one ``pip install .``).
     if runner is _default_runner and settings is not None:
-        unmet, error = _sandbox_batch_check(
-            directives, repo_dir, settings, sandbox_image
-        )
+        unmet, error = _sandbox_batch_check(external, repo_dir, settings, sandbox_image)
         if unmet:
             return {
                 "unmet": unmet,
@@ -250,25 +366,12 @@ def run_prerequisite_check(
             }
         return {
             "unmet": [],
-            "reason": f"all {len(directives)} prerequisite(s) satisfied",
+            "reason": f"all {len(external)} prerequisite(s) satisfied",
         }
 
     # Split the total budget evenly so the gate stays bounded regardless
     # of how many directives are declared.
-    per_check_timeout = max(1.0, _TOTAL_TIMEOUT_S / len(directives))
-    unmet = []
-    for d in directives:
-        try:
-            rc = runner(d["code"], repo_dir, per_check_timeout)
-        except Exception:
-            log.warning(
-                "prerequisite: check for `%s` errored — treating as met",
-                d["directive"],
-                exc_info=True,
-            )
-            continue
-        if rc != 0:
-            unmet.append(d["directive"])
+    unmet = _run_individual_checks(external, repo_dir, runner)
 
     if unmet:
         return {
@@ -277,5 +380,5 @@ def run_prerequisite_check(
         }
     return {
         "unmet": [],
-        "reason": f"all {len(directives)} prerequisite(s) satisfied",
+        "reason": f"all {len(external)} prerequisite(s) satisfied",
     }

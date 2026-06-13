@@ -331,3 +331,107 @@ def test_check_explicit_runner_bypasses_sandbox(monkeypatch):
         spec, Path("/tmp"), runner=_runner_all_fail, settings=_DummySettings()
     )
     assert result["unmet"] == ["symbol CostLogSource from robotsix_llmio"]
+
+
+# --- same-repo skip ---
+
+
+def test_same_repo_symbol_is_skipped(tmp_path):
+    """A prereq whose top-level module matches the repo's own package
+    is skipped (treated as met) — same-repo symbols are deliverables,
+    not prerequisites."""
+    # Set up a repo with a pyproject.toml naming its package.
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text(
+        "[project]\nname = 'robotsix-auto-mail'\n", encoding="utf-8"
+    )
+    # Also create the src/ package for the fallback path.
+    pkg = repo / "src" / "robotsix_auto_mail"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").touch()
+
+    spec = (
+        "## Prerequisites\n"
+        "```prereq\n"
+        "symbol get_record_by_id from robotsix_auto_mail.db\n"
+        "```\n"
+    )
+    result = run_prerequisite_check(spec, repo, runner=_runner_all_fail)
+    # Even though the runner would fail, the directive is same-repo →
+    # skipped, so the gate proceeds.
+    assert result["unmet"] == []
+
+
+def test_same_repo_import_is_skipped(tmp_path):
+    """An ``import`` directive for a same-repo module is also skipped."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text(
+        "[project]\nname = 'robotsix-auto-mail'\n", encoding="utf-8"
+    )
+    spec = "## Prerequisites\n```prereq\nimport robotsix_auto_mail.db\n```\n"
+    result = run_prerequisite_check(spec, repo, runner=_runner_all_fail)
+    assert result["unmet"] == []
+
+
+def test_mixed_same_repo_and_external_only_external_checked(tmp_path):
+    """When a spec has both same-repo and external prereqs, only the
+    external ones are checked."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text(
+        "[project]\nname = 'my-project'\n", encoding="utf-8"
+    )
+    spec = (
+        "## Prerequisites\n"
+        "```prereq\n"
+        "symbol get_record_by_id from my_project.db\n"
+        "symbol CostLogSource from robotsix_llmio\n"
+        "```\n"
+    )
+
+    def runner(code, repo_dir, timeout):
+        # The external one fails.
+        if "robotsix_llmio" in code:
+            return 1
+        return 0
+
+    result = run_prerequisite_check(spec, repo, runner=runner)
+    # Only the external prereq is reported as unmet.
+    assert result["unmet"] == ["symbol CostLogSource from robotsix_llmio"]
+
+
+def test_same_repo_all_skipped_proceeds(tmp_path):
+    """When ALL prereqs are same-repo, the gate proceeds cleanly."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text(
+        "[project]\nname = 'my-project'\n", encoding="utf-8"
+    )
+    spec = (
+        "## Prerequisites\n"
+        "```prereq\n"
+        "import my_project.helpers\n"
+        "symbol get_record from my_project.db\n"
+        "```\n"
+    )
+    result = run_prerequisite_check(spec, repo, runner=_runner_all_fail)
+    assert result["unmet"] == []
+
+
+def test_no_pyproject_does_not_skip(tmp_path):
+    """When the repo has no pyproject.toml and no src/ packages, same-repo
+    detection has no data → directives are checked normally (no skip)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    # No pyproject.toml, no src/ — cannot determine package name.
+    spec = (
+        "## Prerequisites\n"
+        "```prereq\n"
+        "symbol get_record_by_id from robotsix_auto_mail.db\n"
+        "```\n"
+    )
+    result = run_prerequisite_check(spec, repo, runner=_runner_all_fail)
+    # Without package name info, the directive is checked normally.
+    assert result["unmet"] == ["symbol get_record_by_id from robotsix_auto_mail.db"]
