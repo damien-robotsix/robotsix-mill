@@ -546,7 +546,7 @@ modules:
       management-plane CLI for manual operations and is the registered
       console-script target.
     paths:
-      - src/robotsix_mill/cli.py
+      - src/robotsix_mill/cli/**/*.py
       - tests/cli/test_cli.py
       - tests/cli/test_screenshot_cli.py
     dependencies: [config, core]

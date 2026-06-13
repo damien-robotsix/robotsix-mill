@@ -26,14 +26,12 @@ from __future__ import annotations
 import argparse
 import json
 import importlib
-import mimetypes
 import sys
-from pathlib import Path
 
 import httpx
 
-from .config import Settings
-from .core.states import State
+from ..config import Settings
+from ..core.states import State
 
 
 def _client(settings: Settings) -> httpx.Client:
@@ -162,13 +160,13 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
         if cmd == "trace-health":
             result = func()
         elif cmd == "verify":
-            from .runtime.tracing import make_session_id
+            from ..runtime.tracing import make_session_id
 
             session_id = make_session_id(cmd)
             ticket_id = getattr(args, "ticket_id", None)
             result = func(session_id=session_id, ticket_id=ticket_id)
         elif cmd == "langfuse-cleanup":
-            from .config import Settings
+            from ..config import Settings
 
             settings = Settings()
             result = func(
@@ -177,12 +175,12 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                 max_traces=settings.langfuse_cleanup_max_traces,
             )
         elif cmd == "cost-reconciliation":
-            from .runtime.tracing import make_session_id
+            from ..runtime.tracing import make_session_id
 
             session_id = make_session_id(cmd)
             repo_id = getattr(args, "repo_id", None)
             if repo_id:
-                from .config import get_repos_config
+                from ..config import get_repos_config
 
                 repos = get_repos_config()
                 if repo_id not in repos.repos:
@@ -198,8 +196,8 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
             else:
                 result = func(session_id=session_id)
         elif cmd == "board-cleanup":
-            from .runtime.tracing import make_session_id
-            from .config import Settings, get_repos_config
+            from ..runtime.tracing import make_session_id
+            from ..config import Settings, get_repos_config
 
             session_id = make_session_id(cmd)
             repos = get_repos_config()
@@ -225,8 +223,8 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                 rc = repos.repos[repo_id]
             result = func(session_id=session_id, repo_config=rc, settings=Settings())
         elif cmd == "member-sync":
-            from .runtime.tracing import make_session_id
-            from .config import get_repos_config
+            from ..runtime.tracing import make_session_id
+            from ..config import get_repos_config
 
             session_id = make_session_id(cmd)
             repos = get_repos_config()
@@ -252,7 +250,7 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                 rc = repos.repos[repo_id]
             result = func(session_id=session_id, repo_config=rc)
         else:
-            from .runtime.tracing import make_session_id
+            from ..runtime.tracing import make_session_id
 
             session_id = make_session_id(cmd)
             result = func(session_id=session_id)
@@ -378,80 +376,6 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
     return 0
 
 
-def _serve(args: argparse.Namespace, settings: Settings) -> int:
-    # Raise nofile soft cap: docker-compose's ulimits only set the
-    # hard cap, and PAM (via runuser in the container entrypoint)
-    # clamps the soft back to 1024. Workers cascade-crash with
-    # OSError: [Errno 24] once they exhaust it across parallel
-    # git/trivy/agent subprocesses.
-    import resource
-
-    try:
-        _, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
-        target = max(65536, hard) if hard != resource.RLIM_INFINITY else 65536
-        resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
-    except ValueError, OSError:
-        pass
-
-    import uvicorn
-
-    from .runtime.api import create_app
-    from .config import get_repos_config
-    from .config import ConfigError
-
-    if args.repo_id:
-        # Single-repo override for tests/dev.
-        try:
-            repos = get_repos_config()
-        except ConfigError as exc:
-            print(f"Error: {exc}", file=sys.stderr)
-            return 2
-        if args.repo_id not in repos.repos:
-            known = sorted(repos.repos.keys())
-            print(
-                f"Error: Unknown repo '{args.repo_id}'. Known repos: {known}",
-                file=sys.stderr,
-            )
-            return 2
-        single_repo_id: str | None = args.repo_id
-    else:
-        # Multi-repo mode: load all repos from config/repos.yaml.
-        try:
-            repos = get_repos_config()
-        except ConfigError as exc:
-            print(f"Error: {exc}", file=sys.stderr)
-            return 2
-        if not repos.repos:
-            print(
-                "Error: no repos defined in config/repos.yaml",
-                file=sys.stderr,
-            )
-            return 2
-        single_repo_id = None
-
-    uvicorn.run(
-        create_app(repos, settings, single_repo_id=single_repo_id),
-        host=settings.api_host,
-        port=settings.api_port,
-    )
-    return 0
-
-
-def _repos_list(args: argparse.Namespace, settings: Settings) -> int:
-    from .config import get_repos_config
-    from .config import ConfigError
-
-    try:
-        repos = get_repos_config()
-    except ConfigError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 2
-    print(f"{'REPO_ID':30s} {'BOARD_ID'}")
-    for rc in repos.repos.values():
-        print(f"{rc.repo_id:30s} {rc.board_id}")
-    return 0
-
-
 def _read_body_from_args(args: argparse.Namespace) -> str:
     """Read a description body from --description-file (file path or '-' for stdin)."""
     if args.description_file == "-":
@@ -471,10 +395,11 @@ def _resolve_repo_id(
     ``return returncode_on_failure``).
     """
     if args.repo_id is not None:
-        return args.repo_id
+        repo_id: str = args.repo_id
+        return repo_id
 
-    from .config import get_repos_config
-    from .config import ConfigError as _ConfigError
+    from ..config import get_repos_config
+    from ..config import ConfigError as _ConfigError
 
     try:
         repos = get_repos_config()
@@ -497,193 +422,19 @@ def _resolve_repo_id(
     return None
 
 
-def _inquire(args: argparse.Namespace, settings: Settings) -> int:
-    body = _read_body_from_args(args)
-    with _client(settings) as c:
-        r = c.post(
-            "/tickets",
-            json={"title": args.title, "description": body, "kind": "inquiry"},
-        )
-        r.raise_for_status()
-        print(r.json()["id"])
-    return 0
-
-
-def _ticket_new(args: argparse.Namespace, settings: Settings) -> int:
-    body = _read_body_from_args(args)
-    repo_id = _resolve_repo_id(args)
-    if repo_id is None:
-        return 2
-    with _client(settings) as c:
-        r = c.post(
-            "/tickets",
-            json={"title": args.title, "description": body, "repo_id": repo_id},
-        )
-        r.raise_for_status()
-        ticket_id = r.json()["id"]
-        for path in getattr(args, "screenshot", None) or []:
-            _upload_screenshot(c, ticket_id, path)
-        print(ticket_id)
-    return 0
-
-
-def _upload_screenshot(c: httpx.Client, ticket_id: str, path: str) -> None:
-    """Upload one screenshot to *ticket_id*; warn on failure, never raise.
-
-    The ticket already exists at this point, so a failed upload must not
-    fail the whole ``ticket new`` command.
-    """
-    p = Path(path)
-    try:
-        data = p.read_bytes()
-    except OSError as e:
-        print(f"warning: could not read screenshot {path}: {e}", file=sys.stderr)
-        return
-    media_type = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
-    try:
-        resp = c.post(
-            f"/tickets/{ticket_id}/screenshots",
-            files={"file": (p.name, data, media_type)},
-        )
-        if resp.status_code // 100 != 2:
-            print(
-                f"warning: screenshot upload failed for {path}: "
-                f"HTTP {resp.status_code} {resp.text}",
-                file=sys.stderr,
-            )
-    except httpx.HTTPError as e:
-        print(f"warning: screenshot upload failed for {path}: {e}", file=sys.stderr)
-
-
-def _epic_new(args: argparse.Namespace, settings: Settings) -> int:
-    body = _read_body_from_args(args)
-    repo_id = _resolve_repo_id(args)
-    if repo_id is None:
-        return 2
-    with _client(settings) as c:
-        r = c.post(
-            "/epics",
-            json={"title": args.title, "description": body, "repo_id": repo_id},
-        )
-        r.raise_for_status()
-        print(r.json()["id"])
-    return 0
-
-
-def _ticket_list(args: argparse.Namespace, settings: Settings) -> int:
-    params: dict = {"state": args.state} if args.state else {}
-    if args.repo_id:
-        params["repo_id"] = args.repo_id
-    with _client(settings) as c:
-        r = c.get("/tickets", params=params)
-        r.raise_for_status()
-        for t in r.json():
-            print(f"{t['id']}\t{t['state']}\t{t['title']}")
-    return 0
-
-
-def _ticket_show(args: argparse.Namespace, settings: Settings) -> int:
-    with _client(settings) as c:
-        r = c.get(f"/tickets/{args.id}")
-        r.raise_for_status()
-        print(r.json())
-        h = c.get(f"/tickets/{args.id}/history")
-        print("--- history ---")
-        for e in h.json():
-            print(f"{e['at']}\t{e['state']}\t{e.get('note')}")
-    return 0
-
-
-def _ticket_approve(args: argparse.Namespace, settings: Settings) -> int:
-    with _client(settings) as c:
-        r = c.post(f"/tickets/{args.id}/approve")
-        if r.is_success:
-            data = r.json()
-            print(f"ticket {data['id']} approved — now in {data['state']}")
-            return 0
-        else:
-            try:
-                detail = r.json().get("detail", r.text)
-            except Exception:
-                detail = r.text
-            print(f"approve failed: {detail}", file=sys.stderr)
-            return 1
-
-
-def _ticket_resume_blocked(args: argparse.Namespace, settings: Settings) -> int:
-    with _client(settings) as c:
-        r = c.post(f"/tickets/{args.id}/resume-blocked")
-        if r.is_success:
-            data = r.json()
-            print(f"ticket {data['id']} resumed — now in {data['state']}")
-            return 0
-        else:
-            try:
-                detail = r.json().get("detail", r.text)
-            except Exception:
-                detail = r.text
-            print(f"resume-blocked failed: {detail}", file=sys.stderr)
-            return 1
-
-
-def _action_list(args: argparse.Namespace, settings: Settings) -> int:
-    with _client(settings) as c:
-        r = c.get(
-            "/proposed-actions",
-            params={"repo_id": args.repo_id, "status": args.status},
-        )
-        if not r.is_success:
-            try:
-                detail = r.json().get("detail", r.text)
-            except Exception:
-                detail = r.text
-            print(f"list failed: {detail}", file=sys.stderr)
-            return 1
-        for a in r.json():
-            rationale = (a.get("rationale") or "")[:80]
-            print(
-                f"{a['id']}\t{a['source']}\t{a['action_type']}\t"
-                f"{a['target_ticket_id']}\t{rationale}"
-            )
-    return 0
-
-
-def _action_approve(args: argparse.Namespace, settings: Settings) -> int:
-    with _client(settings) as c:
-        r = c.post(
-            f"/proposed-actions/{args.id}/approve",
-            params={"repo_id": args.repo_id},
-        )
-        if r.is_success:
-            data = r.json()
-            print(f"action {data['id']} approved — now {data['status']}")
-            return 0
-        else:
-            try:
-                detail = r.json().get("detail", r.text)
-            except Exception:
-                detail = r.text
-            print(f"approve failed: {detail}", file=sys.stderr)
-            return 1
-
-
-def _action_reject(args: argparse.Namespace, settings: Settings) -> int:
-    with _client(settings) as c:
-        r = c.post(
-            f"/proposed-actions/{args.id}/reject",
-            params={"repo_id": args.repo_id},
-        )
-        if r.is_success:
-            data = r.json()
-            print(f"action {data['id']} rejected — now {data['status']}")
-            return 0
-        else:
-            try:
-                detail = r.json().get("detail", r.text)
-            except Exception:
-                detail = r.text
-            print(f"reject failed: {detail}", file=sys.stderr)
-            return 1
+# Subcommand implementations live in sibling modules of this package.
+# These imports must appear after the helpers above to avoid circular imports.
+from .serve import _serve, _repos_list  # noqa: E402
+from .ticket import (  # noqa: E402
+    _ticket_new,
+    _ticket_list,
+    _ticket_show,
+    _ticket_approve,
+    _ticket_resume_blocked,
+)
+from .epic import _epic_new  # noqa: E402
+from .action import _action_list, _action_approve, _action_reject  # noqa: E402
+from .inquire import _inquire  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
