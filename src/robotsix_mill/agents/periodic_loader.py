@@ -80,6 +80,7 @@ _BUILTIN_KINDS: dict[str, str] = {
     "test_gap": "llm_agent",
     "module_curator": "llm_agent",
     "board_cleanup": "llm_agent",
+    "forge_parity": "llm_agent",
     # Schedule-only passes (no prompt yaml / deterministic runner).
     "trace_review": "schedule_only",
     "config_sync": "schedule_only",
