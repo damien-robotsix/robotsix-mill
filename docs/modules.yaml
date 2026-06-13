@@ -287,6 +287,7 @@ modules:
       - tests/stages/test_review.py
       - tests/stages/test_refine_stage.py
       - tests/stages/test_refine_helpers.py
+      - tests/stages/test_refine_orchestration.py
       - tests/stages/test_merge.py
       - tests/stages/test_ci_fix.py
       - tests/stages/test_pause.py
