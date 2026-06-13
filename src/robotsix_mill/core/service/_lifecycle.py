@@ -14,6 +14,7 @@ from .. import db
 from ..models import (
     Comment,
     ProposedAction,
+    ProposedActionStatus,
     SourceKind,
     Ticket,
     TicketEvent,
@@ -266,6 +267,21 @@ class _LifecycleMixin(_ServiceBase):
             ticket.state = dst
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
+            # Auto-reject stale PENDING proposals when the ticket enters a
+            # terminal (archivable) state — there is nothing left to approve.
+            if dst in self._ARCHIVABLE_STATES:
+                _now = datetime.now(timezone.utc)
+                pending = s.exec(
+                    select(ProposedAction).where(
+                        ProposedAction.target_ticket_id == ticket_id,
+                        ProposedAction.status == ProposedActionStatus.PENDING,
+                    )
+                ).all()
+                for pa in pending:
+                    pa.status = ProposedActionStatus.REJECTED
+                    pa.decided_at = _now
+                    pa.decided_by = "system"
+                    s.add(pa)
             s.flush()
             s.add(_make_event(s, ticket_id=ticket_id, state=dst, note=note))
             s.commit()
