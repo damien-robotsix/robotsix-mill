@@ -94,6 +94,10 @@ filterwarnings = [
     "ignore::ResourceWarning",
 ]
 
+[tool.coverage.run]
+source = ["robotsix_mill"]
+branch = true
+
 [tool.coverage.report]
 precision = 2
 show_missing = true
