@@ -84,7 +84,7 @@ class _CoreSettings(BaseModel):
     # scout may spin a sandbox container (~sandbox_memory each), so this
     # bounds peak resource use while letting long splittable work parallelise.
     parallel_explore_max: int = Field(default=4, ge=1)
-    test_model: str = Field(default="deepseek/deepseek-v4-flash")
+    test_model: str = Field(default="deepseek/deepseek-v4-pro")
     refine_model: str = Field(default="deepseek/deepseek-v4-pro")
     # Model for implement agent runs where the task is likely a no-change
     # investigation (the previous pass returned ``no_change_needed=True``
