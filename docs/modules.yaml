@@ -579,7 +579,7 @@ modules:
       Outbound notification sender.  Posts ticket-state-change
       notifications to configured webhook URLs.
     paths:
-      - src/robotsix_mill/notify.py
+      - src/robotsix_mill/notify/__init__.py
       - tests/notify/test_notify.py
     dependencies: [config, core]
 
