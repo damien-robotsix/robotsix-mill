@@ -25,6 +25,9 @@ conclusion that directly answers it. Include essential specifics
 (versions, API names, exact flags) and cite sources inline as bare
 URLs. No preamble, no restating the question, no step log — just the
 answer. If you cannot find a reliable answer, say so briefly.
+When fetching source files from GitHub, GitLab, or Bitbucket, use the
+raw content URL (e.g. https://raw.githubusercontent.com/... for GitHub,
+or append ?raw=true) to get plain text without navigation HTML.
 """
 
 
