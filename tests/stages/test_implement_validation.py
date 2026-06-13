@@ -9,12 +9,17 @@ and the pure ``smoke_paths_match`` gate, with git/sandbox/LLM seams mocked.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
+import robotsix_mill.stages.implement as implement_facade
 from robotsix_mill.agents.testing import smoke_paths_match
 from robotsix_mill.core.models import SourceKind
 from robotsix_mill.core.states import State
+from robotsix_mill.stages.base import Outcome
 from robotsix_mill.stages.implement import validation as validation_mod
 from robotsix_mill.stages.implement.validation import ValidationMixin
 
@@ -343,3 +348,227 @@ def test_smoke_paths_match_no_overlap_returns_false():
         )
         is False
     )
+
+
+# ---------------------------------------------------------------------------
+# _run_baseline_check — the pre-loop test gate on the base branch
+# ---------------------------------------------------------------------------
+
+_REMOTE_SHA = "remote-sha-aaaaaaaa"
+_HEAD_SHA = "head-sha-bbbbbbbb"
+
+
+def _baseline_ctx(tmp_path, *, deps_by_id=None, repo_config=None):
+    """Fake ctx whose workspace.artifacts_dir is a real temp dir."""
+    deps_by_id = deps_by_id or {}
+    notes: list[tuple] = []
+    service = SimpleNamespace(
+        workspace=lambda ticket: SimpleNamespace(artifacts_dir=tmp_path),
+        add_history_note=lambda tid, note: notes.append((tid, note)),
+        _parse_depends_on=lambda ticket: list(deps_by_id.keys()),
+        get=lambda dep_id: deps_by_id.get(dep_id),
+    )
+    ctx = SimpleNamespace(
+        service=service,
+        repo_config=repo_config if repo_config is not None else SimpleNamespace(),
+    )
+    ctx.history_notes = notes
+    return ctx
+
+
+def _install_baseline_seams(
+    monkeypatch,
+    *,
+    remote_sha=_REMOTE_SHA,
+    head_sha=_HEAD_SHA,
+    target="main",
+    test_result=(True, "ok"),
+    raise_in_agent=False,
+):
+    """Patch the git/target/test-agent seams; return a recorder namespace."""
+    monkeypatch.setattr(validation_mod, "target_branch_for", lambda *a: target)
+    monkeypatch.setattr(
+        validation_mod.git_ops, "remote_branch_sha", lambda *a: remote_sha
+    )
+    monkeypatch.setattr(validation_mod.git_ops, "head_sha", lambda *a: head_sha)
+    checkouts: list = []
+    monkeypatch.setattr(
+        validation_mod.git_ops, "checkout", lambda repo, ref: checkouts.append(ref)
+    )
+    agent_calls: list[dict] = []
+
+    def _fake_agent(**kwargs):
+        agent_calls.append(kwargs)
+        if raise_in_agent:
+            raise RuntimeError("boom")
+        return test_result
+
+    # run_test_agent is resolved as ``_facade.run_test_agent`` where
+    # _facade is the implement package.
+    monkeypatch.setattr(implement_facade, "run_test_agent", _fake_agent)
+    return SimpleNamespace(checkouts=checkouts, agent_calls=agent_calls)
+
+
+def _install_spawn_finalize(monkeypatch):
+    """Patch _spawn_baseline_fix + _finalize to focus on routing."""
+    spawn_calls: list = []
+    finalize_calls: list = []
+    sentinel = Outcome(State.BLOCKED, "baseline blocked")
+
+    def _spawn(cls, *a, **kw):
+        spawn_calls.append((a, kw))
+        return sentinel
+
+    monkeypatch.setattr(
+        ValidationMixin, "_spawn_baseline_fix", classmethod(_spawn), raising=False
+    )
+    monkeypatch.setattr(
+        ValidationMixin,
+        "_finalize",
+        classmethod(lambda cls, *a, **kw: finalize_calls.append(kw)),
+        raising=False,
+    )
+    return SimpleNamespace(
+        spawn_calls=spawn_calls, finalize_calls=finalize_calls, sentinel=sentinel
+    )
+
+
+def _call_baseline(ctx, *, branch="feature", repo_dir=Path("/repo")):
+    return ValidationMixin._run_baseline_check(
+        ctx,
+        SimpleNamespace(id="T-1"),
+        repo_dir,
+        branch,
+        False,
+        SimpleNamespace(),
+    )
+
+
+def _write_cache(tmp_path, base_sha, passed, diagnosis="cached diag"):
+    (tmp_path / "baseline_check.json").write_text(
+        json.dumps({"passed": passed, "diagnosis": diagnosis, "base_sha": base_sha}),
+        encoding="utf-8",
+    )
+
+
+def test_baseline_check_idempotency_short_circuit(tmp_path, monkeypatch):
+    # A completed baseline-fix this ticket depends on satisfies the gate.
+    seams = _install_baseline_seams(monkeypatch)
+    monkeypatch.setattr(
+        ValidationMixin,
+        "_baseline_fix_already_resolved",
+        classmethod(lambda cls, ctx, ticket, title: "fix-1"),
+    )
+    ctx = _baseline_ctx(tmp_path)
+    out = _call_baseline(ctx)
+    assert out is None
+    # history note recorded, test agent never run, no cache written
+    assert ctx.history_notes and "fix-1" in ctx.history_notes[0][1]
+    assert seams.agent_calls == []
+    assert not (tmp_path / "baseline_check.json").exists()
+
+
+def test_baseline_check_cache_hit_same_sha_passed(tmp_path, monkeypatch):
+    seams = _install_baseline_seams(monkeypatch)
+    _write_cache(tmp_path, _REMOTE_SHA, True)
+    out = _call_baseline(_baseline_ctx(tmp_path))
+    assert out is None
+    assert seams.agent_calls == []
+
+
+def test_baseline_check_cache_hit_same_sha_failed(tmp_path, monkeypatch):
+    seams = _install_baseline_seams(monkeypatch)
+    rec = _install_spawn_finalize(monkeypatch)
+    _write_cache(tmp_path, _REMOTE_SHA, False)
+    out = _call_baseline(_baseline_ctx(tmp_path))
+    assert out is rec.sentinel
+    assert out.next_state is State.BLOCKED
+    assert rec.spawn_calls
+    assert seams.agent_calls == []
+
+
+def test_baseline_check_cache_hit_sha_advanced_was_passing(tmp_path, monkeypatch):
+    seams = _install_baseline_seams(monkeypatch)
+    _write_cache(tmp_path, "old-stale-sha", True)
+    out = _call_baseline(_baseline_ctx(tmp_path))
+    # A passing baseline stays valid even after the base advances.
+    assert out is None
+    assert seams.agent_calls == []
+
+
+def test_baseline_check_cache_hit_sha_advanced_was_failing_reruns(
+    tmp_path, monkeypatch
+):
+    seams = _install_baseline_seams(monkeypatch, test_result=(True, "ok"))
+    _write_cache(tmp_path, "old-stale-sha", False)
+    out = _call_baseline(_baseline_ctx(tmp_path))
+    # Base advanced + previously failing → re-run the gate.
+    assert out is None
+    assert len(seams.agent_calls) == 1
+
+
+def test_baseline_check_cache_miss_run_pass(tmp_path, monkeypatch):
+    seams = _install_baseline_seams(monkeypatch, test_result=(True, "all green"))
+    out = _call_baseline(_baseline_ctx(tmp_path), branch="feature")
+    assert out is None
+    # cache persisted with the run result
+    cache = json.loads((tmp_path / "baseline_check.json").read_text(encoding="utf-8"))
+    assert cache == {
+        "passed": True,
+        "diagnosis": "all green",
+        "base_sha": _REMOTE_SHA,
+    }
+    # base checked out, then branch restored
+    assert seams.checkouts == [_REMOTE_SHA, "feature"]
+
+
+def test_baseline_check_cache_miss_run_fail(tmp_path, monkeypatch):
+    seams = _install_baseline_seams(monkeypatch, test_result=(False, "boom diag"))
+    rec = _install_spawn_finalize(monkeypatch)
+    out = _call_baseline(_baseline_ctx(tmp_path))
+    assert out is rec.sentinel
+    assert out.next_state is State.BLOCKED
+    assert rec.finalize_calls and rec.finalize_calls[0].get("ok") is False
+    assert rec.spawn_calls
+    cache = json.loads((tmp_path / "baseline_check.json").read_text(encoding="utf-8"))
+    assert cache["passed"] is False
+    assert seams.agent_calls
+
+
+def test_baseline_check_restores_branch_when_agent_raises(tmp_path, monkeypatch):
+    seams = _install_baseline_seams(monkeypatch, raise_in_agent=True)
+    _install_spawn_finalize(monkeypatch)
+    with pytest.raises(RuntimeError):
+        _call_baseline(_baseline_ctx(tmp_path), branch="feature")
+    # finally: restores the working branch; base was checked out first
+    assert seams.checkouts[0] == _REMOTE_SHA
+    assert seams.checkouts[-1] == "feature"
+    # cache is not written when the agent blows up
+    assert not (tmp_path / "baseline_check.json").exists()
+
+
+def test_baseline_check_remote_sha_fallback_to_head(tmp_path, monkeypatch):
+    seams = _install_baseline_seams(
+        monkeypatch, remote_sha=None, head_sha=_HEAD_SHA, test_result=(True, "ok")
+    )
+    out = _call_baseline(_baseline_ctx(tmp_path))
+    assert out is None
+    # base_sha falls back to head_sha; base checkout targets the branch name
+    cache = json.loads((tmp_path / "baseline_check.json").read_text(encoding="utf-8"))
+    assert cache["base_sha"] == _HEAD_SHA
+    assert seams.checkouts[0] == "main"
+
+
+def test_baseline_check_corrupt_cache_treated_as_miss(tmp_path, monkeypatch):
+    seams = _install_baseline_seams(monkeypatch, test_result=(True, "ok"))
+    (tmp_path / "baseline_check.json").write_text("{not valid json", encoding="utf-8")
+    out = _call_baseline(_baseline_ctx(tmp_path))
+    # Falls through to running the gate rather than raising.
+    assert out is None
+    assert len(seams.agent_calls) == 1
+
+
+def test_baseline_check_passes_retry_on_failure(tmp_path, monkeypatch):
+    seams = _install_baseline_seams(monkeypatch, test_result=(True, "ok"))
+    _call_baseline(_baseline_ctx(tmp_path))
+    assert seams.agent_calls[0]["retry_on_failure"] is True
