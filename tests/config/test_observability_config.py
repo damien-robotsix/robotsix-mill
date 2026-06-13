@@ -10,7 +10,7 @@ no own keys and must not be caught by the partial-config check.
 import pytest
 
 from robotsix_mill.config import load_repos_config
-from robotsix_mill.config_loader import ConfigError
+from robotsix_mill.config.loader import ConfigError
 
 
 def _write(tmp_path, body):

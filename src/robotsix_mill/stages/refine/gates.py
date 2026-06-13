@@ -367,7 +367,7 @@ class RefineGatesMixin:
         if len(draft) < 100:
             return draft
 
-        from ...dedup import annotate_child_body, find_inflight_overlap
+        from ...core.dedup import annotate_child_body, find_inflight_overlap
 
         note = find_inflight_overlap(
             ctx.service,

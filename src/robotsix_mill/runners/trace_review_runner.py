@@ -48,7 +48,7 @@ from ..core.db import session as db_session
 from ..core.models import SourceKind, Ticket
 from ..core.service import TicketService
 from ..core.states import State
-from ..dedup import find_prior_matching_ticket, normalize
+from ..core.dedup import find_prior_matching_ticket, normalize
 from ..runtime.lifespan import _process_started_at
 
 log = logging.getLogger("robotsix_mill.trace_review")

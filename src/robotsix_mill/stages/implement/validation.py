@@ -484,7 +484,7 @@ class ValidationMixin(_ImplementStageBase):
         ``""``. The repo's own ``.robotsix-mill/config.yaml`` ``languages``
         declaration (+ optional ``.robotsix-mill/language_instructions/``
         overrides) win over the central ``repos.yaml`` ``language``."""
-        from ...repo_settings import resolve_language_instructions
+        from ...config.repo_settings import resolve_language_instructions
 
         repo_dir = ctx.service.workspace(ticket).dir / "repo"
         return resolve_language_instructions(

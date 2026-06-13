@@ -17,7 +17,7 @@ import logging
 
 from ..config import RepoConfig, Settings, target_branch_for
 from ..repo_scaffold.member_sync import MemberSyncResult, sync_workspace_members
-from ..workspace_members import detect_workspace_members
+from ..config.workspace_members import detect_workspace_members
 from .periodic_runner import _forge_token
 
 log = logging.getLogger("robotsix_mill.member_sync_runner")

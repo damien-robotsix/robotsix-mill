@@ -9,7 +9,10 @@ repo's own ``.robotsix-mill/config.yaml``, never Playwright/Chromium.
 from pathlib import Path
 
 from robotsix_mill.agents.testing import smoke_paths_match
-from robotsix_mill.repo_settings import load_repo_smoke_command, load_repo_smoke_paths
+from robotsix_mill.config.repo_settings import (
+    load_repo_smoke_command,
+    load_repo_smoke_paths,
+)
 
 # Repo root: tests/stages/<file> → parents[2].
 REPO_ROOT = Path(__file__).resolve().parents[2]

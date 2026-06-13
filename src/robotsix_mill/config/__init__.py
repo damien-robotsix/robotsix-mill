@@ -26,7 +26,7 @@ time.
 
 from __future__ import annotations
 
-from ..config_loader import ConfigError
+from .loader import ConfigError
 from .repos import (
     CrossRepoTarget,
     RepoConfig,

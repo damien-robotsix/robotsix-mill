@@ -184,11 +184,11 @@ def _validate_no_partial_langfuse(
     are present). Both present → configured; both absent/empty → no
     observability (unchanged behavior). Exactly one present is a
     half-configured block that would fail opaquely at runtime — raise
-    :class:`~robotsix_mill.config_loader.ConfigError`. Repos that inherit
+    :class:`~robotsix_mill.config.loader.ConfigError`. Repos that inherit
     via ``langfuse_from`` carry no own keys and are validated separately,
     so they are skipped here.
     """
-    from ..config_loader import ConfigError
+    from .loader import ConfigError
 
     for repo_id, cfg in repos.items():
         if cfg.langfuse_from is not None:
@@ -213,11 +213,11 @@ def _validate_no_partial_langfuse(
 def load_repos_config(config_file: str | None = None) -> ReposRegistry:
     """Load repos configuration from ``config/repos.yaml`` (or override).
 
-    Reads YAML via :func:`~robotsix_mill.config_loader.load_repos_yaml`,
+    Reads YAML via :func:`~robotsix_mill.config.loader.load_repos_yaml`,
     constructs a :class:`RepoConfig` for each entry, validates, and
     returns a :class:`ReposRegistry`.
     """
-    from ..config_loader import load_meta_yaml, load_repos_yaml
+    from .loader import load_meta_yaml, load_repos_yaml
 
     raw = load_repos_yaml(config_file)
     repos: dict[str, RepoConfig] = {}
@@ -279,7 +279,7 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
     # referenced master's Langfuse project, so the whole workspace shares one
     # project. Enforce the operator rule that a referencing repo must NOT
     # carry its own keys, and reject unknown / chained / self references.
-    from ..config_loader import ConfigError
+    from .loader import ConfigError
 
     for repo_id, cfg in list(repos.items()):
         if cfg.langfuse_from is None:
@@ -360,9 +360,9 @@ def get_repo_config(repo_id: str) -> RepoConfig:
     """Look up *repo_id* in :func:`get_repos_config` and return its
     :class:`RepoConfig`.
 
-    Raises :class:`~robotsix_mill.config_loader.ConfigError` for unknown IDs.
+    Raises :class:`~robotsix_mill.config.loader.ConfigError` for unknown IDs.
     """
-    from ..config_loader import ConfigError
+    from .loader import ConfigError
 
     registry = get_repos_config()
     try:

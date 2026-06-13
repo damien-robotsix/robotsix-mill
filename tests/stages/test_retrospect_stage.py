@@ -14,7 +14,7 @@ from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
-from robotsix_mill.draft_target import looks_like_mill_internal
+from robotsix_mill.core.draft_target import looks_like_mill_internal
 from robotsix_mill.stages.retrospect import (
     RetrospectStage,
     _WORD_TO_NUM,

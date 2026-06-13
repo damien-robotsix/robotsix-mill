@@ -9,7 +9,7 @@ keys, unknown references, and chained/self references.
 import pytest
 
 from robotsix_mill.config import load_repos_config
-from robotsix_mill.config_loader import ConfigError
+from robotsix_mill.config.loader import ConfigError
 
 _BASE_REPO = """\
 repos:

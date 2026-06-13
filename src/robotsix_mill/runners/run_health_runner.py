@@ -44,7 +44,7 @@ from ..agents.run_health import (
 from ..config import Settings, get_repos_config
 from ..core.models import SourceKind
 from ..core.service import TicketService
-from ..dedup import normalize
+from ..core.dedup import normalize
 from ..runners.pass_runner import load_memory, persist_memory
 
 log = logging.getLogger("robotsix_mill.run_health")

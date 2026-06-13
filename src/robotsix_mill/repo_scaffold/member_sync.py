@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 
 from ..config import _reset_repos_config
 from . import _repos_yaml_path
-from ..workspace_members import DetectedMember
+from ..config.workspace_members import DetectedMember
 
 log = logging.getLogger("robotsix_mill.workspace_member_sync")
 
@@ -84,7 +84,7 @@ def sync_workspace_members(
             members were detected from; the inherited Langfuse project and
             the ``member_of`` provenance marker both come from it.
         members: detected workspace members (see
-            :func:`~robotsix_mill.workspace_members.detect_workspace_members`).
+            :func:`~robotsix_mill.config.workspace_members.detect_workspace_members`).
         repos_yaml_path: override for the ``config/repos.yaml`` location;
             defaults to :func:`repo_scaffold._repos_yaml_path` (honours
             ``MILL_REPOS_FILE``).

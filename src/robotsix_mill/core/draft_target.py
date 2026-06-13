@@ -31,10 +31,10 @@ from __future__ import annotations
 
 import logging
 
-from .config import Settings
-from .core.service import TicketService
+from ..config import Settings
+from .service import TicketService
 
-log = logging.getLogger("robotsix_mill.draft_target")
+log = logging.getLogger("robotsix_mill.core.draft_target")
 
 
 # Token signals that strongly suggest the proposed draft is about
@@ -166,7 +166,7 @@ def resolve_mill_service(
         )
         return None
     try:
-        from .config import get_repos_config
+        from ..config import get_repos_config
 
         rc = get_repos_config().repos.get(target_repo_id)
     except Exception:  # noqa: BLE001 — fallback must always work

@@ -25,7 +25,7 @@ from pathlib import Path
 import yaml
 
 from robotsix_mill.config import Secrets
-from robotsix_mill.config_loader import _YAML_PATH_TO_ALIAS, load_yaml_config
+from robotsix_mill.config.loader import _YAML_PATH_TO_ALIAS, load_yaml_config
 
 # Output targets, relative to the repo root (the current working
 # directory when the script is invoked).

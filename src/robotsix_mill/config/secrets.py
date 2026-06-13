@@ -54,7 +54,7 @@ class Secrets(BaseModel):
         ``config/secrets.yaml``.  YAML values are passed as field
         defaults, which explicit ``**data`` kwargs can override.
         """
-        from ..config_loader import load_secrets_yaml
+        from .loader import load_secrets_yaml
 
         file_path: str | None = _secrets_file
         if file_path is None:

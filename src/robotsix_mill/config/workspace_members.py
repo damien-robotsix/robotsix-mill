@@ -36,9 +36,9 @@ import yaml
 from pydantic import ValidationError
 
 from robotsix_mill.config import CrossRepoTarget
-from robotsix_mill.repo_settings import _load_repo_config_dict
+from robotsix_mill.config.repo_settings import _load_repo_config_dict
 
-log = logging.getLogger("robotsix_mill.workspace_members")
+log = logging.getLogger("robotsix_mill.config.workspace_members")
 
 
 @dataclass(frozen=True)

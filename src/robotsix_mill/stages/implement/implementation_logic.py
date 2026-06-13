@@ -13,7 +13,7 @@ from ...agents.testing import smoke_paths_match
 from ...config import target_branch_for
 from ...core.models import Ticket
 from ...core.states import State
-from ...repo_settings import load_repo_smoke_command
+from ...config.repo_settings import load_repo_smoke_command
 from ...runners.pass_runner import persist_memory
 from ...vcs import git_ops
 from .. import short_circuit_verify

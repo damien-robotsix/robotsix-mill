@@ -17,7 +17,7 @@ import re
 from pathlib import Path, PurePath
 
 from ..config import RepoConfig, Settings, get_secrets
-from ..repo_settings import load_repo_smoke_command, load_repo_test_command
+from ..config.repo_settings import load_repo_smoke_command, load_repo_test_command
 
 # Machine-detectable marker prefixing a deterministic, LLM-free diagnosis
 # for an ENVIRONMENTAL test-gate failure (a missing binary the agent cannot
