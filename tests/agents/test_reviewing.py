@@ -453,6 +453,10 @@ _TOKEN_LIMIT_MSG = (
     "(1491808 input text). maximum context length is 1048576."
 )
 
+_OUTPUT_EXHAUSTION_MSG = (
+    "Model token limit (8192) exceeded before any response was generated."
+)
+
 
 def test_token_limit_triggers_degraded_retry(tmp_path, monkeypatch):
     """A token-limit error on the first review pass triggers a single
@@ -555,6 +559,90 @@ def test_non_token_exception_propagates(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="some unrelated boom"):
         run_review_agent(settings=s, diff="diff --git a/x b/x", spec="Fix x")
     assert len(calls) == 1
+
+
+# --- Output-token exhaustion (max_tokens too low for reasoning output) -----
+
+
+def test_output_exhaustion_retries_with_higher_max_tokens(tmp_path, monkeypatch):
+    """Output-token exhaustion on first review triggers a retry with
+    increased max_tokens (same untruncated diff, same preseed)."""
+    agent = _FakeAgent()
+    _patch_agent(monkeypatch, agent)
+
+    # Preseed a real file so the first attempt carries message_history.
+    (tmp_path / "x.py").write_text("print('x')\n", encoding="utf-8")
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+
+    diff = "diff --git a/x.py b/x.py\n" + ("+line\n" * 500)
+    seen: list[dict] = []
+
+    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+        make_run(agent)
+        prompt, _limits, kwargs = agent.calls[-1]
+        seen.append({"prompt": prompt, "kwargs": kwargs})
+        if len(seen) == 1:
+            raise RuntimeError(_OUTPUT_EXHAUSTION_MSG)
+        return _StubAgentRunResult(
+            ReviewVerdict(verdict="APPROVE", comments="ok with bigger budget")
+        )
+
+    monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", fake_run_agent)
+
+    verdict = run_review_agent(
+        settings=s,
+        diff=diff,
+        spec="Fix x",
+        repo_dir=tmp_path,
+        reference_files=["x.py"],
+    )
+
+    assert isinstance(verdict, ReviewVerdict)
+    assert verdict.verdict == "APPROVE"
+    assert len(seen) == 2
+
+    # First attempt carries preseed message_history.
+    assert "message_history" in seen[0]["kwargs"]
+    # Second attempt is the output-exhaustion retry: same preseed, higher
+    # max_tokens, diff NOT truncated.
+    assert "message_history" in seen[1]["kwargs"]
+    assert "model_settings" in seen[1]["kwargs"]
+    assert seen[1]["kwargs"]["model_settings"]["max_tokens"] == 65536
+    # Retry preserves preseed, so prompt is None (message_history used).
+    assert seen[1]["prompt"] is None
+
+
+def test_output_exhaustion_persists_yields_needs_discussion(tmp_path, monkeypatch):
+    """When output-token exhaustion persists after the budget-increase
+    retry, return NEEDS_DISCUSSION with 'output' (not 'context window')
+    in the comment."""
+    agent = _FakeAgent()
+    _patch_agent(monkeypatch, agent)
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+
+    calls: list[str] = []
+
+    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+        calls.append(what)
+        raise RuntimeError(_OUTPUT_EXHAUSTION_MSG)
+
+    monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", fake_run_agent)
+
+    verdict = run_review_agent(
+        settings=s,
+        diff="diff --git a/x b/x\n" + ("+x\n" * 100),
+        spec="Fix x",
+    )
+
+    assert isinstance(verdict, ReviewVerdict)
+    assert verdict.verdict == "NEEDS_DISCUSSION"
+    assert verdict.auto_merge_eligible is False
+    assert "output" in verdict.comments.lower()
+    assert "context window" not in verdict.comments.lower()
+    # Initial attempt + one output-exhaustion retry (no truncation path).
+    assert len(calls) == 2
 
 
 # ------------------------------------------------------------------

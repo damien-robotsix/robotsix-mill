@@ -125,11 +125,111 @@ _TOKEN_LIMIT_SIGNALS = (
     "tokens requested",
 )
 
+_OUTPUT_TOKEN_EXHAUSTION_SIGNALS = ("before any response was generated",)
+
 
 def _is_token_limit_error(exc: BaseException) -> bool:
     """True when *exc*'s message matches a known token-limit signal."""
     msg = str(exc).lower()
     return any(sig in msg for sig in _TOKEN_LIMIT_SIGNALS)
+
+
+def _is_output_token_exhaustion(exc: BaseException) -> bool:
+    """True when *exc* indicates output-token exhaustion (max_tokens too
+    low for reasoning output), NOT input context overflow."""
+    msg = str(exc).lower()
+    return any(sig in msg for sig in _OUTPUT_TOKEN_EXHAUSTION_SIGNALS)
+
+
+def _review_attempt(
+    *,
+    diff_text: str,
+    use_preseed: bool,
+    note: str | None,
+    max_tokens_override: int | None = None,
+    spec: str,
+    prior_context: str | None,
+    reference_files: list[str] | None,
+    repo_dir: Path | None,
+    screenshot_path: Path | None,
+    agent: Any,
+    agent_definition_name: str,
+    settings: Settings,
+    limits: Any,
+    _use_claude_sdk: Any,
+    claude_sdk_supports_inline_image: Any,
+) -> object:
+    """Build the prompt and run one review pass, returning the
+    agent's (possibly re-prompted) output. Raises on token-limit
+    overflow so the caller can decide whether to degrade."""
+    from .prompt_blocks import section
+    from .structured_output_guard import reprompt_if_unstructured
+    from .retry import run_agent
+
+    user_prompt = ""
+    if note:
+        user_prompt += f"{note}\n\n"
+    if prior_context is not None:
+        user_prompt += f"{prior_context}\n\n"
+    user_prompt += (
+        section("ticket-spec", spec) + "\n\n" + section("git-diff", diff_text)
+    )
+    run_kwargs: dict[str, Any] = {"usage_limits": limits}
+    if max_tokens_override is not None:
+        from pydantic_ai.settings import ModelSettings
+
+        run_kwargs["model_settings"] = ModelSettings(max_tokens=max_tokens_override)
+    run_user_prompt: str | list[Any] | None = user_prompt
+    # Build the synthetic message_history AFTER the user_prompt is
+    # finalized so the prompt can be prepended cleanly BEFORE the
+    # preload tool calls; see fs_tools.build_preseed_history.
+    if use_preseed and reference_files and repo_dir is not None:
+        from .fs_tools import build_preseed_history
+
+        preseed = build_preseed_history(
+            repo_dir,
+            list(reference_files),
+            user_prompt=user_prompt,
+        )
+        if preseed:
+            run_kwargs["message_history"] = preseed
+            run_user_prompt = None
+    # Attach a board screenshot as a vision image ONLY when the
+    # review agent is routed to the Claude SDK backend AND that
+    # backend can actually view inline images (the capability gate
+    # — default OFF, because the installed llmio bridge silently
+    # mishandles BinaryContent and stalls the CLI for 1200s).
+    # DeepSeek has no vision either. A missing/unreadable file
+    # degrades silently to the text-only path — never crash review.
+    if (
+        screenshot_path is not None
+        and _use_claude_sdk(settings, agent_definition_name)
+        and claude_sdk_supports_inline_image(settings)
+    ):
+        run_user_prompt = _maybe_attach_screenshot(run_user_prompt, screenshot_path)
+    result = run_agent(
+        agent,
+        lambda h: h.run_sync(run_user_prompt, **run_kwargs),
+        settings=settings,
+        what="review",
+    )
+    result = reprompt_if_unstructured(
+        result=result,
+        agent=agent,
+        expected_type=ReviewVerdict,
+        reprompt_message=(
+            "Your last response did not produce a structured "
+            "ReviewVerdict. Reply now with a JSON object containing "
+            "the required fields: verdict (one of APPROVE, "
+            "REQUEST_CHANGES, NEEDS_DISCUSSION), comments, and "
+            "request_changes."
+        ),
+        settings=settings,
+        what="review (re-prompt after prose-only)",
+        run_kwargs={"usage_limits": limits},
+        require_no_tool_calls=False,
+    )
+    return result.output
 
 
 def run_review_agent(
@@ -185,6 +285,8 @@ def run_review_agent(
     is never attached — DeepSeek has no vision and would reject an image
     block. A missing/unreadable screenshot degrades silently to the
     text-only path; it never alters routing or crashes review."""
+    import functools
+
     from pydantic_ai.usage import UsageLimits
 
     from .yaml_loader import load_agent_definition
@@ -194,7 +296,6 @@ def run_review_agent(
         _use_claude_sdk,
         claude_sdk_supports_inline_image,
     )
-    from .retry import run_agent
 
     definition = load_agent_definition(
         Path(__file__).parent.parent.parent.parent / "agent_definitions" / "review.yaml"
@@ -227,82 +328,22 @@ def run_review_agent(
         **overrides,
     )
     try:
-        from .prompt_blocks import section
-        from .structured_output_guard import reprompt_if_unstructured
-
         limits = UsageLimits(request_limit=settings.review_request_limit)
 
-        def _attempt(
-            *,
-            diff_text: str,
-            use_preseed: bool,
-            note: str | None,
-        ) -> object:
-            """Build the prompt and run one review pass, returning the
-            agent's (possibly re-prompted) output. Raises on token-limit
-            overflow so the caller can decide whether to degrade."""
-            user_prompt = ""
-            if note:
-                user_prompt += f"{note}\n\n"
-            if prior_context is not None:
-                user_prompt += f"{prior_context}\n\n"
-            user_prompt += (
-                section("ticket-spec", spec) + "\n\n" + section("git-diff", diff_text)
-            )
-            run_kwargs: dict = {"usage_limits": limits}
-            run_user_prompt: str | list[Any] | None = user_prompt
-            # Build the synthetic message_history AFTER the user_prompt is
-            # finalized so the prompt can be prepended cleanly BEFORE the
-            # preload tool calls; see fs_tools.build_preseed_history.
-            if use_preseed and reference_files and repo_dir is not None:
-                from .fs_tools import build_preseed_history
-
-                preseed = build_preseed_history(
-                    repo_dir,
-                    list(reference_files),
-                    user_prompt=user_prompt,
-                )
-                if preseed:
-                    run_kwargs["message_history"] = preseed
-                    run_user_prompt = None
-            # Attach a board screenshot as a vision image ONLY when the
-            # review agent is routed to the Claude SDK backend AND that
-            # backend can actually view inline images (the capability gate
-            # — default OFF, because the installed llmio bridge silently
-            # mishandles BinaryContent and stalls the CLI for 1200s).
-            # DeepSeek has no vision either. A missing/unreadable file
-            # degrades silently to the text-only path — never crash review.
-            if (
-                screenshot_path is not None
-                and _use_claude_sdk(settings, definition.name)
-                and claude_sdk_supports_inline_image(settings)
-            ):
-                run_user_prompt = _maybe_attach_screenshot(
-                    run_user_prompt, screenshot_path
-                )
-            result = run_agent(
-                agent,
-                lambda h: h.run_sync(run_user_prompt, **run_kwargs),
-                settings=settings,
-                what="review",
-            )
-            result = reprompt_if_unstructured(
-                result=result,
-                agent=agent,
-                expected_type=ReviewVerdict,
-                reprompt_message=(
-                    "Your last response did not produce a structured "
-                    "ReviewVerdict. Reply now with a JSON object containing "
-                    "the required fields: verdict (one of APPROVE, "
-                    "REQUEST_CHANGES, NEEDS_DISCUSSION), comments, and "
-                    "request_changes."
-                ),
-                settings=settings,
-                what="review (re-prompt after prose-only)",
-                run_kwargs={"usage_limits": limits},
-                require_no_tool_calls=False,
-            )
-            return result.output
+        _attempt = functools.partial(
+            _review_attempt,
+            spec=spec,
+            prior_context=prior_context,
+            reference_files=reference_files,
+            repo_dir=repo_dir,
+            screenshot_path=screenshot_path,
+            agent=agent,
+            agent_definition_name=definition.name,
+            settings=settings,
+            limits=limits,
+            _use_claude_sdk=_use_claude_sdk,
+            claude_sdk_supports_inline_image=claude_sdk_supports_inline_image,
+        )
 
         output = _run_with_degraded_retry(_attempt, diff=diff, settings=settings)
     finally:
@@ -512,6 +553,52 @@ def _run_with_degraded_retry(
     except Exception as exc:
         if not _is_token_limit_error(exc):
             raise
+        # Output-token exhaustion: the model burned its entire max_tokens
+        # budget on reasoning before emitting a verdict.  Retry with
+        # increased max_tokens (same untruncated diff, same preseed).
+        if _is_output_token_exhaustion(exc):
+            output_budget = settings.review_output_token_budget
+            if output_budget > 0:
+                log.warning(
+                    "review: output-token exhaustion (%s); retrying with "
+                    "increased max_tokens=%d (diff unchanged)",
+                    exc,
+                    output_budget,
+                )
+                try:
+                    return attempt(
+                        diff_text=diff,
+                        use_preseed=True,
+                        note=None,
+                        max_tokens_override=output_budget,
+                    )
+                except Exception as exc2:
+                    if not _is_token_limit_error(exc2):
+                        raise
+                    log.warning(
+                        "review: output-token exhaustion persists after "
+                        "budget increase (%s); returning NEEDS_DISCUSSION",
+                        exc2,
+                    )
+            else:
+                log.warning(
+                    "review: output-token exhaustion (%s) but "
+                    "review_output_token_budget=0; returning NEEDS_DISCUSSION",
+                    exc,
+                )
+            return ReviewVerdict(
+                verdict="NEEDS_DISCUSSION",
+                comments=(
+                    "The review model exhausted its output token budget "
+                    f"(max_tokens={output_budget or 'agent-default'}) before "
+                    "generating a verdict — its reasoning output consumed the "
+                    "entire budget. This is NOT a context-window overflow (the "
+                    "diff was within limits). An automated verdict is unavailable "
+                    "— a human should review this PR directly, or the review "
+                    "model's max_tokens should be raised further."
+                ),
+                auto_merge_eligible=False,
+            )
         log.warning(
             "review: context-window/token-limit error (%s); retrying with "
             "chunked per-file review",
