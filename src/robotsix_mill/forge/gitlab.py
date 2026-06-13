@@ -6,6 +6,7 @@ stage (it owns the repo dir); this only does the API call.
 from __future__ import annotations
 
 import re
+from typing import Any
 
 import httpx
 
@@ -373,7 +374,7 @@ class GitLabForge(Forge):
             jobs_resp.raise_for_status()
             jobs = jobs_resp.json()
 
-            failing: list[dict] = []
+            failing: list[dict[str, Any]] = []
             for j in jobs:
                 job_id = j["id"]
                 try:
