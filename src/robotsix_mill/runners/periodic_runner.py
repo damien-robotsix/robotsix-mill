@@ -92,6 +92,16 @@ class CopyPastePassResult:
 
 
 @dataclass
+class ForgeParityPassResult:
+    """Result of running a forge-parity pass."""
+
+    updated_memory: str
+    drafts_created: list[dict]
+    session_id: str = ""
+    proposed_actions: list[dict] = field(default_factory=list)
+
+
+@dataclass
 class ConfigSyncPassResult:
     """Result of running a config-sync pass."""
 
@@ -203,10 +213,10 @@ class PeriodicPassConfig:
     Must have fields ``updated_memory: str``, ``drafts_created: list[dict]``,
     ``session_id: str``."""
 
-    extra_agent_kwargs: dict = field(default_factory=dict)
+    extra_agent_kwargs: dict[str, Any] = field(default_factory=dict)
     """Additional kwargs baked into ``partial(agent_fn, repo_dir=..., **extra_agent_kwargs)``."""
 
-    extra_kwargs_fn: Callable[..., dict] | None = None
+    extra_kwargs_fn: Callable[..., dict[str, Any]] | None = None
     """Optional callable ``(settings) -> dict`` whose returned keys are
     merged into ``extra_agent_kwargs`` at runtime.  Used by agent_check
     to inject ``memory_dir=settings.data_dir``."""
@@ -456,6 +466,16 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         memory_filename="copy_paste_memory.md",
         workspace_subdir="copy_paste_workspace",
         result_dataclass=CopyPastePassResult,
+        clone_token_fn=_clone_token,
+    ),
+    "forge_parity": PeriodicPassConfig(
+        label="forge_parity",
+        source_kind=SourceKind.FORGE_PARITY,
+        agent_module_attr="forge_parity",
+        agent_fn_name="run_forge_parity_agent",
+        memory_filename="forge_parity_memory.md",
+        workspace_subdir="forge_parity_workspace",
+        result_dataclass=ForgeParityPassResult,
         clone_token_fn=_clone_token,
     ),
     "config_sync": PeriodicPassConfig(

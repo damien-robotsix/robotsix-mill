@@ -66,6 +66,7 @@ def test_sourcekind_member_count():
         "DATA_DIR_AUDIT",
         "COMPLETENESS_CHECK",
         "COPY_PASTE",
+        "FORGE_PARITY",
         "TRACE_HEALTH",
         "TRACE_REVIEW",
         "MODULE_CURATOR",

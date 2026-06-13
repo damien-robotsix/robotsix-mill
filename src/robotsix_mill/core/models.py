@@ -39,6 +39,7 @@ class SourceKind(StrEnum):
     DATA_DIR_AUDIT = "data_dir_audit"
     COMPLETENESS_CHECK = "completeness_check"
     COPY_PASTE = "copy_paste"
+    FORGE_PARITY = "forge_parity"
     TRACE_HEALTH = "trace-health"
     TRACE_REVIEW = "trace-review"
     MODULE_CURATOR = "module_curator"
