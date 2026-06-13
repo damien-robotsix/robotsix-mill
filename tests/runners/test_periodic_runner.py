@@ -377,11 +377,15 @@ def test_run_periodic_pass_imports_agent_module_lazily(tmp_path, monkeypatch):
         import_calls.append((name, package))
         return fake_module
 
-    monkeypatch.setattr(importlib_mod, "import_module", fake_import_module)
+    # Patch the dotted-string ``run_agent_pass`` seam BEFORE replacing
+    # ``importlib.import_module``: pytest 9.x resolves dotted-string
+    # ``setattr`` targets via ``importlib.import_module``, so the real
+    # function must still be installed when this seam is resolved.
     monkeypatch.setattr(
         "robotsix_mill.runners.periodic_runner.run_agent_pass",
         lambda **kw: _fake_agent_pass_result(),
     )
+    monkeypatch.setattr(importlib_mod, "import_module", fake_import_module)
 
     run_periodic_pass(
         session_id="test-sid",
