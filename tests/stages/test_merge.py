@@ -4572,3 +4572,355 @@ def test_fetch_and_run_rebase_diverged_returns_blocked_outcome(tmp_path, monkeyp
     assert out.next_state is State.BLOCKED
     assert pushed["called"] is False
     assert "diverged" in (out.note or "").lower()
+
+
+# ============================================================
+# Review-feedback gate in the auto-merge polling paths (#...-5d9c)
+# ============================================================
+
+
+def test_waiting_auto_merge_changes_requested_routes_to_addressing_review(
+    tmp_path, monkeypatch
+):
+    """WAITING_AUTO_MERGE + eligible + CI green, but a late CHANGES_REQUESTED
+    review with comments → ADDRESSING_REVIEW (no merge), artifact written."""
+    ctx = _gh(
+        tmp_path,
+        auto_merge_enabled="true",
+        review_enabled="true",
+        review_feedback_enabled="true",
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "sha": "abc1234",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_review_status",
+        lambda self, *, source_branch: {
+            "state": "CHANGES_REQUESTED",
+            "comments": [{"body": "please fix", "path": "a.py", "line": 1}],
+            "files": ["a.py"],
+        },
+    )
+    merged_calls = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: (
+            merged_calls.append(1) or {"merged": True, "reason": "merged"}
+        ),
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="CI pending")
+    t = ctx.service.get(t.id)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.ADDRESSING_REVIEW
+    assert merged_calls == []
+    artifact = ctx.service.workspace(t).artifacts_dir / "review_feedback.json"
+    assert artifact.exists()
+    assert json.loads(artifact.read_text(encoding="utf-8"))["comments"]
+
+
+def test_waiting_auto_merge_changes_requested_empty_comments_is_noop(
+    tmp_path, monkeypatch
+):
+    """WAITING_AUTO_MERGE + CHANGES_REQUESTED but no comments → gate does not
+    fire; auto-merge proceeds to DONE."""
+    ctx = _gh(
+        tmp_path,
+        auto_merge_enabled="true",
+        review_enabled="true",
+        review_feedback_enabled="true",
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "sha": "abc1234",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_review_status",
+        lambda self, *, source_branch: {
+            "state": "CHANGES_REQUESTED",
+            "comments": [],
+            "files": [],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: {"merged": True, "reason": "merged"},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="CI pending")
+    t = ctx.service.get(t.id)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+
+
+def test_waiting_auto_merge_changes_requested_ignored_when_flag_disabled(
+    tmp_path, monkeypatch
+):
+    """WAITING_AUTO_MERGE + CHANGES_REQUESTED but review_feedback_enabled=false
+    → gate ignored; auto-merge proceeds to DONE."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "sha": "abc1234",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_review_status",
+        lambda self, *, source_branch: {
+            "state": "CHANGES_REQUESTED",
+            "comments": [{"body": "fix", "path": "a.py", "line": 1}],
+            "files": ["a.py"],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: {"merged": True, "reason": "merged"},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="CI pending")
+    t = ctx.service.get(t.id)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+
+
+def test_waiting_auto_merge_pr_review_status_raises_is_transient_noop(
+    tmp_path, monkeypatch
+):
+    """WAITING_AUTO_MERGE + pr_review_status raises → treated as transient;
+    flow continues (does not crash, does not route to ADDRESSING_REVIEW)."""
+    ctx = _gh(
+        tmp_path,
+        auto_merge_enabled="true",
+        review_enabled="true",
+        review_feedback_enabled="true",
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "sha": "abc1234",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+
+    def _boom(self, *, source_branch):
+        raise RuntimeError("forge unreachable")
+
+    monkeypatch.setattr(github.GitHubForge, "pr_review_status", _boom)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: {"merged": True, "reason": "merged"},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="CI pending")
+    t = ctx.service.get(t.id)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+
+
+def test_multi_repo_one_repo_changes_requested_routes_to_addressing_review(
+    tmp_path, monkeypatch
+):
+    """Multi-repo: all green + eligible, but one repo reports CHANGES_REQUESTED
+    with comments → ADDRESSING_REVIEW; no repo's merge_pr is called."""
+    ctx = _gh(
+        tmp_path,
+        auto_merge_enabled="true",
+        review_enabled="true",
+        review_feedback_enabled="true",
+    )
+    remote_a = "https://github.com/o/a.git"
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-a", remote_a), ("repo-b", remote_b)])
+
+    _route_by_remote(
+        monkeypatch,
+        pr_responses={
+            remote_a: {
+                "merged": False,
+                "state": "open",
+                "url": "u-a",
+                "mergeable": True,
+            },
+            remote_b: {
+                "merged": False,
+                "state": "open",
+                "url": "u-b",
+                "mergeable": True,
+            },
+        },
+        ci_responses={
+            remote_a: {"conclusion": "success", "failing": []},
+            remote_b: {"conclusion": "success", "failing": []},
+        },
+    )
+    review_by_remote = {
+        remote_a: None,
+        remote_b: {
+            "state": "CHANGES_REQUESTED",
+            "comments": [{"body": "fix", "path": "b.py", "line": 2}],
+            "files": ["b.py"],
+        },
+    }
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_review_status",
+        lambda self, *, source_branch: review_by_remote.get(self._remote_url),
+    )
+    merged_calls = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: (
+            merged_calls.append(self._remote_url) or {"merged": True}
+        ),
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    ctx.service.workspace(t).artifacts_dir.joinpath("review.md").write_text(
+        "verdict: APPROVE\nauto_merge_eligible: true\n", encoding="utf-8"
+    )
+    _write_pr_urls(
+        ctx,
+        t,
+        [
+            {"repo_id": "repo-a", "branch": branch, "url": "u-a"},
+            {"repo_id": "repo-b", "branch": branch, "url": "u-b"},
+        ],
+    )
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.ADDRESSING_REVIEW
+    assert merged_calls == []
+    assert (ctx.service.workspace(t).artifacts_dir / "review_feedback.json").exists()
+
+
+def test_multi_repo_no_changes_requested_auto_merges(tmp_path, monkeypatch):
+    """Multi-repo: all green + eligible and no repo requests changes →
+    auto-merge proceeds as today (regression guard)."""
+    ctx = _gh(
+        tmp_path,
+        auto_merge_enabled="true",
+        review_enabled="true",
+        review_feedback_enabled="true",
+    )
+    remote_a = "https://github.com/o/a.git"
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-a", remote_a), ("repo-b", remote_b)])
+
+    _route_by_remote(
+        monkeypatch,
+        pr_responses={
+            remote_a: {
+                "merged": False,
+                "state": "open",
+                "url": "u-a",
+                "mergeable": True,
+            },
+            remote_b: {
+                "merged": False,
+                "state": "open",
+                "url": "u-b",
+                "mergeable": True,
+            },
+        },
+        ci_responses={
+            remote_a: {"conclusion": "success", "failing": []},
+            remote_b: {"conclusion": "success", "failing": []},
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_review_status",
+        lambda self, *, source_branch: None,
+    )
+    merged_calls = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: (
+            merged_calls.append(self._remote_url) or {"merged": True}
+        ),
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    ctx.service.workspace(t).artifacts_dir.joinpath("review.md").write_text(
+        "verdict: APPROVE\nauto_merge_eligible: true\n", encoding="utf-8"
+    )
+    _write_pr_urls(
+        ctx,
+        t,
+        [
+            {"repo_id": "repo-a", "branch": branch, "url": "u-a"},
+            {"repo_id": "repo-b", "branch": branch, "url": "u-b"},
+        ],
+    )
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert sorted(merged_calls) == [remote_a, remote_b]
