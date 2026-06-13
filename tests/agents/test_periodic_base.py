@@ -15,7 +15,10 @@ from robotsix_mill.agents import (
     retry,
     yaml_loader,
 )
-from robotsix_mill.agents.periodic_base import _count_active_proposals, run_periodic_agent
+from robotsix_mill.agents.periodic_base import (
+    _count_active_proposals,
+    run_periodic_agent,
+)
 from robotsix_mill.config import Settings
 
 
@@ -662,7 +665,9 @@ def test_count_active_proposals_warning_injected(settings, monkeypatch, tmp_path
     assert "states other than `done` / `closed`" in prompt
 
 
-def test_count_active_proposals_no_warning_when_none_active(settings, monkeypatch, tmp_path):
+def test_count_active_proposals_no_warning_when_none_active(
+    settings, monkeypatch, tmp_path
+):
     """When all proposals are terminal, the system prompt does NOT include
     the Active Proposals warning."""
     mocks = _setup_patches(monkeypatch)
@@ -690,7 +695,9 @@ def test_count_active_proposals_no_warning_when_none_active(settings, monkeypatc
     assert "## ⚠️ Active Proposals" not in prompt
 
 
-def test_count_active_proposals_no_warning_empty_proposals(settings, monkeypatch, tmp_path):
+def test_count_active_proposals_no_warning_empty_proposals(
+    settings, monkeypatch, tmp_path
+):
     """When recent_proposals is the empty placeholder, the system prompt
     does NOT include the Active Proposals warning."""
     mocks = _setup_patches(monkeypatch)
