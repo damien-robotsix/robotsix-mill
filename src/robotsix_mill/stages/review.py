@@ -378,7 +378,9 @@ class ReviewStage(Stage):
 
         if workflow_refs:
             # Exclude the current repo — the agent already has repo_dir.
-            current_remote = ctx.repo_config.forge_remote_url or s.forge_remote_url
+            current_remote = (
+                ctx.repo_config.forge_remote_url if ctx.repo_config else None
+            ) or s.forge_remote_url
             if current_remote:
                 try:
                     current_owner, current_repo = _parse_owner_repo(current_remote)
