@@ -11,7 +11,9 @@ from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.forge import github
 from robotsix_mill.stages import StageContext
+from robotsix_mill.stages.base import Outcome
 from robotsix_mill.stages.merge import MergeStage, _read_counter, _write_counter
+from robotsix_mill.vcs.git_ops import ReconcileResult
 
 
 def _ctx(tmp_path, **env):
@@ -4250,3 +4252,233 @@ def test_implement_complete_main_debt_detection_disabled(tmp_path, monkeypatch):
     )
     out = MergeStage().run(_implement_complete(ctx), ctx)
     assert out.next_state is State.FIXING_CI
+
+
+# ============================================================
+# Diverged remote PR branch → BLOCKED, never force-push
+# (stage-level integration coverage for the lease-bypass data-loss guard)
+# ============================================================
+
+
+def test_multi_repo_fix_ci_diverged_returns_blocked_and_skips_push(
+    tmp_path, monkeypatch
+):
+    """When reconcile reports the PR branch DIVERGED, _multi_repo_fix_ci must
+    BLOCK and must NOT call push_with_lease — the lease cannot protect a case
+    where reconcile already fetched the foreign commit into the lease ref."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-b", remote_b)])
+
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [{"name": "tests"}],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_code_scanning_alerts",
+        lambda self, *, source_branch: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": ""},
+    )
+    monkeypatch.setattr(
+        merge_mod.tracing,
+        "start_ticket_root_span",
+        lambda *a, **k: contextlib.nullcontext(),
+    )
+    # Diverged reconcile must short-circuit before any agent/push.
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "reconcile_with_remote_pr",
+        lambda *a, **k: ReconcileResult.DIVERGED,
+    )
+    # If the guard were removed, the agent would run + produce a commit
+    # (head != remote) → the push below would fire.
+    monkeypatch.setattr(
+        merge_mod,
+        "run_ci_fix_agent",
+        lambda **k: type("_R", (), {"status": "DONE", "updated_memory": ""})(),
+    )
+    monkeypatch.setattr(merge_mod.git_ops, "head_sha", lambda d: "newsha")
+    monkeypatch.setattr(merge_mod.git_ops, "remote_branch_sha", lambda d, b: "oldsha")
+    pushed = {"called": False}
+
+    def _spy_push(*a, **k):
+        pushed["called"] = True
+        raise AssertionError("push_with_lease must not run on a diverged branch")
+
+    monkeypatch.setattr(merge_mod.git_ops, "push_with_lease", _spy_push)
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    (ctx.service.workspace(t).dir / "repos" / "repo-b" / ".git").mkdir(parents=True)
+
+    out = MergeStage()._multi_repo_fix_ci(
+        t, ctx, {"repo_id": "repo-b", "branch": branch, "url": "u"}
+    )
+    assert out.next_state is State.BLOCKED
+    assert pushed["called"] is False
+    assert "diverged" in (out.note or "").lower()
+
+
+def test_multi_repo_rebase_diverged_returns_blocked_and_skips_push(
+    tmp_path, monkeypatch
+):
+    """When reconcile reports the PR branch DIVERGED, _multi_repo_rebase must
+    BLOCK and must NOT call push_with_lease."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-b", remote_b)])
+
+    monkeypatch.setattr(
+        merge_mod.tracing,
+        "start_ticket_root_span",
+        lambda *a, **k: contextlib.nullcontext(),
+    )
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "reconcile_with_remote_pr",
+        lambda *a, **k: ReconcileResult.DIVERGED,
+    )
+    monkeypatch.setattr(merge_mod.git_ops, "fetch", lambda *a, **k: None)
+    monkeypatch.setattr(
+        merge_mod,
+        "run_rebase_agent",
+        lambda **k: RebaseResult(status="DONE", summary="ok"),
+    )
+    monkeypatch.setattr(merge_mod.git_ops, "head_sha", lambda d: "newsha")
+    monkeypatch.setattr(merge_mod.git_ops, "remote_branch_sha", lambda d, b: "oldsha")
+    pushed = {"called": False}
+
+    def _spy_push(*a, **k):
+        pushed["called"] = True
+        raise AssertionError("push_with_lease must not run on a diverged branch")
+
+    monkeypatch.setattr(merge_mod.git_ops, "push_with_lease", _spy_push)
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    (ctx.service.workspace(t).dir / "repos" / "repo-b" / ".git").mkdir(parents=True)
+
+    out = MergeStage()._multi_repo_rebase(
+        t, ctx, {"repo_id": "repo-b", "branch": branch, "url": "u"}
+    )
+    assert out.next_state is State.BLOCKED
+    assert pushed["called"] is False
+    assert "diverged" in (out.note or "").lower()
+
+
+def test_run_review_revision_diverged_returns_blocked_and_skips_push(
+    tmp_path, monkeypatch
+):
+    """When reconcile reports the PR branch DIVERGED, _run_review_revision must
+    BLOCK and must NOT call push_with_lease."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+
+    monkeypatch.setattr(
+        merge_mod.tracing,
+        "start_ticket_root_span",
+        lambda *a, **k: contextlib.nullcontext(),
+    )
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "reconcile_with_remote_pr",
+        lambda *a, **k: ReconcileResult.DIVERGED,
+    )
+    monkeypatch.setattr(
+        merge_mod,
+        "run_review_revision_agent",
+        lambda **k: type("_R", (), {"status": "DONE", "updated_memory": ""})(),
+    )
+    monkeypatch.setattr(merge_mod.git_ops, "head_sha", lambda d: "newsha")
+    monkeypatch.setattr(merge_mod.git_ops, "remote_branch_sha", lambda d, b: "oldsha")
+    pushed = {"called": False}
+
+    def _spy_push(*a, **k):
+        pushed["called"] = True
+        raise AssertionError("push_with_lease must not run on a diverged branch")
+
+    monkeypatch.setattr(merge_mod.git_ops, "push_with_lease", _spy_push)
+
+    t = _implement_complete(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    (repo_dir / ".git").mkdir(parents=True)
+    # The revision agent only runs when there is review feedback to address.
+    ctx.service.workspace(t).artifacts_dir.mkdir(parents=True, exist_ok=True)
+    (ctx.service.workspace(t).artifacts_dir / "review_feedback.json").write_text(
+        json.dumps({"comments": [{"body": "please fix"}], "files": []}),
+        encoding="utf-8",
+    )
+
+    out = MergeStage()._run_review_revision(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert pushed["called"] is False
+    assert "diverged" in (out.note or "").lower()
+
+
+def test_fetch_and_run_rebase_diverged_returns_blocked_outcome(tmp_path, monkeypatch):
+    """When reconcile reports the PR branch DIVERGED, _fetch_and_run_rebase
+    returns an Outcome(BLOCKED) (not a bool) and never reaches a push.  This
+    method returns bool | Outcome; assert the Outcome shape."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+
+    monkeypatch.setattr(
+        merge_mod.tracing,
+        "start_ticket_root_span",
+        lambda *a, **k: contextlib.nullcontext(),
+    )
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "reconcile_with_remote_pr",
+        lambda *a, **k: ReconcileResult.DIVERGED,
+    )
+    monkeypatch.setattr(merge_mod.git_ops, "fetch", lambda *a, **k: None)
+    monkeypatch.setattr(
+        merge_mod,
+        "run_rebase_agent",
+        lambda **k: RebaseResult(status="DONE", summary="ok"),
+    )
+    pushed = {"called": False}
+
+    def _spy_push(*a, **k):
+        pushed["called"] = True
+        raise AssertionError("push_with_lease must not run on a diverged branch")
+
+    monkeypatch.setattr(merge_mod.git_ops, "push_with_lease", _spy_push)
+
+    t = _in_rebasing(ctx)
+    branch = f"mill/{t.id}"
+
+    out = MergeStage()._fetch_and_run_rebase(
+        t,
+        ctx.settings,
+        ctx.repo_config,
+        "/repo",
+        branch,
+        "main",
+        1,
+    )
+    assert isinstance(out, Outcome)
+    assert out.next_state is State.BLOCKED
+    assert pushed["called"] is False
+    assert "diverged" in (out.note or "").lower()
