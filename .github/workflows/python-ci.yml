@@ -146,7 +146,7 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: system
           BANDIT_SEVERITY: ${{ inputs.bandit-severity }}
-        run: uv run bandit -c pyproject.toml -r src/ --severity-level "$BANDIT_SEVERITY"
+        run: uv run --with 'bandit[toml]' bandit -c pyproject.toml -r src/ --severity-level "$BANDIT_SEVERITY"
 
       - name: Run tests
         env:
