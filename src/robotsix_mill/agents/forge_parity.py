@@ -11,6 +11,9 @@ the runner has a clear result to work with.
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any
+
 from ..config import Settings
 from .periodic_base import PeriodicAgentResult, load_periodic_system_prompt
 
@@ -30,8 +33,8 @@ def run_forge_parity_agent(
     memory: str = "",
     recent_proposals: str = "",
     verified_proposals: str = "",
-    repo_dir=None,
-    definition_override=None,
+    repo_dir: Path | None = None,
+    definition_override: Any = None,
 ) -> ForgeParityResult:
     """Run the forge-parity detection pass.
 
@@ -60,7 +63,7 @@ def run_forge_parity_agent(
     """
     from .periodic_base import run_periodic_agent
 
-    return run_periodic_agent(
+    return run_periodic_agent(  # type: ignore[no-any-return]
         settings=settings,
         definition_name="forge_parity",
         definition_override=definition_override,

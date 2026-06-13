@@ -213,10 +213,10 @@ class PeriodicPassConfig:
     Must have fields ``updated_memory: str``, ``drafts_created: list[dict]``,
     ``session_id: str``."""
 
-    extra_agent_kwargs: dict = field(default_factory=dict)
+    extra_agent_kwargs: dict[str, Any] = field(default_factory=dict)
     """Additional kwargs baked into ``partial(agent_fn, repo_dir=..., **extra_agent_kwargs)``."""
 
-    extra_kwargs_fn: Callable[..., dict] | None = None
+    extra_kwargs_fn: Callable[..., dict[str, Any]] | None = None
     """Optional callable ``(settings) -> dict`` whose returned keys are
     merged into ``extra_agent_kwargs`` at runtime.  Used by agent_check
     to inject ``memory_dir=settings.data_dir``."""
