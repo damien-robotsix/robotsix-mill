@@ -1014,13 +1014,13 @@ def test_deployed_sha_recorded(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_remote_flag_parsing() -> None:
-    """--remote upstream/stable is split into remote=upstream, branch=stable."""
+    """--remote is stored as a single token; a two-word value like 'origin main' splits correctly."""
     ns = au._build_parser().parse_args(["--remote", "upstream/stable"])
     assert ns.remote == "upstream/stable"
 
     # Verify the run() function's splitting logic
     assert ns.remote.split(maxsplit=1)[0] == "upstream/stable"  # single token
-    # Actually, let's test a two-token remote
+    # Two-token remote
     ns2 = au._build_parser().parse_args(["--remote", "origin main"])
     parts = ns2.remote.split(maxsplit=1)
     assert parts[0] == "origin"

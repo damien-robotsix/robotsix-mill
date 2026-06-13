@@ -539,13 +539,13 @@ def _poll_idle(
     while not _idle_check(cmd):
         if waited >= max_wait:
             return False
+        time.sleep(poll_interval)
+        waited += poll_interval
         _log(
             log_path,
             f"mill busy (audit/stage running) — waiting {poll_interval}s "
             f"(waited {waited}s)",
         )
-        time.sleep(poll_interval)
-        waited += poll_interval
     _log(log_path, f"mill idle after {waited}s")
     return True
 
