@@ -33,6 +33,10 @@ modules:
       - tests/config/test_workspace_members.py
       - tests/config/test_member_sync_config.py
       - tests/config/test_migrate_config.py
+      - tests/config/test_cross_repo_target.py
+      - tests/config/test_langfuse_from.py
+      - tests/config/test_observability_config.py
+      - tests/config/test_target_branch_for.py
     dependencies: []
 
   - id: core
