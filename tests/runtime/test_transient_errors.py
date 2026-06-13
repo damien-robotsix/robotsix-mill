@@ -180,6 +180,11 @@ def test_cpe_transient_git_remote_rejected_internal_server():
     assert _is_transient_called_process_error(exc) is True
 
 
+def test_cpe_transient_git_authentication_failed():
+    exc = subprocess.CalledProcessError(1, "git", stderr="fatal: Authentication failed")
+    assert _is_transient_called_process_error(exc) is True
+
+
 def test_cpe_fatal_stderr_none():
     exc = subprocess.CalledProcessError(1, "git", stderr=None)
     assert _is_transient_called_process_error(exc) is False

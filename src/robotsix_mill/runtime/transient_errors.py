@@ -30,7 +30,7 @@ _GIT_TRANSIENT_RE = re.compile(
     r"(Internal Server Error|500|503|HTTP/.* 5\d\d|Connection refused)"
 )
 _GIT_FATAL_TRANSIENT_RE = re.compile(
-    r"(remote rejected.*[Ii]nternal [Ss]erver|fatal: unable to access)"
+    r"(remote rejected.*[Ii]nternal [Ss]erver|fatal: unable to access|fatal: Authentication failed)"
 )
 # A reclaimed/missing workspace clone: the per-ticket clone dir vanished
 # mid-run (orphan-workspace reclaim, disk cleanup, …), so a ``git -C <dir> …``

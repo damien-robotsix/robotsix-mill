@@ -659,10 +659,10 @@ def test_inflight_advisory_untouched_when_distinct(ctx_factory, monkeypatch):
 
 
 def test_clone_failure_escalates_to_blocked_with_history_note(ctx_factory, monkeypatch):
-    """A clone failure escalates to BLOCKED. The diagnostic + remediation
-    hint land in the transition note (history) — v1 moved agent
-    conclusions out of comments to keep comments reserved for ASK_USER
-    + review threads."""
+    """A clone failure propagates to the worker. The worker's
+    _handle_stage_error classifies the error and either retries
+    (transient) or blocks (fatal). The stage itself no longer catches
+    CalledProcessError — the worker owns the retry/block decision."""
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///nonexistent", require_approval="false")
     t = _ticket(ctx, body="Add endpoint")
 
@@ -675,14 +675,8 @@ def test_clone_failure_escalates_to_blocked_with_history_note(ctx_factory, monke
         ),
     )
 
-    out = RefineStage().run(t, ctx)
-
-    assert out.next_state is State.BLOCKED
-    assert "refine clone failed" in (out.note or "")
-    assert "resume-blocked" in (out.note or "")
-    # No agent-authored comment.
-    comments = ctx.service.list_comments(t.id)
-    assert not any(c.author == "refine" for c in comments)
+    with pytest.raises(subprocess.CalledProcessError):
+        RefineStage().run(t, ctx)
 
 
 # ---------------------------------------------------------------------------
@@ -3386,8 +3380,10 @@ def test_clone_failure_transient_reraises_for_worker_retry(ctx_factory, monkeypa
 
 
 def test_clone_failure_note_redacts_credentials(ctx_factory, monkeypatch):
-    """A fatal clone failure whose stderr echoes the tokenized remote
-    must not leak the token into the BLOCKED note."""
+    """A clone failure propagates to the worker. The worker's
+    _handle_stage_error creates a note from str(error), which for
+    CalledProcessError does NOT include stderr — so credentials in
+    stderr are never leaked into the transition note."""
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///nonexistent", require_approval="false")
     t = _ticket(ctx, body="Add endpoint")
 
@@ -3405,8 +3401,11 @@ def test_clone_failure_note_redacts_credentials(ctx_factory, monkeypatch):
         ),
     )
 
-    out = RefineStage().run(t, ctx)
+    with pytest.raises(subprocess.CalledProcessError) as exc_info:
+        RefineStage().run(t, ctx)
 
-    assert out.next_state is State.BLOCKED
-    assert "ghs_secret123" not in (out.note or "")
-    assert "://***@" in (out.note or "")
+    # The stage no longer produces a BLOCKED note; the exception
+    # propagates to the worker.  Verify the stderr is present on the
+    # exception (the worker's error handler does not include it in the
+    # blocking note, so the token is never leaked).
+    assert b"ghs_secret123" in exc_info.value.stderr

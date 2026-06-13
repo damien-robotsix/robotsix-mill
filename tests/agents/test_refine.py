@@ -405,10 +405,10 @@ def test_refine_clones_repo_and_passes_repo_dir(ctx, service, monkeypatch):
 
 
 def test_refine_clone_failure_blocks_with_history_note(ctx, service, monkeypatch):
-    """Clone failure escalates to BLOCKED. The diagnostic and remediation
-    hint land in the transition note (history) rather than a comment —
-    v1 moved agent conclusions out of comments so comments stay
-    reserved for ASK_USER + review threads."""
+    """Clone failure propagates to the worker. The worker's
+    _handle_stage_error classifies the error and either retries
+    (transient) or blocks (fatal). The stage itself no longer catches
+    CalledProcessError — the worker owns the retry/block decision."""
     import subprocess
 
     from robotsix_mill.vcs import git_ops
@@ -439,10 +439,8 @@ def test_refine_clone_failure_blocks_with_history_note(ctx, service, monkeypatch
     monkeypatch.setattr(git_ops, "clone", boom_clone)
     monkeypatch.setattr(refining, "run_refine_agent", fake_refine)
     t = service.create("x", "do a thing")
-    out = RefineStage().run(t, ctx)
-    assert out.next_state is State.BLOCKED
-    assert "refine clone failed" in (out.note or "")
-    assert "resume-blocked" in (out.note or "")
+    with pytest.raises(subprocess.CalledProcessError):
+        RefineStage().run(t, ctx)
     # Refine agent was NOT invoked — we bailed before reaching it.
     assert refine_called == []
     # No agent-authored comment.
@@ -1121,8 +1119,9 @@ def test_dedup_failure_degrades_gracefully(ctx, service, monkeypatch):
 
 
 def test_dedup_clone_failure_escalates_before_dedup(ctx, service, monkeypatch):
-    """Clone failure escalates to BLOCKED before dedup runs at all —
-    no half-grounded refine attempts."""
+    """Clone failure propagates to the worker before dedup runs at all —
+    no half-grounded refine attempts. The stage no longer catches
+    CalledProcessError — the worker owns the retry/block decision."""
     import subprocess
 
     from robotsix_mill.vcs import git_ops
@@ -1148,9 +1147,9 @@ def test_dedup_clone_failure_escalates_before_dedup(ctx, service, monkeypatch):
 
     t = service.create("Add X", _DEDUP_BODY)
 
-    out = RefineStage().run(t, ctx)
+    with pytest.raises(subprocess.CalledProcessError):
+        RefineStage().run(t, ctx)
 
-    assert out.next_state is State.BLOCKED
     assert not dedup_called, "dedup should not be called when clone failed"
 
 

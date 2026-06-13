@@ -7,7 +7,7 @@ holds ``run`` (the orchestrator) plus ``_clone_or_resume``.
 
 from __future__ import annotations
 
-import subprocess
+
 from pathlib import Path
 
 from ...agents import refining
@@ -173,45 +173,13 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
             return cand  # idempotent: reuse an existing clone
 
         try:
-            try:
-                token = github_token(s, repo_config=ctx.repo_config)
-            except RuntimeError:
-                token = None  # no credentials configured — clone will fail
-            git_ops.clone(
-                remote_url,
-                cand,
-                target_branch_for(s, ctx.repo_config),
-                token,
-            )
-            return cand
-        except subprocess.CalledProcessError as e:
-            # A transient clone failure (5xx, connection refused, DNS
-            # outage) must reach the worker's stage-retry / outage
-            # parking instead of hard-blocking — see the 2026-06-12
-            # network shutdown that mass-blocked refine tickets here.
-            from ...runtime.transient_errors import reraise_if_transient
-
-            reraise_if_transient(e)
-            # Escalate clone failure to BLOCKED — running refine
-            # with no repo grounds the agent's system prompt
-            # against tools that aren't registered (the
-            # `tools=[]` path in refining.py:385). The result is
-            # an inconsistent, tool-less refine that wastes
-            # tokens. Surface the cause to the operator instead.
-            reason = (
-                "refine clone failed: "
-                + git_ops.redact_credentials((e.stderr or "").strip())[:200]
-            )
-            log.warning("%s: %s", ticket.id, reason)
-            # The diagnostic used to be posted as a comment; the
-            # transition note carries the same info and v1 keeps
-            # agent conclusions out of comments. The remediation
-            # hint ("fix permissions/credentials/disk/network, then
-            # resume-blocked") lives in this commit's git log as
-            # ambient context.
-            return Outcome(
-                State.BLOCKED,
-                f"{reason}. Fix the underlying cause (permissions, "
-                "credentials, disk space, network) then "
-                "`resume-blocked` to re-run refine.",
-            )
+            token = github_token(s, repo_config=ctx.repo_config)
+        except RuntimeError:
+            token = None  # no credentials configured — clone will fail
+        git_ops.clone(
+            remote_url,
+            cand,
+            target_branch_for(s, ctx.repo_config),
+            token,
+        )
+        return cand
