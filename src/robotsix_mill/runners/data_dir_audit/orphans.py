@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import shutil
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlmodel import select
@@ -135,7 +135,7 @@ def find_orphan_workspaces(
     with db.session(settings, board_id) as s:
         for start in range(0, len(candidate_ids), _BATCH_SIZE):
             chunk = candidate_ids[start : start + _BATCH_SIZE]
-            stmt = select(Ticket.id).where(Ticket.id.in_(chunk))
+            stmt = select(Ticket.id).where(Ticket.id.in_(chunk))  # type: ignore[attr-defined]
             existing_ids.update(s.exec(stmt).all())
 
     orphans: list[OrphanWorkspace] = []
@@ -167,7 +167,7 @@ def _close_time_from_ticket_id(name: str) -> datetime | None:
     """
     try:
         return datetime.strptime(name[:16], "%Y%m%dT%H%M%SZ").replace(
-            tzinfo=datetime.timezone.utc
+            tzinfo=timezone.utc
         )
     except ValueError:
         return None
@@ -207,8 +207,8 @@ def _terminal_close_times(
             chunk_terminal = set(
                 s.exec(
                     select(Ticket.id).where(
-                        Ticket.id.in_(chunk),
-                        Ticket.state.in_(_TERMINAL_STATES),
+                        Ticket.id.in_(chunk),  # type: ignore[attr-defined]
+                        Ticket.state.in_(_TERMINAL_STATES),  # type: ignore[attr-defined]
                     )
                 ).all()
             )
@@ -217,8 +217,8 @@ def _terminal_close_times(
             terminal_ids.update(chunk_terminal)
             rows = s.exec(
                 select(TicketEvent.ticket_id, TicketEvent.at).where(
-                    TicketEvent.ticket_id.in_(chunk_terminal),
-                    TicketEvent.state.in_(_TERMINAL_STATES),
+                    TicketEvent.ticket_id.in_(chunk_terminal),  # type: ignore[attr-defined]
+                    TicketEvent.state.in_(_TERMINAL_STATES),  # type: ignore[attr-defined]
                 )
             ).all()
             for ticket_id, at in rows:

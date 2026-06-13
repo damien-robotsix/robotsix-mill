@@ -11,6 +11,7 @@ import logging
 import os
 from collections import defaultdict
 from pathlib import Path
+from typing import Any
 
 from ...config import Settings
 
@@ -71,9 +72,9 @@ def _select_largest_from_sizes(
     dir_totals: defaultdict[str, int],
     top_n: int,
     threshold_bytes: int,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Return the top-N items above *threshold_bytes* from pre-computed size dicts."""
-    results: list[dict] = [
+    results: list[dict[str, Any]] = [
         {"path": rel, "size_bytes": size, "is_directory": False}
         for rel, size in file_sizes.items()
         if size >= threshold_bytes
@@ -93,7 +94,7 @@ def find_largest_items(
     data_dir: Path,
     top_n: int = 10,
     threshold_bytes: int = 100 * 1024 * 1024,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Return top-N items under *data_dir* whose size ≥ *threshold_bytes*.
 
     Returns a list of dicts, each with keys ``path`` (str, relative to
@@ -127,7 +128,7 @@ _GENERIC_JSON_CAP_BYTES = 5 * 1024 * 1024  # 5 MB
 # come first, generic ``*.json`` is the fall-through. Files already
 # matched by an earlier specific pattern are excluded from later
 # patterns to avoid double-flagging.
-_UNBOUNDED_PATTERNS: list[dict] = [
+_UNBOUNDED_PATTERNS: list[dict[str, str]] = [
     {"pattern": "*_memory.md", "glob": "*_memory.md"},
     {"pattern": "runs.json", "glob": "runs.json"},
     {"pattern": "ci_patterns.json", "glob": "ci_patterns.json"},
@@ -180,7 +181,7 @@ def _evaluate_path(
     pattern: str,
     cap_bytes: int,
     cap_detail: str,
-) -> dict | None:
+) -> dict[str, Any] | None:
     """Return a finding dict for ``path`` if it exceeds its cap, else None."""
     try:
         size = path.stat().st_size
@@ -211,7 +212,7 @@ def _evaluate_path(
 def check_unbounded_candidates(
     data_dir: Path,
     settings: Settings,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Inspect ``data_dir`` for files exceeding known unbounded-pattern caps.
 
     Walks ``data_dir`` recursively, applies the specific-pattern globs
@@ -235,7 +236,7 @@ def check_unbounded_candidates(
     if not data_dir.exists():
         return []
 
-    findings: list[dict] = []
+    findings: list[dict[str, Any]] = []
     matched: set[Path] = set()
 
     for entry in _UNBOUNDED_PATTERNS:

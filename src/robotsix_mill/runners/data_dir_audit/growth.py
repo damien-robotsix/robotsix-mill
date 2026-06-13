@@ -107,7 +107,7 @@ def _growth_state_path(settings: Settings, board_id: str) -> Path:
     return settings.data_dir / board_id / "data_dir_audit_state.json"
 
 
-def _load_growth_state(state_path: Path) -> dict[str, dict]:
+def _load_growth_state(state_path: Path) -> dict[str, dict[str, Any]]:
     """Load prior-pass size state from *state_path*.
 
     Returns an empty dict on first-run (file absent) or when the file
@@ -132,7 +132,7 @@ def _load_growth_state(state_path: Path) -> dict[str, dict]:
         return {}
 
 
-def _save_growth_state(state_path: Path, state: dict[str, dict]) -> None:
+def _save_growth_state(state_path: Path, state: dict[str, dict[str, Any]]) -> None:
     """Atomically persist *state* to *state_path*.
 
     Writes to a ``.json.tmp`` sibling first, then replaces the target
@@ -172,7 +172,7 @@ def _enumerate_boards(settings: Settings) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def _record_entry(entry: Path, board_dir: Path, result: dict[str, dict]) -> None:
+def _record_entry(entry: Path, board_dir: Path, result: dict[str, dict[str, Any]]) -> None:
     """Add a single filesystem *entry* to *result* if it qualifies.
 
     Symlinks, unreadable entries, and the audit state file itself are
@@ -195,7 +195,7 @@ def _record_entry(entry: Path, board_dir: Path, result: dict[str, dict]) -> None
         result[rel + "/"] = {"size_bytes": 0, "mtime": stat.st_mtime}
 
 
-def _compute_cumulative_dir_sizes(result: dict[str, dict]) -> None:
+def _compute_cumulative_dir_sizes(result: dict[str, dict[str, Any]]) -> None:
     """Fill in cumulative directory sizes in *result* (in place).
 
     For each directory key, sum the sizes of all files whose path
@@ -215,7 +215,7 @@ def _compute_cumulative_dir_sizes(result: dict[str, dict]) -> None:
         result[dir_key]["size_bytes"] = cumulative
 
 
-def _scan_board_sizes(board_dir: Path) -> dict[str, dict]:
+def _scan_board_sizes(board_dir: Path) -> dict[str, dict[str, Any]]:
     """Walk *board_dir* and record file sizes + cumulative directory sizes.
 
     Returns a dict mapping POSIX relative paths to
@@ -227,7 +227,7 @@ def _scan_board_sizes(board_dir: Path) -> dict[str, dict]:
     - Symlinks are skipped entirely (not followed, not measured).
     - The state file itself (``data_dir_audit_state.json``) is excluded.
     """
-    result: dict[str, dict] = {}
+    result: dict[str, dict[str, Any]] = {}
     # First pass: collect all file entries (skipping symlinks + state file).
     for entry in board_dir.rglob("*"):
         _record_entry(entry, board_dir, result)
@@ -244,11 +244,11 @@ def _scan_board_sizes(board_dir: Path) -> dict[str, dict]:
 
 
 def _compute_growth_deltas(
-    prior: dict[str, dict],
-    current: dict[str, dict],
+    prior: dict[str, dict[str, Any]],
+    current: dict[str, dict[str, Any]],
     settings: Settings,
     board_id: str = "",
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Compare *prior* and *current* size snapshots; flag excessive growth.
 
     For every path present in *both* snapshots:
@@ -260,7 +260,7 @@ def _compute_growth_deltas(
 
     Returns a list of flag-dicts (empty if nothing flagged).
     """
-    flags: list[dict] = []
+    flags: list[dict[str, Any]] = []
     threshold_bytes = settings.data_dir_audit_growth_delta_bytes
     threshold_pct = settings.data_dir_audit_growth_delta_pct
 
@@ -335,7 +335,7 @@ def _workspace_ticket_states(
         for start in range(0, len(ids), _BATCH_SIZE):
             chunk = ids[start : start + _BATCH_SIZE]
             rows = s.exec(
-                select(Ticket.id, Ticket.state).where(Ticket.id.in_(chunk))
+                select(Ticket.id, Ticket.state).where(Ticket.id.in_(chunk))  # type: ignore[attr-defined]
             ).all()
             for tid, state in rows:
                 states[tid] = (
@@ -504,13 +504,13 @@ def _classify_children(
 # ---------------------------------------------------------------------------
 
 
-def _scan_growth_deltas(settings: Settings) -> tuple[list[dict], int]:
+def _scan_growth_deltas(settings: Settings) -> tuple[list[dict[str, Any]], int]:
     """Scan every board for size deltas against persisted prior-pass state.
 
     Returns ``(all_growth_flags, boards_with_flags)``. Current scan
     is persisted per-board, naturally pruning deleted paths.
     """
-    all_growth_flags: list[dict] = []
+    all_growth_flags: list[dict[str, Any]] = []
     boards_with_flags = 0
     for board_id in _enumerate_boards(settings):
         state_path = _growth_state_path(settings, board_id)

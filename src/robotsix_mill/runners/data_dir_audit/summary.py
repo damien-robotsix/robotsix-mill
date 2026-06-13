@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from .filing import _human_bytes, _trim_path
 from .orphans import OrphanWorkspace
 
@@ -27,12 +29,12 @@ def _orphan_summary_line(
 def _build_summary(
     total_bytes: int,
     total_files: int,
-    oversized: list[dict],
-    all_growth_flags: list[dict],
-    findings: list[dict],
+    oversized: list[dict[str, Any]],
+    all_growth_flags: list[dict[str, Any]],
+    findings: list[dict[str, Any]],
     orphans_by_board: dict[str, list[OrphanWorkspace]],
     total_orphans: int,
-    drafts_created: list[dict],
+    drafts_created: list[dict[str, Any]],
     closed_pruned: int = 0,
     clones_pruned: int = 0,
 ) -> str:

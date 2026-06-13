@@ -21,6 +21,7 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
+from typing import Any
 
 from ...config import RepoConfig, Settings
 from ...core.service import TicketService
@@ -46,14 +47,14 @@ log = logging.getLogger("robotsix_mill.data_dir_audit")
 class DataDirAuditPassResult:
     """Result of running a data-dir audit pass."""
 
-    drafts_created: list[dict]  # [{"id": ..., "title": ...}]
+    drafts_created: list[dict[str, Any]]  # [{"id": ..., "title": ...}]
     summary: str
-    oversized_items: list[dict] = field(default_factory=list)
+    oversized_items: list[dict[str, Any]] = field(default_factory=list)
     # [{"path": "relative/path", "size_bytes": 123456, "is_directory": false}, …]
     updated_memory: str = ""
     session_id: str = ""
-    findings: list[dict] = field(default_factory=list)
-    growth_flags: list[dict] = field(default_factory=list)
+    findings: list[dict[str, Any]] = field(default_factory=list)
+    growth_flags: list[dict[str, Any]] = field(default_factory=list)
     # Number of terminal-state ticket workspaces removed by the opt-in
     # prune_closed GC step (0 when the knob is disabled).
     closed_pruned: int = 0
@@ -142,7 +143,7 @@ def run_data_dir_audit_pass(
     # repo_config or an empty board_id there is no board to file
     # against — skip filing entirely (still return the inspection
     # results so the runs panel can show what was found).
-    drafts_created: list[dict] = []
+    drafts_created: list[dict[str, Any]] = []
     if repo_config is not None and repo_config.board_id:
         service = TicketService(settings, board_id=repo_config.board_id)
         drafts_created = _file_findings_as_tickets(

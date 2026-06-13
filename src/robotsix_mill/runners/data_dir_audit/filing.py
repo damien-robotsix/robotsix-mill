@@ -9,7 +9,9 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
+from typing import Any
 
+from ...config import Settings
 from ...core.models import SourceKind
 from ...core.service import TicketService
 from ..data_dir_audit.orphans import OrphanWorkspace
@@ -63,7 +65,7 @@ def _build_finding(
     pattern: str,
     record_count: int | None,
     record_max: int | None,
-) -> dict:
+) -> dict[str, Any]:
     """Build a finding dict for ``path`` against its pattern's caps."""
     try:
         rel_path = str(path.relative_to(data_dir))
@@ -82,7 +84,7 @@ def _build_finding(
     }
 
 
-def _build_oversized_finding(item: dict) -> tuple[str, str, str]:
+def _build_oversized_finding(item: dict[str, Any]) -> tuple[str, str, str]:
     """Return ``(gap_id, title, body)`` for an oversized-item finding."""
     path = item["path"]
     size = int(item["size_bytes"])
@@ -102,7 +104,7 @@ def _build_oversized_finding(item: dict) -> tuple[str, str, str]:
     return gap_id, title, body
 
 
-def _build_growth_finding(flag: dict) -> tuple[str, str, str]:
+def _build_growth_finding(flag: dict[str, Any]) -> tuple[str, str, str]:
     """Return ``(gap_id, title, body)`` for a growth-delta finding."""
     path = flag["path"]
     board_id = flag.get("board_id", "")
@@ -162,7 +164,7 @@ def _build_growth_finding(flag: dict) -> tuple[str, str, str]:
     return gap_id, title, body
 
 
-def _build_unbounded_finding(finding: dict) -> tuple[str, str, str]:
+def _build_unbounded_finding(finding: dict[str, Any]) -> tuple[str, str, str]:
     """Return ``(gap_id, title, body)`` for an unbounded-collection finding."""
     path = finding["path"]
     current_size = int(finding["current_size"])
@@ -220,9 +222,9 @@ def _build_orphan_finding(orphan: OrphanWorkspace) -> tuple[str, str, str]:
 
 
 def _order_findings(
-    oversized: list[dict],
-    growth_flags: list[dict],
-    unbounded: list[dict],
+    oversized: list[dict[str, Any]],
+    growth_flags: list[dict[str, Any]],
+    unbounded: list[dict[str, Any]],
     orphans_by_board: dict[str, list[OrphanWorkspace]],
 ) -> list[tuple[str, str, str]]:
     """Order findings deterministically and return ``[(gap_id, title, body)]``.
@@ -262,14 +264,14 @@ def _order_findings(
 
 
 def _file_findings_as_tickets(
-    settings,
+    settings: Settings,
     service: TicketService,
-    oversized: list[dict],
-    growth_flags: list[dict],
-    unbounded: list[dict],
+    oversized: list[dict[str, Any]],
+    growth_flags: list[dict[str, Any]],
+    unbounded: list[dict[str, Any]],
     orphans_by_board: dict[str, list[OrphanWorkspace]],
     session_id: str = "",
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """File draft tickets for findings, dedup'd via gap-id markers.
 
     Returns ``[{"id": ticket.id, "title": ticket.title}, ...]`` for
@@ -300,7 +302,7 @@ def _file_findings_as_tickets(
     # list (orphan → growth → oversized → unbounded). There is no
     # per-class cap; dedup-skipped in-flight findings do not consume slots.
     cap = settings.data_dir_audit_max_drafts_per_pass
-    created: list[dict] = []
+    created: list[dict[str, Any]] = []
     for gap_id, title, body in ordered:
         if cap > 0 and len(created) >= cap:
             log.info(
