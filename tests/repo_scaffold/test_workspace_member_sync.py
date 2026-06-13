@@ -1,4 +1,4 @@
-"""Tests for ``robotsix_mill.workspace_member_sync``.
+"""Tests for ``robotsix_mill.repo_scaffold.member_sync``.
 
 The sync turns detected vcs2l workspace members into ``config/repos.yaml``
 registry entries: deriving repo_id/forge_remote_url/working_branch/
@@ -20,7 +20,7 @@ from robotsix_mill.config import (
 from robotsix_mill.core import db
 from robotsix_mill.core.models import SourceKind
 from robotsix_mill.core.service import TicketService
-from robotsix_mill.workspace_member_sync import (
+from robotsix_mill.repo_scaffold.member_sync import (
     _member_repo_id,
     sync_workspace_members,
 )

@@ -19,13 +19,13 @@ from typing import TYPE_CHECKING
 import yaml
 
 if TYPE_CHECKING:
-    from .stages.base import Outcome
+    from ..stages.base import Outcome
 
-from .config import _reset_repos_config, get_repos_config
-from .core.states import State
-from .forge.auth import github_token
-from .forge.base import NotConfiguredError, RepoInfo
-from .vcs import git_ops
+from ..config import _reset_repos_config, get_repos_config
+from ..core.states import State
+from ..forge.auth import github_token
+from ..forge.base import NotConfiguredError, RepoInfo
+from ..vcs import git_ops
 
 log = logging.getLogger("robotsix_mill.repo_scaffold")
 
@@ -52,7 +52,7 @@ def run_repo_scaffold(
         creation is unavailable or the repo already exists, ``ERRORED``
         on unexpected failures.
     """
-    from .stages.base import Outcome
+    from ..stages.base import Outcome
 
     try:
         repo_info = forge.create_repo(
@@ -115,8 +115,8 @@ def _file_implementation_followup(
     marker). Best-effort — returns the new ticket id, or ``None`` on
     failure (the caller does not fail the scaffold over this).
     """
-    from .core.models import SourceKind
-    from .core.service import TicketService
+    from ..core.models import SourceKind
+    from ..core.service import TicketService
 
     name = repo_info.name
     board_id = _sanitize_repo_id(name)
@@ -165,7 +165,7 @@ def _scaffold_initial_commit(settings, repo_info: RepoInfo, params: dict) -> Non
     PAT when set: it created the repo and definitely has push access, whereas
     the GitHub App installation may not yet include the brand-new repo.
     """
-    from .config import get_secrets
+    from ..config import get_secrets
 
     token = get_secrets().forge_repo_create_token or github_token(
         settings, repo_config=None

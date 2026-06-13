@@ -37,9 +37,9 @@ from pathlib import Path
 
 import yaml
 
-from .config import _reset_repos_config
-from .repo_scaffold import _repos_yaml_path
-from .workspace_members import DetectedMember
+from ..config import _reset_repos_config
+from . import _repos_yaml_path
+from ..workspace_members import DetectedMember
 
 log = logging.getLogger("robotsix_mill.workspace_member_sync")
 
@@ -262,8 +262,8 @@ def _file_member_buildout(settings, repo_id: str, entry: dict) -> str | None:
     normal pipeline onboards it. Best-effort — returns the ticket id, or
     ``None`` on failure (registration is not failed over this).
     """
-    from .core.models import SourceKind
-    from .core.service import TicketService
+    from ..core.models import SourceKind
+    from ..core.service import TicketService
 
     branch = entry.get("working_branch")
     branch_note = (

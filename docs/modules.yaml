@@ -523,8 +523,7 @@ modules:
       LICENSE, Python skeleton), and registers the new repo in
       ``config/repos.yaml``.
     paths:
-      - src/robotsix_mill/repo_scaffold.py
-      - src/robotsix_mill/workspace_member_sync.py
+      - src/robotsix_mill/repo_scaffold/**/*.py
       - tests/repo_scaffold/test_repo_scaffold.py
       - tests/repo_scaffold/test_workspace_member_sync.py
     dependencies: [config, forge, vcs]
