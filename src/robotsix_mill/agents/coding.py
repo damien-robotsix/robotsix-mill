@@ -65,7 +65,6 @@ def run_implement_agent(
     memory: str = "",
     epic_context: str = "",
     previous_attempt_summary: str | None = None,
-    file_map: set[str] | None = None,
     board_id: str = "",
     current_ticket_id: str = "",
     language_instructions: str = "",
@@ -97,12 +96,9 @@ def run_implement_agent(
     ``extra_roots`` — additional repo roots forwarded to the coordinator
     so the agent can read/write across multiple cloned repos
     (meta-board tickets).
-    ``file_map`` — kept on the signature for backward compatibility
-    with the stage runner (which loads it from ``file_map.json`` for
-    *scope enforcement*); not used for routing. The implement agent
-    is always the primary worker and can delegate to per-domain
-    expert sub-agents via its ``consult_expert`` tool, with each
-    expert keeping its own memory ledger."""
+    The implement agent is always the primary worker and can delegate
+    to per-domain expert sub-agents via its ``consult_expert`` tool,
+    with each expert keeping its own memory ledger."""
     from pydantic_ai.exceptions import UnexpectedModelBehavior, UsageLimitExceeded
 
     from .coordinating import run_coordinator
