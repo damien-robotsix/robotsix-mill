@@ -173,6 +173,7 @@ reference are covered in [docs/configuration.md](docs/configuration.md).
 - [docs/expert-yaml-schema.md](docs/expert-yaml-schema.md) — Field reference for `expert_definitions/*.yaml` files
 - [docs/approval-gate.md](docs/approval-gate.md) — Human approval gate after refine
 - [docs/proposed-actions.md](docs/proposed-actions.md) — Operator review/approve/reject of agent-proposed ticket mutations
+- [docs/agent-md-candidates.md](docs/agent-md-candidates.md) — Review and validate AGENT.md rule proposals from retrospect agent
 - [docs/dedup-guard.md](docs/dedup-guard.md) — Pre-refine duplicate / already-done check
 - [docs/epic-dedup.md](docs/epic-dedup.md) — Advisory pre-filing dedup for epic-decomposition children
 - [docs/merge-stage.md](docs/merge-stage.md) — Gate-check, auto-rebase, and auto-fix for merge-ready PRs
