@@ -19,9 +19,6 @@ modules:
       Every other module depends on this.
     paths:
       - src/robotsix_mill/config/*.py
-      - src/robotsix_mill/config_loader.py
-      - src/robotsix_mill/repo_settings.py
-      - src/robotsix_mill/workspace_members.py
       - src/robotsix_mill/__init__.py
       - src/robotsix_mill/py.typed
       - config/mill.defaults.yaml
@@ -56,7 +53,8 @@ modules:
       - src/robotsix_mill/core/constants.py
       - src/robotsix_mill/core/text_noop.py
       - src/robotsix_mill/core/duration.py
-      - src/robotsix_mill/dedup.py
+      - src/robotsix_mill/core/dedup.py
+      - src/robotsix_mill/core/draft_target.py
       - tests/test_dedup.py
       - tests/core/test_models.py
       - tests/core/test_states.py
@@ -221,7 +219,6 @@ modules:
       - src/robotsix_mill/runners/module_curator_runner.py
       - src/robotsix_mill/runners/periodic_runner.py
       - src/robotsix_mill/runners/verify_runner.py
-      - src/robotsix_mill/draft_target.py
       - tests/runners/test_draft_target.py
       - tests/runners/test_pass_runner.py
       - tests/runners/test_periodic_runner.py

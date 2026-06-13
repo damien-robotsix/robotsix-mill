@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 
 from robotsix_mill.config import CrossRepoTarget
-from robotsix_mill.workspace_members import (
+from robotsix_mill.config.workspace_members import (
     DetectedMember,
     detect_workspace_members,
 )
@@ -74,35 +74,45 @@ def test_none_repo_dir_returns_empty():
 
 
 def test_missing_manifest_returns_empty_no_warning(tmp_path, caplog):
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.workspace_members"):
+    with caplog.at_level(
+        logging.WARNING, logger="robotsix_mill.config.workspace_members"
+    ):
         assert detect_workspace_members(tmp_path) == []
     assert caplog.records == []
 
 
 def test_malformed_yaml_warns_and_returns_empty(tmp_path, caplog):
     _write_manifest(tmp_path, "repositories: [unterminated\n")
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.workspace_members"):
+    with caplog.at_level(
+        logging.WARNING, logger="robotsix_mill.config.workspace_members"
+    ):
         assert detect_workspace_members(tmp_path) == []
     assert any("read/parse error" in r.message for r in caplog.records)
 
 
 def test_non_mapping_top_level_warns_and_returns_empty(tmp_path, caplog):
     _write_manifest(tmp_path, "- just\n- a\n- list\n")
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.workspace_members"):
+    with caplog.at_level(
+        logging.WARNING, logger="robotsix_mill.config.workspace_members"
+    ):
         assert detect_workspace_members(tmp_path) == []
     assert any("mapping" in r.message for r in caplog.records)
 
 
 def test_missing_repositories_key_warns_and_returns_empty(tmp_path, caplog):
     _write_manifest(tmp_path, "other_key: value\n")
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.workspace_members"):
+    with caplog.at_level(
+        logging.WARNING, logger="robotsix_mill.config.workspace_members"
+    ):
         assert detect_workspace_members(tmp_path) == []
     assert any("repositories" in r.message for r in caplog.records)
 
 
 def test_repositories_not_mapping_warns_and_returns_empty(tmp_path, caplog):
     _write_manifest(tmp_path, "repositories:\n  - a\n  - b\n")
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.workspace_members"):
+    with caplog.at_level(
+        logging.WARNING, logger="robotsix_mill.config.workspace_members"
+    ):
         assert detect_workspace_members(tmp_path) == []
     assert any("repositories" in r.message for r in caplog.records)
 
@@ -116,7 +126,9 @@ def test_member_missing_url_is_skipped_with_warning(tmp_path, caplog):
         "  src/good/pkg:\n"
         "    url: https://github.com/upstream/good.git\n",
     )
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.workspace_members"):
+    with caplog.at_level(
+        logging.WARNING, logger="robotsix_mill.config.workspace_members"
+    ):
         members = detect_workspace_members(tmp_path)
     assert [m.path for m in members] == ["src/good/pkg"]
     assert any("url" in r.message for r in caplog.records)
@@ -127,7 +139,9 @@ def test_member_empty_url_is_skipped(tmp_path, caplog):
         tmp_path,
         "repositories:\n  src/bad/pkg:\n    url: '   '\n",
     )
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.workspace_members"):
+    with caplog.at_level(
+        logging.WARNING, logger="robotsix_mill.config.workspace_members"
+    ):
         assert detect_workspace_members(tmp_path) == []
     assert any("url" in r.message for r in caplog.records)
 
@@ -140,7 +154,9 @@ def test_member_entry_not_a_dict_is_skipped(tmp_path, caplog):
         "  src/good/pkg:\n"
         "    url: https://github.com/upstream/good.git\n",
     )
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.workspace_members"):
+    with caplog.at_level(
+        logging.WARNING, logger="robotsix_mill.config.workspace_members"
+    ):
         members = detect_workspace_members(tmp_path)
     assert [m.path for m in members] == ["src/good/pkg"]
     assert any("mapping" in r.message for r in caplog.records)
@@ -175,7 +191,9 @@ def test_partial_cross_repo_target_tolerated(tmp_path, caplog):
         "    cross_repo_target:\n"
         "      upstream_remote_url: https://github.com/upstream/a.git\n",
     )
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.workspace_members"):
+    with caplog.at_level(
+        logging.WARNING, logger="robotsix_mill.config.workspace_members"
+    ):
         members = detect_workspace_members(tmp_path)
     assert len(members) == 1
     assert members[0].cross_repo_target is None
@@ -185,7 +203,9 @@ def test_partial_cross_repo_target_tolerated(tmp_path, caplog):
 def test_members_not_a_mapping_tolerated(tmp_path, caplog):
     _write_manifest(tmp_path, _TWO_MEMBER_MANIFEST)
     _write_config(tmp_path, "members:\n  - a\n  - b\n")
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.workspace_members"):
+    with caplog.at_level(
+        logging.WARNING, logger="robotsix_mill.config.workspace_members"
+    ):
         members = detect_workspace_members(tmp_path)
     assert len(members) == 2
     assert all(m.cross_repo_target is None for m in members)

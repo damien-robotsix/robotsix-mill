@@ -342,7 +342,7 @@ def _sanitize_repo_id(name: str) -> str:
 
 def _repos_yaml_path() -> Path | None:
     """Resolve the ``config/repos.yaml`` path using the same logic as
-    :func:`~robotsix_mill.config_loader.load_repos_yaml`.
+    :func:`~robotsix_mill.config.loader.load_repos_yaml`.
 
     Returns ``None`` when ``MILL_REPOS_FILE`` is explicitly empty
     (disabled by test suite).

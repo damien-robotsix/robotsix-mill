@@ -7,7 +7,7 @@ context via environment variables (``TICKET_ID``, ``REPO_DIR``,
 ``WORKSPACE_DIR``) and has 300 s to complete.
 
 This module follows the same hardening contract as
-:mod:`robotsix_mill.repo_settings`: a managed repo MUST NOT be able to
+:mod:`robotsix_mill.config.repo_settings`: a managed repo MUST NOT be able to
 crash mill by committing a broken script, so every path returns
 ``None`` (no error) or a short error string rather than raising.
 """

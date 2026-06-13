@@ -373,7 +373,7 @@ class RefineAgentMixin:
                     len(saved_state),
                 )
 
-        from ...repo_settings import (
+        from ...config.repo_settings import (
             resolve_language_instructions,
             warn_if_deprecated_log_folder,
         )
@@ -712,7 +712,7 @@ class RefineAgentMixin:
                 # whose scope overlaps a recent ticket or an earlier
                 # sibling in this batch. Best-effort — a failure here must
                 # not block filing.
-                from ...dedup import annotate_child_body, find_child_overlaps
+                from ...core.dedup import annotate_child_body, find_child_overlaps
 
                 child_titles = list(breakdown.child_titles)
                 child_bodies = list(breakdown.child_bodies)

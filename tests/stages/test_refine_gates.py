@@ -21,7 +21,7 @@ import pytest
 import robotsix_mill.agents.dedup as agents_dedup
 import robotsix_mill.agents.freshness as freshness_mod
 import robotsix_mill.agents.obsolescence as obsolescence_mod
-import robotsix_mill.dedup as dedup_top
+import robotsix_mill.core.dedup as dedup_top
 import robotsix_mill.stages.refine as refine_module
 from robotsix_mill.core import db
 from robotsix_mill.core.models import SourceKind

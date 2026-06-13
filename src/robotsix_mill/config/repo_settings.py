@@ -28,7 +28,7 @@ from pathlib import Path
 
 import yaml
 
-log = logging.getLogger("robotsix_mill.repo_settings")
+log = logging.getLogger("robotsix_mill.config.repo_settings")
 
 
 def load_repo_test_command(repo_dir: Path | None) -> str | None:

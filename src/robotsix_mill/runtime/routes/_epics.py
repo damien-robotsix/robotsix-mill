@@ -180,7 +180,7 @@ def generate_children(
                 # block filing.
                 from datetime import datetime, timezone
 
-                from ...dedup import annotate_child_body, find_child_overlaps
+                from ...core.dedup import annotate_child_body, find_child_overlaps
 
                 child_titles = list(result.child_titles)
                 child_bodies = list(result.child_bodies)

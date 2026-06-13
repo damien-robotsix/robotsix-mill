@@ -12,7 +12,7 @@ import logging
 
 from types import SimpleNamespace
 
-from robotsix_mill.repo_settings import (
+from robotsix_mill.config.repo_settings import (
     load_extra_sandbox_packages,
     load_repo_languages,
     load_repo_smoke_command,
@@ -60,21 +60,21 @@ def test_missing_key_returns_none(tmp_path):
 
 def test_non_mapping_top_level_returns_none(tmp_path, caplog):
     _write_config(tmp_path, "- just\n- a\n- list\n")
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.config.repo_settings"):
         assert load_repo_test_command(tmp_path) is None
     assert any("mapping" in r.message for r in caplog.records)
 
 
 def test_non_string_value_warns_and_returns_none(tmp_path, caplog):
     _write_config(tmp_path, "test_command: 123\n")
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.config.repo_settings"):
         assert load_repo_test_command(tmp_path) is None
     assert any("string" in r.message for r in caplog.records)
 
 
 def test_malformed_yaml_warns_and_returns_none(tmp_path, caplog):
     _write_config(tmp_path, "test_command: [unterminated\n")
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.config.repo_settings"):
         # Must not raise.
         assert load_repo_test_command(tmp_path) is None
     assert any("read/parse error" in r.message for r in caplog.records)
@@ -187,14 +187,14 @@ def test_extra_sandbox_packages_empty_strings_filtered(tmp_path):
 
 def test_extra_sandbox_packages_non_list_warns_and_returns_empty(tmp_path, caplog):
     _write_config(tmp_path, "extra_sandbox_packages: colcon\n")
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.config.repo_settings"):
         assert load_extra_sandbox_packages(tmp_path) == []
     assert any("must be a list" in r.message for r in caplog.records)
 
 
 def test_extra_sandbox_packages_non_list_int_warns(tmp_path, caplog):
     _write_config(tmp_path, "extra_sandbox_packages: 42\n")
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.config.repo_settings"):
         assert load_extra_sandbox_packages(tmp_path) == []
     assert any("must be a list" in r.message for r in caplog.records)
 
@@ -206,14 +206,14 @@ def test_extra_sandbox_packages_non_string_coerced(tmp_path):
 
 def test_extra_sandbox_packages_non_mapping_top_level_returns_empty(tmp_path, caplog):
     _write_config(tmp_path, "- just\n- a\n- list\n")
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.config.repo_settings"):
         assert load_extra_sandbox_packages(tmp_path) == []
     assert any("mapping" in r.message for r in caplog.records)
 
 
 def test_extra_sandbox_packages_malformed_yaml_returns_empty(tmp_path, caplog):
     _write_config(tmp_path, "extra_sandbox_packages: [unterminated\n")
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.config.repo_settings"):
         assert load_extra_sandbox_packages(tmp_path) == []
     assert any("read/parse error" in r.message for r in caplog.records)
 
@@ -246,14 +246,14 @@ def test_smoke_command_empty_value_returns_none(tmp_path):
 
 def test_smoke_command_non_string_warns_and_returns_none(tmp_path, caplog):
     _write_config(tmp_path, "smoke_command: 123\n")
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.config.repo_settings"):
         assert load_repo_smoke_command(tmp_path) is None
     assert any("string" in r.message for r in caplog.records)
 
 
 def test_smoke_command_malformed_yaml_returns_none(tmp_path, caplog):
     _write_config(tmp_path, "smoke_command: [unterminated\n")
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.config.repo_settings"):
         assert load_repo_smoke_command(tmp_path) is None
     assert any("read/parse error" in r.message for r in caplog.records)
 
@@ -294,14 +294,14 @@ def test_smoke_paths_non_string_coerced(tmp_path):
 
 def test_smoke_paths_non_list_warns_and_returns_empty(tmp_path, caplog):
     _write_config(tmp_path, "smoke_paths: src/runtime/**\n")
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.config.repo_settings"):
         assert load_repo_smoke_paths(tmp_path) == []
     assert any("must be a list" in r.message for r in caplog.records)
 
 
 def test_smoke_paths_malformed_yaml_returns_empty(tmp_path, caplog):
     _write_config(tmp_path, "smoke_paths: [unterminated\n")
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.config.repo_settings"):
         assert load_repo_smoke_paths(tmp_path) == []
     assert any("read/parse error" in r.message for r in caplog.records)
 
@@ -313,27 +313,27 @@ def test_smoke_paths_malformed_yaml_returns_empty(tmp_path, caplog):
 
 
 def test_warn_if_deprecated_log_folder_none_repo_dir_no_warn(caplog):
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.config.repo_settings"):
         warn_if_deprecated_log_folder(None)
     assert not any("deployed_log_folder" in r.message for r in caplog.records)
 
 
 def test_warn_if_deprecated_log_folder_missing_file_no_warn(tmp_path, caplog):
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.config.repo_settings"):
         warn_if_deprecated_log_folder(tmp_path)
     assert not any("deployed_log_folder" in r.message for r in caplog.records)
 
 
 def test_warn_if_deprecated_log_folder_absent_key_no_warn(tmp_path, caplog):
     _write_config(tmp_path, "test_command: pytest\n")
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.config.repo_settings"):
         warn_if_deprecated_log_folder(tmp_path)
     assert not any("deployed_log_folder" in r.message for r in caplog.records)
 
 
 def test_warn_if_deprecated_log_folder_present_key_warns(tmp_path, caplog):
     _write_config(tmp_path, "deployed_log_folder: /var/log/app\n")
-    with caplog.at_level(logging.WARNING, logger="robotsix_mill.repo_settings"):
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.config.repo_settings"):
         warn_if_deprecated_log_folder(tmp_path)
     assert any(
         "deployed_log_folder" in r.message and "deprecated" in r.message

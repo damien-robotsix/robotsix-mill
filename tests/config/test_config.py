@@ -43,7 +43,7 @@ def test_default_paths():
     that constructs a bare ``Settings()``.  ``load_yaml_config()``
     is not patched by that fixture and returns the real committed
     defaults."""
-    from robotsix_mill.config_loader import load_yaml_config
+    from robotsix_mill.config.loader import load_yaml_config
 
     cfg = load_yaml_config()
     assert cfg["service"]["data_dir"] == ".data"
@@ -653,7 +653,7 @@ class TestYamlLoading:
     def test_load_yaml_config_returns_nested_dict(self):
         """``load_yaml_config()`` returns a nested dict matching the
         defaults YAML structure when no overlays are present."""
-        from robotsix_mill.config_loader import load_yaml_config
+        from robotsix_mill.config.loader import load_yaml_config
 
         config = load_yaml_config()
         assert isinstance(config, dict)
@@ -666,7 +666,7 @@ class TestYamlLoading:
     def test_load_yaml_config_deep_merges_local_overlay(self, tmp_path, monkeypatch):
         """``load_yaml_config()`` deep-merges a local overlay YAML over
         defaults."""
-        from robotsix_mill.config_loader import load_yaml_config
+        from robotsix_mill.config.loader import load_yaml_config
 
         # Write a temporary local overlay
         local_dir = tmp_path / "config"
@@ -680,7 +680,7 @@ class TestYamlLoading:
         local.write_text("core:\n  limits:\n    max_fix_iterations: 99\n")
 
         # Patch the module-level path to point at our temp dir
-        import robotsix_mill.config_loader as cl
+        import robotsix_mill.config.loader as cl
 
         monkeypatch.setattr(cl, "_DEFAULTS_FILE", defaults)
         monkeypatch.setattr(cl, "_LOCAL_FILE", local)
@@ -693,8 +693,8 @@ class TestYamlLoading:
     def test_load_yaml_config_missing_defaults_raises(self, monkeypatch):
         """``load_yaml_config()`` raises ``ConfigError`` when
         ``mill.defaults.yaml`` is missing."""
-        from robotsix_mill.config_loader import ConfigError, load_yaml_config
-        import robotsix_mill.config_loader as cl
+        from robotsix_mill.config.loader import ConfigError, load_yaml_config
+        import robotsix_mill.config.loader as cl
 
         monkeypatch.setattr(cl, "_DEFAULTS_FILE", cl.Path("/nonexistent/defaults.yaml"))
         with pytest.raises(ConfigError, match="Required config file not found"):
@@ -703,7 +703,7 @@ class TestYamlLoading:
     def test_load_secrets_yaml_returns_populated_dict(self, tmp_path):
         """``load_secrets_yaml()`` returns a populated dict when a valid
         secrets file exists."""
-        from robotsix_mill.config_loader import load_secrets_yaml
+        from robotsix_mill.config.loader import load_secrets_yaml
 
         secrets_file = tmp_path / "secrets.yaml"
         secrets_file.write_text(
@@ -721,14 +721,14 @@ class TestYamlLoading:
     def test_load_secrets_yaml_missing_returns_empty(self):
         """``load_secrets_yaml()`` returns an empty dict when the secrets
         file is missing (not an error)."""
-        from robotsix_mill.config_loader import load_secrets_yaml
+        from robotsix_mill.config.loader import load_secrets_yaml
 
         result = load_secrets_yaml("/nonexistent/secrets.yaml")
         assert result == {}
 
     def test_load_secrets_yaml_malformed_raises(self, tmp_path):
         """``load_secrets_yaml()`` raises ``ConfigError`` on malformed YAML."""
-        from robotsix_mill.config_loader import ConfigError, load_secrets_yaml
+        from robotsix_mill.config.loader import ConfigError, load_secrets_yaml
 
         secrets_file = tmp_path / "bad.yaml"
         secrets_file.write_text("{ invalid: yaml: : }")
@@ -740,7 +740,7 @@ class TestYamlLoading:
     def test_load_yaml_config_empty_config_file(self):
         """``load_yaml_config(config_file="")`` treats explicit empty
         string as "no production file" and does NOT raise."""
-        from robotsix_mill.config_loader import load_yaml_config
+        from robotsix_mill.config.loader import load_yaml_config
 
         result = load_yaml_config(config_file="")
         assert isinstance(result, dict)
@@ -748,8 +748,8 @@ class TestYamlLoading:
 
     def test_load_yaml_config_malformed_defaults_raises(self, tmp_path, monkeypatch):
         """Malformed YAML in the defaults file raises ``ConfigError``."""
-        from robotsix_mill.config_loader import ConfigError, load_yaml_config
-        import robotsix_mill.config_loader as cl
+        from robotsix_mill.config.loader import ConfigError, load_yaml_config
+        import robotsix_mill.config.loader as cl
 
         defaults = tmp_path / "bad_defaults.yaml"
         defaults.write_text("{ invalid: yaml: : }")
@@ -759,8 +759,8 @@ class TestYamlLoading:
 
     def test_load_yaml_config_malformed_local_raises(self, tmp_path, monkeypatch):
         """Malformed YAML in the local overlay raises ``ConfigError``."""
-        from robotsix_mill.config_loader import ConfigError, load_yaml_config
-        import robotsix_mill.config_loader as cl
+        from robotsix_mill.config.loader import ConfigError, load_yaml_config
+        import robotsix_mill.config.loader as cl
         import shutil
 
         local_dir = tmp_path / "config"
@@ -777,8 +777,8 @@ class TestYamlLoading:
     def test_load_yaml_config_three_layer_cascade(self, tmp_path, monkeypatch):
         """Defaults + local + production deep-merge: local overrides
         defaults, production overrides local."""
-        from robotsix_mill.config_loader import load_yaml_config
-        import robotsix_mill.config_loader as cl
+        from robotsix_mill.config.loader import load_yaml_config
+        import robotsix_mill.config.loader as cl
         import shutil
 
         local_dir = tmp_path / "config"
@@ -797,8 +797,8 @@ class TestYamlLoading:
     def test_load_yaml_config_skip_local_with_production(self, tmp_path, monkeypatch):
         """``skip_local=True`` with a production file skips the local
         overlay but includes production."""
-        from robotsix_mill.config_loader import load_yaml_config
-        import robotsix_mill.config_loader as cl
+        from robotsix_mill.config.loader import load_yaml_config
+        import robotsix_mill.config.loader as cl
         import shutil
 
         local_dir = tmp_path / "config"
@@ -820,14 +820,14 @@ class TestYamlLoading:
 
     def test_load_secrets_yaml_empty_string_path(self):
         """``load_secrets_yaml("")`` returns ``{}`` (explicit no-file)."""
-        from robotsix_mill.config_loader import load_secrets_yaml
+        from robotsix_mill.config.loader import load_secrets_yaml
 
         assert load_secrets_yaml("") == {}
 
     def test_load_secrets_yaml_env_var_overrides_default(self, tmp_path, monkeypatch):
         """``MILL_SECRETS_FILE`` env var pointing to a valid temp YAML
         file is used instead of the default ``config/secrets.yaml``."""
-        from robotsix_mill.config_loader import load_secrets_yaml
+        from robotsix_mill.config.loader import load_secrets_yaml
 
         secrets_file = tmp_path / "custom_secrets.yaml"
         secrets_file.write_text("openrouter_api_key: sk-from-env\n")
@@ -936,14 +936,14 @@ class TestLoadReposYaml:
 
     def test_missing_file_returns_empty(self):
         """Missing file → returns empty dict (not an error)."""
-        from robotsix_mill.config_loader import load_repos_yaml
+        from robotsix_mill.config.loader import load_repos_yaml
 
         result = load_repos_yaml("/nonexistent/repos.yaml")
         assert result == {}
 
     def test_malformed_yaml_raises(self, tmp_path):
         """Malformed YAML → raises ``ConfigError`` with file path in message."""
-        from robotsix_mill.config_loader import ConfigError, load_repos_yaml
+        from robotsix_mill.config.loader import ConfigError, load_repos_yaml
 
         bad_file = tmp_path / "bad.yaml"
         bad_file.write_text("{ invalid: yaml: : }")
@@ -953,7 +953,7 @@ class TestLoadReposYaml:
     def test_valid_file_returns_dict(self, tmp_path):
         """Valid YAML → returns dict keyed by repo ID with nested
         ``board_id`` and ``langfuse`` sub-dict."""
-        from robotsix_mill.config_loader import load_repos_yaml
+        from robotsix_mill.config.loader import load_repos_yaml
 
         repos_file = tmp_path / "repos.yaml"
         repos_file.write_text(
@@ -979,7 +979,7 @@ class TestLoadReposYaml:
 
     def test_env_var_overrides_path(self, tmp_path, monkeypatch):
         """``MILL_REPOS_FILE`` env var overrides the default path."""
-        from robotsix_mill.config_loader import load_repos_yaml
+        from robotsix_mill.config.loader import load_repos_yaml
 
         repos_file = tmp_path / "custom.yaml"
         repos_file.write_text(
@@ -998,7 +998,7 @@ class TestLoadReposYaml:
 
     def test_env_var_empty_string_returns_empty(self, monkeypatch):
         """``MILL_REPOS_FILE=""`` returns an empty dict (test-suite mode)."""
-        from robotsix_mill.config_loader import load_repos_yaml
+        from robotsix_mill.config.loader import load_repos_yaml
 
         monkeypatch.setenv("MILL_REPOS_FILE", "")
         result = load_repos_yaml()
@@ -1006,7 +1006,7 @@ class TestLoadReposYaml:
 
     def test_explicit_arg_overrides_env_var(self, tmp_path, monkeypatch):
         """Explicit ``file_path`` arg takes precedence over env var."""
-        from robotsix_mill.config_loader import load_repos_yaml
+        from robotsix_mill.config.loader import load_repos_yaml
 
         explicit_file = tmp_path / "explicit.yaml"
         explicit_file.write_text(
@@ -1029,7 +1029,7 @@ class TestLoadReposYaml:
 
     def test_top_level_meta_block_not_surfaced_as_repo(self, tmp_path):
         """A sibling ``meta:`` block is NOT returned as a repo entry."""
-        from robotsix_mill.config_loader import load_repos_yaml
+        from robotsix_mill.config.loader import load_repos_yaml
 
         repos_file = tmp_path / "repos.yaml"
         repos_file.write_text(
@@ -1050,7 +1050,7 @@ class TestLoadReposYaml:
     def test_legacy_flat_format(self, tmp_path):
         """YAML document without a ``repos:`` top-level key — the
         document itself IS the repo mapping (with ``meta`` filtered out)."""
-        from robotsix_mill.config_loader import load_repos_yaml
+        from robotsix_mill.config.loader import load_repos_yaml
 
         repos_file = tmp_path / "repos.yaml"
         repos_file.write_text(
@@ -1074,7 +1074,7 @@ class TestLoadReposYaml:
     def test_non_dict_repos_value_raises(self, tmp_path):
         """A ``repos:`` key whose value is a string (not a mapping)
         raises ``ConfigError``."""
-        from robotsix_mill.config_loader import ConfigError, load_repos_yaml
+        from robotsix_mill.config.loader import ConfigError, load_repos_yaml
 
         repos_file = tmp_path / "repos.yaml"
         repos_file.write_text("repos: not-a-mapping\n")
@@ -1083,7 +1083,7 @@ class TestLoadReposYaml:
 
     def test_empty_repos_dict(self, tmp_path):
         """``repos: {}`` returns an empty dict (not an error)."""
-        from robotsix_mill.config_loader import load_repos_yaml
+        from robotsix_mill.config.loader import load_repos_yaml
 
         repos_file = tmp_path / "repos.yaml"
         repos_file.write_text("repos: {}\n")
@@ -1095,12 +1095,12 @@ class TestLoadMetaYaml:
     """Tests for ``config_loader.load_meta_yaml``."""
 
     def test_missing_file_returns_empty(self):
-        from robotsix_mill.config_loader import load_meta_yaml
+        from robotsix_mill.config.loader import load_meta_yaml
 
         assert load_meta_yaml("/nonexistent/repos.yaml") == {}
 
     def test_returns_meta_block(self, tmp_path):
-        from robotsix_mill.config_loader import load_meta_yaml
+        from robotsix_mill.config.loader import load_meta_yaml
 
         repos_file = tmp_path / "repos.yaml"
         repos_file.write_text(
@@ -1123,7 +1123,7 @@ class TestLoadMetaYaml:
         }
 
     def test_no_meta_block_returns_empty(self, tmp_path):
-        from robotsix_mill.config_loader import load_meta_yaml
+        from robotsix_mill.config.loader import load_meta_yaml
 
         repos_file = tmp_path / "repos.yaml"
         repos_file.write_text("repos:\n  my-repo:\n    board_id: my-board\n")
@@ -1133,13 +1133,13 @@ class TestLoadMetaYaml:
 
     def test_empty_string_path_returns_empty(self):
         """``load_meta_yaml("")`` returns ``{}`` (explicit no-file)."""
-        from robotsix_mill.config_loader import load_meta_yaml
+        from robotsix_mill.config.loader import load_meta_yaml
 
         assert load_meta_yaml("") == {}
 
     def test_malformed_yaml_raises(self, tmp_path):
         """Malformed YAML raises ``ConfigError``."""
-        from robotsix_mill.config_loader import ConfigError, load_meta_yaml
+        from robotsix_mill.config.loader import ConfigError, load_meta_yaml
 
         repos_file = tmp_path / "repos.yaml"
         repos_file.write_text("{ invalid: yaml: : }")
@@ -1148,7 +1148,7 @@ class TestLoadMetaYaml:
 
     def test_meta_not_dict_returns_empty(self, tmp_path):
         """A ``meta:`` value that is a string (not a mapping) returns ``{}``."""
-        from robotsix_mill.config_loader import load_meta_yaml
+        from robotsix_mill.config.loader import load_meta_yaml
 
         repos_file = tmp_path / "repos.yaml"
         repos_file.write_text(
@@ -1532,7 +1532,7 @@ class TestLoadReposConfig:
 
     def test_get_repo_config_unknown_id(self):
         """``get_repo_config()`` with unknown ID raises ``ConfigError``."""
-        from robotsix_mill.config_loader import ConfigError
+        from robotsix_mill.config.loader import ConfigError
         from robotsix_mill.config import (
             _reset_repos_config,
             get_repo_config,
@@ -1786,7 +1786,7 @@ class TestFactories:
     ):
         """``load_settings()`` applies YAML values when no other source
         sets them."""
-        import robotsix_mill.config_loader as cl
+        import robotsix_mill.config.loader as cl
 
         # Write a temporary defaults file with a non-standard value
         local_dir = tmp_path / "config"
@@ -1817,7 +1817,7 @@ class TestFactories:
 
     def test_load_settings_env_override_yaml(self, tmp_path, monkeypatch):
         """Env vars override YAML defaults in ``load_settings()``."""
-        import robotsix_mill.config_loader as cl
+        import robotsix_mill.config.loader as cl
 
         # Local overlay sets max_fix_iterations=42, but env var says 77
         local_dir = tmp_path / "config"
@@ -1840,7 +1840,7 @@ class TestFactories:
     def test_settings_init_applies_yaml_fallback(self, tmp_path, monkeypatch):
         """``Settings()`` applies YAML when field is at default;
         constructor kwargs override YAML."""
-        import robotsix_mill.config_loader as cl
+        import robotsix_mill.config.loader as cl
 
         local_dir = tmp_path / "config"
         local_dir.mkdir()
@@ -1872,7 +1872,7 @@ class TestFlattenYamlConfig:
 
     def test_flatten_basic_nesting(self):
         """Nested YAML dict is flattened to alias→value pairs."""
-        from robotsix_mill.config_loader import flatten_yaml_config
+        from robotsix_mill.config.loader import flatten_yaml_config
 
         yaml_config = {
             "core": {
@@ -1889,7 +1889,7 @@ class TestFlattenYamlConfig:
     def test_flatten_doc_classifier_diff_max_chars(self):
         """``core.limits.doc_classifier_diff_max_chars`` flattens to the
         ``doc_classifier_diff_max_chars`` Settings alias."""
-        from robotsix_mill.config_loader import flatten_yaml_config
+        from robotsix_mill.config.loader import flatten_yaml_config
 
         yaml_config = {"core": {"limits": {"doc_classifier_diff_max_chars": 1234}}}
         result = flatten_yaml_config(yaml_config)
@@ -1898,7 +1898,7 @@ class TestFlattenYamlConfig:
     def test_flatten_meta_periodic(self):
         """``core.meta_periodic`` / ``core.meta_interval_seconds`` flatten to
         their Settings aliases (enables the daily cross-repo meta pass)."""
-        from robotsix_mill.config_loader import flatten_yaml_config
+        from robotsix_mill.config.loader import flatten_yaml_config
 
         out = flatten_yaml_config(
             {"core": {"meta_periodic": True, "meta_interval_seconds": 86400}}
@@ -1911,7 +1911,7 @@ class TestFlattenYamlConfig:
         ``enable_repo_creation`` Settings alias (gates the new-repo
         scaffold path; without the mapping the YAML key is silently
         ignored and repo creation stays off)."""
-        from robotsix_mill.config_loader import flatten_yaml_config
+        from robotsix_mill.config.loader import flatten_yaml_config
 
         yaml_config = {"core": {"enable_repo_creation": True}}
         result = flatten_yaml_config(yaml_config)
@@ -1919,7 +1919,7 @@ class TestFlattenYamlConfig:
 
     def test_flatten_unknown_paths_ignored(self):
         """YAML paths without a mapping are silently ignored."""
-        from robotsix_mill.config_loader import flatten_yaml_config
+        from robotsix_mill.config.loader import flatten_yaml_config
 
         yaml_config = {
             "core": {
@@ -1932,7 +1932,7 @@ class TestFlattenYamlConfig:
 
     def test_flatten_last_wins_for_duplicate_aliases(self):
         """When two YAML paths map to the same alias, the last one wins."""
-        from robotsix_mill.config_loader import flatten_yaml_config
+        from robotsix_mill.config.loader import flatten_yaml_config
 
         yaml_config = {
             "core": {"models": {"web_research": "model-a"}},
@@ -2001,7 +2001,7 @@ class TestLoadYamlConfigDelegation:
     ``load_yaml_cascade``, returning its result unchanged.
 
     The cascade name is patched on the *consumer* module
-    (``robotsix_mill.config_loader``) — because ``config_loader`` did
+    (``robotsix_mill.config.loader``) — because ``config_loader`` did
     ``from robotsix_yaml_config import load_yaml_cascade``, patching the
     source module ``robotsix_yaml_config.load_yaml_cascade`` would not
     intercept the already-bound name.
@@ -2016,7 +2016,7 @@ class TestLoadYamlConfigDelegation:
 
     def test_default_layers(self):
         from unittest import mock
-        import robotsix_mill.config_loader as cl
+        import robotsix_mill.config.loader as cl
 
         sentinel = {"sentinel": "cascade-result"}
         with mock.patch.object(
@@ -2032,7 +2032,7 @@ class TestLoadYamlConfigDelegation:
 
     def test_skip_local_drops_local_layer(self):
         from unittest import mock
-        import robotsix_mill.config_loader as cl
+        import robotsix_mill.config.loader as cl
 
         sentinel = {"sentinel": "cascade-result"}
         with mock.patch.object(
@@ -2046,7 +2046,7 @@ class TestLoadYamlConfigDelegation:
     def test_config_file_appends_production_layer(self):
         from pathlib import Path
         from unittest import mock
-        import robotsix_mill.config_loader as cl
+        import robotsix_mill.config.loader as cl
 
         sentinel = {"sentinel": "cascade-result"}
         with mock.patch.object(
@@ -2072,13 +2072,13 @@ class TestConfigErrorBackwardCompat:
 
     def test_config_error_subclasses_shared_base(self):
         from robotsix_yaml_config import YamlConfigError
-        from robotsix_mill.config_loader import ConfigError
+        from robotsix_mill.config.loader import ConfigError
 
         assert issubclass(ConfigError, YamlConfigError)
 
     def test_except_config_error_catches_loader_error(self, monkeypatch):
-        from robotsix_mill.config_loader import ConfigError, load_yaml_config
-        import robotsix_mill.config_loader as cl
+        from robotsix_mill.config.loader import ConfigError, load_yaml_config
+        import robotsix_mill.config.loader as cl
 
         # Force the missing-defaults path so the loader raises.
         monkeypatch.setattr(cl, "_DEFAULTS_FILE", cl.Path("/nonexistent/defaults.yaml"))

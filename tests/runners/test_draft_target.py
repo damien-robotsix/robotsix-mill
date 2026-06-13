@@ -13,7 +13,7 @@ import logging
 from types import SimpleNamespace
 
 from robotsix_mill.core.service import TicketService
-from robotsix_mill.draft_target import resolve_mill_service
+from robotsix_mill.core.draft_target import resolve_mill_service
 
 
 def test_resolve_mill_service_unset_target_returns_none(settings, service, caplog):

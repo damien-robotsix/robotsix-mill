@@ -27,8 +27,8 @@ from ..core.service import TicketService
 from ..core.states import State
 from ..core.text_utils import tail_keep
 from ..core.workspace import Workspace
-from ..dedup import _extract_paths, annotate_child_body, find_inflight_overlap
-from ..draft_target import looks_like_mill_internal, resolve_mill_service
+from ..core.dedup import _extract_paths, annotate_child_body, find_inflight_overlap
+from ..core.draft_target import looks_like_mill_internal, resolve_mill_service
 
 log = logging.getLogger("robotsix_mill.pass_runner")
 

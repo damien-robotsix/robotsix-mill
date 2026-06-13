@@ -540,7 +540,7 @@ def _run_epic_reprocess(epic_id: str, comment_body: str, settings) -> None:
         # scope overlaps a recent ticket or an earlier sibling in this
         # batch. Runs after the existing-children title filter above.
         # Best-effort — a failure must not block filing.
-        from ...dedup import annotate_child_body, find_child_overlaps
+        from ...core.dedup import annotate_child_body, find_child_overlaps
 
         overlap_notes = find_child_overlaps(
             svc,

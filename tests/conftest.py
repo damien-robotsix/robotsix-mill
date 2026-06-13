@@ -87,7 +87,7 @@ def _no_dotenv(monkeypatch):
     # Patch _LOCAL_FILE to a nonexistent path so no local overlay
     # leaks into any test, even when Settings.__init__ calls
     # load_yaml_config directly.
-    import robotsix_mill.config_loader as _cl
+    import robotsix_mill.config.loader as _cl
 
     monkeypatch.setattr(_cl, "_LOCAL_FILE", _cl.Path("/nonexistent/mill.local.yaml"))
     for var in (

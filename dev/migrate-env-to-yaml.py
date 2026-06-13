@@ -24,7 +24,7 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 import yaml
-from robotsix_mill.config_loader import (
+from robotsix_mill.config.loader import (
     _YAML_PATH_TO_ALIAS,
     ConfigError,
     load_yaml_config,

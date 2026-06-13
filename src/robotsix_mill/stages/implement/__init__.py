@@ -37,7 +37,7 @@ intercept the real call sites, which reach them through a
 from __future__ import annotations
 
 from ...agents.testing import run_smoke_agent, run_test_agent
-from ...repo_settings import load_repo_smoke_paths
+from ...config.repo_settings import load_repo_smoke_paths
 from ._shared import _FLOOD_SAMPLE_SIZE, _modules_yaml_added_paths
 from .core import ImplementStage
 

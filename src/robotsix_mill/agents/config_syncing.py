@@ -35,7 +35,7 @@ AUTHORITATIVE FILES (read these, in order):
 - ``src/robotsix_mill/config.py`` — the Pydantic ``Settings`` and
   ``Secrets`` classes are the source of truth for what knobs exist.
   Extract every field: name, type, default, and YAML key path (the
-  YAML→env mapping is in ``src/robotsix_mill/config_loader.py``).
+  YAML→env mapping is in ``src/robotsix_mill/config/loader.py``).
 - ``config/mill.defaults.yaml`` — canonical YAML defaults committed
   to the repo. Every model field that has a YAML mapping should
   appear here with a default that matches the model.

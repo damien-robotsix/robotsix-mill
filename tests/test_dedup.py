@@ -1,4 +1,4 @@
-"""Tests for the shared ticket-dedup primitives in ``robotsix_mill.dedup``.
+"""Tests for the shared ticket-dedup primitives in ``robotsix_mill.core.dedup``.
 
 These exercise ``find_prior_matching_ticket`` directly (no runner, no
 LLM): file-path body match, fingerprint title match, recency-window
@@ -20,7 +20,7 @@ from robotsix_mill.core.models import SourceKind, Ticket
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.core.workspace import Workspace
-from robotsix_mill.dedup import (
+from robotsix_mill.core.dedup import (
     _describe_recent_signal,
     _extract_concern_tokens,
     _extract_paths,
@@ -847,7 +847,7 @@ def test_find_prior_returns_none_and_logs_on_exception(settings, monkeypatch, ca
 
     monkeypatch.setattr(svc, "recent_tickets", _boom)
 
-    with caplog.at_level(logging.ERROR, logger="robotsix_mill.dedup"):
+    with caplog.at_level(logging.ERROR, logger="robotsix_mill.core.dedup"):
         result = find_prior_matching_ticket(
             svc, _BOARD, [_TARGET_PATH], "any symptom", settings, _now()
         )
@@ -1053,7 +1053,7 @@ def test_child_overlaps_list_children_failure_non_fatal(settings, monkeypatch, c
 
     monkeypatch.setattr(svc, "list_children", _boom)
 
-    with caplog.at_level(logging.ERROR, logger="robotsix_mill.dedup"):
+    with caplog.at_level(logging.ERROR, logger="robotsix_mill.core.dedup"):
         notes = find_child_overlaps(
             svc,
             "EPIC-1",
@@ -1071,14 +1071,14 @@ def test_child_overlaps_outer_exception_returns_all_none(settings, monkeypatch, 
     """An unexpected failure inside the per-child loop yields an all-None
     result of the correct length so children are still filed (lines
     260-262)."""
-    import robotsix_mill.dedup as dedup_mod
+    import robotsix_mill.core.dedup as dedup_mod
 
     def _boom(*a, **k):
         raise RuntimeError("matcher exploded")
 
     monkeypatch.setattr(dedup_mod, "find_prior_matching_ticket", _boom)
 
-    with caplog.at_level(logging.ERROR, logger="robotsix_mill.dedup"):
+    with caplog.at_level(logging.ERROR, logger="robotsix_mill.core.dedup"):
         notes = find_child_overlaps(
             _svc(settings),
             "EPIC-1",
@@ -1146,7 +1146,7 @@ def test_describe_recent_signal_except_falls_back_to_title_overlap(
 
     monkeypatch.setattr(Workspace, "read_description", _flaky_read)
 
-    with caplog.at_level(logging.ERROR, logger="robotsix_mill.dedup"):
+    with caplog.at_level(logging.ERROR, logger="robotsix_mill.core.dedup"):
         notes = find_child_overlaps(
             _svc(settings),
             "EPIC-1",

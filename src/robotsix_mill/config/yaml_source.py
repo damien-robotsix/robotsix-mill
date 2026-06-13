@@ -34,7 +34,7 @@ class YamlSettingsSource(PydanticBaseSettingsSource):
         raise NotImplementedError
 
     def __call__(self) -> dict[str, Any]:
-        from ..config_loader import flatten_yaml_config, load_yaml_config
+        from .loader import flatten_yaml_config, load_yaml_config
 
         yaml_config = load_yaml_config()
         flat: dict[str, object] = flatten_yaml_config(yaml_config)  # alias → value

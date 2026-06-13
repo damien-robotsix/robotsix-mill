@@ -8,7 +8,7 @@ Cross-references the live source-of-truth objects — never re-parses
 source — to catch config drift that the heuristic ``config_sync`` LLM
 agent would otherwise only notice on its next daily pass:
 
-    * ``robotsix_mill.config_loader._YAML_PATH_TO_ALIAS`` — the
+    * ``robotsix_mill.config.loader._YAML_PATH_TO_ALIAS`` — the
       hand-maintained dotted-YAML-path → Settings field/alias map.
     * ``robotsix_mill.config.Settings`` / ``Secrets`` — the Pydantic-v2
       models (introspected via ``model_fields``).
@@ -191,7 +191,7 @@ def collect_drift() -> list[str]:
     """Load the real on-disk surfaces and run every invariant."""
 
     from robotsix_mill.config import Secrets, Settings
-    from robotsix_mill.config_loader import _YAML_PATH_TO_ALIAS
+    from robotsix_mill.config.loader import _YAML_PATH_TO_ALIAS
 
     with open(_DEFAULTS_YAML, "r", encoding="utf-8") as fh:
         defaults = yaml.safe_load(fh)

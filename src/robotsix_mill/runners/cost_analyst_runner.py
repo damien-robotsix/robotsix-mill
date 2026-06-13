@@ -310,7 +310,7 @@ def _build_cost_digest(settings: Settings) -> str:
 def _existing_title_keys(service: TicketService) -> set[str]:
     """Normalized titles of recent cost-analyst tickets — a backstop against
     re-filing the same proposal the agent already has in recent-proposals."""
-    from ..dedup import normalize
+    from ..core.dedup import normalize
 
     return {
         normalize(t.title)[:60]
@@ -324,7 +324,7 @@ def _file_drafts(
     session_id: str,
     board_id: str,
 ) -> list[dict]:
-    from ..dedup import normalize
+    from ..core.dedup import normalize
 
     service = TicketService(settings, board_id=board_id)
     seen = _existing_title_keys(service)

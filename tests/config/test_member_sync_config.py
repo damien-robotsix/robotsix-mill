@@ -7,7 +7,7 @@ the ``enabled`` flag and ``interval_seconds`` are configurable.
 from __future__ import annotations
 
 from robotsix_mill.config import Settings
-from robotsix_mill.config_loader import flatten_yaml_config
+from robotsix_mill.config.loader import flatten_yaml_config
 
 
 def test_defaults():

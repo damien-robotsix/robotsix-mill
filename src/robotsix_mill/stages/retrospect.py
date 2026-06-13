@@ -24,7 +24,7 @@ from ..core.states import State
 from ..core.text_noop import is_noop_report
 from ..core.text_utils import truncate_at_boundary
 from ..core.workspace import prune_clone
-from ..draft_target import looks_like_mill_internal, resolve_mill_service
+from ..core.draft_target import looks_like_mill_internal, resolve_mill_service
 from ..forge import get_forge
 from ..runtime.tracing import current_session
 from .base import Outcome, Stage, StageContext
@@ -456,7 +456,7 @@ class RetrospectStage(Stage):
         recorded in ``res.findings`` (persisted into retrospect.md).
 
         Reuses the shared
-        :func:`robotsix_mill.dedup.find_agent_md_proposal_overlap` seam
+        :func:`robotsix_mill.core.dedup.find_agent_md_proposal_overlap` seam
         — no second matcher. Best-effort: a dedup-query failure inside
         the helper logs and returns ``None`` (fall through to filing).
         """
@@ -468,7 +468,7 @@ class RetrospectStage(Stage):
 
         from datetime import datetime, timezone
 
-        from ..dedup import find_agent_md_proposal_overlap
+        from ..core.dedup import find_agent_md_proposal_overlap
 
         now = datetime.now(timezone.utc)
         kept: list[dict] = []

@@ -24,7 +24,7 @@ from robotsix_mill.repo_scaffold.member_sync import (
     _member_repo_id,
     sync_workspace_members,
 )
-from robotsix_mill.workspace_members import DetectedMember
+from robotsix_mill.config.workspace_members import DetectedMember
 
 
 # ---------------------------------------------------------------------------

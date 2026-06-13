@@ -17,13 +17,13 @@ import re
 from collections.abc import Collection, Sequence
 from datetime import datetime, timedelta, timezone
 
-from .config import Settings
-from .core.models import SourceKind, Ticket
-from .core.service import TicketService
-from .core.states import State
-from .core.workspace import Workspace
+from ..config import Settings
+from .models import SourceKind, Ticket
+from .service import TicketService
+from .states import State
+from .workspace import Workspace
 
-log = logging.getLogger("robotsix_mill.dedup")
+log = logging.getLogger("robotsix_mill.core.dedup")
 
 
 def normalize(s: str) -> str:
