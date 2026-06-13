@@ -29,6 +29,8 @@ from ...core.models import (
     TicketTransition,
 )
 from ...config import RepoConfig, ReposRegistry, Settings
+from ...config.repos import target_branch_for
+from ...stages.merge import _verify_merge_ancestor
 from ...core.models import Ticket
 from ...core.service import TicketService
 from ...core.states import STAGE_FOR_STATE, State
@@ -606,6 +608,23 @@ def merge_now(
                 raise HTTPException(
                     409, f"merge rejected for {repo_id}: {result['reason']}"
                 )
+            # Verify the merged commit actually reached the repo's target
+            # branch before trusting merge_pr()'s success. A confirmed
+            # non-ancestor blocks the DONE transition (best-effort allow
+            # when there is no local clone or git errors).
+            entry_repo_dir = svc.workspace(ticket).dir / "repos" / repo_id
+            repo_dir = (
+                str(entry_repo_dir) if (entry_repo_dir / ".git").exists() else None
+            )
+            sha = pr.get("sha", "")
+            target = target_branch_for(settings, rc)
+            if not _verify_merge_ancestor(repo_dir, sha, ticket.id, target):
+                raise HTTPException(
+                    409,
+                    f"merge reported success for {repo_id} but commit "
+                    f"{sha[:8] or '(none)'} is not on origin/{target} — "
+                    "refusing to mark done",
+                )
             merged_urls.append(pr.get("url", url))
 
         ticket = svc.transition(
@@ -626,6 +645,21 @@ def merge_now(
     result = forge.merge_pr(source_branch=ticket.branch)
     if not result["merged"]:
         raise HTTPException(409, result["reason"])
+
+    # Verify the merged commit actually reached origin/<target> before
+    # trusting merge_pr()'s success. A confirmed non-ancestor blocks the
+    # DONE transition, leaving the ticket in HUMAN_MR_APPROVAL (best-effort
+    # allow when there is no local clone or git errors).
+    repo = svc.workspace(ticket).repo_dir
+    repo_dir = str(repo) if (repo / ".git").exists() else None
+    sha = pr.get("sha", "")
+    target = target_branch_for(settings, repo_config)
+    if not _verify_merge_ancestor(repo_dir, sha, ticket.id, target):
+        raise HTTPException(
+            409,
+            f"merge reported success but commit {sha[:8] or '(none)'} is not "
+            f"on origin/{target} — refusing to mark done",
+        )
 
     ticket = svc.transition(
         ticket_id,

@@ -1978,6 +1978,59 @@ def test_merge_now_happy_path(client, service, monkeypatch):
     assert "merged via board" in notes
 
 
+def test_merge_now_blocks_when_not_merged_to_mainline(client, service, monkeypatch):
+    """merge-now refuses the DONE transition when the merged commit is
+    not an ancestor of the target branch (forge reported success but the
+    work never reached mainline)."""
+    fake = _FakeForge(merge_result={"merged": True, "reason": "merged"})
+    _patch_forge(monkeypatch, fake)
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.routes._tickets._verify_merge_ancestor",
+        lambda *a, **k: False,
+    )
+
+    t = _to_human_mr_approval(service, "Diverged merge")
+    assert service.get(t.id).state is State.HUMAN_MR_APPROVAL
+
+    r = client.post(f"/tickets/{t.id}/merge-now")
+    assert r.status_code == 409, f"Got {r.status_code}: {r.text}"
+
+    # Ticket stays parked; no DONE transition, no merge note.
+    assert service.get(t.id).state is State.HUMAN_MR_APPROVAL
+    notes = " ".join(e.note or "" for e in service.history(t.id))
+    assert "merged via board" not in notes
+
+
+def test_merge_now_multi_repo_blocks_when_not_merged_to_mainline(
+    client, service, monkeypatch
+):
+    """Multi-repo merge-now refuses the DONE transition when a merged
+    commit is not an ancestor of its repo's target branch."""
+    forge_a = _FakeForge()
+    forge_b = _FakeForge()
+    _patch_multirepo_forge(monkeypatch, {"repo-a": forge_a, "repo-b": forge_b})
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.routes._tickets._verify_merge_ancestor",
+        lambda *a, **k: False,
+    )
+
+    t = _to_human_mr_approval(service, "Multi-repo diverged")
+    _write_pr_urls(
+        service,
+        t,
+        [
+            {"repo_id": "repo-a", "branch": "mill/a", "url": "u-a"},
+            {"repo_id": "repo-b", "branch": "mill/b", "url": "u-b"},
+        ],
+    )
+
+    r = client.post(f"/tickets/{t.id}/merge-now")
+    assert r.status_code == 409, f"Got {r.status_code}: {r.text}"
+    assert service.get(t.id).state is State.HUMAN_MR_APPROVAL
+    notes = " ".join(e.note or "" for e in service.history(t.id))
+    assert "merged via board" not in notes
+
+
 def test_merge_now_wrong_state_409(client, service, monkeypatch):
     """POST /tickets/{id}/merge-now on a non-human_mr_approval ticket
     returns 409."""
@@ -2047,17 +2100,20 @@ def _write_pr_urls(service, ticket, entries):
 def _patch_multirepo_forge(monkeypatch, forges_by_repo):
     """Route per-repo ``get_forge`` calls to per-repo fakes.
 
-    ``_repo_config_for_entry`` is stubbed to return the entry's
-    ``repo_id`` string, which then keys the per-repo forge in the
-    patched ``get_forge``.
+    ``_repo_config_for_entry`` is stubbed to return a tiny RepoConfig-like
+    stand-in carrying the entry's ``repo_id`` (which keys the per-repo
+    forge in the patched ``get_forge``) and an empty ``working_branch`` so
+    ``target_branch_for`` falls back to the default target branch.
     """
+    from types import SimpleNamespace
+
     monkeypatch.setattr(
         "robotsix_mill.stages.merge._repo_config_for_entry",
-        lambda entry: entry["repo_id"],
+        lambda entry: SimpleNamespace(repo_id=entry["repo_id"], working_branch=""),
     )
     monkeypatch.setattr(
         "robotsix_mill.runtime.routes._tickets.get_forge",
-        lambda s, repo_config=None: forges_by_repo[repo_config],
+        lambda s, repo_config=None: forges_by_repo[repo_config.repo_id],
     )
 
 
