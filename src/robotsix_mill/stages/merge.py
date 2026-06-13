@@ -871,6 +871,27 @@ class MergeStage(Stage):
         can merge instead (mirrors the single-repo gate path). Partial merges
         are fine — the next poll continues."""
         s = ctx.settings
+
+        # --- Review feedback check (opt-in): if any repo's PR has a late
+        # CHANGES_REQUESTED review, short-circuit to ADDRESSING_REVIEW before
+        # merging any repo. ---
+        for r in green:
+            try:
+                rc = get_repo_config(r["repo_id"])
+            except ConfigError as e:
+                return Outcome(
+                    State.BLOCKED,
+                    f"unknown repo_id '{r['repo_id']}': {e} — resumable",
+                )
+            review_outcome = self._review_changes_requested_outcome(
+                ticket,
+                ctx,
+                branch=r["branch"],
+                forge=get_forge(s, repo_config=rc),
+            )
+            if review_outcome is not None:
+                return review_outcome
+
         eligible, reason = self._auto_merge_eligible(ticket, ctx)
         if not eligible:
             self._maybe_comment(
@@ -910,6 +931,73 @@ class MergeStage(Stage):
         # Next poll sees all PRs merged → DONE.
         return Outcome(ticket.state)
 
+    def _review_changes_requested_outcome(
+        self, ticket: Ticket, ctx: StageContext, *, branch: str, forge: Forge
+    ) -> Outcome | None:
+        """Return ``Outcome(ADDRESSING_REVIEW, ...)`` when the forge reports a
+        CHANGES_REQUESTED review with at least one comment for ``branch``;
+        else ``None``. Guarded by ``ctx.settings.review_feedback_enabled``.
+        Persists ``artifacts/review_feedback.json`` before routing.
+
+        Transient-tolerant: a ``pr_review_status`` exception logs a warning
+        and is treated as ``None`` (no gate this poll). A CHANGES_REQUESTED
+        review with an empty comment list AND an empty body is a no-op
+        (log + return ``None``); if the body is non-empty, one comment is
+        synthesized from it so the review still routes to ADDRESSING_REVIEW.
+        """
+        if not ctx.settings.review_feedback_enabled:
+            return None
+        try:
+            review_status = forge.pr_review_status(source_branch=branch)
+        except Exception as e:  # noqa: BLE001 — transient
+            log.warning("%s: pr_review_status failed (retry): %s", ticket.id, e)
+            return None
+
+        if review_status is None or review_status.get("state") != "CHANGES_REQUESTED":
+            return None
+
+        comments = review_status.get("comments", [])
+        if not comments:
+            body = (review_status.get("body") or "").strip()
+            if not body:
+                # CHANGES_REQUESTED with neither comments nor a review body —
+                # nothing actionable to hand the revision agent. Treat as a
+                # no-op so an auto-merge poll proceeds.
+                log.info(
+                    "%s: changes requested with empty body — treating as no-op",
+                    ticket.id,
+                )
+                return None
+            # EMPTY comments list but a non-empty review body — still
+            # actionable: a human blocked the merge. Synthesize ONE comment
+            # from the review body (path='', line=None) so the revision agent
+            # has something to act on, rather than silently dropping it.
+            review_status["comments"] = comments = [
+                {
+                    "body": body,
+                    "path": "",
+                    "line": None,
+                    "review_state": "CHANGES_REQUESTED",
+                }
+            ]
+
+        # Persist the review comments as an artifact so the agent can
+        # read them even if the forge becomes unreachable on the next poll.
+        artifact_dir = ctx.service.workspace(ticket).artifacts_dir
+        review_json = json.dumps(review_status, indent=2)
+        artifact_dir.joinpath("review_feedback.json").write_text(
+            review_json, encoding="utf-8"
+        )
+        log.info(
+            "%s: human requested changes (%d comments) → ADDRESSING_REVIEW",
+            ticket.id,
+            len(comments),
+        )
+        return Outcome(
+            State.ADDRESSING_REVIEW,
+            f"Reviewer requested changes with {len(comments)} comment(s)",
+        )
+
     def _handle_human_mr_approval(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Poll PR status from HUMAN_MR_APPROVAL: merged/closed/conflicting/CI/auto-merge."""
         s = ctx.settings
@@ -939,53 +1027,14 @@ class MergeStage(Stage):
             )
 
         # --- Review feedback check (opt-in, gated by config flag) ---
-        if s.review_feedback_enabled:
-            try:
-                review_status = get_forge(
-                    s, repo_config=ctx.repo_config
-                ).pr_review_status(source_branch=branch)
-            except Exception as e:  # noqa: BLE001 — transient
-                log.warning("%s: pr_review_status failed (retry): %s", ticket.id, e)
-                review_status = None
-
-            if (
-                review_status is not None
-                and review_status.get("state") == "CHANGES_REQUESTED"
-            ):
-                # Persist the review comments as an artifact so the agent can
-                # read them even if the forge becomes unreachable on the next poll.
-                comments = review_status.get("comments", [])
-                if not comments:
-                    # CHANGES_REQUESTED with an EMPTY comments list — a review
-                    # that requests changes but carries no inline comments and
-                    # no surviving body comment. This is still actionable: a
-                    # human blocked the merge. Synthesize ONE comment from the
-                    # review body (path='', line=None) so the revision agent
-                    # has something to act on, rather than silently dropping it.
-                    body = (review_status.get("body") or "").strip()
-                    review_status["comments"] = comments = [
-                        {
-                            "body": body
-                            or "Reviewer requested changes without leaving comments.",
-                            "path": "",
-                            "line": None,
-                            "review_state": "CHANGES_REQUESTED",
-                        }
-                    ]
-                artifact_dir = ctx.service.workspace(ticket).artifacts_dir
-                review_json = json.dumps(review_status, indent=2)
-                artifact_dir.joinpath("review_feedback.json").write_text(
-                    review_json, encoding="utf-8"
-                )
-                log.info(
-                    "%s: human requested changes (%d comments) → ADDRESSING_REVIEW",
-                    ticket.id,
-                    len(comments),
-                )
-                return Outcome(
-                    State.ADDRESSING_REVIEW,
-                    f"Reviewer requested changes with {len(comments)} comment(s)",
-                )
+        review_outcome = self._review_changes_requested_outcome(
+            ticket,
+            ctx,
+            branch=branch,
+            forge=get_forge(s, repo_config=ctx.repo_config),
+        )
+        if review_outcome is not None:
+            return review_outcome
 
         # PR is open.  Check mergeability.
         mergeable = pr.get("mergeable")
@@ -1238,6 +1287,17 @@ class MergeStage(Stage):
             return Outcome(
                 State.IMPLEMENT_COMPLETE, "PR is now conflicting; gates no longer pass"
             )
+
+        # --- Review feedback check (opt-in): a late CHANGES_REQUESTED must
+        # short-circuit to ADDRESSING_REVIEW before any auto-merge. ---
+        review_outcome = self._review_changes_requested_outcome(
+            ticket,
+            ctx,
+            branch=branch,
+            forge=get_forge(s, repo_config=ctx.repo_config),
+        )
+        if review_outcome is not None:
+            return review_outcome
 
         # Check CI.
         try:
