@@ -955,25 +955,36 @@ class MergeStage(Stage):
                 # Persist the review comments as an artifact so the agent can
                 # read them even if the forge becomes unreachable on the next poll.
                 comments = review_status.get("comments", [])
-                if comments:
-                    artifact_dir = ctx.service.workspace(ticket).artifacts_dir
-                    review_json = json.dumps(review_status, indent=2)
-                    artifact_dir.joinpath("review_feedback.json").write_text(
-                        review_json, encoding="utf-8"
-                    )
-                    log.info(
-                        "%s: human requested changes (%d comments) → ADDRESSING_REVIEW",
-                        ticket.id,
-                        len(comments),
-                    )
-                    return Outcome(
-                        State.ADDRESSING_REVIEW,
-                        f"Reviewer requested changes with {len(comments)} comment(s)",
-                    )
-                # CHANGES_REQUESTED but no comments — treat as no-op (empty review body).
+                if not comments:
+                    # CHANGES_REQUESTED with an EMPTY comments list — a review
+                    # that requests changes but carries no inline comments and
+                    # no surviving body comment. This is still actionable: a
+                    # human blocked the merge. Synthesize ONE comment from the
+                    # review body (path='', line=None) so the revision agent
+                    # has something to act on, rather than silently dropping it.
+                    body = (review_status.get("body") or "").strip()
+                    review_status["comments"] = comments = [
+                        {
+                            "body": body
+                            or "Reviewer requested changes without leaving comments.",
+                            "path": "",
+                            "line": None,
+                            "review_state": "CHANGES_REQUESTED",
+                        }
+                    ]
+                artifact_dir = ctx.service.workspace(ticket).artifacts_dir
+                review_json = json.dumps(review_status, indent=2)
+                artifact_dir.joinpath("review_feedback.json").write_text(
+                    review_json, encoding="utf-8"
+                )
                 log.info(
-                    "%s: changes requested with empty body — treating as no-op",
+                    "%s: human requested changes (%d comments) → ADDRESSING_REVIEW",
                     ticket.id,
+                    len(comments),
+                )
+                return Outcome(
+                    State.ADDRESSING_REVIEW,
+                    f"Reviewer requested changes with {len(comments)} comment(s)",
                 )
 
         # PR is open.  Check mergeability.
