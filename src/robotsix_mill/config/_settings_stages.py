@@ -242,6 +242,13 @@ class _StagesSettings(BaseModel):
     # leaves ample room for spec + prior context + preseed + tools + the
     # output reservation. 0 disables the cap.
     review_diff_max_chars: int = Field(default=200_000, ge=0)
+    # Output token budget for the review agent retry when the primary
+    # attempt exhausts its max_tokens before generating a response
+    # (the reasoning model burns output tokens on internal reasoning).
+    # This is the *retry* budget; the primary attempt uses the YAML
+    # max_tokens. Set higher than the YAML max_tokens. 0 disables the
+    # output-exhaustion retry (falls straight to NEEDS_DISCUSSION).
+    review_output_token_budget: int = Field(default=65536, ge=0)
     # How many model requests the scope-triage agent may make per
     # invocation (main call + any tool calls). Default 8: the agent is
     # tool-less, but structured-output retries (schema mismatch, output

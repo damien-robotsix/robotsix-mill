@@ -474,10 +474,11 @@ def test_real_review_yaml_has_max_tokens_cap():
         ad = load_agent_definition(p)
         assert ad.name == "review"
         assert ad.max_tokens is not None
-        assert ad.max_tokens == 8192
+        assert ad.max_tokens == 32768
         # Sanity: present and within a tunable-but-bounded range that
-        # stays above legitimate verdicts and below the observed runaway.
-        assert 2048 <= ad.max_tokens <= 12288
+        # stays above legitimate verdicts (including reasoning overhead)
+        # and below the observed runaway.
+        assert 16384 <= ad.max_tokens <= 65536
     finally:
         # Don't leak the env var if it wasn't set before.
         if not had_model:

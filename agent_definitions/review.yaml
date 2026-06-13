@@ -18,22 +18,16 @@ reply_to_thread: false
 output_type: ReviewVerdict
 retries: 2
 # Hard output-token cap backstopping runaway prose-narrative generations.
-# The conciseness directives in the system_prompt are prompt-only and have
-# proven insufficient: trace a2df28bd / generation 61e63af1 emitted a
-# 16,789-token review (only 298 input tokens, $0.32 — 3.0x the median),
-# dominated by inline self-talk and diff re-summarization instead of a
-# structured ReviewVerdict. 8192 sits far above any legitimate verdict (a
-# <200-word `comments` justification plus a handful of `request_changes`
-# entries and the JSON envelope) yet roughly half the observed runaway, so
-# it clips genuine runaways while leaving legitimate output untouched.
-# Do NOT set this aggressively low: the `reprompt_if_unstructured` guard
-# (structured_output_guard.py) re-fires a full second inference when
-# `result.output` is a raw string >=10K chars. A cap that truncates a
-# legitimate reasoning+verdict mid-stream into a broken >10K fragment would
-# trip that guard, paying 2x output tokens and degrading to
-# NEEDS_DISCUSSION (human triage). 8192 stays above legitimate output and
-# below the runaway, avoiding both runaway cost and truncation double-billing.
-max_tokens: 8192
+# The DeepSeek reasoning model burns output tokens on internal reasoning
+# BEFORE emitting the structured verdict — so the budget must accommodate
+# both reasoning and the final response. 8192 was chosen pre-reasoner and
+# proved insufficient (trace bdd6445437c8e8f4db73bd5e3af1cab2): the model
+# exhausted the entire budget on reasoning and never emitted a verdict.
+# 32768 is ~4x the old cap, well above legitimate reasoning+verdict output
+# (~2-8K tokens observed) yet still well below genuine runaways (~16K+).
+# The retry ladder in reviewing.py can push further via
+# ``review_output_token_budget`` when output exhaustion is detected.
+max_tokens: 32768
 module: reviewing
 skills: []
 

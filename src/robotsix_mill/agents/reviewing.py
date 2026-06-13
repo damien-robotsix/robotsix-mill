@@ -125,11 +125,22 @@ _TOKEN_LIMIT_SIGNALS = (
     "tokens requested",
 )
 
+_OUTPUT_TOKEN_EXHAUSTION_SIGNALS = (
+    "before any response was generated",
+)
+
 
 def _is_token_limit_error(exc: BaseException) -> bool:
     """True when *exc*'s message matches a known token-limit signal."""
     msg = str(exc).lower()
     return any(sig in msg for sig in _TOKEN_LIMIT_SIGNALS)
+
+
+def _is_output_token_exhaustion(exc: BaseException) -> bool:
+    """True when *exc* indicates output-token exhaustion (max_tokens too
+    low for reasoning output), NOT input context overflow."""
+    msg = str(exc).lower()
+    return any(sig in msg for sig in _OUTPUT_TOKEN_EXHAUSTION_SIGNALS)
 
 
 def run_review_agent(
@@ -237,6 +248,7 @@ def run_review_agent(
             diff_text: str,
             use_preseed: bool,
             note: str | None,
+            max_tokens_override: int | None = None,
         ) -> object:
             """Build the prompt and run one review pass, returning the
             agent's (possibly re-prompted) output. Raises on token-limit
@@ -249,7 +261,10 @@ def run_review_agent(
             user_prompt += (
                 section("ticket-spec", spec) + "\n\n" + section("git-diff", diff_text)
             )
-            run_kwargs: dict = {"usage_limits": limits}
+            run_kwargs: dict[str, Any] = {"usage_limits": limits}
+            if max_tokens_override is not None:
+                from pydantic_ai.settings import ModelSettings
+                run_kwargs["model_settings"] = ModelSettings(max_tokens=max_tokens_override)
             run_user_prompt: str | list[Any] | None = user_prompt
             # Build the synthetic message_history AFTER the user_prompt is
             # finalized so the prompt can be prepended cleanly BEFORE the
@@ -512,6 +527,51 @@ def _run_with_degraded_retry(
     except Exception as exc:
         if not _is_token_limit_error(exc):
             raise
+        # Output-token exhaustion: the model burned its entire max_tokens
+        # budget on reasoning before emitting a verdict.  Retry with
+        # increased max_tokens (same untruncated diff, same preseed).
+        if _is_output_token_exhaustion(exc):
+            output_budget = settings.review_output_token_budget
+            if output_budget > 0:
+                log.warning(
+                    "review: output-token exhaustion (%s); retrying with "
+                    "increased max_tokens=%d (diff unchanged)",
+                    exc, output_budget,
+                )
+                try:
+                    return attempt(
+                        diff_text=diff,
+                        use_preseed=True,
+                        note=None,
+                        max_tokens_override=output_budget,
+                    )
+                except Exception as exc2:
+                    if not _is_token_limit_error(exc2):
+                        raise
+                    log.warning(
+                        "review: output-token exhaustion persists after "
+                        "budget increase (%s); returning NEEDS_DISCUSSION",
+                        exc2,
+                    )
+            else:
+                log.warning(
+                    "review: output-token exhaustion (%s) but "
+                    "review_output_token_budget=0; returning NEEDS_DISCUSSION",
+                    exc,
+                )
+            return ReviewVerdict(
+                verdict="NEEDS_DISCUSSION",
+                comments=(
+                    "The review model exhausted its output token budget "
+                    f"(max_tokens={output_budget or 'agent-default'}) before "
+                    "generating a verdict — its reasoning output consumed the "
+                    "entire budget. This is NOT a context-window overflow (the "
+                    "diff was within limits). An automated verdict is unavailable "
+                    "— a human should review this PR directly, or the review "
+                    "model's max_tokens should be raised further."
+                ),
+                auto_merge_eligible=False,
+            )
         log.warning(
             "review: context-window/token-limit error (%s); retrying with "
             "chunked per-file review",
