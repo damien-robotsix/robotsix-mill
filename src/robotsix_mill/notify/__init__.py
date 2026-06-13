@@ -13,9 +13,9 @@ import logging
 
 import httpx
 
-from .config import Settings, get_secrets
-from .core.models import Ticket
-from .core.states import State
+from ..config import Settings, get_secrets
+from ..core.models import Ticket
+from ..core.states import State
 
 log = logging.getLogger("robotsix_mill.notify")
 
@@ -66,7 +66,7 @@ def send_notification(
         f"Board: {settings.api_url}"
     )
 
-    from .agents.retry import call_with_retry
+    from ..agents.retry import call_with_retry
 
     def _post() -> None:
         r = httpx.post(url, headers=headers, content=body, timeout=_TIMEOUT)
