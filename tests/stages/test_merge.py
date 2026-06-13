@@ -570,6 +570,92 @@ def test_human_mr_approval_ci_failing_falls_back_to_implement_complete(
     assert "gates no longer pass" in out.note
 
 
+# --- HUMAN_MR_APPROVAL: CHANGES_REQUESTED review submitted while parked ---
+
+
+def test_human_mr_approval_changes_requested_while_parked_routes_to_addressing_review(
+    tmp_path, monkeypatch
+):
+    """A reviewer who submits CHANGES_REQUESTED *after* the ticket is parked at
+    HUMAN_MR_APPROVAL must be detected on a later poll and routed to
+    ADDRESSING_REVIEW — not silently ignored."""
+    ctx = _gh(tmp_path, review_feedback_enabled="true")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_review_status",
+        lambda self, *, source_branch: {
+            "state": "CHANGES_REQUESTED",
+            "comments": [
+                {
+                    "body": "data-loss bug here",
+                    "path": "ci_fix.py",
+                    "line": 429,
+                    "review_state": "CHANGES_REQUESTED",
+                }
+            ],
+            "files": ["ci_fix.py"],
+        },
+    )
+    t = _human_mr_approval(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.ADDRESSING_REVIEW
+    # The review comments are persisted so the revision agent can read them.
+    review_json = ctx.service.workspace(t).artifacts_dir / "review_feedback.json"
+    assert review_json.exists()
+    persisted = json.loads(review_json.read_text(encoding="utf-8"))
+    assert persisted["state"] == "CHANGES_REQUESTED"
+    assert persisted["comments"][0]["path"] == "ci_fix.py"
+
+
+def test_human_mr_approval_body_only_changes_requested_is_actionable(
+    tmp_path, monkeypatch
+):
+    """A CHANGES_REQUESTED review with only a summary body (no inline comments,
+    synthesized as path='' / line=None) is actionable — not dropped as a no-op."""
+    ctx = _gh(tmp_path, review_feedback_enabled="true")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_review_status",
+        lambda self, *, source_branch: {
+            "state": "CHANGES_REQUESTED",
+            "comments": [
+                {
+                    "body": "Please rework the whole approach.",
+                    "path": "",
+                    "line": None,
+                    "review_state": "CHANGES_REQUESTED",
+                }
+            ],
+            "files": [],
+        },
+    )
+    t = _human_mr_approval(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.ADDRESSING_REVIEW
+    review_json = ctx.service.workspace(t).artifacts_dir / "review_feedback.json"
+    assert review_json.exists()
+
+
 # --- REBASING path: clean rebase → IMPLEMENT_COMPLETE ---
 
 
