@@ -590,8 +590,8 @@ modules:
       docker compose build/up, and deployed-SHA recording.  Consumed by
       thin bash wrappers in ``dev/``.
     paths:
-      - src/robotsix_mill/autoupdate.py
-      - tests/test_autoupdate.py
+      - src/robotsix_mill/autoupdate/**/*.py
+      - tests/autoupdate/**/*.py
     dependencies: []
 
   # -------------------------------------------------------------------
