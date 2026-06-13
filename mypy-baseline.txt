@@ -405,7 +405,6 @@ src/robotsix_mill/agents/explore.py:0: error: Argument 5 to "run_explore" has in
 src/robotsix_mill/agents/explore.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/robotsix_mill/agents/scope_triage.py:0: error: Returning Any from function declared to return "ScopeTriageVerdict"  [no-any-return]
 src/robotsix_mill/agents/reviewing.py:0: error: Missing type arguments for generic type "list"  [type-arg]
-src/robotsix_mill/agents/reviewing.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/agents/review_revision.py:0: error: Returning Any from function declared to return "ReviewRevisionResult"  [no-any-return]
 src/robotsix_mill/agents/retrospecting.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/agents/retrospecting.py:0: error: Function is missing a type annotation  [no-untyped-def]
