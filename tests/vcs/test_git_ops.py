@@ -1253,9 +1253,6 @@ class TestReconcileWithRemotePr:
         # Push the feature branch so it exists on the remote.
         git_ops.push(dest, "feature", remote, token=None)
 
-        # Capture the local HEAD before the human push.
-        local_before = git_ops.head_sha(dest)
-
         # Simulate a human pushing to the same branch from another clone.
         pusher = tmp_path / "pusher"
         subprocess.run(
