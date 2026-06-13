@@ -558,7 +558,7 @@ modules:
       scripts after clone and before agent execution in refine and
       implement stages, with controlled timeout and error handling.
     paths:
-      - src/robotsix_mill/hooks.py
+      - src/robotsix_mill/hooks/__init__.py
       - tests/hooks/test_hooks.py
     dependencies: []
 

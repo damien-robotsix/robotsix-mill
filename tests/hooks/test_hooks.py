@@ -1,4 +1,4 @@
-"""Tests for ``src/robotsix_mill/hooks.py``."""
+"""Tests for ``src/robotsix_mill/hooks/__init__.py``."""
 
 import stat
 from pathlib import Path
