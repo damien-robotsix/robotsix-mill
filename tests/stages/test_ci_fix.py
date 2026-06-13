@@ -109,7 +109,7 @@ def test_fix_success_push_success_returns_implement_complete(tmp_path, monkeypat
         push_seen.update(branch=branch, token=token)
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push",
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
         fake_push,
     )
 
@@ -158,7 +158,7 @@ def test_fix_success_no_change_hits_ceiling_blocks(tmp_path, monkeypatch):
         push_seen.append(branch)
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push",
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
         fake_push,
     )
     # Simulate no-change: local HEAD == remote HEAD.
@@ -218,7 +218,7 @@ def test_fix_success_with_changes_resets_no_change_counter(tmp_path, monkeypatch
         push_seen.append(branch)
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push",
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
         fake_push,
     )
 
@@ -296,7 +296,7 @@ def test_max_auto_retries_zero_disables_ceiling(tmp_path, monkeypatch):
         push_seen.append(branch)
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push",
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
         fake_push,
     )
     # Simulate no-change: local HEAD == remote HEAD.
@@ -357,7 +357,7 @@ def test_churn_loop_bounded_by_max_cycles(tmp_path, monkeypatch):
         fake_agent,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push",
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
         lambda *a, **k: None,
     )
     # Simulate a fresh churn commit every cycle: local != remote, so both
@@ -417,7 +417,7 @@ def test_cycle_counter_resets_on_ci_green(tmp_path, monkeypatch):
         lambda **k: CiFixResult(status="DONE", summary="ok"),
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push",
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
         lambda *a, **k: None,
     )
     monkeypatch.setattr(
@@ -478,7 +478,7 @@ def test_max_cycles_zero_disables_ceiling(tmp_path, monkeypatch):
         fake_agent,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push",
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
         lambda *a, **k: None,
     )
     monkeypatch.setattr(
@@ -544,7 +544,7 @@ def test_fix_success_push_failure_blocks(tmp_path, monkeypatch):
         lambda **k: CiFixResult(status="DONE", summary="ok"),
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push",
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
         lambda **k: (_ for _ in ()).throw(RuntimeError("remote rejected")),
     )
 
@@ -586,7 +586,7 @@ def test_fix_failure_retries_next_poll(tmp_path, monkeypatch):
     def fake_push(*a, **k):
         push_calls.append(1)
 
-    monkeypatch.setattr("robotsix_mill.stages.ci_fix.git_ops.push", fake_push)
+    monkeypatch.setattr("robotsix_mill.stages.ci_fix.git_ops.push_with_lease", fake_push)
 
     t = _fixing_ci(ctx)
     _setup_repo(ctx, t)
@@ -624,7 +624,7 @@ def test_fix_failure_exhausted_blocks(tmp_path, monkeypatch):
         lambda **k: CiFixResult(status="FAILED", summary="nope"),
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push",
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
         lambda **k: None,
     )
 
@@ -746,7 +746,7 @@ def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
     def fake_push(repo, branch, remote_url, token):
         push_args.update(branch=branch, remote_url=remote_url, token=token)
 
-    monkeypatch.setattr("robotsix_mill.stages.ci_fix.git_ops.push", fake_push)
+    monkeypatch.setattr("robotsix_mill.stages.ci_fix.git_ops.push_with_lease", fake_push)
 
     t = _fixing_ci(ctx)
     _setup_repo(ctx, t)
@@ -850,7 +850,7 @@ def test_counter_location_is_artifacts_dir(tmp_path, monkeypatch):
         lambda **k: CiFixResult(status="FAILED", summary="nope"),
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push",
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
         lambda **k: None,
     )
 
@@ -996,7 +996,7 @@ def test_ci_fix_stage_fetches_job_logs_on_failure(tmp_path, monkeypatch):
     )
     # push succeeds.
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push",
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
         lambda *a, **k: None,
     )
 
@@ -1151,7 +1151,7 @@ def test_all_in_diff_alerts_suppress_dependency_fixer(tmp_path, monkeypatch):
     )
     push_calls = []
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push",
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
         lambda *a, **k: push_calls.append(1),
     )
 
@@ -1228,7 +1228,7 @@ def test_alerts_in_added_files_classify_in_scope_no_spawn(tmp_path, monkeypatch)
     )
     push_calls = []
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push",
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
         lambda *a, **k: push_calls.append(1),
     )
 
@@ -1255,7 +1255,7 @@ def test_out_of_scope_description_names_untouched_alert(tmp_path, monkeypatch):
         lambda **k: _oos_result(),
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push",
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
         lambda *a, **k: None,
     )
 
@@ -1282,7 +1282,7 @@ def test_out_of_scope_spawns_fix_ticket_and_parks(tmp_path, monkeypatch):
     )
     push_calls = []
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push",
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
         lambda *a, **k: push_calls.append(1),
     )
 
@@ -1319,7 +1319,7 @@ def test_out_of_scope_is_idempotent_across_cycles(tmp_path, monkeypatch):
         lambda **k: _oos_result(),
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push",
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
         lambda *a, **k: None,
     )
 
@@ -1345,7 +1345,7 @@ def test_out_of_scope_fix_done_auto_resumes_original(tmp_path, monkeypatch):
         lambda **k: _oos_result(),
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push",
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
         lambda *a, **k: None,
     )
 
@@ -1376,7 +1376,7 @@ def test_in_scope_done_still_pushes_no_fix_ticket(tmp_path, monkeypatch):
     )
     push_calls = []
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push",
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
         lambda *a, **k: push_calls.append(1),
     )
 
@@ -1433,7 +1433,7 @@ def test_out_of_scope_stale_branch_refreshes_no_spawn(tmp_path, monkeypatch):
     )
     push_calls = []
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push",
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
         lambda *a, **k: push_calls.append(1),
     )
 
@@ -1491,7 +1491,7 @@ def test_out_of_scope_clean_branch_spawns_fix(tmp_path, monkeypatch):
         lambda **k: _oos_result(),
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push",
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
         lambda *a, **k: None,
     )
 
@@ -1541,7 +1541,7 @@ def test_out_of_scope_stale_branch_refresh_capped_at_one(tmp_path, monkeypatch):
         lambda **k: _oos_result(),
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push",
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
         lambda *a, **k: None,
     )
 

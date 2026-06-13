@@ -593,7 +593,7 @@ def test_rebasing_clean_rebase_returns_to_implement_complete(tmp_path, monkeypat
         push_calls.update(branch=branch, remote_url=remote_url)
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push",
+        "robotsix_mill.stages.merge.git_ops.push_with_lease",
         fake_push,
     )
 
@@ -660,7 +660,7 @@ def test_rebasing_push_targets_per_repo_remote(tmp_path, monkeypatch):
     def fake_push(repo, branch, remote_url, token):
         push_calls.update(branch=branch, remote_url=remote_url)
 
-    monkeypatch.setattr("robotsix_mill.stages.merge.git_ops.push", fake_push)
+    monkeypatch.setattr("robotsix_mill.stages.merge.git_ops.push_with_lease", fake_push)
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
@@ -706,7 +706,7 @@ def test_rebasing_success_no_pr_routes_to_ready(tmp_path, monkeypatch):
         push_calls.update(branch=branch, remote_url=remote_url)
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push",
+        "robotsix_mill.stages.merge.git_ops.push_with_lease",
         fake_push,
     )
 
@@ -752,7 +752,7 @@ def test_rebasing_noop_skips_force_push(tmp_path, monkeypatch):
     )
     pushed = []
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push",
+        "robotsix_mill.stages.merge.git_ops.push_with_lease",
         lambda repo, branch, remote_url, token: pushed.append(branch),
     )
 
@@ -789,7 +789,7 @@ def test_rebasing_noop_blocks_after_max_attempts(tmp_path, monkeypatch):
         lambda repo, branch: sha,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push",
+        "robotsix_mill.stages.merge.git_ops.push_with_lease",
         lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not push")),
     )
 
@@ -871,7 +871,7 @@ def test_rebasing_exhausted_blocks(tmp_path, monkeypatch):
         push_called.append(1)
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push",
+        "robotsix_mill.stages.merge.git_ops.push_with_lease",
         fake_push,
     )
 
@@ -922,7 +922,7 @@ def test_implement_complete_to_rebasing_and_back(tmp_path, monkeypatch):
         push_calls.update(branch=branch, remote_url=remote_url)
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push",
+        "robotsix_mill.stages.merge.git_ops.push_with_lease",
         fake_push,
     )
 
@@ -1056,7 +1056,7 @@ def test_no_force_push_on_rebase_failure(tmp_path, monkeypatch):
         push_called.append(1)
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push",
+        "robotsix_mill.stages.merge.git_ops.push_with_lease",
         fake_push,
     )
 
@@ -1089,7 +1089,7 @@ def test_push_failure_after_rebase_success_blocks(tmp_path, monkeypatch):
         raise RuntimeError("remote rejected")
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push",
+        "robotsix_mill.stages.merge.git_ops.push_with_lease",
         boom_push,
     )
 
@@ -1144,7 +1144,7 @@ def test_rebase_counter_resets_only_when_pr_becomes_mergeable(tmp_path, monkeypa
         pass
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push",
+        "robotsix_mill.stages.merge.git_ops.push_with_lease",
         fake_push,
     )
 
@@ -1202,7 +1202,7 @@ def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
         push_args.update(branch=branch, remote_url=remote_url, token=token)
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push",
+        "robotsix_mill.stages.merge.git_ops.push_with_lease",
         fake_push,
     )
 
@@ -1251,7 +1251,7 @@ def test_rebase_force_push_uses_minted_token_not_raw_forge_token(tmp_path, monke
     )
     seen = {}
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push",
+        "robotsix_mill.stages.merge.git_ops.push_with_lease",
         lambda repo, branch, remote_url, token: seen.update(token=token),
     )
 
@@ -1464,7 +1464,9 @@ def test_closed_pr_skips_check_status(tmp_path, monkeypatch):
 
 
 def test_fetch_called_before_rebase_agent(tmp_path, monkeypatch):
-    """git_ops.fetch is called before run_rebase_agent in _handle_conflict."""
+    """git_ops.fetch is called (twice) before run_rebase_agent in
+    _handle_conflict: once by reconcile_with_remote_pr for the PR
+    branch, once for the target branch."""
     ctx = _gh(tmp_path)
     calls = []
 
@@ -1484,7 +1486,7 @@ def test_fetch_called_before_rebase_agent(tmp_path, monkeypatch):
         fake_rebase,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push",
+        "robotsix_mill.stages.merge.git_ops.push_with_lease",
         lambda *a, **k: None,
     )
 
@@ -1494,7 +1496,9 @@ def test_fetch_called_before_rebase_agent(tmp_path, monkeypatch):
     (repo_dir / ".git").mkdir(exist_ok=True)
 
     MergeStage().run(t, ctx)
-    assert calls == ["fetch", "agent"]
+    # reconcile_with_remote_pr → fetch (PR branch),
+    # then fetch (target branch), then agent.
+    assert calls == ["fetch", "fetch", "agent"]
 
 
 def test_fetch_failure_does_not_invoke_agent(tmp_path, monkeypatch):
@@ -2918,7 +2922,7 @@ def test_multi_repo_conflicting_with_clone_runs_rebase(tmp_path, monkeypatch):
     pushed = {}
     monkeypatch.setattr(
         merge_mod.git_ops,
-        "push",
+        "push_with_lease",
         lambda repo_dir, *, branch, remote_url, token: pushed.update(
             {"branch": branch, "remote": remote_url}
         ),
@@ -3158,7 +3162,7 @@ def test_multi_repo_failing_ci_with_clone_runs_ci_fix(tmp_path, monkeypatch):
     pushed = {}
     monkeypatch.setattr(
         merge_mod.git_ops,
-        "push",
+        "push_with_lease",
         lambda repo_dir, *, branch, remote_url, token: pushed.update(
             {"branch": branch, "remote": remote_url}
         ),
@@ -3243,7 +3247,7 @@ def test_multi_repo_ci_fix_cycle_ceiling_blocks(tmp_path, monkeypatch):
     monkeypatch.setattr(merge_mod.git_ops, "remote_branch_sha", lambda d, b: "oldsha")
     monkeypatch.setattr(
         merge_mod.git_ops,
-        "push",
+        "push_with_lease",
         lambda *a, **k: None,
     )
 
@@ -3326,7 +3330,7 @@ def test_multi_repo_ci_fix_cycle_reset_on_green(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(merge_mod.git_ops, "head_sha", lambda d: "newsha")
     monkeypatch.setattr(merge_mod.git_ops, "remote_branch_sha", lambda d, b: "oldsha")
-    monkeypatch.setattr(merge_mod.git_ops, "push", lambda *a, **k: None)
+    monkeypatch.setattr(merge_mod.git_ops, "push_with_lease", lambda *a, **k: None)
 
     _write_pr_urls(
         ctx,

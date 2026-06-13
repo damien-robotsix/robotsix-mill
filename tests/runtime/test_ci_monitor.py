@@ -578,7 +578,7 @@ def test_existing_pr_ci_fix_path_still_works(tmp_path, monkeypatch):
         push_seen.update(branch=branch, token=token)
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push",
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
         fake_push,
     )
 

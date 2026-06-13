@@ -263,6 +263,117 @@ def fetch(repo: Path, *, remote_url: str, token: str | None, branch: str) -> Non
     )
 
 
+def reconcile_with_remote_pr(
+    repo: Path, remote_url: str, branch: str, token: str | None
+) -> bool:
+    """Fetch the remote PR branch and fast-forward the workspace clone
+    to include any foreign commits (e.g. a human pushed a fix commit
+    directly to the PR branch after the clone was created).
+
+    Returns ``True`` on success (synced or fast-forwarded), ``False``
+    when branches have diverged and can't be auto-reconciled (or when
+    any git operation fails — the caller should log a warning and let
+    the lease check on push provide the safety backstop).
+    """
+    try:
+        # 1. Update the remote-tracking ref.
+        try:
+            fetch(repo, remote_url=remote_url, token=token, branch=branch)
+        except subprocess.CalledProcessError:
+            # Fetch failed.  If we have no tracking ref at all the remote
+            # branch likely doesn't exist yet → no-op success.
+            if remote_branch_sha(repo, branch) is None:
+                return True
+            # Otherwise we can't reconcile — return False.
+            return False
+
+        remote_sha = remote_branch_sha(repo, branch)
+        if remote_sha is None:
+            # Remote branch doesn't exist (unreachable after successful
+            # fetch, but guard anyway).
+            return True
+
+        local_sha = head_sha(repo)
+        if local_sha == remote_sha:
+            return True  # Already in sync.
+
+        # 2. If local is an ancestor of remote → fast-forward.
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo),
+                "merge-base",
+                "--is-ancestor",
+                local_sha,
+                remote_sha,
+            ],
+            capture_output=True,
+        )
+        if result.returncode == 0:
+            _git(repo, "reset", "--hard", remote_sha)
+            return True
+
+        # 3. If remote is an ancestor of local → we're ahead, nothing to do.
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo),
+                "merge-base",
+                "--is-ancestor",
+                remote_sha,
+                local_sha,
+            ],
+            capture_output=True,
+        )
+        if result.returncode == 0:
+            return True
+
+        # 4. Neither is ancestor → diverged.
+        return False
+    except Exception:
+        # Any unexpected git failure (missing repo, corrupt clone, etc.)
+        # — can't reconcile, let the lease check provide the backstop.
+        return False
+
+
+def push_with_lease(
+    repo: Path, branch: str, remote_url: str, token: str | None
+) -> None:
+    """Push ``branch`` to ``remote_url`` with a compare-and-swap lease.
+
+    Uses ``--force-with-lease=<branch>:<expected-sha>`` where
+    ``<expected-sha>`` is the current ``refs/remotes/origin/<branch>``
+    value (which must have been populated by a prior ``fetch()`` or
+    ``reconcile_with_remote_pr()`` call).  If the remote branch doesn't
+    exist yet (``remote_branch_sha`` returns ``None``), falls back to a
+    plain ``--force`` push — there is nothing to lease against.
+
+    A lease violation raises :class:`subprocess.CalledProcessError` (git
+    exits non-zero).  The existing ``except Exception`` blocks in the
+    callers already catch this and route to BLOCKED.
+    """
+    expected_sha = remote_branch_sha(repo, branch)
+    if expected_sha is None:
+        # Remote branch doesn't exist yet — nothing to lease against.
+        _git(
+            repo,
+            "push",
+            "--force",
+            _authed_url(remote_url, token),
+            f"{branch}:{branch}",
+        )
+    else:
+        _git(
+            repo,
+            "push",
+            f"--force-with-lease=refs/heads/{branch}:{expected_sha}",
+            _authed_url(remote_url, token),
+            f"{branch}:{branch}",
+        )
+
+
 def branch_is_ahead_of_main(repo: Path, target_branch: str = "main") -> bool:
     """Return True when HEAD has commits not in origin/main.
 

@@ -615,6 +615,24 @@ class MergeStage(Stage):
             # Attribute the agent's cost/traces to the ticket's session, and
             # to the TARGET repo's Langfuse project, not an orphan trace.
             with tracing.start_ticket_root_span(ticket.id, "ci_fix", repo_config=rc):
+                remote_url = _resolve_remote_url(s, rc)
+                token = github_token(s, repo_config=rc)
+
+                # Reconcile with remote PR branch first so the ci-fix
+                # agent sees any foreign commits.
+                reconciled = git_ops.reconcile_with_remote_pr(
+                    Path(repo_dir), remote_url, branch, token
+                )
+                if not reconciled:
+                    log.warning(
+                        "%s: multi-repo ci-fix for %s: could not fast-forward "
+                        "to remote PR branch (diverged) — continuing with "
+                        "local state; lease check on push will prevent data "
+                        "loss if remote has advanced",
+                        ticket.id,
+                        repo_id,
+                    )
+
                 mem_path = s.memory_file_for("ci_fix", rc.board_id)
                 result = run_ci_fix_agent(
                     settings=s,
@@ -653,7 +671,7 @@ class MergeStage(Stage):
                 )
                 return Outcome(ticket.state)
             try:
-                git_ops.push(
+                git_ops.push_with_lease(
                     repo_dir,
                     branch=branch,
                     remote_url=_resolve_remote_url(s, rc),
@@ -736,10 +754,28 @@ class MergeStage(Stage):
             # Attribute the agent's cost/traces to the ticket's session, and
             # to the TARGET repo's Langfuse project, not an orphan trace.
             with tracing.start_ticket_root_span(ticket.id, "rebase", repo_config=rc):
+                remote_url = _resolve_remote_url(s, rc)
+                token = github_token(s, repo_config=rc)
+
+                # Reconcile with remote PR branch first so the rebase
+                # agent sees any foreign commits.
+                reconciled = git_ops.reconcile_with_remote_pr(
+                    Path(repo_dir), remote_url, branch, token
+                )
+                if not reconciled:
+                    log.warning(
+                        "%s: multi-repo rebase for %s: could not fast-forward "
+                        "to remote PR branch (diverged) — continuing with "
+                        "local state; lease check on push will prevent data "
+                        "loss if remote has advanced",
+                        ticket.id,
+                        repo_id,
+                    )
+
                 git_ops.fetch(
                     Path(repo_dir),
-                    remote_url=_resolve_remote_url(s, rc),
-                    token=github_token(s, repo_config=rc),
+                    remote_url=remote_url,
+                    token=token,
                     branch=target,
                 )
                 mem_path = s.memory_file_for("rebase", rc.board_id)
@@ -780,7 +816,7 @@ class MergeStage(Stage):
                 )
                 return Outcome(ticket.state)
             try:
-                git_ops.push(
+                git_ops.push_with_lease(
                     repo_dir,
                     branch=branch,
                     remote_url=_resolve_remote_url(s, rc),
@@ -1484,6 +1520,22 @@ class MergeStage(Stage):
             # review_revision is traced=False (like ci_fix), so wrap the
             # LLM agent in the ticket's Langfuse session.
             with tracing.start_ticket_root_span(ticket.id, "review_revision"):
+                # Reconcile with remote PR branch first so the agent
+                # sees any foreign commits.
+                remote_url = _resolve_remote_url(s, ctx.repo_config)
+                token = github_token(s, repo_config=ctx.repo_config)
+                reconciled = git_ops.reconcile_with_remote_pr(
+                    Path(repo_dir), remote_url, branch, token
+                )
+                if not reconciled:
+                    log.warning(
+                        "%s: could not fast-forward to remote PR branch "
+                        "(diverged) — continuing with local state; lease "
+                        "check on push will prevent data loss if remote "
+                        "has advanced",
+                        ticket.id,
+                    )
+
                 review_revision_memory_path = s.memory_file_for(
                     "review_revision", ctx.memory_board_id(ticket)
                 )
@@ -1533,7 +1585,9 @@ class MergeStage(Stage):
             try:
                 # Per-repo remote + token (see the rebase push for why the
                 # global forge_remote_url/tokenless mint break non-mill boards).
-                git_ops.push(
+                # Use push_with_lease so a concurrent human push is never
+                # silently overwritten.
+                git_ops.push_with_lease(
                     repo_dir,
                     branch=branch,
                     remote_url=_resolve_remote_url(s, ctx.repo_config),
@@ -1655,6 +1709,24 @@ class MergeStage(Stage):
                 stack.enter_context(tracing.start_ticket_root_span(ticket.id, "rebase"))
             stack.enter_context(tracing.trace_stage("rebase"))
             with stack:
+                remote_url = _resolve_remote_url(s, repo_config)
+                token = github_token(s, repo_config=repo_config)
+
+                # Reconcile with the remote PR branch first so the
+                # rebase agent operates on a branch that includes any
+                # foreign commits (e.g. a human pushed a fix directly).
+                reconciled = git_ops.reconcile_with_remote_pr(
+                    Path(repo_dir), remote_url, branch, token
+                )
+                if not reconciled:
+                    log.warning(
+                        "%s: could not fast-forward to remote PR branch "
+                        "(diverged) — continuing with local state; lease "
+                        "check on push will prevent data loss if remote "
+                        "has advanced",
+                        ticket.id,
+                    )
+
                 # Refresh origin/<target> so the agent rebases onto
                 # current main, not the stale ref frozen at clone time.
                 # The sandbox has --network none; git fetch MUST run
@@ -1667,8 +1739,8 @@ class MergeStage(Stage):
                 # repo isn't the mill's own.
                 git_ops.fetch(
                     Path(repo_dir),
-                    remote_url=_resolve_remote_url(s, repo_config),
-                    token=github_token(s, repo_config=repo_config),
+                    remote_url=remote_url,
+                    token=token,
                     branch=target,
                 )
                 rebase_memory_path = s.memory_file_for(
@@ -1760,8 +1832,11 @@ class MergeStage(Stage):
         # lands on the wrong remote, the real PR branch never changes, and
         # the loop blocks ("force-pushed Nx but still conflicting"). Mirror
         # the fetch above, which already resolves these per-repo.
+        #
+        # Use push_with_lease so a concurrent human push to the PR branch
+        # is never silently overwritten.
         try:
-            git_ops.push(
+            git_ops.push_with_lease(
                 repo_dir,
                 branch=branch,
                 remote_url=_resolve_remote_url(s, ctx.repo_config),
