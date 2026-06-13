@@ -365,14 +365,29 @@ def _synthesize_chunk_verdicts(
         f"per-file summaries. Produce a single consolidated ReviewVerdict "
         f"covering ALL files."
     )
-    output = attempt(
-        diff_text=synthesis_text, use_preseed=False, note=synthesis_note
-    )
+    output = attempt(diff_text=synthesis_text, use_preseed=False, note=synthesis_note)
     verdict = _coerce_verdict(output)
+
+    # Deterministic severity floor: the synthesis LLM re-decides the
+    # verdict from prose summaries, so a chunk's REQUEST_CHANGES could
+    # otherwise be silently dropped — or worse, come back APPROVE with
+    # auto_merge_eligible=True (unreviewed auto-merge). Floor the final
+    # verdict at REQUEST_CHANGES when any chunk requested changes, union
+    # the asks the synthesis pass dropped, and never allow auto-merge
+    # from a chunked review (no single pass ever saw the whole diff).
+    chunk_asks = [a for _, v in per_chunk for a in v.request_changes]
+    any_request_changes = any(v.verdict == "REQUEST_CHANGES" for _, v in per_chunk)
+    if any_request_changes and verdict.verdict != "REQUEST_CHANGES":
+        verdict.verdict = "REQUEST_CHANGES"
+        seen = {(a.title, a.description) for a in verdict.request_changes}
+        verdict.request_changes.extend(
+            a for a in chunk_asks if (a.title, a.description) not in seen
+        )
+    verdict.auto_merge_eligible = False
+
     verdict.comments = (
         f"[Chunked review: {len(per_chunk)} files reviewed in "
-        f"{len(per_chunk)} chunks due to diff size]\n\n"
-        + verdict.comments
+        f"{len(per_chunk)} chunks due to diff size]\n\n" + verdict.comments
     )
     return verdict
 
@@ -446,7 +461,21 @@ def _run_chunked_review(
         verdict = _coerce_verdict(output)
         per_chunk_verdicts.append((path, verdict))
 
-    return _synthesize_chunk_verdicts(attempt, per_chunk_verdicts, settings)
+    try:
+        return _synthesize_chunk_verdicts(attempt, per_chunk_verdicts, settings)
+    except Exception as exc:
+        if _is_token_limit_error(exc):
+            # The synthesis prompt itself hit the model's token limit
+            # (with output-token exhaustion this can happen regardless of
+            # prompt size). Preserve the graceful-degradation contract:
+            # fall through to Tier 3 instead of crashing the stage.
+            log.warning(
+                "chunked review: synthesis pass hit token limit (%s); "
+                "falling through to degraded single-pass",
+                exc,
+            )
+            return None
+        raise
 
 
 def _run_with_degraded_retry(
