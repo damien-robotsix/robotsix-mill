@@ -1588,7 +1588,7 @@ class MergeStage(Stage):
                 # Use push_with_lease so a concurrent human push is never
                 # silently overwritten.
                 git_ops.push_with_lease(
-                    repo_dir,
+                    Path(repo_dir),
                     branch=branch,
                     remote_url=_resolve_remote_url(s, ctx.repo_config),
                     token=github_token(s, repo_config=ctx.repo_config),
@@ -1837,7 +1837,7 @@ class MergeStage(Stage):
         # is never silently overwritten.
         try:
             git_ops.push_with_lease(
-                repo_dir,
+                Path(repo_dir),
                 branch=branch,
                 remote_url=_resolve_remote_url(s, ctx.repo_config),
                 token=github_token(s, repo_config=ctx.repo_config),

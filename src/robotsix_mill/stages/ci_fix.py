@@ -707,7 +707,7 @@ class CIFixStage(Stage):
         # another board would push to the wrong remote.
         try:
             git_ops.push_with_lease(
-                repo_dir,
+                Path(repo_dir),
                 branch=branch,
                 remote_url=_resolve_remote_url(s, ctx.repo_config),
                 token=github_token(s, repo_config=ctx.repo_config),
