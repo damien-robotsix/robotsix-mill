@@ -6,7 +6,7 @@ pass: clone the managed repo → :func:`detect_workspace_members` →
 ledger, and no agent engine — it reuses only the periodic
 scheduling/registration plumbing and this standalone runner.
 
-The :class:`~robotsix_mill.workspace_member_sync.MemberSyncResult` is
+The :class:`~robotsix_mill.repo_scaffold.member_sync.MemberSyncResult` is
 reused directly as the pass-result shape (carrying ``added`` / ``updated``
 / ``flagged_for_removal`` / ``filed_tickets`` / ``skipped``).
 """
@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 
 from ..config import RepoConfig, Settings, target_branch_for
-from ..workspace_member_sync import MemberSyncResult, sync_workspace_members
+from ..repo_scaffold.member_sync import MemberSyncResult, sync_workspace_members
 from ..workspace_members import detect_workspace_members
 from .periodic_runner import _forge_token
 
