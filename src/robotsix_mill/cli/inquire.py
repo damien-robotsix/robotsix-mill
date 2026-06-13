@@ -3,9 +3,10 @@ from __future__ import annotations
 import argparse
 
 from . import _client, _read_body_from_args
+from ..config import Settings
 
 
-def _inquire(args: argparse.Namespace, settings) -> int:
+def _inquire(args: argparse.Namespace, settings: Settings) -> int:
     body = _read_body_from_args(args)
     with _client(settings) as c:
         r = c.post(

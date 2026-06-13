@@ -4,9 +4,10 @@ import argparse
 import sys
 
 from . import _client
+from ..config import Settings
 
 
-def _action_list(args: argparse.Namespace, settings) -> int:
+def _action_list(args: argparse.Namespace, settings: Settings) -> int:
     with _client(settings) as c:
         r = c.get(
             "/proposed-actions",
@@ -28,7 +29,7 @@ def _action_list(args: argparse.Namespace, settings) -> int:
     return 0
 
 
-def _action_approve(args: argparse.Namespace, settings) -> int:
+def _action_approve(args: argparse.Namespace, settings: Settings) -> int:
     with _client(settings) as c:
         r = c.post(
             f"/proposed-actions/{args.id}/approve",
@@ -47,7 +48,7 @@ def _action_approve(args: argparse.Namespace, settings) -> int:
             return 1
 
 
-def _action_reject(args: argparse.Namespace, settings) -> int:
+def _action_reject(args: argparse.Namespace, settings: Settings) -> int:
     with _client(settings) as c:
         r = c.post(
             f"/proposed-actions/{args.id}/reject",

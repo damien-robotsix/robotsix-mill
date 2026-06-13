@@ -3,8 +3,10 @@ from __future__ import annotations
 import argparse
 import sys
 
+from ..config import Settings
 
-def _serve(args: argparse.Namespace, settings) -> int:
+
+def _serve(args: argparse.Namespace, settings: Settings) -> int:
     # Raise nofile soft cap: docker-compose's ulimits only set the
     # hard cap, and PAM (via runuser in the container entrypoint)
     # clamps the soft back to 1024. Workers cascade-crash with
@@ -63,7 +65,7 @@ def _serve(args: argparse.Namespace, settings) -> int:
     return 0
 
 
-def _repos_list(args: argparse.Namespace, settings) -> int:
+def _repos_list(args: argparse.Namespace, settings: Settings) -> int:
     from ..config import get_repos_config
     from ..config import ConfigError
 

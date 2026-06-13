@@ -395,7 +395,8 @@ def _resolve_repo_id(
     ``return returncode_on_failure``).
     """
     if args.repo_id is not None:
-        return args.repo_id
+        repo_id: str = args.repo_id
+        return repo_id
 
     from ..config import get_repos_config
     from ..config import ConfigError as _ConfigError

@@ -3,9 +3,10 @@ from __future__ import annotations
 import argparse
 
 from . import _client, _resolve_repo_id, _read_body_from_args
+from ..config import Settings
 
 
-def _epic_new(args: argparse.Namespace, settings) -> int:
+def _epic_new(args: argparse.Namespace, settings: Settings) -> int:
     body = _read_body_from_args(args)
     repo_id = _resolve_repo_id(args)
     if repo_id is None:

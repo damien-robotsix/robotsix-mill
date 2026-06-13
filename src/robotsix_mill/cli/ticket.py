@@ -8,6 +8,7 @@ from pathlib import Path
 import httpx
 
 from . import _client, _resolve_repo_id, _read_body_from_args
+from ..config import Settings
 
 
 def _upload_screenshot(c: httpx.Client, ticket_id: str, path: str) -> None:
@@ -38,7 +39,7 @@ def _upload_screenshot(c: httpx.Client, ticket_id: str, path: str) -> None:
         print(f"warning: screenshot upload failed for {path}: {e}", file=sys.stderr)
 
 
-def _ticket_new(args: argparse.Namespace, settings) -> int:
+def _ticket_new(args: argparse.Namespace, settings: Settings) -> int:
     body = _read_body_from_args(args)
     repo_id = _resolve_repo_id(args)
     if repo_id is None:
@@ -56,8 +57,8 @@ def _ticket_new(args: argparse.Namespace, settings) -> int:
     return 0
 
 
-def _ticket_list(args: argparse.Namespace, settings) -> int:
-    params: dict = {"state": args.state} if args.state else {}
+def _ticket_list(args: argparse.Namespace, settings: Settings) -> int:
+    params: dict[str, str] = {"state": args.state} if args.state else {}
     if args.repo_id:
         params["repo_id"] = args.repo_id
     with _client(settings) as c:
@@ -68,7 +69,7 @@ def _ticket_list(args: argparse.Namespace, settings) -> int:
     return 0
 
 
-def _ticket_show(args: argparse.Namespace, settings) -> int:
+def _ticket_show(args: argparse.Namespace, settings: Settings) -> int:
     with _client(settings) as c:
         r = c.get(f"/tickets/{args.id}")
         r.raise_for_status()
@@ -80,7 +81,7 @@ def _ticket_show(args: argparse.Namespace, settings) -> int:
     return 0
 
 
-def _ticket_approve(args: argparse.Namespace, settings) -> int:
+def _ticket_approve(args: argparse.Namespace, settings: Settings) -> int:
     with _client(settings) as c:
         r = c.post(f"/tickets/{args.id}/approve")
         if r.is_success:
@@ -96,7 +97,7 @@ def _ticket_approve(args: argparse.Namespace, settings) -> int:
             return 1
 
 
-def _ticket_resume_blocked(args: argparse.Namespace, settings) -> int:
+def _ticket_resume_blocked(args: argparse.Namespace, settings: Settings) -> int:
     with _client(settings) as c:
         r = c.post(f"/tickets/{args.id}/resume-blocked")
         if r.is_success:
