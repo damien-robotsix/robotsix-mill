@@ -72,6 +72,7 @@ override them when the forge supports the capability.
 | Method | Default behaviour | GitHub override | GitLab override |
 |--------|-------------------|-----------------|-----------------|
 | `list_code_scanning_alerts(*, source_branch)` | Returns `[]` — code-scanning is GitHub-only. | Fetches open CodeQL alerts via the security/code-scanning API. | Not overridden (inherits `[]`). |
+| `update_branch(*, source_branch)` | Returns `{"updated": False, "reason": "not supported"}` — MR/PR branch rebasing is not implemented by default. | `PUT /repos/{owner}/{repo}/pulls/{number}/update-branch` — merges the target branch tip into the PR branch so CI re-runs against the current base. | `PUT /projects/:id/merge_requests/:iid/rebase` — rebases the MR branch against the target branch; returns `{"updated": True, "reason": "rebase accepted"}` on 202 (accepted). |
 | `delete_branch(*, branch)` | Returns `False`. | `DELETE /repos/.../git/refs/heads/{branch}` — returns `True` on 204/404/422 (branch gone = success). | `DELETE /projects/:id/repository/branches/:branch` — returns `True` on 204/404. |
 | `list_branches()` | Returns `[]`. | Paginates `GET /repos/.../branches`, returns `list[BranchInfo]`. | Paginates `GET /projects/:id/repository/branches`. |
 | `list_open_pr_branches()` | Returns `set()` (empty). | Paginates `GET /repos/.../pulls?state=open`, collects head refs. | Paginates `GET /projects/:id/merge_requests?state=opened`, collects `source_branch`. |
@@ -566,6 +567,7 @@ Concrete methods:
 
 | Method | GitHub | GitLab |
 |--------|--------|--------|
+| `update_branch` | `PUT /repos/{o}/{r}/pulls/{number}/update-branch` | `PUT /projects/:id/merge_requests/:iid/rebase` |
 | `list_code_scanning_alerts` | `GET /repos/{o}/{r}/code-scanning/alerts?ref=refs/heads/{branch}&state=open` | no-op (`[]`) |
 | `delete_branch` | `DELETE /repos/{o}/{r}/git/refs/heads/{branch}` | `DELETE /projects/:id/repository/branches/:branch` |
 | `list_branches` | `GET /repos/{o}/{r}/branches?per_page=100` (paginated) | `GET /projects/:id/repository/branches?per_page=100` (paginated) |
