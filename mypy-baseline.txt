@@ -785,7 +785,6 @@ src/robotsix_mill/runtime/worker/core.py:0: error: Missing type arguments for ge
 src/robotsix_mill/runtime/worker/core.py:0: error: Missing type arguments for generic type "PriorityQueue"  [type-arg]
 src/robotsix_mill/runtime/worker/core.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/runtime/worker/core.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
-src/robotsix_mill/runtime/lifespan.py:0: error: "StreamHandler[TextIO | Any]" has no attribute "_mill"  [attr-defined]
 src/robotsix_mill/runtime/lifespan.py:0: error: Missing type arguments for generic type "AbstractAsyncContextManager"  [type-arg]
 src/robotsix_mill/runtime/lifespan.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/robotsix_mill/runtime/deps.py:0: error: Returning Any from function declared to return "TicketService"  [no-any-return]
