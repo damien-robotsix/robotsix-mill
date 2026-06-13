@@ -953,7 +953,11 @@ def test_auto_reject_pending_on_task_close(service):
     """A PENDING proposal on a task is auto-rejected when the task
     transitions DONE → CLOSED."""
     from robotsix_mill.core import db
-    from robotsix_mill.core.models import ProposedAction, ActionType, ProposedActionStatus
+    from robotsix_mill.core.models import (
+        ProposedAction,
+        ActionType,
+        ProposedActionStatus,
+    )
     from datetime import datetime, timezone
 
     t = service.create("Proposal target task")
@@ -988,7 +992,11 @@ def test_auto_reject_pending_on_inquiry_answered(service):
     """A PENDING proposal on an inquiry is auto-rejected when the
     inquiry transitions to ANSWERED."""
     from robotsix_mill.core import db
-    from robotsix_mill.core.models import ProposedAction, ActionType, ProposedActionStatus
+    from robotsix_mill.core.models import (
+        ProposedAction,
+        ActionType,
+        ProposedActionStatus,
+    )
     from datetime import datetime, timezone
 
     t = service.create("Proposal target inquiry", kind="inquiry")
@@ -1020,7 +1028,11 @@ def test_auto_reject_pending_on_epic_closed(service):
     """A PENDING proposal on an epic is auto-rejected when the epic
     transitions to EPIC_CLOSED."""
     from robotsix_mill.core import db
-    from robotsix_mill.core.models import ProposedAction, ActionType, ProposedActionStatus
+    from robotsix_mill.core.models import (
+        ProposedAction,
+        ActionType,
+        ProposedActionStatus,
+    )
     from datetime import datetime, timezone
 
     t = service.create("Proposal target epic", kind="epic")
@@ -1052,7 +1064,11 @@ def test_auto_reject_skips_non_pending_proposals(service):
     """Non-PENDING proposals (APPROVED, REJECTED, EXECUTED, FAILED) are
     NOT touched when the ticket transitions to a terminal state."""
     from robotsix_mill.core import db
-    from robotsix_mill.core.models import ProposedAction, ActionType, ProposedActionStatus
+    from robotsix_mill.core.models import (
+        ProposedAction,
+        ActionType,
+        ProposedActionStatus,
+    )
     from datetime import datetime, timezone
 
     t = service.create("Non-pending proposals")
@@ -1088,14 +1104,20 @@ def test_auto_reject_skips_non_pending_proposals(service):
     with db.session(service.settings, service.board_id) as s:
         for status, pa_id in pa_ids.items():
             reloaded = s.get(ProposedAction, pa_id)
-            assert reloaded.status == status, f"expected {status.value}, got {reloaded.status.value}"
+            assert reloaded.status == status, (
+                f"expected {status.value}, got {reloaded.status.value}"
+            )
 
 
 def test_auto_reject_not_triggered_on_non_archivable_transition(service):
     """Transitioning to a non-archivable state (e.g. READY, DONE,
     BLOCKED) does NOT auto-reject proposals."""
     from robotsix_mill.core import db
-    from robotsix_mill.core.models import ProposedAction, ActionType, ProposedActionStatus
+    from robotsix_mill.core.models import (
+        ProposedAction,
+        ActionType,
+        ProposedActionStatus,
+    )
     from datetime import datetime, timezone
 
     t = service.create("Non-terminal ticket")
