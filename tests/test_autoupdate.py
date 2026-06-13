@@ -1044,3 +1044,128 @@ def test_remote_flag_parsing() -> None:
 def _fake_flock(monkeypatch) -> None:
     """Patch fcntl.flock to always succeed (lock acquired)."""
     monkeypatch.setattr(au.fcntl, "flock", lambda fd, op: None)
+
+
+# ---------------------------------------------------------------------------
+# Diverged deploy branch: --ensure-branch reconciles via reset --hard
+# ---------------------------------------------------------------------------
+
+
+def test_diverged_branch_reconciles_with_ensure_branch(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """When the ff-only merge fails (diverged) AND --ensure-branch is set,
+    the deploy mirror is reconciled by `git reset --hard <remote>/<branch>`
+    and the build proceeds (rc 0, deployed SHA recorded)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / ".env").write_text("SECRET=xyz")
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / ".mill-autoupdate-deployed-sha").write_text("abc1234\n")
+
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        if cmd[0] == "git":
+            cmd_str = " ".join(cmd)
+            if "rev-parse" in cmd_str and "origin/main" in cmd_str:
+                return _cp(0, "def9999\n")
+            if "rev-parse" in cmd_str and "--short" in cmd_str:
+                return _cp(0, "def9999\n")
+            if "rev-parse" in cmd_str and "HEAD" in cmd_str:
+                return _cp(0, "deadbeefcafe\n")  # diverged local tip
+            if "fetch" in cmd_str:
+                return _cp(0)
+            if "checkout" in cmd_str:
+                return _cp(0)
+            if "status" in cmd_str:
+                return _cp(0, "")
+            if "diff" in cmd_str and ".env" in cmd_str:
+                return _cp(0, "")  # .env unchanged
+            if "merge" in cmd_str:
+                return _cp(1, "", "Not possible to fast-forward, aborting.")
+            if "reset" in cmd_str:
+                return _cp(0)
+            if "log" in cmd_str:
+                return _cp(0, "abc1234 some commit")
+        if cmd[0] == "docker" and "build" in cmd:
+            return _cp(0)
+        if cmd[0] == "docker" and "up" in cmd:
+            return _cp(0)
+        if cmd[0] == "getent":
+            return _cp(0, "docker:x:999:\n")
+        return _cp(0, "")
+
+    monkeypatch.setattr(au.subprocess, "run", fake_run)
+    _fake_flock(monkeypatch)
+    monkeypatch.setattr(au.os, "open", lambda *a, **kw: 3)
+    monkeypatch.setattr(au.os, "close", lambda fd: None)
+
+    rc = au.main(
+        [
+            "--repo",
+            str(repo),
+            "--state-dir",
+            str(state),
+            "--ensure-branch",
+            "main",
+            "--no-idle-check",
+        ]
+    )
+    assert rc == 0
+    # reset --hard origin/main must have run after the failed merge.
+    assert any(
+        c[0] == "git" and "reset" in c and "--hard" in c and "origin/main" in c
+        for c in calls
+    ), "expected `git reset --hard origin/main` reconcile"
+    # And the deploy proceeded.
+    assert any(c[0] == "docker" and "build" in c for c in calls)
+    assert "def9999" in (state / ".mill-autoupdate-deployed-sha").read_text()
+
+
+def test_diverged_branch_without_ensure_branch_skips(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Without --ensure-branch, a failed ff-only merge skips conservatively
+    (rc 1, no reset, no build) — the legacy behavior for a manual run on an
+    arbitrary branch."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / ".env").write_text("SECRET=xyz")
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / ".mill-autoupdate-deployed-sha").write_text("abc1234\n")
+
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        if cmd[0] == "git":
+            cmd_str = " ".join(cmd)
+            if "rev-parse" in cmd_str and "origin/main" in cmd_str:
+                return _cp(0, "def9999\n")
+            if "rev-parse" in cmd_str and "--short" in cmd_str:
+                return _cp(0, "def9999\n")
+            if "fetch" in cmd_str:
+                return _cp(0)
+            if "status" in cmd_str:
+                return _cp(0, "")
+            if "diff" in cmd_str and ".env" in cmd_str:
+                return _cp(0, "")
+            if "merge" in cmd_str:
+                return _cp(1, "", "Not possible to fast-forward, aborting.")
+        if cmd[0] == "getent":
+            return _cp(0, "docker:x:999:\n")
+        return _cp(0, "")
+
+    monkeypatch.setattr(au.subprocess, "run", fake_run)
+    _fake_flock(monkeypatch)
+    monkeypatch.setattr(au.os, "open", lambda *a, **kw: 3)
+    monkeypatch.setattr(au.os, "close", lambda fd: None)
+
+    rc = au.main(["--repo", str(repo), "--state-dir", str(state), "--no-idle-check"])
+    assert rc == 1
+    assert not any(c[0] == "git" and "reset" in c for c in calls)
+    assert not any(c[0] == "docker" and "build" in c for c in calls)

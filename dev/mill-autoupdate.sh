@@ -37,6 +37,7 @@ exec "$REPO/.venv/bin/robotsix-autoupdate" \
   --state-dir "$STATE_DIR" \
   --state-prefix mill-autoupdate \
   --service mill \
+  --ensure-branch main \
   --idle-check-cmd "python3 $REPO/dev/mill-idle-check.py" \
   --pre-build-wait "${PRE_BUILD_WAIT:-1200}" \
   --post-build-wait "${POST_BUILD_WAIT:-300}" \
