@@ -9,6 +9,7 @@ from pydantic_ai.usage import UsageLimits
 
 from robotsix_mill.agents.reviewing import (
     SYSTEM_PROMPT,
+    ReviewAsk,
     ReviewVerdict,
     run_review_agent,
 )
@@ -621,3 +622,238 @@ def test_extra_roots_defaults_to_none(tmp_path, monkeypatch):
         repo_dir=repo_dir,
     )
     assert captured == [None]
+
+
+# --- Chunked review (Tier 2 degradation) ------------------------------------
+
+
+def _multi_file_diff(files: list[tuple[str, str]]) -> str:
+    """Build a unified git diff string from *files* (``[(path, body), …]``)."""
+    parts: list[str] = []
+    for path, body in files:
+        parts.append(
+            f"diff --git a/{path} b/{path}\n"
+            f"--- a/{path}\n"
+            f"+++ b/{path}\n"
+            f"@@ -0,0 +1,{body.count(chr(10)) + 1} @@\n"
+            f"{body}\n"
+        )
+    return "".join(parts)
+
+
+def test_chunked_review_synthesizes_verdicts(tmp_path, monkeypatch):
+    """Multi-file diff where the first pass token-limits, all per-chunk
+    reviews succeed, and the synthesis pass produces a consolidated
+    APPROVE verdict with the ``[Chunked review: …]`` marker."""
+    agent = _FakeAgent()
+    _patch_agent(monkeypatch, agent)
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+
+    diff = _multi_file_diff(
+        [
+            ("a.py", "+line\n" * 30),
+            ("b.py", "+line\n" * 30),
+            ("c.py", "+line\n" * 30),
+        ]
+    )
+
+    seen: list[dict] = []
+
+    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+        make_run(agent)
+        prompt, _limits, kwargs = agent.calls[-1]
+        seen.append({"prompt": prompt, "kwargs": kwargs})
+        if len(seen) == 1:
+            raise RuntimeError(_TOKEN_LIMIT_MSG)
+        # Per-chunk and synthesis calls all return APPROVE.
+        return _StubAgentRunResult(ReviewVerdict(verdict="APPROVE", comments="lgtm"))
+
+    monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", fake_run_agent)
+
+    verdict = run_review_agent(settings=s, diff=diff, spec="Fix things")
+
+    assert isinstance(verdict, ReviewVerdict)
+    assert verdict.verdict == "APPROVE"
+    # 1 failed + 3 chunk + 1 synthesis = 5
+    assert len(seen) == 5
+
+    # Chunked-review marker must be present on the final verdict.
+    assert verdict.comments.startswith(
+        "[Chunked review: 3 files reviewed in 3 chunks due to diff size]"
+    )
+
+    # Per-chunk calls (indices 1, 2, 3) must carry use_preseed=False and
+    # a note naming "part X of 3".
+    for i, expected_part in enumerate((1, 2, 3), start=1):
+        call_kwargs = seen[i]["kwargs"]
+        # message_history must NOT be present (use_preseed=False).
+        assert "message_history" not in call_kwargs, f"chunk {i} had preseed"
+        prompt = seen[i]["prompt"]
+        assert isinstance(prompt, str)
+        assert f"part {expected_part} of 3" in prompt, f"chunk {i} missing part note"
+
+    # Synthesis call (index 4) must carry a synthesis note.
+    synthesis_prompt = seen[4]["prompt"]
+    assert isinstance(synthesis_prompt, str)
+    assert "Synthesis pass" in synthesis_prompt
+    assert "previously reviewed 3 files" in synthesis_prompt
+
+
+def test_chunked_review_single_oversized_file_falls_through(tmp_path, monkeypatch):
+    """Single-file diff whose chunk exceeds the per-file budget → chunked
+    review returns None → degraded single-pass → NEEDS_DISCUSSION (the
+    existing surrender message, NOT the chunked-review marker)."""
+    agent = _FakeAgent()
+    _patch_agent(monkeypatch, agent)
+
+    # Override the per-chunk budget to a tiny value so the single-file
+    # chunk easily exceeds it.  The chunked-review guard uses
+    # max(review_diff_max_chars, 40_000); setting it to 1000 means
+    # max(1000, 40_000) = 40_000, which is still too large for the test
+    # to trigger the guard.  We need the diff to be > 40_000 chars.
+    # So we set review_diff_max_chars to 0 (uncapped) — the guard
+    # becomes max(0, 40_000) = 40_000.  A ~50 KB diff exceeds that.
+    s = _settings(
+        tmp_path,
+        OPENROUTER_API_KEY="k",
+        review_diff_max_chars="0",
+    )
+
+    big_body = "+" + "x" * 49_000 + "\n"
+    diff = _multi_file_diff([("huge.py", big_body)])
+
+    seen: list[dict] = []
+
+    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+        make_run(agent)
+        prompt, _limits, kwargs = agent.calls[-1]
+        seen.append({"prompt": prompt, "kwargs": kwargs})
+        if len(seen) == 1:
+            raise RuntimeError(_TOKEN_LIMIT_MSG)
+        # Degraded retry also token-limits.
+        raise RuntimeError(_TOKEN_LIMIT_MSG)
+
+    monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", fake_run_agent)
+
+    verdict = run_review_agent(settings=s, diff=diff, spec="Fix huge")
+
+    assert isinstance(verdict, ReviewVerdict)
+    assert verdict.verdict == "NEEDS_DISCUSSION"
+    assert verdict.auto_merge_eligible is False
+    # The existing surrender message, NOT the chunked-review marker.
+    assert "context window" in verdict.comments.lower()
+    assert not verdict.comments.startswith("[Chunked review:")
+    # Exactly 2 calls: Tier 1 (token-limit) → chunked review bails
+    # (single oversized file) → Tier 3 (token-limit again) → surrender.
+    assert len(seen) == 2
+
+
+def test_chunked_review_synthesis_token_limit_falls_through(tmp_path, monkeypatch):
+    """A token-limit raised by the SYNTHESIS pass must not crash the
+    stage: chunked review returns None and the runner falls through to
+    Tier 3 (degraded single-pass), preserving the graceful-degradation
+    contract."""
+    agent = _FakeAgent()
+    _patch_agent(monkeypatch, agent)
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+
+    diff = _multi_file_diff(
+        [
+            ("a.py", "+line\n" * 30),
+            ("b.py", "+line\n" * 30),
+        ]
+    )
+
+    seen: list[dict] = []
+
+    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+        make_run(agent)
+        prompt, _limits, kwargs = agent.calls[-1]
+        seen.append({"prompt": prompt, "kwargs": kwargs})
+        # Call 1: Tier 1 full pass → token limit.
+        if len(seen) == 1:
+            raise RuntimeError(_TOKEN_LIMIT_MSG)
+        # Calls 2-3: per-chunk reviews succeed.
+        if len(seen) <= 3:
+            return _StubAgentRunResult(
+                ReviewVerdict(verdict="APPROVE", comments="lgtm")
+            )
+        # Call 4: synthesis pass → token limit (output exhaustion can
+        # fire regardless of prompt size).
+        if len(seen) == 4:
+            raise RuntimeError(_TOKEN_LIMIT_MSG)
+        # Call 5: Tier 3 degraded single-pass succeeds.
+        return _StubAgentRunResult(
+            ReviewVerdict(verdict="APPROVE", comments="tier3 ok")
+        )
+
+    monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", fake_run_agent)
+
+    verdict = run_review_agent(settings=s, diff=diff, spec="Fix things")
+
+    assert isinstance(verdict, ReviewVerdict)
+    # Tier 3 verdict, not a crash and not the chunked marker.
+    assert verdict.verdict == "APPROVE"
+    assert verdict.comments == "tier3 ok"
+    assert not verdict.comments.startswith("[Chunked review:")
+    # 1 full + 2 chunks + 1 synthesis + 1 tier-3 = 5 calls.
+    assert len(seen) == 5
+
+
+def test_chunked_review_request_changes_floor(tmp_path, monkeypatch):
+    """If any chunk verdict is REQUEST_CHANGES, the synthesized verdict
+    is floored at REQUEST_CHANGES (the LLM cannot silently drop it), the
+    dropped asks are unioned in, and auto_merge_eligible is forced False
+    in chunked mode."""
+    agent = _FakeAgent()
+    _patch_agent(monkeypatch, agent)
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+
+    diff = _multi_file_diff(
+        [
+            ("a.py", "+line\n" * 30),
+            ("b.py", "+line\n" * 30),
+        ]
+    )
+
+    ask = ReviewAsk(
+        title="Fix the bug",
+        description="a.py introduces an off-by-one",
+        files=["a.py"],
+    )
+
+    seen: list[dict] = []
+
+    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+        make_run(agent)
+        prompt, _limits, kwargs = agent.calls[-1]
+        seen.append({"prompt": prompt, "kwargs": kwargs})
+        if len(seen) == 1:
+            raise RuntimeError(_TOKEN_LIMIT_MSG)
+        # Chunk 1 (a.py) demands changes.
+        if len(seen) == 2:
+            return _StubAgentRunResult(
+                ReviewVerdict(
+                    verdict="REQUEST_CHANGES",
+                    comments="off-by-one in a.py",
+                    request_changes=[ask],
+                )
+            )
+        # Chunk 2 approves; synthesis (wrongly) approves and claims
+        # auto-merge eligibility.
+        return _StubAgentRunResult(
+            ReviewVerdict(verdict="APPROVE", comments="lgtm", auto_merge_eligible=True)
+        )
+
+    monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", fake_run_agent)
+
+    verdict = run_review_agent(settings=s, diff=diff, spec="Fix things")
+
+    assert isinstance(verdict, ReviewVerdict)
+    assert verdict.verdict == "REQUEST_CHANGES"
+    assert any(a.title == "Fix the bug" for a in verdict.request_changes)
+    assert verdict.auto_merge_eligible is False
+    assert verdict.comments.startswith("[Chunked review: 2 files")

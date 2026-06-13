@@ -9,6 +9,7 @@ APPROVE / REQUEST_CHANGES / NEEDS_DISCUSSION.
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import Any, Literal
@@ -309,6 +310,174 @@ def run_review_agent(
     return _coerce_verdict(output)
 
 
+def _split_diff_by_file(diff: str) -> list[tuple[str, str]]:
+    """Split a unified git diff into per-file ``(path, chunk_text)`` pairs.
+
+    Splits on ``^diff --git `` boundaries and extracts the file path from
+    the ``+++ b/<path>`` line in each chunk.  Empty chunks and deletion-only
+    chunks (``+++ /dev/null``) are skipped.  Pairs are returned in the same
+    order as the original diff.
+    """
+    chunks = re.split(r"(?=^diff --git )", diff, flags=re.MULTILINE)
+    result: list[tuple[str, str]] = []
+    for chunk in chunks:
+        stripped = chunk.strip()
+        if not stripped:
+            continue
+        path_match = re.search(r"^\+\+\+ b/(.+)$", chunk, re.MULTILINE)
+        if not path_match:
+            continue
+        path = path_match.group(1)
+        if path == "/dev/null":
+            # Deletion-only chunk — no file to review
+            continue
+        result.append((path, stripped))
+    return result
+
+
+def _synthesize_chunk_verdicts(
+    attempt: Any,
+    per_chunk: list[tuple[str, ReviewVerdict]],
+    settings: Settings,
+) -> ReviewVerdict:
+    """Run a synthesis pass over per-file chunk verdicts.
+
+    Builds a *diff_text* from the per-chunk summaries (one Markdown
+    section per file: verdict, comments, and any ``request_changes``
+    asks), then calls *attempt* for a final consolidated verdict.  The
+    returned verdict's ``comments`` field is prefixed with a
+    machine-readable ``[Chunked review: …]`` marker.
+    """
+    sections: list[str] = []
+    for path, verdict in per_chunk:
+        sec = f"## {path}\n\n**Verdict:** {verdict.verdict}\n\n{verdict.comments}"
+        if verdict.request_changes:
+            asks = "\n".join(
+                f"- **{a.title}**: {a.description}" for a in verdict.request_changes
+            )
+            sec += f"\n\n**Requested changes:**\n{asks}"
+        sections.append(sec)
+
+    synthesis_text = "\n\n".join(sections)
+    synthesis_note = (
+        f"Synthesis pass: you previously reviewed {len(per_chunk)} files "
+        f"independently (chunked review due to diff size). Below are the "
+        f"per-file summaries. Produce a single consolidated ReviewVerdict "
+        f"covering ALL files."
+    )
+    output = attempt(diff_text=synthesis_text, use_preseed=False, note=synthesis_note)
+    verdict = _coerce_verdict(output)
+
+    # Deterministic severity floor: the synthesis LLM re-decides the
+    # verdict from prose summaries, so a chunk's REQUEST_CHANGES could
+    # otherwise be silently dropped — or worse, come back APPROVE with
+    # auto_merge_eligible=True (unreviewed auto-merge). Floor the final
+    # verdict at REQUEST_CHANGES when any chunk requested changes, union
+    # the asks the synthesis pass dropped, and never allow auto-merge
+    # from a chunked review (no single pass ever saw the whole diff).
+    chunk_asks = [a for _, v in per_chunk for a in v.request_changes]
+    any_request_changes = any(v.verdict == "REQUEST_CHANGES" for _, v in per_chunk)
+    if any_request_changes and verdict.verdict != "REQUEST_CHANGES":
+        verdict.verdict = "REQUEST_CHANGES"
+        seen = {(a.title, a.description) for a in verdict.request_changes}
+        verdict.request_changes.extend(
+            a for a in chunk_asks if (a.title, a.description) not in seen
+        )
+    verdict.auto_merge_eligible = False
+
+    verdict.comments = (
+        f"[Chunked review: {len(per_chunk)} files reviewed in "
+        f"{len(per_chunk)} chunks due to diff size]\n\n" + verdict.comments
+    )
+    return verdict
+
+
+def _run_chunked_review(
+    attempt: Any,
+    diff: str,
+    settings: Settings,
+) -> ReviewVerdict | None:
+    """Review each file's diff independently, then synthesise a consolidated verdict.
+
+    Returns a synthesized :class:`ReviewVerdict` on success, or ``None``
+    when a single file exceeds the per-chunk budget (caller falls through
+    to the existing degraded single-pass).
+
+    Steps:
+
+    1. Split *diff* into per-file chunks via :func:`_split_diff_by_file`.
+    2. If any single chunk exceeds the per-file budget (max of
+       ``settings.review_diff_max_chars`` and 40 000), log a warning and
+       return ``None`` immediately.
+    3. Review each chunk independently, collecting ``(path, verdict)``
+       pairs.
+    4. Run a synthesis pass via :func:`_synthesize_chunk_verdicts` to
+       produce the consolidated verdict.
+    """
+    chunks = _split_diff_by_file(diff)
+    if not chunks:
+        log.warning("chunked review: no per-file chunks extracted from diff")
+        return None
+
+    per_file_budget = max(settings.review_diff_max_chars, 40_000)
+
+    # Single-file overflow guard: if any one file's diff is still too
+    # large, chunked review cannot help — bail so the caller falls
+    # through to the degraded single-pass.
+    for path, chunk_text in chunks:
+        if len(chunk_text) > per_file_budget:
+            log.warning(
+                "chunked review: single file %r diff (%d chars) exceeds "
+                "per-chunk budget (%d chars); falling through to degraded "
+                "single-pass",
+                path,
+                len(chunk_text),
+                per_file_budget,
+            )
+            return None
+
+    n = len(chunks)
+    per_chunk_verdicts: list[tuple[str, ReviewVerdict]] = []
+
+    for i, (path, chunk_text) in enumerate(chunks, start=1):
+        note = (
+            f"Reviewing file {i}/{n}: {path}. "
+            f"This is part {i} of {n} in a chunked review — "
+            f"focus on this file's changes. "
+            f"Cross-file concerns will be assessed in a synthesis pass."
+        )
+        try:
+            output = attempt(diff_text=chunk_text, use_preseed=False, note=note)
+        except Exception as exc:
+            if _is_token_limit_error(exc):
+                log.warning(
+                    "chunked review: single file %r still overflows (%s); "
+                    "falling through to degraded single-pass",
+                    path,
+                    exc,
+                )
+                return None
+            raise
+        verdict = _coerce_verdict(output)
+        per_chunk_verdicts.append((path, verdict))
+
+    try:
+        return _synthesize_chunk_verdicts(attempt, per_chunk_verdicts, settings)
+    except Exception as exc:
+        if _is_token_limit_error(exc):
+            # The synthesis prompt itself hit the model's token limit
+            # (with output-token exhaustion this can happen regardless of
+            # prompt size). Preserve the graceful-degradation contract:
+            # fall through to Tier 3 instead of crashing the stage.
+            log.warning(
+                "chunked review: synthesis pass hit token limit (%s); "
+                "falling through to degraded single-pass",
+                exc,
+            )
+            return None
+        raise
+
+
 def _run_with_degraded_retry(
     attempt: Any,
     *,
@@ -317,14 +486,27 @@ def _run_with_degraded_retry(
 ) -> object:
     """Run *attempt* (one review pass), degrading on token-limit overflow.
 
-    Calls ``attempt(diff_text=, use_preseed=, note=)``. On a context-window
-    / token-limit error, retry once with NO preseed and a hard-truncated
-    diff. If that ALSO overflows, return a best-effort NEEDS_DISCUSSION
-    :class:`ReviewVerdict` rather than crashing the stage — graceful
-    degradation is the contract. Non token-limit exceptions propagate
-    unchanged, so run_agent's transient retry and the caller's handling
-    apply exactly as before.
+    Calls ``attempt(diff_text=, use_preseed=, note=)``.  Degradation
+    follows a three-tier fallback:
+
+    Tier 1 — full diff + preseed (reference files preloaded).
+        On token-limit error: log warning, advance to Tier 2.
+        On other error: re-raise (unchanged).
+
+    Tier 2 — chunked per-file review via :func:`_run_chunked_review`.
+        Each file's diff is reviewed independently, then a synthesis
+        pass produces a consolidated verdict.
+        Returns ``ReviewVerdict`` → use it (success).
+        Returns ``None`` (single file too big) → fall through to Tier 3.
+
+    Tier 3 — degraded single-pass: NO preseed, hard-truncated diff.
+        On token-limit error: return best-effort ``NEEDS_DISCUSSION``.
+        On success: return verdict (unchanged).
+
+    Non token-limit exceptions propagate unchanged, so ``run_agent``'s
+    transient retry and the caller's handling apply exactly as before.
     """
+    # Tier 1: full diff + preseed -------------------------------------------
     try:
         return attempt(diff_text=diff, use_preseed=True, note=None)
     except Exception as exc:
@@ -332,10 +514,16 @@ def _run_with_degraded_retry(
             raise
         log.warning(
             "review: context-window/token-limit error (%s); retrying with "
-            "reduced context (no preseed, hard-truncated diff)",
+            "chunked per-file review",
             exc,
         )
 
+    # Tier 2: chunked per-file review ---------------------------------------
+    chunked_result = _run_chunked_review(attempt, diff, settings)
+    if chunked_result is not None:
+        return chunked_result
+
+    # Tier 3: degraded single-pass — hard-truncated diff, no preseed --------
     from ..core.text_utils import head_tail_keep
 
     # Hard-truncate to a small fixed budget. ``or 40_000`` keeps the cap
