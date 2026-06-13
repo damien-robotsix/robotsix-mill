@@ -322,12 +322,21 @@ def run_retrospect_agent(
 
     # Build read-only filesystem tools when a clone is available so
     # the agent can verify concrete gap claims before filing follow-ups.
+    # Include `explore` / `parallel_explore` sub-agents for complex
+    # multi-step verification — their internal calls don't count against
+    # the retrospect agent's pydantic-ai `request_limit`, preventing the
+    # saturation that previously BLOCKED already-delivered tickets.
     tools: list = []
     if repo_dir is not None and repo_dir.exists():
         from .fs_tools import build_fs_tools
+        from .explore import make_explore_tool, make_parallel_explore_tool
 
-        ro_tool_names: set[str] = {"read_file", "list_dir", "run_command"}
         tools = [
+            make_explore_tool(settings, repo_dir),
+            make_parallel_explore_tool(settings, repo_dir),
+        ]
+        ro_tool_names: set[str] = {"read_file", "list_dir", "run_command"}
+        tools += [
             t for t in build_fs_tools(repo_dir, settings) if t.__name__ in ro_tool_names
         ]
 

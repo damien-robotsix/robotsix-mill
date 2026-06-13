@@ -292,8 +292,9 @@ def test_langfuse_none_workflow_only_still_succeeds(ctx_factory, monkeypatch):
 
 
 def test_agent_raises_blocked_resumable(ctx_factory, monkeypatch):
-    """When run_retrospect_agent raises, the stage returns BLOCKED
-    with a resumable note and no retrospect.md artifact."""
+    """When run_retrospect_agent raises a non-transient exception, the
+    stage degrades to CLOSED (not BLOCKED) with a failure note and a
+    minimal retrospect.md artifact recording the failure."""
     from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.runners import pass_runner
 
@@ -326,12 +327,73 @@ def test_agent_raises_blocked_resumable(ctx_factory, monkeypatch):
     t = _ticket(ctx)
     out = RetrospectStage().run(t, ctx)
 
-    assert out.next_state is State.BLOCKED
+    assert out.next_state is State.CLOSED
     assert "retrospect failed" in (out.note or "").lower()
-    assert "resumable" in (out.note or "").lower()
 
     artifact = ctx.service.workspace(t).artifacts_dir / "retrospect.md"
-    assert not artifact.exists()
+    assert artifact.exists()
+    content = artifact.read_text()
+    assert "retrospect failed" in content
+
+
+def test_agent_raises_non_transient_closes_with_failure_artifact(
+    ctx_factory, monkeypatch
+):
+    """When run_retrospect_agent raises a non-transient exception and
+    reraise_if_transient is a no-op (simulating a fatal error), the
+    stage returns CLOSED with a failure note and a minimal
+    retrospect.md artifact recording the failure."""
+    from robotsix_mill.langfuse import client as langfuse_client
+    from robotsix_mill.runners import pass_runner
+
+    ctx = ctx_factory()
+
+    def _boom(**kwargs):
+        raise RuntimeError("simulated saturation")
+
+    monkeypatch.setattr(retrospecting, "run_retrospect_agent", _boom)
+    # Explicitly make reraise_if_transient a no-op so the non-transient
+    # degrade path is exercised unambiguously.
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.transient_errors.reraise_if_transient",
+        lambda e: None,
+    )
+    monkeypatch.setattr(
+        langfuse_client,
+        "fetch_session_summary",
+        lambda settings, session_id: "summary",
+    )
+    monkeypatch.setattr(
+        langfuse_client,
+        "_langfuse_api_get",
+        lambda settings, path, params=None, repo_config=None: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
+    )
+    monkeypatch.setattr(
+        pass_runner,
+        "_verify_prior_proposals",
+        lambda service, settings, source_label: {},
+    )
+
+    t = _ticket(ctx)
+    out = RetrospectStage().run(t, ctx)
+
+    assert out.next_state is State.CLOSED
+    assert "retrospect failed" in (out.note or "").lower()
+    # The note uses repr form: "RuntimeError('simulated saturation')"
+    assert "RuntimeError" in (out.note or "")
+    assert "simulated saturation" in (out.note or "")
+
+    artifact = ctx.service.workspace(t).artifacts_dir / "retrospect.md"
+    assert artifact.exists()
+    content = artifact.read_text()
+    assert "# Retrospect" in content
+    assert "retrospect failed" in content
+    assert "RuntimeError" in content
+    assert "simulated saturation" in content
 
 
 # ------------------------------------------------------------------

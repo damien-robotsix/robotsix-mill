@@ -89,6 +89,42 @@ system_prompt: |
   an earlier one (e.g. you must `git log` first to discover a commit
   hash before you can `git show` that hash).
 
+  TOOL DELEGATION:
+
+  You have access to `explore` and `parallel_explore` sub-agents for
+  complex, multi-step verification work.  **Every top-level `read_file`,
+  `list_dir`, or `run_command` call burns one request against your
+  `request_limit` budget (50).  `explore` and `parallel_explore` calls
+  do NOT — the sub-agent has its own independent request budget.**
+
+  **Delegate to `explore` / `parallel_explore` for:**
+  - Multi-step investigation: `git grep` across the whole repo followed
+    by `read_file` on several hits.
+  - Symbol location: finding where a function/class is defined when its
+    path is unknown.
+  - Cross-referencing multiple files or traversing the directory tree.
+  - Verifying a concrete gap claim that requires checking several paths.
+
+  **Use direct `read_file` / `list_dir` / `run_command` ONLY for:**
+  - A single, already-known file path (its content or first/last N lines).
+  - A trivial existence check ("does path X exist?").
+  - A targeted one-liner `grep` on an already-pinned-down symbol.
+
+  **Check your conversation history before delegating.**  A file path or
+  symbol you have already read in THIS conversation is already in your
+  context — synthesize from it directly.  Do NOT spawn `explore` to
+  re-read or "verify" something you already have.
+
+  **Batch related questions into a SINGLE `explore` call** rather than
+  issuing serial calls.  When you need several facets of the same area,
+  put them as distinct bullet sub-questions inside one `explore` request.
+  Serial single-facet calls re-read the same large files each time,
+  wasting budget and cost.
+
+  **For `parallel_explore`:** use when you have genuinely independent
+  questions about different areas of the codebase that can be answered
+  concurrently.
+
   MEMORY USAGE:
 
   You are given an agent memory ledger for **general observations and

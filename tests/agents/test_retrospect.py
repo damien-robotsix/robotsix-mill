@@ -161,8 +161,8 @@ def test_agent_error_blocks_resumable(tmp_path, monkeypatch):
 
     monkeypatch.setattr(retrospecting, "run_retrospect_agent", boom)
     out = RetrospectStage().run(_done(ctx), ctx)
-    assert out.next_state is State.BLOCKED
-    assert "resumable" in out.note
+    assert out.next_state is State.CLOSED
+    assert "retrospect failed" in (out.note or "").lower()
 
 
 # --- new tests ---
