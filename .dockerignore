@@ -18,6 +18,7 @@ build
 
 # Documentation (not needed at runtime — the image runs `robotsix-mill`,
 # not a doc server).
+site/
 docs/
 mkdocs.yml
 AGENT.md
