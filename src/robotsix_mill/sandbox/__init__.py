@@ -127,7 +127,15 @@ def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> s
         return command
     if not (repo_dir / "pyproject.toml").exists():
         return command
-    return "pip install --user --quiet --disable-pip-version-check . && " + command
+    # Install the project WITH its dev/test extra so test-only deps the
+    # ticket adds (e.g. hypothesis) are importable in the gate — a plain
+    # `pip install .` pulls runtime deps only, so a new test dependency
+    # fails with ModuleNotFoundError. Try `.[dev]` (the convention across
+    # robotsix repos); fall back to a plain install for any repo that has
+    # no `dev` extra (pip would otherwise error), so this never regresses
+    # a previously-runnable gate.
+    pip = "pip install --user --quiet --disable-pip-version-check"
+    return f"({pip} '.[dev]' || {pip} .) && " + command
 
 
 def _build_extra_packages_prefix(extra_packages: list[str]) -> tuple[str, bool]:

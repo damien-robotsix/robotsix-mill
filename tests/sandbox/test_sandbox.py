@@ -376,10 +376,8 @@ def test_install_project_prefixes_pip_when_pyproject_and_proxy(tmp_path, monkeyp
     sandbox.run("pytest -q", repo_dir=repo, settings=s, install_project=True)
 
     cmd = seen["argv"][-1]
-    assert cmd == (
-        PATH_EXPORT
-        + "pip install --user --quiet --disable-pip-version-check . && pytest -q"
-    )
+    pip = "pip install --user --quiet --disable-pip-version-check"
+    assert cmd == (PATH_EXPORT + f"({pip} '.[dev]' || {pip} .) && pytest -q")
 
 
 def test_install_project_noop_without_pyproject(tmp_path, monkeypatch):
