@@ -236,7 +236,7 @@ class _CommentMixin(_ServiceBase):
         ) as s:
             comment = s.get(Comment, comment_id)
             if comment is None:
-                raise KeyError(comment_id)
+                raise KeyError(f"comment {comment_id} not found")
             if comment.parent_id is not None:
                 raise ValueError("only top-level threads can be reopened")
             if comment.closed_at is None:
