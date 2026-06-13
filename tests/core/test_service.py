@@ -946,6 +946,190 @@ def test_all_descendants_is_cycle_safe(service):
     assert result[0].id == "cyc-B"
 
 
+# -- auto-reject proposals on terminal transition -----------------------
+
+
+def test_auto_reject_pending_on_task_close(service):
+    """A PENDING proposal on a task is auto-rejected when the task
+    transitions DONE → CLOSED."""
+    from robotsix_mill.core import db
+    from robotsix_mill.core.models import ProposedAction, ActionType, ProposedActionStatus
+    from datetime import datetime, timezone
+
+    t = service.create("Proposal target task")
+    # Create a PENDING proposal directly in the DB.
+    pa = ProposedAction(
+        source="test-agent",
+        target_ticket_id=t.id,
+        action_type=ActionType.TRANSITION,
+        payload=None,
+        rationale="test rationale",
+        status=ProposedActionStatus.PENDING,
+        created_at=datetime.now(timezone.utc),
+    )
+    with db.session(service.settings, service.board_id) as s:
+        s.add(pa)
+        s.commit()
+        s.refresh(pa)
+
+    # Transition task to terminal state (DONE → CLOSED).
+    service.transition(t.id, State.DONE)
+    service.transition(t.id, State.CLOSED)
+
+    # Re-read the proposal — it should be REJECTED by "system".
+    with db.session(service.settings, service.board_id) as s:
+        reloaded = s.get(ProposedAction, pa.id)
+    assert reloaded.status == ProposedActionStatus.REJECTED
+    assert reloaded.decided_by == "system"
+    assert reloaded.decided_at is not None
+
+
+def test_auto_reject_pending_on_inquiry_answered(service):
+    """A PENDING proposal on an inquiry is auto-rejected when the
+    inquiry transitions to ANSWERED."""
+    from robotsix_mill.core import db
+    from robotsix_mill.core.models import ProposedAction, ActionType, ProposedActionStatus
+    from datetime import datetime, timezone
+
+    t = service.create("Proposal target inquiry", kind="inquiry")
+    pa = ProposedAction(
+        source="test-agent",
+        target_ticket_id=t.id,
+        action_type=ActionType.TRANSITION,
+        payload=None,
+        rationale="test rationale",
+        status=ProposedActionStatus.PENDING,
+        created_at=datetime.now(timezone.utc),
+    )
+    with db.session(service.settings, service.board_id) as s:
+        s.add(pa)
+        s.commit()
+        s.refresh(pa)
+
+    # Inquiry starts in ASKED → ANSWERED.
+    service.transition(t.id, State.ANSWERED)
+
+    with db.session(service.settings, service.board_id) as s:
+        reloaded = s.get(ProposedAction, pa.id)
+    assert reloaded.status == ProposedActionStatus.REJECTED
+    assert reloaded.decided_by == "system"
+    assert reloaded.decided_at is not None
+
+
+def test_auto_reject_pending_on_epic_closed(service):
+    """A PENDING proposal on an epic is auto-rejected when the epic
+    transitions to EPIC_CLOSED."""
+    from robotsix_mill.core import db
+    from robotsix_mill.core.models import ProposedAction, ActionType, ProposedActionStatus
+    from datetime import datetime, timezone
+
+    t = service.create("Proposal target epic", kind="epic")
+    pa = ProposedAction(
+        source="test-agent",
+        target_ticket_id=t.id,
+        action_type=ActionType.TRANSITION,
+        payload=None,
+        rationale="test rationale",
+        status=ProposedActionStatus.PENDING,
+        created_at=datetime.now(timezone.utc),
+    )
+    with db.session(service.settings, service.board_id) as s:
+        s.add(pa)
+        s.commit()
+        s.refresh(pa)
+
+    # Epic starts in EPIC_OPEN → EPIC_CLOSED.
+    service.transition(t.id, State.EPIC_CLOSED)
+
+    with db.session(service.settings, service.board_id) as s:
+        reloaded = s.get(ProposedAction, pa.id)
+    assert reloaded.status == ProposedActionStatus.REJECTED
+    assert reloaded.decided_by == "system"
+    assert reloaded.decided_at is not None
+
+
+def test_auto_reject_skips_non_pending_proposals(service):
+    """Non-PENDING proposals (APPROVED, REJECTED, EXECUTED, FAILED) are
+    NOT touched when the ticket transitions to a terminal state."""
+    from robotsix_mill.core import db
+    from robotsix_mill.core.models import ProposedAction, ActionType, ProposedActionStatus
+    from datetime import datetime, timezone
+
+    t = service.create("Non-pending proposals")
+    # Insert one proposal per non-PENDING status.
+    statuses = [
+        ProposedActionStatus.APPROVED,
+        ProposedActionStatus.REJECTED,
+        ProposedActionStatus.EXECUTED,
+        ProposedActionStatus.FAILED,
+    ]
+    pa_ids: dict[ProposedActionStatus, int] = {}
+    for status in statuses:
+        pa = ProposedAction(
+            source="test-agent",
+            target_ticket_id=t.id,
+            action_type=ActionType.TRANSITION,
+            payload=None,
+            rationale=f"rationale {status.value}",
+            status=status,
+            created_at=datetime.now(timezone.utc),
+        )
+        with db.session(service.settings, service.board_id) as s:
+            s.add(pa)
+            s.commit()
+            s.refresh(pa)
+            pa_ids[status] = pa.id
+
+    # Transition to CLOSED.
+    service.transition(t.id, State.DONE)
+    service.transition(t.id, State.CLOSED)
+
+    # All non-PENDING proposals should retain their status.
+    with db.session(service.settings, service.board_id) as s:
+        for status, pa_id in pa_ids.items():
+            reloaded = s.get(ProposedAction, pa_id)
+            assert reloaded.status == status, f"expected {status.value}, got {reloaded.status.value}"
+
+
+def test_auto_reject_not_triggered_on_non_archivable_transition(service):
+    """Transitioning to a non-archivable state (e.g. READY, DONE,
+    BLOCKED) does NOT auto-reject proposals."""
+    from robotsix_mill.core import db
+    from robotsix_mill.core.models import ProposedAction, ActionType, ProposedActionStatus
+    from datetime import datetime, timezone
+
+    t = service.create("Non-terminal ticket")
+    pa = ProposedAction(
+        source="test-agent",
+        target_ticket_id=t.id,
+        action_type=ActionType.TRANSITION,
+        payload=None,
+        rationale="test rationale",
+        status=ProposedActionStatus.PENDING,
+        created_at=datetime.now(timezone.utc),
+    )
+    with db.session(service.settings, service.board_id) as s:
+        s.add(pa)
+        s.commit()
+        s.refresh(pa)
+
+    # Transition to READY (non-terminal).
+    service.transition(t.id, State.READY)
+
+    with db.session(service.settings, service.board_id) as s:
+        reloaded = s.get(ProposedAction, pa.id)
+    assert reloaded.status == ProposedActionStatus.PENDING  # untouched
+
+
+def test_auto_reject_no_proposals_clean_transition(service):
+    """A ticket with no proposals at all transitions cleanly (no error)."""
+    t = service.create("No proposals ticket")
+    # Should not raise.
+    service.transition(t.id, State.DONE)
+    service.transition(t.id, State.CLOSED)
+    assert service.get(t.id).state is State.CLOSED
+
+
 # -- mark_done ----------------------------------------------------------
 
 
