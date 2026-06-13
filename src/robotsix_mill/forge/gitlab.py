@@ -179,6 +179,16 @@ class GitLabForge(Forge):
         except Exception as e:
             return {"merged": False, "reason": str(e)}
 
+    def update_branch(self, *, source_branch: str) -> dict:
+        try:
+            project_path = _parse_gitlab_project_path(self._remote_url)
+            mr = self._find_mr(project_path=project_path, source_branch=source_branch)
+            if mr is None:
+                return {"updated": False, "reason": "MR not found"}
+            return self._rebase_mr(project_path, mr["iid"])
+        except Exception as e:
+            return {"updated": False, "reason": str(e)}
+
     def list_pr_reviews(self, *, source_branch: str) -> list[dict]:
         project_path = _parse_gitlab_project_path(self._remote_url)
         mr = self._find_mr(project_path=project_path, source_branch=source_branch)
@@ -741,6 +751,31 @@ class GitLabForge(Forge):
             }
         except Exception as e:
             return {"merged": False, "reason": str(e)}
+
+    def _rebase_mr(self, project_path: str, mr_iid: int) -> dict:
+        """PUT /projects/:id/merge_requests/:iid/rebase to merge the target
+        branch tip into the MR branch so its pipeline re-runs against the
+        current base."""
+        pid = self._resolve_project_id(project_path)
+        try:
+            r = self._http.put(
+                f"/projects/{pid}/merge_requests/{mr_iid}/rebase",
+            )
+            if r.status_code == 202:
+                return {"updated": True, "reason": "rebase accepted"}
+            if r.status_code == 403:
+                return {
+                    "updated": False,
+                    "reason": "rebase forbidden (insufficient permissions?)",
+                }
+            if r.status_code == 409:
+                return {"updated": False, "reason": "MR is not mergeable"}
+            return {
+                "updated": False,
+                "reason": f"HTTP {r.status_code}: {r.text[:200]}",
+            }
+        except Exception as e:
+            return {"updated": False, "reason": str(e)}
 
     def _delete_branch(self, project_path: str, branch: str) -> bool:
         """DELETE /projects/:id/repository/branches/:branch."""

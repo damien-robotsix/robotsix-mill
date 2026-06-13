@@ -835,6 +835,157 @@ def test_merge_pr_unexpected_error_status(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# update_branch (MR rebase)
+# ---------------------------------------------------------------------------
+
+
+def test_update_branch_mr_not_found(tmp_path, monkeypatch):
+    """No MR → {"updated": False, "reason": "MR not found"}."""
+    project_json = {"id": 42}
+    get_map = {
+        "merge_requests": _make_response(200, []),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.update_branch(source_branch="feature/x")
+    assert result == {"updated": False, "reason": "MR not found"}
+
+
+def test_update_branch_202_accepted(tmp_path, monkeypatch):
+    """202 → {"updated": True, "reason": "rebase accepted"}."""
+    project_json = {"id": 42}
+    mr = {"iid": 7, "state": "opened", "web_url": "http://x"}
+    get_map = {
+        "merge_requests": _make_response(200, [mr]),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(
+        monkeypatch,
+        get_map=get_map,
+        put_response=_make_response(202, {"rebase_in_progress": True}),
+    )
+
+    forge = _forge(tmp_path)
+    result = forge.update_branch(source_branch="feature/x")
+    assert result == {"updated": True, "reason": "rebase accepted"}
+
+
+def test_update_branch_403_forbidden(tmp_path, monkeypatch):
+    """403 → not updated, permissions reason."""
+    project_json = {"id": 42}
+    mr = {"iid": 7, "state": "opened", "web_url": "http://x"}
+    get_map = {
+        "merge_requests": _make_response(200, [mr]),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(
+        monkeypatch,
+        get_map=get_map,
+        put_response=_make_response(403, {}, "forbidden"),
+    )
+
+    forge = _forge(tmp_path)
+    result = forge.update_branch(source_branch="feature/x")
+    assert result == {
+        "updated": False,
+        "reason": "rebase forbidden (insufficient permissions?)",
+    }
+
+
+def test_update_branch_409_not_mergeable(tmp_path, monkeypatch):
+    """409 → MR is not mergeable."""
+    project_json = {"id": 42}
+    mr = {"iid": 7, "state": "opened", "web_url": "http://x"}
+    get_map = {
+        "merge_requests": _make_response(200, [mr]),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(
+        monkeypatch,
+        get_map=get_map,
+        put_response=_make_response(409, {}, "conflict"),
+    )
+
+    forge = _forge(tmp_path)
+    result = forge.update_branch(source_branch="feature/x")
+    assert result == {"updated": False, "reason": "MR is not mergeable"}
+
+
+def test_update_branch_unexpected_status(tmp_path, monkeypatch):
+    """Unexpected HTTP status → {"updated": False, ...} with status text."""
+    project_json = {"id": 42}
+    mr = {"iid": 7, "state": "opened", "web_url": "http://x"}
+    get_map = {
+        "merge_requests": _make_response(200, [mr]),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(
+        monkeypatch,
+        get_map=get_map,
+        put_response=_make_response(500, {}, "boom"),
+    )
+
+    forge = _forge(tmp_path)
+    result = forge.update_branch(source_branch="feature/x")
+    assert result["updated"] is False
+    assert "HTTP 500" in result["reason"]
+
+
+def test_update_branch_find_mr_raises_returns_graceful_dict(tmp_path, monkeypatch):
+    """When project lookup fails, update_branch returns a dict, never raises."""
+    get_map = {
+        "projects/ns%2Fproject": _make_response(500, {}, "internal error"),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.update_branch(source_branch="feature/x")
+    assert result["updated"] is False
+    assert "GitLab project lookup failed" in result["reason"]
+
+
+def test_update_branch_network_error(tmp_path, monkeypatch):
+    """Network error during PUT → {"updated": False} (no raise)."""
+    project_json = {"id": 42}
+    mr = {"iid": 7, "state": "opened", "web_url": "http://x"}
+    get_map = {
+        "merge_requests": _make_response(200, [mr]),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+
+    class ErrorClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def post(self, url, headers=None, json=None, **kwargs):
+            return _make_response(500, {}, "")
+
+        def put(self, url, headers=None, json=None, **kwargs):
+            raise ConnectionError("connection refused")
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            for key, resp in get_map.items():
+                if key in url:
+                    return resp
+            return _make_response(404, [], "")
+
+    monkeypatch.setattr(real_httpx, "Client", ErrorClient)
+
+    forge = _forge(tmp_path)
+    result = forge.update_branch(source_branch="feature/x")
+    assert result["updated"] is False
+    assert "connection refused" in result["reason"]
+
+
+# ---------------------------------------------------------------------------
 # merge_pr payload shape
 # ---------------------------------------------------------------------------
 
