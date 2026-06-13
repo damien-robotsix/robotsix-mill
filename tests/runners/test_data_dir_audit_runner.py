@@ -559,7 +559,7 @@ def test_pass_reports_orphans_per_board_in_summary(tmp_path, monkeypatch):
     db.init_db(s, "board-b")
 
     monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings",
+        "robotsix_mill.runners.data_dir_audit.Settings",
         lambda: s,
     )
 
@@ -583,7 +583,7 @@ def test_pass_no_orphans_when_clean(tmp_path, monkeypatch):
     db.init_db(s, "board-clean")
 
     monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings",
+        "robotsix_mill.runners.data_dir_audit.Settings",
         lambda: s,
     )
 
@@ -610,7 +610,7 @@ def test_pass_integrates_find_largest_items(tmp_path, monkeypatch):
         os.close(fd)
 
     monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: settings
+        "robotsix_mill.runners.data_dir_audit.Settings", lambda: settings
     )
 
     db.init_db(settings, "test-board")
@@ -885,7 +885,7 @@ class TestRunDataDirAuditPass:
 
         # Tests inject Settings via the module-level monkeypatch seam.
         monkeypatch.setattr(
-            "robotsix_mill.runners.data_dir_audit_runner.Settings",
+            "robotsix_mill.runners.data_dir_audit.Settings",
             lambda: settings,
         )
 
@@ -900,7 +900,7 @@ class TestRunDataDirAuditPass:
     def test_no_findings_summary(self, tmp_path, monkeypatch):
         settings = _make_settings(tmp_path)
         monkeypatch.setattr(
-            "robotsix_mill.runners.data_dir_audit_runner.Settings",
+            "robotsix_mill.runners.data_dir_audit.Settings",
             lambda: settings,
         )
 
@@ -930,9 +930,7 @@ def test_summary_header_includes_total_bytes_and_file_count(tmp_path, monkeypatc
     (s.data_dir / "b.txt").write_bytes(b"y" * 20)
     (s.data_dir / "c.txt").write_bytes(b"z" * 30)
 
-    monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
-    )
+    monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
 
     # No board_id in the repo_config → no filing path is reached.
     result = run_data_dir_audit_pass()
@@ -943,9 +941,7 @@ def test_summary_header_includes_total_bytes_and_file_count(tmp_path, monkeypatc
 def test_summary_zero_finding_short_circuit(tmp_path, monkeypatch):
     """Empty data_dir + no findings → single-line short-circuit."""
     s = _make_settings(tmp_path)
-    monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
-    )
+    monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
 
     result = run_data_dir_audit_pass()
     assert result.summary == "Scanned 0 B in 0 files. No issues found."
@@ -965,9 +961,7 @@ def test_summary_truncates_long_paths(tmp_path, monkeypatch):
     finally:
         os.close(fd)
 
-    monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
-    )
+    monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
 
     result = run_data_dir_audit_pass()
     assert "…" in result.summary
@@ -983,7 +977,7 @@ def test_summary_truncates_long_paths(tmp_path, monkeypatch):
 def test_run_pass_propagates_session_id(tmp_path, monkeypatch):
     settings = _make_settings(tmp_path)
     monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings",
+        "robotsix_mill.runners.data_dir_audit.Settings",
         lambda: settings,
     )
 
@@ -1351,9 +1345,7 @@ def _seed_board(board_dir: Path) -> None:
 def test_first_run_no_prior_state(tmp_path, monkeypatch):
     """First run: no prior state → no growth flags, current scan saved."""
     s = _make_settings(tmp_path)
-    monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
-    )
+    monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
 
     board = s.data_dir / "test-board"
     _seed_board(board)
@@ -1375,9 +1367,7 @@ def test_first_run_no_prior_state(tmp_path, monkeypatch):
 def test_growth_detected_on_second_run(tmp_path, monkeypatch):
     """Second run picks up prior state and flags growth."""
     s = _make_settings(tmp_path)
-    monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
-    )
+    monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
 
     board = s.data_dir / "test-board"
     _seed_board(board)
@@ -1402,9 +1392,7 @@ def test_growth_detected_on_second_run(tmp_path, monkeypatch):
 def test_growth_ignores_shrink(tmp_path, monkeypatch):
     """Shrinking files should not be flagged."""
     s = _make_settings(tmp_path)
-    monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
-    )
+    monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
 
     board = s.data_dir / "test-board"
     _seed_board(board)
@@ -1424,9 +1412,7 @@ def test_growth_ignores_shrink(tmp_path, monkeypatch):
 def test_corrupt_state_recovered(tmp_path, monkeypatch, caplog):
     """Corrupt state file should be treated as first-run and overwritten."""
     s = _make_settings(tmp_path)
-    monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
-    )
+    monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
 
     board = s.data_dir / "test-board"
     _seed_board(board)
@@ -1450,9 +1436,7 @@ def test_corrupt_state_recovered(tmp_path, monkeypatch, caplog):
 def test_multiple_boards(tmp_path, monkeypatch):
     """Growth tracking works across multiple boards."""
     s = _make_settings(tmp_path)
-    monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
-    )
+    monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
 
     for bid in ("board-a", "board-b"):
         board = s.data_dir / bid
@@ -1476,9 +1460,7 @@ def test_multiple_boards(tmp_path, monkeypatch):
 def test_result_summary_format(tmp_path, monkeypatch):
     """Verify the summary string format."""
     s = _make_settings(tmp_path)
-    monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
-    )
+    monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
 
     board = s.data_dir / "test-board"
     _seed_board(board)
@@ -1543,9 +1525,7 @@ class TestFilingAndDedup:
         return board_id
 
     def _run_with_filing(self, s, monkeypatch, *, session_id=""):
-        monkeypatch.setattr(
-            "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
-        )
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
         return run_data_dir_audit_pass(
             session_id=session_id, repo_config=_test_repo_config()
         )
@@ -1719,9 +1699,7 @@ class TestFilingAndDedup:
         finally:
             os.close(fd)
 
-        monkeypatch.setattr(
-            "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
-        )
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
 
         result = run_data_dir_audit_pass(repo_config=None)
 
@@ -1841,7 +1819,7 @@ def test_prune_closed_knob_default_off_is_noop(tmp_path, monkeypatch):
     )
 
     monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings",
+        "robotsix_mill.runners.data_dir_audit.Settings",
         lambda: s,
     )
 
@@ -2000,9 +1978,7 @@ def test_pass_alert_only_after_gc(tmp_path, monkeypatch):
 
     # Pruning ENABLED → workspace GC'd before measurement → no oversized.
     s_on = _build_settings(prune=True)
-    monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s_on
-    )
+    monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s_on)
     result_on = run_data_dir_audit_pass()
     assert result_on.closed_pruned == 1
     assert result_on.oversized_items == []
@@ -2010,9 +1986,7 @@ def test_pass_alert_only_after_gc(tmp_path, monkeypatch):
 
     # Pruning DISABLED → workspace remains → oversized finding produced.
     s_off = _build_settings(prune=False)
-    monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s_off
-    )
+    monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s_off)
     result_off = run_data_dir_audit_pass()
     assert result_off.closed_pruned == 0
     assert any(item["path"].endswith("big.bin") for item in result_off.oversized_items)
@@ -2048,9 +2022,7 @@ def test_growth_suppressed_for_active_workspace(tmp_path, monkeypatch, caplog):
     """Growth inside an active (live, non-terminal) ticket workspace is
     suppressed and an INFO line is logged."""
     s = _make_settings(tmp_path)
-    monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
-    )
+    monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
     board_id = "test-board"
     ticket_id = "20260101T000000Z-active-ab12"
     _make_workspace_dir(s, board_id, ticket_id)
@@ -2079,9 +2051,7 @@ def test_growth_suppressed_for_terminal_workspace_when_clone_gc_on(
     terminal-ticket workspace is suppressed — the GC reclaims it on
     the next pass instead of filing an unactionable ticket."""
     s = _make_settings(tmp_path)
-    monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
-    )
+    monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
     board_id = "test-board"
     ticket_id = "20260101T000000Z-closed-bbbb"
     _make_workspace_dir(s, board_id, ticket_id)
@@ -2107,9 +2077,7 @@ def test_growth_kept_for_terminal_workspace_when_clone_gc_off(tmp_path, monkeypa
     """With the terminal-clone GC disabled, terminal-workspace growth
     still flags (nothing reclaims it)."""
     s = _make_settings(tmp_path, data_dir_audit_prune_terminal_clones=False)
-    monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
-    )
+    monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
     board_id = "test-board"
     ticket_id = "20260101T000000Z-closed-dddd"
     _make_workspace_dir(s, board_id, ticket_id)
@@ -2157,9 +2125,7 @@ def test_growth_suppressed_for_periodic_pass_workspace(tmp_path, monkeypatch, ca
     """Growth inside a periodic-pass clone (``health_workspace/repo/``)
     is suppressed unconditionally and an INFO line is logged."""
     s = _make_settings(tmp_path)
-    monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
-    )
+    monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
     board_id = "test-board"
     db.init_db(s, board_id)
     # Seed a small clone file so the periodic-pass path exists in the
@@ -2272,9 +2238,7 @@ def test_growth_suppressed_for_orphan_workspace(tmp_path, monkeypatch):
     the orphan check files its own finding with the full dir size, so a
     growth ticket on the same path would be redundant noise."""
     s = _make_settings(tmp_path)
-    monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
-    )
+    monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
     board_id = "test-board"
     ticket_id = "20260101T000000Z-orph-cccc"
     _make_workspace_dir(s, board_id, ticket_id)
@@ -2309,9 +2273,7 @@ def test_prune_terminal_clones_removes_clones_keeps_artifacts(tmp_path, monkeypa
     """The default-on clone GC removes repo/ + repos/ of an old terminal
     ticket but preserves description.md and artifacts/."""
     s = _make_settings(tmp_path)
-    monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
-    )
+    monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
     board_id = "test-board"
     ticket_id = "20260101T000000Z-closed-eeee"
     ws_dir = _make_workspace_with_clones(s, board_id, ticket_id)
@@ -2337,9 +2299,7 @@ def test_prune_terminal_clones_removes_clones_keeps_artifacts(tmp_path, monkeypa
 def test_prune_terminal_clones_age_guard_and_active_kept(tmp_path, monkeypatch):
     """Recently-closed and active tickets keep their clones."""
     s = _make_settings(tmp_path)
-    monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
-    )
+    monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
     board_id = "test-board"
     recent = "20260101T000000Z-recent-ffff"
     active = "20260101T000000Z-active-0000"
@@ -2359,9 +2319,7 @@ def test_prune_terminal_clones_age_guard_and_active_kept(tmp_path, monkeypatch):
 def test_prune_terminal_clones_knob_off_is_noop(tmp_path, monkeypatch):
     """With the knob disabled, no clones are touched."""
     s = _make_settings(tmp_path, data_dir_audit_prune_terminal_clones=False)
-    monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
-    )
+    monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
     board_id = "test-board"
     ticket_id = "20260101T000000Z-closed-1111"
     ws_dir = _make_workspace_with_clones(s, board_id, ticket_id)
@@ -2392,9 +2350,7 @@ def test_aggregate_workspaces_growth_suppressed_when_explained(
     growth is fully attributable to (individually suppressed) active
     ticket workspaces — the exact live failure of ticket 0ea7."""
     s = _make_settings(tmp_path)
-    monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
-    )
+    monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
     board_id = "test-board"
     ticket_id = "20260101T000000Z-active-2222"
     _make_workspace_dir(s, board_id, ticket_id)
@@ -2416,9 +2372,7 @@ def test_unexplained_growth_keeps_flag_with_breakdown(tmp_path, monkeypatch):
     """Growth outside any workspace taxonomy survives suppression and
     carries a classified breakdown for the filed ticket."""
     s = _make_settings(tmp_path)
-    monkeypatch.setattr(
-        "robotsix_mill.runners.data_dir_audit_runner.Settings", lambda: s
-    )
+    monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
     board_id = "test-board"
     db.init_db(s, board_id)
     _write_bytes(s.data_dir / board_id / "logs" / "app.log", 100)
