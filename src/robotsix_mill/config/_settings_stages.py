@@ -222,11 +222,18 @@ class _StagesSettings(BaseModel):
     review_max_rounds: int = Field(default=3, ge=0)
     # How many model requests the review agent may make in one run
     # (counts each tool call + each reasoning step + the final verdict).
-    # 40 is the empirical floor for a medium PR (4-6 files): read_file
-    # per modified file + diff walk + verdict + a few post_comment
-    # round-trips. 20 was the original default and routinely BLOCKED
-    # medium PRs with "review agent error — resumable" mid-review.
-    review_request_limit: int = Field(default=40)
+    # 20 (original) then 40 each routinely BLOCKED medium PRs with
+    # "review agent error — resumable" mid-review. 40 was *still* too low:
+    # test-heavy / multi-file diffs make the reviewer read_file the
+    # source-under-test plus related modules to verify claims (the
+    # preloaded reference_files cover only the modified files), and 40 was
+    # exhausted on three tickets in one day (f0eb, 741f, 2e8d — each a
+    # test-gap or multi-file change). Unlike refine, review has no explore
+    # sub-agent to delegate breadth reads to, so the cap itself is the
+    # lever; match refine's 80 (same reasoning: per-run cost is negligible
+    # ~$0.03-0.09 and the per-ticket spend cap is the real backstop). See
+    # ticket bc6d.
+    review_request_limit: int = Field(default=80)
     # Maximum characters of the re-review prior-context block (prior
     # review comments + the implement rebuttal) fed to the review agent.
     # Each component is tail-kept (most-recent content survives) so multi-
