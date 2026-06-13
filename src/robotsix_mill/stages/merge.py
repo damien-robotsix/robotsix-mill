@@ -623,12 +623,21 @@ class MergeStage(Stage):
                 reconciled = git_ops.reconcile_with_remote_pr(
                     Path(repo_dir), remote_url, branch, token
                 )
-                if not reconciled:
+                if reconciled is git_ops.ReconcileResult.DIVERGED:
+                    return Outcome(
+                        State.BLOCKED,
+                        f"{repo_id}: PR branch diverged from the workspace clone (a human "
+                        f"likely pushed to it) — manual reconciliation required. "
+                        f"The mill refuses to force-push: push_with_lease cannot "
+                        f"protect this case (reconcile already fetched the foreign "
+                        f"commit into the lease ref), so it would silently "
+                        f"overwrite that commit.",
+                    )
+                if reconciled is git_ops.ReconcileResult.UNAVAILABLE:
                     log.warning(
-                        "%s: multi-repo ci-fix for %s: could not fast-forward "
-                        "to remote PR branch (diverged) — continuing with "
-                        "local state; lease check on push will prevent data "
-                        "loss if remote has advanced",
+                        "%s: %s: could not reach the remote PR branch to "
+                        "reconcile — proceeding; push_with_lease backstops a "
+                        "stale push",
                         ticket.id,
                         repo_id,
                     )
@@ -762,12 +771,21 @@ class MergeStage(Stage):
                 reconciled = git_ops.reconcile_with_remote_pr(
                     Path(repo_dir), remote_url, branch, token
                 )
-                if not reconciled:
+                if reconciled is git_ops.ReconcileResult.DIVERGED:
+                    return Outcome(
+                        State.BLOCKED,
+                        f"{repo_id}: PR branch diverged from the workspace clone (a human "
+                        f"likely pushed to it) — manual reconciliation required. "
+                        f"The mill refuses to force-push: push_with_lease cannot "
+                        f"protect this case (reconcile already fetched the foreign "
+                        f"commit into the lease ref), so it would silently "
+                        f"overwrite that commit.",
+                    )
+                if reconciled is git_ops.ReconcileResult.UNAVAILABLE:
                     log.warning(
-                        "%s: multi-repo rebase for %s: could not fast-forward "
-                        "to remote PR branch (diverged) — continuing with "
-                        "local state; lease check on push will prevent data "
-                        "loss if remote has advanced",
+                        "%s: %s: could not reach the remote PR branch to "
+                        "reconcile — proceeding; push_with_lease backstops a "
+                        "stale push",
                         ticket.id,
                         repo_id,
                     )
@@ -1527,12 +1545,20 @@ class MergeStage(Stage):
                 reconciled = git_ops.reconcile_with_remote_pr(
                     Path(repo_dir), remote_url, branch, token
                 )
-                if not reconciled:
+                if reconciled is git_ops.ReconcileResult.DIVERGED:
+                    return Outcome(
+                        State.BLOCKED,
+                        "PR branch diverged from the workspace clone (a human likely pushed to "
+                        "it) — manual reconciliation required. The mill refuses to "
+                        "force-push here: push_with_lease cannot protect this case "
+                        "because reconcile's own fetch already advanced the tracking "
+                        "ref to the foreign commit, so a lease push would pass its "
+                        "compare-and-swap and SILENTLY OVERWRITE that commit.",
+                    )
+                if reconciled is git_ops.ReconcileResult.UNAVAILABLE:
                     log.warning(
-                        "%s: could not fast-forward to remote PR branch "
-                        "(diverged) — continuing with local state; lease "
-                        "check on push will prevent data loss if remote "
-                        "has advanced",
+                        "%s: could not reach the remote PR branch to reconcile "
+                        "— proceeding; push_with_lease backstops a stale push",
                         ticket.id,
                     )
 
@@ -1651,6 +1677,8 @@ class MergeStage(Stage):
             ticket, s, ctx.repo_config, repo_dir, branch, target, attempt
         )
 
+        if isinstance(ok, Outcome):
+            return ok  # e.g. BLOCKED on a diverged PR branch
         if ok:
             return self._handle_rebase_success(
                 ticket, ctx, branch, repo_dir, counter_path, attempt, max_attempts
@@ -1688,8 +1716,12 @@ class MergeStage(Stage):
         branch: str,
         target: str,
         attempt: int,
-    ) -> bool:
-        """Fetch target branch and invoke the rebase agent. Returns True on success."""
+    ) -> bool | Outcome:
+        """Fetch target branch and invoke the rebase agent.
+
+        Returns True on success, False on a (retryable) rebase failure, or
+        an ``Outcome`` to return directly (e.g. BLOCKED when the remote PR
+        branch has diverged and must not be force-pushed over)."""
         try:
             # The merge stage is traced=False (poll-driven, normally no
             # LLM), so the worker does NOT open the ticket's root span.
@@ -1718,12 +1750,20 @@ class MergeStage(Stage):
                 reconciled = git_ops.reconcile_with_remote_pr(
                     Path(repo_dir), remote_url, branch, token
                 )
-                if not reconciled:
+                if reconciled is git_ops.ReconcileResult.DIVERGED:
+                    return Outcome(
+                        State.BLOCKED,
+                        "PR branch diverged from the workspace clone (a human likely pushed to "
+                        "it) — manual reconciliation required. The mill refuses to "
+                        "force-push here: push_with_lease cannot protect this case "
+                        "because reconcile's own fetch already advanced the tracking "
+                        "ref to the foreign commit, so a lease push would pass its "
+                        "compare-and-swap and SILENTLY OVERWRITE that commit.",
+                    )
+                if reconciled is git_ops.ReconcileResult.UNAVAILABLE:
                     log.warning(
-                        "%s: could not fast-forward to remote PR branch "
-                        "(diverged) — continuing with local state; lease "
-                        "check on push will prevent data loss if remote "
-                        "has advanced",
+                        "%s: could not reach the remote PR branch to reconcile "
+                        "— proceeding; push_with_lease backstops a stale push",
                         ticket.id,
                     )
 

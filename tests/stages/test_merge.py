@@ -2916,6 +2916,13 @@ def test_multi_repo_conflicting_with_clone_runs_rebase(tmp_path, monkeypatch):
         "start_ticket_root_span",
         lambda *a, **k: contextlib.nullcontext(),
     )
+    # Reconcile is exercised separately; this test targets the
+    # rebase/ci-fix flow, so treat the PR branch as in sync.
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "reconcile_with_remote_pr",
+        lambda *a, **k: merge_mod.git_ops.ReconcileResult.SYNCED,
+    )
     monkeypatch.setattr(merge_mod.git_ops, "fetch", lambda *a, **k: None)
     monkeypatch.setattr(merge_mod.git_ops, "head_sha", lambda d: "newsha")
     monkeypatch.setattr(merge_mod.git_ops, "remote_branch_sha", lambda d, b: "oldsha")

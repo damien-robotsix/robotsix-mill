@@ -1274,7 +1274,7 @@ class TestReconcileWithRemotePr:
         # Now reconcile — the workspace should fast-forward to include
         # the human commit.
         result = git_ops.reconcile_with_remote_pr(dest, remote, "feature", token=None)
-        assert result is True
+        assert result is git_ops.ReconcileResult.SYNCED
 
         # Workspace HEAD should now equal the remote tip.
         _git(dest, "fetch", "origin", "feature")
@@ -1306,7 +1306,7 @@ class TestReconcileWithRemotePr:
         head_before = git_ops.head_sha(dest)
 
         result = git_ops.reconcile_with_remote_pr(dest, remote, "feature", token=None)
-        assert result is True
+        assert result is git_ops.ReconcileResult.SYNCED
         assert git_ops.head_sha(dest) == head_before
 
     def test_remote_branch_does_not_exist_noop(self, tmp_path):
@@ -1323,11 +1323,11 @@ class TestReconcileWithRemotePr:
         result = git_ops.reconcile_with_remote_pr(
             dest, remote, "never-pushed", token=None
         )
-        assert result is True
+        assert result is git_ops.ReconcileResult.SYNCED
         assert git_ops.head_sha(dest) == head_before
 
-    def test_diverged_returns_false(self, tmp_path):
-        """AC4: both sides advanced independently → returns False."""
+    def test_diverged_returns_diverged(self, tmp_path):
+        """AC4: both sides advanced independently → returns DIVERGED."""
         remote = make_bare_repo(tmp_path)
         dest = tmp_path / "repo"
         git_ops.clone(remote, dest, "main")
@@ -1352,7 +1352,7 @@ class TestReconcileWithRemotePr:
         _git(pusher, "push", "origin", "feature")
 
         result = git_ops.reconcile_with_remote_pr(dest, remote, "feature", token=None)
-        assert result is False
+        assert result is git_ops.ReconcileResult.DIVERGED
 
     def test_local_ahead_of_remote_noop(self, tmp_path):
         """When local is ahead of remote (normal case after local commits,
@@ -1370,7 +1370,7 @@ class TestReconcileWithRemotePr:
         head_before = git_ops.head_sha(dest)
 
         result = git_ops.reconcile_with_remote_pr(dest, remote, "feature", token=None)
-        assert result is True
+        assert result is git_ops.ReconcileResult.SYNCED
         # Local should still be ahead (unchanged).
         assert git_ops.head_sha(dest) == head_before
 
@@ -1556,7 +1556,7 @@ class TestRebasePreservesForeignCommits:
         reconciled = git_ops.reconcile_with_remote_pr(
             dest, remote, "feature", token=None
         )
-        assert reconciled is True
+        assert reconciled is git_ops.ReconcileResult.SYNCED
 
         # Now rebase onto main.  Use the file:// remote so fetch works.
         rebased = git_ops.try_rebase_onto(dest, "main", remote_url=remote)

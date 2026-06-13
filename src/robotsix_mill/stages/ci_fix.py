@@ -426,11 +426,20 @@ class CIFixStage(Stage):
         reconciled = git_ops.reconcile_with_remote_pr(
             Path(repo_dir), remote_url, branch, token
         )
-        if not reconciled:
+        if reconciled is git_ops.ReconcileResult.DIVERGED:
+            return Outcome(
+                State.BLOCKED,
+                "PR branch diverged from the workspace clone (a human likely pushed to "
+                "it) — manual reconciliation required. The mill refuses to "
+                "force-push here: push_with_lease cannot protect this case "
+                "because reconcile's own fetch already advanced the tracking "
+                "ref to the foreign commit, so a lease push would pass its "
+                "compare-and-swap and SILENTLY OVERWRITE that commit.",
+            )
+        if reconciled is git_ops.ReconcileResult.UNAVAILABLE:
             log.warning(
-                "%s: could not fast-forward to remote PR branch (diverged) — "
-                "continuing with local state; lease check on push will "
-                "prevent data loss if remote has advanced",
+                "%s: could not reach the remote PR branch to reconcile — "
+                "proceeding; push_with_lease backstops a stale push",
                 ticket.id,
             )
 

@@ -9,9 +9,35 @@ from __future__ import annotations
 
 import re
 import subprocess
+from enum import Enum
 from pathlib import Path
 
 _CREDENTIAL_IN_URL = re.compile(r"://[^@/\s']+@")
+
+
+class ReconcileResult(str, Enum):
+    """Outcome of :func:`reconcile_with_remote_pr`.
+
+    ``SYNCED`` — the workspace already matches the remote PR branch, was
+        fast-forwarded onto it, is strictly ahead of it, or the remote
+        branch doesn't exist yet (first push). Safe to proceed.
+    ``DIVERGED`` — the workspace and the remote PR branch have BOTH
+        advanced independently (e.g. a human pushed a commit to the PR
+        after the clone). A force-push here would silently overwrite the
+        foreign commit — ``push_with_lease`` does NOT protect this case,
+        because reconcile's own fetch already advanced the lease ref to
+        that commit, so the compare-and-swap would pass. Callers MUST
+        block instead of pushing.
+    ``UNAVAILABLE`` — the remote couldn't be reached / inspected (fetch
+        failed transiently, corrupt clone, etc.). Reconcile couldn't
+        determine the relationship, but the lease ref was NOT advanced to
+        any foreign commit, so ``push_with_lease`` still backstops a stale
+        push. Callers may proceed (the lease catches a genuine race).
+    """
+
+    SYNCED = "synced"
+    DIVERGED = "diverged"
+    UNAVAILABLE = "unavailable"
 
 
 def redact_credentials(text: str | bytes) -> str:
@@ -265,15 +291,21 @@ def fetch(repo: Path, *, remote_url: str, token: str | None, branch: str) -> Non
 
 def reconcile_with_remote_pr(
     repo: Path, remote_url: str, branch: str, token: str | None
-) -> bool:
+) -> ReconcileResult:
     """Fetch the remote PR branch and fast-forward the workspace clone
     to include any foreign commits (e.g. a human pushed a fix commit
     directly to the PR branch after the clone was created).
 
-    Returns ``True`` on success (synced or fast-forwarded), ``False``
-    when branches have diverged and can't be auto-reconciled (or when
-    any git operation fails — the caller should log a warning and let
-    the lease check on push provide the safety backstop).
+    Returns a :class:`ReconcileResult`:
+
+    - ``SYNCED`` — already in sync, fast-forwarded, locally ahead, or the
+      remote branch doesn't exist yet. Safe to proceed.
+    - ``DIVERGED`` — both sides advanced independently; a force-push would
+      silently overwrite the foreign commit and the lease can't protect
+      it (see the enum docstring). Callers MUST block, not push.
+    - ``UNAVAILABLE`` — the remote couldn't be fetched/inspected; the
+      lease ref was not advanced to a foreign commit, so push_with_lease
+      still backstops. Callers may proceed.
     """
     try:
         # 1. Update the remote-tracking ref.
@@ -283,19 +315,20 @@ def reconcile_with_remote_pr(
             # Fetch failed.  If we have no tracking ref at all the remote
             # branch likely doesn't exist yet → no-op success.
             if remote_branch_sha(repo, branch) is None:
-                return True
-            # Otherwise we can't reconcile — return False.
-            return False
+                return ReconcileResult.SYNCED
+            # Otherwise we couldn't refresh the ref — undetermined. The
+            # lease ref was NOT advanced, so the push lease still guards.
+            return ReconcileResult.UNAVAILABLE
 
         remote_sha = remote_branch_sha(repo, branch)
         if remote_sha is None:
             # Remote branch doesn't exist (unreachable after successful
             # fetch, but guard anyway).
-            return True
+            return ReconcileResult.SYNCED
 
         local_sha = head_sha(repo)
         if local_sha == remote_sha:
-            return True  # Already in sync.
+            return ReconcileResult.SYNCED  # Already in sync.
 
         # 2. If local is an ancestor of remote → fast-forward.
         result = subprocess.run(
@@ -312,7 +345,7 @@ def reconcile_with_remote_pr(
         )
         if result.returncode == 0:
             _git(repo, "reset", "--hard", remote_sha)
-            return True
+            return ReconcileResult.SYNCED
 
         # 3. If remote is an ancestor of local → we're ahead, nothing to do.
         result = subprocess.run(
@@ -328,14 +361,17 @@ def reconcile_with_remote_pr(
             capture_output=True,
         )
         if result.returncode == 0:
-            return True
+            return ReconcileResult.SYNCED
 
-        # 4. Neither is ancestor → diverged.
-        return False
+        # 4. Neither is ancestor → diverged. A force-push must NOT happen
+        # here: the fetch above already advanced refs/remotes/origin/<branch>
+        # to the foreign commit, so push_with_lease's compare-and-swap would
+        # pass and silently overwrite it.
+        return ReconcileResult.DIVERGED
     except Exception:
         # Any unexpected git failure (missing repo, corrupt clone, etc.)
-        # — can't reconcile, let the lease check provide the backstop.
-        return False
+        # — undetermined; let the lease check provide the backstop.
+        return ReconcileResult.UNAVAILABLE
 
 
 def push_with_lease(

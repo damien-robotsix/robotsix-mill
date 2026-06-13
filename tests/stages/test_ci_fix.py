@@ -8,6 +8,7 @@ from robotsix_mill.core.models import SourceKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.forge import github
+from robotsix_mill.vcs import git_ops
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.ci_fix import (
     CIFixStage,
@@ -1617,3 +1618,55 @@ def test_github_update_branch_http_mapping(tmp_path, monkeypatch):
     )
     res = forge.update_branch(source_branch="b")
     assert res == {"updated": False, "reason": "PR not found"}
+
+
+# --- Diverged remote PR branch → BLOCKED, never force-push (data-loss guard) ---
+
+
+def test_reconcile_diverged_blocks_without_pushing(tmp_path, monkeypatch):
+    """When reconcile_with_remote_pr returns False (the workspace clone and the
+    remote PR branch have diverged — e.g. a human pushed to the PR), the stage
+    must BLOCK and must NOT call push_with_lease. push_with_lease cannot protect
+    this case: reconcile's own fetch already advanced the lease ref to the
+    foreign commit, so a lease push would silently overwrite it."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "lint", "summary": "err", "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    # Diverged: reconcile reports it cannot fast-forward.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.reconcile_with_remote_pr",
+        lambda repo, remote_url, branch, token: git_ops.ReconcileResult.DIVERGED,
+    )
+    pushed = {"called": False}
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
+        lambda *a, **k: pushed.update(called=True),
+    )
+    # The agent must never run on a diverged branch.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: (_ for _ in ()).throw(
+            AssertionError("agent ran despite diverged branch")
+        ),
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert pushed["called"] is False
+    assert "diverged" in (out.note or "").lower()
