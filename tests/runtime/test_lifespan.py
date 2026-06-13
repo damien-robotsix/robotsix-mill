@@ -14,7 +14,7 @@ from robotsix_mill.runtime.lifespan import create_lifespan, setup_logging
 
 
 class TestSetupLogging:
-    def test_adds_stream_handler_with_mill_marker(self):
+    def test_adds_stream_handler_and_keeps_propagate(self):
         root = logging.getLogger("robotsix_mill")
         # Remove any existing handlers so we start clean.
         for h in list(root.handlers):
@@ -22,11 +22,10 @@ class TestSetupLogging:
 
         setup_logging()
 
-        handlers = root.handlers
-        assert any(
-            isinstance(h, logging.StreamHandler) and getattr(h, "_mill", False)
-            for h in handlers
-        ), "Expected a StreamHandler with _mill=True"
+        assert any(isinstance(h, logging.StreamHandler) for h in root.handlers), (
+            "Expected a StreamHandler to be attached"
+        )
+        assert root.propagate is True
 
     def test_idempotent_no_duplicate_handlers(self):
         root = logging.getLogger("robotsix_mill")

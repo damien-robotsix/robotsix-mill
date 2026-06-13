@@ -1018,12 +1018,14 @@ def test_setup_logging_surfaces_app_logs_idempotently(capsys):
     from robotsix_mill.runtime.api import setup_logging
 
     root = logging.getLogger("robotsix_mill")
-    root.handlers = [h for h in root.handlers if not getattr(h, "_mill", False)]
+    root.handlers = [
+        h for h in root.handlers if not isinstance(h, logging.StreamHandler)
+    ]
 
     setup_logging()
     setup_logging()  # idempotent — second call must not add another
-    mill = [h for h in root.handlers if getattr(h, "_mill", False)]
-    assert len(mill) == 1
+    stream_handlers = [h for h in root.handlers if isinstance(h, logging.StreamHandler)]
+    assert len(stream_handlers) == 1
     assert root.level == logging.INFO
 
     logging.getLogger("robotsix_mill.audit").info("audit pass starting xyz")
