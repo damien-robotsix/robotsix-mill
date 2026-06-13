@@ -416,7 +416,32 @@ class CIFixStage(Stage):
         max_attempts: int,
     ) -> Outcome:
         """Run the ci-fix agent and route success / retry / exhausted cases."""
+        s = ctx.settings
         counter_path = ctx.service.workspace(ticket).artifacts_dir / _CI_FIX_COUNTER
+
+        # Reconcile with remote PR branch before running the agent so it
+        # works from the latest remote state (includes any foreign commits).
+        remote_url = _resolve_remote_url(s, ctx.repo_config)
+        token = github_token(s, repo_config=ctx.repo_config)
+        reconciled = git_ops.reconcile_with_remote_pr(
+            Path(repo_dir), remote_url, branch, token
+        )
+        if reconciled is git_ops.ReconcileResult.DIVERGED:
+            return Outcome(
+                State.BLOCKED,
+                "PR branch diverged from the workspace clone (a human likely pushed to "
+                "it) — manual reconciliation required. The mill refuses to "
+                "force-push here: push_with_lease cannot protect this case "
+                "because reconcile's own fetch already advanced the tracking "
+                "ref to the foreign commit, so a lease push would pass its "
+                "compare-and-swap and SILENTLY OVERWRITE that commit.",
+            )
+        if reconciled is git_ops.ReconcileResult.UNAVAILABLE:
+            log.warning(
+                "%s: could not reach the remote PR branch to reconcile — "
+                "proceeding; push_with_lease backstops a stale push",
+                ticket.id,
+            )
 
         result = self._invoke_agent(ticket, ctx, repo_dir, branch, failing_summary)
 
@@ -684,13 +709,14 @@ class CIFixStage(Stage):
             # Agent produced commits — reset the no-change counter.
             _write_counter(no_change_counter_path, 0)
 
-        # Fix applied → force-push only the ticket branch. Use the
+        # Fix applied → force-push only the ticket branch with a lease so
+        # a concurrent human push is never silently overwritten. Use the
         # per-repo remote + token; the global s.forge_remote_url and a
         # tokenless mint point at the mill's own repo, so a ci-fix on
         # another board would push to the wrong remote.
         try:
-            git_ops.push(
-                repo_dir,
+            git_ops.push_with_lease(
+                Path(repo_dir),
                 branch=branch,
                 remote_url=_resolve_remote_url(s, ctx.repo_config),
                 token=github_token(s, repo_config=ctx.repo_config),

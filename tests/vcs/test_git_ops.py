@@ -1231,3 +1231,355 @@ class TestWorkingBranchRegression:
         git_ops.commit_all(dest, "feature commit")
 
         assert git_ops.branch_is_ahead_of_main(dest, target_branch=target) is True
+
+
+# ===========================================================================
+# 15. reconcile_with_remote_pr — integration (real git, file:// remote)
+# ===========================================================================
+
+
+class TestReconcileWithRemotePr:
+    """AC1–AC4: reconcile_with_remote_pr behaviour."""
+
+    def test_remote_ahead_fast_forwards(self, tmp_path):
+        """AC1: remote has an extra commit → fast-forward the workspace."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "feat.txt").write_text("local work")
+        git_ops.commit_all(dest, "local commit")
+
+        # Push the feature branch so it exists on the remote.
+        git_ops.push(dest, "feature", remote, token=None)
+
+        # Simulate a human pushing to the same branch from another clone.
+        pusher = tmp_path / "pusher"
+        subprocess.run(
+            ["git", "clone", "-q", remote, str(pusher)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        _git(pusher, "config", "user.email", "human@t")
+        _git(pusher, "config", "user.name", "human")
+        # The feature branch now exists on remote, so check it out.
+        _git(pusher, "fetch", "origin", "feature")
+        _git(pusher, "checkout", "-b", "feature", "origin/feature")
+        (pusher / "human_fix.txt").write_text("human pushed this fix\n")
+        _git(pusher, "add", "-A")
+        _git(pusher, "commit", "-q", "-m", "human fix")
+        _git(pusher, "push", "origin", "feature")
+
+        # Now reconcile — the workspace should fast-forward to include
+        # the human commit.
+        result = git_ops.reconcile_with_remote_pr(dest, remote, "feature", token=None)
+        assert result is git_ops.ReconcileResult.SYNCED
+
+        # Workspace HEAD should now equal the remote tip.
+        _git(dest, "fetch", "origin", "feature")
+        remote_sha = git_ops.remote_branch_sha(dest, "feature")
+        assert git_ops.head_sha(dest) == remote_sha
+
+        # The human commit must be in the log.
+        log = subprocess.run(
+            ["git", "-C", str(dest), "log", "--oneline", "--format=%s"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        assert "human fix" in log
+
+        # The local commit should also be in the log (the human built on
+        # top of it).
+        assert "local commit" in log
+
+    def test_already_in_sync_noop(self, tmp_path):
+        """AC2: when workspace is already at the remote tip → no-op."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "feat.txt").write_text("work")
+        git_ops.commit_all(dest, "commit")
+        # Push so local == remote.
+        git_ops.push(dest, "feature", remote, token=None)
+        head_before = git_ops.head_sha(dest)
+
+        result = git_ops.reconcile_with_remote_pr(dest, remote, "feature", token=None)
+        assert result is git_ops.ReconcileResult.SYNCED
+        assert git_ops.head_sha(dest) == head_before
+
+    def test_remote_branch_does_not_exist_noop(self, tmp_path):
+        """AC3: remote branch doesn't exist yet → no-op, returns True."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        # Create a local branch that has never been pushed.
+        git_ops.create_branch(dest, "never-pushed")
+        (dest / "feat.txt").write_text("unpushed work")
+        git_ops.commit_all(dest, "unpushed commit")
+        head_before = git_ops.head_sha(dest)
+
+        result = git_ops.reconcile_with_remote_pr(
+            dest, remote, "never-pushed", token=None
+        )
+        assert result is git_ops.ReconcileResult.SYNCED
+        assert git_ops.head_sha(dest) == head_before
+
+    def test_diverged_returns_diverged(self, tmp_path):
+        """AC4: both sides advanced independently → returns DIVERGED."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "local.txt").write_text("local work")
+        git_ops.commit_all(dest, "local commit")
+
+        # Push a DIFFERENT commit to the remote (simulating a human).
+        pusher = tmp_path / "pusher"
+        subprocess.run(
+            ["git", "clone", "-q", remote, str(pusher)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        _git(pusher, "config", "user.email", "human@t")
+        _git(pusher, "config", "user.name", "human")
+        _git(pusher, "checkout", "-b", "feature")
+        (pusher / "remote.txt").write_text("remote work\n")
+        _git(pusher, "add", "-A")
+        _git(pusher, "commit", "-q", "-m", "remote commit")
+        _git(pusher, "push", "origin", "feature")
+
+        result = git_ops.reconcile_with_remote_pr(dest, remote, "feature", token=None)
+        assert result is git_ops.ReconcileResult.DIVERGED
+
+    def test_local_ahead_of_remote_noop(self, tmp_path):
+        """When local is ahead of remote (normal case after local commits,
+        before push) → returns True, no change."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "feat.txt").write_text("local work")
+        git_ops.commit_all(dest, "local commit")
+        # Push so remote knows about it, then make another local commit.
+        git_ops.push(dest, "feature", remote, token=None)
+        (dest / "feat2.txt").write_text("more local work")
+        git_ops.commit_all(dest, "second local commit")
+        head_before = git_ops.head_sha(dest)
+
+        result = git_ops.reconcile_with_remote_pr(dest, remote, "feature", token=None)
+        assert result is git_ops.ReconcileResult.SYNCED
+        # Local should still be ahead (unchanged).
+        assert git_ops.head_sha(dest) == head_before
+
+
+# ===========================================================================
+# 16. push_with_lease — integration (real git, file:// remote)
+# ===========================================================================
+
+
+class TestPushWithLease:
+    """AC5–AC6: push_with_lease behaviour."""
+
+    def test_succeeds_when_remote_at_expected_sha(self, tmp_path):
+        """AC5: push_with_lease succeeds when remote matches the
+        expected SHA (refs/remotes/origin/<branch>)."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "feat.txt").write_text("initial work")
+        git_ops.commit_all(dest, "initial commit")
+
+        # Push so the remote has the branch.
+        git_ops.push(dest, "feature", remote, token=None)
+
+        # Make another local commit so we have something new to push.
+        (dest / "feat2.txt").write_text("more work")
+        git_ops.commit_all(dest, "second commit")
+
+        # Fetch the remote branch to populate the tracking ref.
+        git_ops.fetch(dest, remote_url=remote, token=None, branch="feature")
+
+        # Push with lease should succeed — remote is at the expected SHA.
+        git_ops.push_with_lease(dest, "feature", remote, token=None)
+
+        # Verify the remote has our latest commit.
+        verify = tmp_path / "verify"
+        subprocess.run(
+            ["git", "clone", "-q", remote, str(verify)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        _git(verify, "fetch", "origin", "feature")
+        _git(verify, "checkout", "-b", "feature", "origin/feature")
+        assert (verify / "feat.txt").read_text() == "initial work"
+        assert (verify / "feat2.txt").read_text() == "more work"
+
+    def test_fails_when_remote_has_advanced(self, tmp_path):
+        """AC6: push_with_lease fails (raises CalledProcessError) when
+        the remote has advanced since the last fetch."""
+        remote = make_bare_repo(tmp_path)
+
+        # First clone — will push with lease.
+        dest1 = tmp_path / "repo1"
+        git_ops.clone(remote, dest1, "main")
+        git_ops.create_branch(dest1, "feature")
+        (dest1 / "feat1.txt").write_text("work from clone 1")
+        git_ops.commit_all(dest1, "commit from clone 1")
+
+        # Push so the remote has the branch at a known SHA.
+        git_ops.push(dest1, "feature", remote, token=None)
+
+        # Fetch to populate tracking ref with the current remote SHA.
+        git_ops.fetch(dest1, remote_url=remote, token=None, branch="feature")
+
+        # Meanwhile, a second clone pushes a DIFFERENT commit to the
+        # same branch (simulating a concurrent human push).
+        dest2 = tmp_path / "repo2"
+        git_ops.clone(remote, dest2, "main")
+        # Fetch the feature branch and check it out.
+        git_ops.fetch(dest2, remote_url=remote, token=None, branch="feature")
+        _git(dest2, "branch", "feature", "origin/feature")
+        _git(dest2, "checkout", "feature")
+        (dest2 / "feat2.txt").write_text("concurrent human push")
+        git_ops.commit_all(dest2, "human commit")
+        git_ops.push(dest2, "feature", remote, token=None)
+
+        # Now clone 1 tries to push with lease — must fail because the
+        # remote has advanced beyond the expected SHA.
+        with pytest.raises(subprocess.CalledProcessError):
+            git_ops.push_with_lease(dest1, "feature", remote, token=None)
+
+        # The remote must still have the human commit (NOT overwritten).
+        verify = tmp_path / "verify"
+        subprocess.run(
+            ["git", "clone", "-q", remote, str(verify)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        _git(verify, "fetch", "origin", "feature")
+        _git(verify, "checkout", "-b", "feature", "origin/feature")
+        assert (verify / "feat2.txt").read_text() == "concurrent human push"
+        # The human commit is still there — lease prevented the overwrite.
+
+    def test_new_remote_branch_falls_back_to_force(self, tmp_path):
+        """When the remote branch doesn't exist yet, push_with_lease
+        falls back to a plain --force push (nothing to lease against)."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "brand-new-branch")
+        (dest / "new.txt").write_text("first push")
+        git_ops.commit_all(dest, "first commit")
+
+        # No prior fetch — remote_branch_sha returns None.
+        # push_with_lease should fall back to --force.
+        git_ops.push_with_lease(dest, "brand-new-branch", remote, token=None)
+
+        # Verify the remote has the new branch.
+        verify = tmp_path / "verify"
+        subprocess.run(
+            ["git", "clone", "-q", remote, str(verify)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        _git(verify, "fetch", "origin", "brand-new-branch")
+        _git(verify, "checkout", "-b", "brand-new-branch", "origin/brand-new-branch")
+        assert (verify / "new.txt").read_text() == "first push"
+
+
+# ===========================================================================
+# 17. End-to-end: rebase preserves foreign commits (AC7)
+# ===========================================================================
+
+
+class TestRebasePreservesForeignCommits:
+    """AC7: reconcile + rebase preserves human-pushed commits."""
+
+    def test_rebase_preserves_human_commit(self, tmp_path):
+        """Full integration test:
+        1. Bare repo with main + feature branch (the PR branch)
+        2. Clone workspace (single-branch of feature)
+        3. Push a human commit to remote feature
+        4. Push a new commit to main (so rebase has something to do)
+        5. Call reconcile_with_remote_pr then try_rebase_onto
+        6. Assert the human commit appears in the post-rebase log
+        """
+        remote = make_bare_repo(tmp_path)
+
+        # --- 1. Create the PR branch (feature) with a ticket commit ---
+        dest = tmp_path / "workspace"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "ticket_work.txt").write_text("ticket changes\n")
+        git_ops.commit_all(dest, "ticket: implement feature X")
+        ticket_commit_msg = "ticket: implement feature X"
+
+        # --- 2. Clone workspace as the mill would: single-branch of feature ---
+        # (We already have the workspace at dest, but let's simulate the
+        # situation where a human pushes after the clone was created.)
+        # First, push the feature branch so it exists on the remote.
+        git_ops.push(dest, "feature", remote, token=None)
+
+        # --- 3. Push a human commit to remote feature ---
+        pusher = tmp_path / "pusher"
+        subprocess.run(
+            ["git", "clone", "-q", remote, str(pusher)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        _git(pusher, "config", "user.email", "human@t")
+        _git(pusher, "config", "user.name", "human")
+        _git(pusher, "checkout", "feature")
+        (pusher / "human_fix.txt").write_text("human fix for edge case\n")
+        _git(pusher, "add", "-A")
+        _git(pusher, "commit", "-q", "-m", "human: fix edge case")
+        _git(pusher, "push", "origin", "feature")
+
+        # --- 4. Push a new commit to main (so rebase has something to do) ---
+        _git(pusher, "checkout", "main")
+        (pusher / "main_update.txt").write_text("main advanced\n")
+        _git(pusher, "add", "-A")
+        _git(pusher, "commit", "-q", "-m", "main: advance after PR was cut")
+        _git(pusher, "push", "origin", "main")
+
+        # --- 5. Reconcile + rebase ---
+        # The workspace clone is stale (doesn't have the human commit or
+        # the main update).  Reconcile first.
+        reconciled = git_ops.reconcile_with_remote_pr(
+            dest, remote, "feature", token=None
+        )
+        assert reconciled is git_ops.ReconcileResult.SYNCED
+
+        # Now rebase onto main.  Use the file:// remote so fetch works.
+        rebased = git_ops.try_rebase_onto(dest, "main", remote_url=remote)
+        assert rebased is True
+
+        # --- 6. Assert the human commit appears in the post-rebase log ---
+        # It should be on top of main, alongside (or on top of) the ticket
+        # commits.
+        log = (
+            subprocess.run(
+                ["git", "-C", str(dest), "log", "--oneline", "--format=%s"],
+                capture_output=True,
+                text=True,
+            )
+            .stdout.strip()
+            .split("\n")
+        )
+        assert "human: fix edge case" in log
+        assert ticket_commit_msg in log
+        assert "main: advance after PR was cut" in log
+
+        # The human commit should be in the history — either on top or
+        # merged in.  Verify the file exists.
+        assert (dest / "human_fix.txt").exists()
+        assert (dest / "human_fix.txt").read_text() == "human fix for edge case\n"
+        assert (dest / "ticket_work.txt").exists()
