@@ -311,6 +311,22 @@ class _PeriodicSettings(BaseModel):
     # in the worker loop.
     completeness_check_interval_seconds: int = Field(default=86400)
 
+    # --- forge-parity agent (forge adapter drift detection) ---
+    # Model for the forge-parity agent. Defaults to the same capable model
+    # as audit/health. Override with MILL_FORGE_PARITY_MODEL.
+    forge_parity_model: str = Field(default="deepseek/deepseek-v4-flash")
+    # Path to the forge-parity agent's Markdown memory ledger. Override to
+    # pin a specific path; unset (default) derives
+    # <data_dir>/forge_parity_memory.md.
+    forge_parity_memory_path: Path | None = Field(default=None)
+    # Opt-in periodic forge-parity pass. Defaults to True (opt-out);
+    # set false to disable the weekly forge-adapter drift detection.
+    forge_parity_periodic: bool = Field(default=True)
+    # Seconds between periodic forge-parity passes when
+    # MILL_FORGE_PARITY_PERIODIC=true. Default 604800 (1 week). Minimum
+    # enforced at 60s in the worker loop.
+    forge_parity_interval_seconds: int = Field(default=604800)
+
     # --- copy-paste agent (deterministic clone detection and triage) ---
     # Model for the copy-paste agent. Defaults to the same capable model
     # as audit/health. Override with MILL_COPY_PASTE_MODEL.

@@ -369,6 +369,7 @@ modules:
       - src/robotsix_mill/agents/spawn_subtask.py
       - src/robotsix_mill/agents/post_comment.py
       - src/robotsix_mill/agents/copy_pasting.py
+      - src/robotsix_mill/agents/forge_parity.py
       - tests/agents/test_fs_tools.py
       - tests/agents/test_web.py
       - tests/agents/test_explore.py

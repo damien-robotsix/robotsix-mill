@@ -414,6 +414,11 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.copy_paste.enabled": "copy_paste_periodic",
     "periodic.copy_paste.interval_seconds": "copy_paste_interval_seconds",
     "periodic.copy_paste.memory_path": "copy_paste_memory_path",
+    # -- periodic.forge_parity --
+    "periodic.forge_parity.model": "forge_parity_model",
+    "periodic.forge_parity.enabled": "forge_parity_periodic",
+    "periodic.forge_parity.interval_seconds": "forge_parity_interval_seconds",
+    "periodic.forge_parity.memory_path": "forge_parity_memory_path",
     # -- periodic.survey --
     "periodic.survey.model": "survey_model",
     "periodic.survey.enabled": "survey_periodic",

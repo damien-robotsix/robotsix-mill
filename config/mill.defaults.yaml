@@ -280,6 +280,13 @@ periodic:
     interval_seconds: 604800        # seconds between passes (604800 = 1 week)
     memory_path: null               # defaults to <data_dir>/copy_paste_memory.md
 
+  # -- forge-parity agent — forge adapter drift detection -----------------
+  forge_parity:
+    model: *default_model           # forge-parity agent model
+    enabled: true                   # enable periodic forge-parity passes
+    interval_seconds: 604800        # seconds between passes (604800 = 1 week)
+    memory_path: null               # defaults to <data_dir>/forge_parity_memory.md
+
   # -- cost-reconciliation — detects OpenRouter ↔ Langfuse cost drift -----
   cost_reconciliation:
     enabled: true

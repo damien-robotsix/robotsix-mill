@@ -510,8 +510,8 @@ def test_run_periodic_pass_requires_repo_short_circuit_logs_warning(
 # ------------------------------------------------------------------ PERIODIC_PASS_CONFIGS registry
 
 
-def test_periodic_pass_configs_registry_has_all_ten_entries():
-    """All 10 periodic passes are registered."""
+def test_periodic_pass_configs_registry_has_all_eleven_entries():
+    """All 11 periodic passes are registered."""
     expected = {
         "audit",
         "agent_check",
@@ -519,6 +519,7 @@ def test_periodic_pass_configs_registry_has_all_ten_entries():
         "survey",
         "completeness_check",
         "copy_paste",
+        "forge_parity",
         "config_sync",
         "health",
         "module_curator",
