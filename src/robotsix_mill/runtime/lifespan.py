@@ -8,12 +8,12 @@ suitable for ``FastAPI(lifespan=...)``.
 from __future__ import annotations
 
 import logging
-import sys
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import AsyncContextManager, Callable
 
 from fastapi import FastAPI
+from robotsix_llmio.logging import setup_logging as llmio_setup_logging
 
 from ..config import ReposRegistry, Settings
 from ..core import db
@@ -36,23 +36,20 @@ def setup_logging() -> None:
     # Configure both mill's own logger AND robotsix_llmio's, so the
     # extracted LLM-I/O library's logs (esp. the claude_sdk per-turn stream
     # feedback) surface in docker logs instead of vanishing at a handler-less
-    # root.
-    for logger_name in ("robotsix_mill", "robotsix_llmio"):
-        lg = logging.getLogger(logger_name)
-        if any(getattr(h, "_mill", False) for h in lg.handlers):
-            continue
-        h = logging.StreamHandler(sys.stdout)
-        h.addFilter(tracing.OTelTraceFilter())
-        h.setFormatter(
-            logging.Formatter(
-                "%(asctime)s %(levelname)s [%(trace_id)s] %(name)s: %(message)s"
-            )
-        )
-        h._mill = True  # marker for idempotency
-        lg.addHandler(h)
-        lg.setLevel(logging.INFO)
-    # keep propagate=True: uvicorn leaves the real root handler-less so
-    # there's no double-logging, and pytest's caplog needs propagation.
+    # root.  Delegate to llmio's shared helper (idempotent; attaches a single
+    # StreamHandler carrying llmio's trace-id filter + the ``console`` formatter).
+    # Pass level=logging.INFO explicitly to preserve mill's always-INFO
+    # behavior rather than relying on the helper's LOG_LEVEL env resolution.
+    # Note: llmio's ``console`` format orders the fields as
+    # ``%(asctime)s %(levelname)s %(name)s [%(trace_id)s] %(message)s`` and
+    # renders ``-`` (not ``N/A``) when no span is active — an accepted
+    # cosmetic change from mill's previous format.
+    llmio_setup_logging(loggers=["robotsix_mill", "robotsix_llmio"], level=logging.INFO)
+    # Re-set propagate=True after the helper (which sets it False): uvicorn
+    # leaves the real root handler-less so there's no double-logging, and
+    # pytest's caplog fixture needs propagation to capture our records.
+    logging.getLogger("robotsix_mill").propagate = True
+    logging.getLogger("robotsix_llmio").propagate = True
 
 
 # Called at import time so logging is configured before any lifespan or
