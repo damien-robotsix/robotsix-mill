@@ -1014,17 +1014,26 @@ def test_deployed_sha_recorded(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_remote_flag_parsing() -> None:
-    """--remote is stored as a single token; a two-word value like 'origin main' splits correctly."""
+    """--remote 'upstream/stable' splits into remote='upstream', branch='stable' (spec #24)."""
     ns = au._build_parser().parse_args(["--remote", "upstream/stable"])
     assert ns.remote == "upstream/stable"
 
-    # Verify the run() function's splitting logic
-    assert ns.remote.split(maxsplit=1)[0] == "upstream/stable"  # single token
-    # Two-token remote
-    ns2 = au._build_parser().parse_args(["--remote", "origin main"])
-    parts = ns2.remote.split(maxsplit=1)
-    assert parts[0] == "origin"
-    assert parts[1] == "main"
+    # Mirror run()'s parsing: first slash separates remote from branch.
+    remote_name, _, remote_branch = ns.remote.partition("/")
+    assert remote_name == "upstream"
+    assert remote_branch == "stable"
+
+    # The default value parses to (origin, main) — the shipped cron path.
+    default = au._build_parser().parse_args([])
+    remote_name, _, remote_branch = default.remote.partition("/")
+    assert remote_name == "origin"
+    assert remote_branch == "main"
+
+    # Branch names containing slashes keep their full branch part.
+    ns3 = au._build_parser().parse_args(["--remote", "origin/feature/x"])
+    remote_name, _, remote_branch = ns3.remote.partition("/")
+    assert remote_name == "origin"
+    assert remote_branch == "feature/x"
 
 
 # ---------------------------------------------------------------------------

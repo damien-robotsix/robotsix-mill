@@ -76,7 +76,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--remote",
         default="origin/main",
-        help="Remote ref to fetch and merge, as '<remote> <branch>' (default: %(default)s).",
+        help="Remote ref to fetch and merge, as '<remote>/<branch>' (default: %(default)s).",
     )
     p.add_argument(
         "--service",
@@ -149,9 +149,16 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
     lock_path = Path(f"/tmp/{prefix}.lock")
 
     # -- parse remote --------------------------------------------------------
-    remote_parts = args.remote.split(maxsplit=1)
-    remote_name = remote_parts[0]
-    remote_branch = remote_parts[1] if len(remote_parts) > 1 else "main"
+    # "<remote>/<branch>" — split at the FIRST slash so branch names that
+    # themselves contain slashes (origin/feature/x) keep the full branch
+    # part. Falls back to whitespace splitting for a legacy "origin main"
+    # form, defaulting the branch to "main".
+    if "/" in args.remote:
+        remote_name, _, remote_branch = args.remote.partition("/")
+    else:
+        remote_parts = args.remote.split(maxsplit=1)
+        remote_name = remote_parts[0]
+        remote_branch = remote_parts[1] if len(remote_parts) > 1 else "main"
 
     # -- determine whether idle checking is active ---------------------------
     do_idle_check = bool(args.idle_check_cmd) and not args.no_idle_check

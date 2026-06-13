@@ -22,7 +22,17 @@ STATE_DIR="$(dirname "$REPO")"          # runtime files live outside the repo
 export DOCKER_GID
 DOCKER_GID=$(getent group docker | cut -d: -f3)
 
-exec robotsix-autoupdate \
+# One-time marker migration: the old bash autoupdater recorded the deployed
+# SHA as .mill-deployed-sha; the CLI uses .{PREFIX}-deployed-sha. Without
+# this copy the first CLI run would see "first run" and redeploy (or
+# force-deploy after deferrals) even when already current.
+if [ -f "$STATE_DIR/.mill-deployed-sha" ] && [ ! -f "$STATE_DIR/.mill-autoupdate-deployed-sha" ]; then
+  cp "$STATE_DIR/.mill-deployed-sha" "$STATE_DIR/.mill-autoupdate-deployed-sha"
+fi
+
+# The console script is installed in the repo venv by `uv sync`, not on the
+# system PATH this script resets above — under cron a bare name exits 127.
+exec "$REPO/.venv/bin/robotsix-autoupdate" \
   --repo "$REPO" \
   --state-dir "$STATE_DIR" \
   --state-prefix mill-autoupdate \
