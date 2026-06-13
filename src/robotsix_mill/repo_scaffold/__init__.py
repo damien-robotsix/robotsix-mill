@@ -14,12 +14,15 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 import yaml
 
 if TYPE_CHECKING:
-    from ..stages.base import Outcome
+    from ..config import Settings
+    from ..core.models import Ticket
+    from ..forge.base import Forge
+    from ..stages.base import Outcome, StageContext
 
 from ..config import _reset_repos_config, get_repos_config
 from ..core.states import State
@@ -35,7 +38,11 @@ log = logging.getLogger("robotsix_mill.repo_scaffold")
 
 
 def run_repo_scaffold(
-    settings, forge, ctx, params: dict, ticket_description: str = ""
+    settings: Settings,
+    forge: Forge,
+    ctx: StageContext,
+    params: dict[str, Any],
+    ticket_description: str = "",
 ) -> Outcome:
     """Execute the repo-scaffold workflow for a ``new-repo`` extraction ticket.
 
@@ -104,7 +111,10 @@ def run_repo_scaffold(
 
 
 def _file_implementation_followup(
-    settings, repo_info: RepoInfo, params: dict, scaffold_description: str
+    settings: Settings,
+    repo_info: RepoInfo,
+    params: dict[str, Any],
+    scaffold_description: str,
 ) -> str | None:
     """File a build-out ticket on the NEW repo's own board.
 
@@ -155,7 +165,9 @@ def _file_implementation_followup(
         return None
 
 
-def _scaffold_initial_commit(settings, repo_info: RepoInfo, params: dict) -> None:
+def _scaffold_initial_commit(
+    settings: Settings, repo_info: RepoInfo, params: dict[str, Any]
+) -> None:
     """Initialise a fresh local repo, write scaffold files, commit, and
     force-push to the new remote's default branch.
 
@@ -351,7 +363,9 @@ def _repos_yaml_path() -> Path | None:
 _DEFAULT_PERIODIC_NAMES = ("audit", "health")
 
 
-def _append_repo_config(repo_info: RepoInfo, params: dict, settings) -> None:
+def _append_repo_config(
+    repo_info: RepoInfo, params: dict[str, Any], settings: Settings
+) -> None:
     """Append a :class:`RepoConfig` stanza to ``config/repos.yaml`` for
     the newly created repository."""
     path = _repos_yaml_path()
@@ -397,7 +411,7 @@ def _append_repo_config(repo_info: RepoInfo, params: dict, settings) -> None:
         lf_secret_key = ""
         lf_base_url = "https://cloud.langfuse.com"
 
-    new_entry: dict = {
+    new_entry: dict[str, Any] = {
         "board_id": repo_id,
         "langfuse": {
             "project_name": repo_id,
@@ -421,7 +435,7 @@ def _append_repo_config(repo_info: RepoInfo, params: dict, settings) -> None:
     log.info("Appended repo %r to %s", repo_id, path)
 
 
-def _post_blocked_comment(ctx, ticket, body: str) -> None:
+def _post_blocked_comment(ctx: StageContext, ticket: Ticket, body: str) -> None:
     """Post a comment on *ticket* and return nothing."""
     try:
         ctx.service.add_comment(

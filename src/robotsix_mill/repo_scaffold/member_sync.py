@@ -34,8 +34,12 @@ import logging
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, TYPE_CHECKING
 
 import yaml
+
+if TYPE_CHECKING:
+    from ..config import Settings
 
 from ..config import _reset_repos_config
 from . import _repos_yaml_path
@@ -65,7 +69,7 @@ class MemberSyncResult:
 
 
 def sync_workspace_members(
-    settings,
+    settings: Settings,
     master_repo_id: str,
     members: Iterable[DetectedMember],
     *,
@@ -129,7 +133,7 @@ def sync_workspace_members(
 
 
 def _upsert_members(
-    repos: dict,
+    repos: dict[str, Any],
     members: list[DetectedMember],
     master_repo_id: str,
     result: MemberSyncResult,
@@ -170,7 +174,7 @@ def _upsert_members(
 
 
 def _flag_vanished(
-    repos: dict,
+    repos: dict[str, Any],
     master_repo_id: str,
     member_ids: set[str],
     result: MemberSyncResult,
@@ -208,14 +212,16 @@ def _member_repo_id(path: str) -> str:
     return "".join(out).strip("-")
 
 
-def _is_member_of(entry, master_repo_id: str) -> bool:
+def _is_member_of(entry: dict[str, Any], master_repo_id: str) -> bool:
     """True when *entry* is a registry stanza synced from *master_repo_id*."""
     return isinstance(entry, dict) and entry.get("member_of") == master_repo_id
 
 
-def _member_entry(member: DetectedMember, repo_id: str, master_repo_id: str) -> dict:
+def _member_entry(
+    member: DetectedMember, repo_id: str, master_repo_id: str
+) -> dict[str, Any]:
     """Build the ``config/repos.yaml`` stanza for a detected member."""
-    entry: dict = {
+    entry: dict[str, Any] = {
         "board_id": repo_id,
         # Inherit the master's Langfuse project by reference — resolved
         # at config-load time so the whole workspace shares one project.
@@ -232,7 +238,7 @@ def _member_entry(member: DetectedMember, repo_id: str, master_repo_id: str) -> 
     return entry
 
 
-def _load_repos_document(path: Path) -> dict:
+def _load_repos_document(path: Path) -> dict[str, Any]:
     """Load ``config/repos.yaml`` into a normalised ``{"repos": {...}}`` dict."""
     if path.exists():
         with open(path, "r", encoding="utf-8") as fh:
@@ -247,14 +253,16 @@ def _load_repos_document(path: Path) -> dict:
     return data
 
 
-def _write_repos_document(path: Path, data: dict) -> None:
+def _write_repos_document(path: Path, data: dict[str, Any]) -> None:
     """Write *data* back to ``config/repos.yaml`` preserving key order."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:
         yaml.dump(data, fh, default_flow_style=False, sort_keys=False)
 
 
-def _file_member_buildout(settings, repo_id: str, entry: dict) -> str | None:
+def _file_member_buildout(
+    settings: Settings, repo_id: str, entry: dict[str, Any]
+) -> str | None:
     """File a build-out ticket on a newly registered member's own board.
 
     The build-out covers adding the member's ``.robotsix-mill/config.yaml``
