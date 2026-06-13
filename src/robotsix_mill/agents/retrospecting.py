@@ -386,6 +386,8 @@ def run_retrospect_agent(
         prompt += f"\n\n{epic_context}"
     if sibling_context:
         prompt += f"\n\n{sibling_context}"
+    if repo_dir is not None and repo_dir.exists():
+        prompt += f"\n\nRepository working directory: {repo_dir}\n"
     from .retry import run_agent
 
     try:
