@@ -32,6 +32,7 @@ import logging
 import re
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from .. import sandbox
@@ -108,7 +109,7 @@ def _repo_package_names(repo_dir: Path) -> set[str]:
     return names
 
 
-def parse_prerequisites(spec: str) -> list[dict]:
+def parse_prerequisites(spec: str) -> list[dict[str, str]]:
     """Extract prerequisite directives from *spec*.
 
     Returns a list of ``{"directive": <normalized str>, "code": <python
@@ -125,7 +126,7 @@ def parse_prerequisites(spec: str) -> list[dict]:
     if not fence:
         return []
 
-    directives: list[dict] = []
+    directives: list[dict[str, str]] = []
     for line in fence.group(1).splitlines():
         line = line.strip()
         if not line:
@@ -176,7 +177,7 @@ def _default_runner(code: str, repo_dir: Path, timeout: float) -> int:
     return proc.returncode
 
 
-def _build_batch_script(directives: list[dict]) -> str:
+def _build_batch_script(directives: list[dict[str, str]]) -> str:
     """Build a single stdlib-only Python script that checks every directive.
 
     Each directive runs in its OWN ``try/except ImportError`` block (no
@@ -255,10 +256,12 @@ def _sandbox_batch_check(
     return unmet, None
 
 
-def _filter_same_repo(directives: list[dict], repo_pkgs: set[str]) -> list[dict]:
+def _filter_same_repo(
+    directives: list[dict[str, str]], repo_pkgs: set[str]
+) -> list[dict[str, str]]:
     """Return only the directives whose top-level module is NOT a
     same-repo package, logging each skipped directive at INFO level."""
-    external: list[dict] = []
+    external: list[dict[str, str]] = []
     for d in directives:
         code = d["code"]
         # Extract the module path: "import foo.bar" → "foo.bar",
@@ -284,9 +287,9 @@ def _filter_same_repo(directives: list[dict], repo_pkgs: set[str]) -> list[dict]
 
 
 def _run_individual_checks(
-    external: list[dict],
+    external: list[dict[str, str]],
     repo_dir: Path,
-    runner,
+    runner: Callable[[str, Path, float], int],
 ) -> list[str]:
     """Run each directive one at a time via *runner*, returning the
     ``unmet`` list."""
@@ -311,7 +314,7 @@ def run_prerequisite_check(
     spec: str,
     repo_dir: Path | None,
     *,
-    runner=_default_runner,
+    runner: Callable[[str, Path, float], int] = _default_runner,
     settings: Settings | None = None,
     sandbox_image: str | None = None,
 ) -> dict[str, list[str] | str]:
