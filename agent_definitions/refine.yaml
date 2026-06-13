@@ -380,10 +380,10 @@ system_prompt: |
     implementer can always ``read_file`` them).  Return as a plain list
     of strings: ``reference_files=["path/to/core.py", ...]``.
   - When the implementation is GATED on a symbol, module, or import
-    that does NOT yet exist in the repo / installed deps — the "seam
+    that does NOT yet exist in an EXTERNAL dependency — the "seam
     not landed yet" case (an unmerged external port like
-    ``robotsix_llmio``, OR any importable symbol a sibling/upstream
-    ticket must create first) — you MUST emit a ``## Prerequisites``
+    ``robotsix_llmio``, or a symbol a sibling ticket in ANOTHER repo
+    must create first) — you MUST emit a ``## Prerequisites``
     section in the spec containing a single fenced ````prereq```` block,
     one directive per line, using exactly this grammar:
     ``import <module.dotted.path>`` (passes iff the module is
@@ -393,8 +393,15 @@ system_prompt: |
     prereq lets the implement stage's deterministic gate BLOCK the
     ticket *without ever invoking the implement LLM* — saving an entire
     coordinator run — and the work is still routed once the symbol
-    lands.  Only declare prerequisites for genuinely not-yet-existing
-    external/unmerged symbols — not for code the ticket itself creates.
+    lands.
+    **The Prerequisites section is ONLY for symbols in external
+    dependencies (other repos/packages), NEVER for code that this
+    ticket or this repo will provide.**  Same-repo symbols are
+    deliverables, not prerequisites — declaring them as prerequisites
+    will cause a permanent false BLOCKED because the target repo's own
+    package is not installed in the mill's environment at gate time.
+    The gate automatically skips same-repo directives, but you must
+    not emit them in the first place.
     Example::
 
         ## Prerequisites
