@@ -28,8 +28,8 @@ import subprocess
 import uuid
 from pathlib import Path
 
-from .config import Settings
-from .repo_settings import load_extra_sandbox_packages
+from ..config import Settings
+from ..repo_settings import load_extra_sandbox_packages
 
 _OUT_CAP = 8000
 

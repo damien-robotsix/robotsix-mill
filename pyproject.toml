@@ -216,7 +216,7 @@ max-complexity = 10
 "src/robotsix_mill/runtime/routes/_health.py" = ["S110"]
 "src/robotsix_mill/runtime/routes/_misc.py" = ["S110"]
 "src/robotsix_mill/runtime/stage_retry.py" = ["S311"]
-"src/robotsix_mill/sandbox.py" = ["S108", "S603", "S607"]
+"src/robotsix_mill/sandbox/__init__.py" = ["S108", "S603", "S607"]
 "src/robotsix_mill/vcs/git_ops.py" = ["S603", "S607"]
 "src/robotsix_mill/autoupdate/__init__.py" = ["S108", "S602", "S603", "S607", "C901"]
 # Meta's deterministic ground-truth blocks shell out to read-only
