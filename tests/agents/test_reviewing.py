@@ -554,3 +554,70 @@ def test_non_token_exception_propagates(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="some unrelated boom"):
         run_review_agent(settings=s, diff="diff --git a/x b/x", spec="Fix x")
     assert len(calls) == 1
+
+
+# ------------------------------------------------------------------
+# extra_roots forwarding
+# ------------------------------------------------------------------
+
+
+def test_extra_roots_forwarded_to_build_fs_tools(tmp_path, monkeypatch):
+    """``extra_roots`` is forwarded to ``build_fs_tools`` when provided."""
+    from robotsix_mill.agents import fs_tools
+
+    captured: list = []
+
+    def fake_build_fs_tools(
+        root, settings, *, pre_seeded=None, extra_roots=None, sandbox_image=None
+    ):
+        captured.append(extra_roots)
+        return []
+
+    monkeypatch.setattr(fs_tools, "build_fs_tools", fake_build_fs_tools)
+
+    agent = _FakeAgent()
+    _patch_agent_definition(monkeypatch, agent)
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    extra = [tmp_path / "other"]
+
+    run_review_agent(
+        settings=s,
+        diff="diff",
+        spec="spec",
+        repo_dir=repo_dir,
+        extra_roots=extra,
+    )
+    assert captured == [extra]
+
+
+def test_extra_roots_defaults_to_none(tmp_path, monkeypatch):
+    """When ``extra_roots`` is not passed, ``build_fs_tools`` receives ``None``."""
+    from robotsix_mill.agents import fs_tools
+
+    captured: list = []
+
+    def fake_build_fs_tools(
+        root, settings, *, pre_seeded=None, extra_roots=None, sandbox_image=None
+    ):
+        captured.append(extra_roots)
+        return []
+
+    monkeypatch.setattr(fs_tools, "build_fs_tools", fake_build_fs_tools)
+
+    agent = _FakeAgent()
+    _patch_agent_definition(monkeypatch, agent)
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+
+    run_review_agent(
+        settings=s,
+        diff="diff",
+        spec="spec",
+        repo_dir=repo_dir,
+    )
+    assert captured == [None]
