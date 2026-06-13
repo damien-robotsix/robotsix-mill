@@ -364,23 +364,57 @@ class GitLabForge(Forge):
         return items[0]
 
     def _get_failed_jobs(self, project_path: str, pipeline_id: int) -> list[dict]:
-        """GET /projects/:id/pipelines/:pipeline_id/jobs?scope=failed&per_page=20."""
+        """GET /projects/:id/pipelines/:pipeline_id/jobs?scope=failed&per_page=20.
+
+        Each failed job's trace (``GET /projects/:id/jobs/:job_id/trace``) is
+        fetched and ANSI-stripped / failure-windowed via the shared
+        ``_capture_failure_window`` helper so ``check_status`` returns failure
+        detail (``summary``/``text``) comparable to the GitHub adapter. GitLab
+        exposes no per-line annotations, so ``annotations`` stays ``[]``.
+        """
         pid = self._resolve_project_id(project_path)
-        r = self._http.get(
-            f"/projects/{pid}/pipelines/{pipeline_id}/jobs",
-            params={"scope": "failed", "per_page": 20},
-        )
-        r.raise_for_status()
-        jobs = r.json()
-        return [
-            {
-                "name": j.get("name", ""),
-                "summary": None,
-                "text": None,
-                "annotations": [],
-            }
-            for j in jobs
-        ]
+        log_max = self.settings.ci_log_max_bytes
+
+        with self._http.client() as (c, api, headers):
+            jobs_resp = c.get(
+                f"{api}/projects/{pid}/pipelines/{pipeline_id}/jobs",
+                headers=headers,
+                params={"scope": "failed", "per_page": 20},
+            )
+            jobs_resp.raise_for_status()
+            jobs = jobs_resp.json()
+
+            failing: list[dict[str, Any]] = []
+            for j in jobs:
+                job_id = j["id"]
+                try:
+                    log_resp = c.get(
+                        f"{api}/projects/{pid}/jobs/{job_id}/trace",
+                        headers=headers,
+                    )
+                    log_resp.raise_for_status()
+                    raw = log_resp.text
+                except Exception:
+                    raw = ""
+
+                clean = _capture_failure_window(_ANSI_RE.sub("", raw), log_max)
+                summary = clean or None
+                text = clean or None
+                if summary and len(summary) > 2000:
+                    summary = summary[:1999] + "…"
+                if text and len(text) > 4000:
+                    text = text[:3999] + "…"
+
+                failing.append(
+                    {
+                        "name": j.get("name", ""),
+                        "summary": summary,
+                        "text": text,
+                        "annotations": [],
+                    }
+                )
+
+        return failing
 
     def _mr_notes(self, *, project_path: str, mr_iid: int) -> list[dict]:
         """GET /projects/:id/merge_requests/:iid/notes?per_page=100."""
