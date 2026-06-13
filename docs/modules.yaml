@@ -645,6 +645,7 @@ modules:
       - .dockerignore
       - .hadolint.yaml
       - pyproject.toml
+      - uv.lock
       - .pre-commit-config.yaml
       - renovate.json
       - .github/**/*
