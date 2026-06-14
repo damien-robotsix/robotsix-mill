@@ -74,3 +74,11 @@ repos:
         language: system
         files: ^(config/mill\.defaults\.yaml|config/secrets\.example\.yaml|src/robotsix_mill/config\.py|src/robotsix_mill/config_loader\.py)$
         pass_filenames: false
+  - repo: local
+    hooks:
+      - id: vulture
+        name: Vulture (dead code)
+        entry: vulture src/ vulture_whitelist.py
+        language: system
+        types: [python]
+        pass_filenames: false

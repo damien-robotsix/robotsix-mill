@@ -58,7 +58,7 @@ tracing = [
 # `robotsix-modules validate` step + the validate-module-taxonomy hook); no
 # Python import in mill. CI/dev-only, so it stays in the dev group (out of the
 # pip-based audit install and the runtime image).
-dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "pytest-xdist>=3", "bandit[toml]>=1.8", "mypy>=1.15", "mypy-baseline>=0.7", "ruff==0.15.15", "deptry>=0.25", "robotsix-modules @ git+https://github.com/damien-robotsix/robotsix-modules@main"]
+dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "pytest-xdist>=3", "bandit[toml]>=1.8", "mypy>=1.15", "mypy-baseline>=0.7", "ruff==0.15.15", "deptry>=0.25", "vulture>=2", "robotsix-modules @ git+https://github.com/damien-robotsix/robotsix-modules@main"]
 docs = ["mkdocs-material>=9", "mkdocstrings[python]>=0.27"]
 
 [tool.uv]
@@ -130,6 +130,11 @@ max-complexity = 10
 "tests/**" = ["S"]
 "dev/**" = ["S"]
 "scripts/**" = ["S"]
+# vulture_whitelist.py is a tool configuration file whose syntax
+# (bare-name expressions marking "used" identifiers for vulture's
+# dead-code scanner) triggers B018 ("useless expression") and F821
+# ("undefined name") on every entry.  Both are the intended API.
+"vulture_whitelist.py" = ["B018", "F821"]
 # test_datetime_utils.py exercises TZDateTime's handling of naive
 # datetime inputs on purpose — DTZ001 (no tzinfo) is the contract
 # under test, not a defect.
@@ -256,6 +261,7 @@ DEP002 = [
     "mypy",
     "ruff",
     "deptry",
+    "vulture",
     "mkdocs-material",
     "mkdocstrings",
     "langfuse",
