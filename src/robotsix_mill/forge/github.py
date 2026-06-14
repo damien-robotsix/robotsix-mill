@@ -242,6 +242,19 @@ class GitHubForge(Forge):
         body: str,
         head_repo: str | None = None,
     ) -> str:
+        """Open a Pull Request for the already-pushed *source_branch*.
+
+        :param source_branch: head branch to open the PR from.
+        :param title: PR title.
+        :param body: PR description body.
+        :param head_repo: when set (``owner/repo``), a cross-fork PR whose
+            head lives on the fork; the head is qualified ``owner:branch``
+            and the base resolves to the upstream ``base_branch``.
+        Returns the new (or already-existing) PR's ``html_url``. Calls the
+        GitHub API to create the PR (idempotent: reuses an open PR for the
+        same head instead of double-opening). Raises ``RuntimeError`` on a
+        non-recoverable create failure.
+        """
         s = self.settings
         owner, repo = self._owner_repo
         from ..config import target_branch_for  # lazy: avoid import cycle
@@ -527,10 +540,25 @@ class GitHubForge(Forge):
         raise RuntimeError(f"GitHub fork failed: {r.status_code} {r.text[:300]}")
 
     def pr_status(self, *, source_branch: str) -> dict | None:
+        """Return the PR status for the PR whose head is *source_branch*.
+
+        Looks the PR up by head branch and returns the normalized status
+        ``dict`` (``merged``, ``state``, ``url``, ``mergeable``,
+        ``mergeable_state``, ``sha``, ``number``), or ``None`` when no PR
+        exists for the branch.
+        """
         owner, repo = self._owner_repo
         return self._get_pr(owner=owner, repo=repo, head=source_branch)
 
     def pr_status_by_url(self, *, url: str) -> dict | None:
+        """Return the PR status resolved directly from a PR *url*.
+
+        Parses the ``/pull/<number>`` segment out of *url* and fetches the
+        PR by number, returning the same status ``dict`` shape as
+        :meth:`pr_status`. Returns ``None`` when *url* has no PR number.
+        Unlike :meth:`pr_status` this still resolves a merged PR whose head
+        branch was auto-deleted on merge.
+        """
         m = re.search(r"/pull/(\d+)", url or "")
         if not m:
             return None
@@ -538,10 +566,23 @@ class GitHubForge(Forge):
         return self._get_pr_by_number(owner=owner, repo=repo, number=int(m.group(1)))
 
     def check_status(self, *, source_branch: str) -> dict | None:
+        """Return the aggregate CI check status for *source_branch*'s PR head.
+
+        Returns a ``dict`` with ``conclusion`` (``"success"`` /
+        ``"failure"`` / ``"pending"``) and a ``failing`` list of failing-
+        check detail dicts, or ``None`` when there is no PR / head SHA to
+        gate on. A repo with no CI configured reports ``"success"`` so the
+        merge pipeline does not wait forever.
+        """
         owner, repo = self._owner_repo
         return self._check_status(owner=owner, repo=repo, head=source_branch)
 
     def pr_files(self, *, source_branch: str) -> list[dict]:
+        """Return the list of files changed in *source_branch*'s PR.
+
+        Each entry is a ``dict`` with ``path``, ``status``, ``additions``,
+        and ``deletions``. Returns ``[]`` when no PR exists for the branch.
+        """
         owner, repo = self._owner_repo
         pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
         if pr is None:
@@ -553,6 +594,13 @@ class GitHubForge(Forge):
         )
 
     def merge_pr(self, *, source_branch: str) -> dict:
+        """Merge (squash) the PR whose head is *source_branch*.
+
+        Returns a ``dict`` with ``merged`` (bool) and a ``reason`` string.
+        Mutates remote state: squash-merges the PR via the GitHub API.
+        Returns ``{"merged": False, "reason": "PR not found"}`` when no PR
+        exists for the branch.
+        """
         owner, repo = self._owner_repo
         pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
         if pr is None:
@@ -564,6 +612,14 @@ class GitHubForge(Forge):
         )
 
     def update_branch(self, *, source_branch: str) -> dict:
+        """Update *source_branch*'s PR head with the latest base branch.
+
+        Calls the GitHub ``update-branch`` API (merges the base into the PR
+        head), mutating remote state. Returns a ``dict`` with ``updated``
+        (bool) and a ``reason`` string — ``False``/"already up to date" when
+        there is nothing to merge, ``False``/"PR not found" when no PR
+        exists for the branch.
+        """
         owner, repo = self._owner_repo
         pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
         if pr is None:
@@ -582,6 +638,11 @@ class GitHubForge(Forge):
             return {"updated": False, "reason": str(e)}
 
     def list_pr_reviews(self, *, source_branch: str) -> list[dict]:
+        """Return the reviews submitted on *source_branch*'s PR.
+
+        Each entry is a ``dict`` with ``id``, ``author``, ``created_at``,
+        and ``body``. Returns ``[]`` when no PR exists for the branch.
+        """
         owner, repo = self._owner_repo
         pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
         if pr is None:
@@ -593,6 +654,12 @@ class GitHubForge(Forge):
         )
 
     def list_review_comments(self, *, source_branch: str) -> list[dict]:
+        """Return the inline review comments on *source_branch*'s PR.
+
+        Each entry is a ``dict`` with ``id``, ``author``, ``created_at``,
+        ``body``, ``file_path``, ``line``, and ``diff_hunk``. Returns ``[]``
+        when no PR exists for the branch.
+        """
         owner, repo = self._owner_repo
         pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
         if pr is None:
@@ -604,6 +671,14 @@ class GitHubForge(Forge):
         )
 
     def pr_review_status(self, *, source_branch: str) -> dict | None:
+        """Return the aggregate review status for *source_branch*'s PR.
+
+        Returns a ``dict`` with ``state`` (the latest non-dismissed review
+        state, e.g. ``"CHANGES_REQUESTED"`` / ``"APPROVED"`` / ``"PENDING"``),
+        a ``comments`` list (review bodies + inline comments, each carrying
+        its ``review_state``), and ``files`` (changed file paths). Returns
+        ``None`` when no PR exists for the branch.
+        """
         owner, repo = self._owner_repo
         pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
         if pr is None:
@@ -617,6 +692,14 @@ class GitHubForge(Forge):
     def list_workflow_runs(
         self, *, branch: str | None = None, head_sha: str | None = None
     ) -> list[dict]:
+        """Return completed GitHub Actions workflow runs.
+
+        :param branch: when set, filter runs to this branch.
+        :param head_sha: when set, filter runs to this head commit SHA.
+        Returns a ``list[dict]`` (one per run) with ``id``, ``name``,
+        ``workflow_id``, ``head_sha``, ``conclusion``, ``html_url``, and
+        ``created_at``.
+        """
         owner, repo = self._owner_repo
         return self._list_workflow_runs(
             owner=owner,
@@ -649,6 +732,15 @@ class GitHubForge(Forge):
         return raw if isinstance(raw, list) else []
 
     def list_code_scanning_alerts(self, *, source_branch: str) -> list[dict]:
+        """Return open code-scanning (CodeQL) alerts for *source_branch*.
+
+        Queries both the PR merge ref and the branch ref, unioning the
+        results (de-duped on the raw alert number) so both CodeQL workflow
+        shapes are covered. Each entry is a ``dict`` with ``rule``,
+        ``severity``, ``path``, ``line``, ``message``, and ``url``.
+        Best-effort: degrades to ``[]`` when code-scanning is off or the
+        token lacks the security-events scope.
+        """
         owner, repo = self._owner_repo
         # A CodeQL workflow that only triggers on ``pull_request`` (the common
         # case) files its alerts under the PR merge ref ``refs/pull/{N}/merge``,
@@ -699,6 +791,13 @@ class GitHubForge(Forge):
         return out
 
     def fetch_workflow_job_logs(self, *, run_id: int) -> str:
+        """Return the logs of the failed jobs in workflow run *run_id*.
+
+        :param run_id: GitHub Actions workflow-run id whose jobs to fetch.
+        Concatenates (ANSI-stripped, failure-window-capped) logs for up to
+        the first few failed-like jobs of the run into a single string;
+        returns ``""`` when the run has no failed jobs.
+        """
         owner, repo = self._owner_repo
         return self._fetch_workflow_job_logs(
             owner=owner,
@@ -709,6 +808,16 @@ class GitHubForge(Forge):
     def create_repo(
         self, *, name: str, owner: str, private: bool, description: str
     ) -> RepoInfo:
+        """Create a new GitHub repository and return its :class:`RepoInfo`.
+
+        :param name: repository name.
+        :param owner: org/user namespace to create under (empty falls back
+            to the authenticated user).
+        :param private: whether the repo is private.
+        :param description: repo description (clamped to GitHub's limit).
+        Mutates remote state: creates the repo via the GitHub API. Raises
+        :class:`NotConfiguredError` when ``enable_repo_creation`` is off.
+        """
         if not self.settings.enable_repo_creation:
             raise NotConfiguredError(
                 "Repo creation is disabled. Set enable_repo_creation=True "
@@ -730,6 +839,15 @@ class GitHubForge(Forge):
         source_repo: str,
         target_namespace: str | None = None,
     ) -> RepoInfo:
+        """Fork an existing GitHub repository and return its :class:`RepoInfo`.
+
+        :param source_owner: owner of the repo to fork.
+        :param source_repo: name of the repo to fork.
+        :param target_namespace: org to create the fork under (defaults to
+            the authenticated account).
+        Mutates remote state: creates the fork via the GitHub API. Raises
+        :class:`NotConfiguredError` when ``enable_repo_creation`` is off.
+        """
         if not self.settings.enable_repo_creation:
             raise NotConfiguredError(
                 "Repo creation is disabled. Set enable_repo_creation=True "
@@ -744,6 +862,13 @@ class GitHubForge(Forge):
         )
 
     def delete_branch(self, *, branch: str) -> bool:
+        """Delete remote *branch*, returning ``True`` once it is gone.
+
+        :param branch: branch name to delete.
+        Mutates remote state: issues a DELETE on the branch ref (resolved to
+        the fork for cross-repo targets). Returns ``True`` when the branch is
+        deleted or already absent, ``False`` on any other failure.
+        """
         # For cross-repo targets the head branch lives on the fork,
         # not the upstream repo.  Resolve the fork owner/repo so the
         # DELETE goes to the right place instead of 404'ing on
@@ -759,10 +884,21 @@ class GitHubForge(Forge):
         return self._delete_branch(owner=owner, repo=repo, branch=branch)
 
     def list_branches(self) -> list[BranchInfo]:
+        """Return all branches of the repo as :class:`BranchInfo` entries.
+
+        Paginates the GitHub branches API and returns a ``list[BranchInfo]``
+        (``name``, ``last_commit_at``, ``is_protected``). Returns ``[]`` on
+        any API failure.
+        """
         owner, repo = self._owner_repo
         return self._list_branches(owner=owner, repo=repo)
 
     def list_open_pr_branches(self) -> set[str]:
+        """Return the set of head branch names that have an open PR.
+
+        Paginates the open-PRs API and collects each PR's head ref. Returns
+        a ``set[str]`` of branch names (empty on any API failure).
+        """
         owner, repo = self._owner_repo
         return self._list_open_pr_branches(owner=owner, repo=repo)
 
