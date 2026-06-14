@@ -15,7 +15,7 @@ from pathlib import Path
 
 import yaml
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _DOCS_DIR = _REPO_ROOT / "docs"
 _MKDOCS_YML = _REPO_ROOT / "mkdocs.yml"
 
