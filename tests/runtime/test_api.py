@@ -261,8 +261,10 @@ def test_board_cards_closed_sorted_newest_first(client, service, settings):
     ids = [c["id"] for c in cards]
 
     # Non-closed cards (drafts) should appear oldest-first.
-    draft_positions = {t_draft.id: ids.index(t_draft.id),
-                       t_draft2.id: ids.index(t_draft2.id)}
+    draft_positions = {
+        t_draft.id: ids.index(t_draft.id),
+        t_draft2.id: ids.index(t_draft2.id),
+    }
     assert draft_positions[t_draft.id] < draft_positions[t_draft2.id], (
         "draft-oldest must appear before draft-newest (created_at ascending)"
     )
