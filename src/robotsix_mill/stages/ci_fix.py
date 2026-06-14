@@ -475,7 +475,9 @@ class CIFixStage(Stage):
             )
 
         if result is not None and result.status == "OUT_OF_SCOPE":
-            return self._handle_out_of_scope(ticket, ctx, branch, result, failing_summary)
+            return self._handle_out_of_scope(
+                ticket, ctx, branch, result, failing_summary
+            )
 
         # Agent failed (result is None on crash, or status == "FAILED").
         if attempt < max_attempts:

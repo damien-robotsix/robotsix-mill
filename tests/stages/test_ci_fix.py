@@ -1809,7 +1809,9 @@ def test_ci_failure_fingerprint_differs_for_different_checks() -> None:
 
 def test_ci_failure_fingerprint_differs_for_different_repos() -> None:
     """Same failure on different repos produces different fingerprints."""
-    summary = "## Failing check #1: lint\n**Summary:**\nerror\n\n**Job logs:**\n```\nx\n```\n"
+    summary = (
+        "## Failing check #1: lint\n**Summary:**\nerror\n\n**Job logs:**\n```\nx\n```\n"
+    )
     fp1 = _ci_failure_fingerprint(summary, "board-a")
     fp2 = _ci_failure_fingerprint(summary, "board-b")
     assert fp1 != fp2
