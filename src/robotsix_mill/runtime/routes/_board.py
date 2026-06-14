@@ -10,6 +10,8 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from ...config import Settings
+from ...core.models import Ticket
 from ...core.states import State
 from ..board_adapter import MillBoardAdapter
 from ..deps import (
@@ -91,7 +93,7 @@ def board_cards(
         services.append(_TicketService(settings, board_id="meta"))
 
     # Collect all (ticket, settings, svc) tuples first, then sort.
-    collected: list[tuple] = []
+    collected: list[tuple[Ticket, Settings, _TicketService]] = []
     for s in services:
         try:
             tickets = s.list()
