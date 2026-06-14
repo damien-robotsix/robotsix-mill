@@ -454,6 +454,47 @@ def make_post_findings_tool(settings: Settings, agent_name: str) -> Callable[...
 # ---------------------------------------------------------------------------
 
 
+def _build_meta_investigation_workspace(
+    ctx: StageContext, ticket: Ticket, ws: Any, draft: str
+) -> tuple[Path | None, list[Path], MaintenanceResult | None]:
+    """Build the multi-repo investigation workspace for a meta-board ticket.
+
+    Meta tickets are cross-repo. The maintenance agent's single-repo model
+    (``clone_repo`` into a tempdir + ``investigation_root = ws.repo_dir``)
+    cannot inspect more than one repo, and ``ws.repo_dir`` (the singular
+    ``<ws>/repo`` dir) never exists for a meta ticket — so every filesystem
+    tool returns "workspace repo directory does not exist" and the agent
+    blocks (live: ticket 6e68, a multi-repo PyPI-publication audit). This
+    builds the SAME workspace the refine/implement stages use: each required
+    repo cloned into ``<ws>/repos/<id>``, exposed as investigation roots.
+
+    Returns ``(meta_repo_dir, meta_extra_roots, blocking_result)``. For a
+    non-meta ticket returns ``(None, [], None)``. When the meta workspace
+    can't be built, ``blocking_result`` is a failing
+    :class:`MaintenanceResult` the caller should return directly.
+    """
+    if ticket.board_id != "meta":
+        return None, [], None
+
+    from ..meta.workspace import build_triaged_meta_workspace
+
+    meta_repo_dir, meta_roots, meta_outcome = build_triaged_meta_workspace(
+        ctx, ticket, ws, draft, author="maintenance"
+    )
+    if meta_outcome is not None:
+        # Triage error or no repo cloned — surface as a blocking result
+        # (build_triaged_meta_workspace already added an explanatory comment).
+        return (
+            None,
+            [],
+            MaintenanceResult(
+                success=False,
+                note=meta_outcome.note or "meta workspace build failed",
+            ),
+        )
+    return meta_repo_dir, meta_roots or [], None
+
+
 def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResult:
     """Load the maintenance agent definition, build its tool set, run the
     agent loop, and return a structured :class:`MaintenanceResult`.
@@ -475,6 +516,14 @@ def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResul
     ws = ctx.service.workspace(ticket)
     draft = ws.read_description().strip()
 
+    # 2b. Meta-board tickets are cross-repo — build the multi-repo
+    # investigation workspace (see _build_meta_investigation_workspace).
+    meta_repo_dir, meta_extra_roots, meta_block = _build_meta_investigation_workspace(
+        ctx, ticket, ws, draft
+    )
+    if meta_block is not None:
+        return meta_block
+
     # 3. Create a temporary workspace directory for the clone
     import tempfile
 
@@ -492,20 +541,24 @@ def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResul
         tools.append(make_post_findings_tool(ctx.settings, "maintenance"))
 
         # Determine the effective root for investigation tools.
-        # When investigation_workspace is set, tools are scoped to
-        # that pre-populated directory; otherwise fall back to the
-        # ticket's own workspace repo dir.
+        # Priority: an explicit investigation_workspace override, then the
+        # meta multi-repo primary clone (for meta-board tickets), then the
+        # ticket's own single-repo workspace dir.
         investigation_root = (
             ctx.settings.investigation_workspace
             if ctx.settings.investigation_workspace is not None
-            else ws.repo_dir
+            else (meta_repo_dir if meta_repo_dir is not None else ws.repo_dir)
         )
+
+        # Investigation tools can read the maintenance clone (clone_dir) AND
+        # every meta repo clone (meta_extra_roots, empty for non-meta tickets).
+        fs_extra_roots = [clone_dir, *meta_extra_roots]
 
         # Read-only filesystem tools (read_file, list_dir, run_command)
         from .fs_tools import build_fs_tools
 
         all_fs = build_fs_tools(
-            investigation_root, ctx.settings, extra_roots=[clone_dir]
+            investigation_root, ctx.settings, extra_roots=fs_extra_roots
         )
         ro_fs = {
             t.__name__: t
@@ -536,11 +589,13 @@ def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResul
         from .explore import make_explore_tool, make_parallel_explore_tool
 
         tools.append(
-            make_explore_tool(ctx.settings, investigation_root, extra_roots=[clone_dir])
+            make_explore_tool(
+                ctx.settings, investigation_root, extra_roots=fs_extra_roots
+            )
         )
         tools.append(
             make_parallel_explore_tool(
-                ctx.settings, investigation_root, extra_roots=[clone_dir]
+                ctx.settings, investigation_root, extra_roots=fs_extra_roots
             )
         )
 
@@ -581,7 +636,21 @@ def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResul
                 )
         except Exception:
             log.debug("could not list registered boards for prompt", exc_info=True)
-        if remote_url:
+        if meta_extra_roots:
+            # Meta multi-repo ticket: the required repos are ALREADY cloned
+            # locally. Point the agent at them so it reads them directly with
+            # list_dir/read_file/run_command — do NOT use the single-repo
+            # clone_repo tool (it holds only one repo at a time and would
+            # overwrite each prior clone).
+            repo_context += (
+                "\n# Pre-cloned repositories (read these directly)\n"
+                "These repos are already cloned locally for this cross-repo "
+                "task — inspect them with list_dir/read_file/run_command. Do "
+                "NOT call clone_repo for them.\n"
+                + "\n".join(f"- {p.name}: {p}" for p in meta_extra_roots)
+                + "\n"
+            )
+        elif remote_url:
             repo_context += (
                 f"\n# Repository clone URL\n{remote_url}\n"
                 "(pass this EXACT url to clone_repo — do not guess remotes)\n"
