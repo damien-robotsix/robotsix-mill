@@ -10,6 +10,9 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from ...config import Settings
+from ...core.models import Ticket
+from ...core.states import State
 from ..board_adapter import MillBoardAdapter
 from ..deps import (
     enrich_ticket_read,
@@ -23,6 +26,10 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 _adapter = MillBoardAdapter()
+
+# States whose cards should be sorted by updated_at descending (most
+# recent first) instead of the default created_at ascending.
+_CLOSED_TERMINAL_STATES: set[State] = {State.CLOSED, State.EPIC_CLOSED}
 
 
 def _ticket_to_card(ticket, settings, svc):
@@ -65,6 +72,10 @@ def board_cards(
     Mirrors ``GET /tickets`` but returns the flat card shape expected
     by robotsix-board's ``board.js`` instead of the full ``TicketRead``
     model.
+
+    Closed and epic-closed cards are sorted by ``updated_at``
+    descending (most recent first); all other cards remain sorted by
+    ``created_at`` ascending.
     """
     from ...core.service import TicketService as _TicketService
 
@@ -81,7 +92,8 @@ def board_cards(
         ]
         services.append(_TicketService(settings, board_id="meta"))
 
-    cards: list[dict] = []
+    # Collect all (ticket, settings, svc) tuples first, then sort.
+    collected: list[tuple[Ticket, Settings, _TicketService]] = []
     for s in services:
         try:
             tickets = s.list()
@@ -89,9 +101,21 @@ def board_cards(
             log.warning("Failed to list tickets from board service", exc_info=True)
             continue
         for t in tickets:
-            cards.append(_ticket_to_card(t, settings, s))
+            collected.append((t, settings, s))
 
-    return cards
+    # Compound sort: closed / epic_closed cards sorted by updated_at
+    # descending (group 1), everything else by created_at ascending
+    # (group 0).
+    collected.sort(
+        key=lambda item: (
+            0 if item[0].state not in _CLOSED_TERMINAL_STATES else 1,
+            item[0].created_at.timestamp()
+            if item[0].state not in _CLOSED_TERMINAL_STATES
+            else -item[0].updated_at.timestamp(),
+        )
+    )
+
+    return [_ticket_to_card(t, settings, s) for t, settings, s in collected]
 
 
 @router.post("/board/move/{card_id}/{target_status}")
