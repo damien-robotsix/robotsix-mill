@@ -117,6 +117,7 @@ def run_periodic_agent(
     prompt_tail: str,
     include_forge_url: bool = False,
     include_jscpd: bool = False,
+    include_workflow_caller_audit: bool = False,
     include_run_command: bool = False,
     extra_roots: list[Path] | None = None,
     usage_limits: Any = None,
@@ -160,6 +161,10 @@ def run_periodic_agent(
     include_jscpd:
         When ``True``, appends ``make_jscpd_tool(repo_dir)`` to the
         tool list.
+    include_workflow_caller_audit:
+        When ``True``, appends ``make_workflow_caller_audit_tool(repo_dir)``
+        — a deterministic detector for broken reusable-workflow callers
+        (wrong org / missing permissions) — to the tool list.
     include_run_command:
         When ``True``, adds ``"run_command"`` to the fs-tool name
         filter (default filter is ``{"read_file", "list_dir"}``).
@@ -228,6 +233,11 @@ def run_periodic_agent(
             from .jscpd_tool import make_jscpd_tool
 
             tools.append(make_jscpd_tool(repo_dir))
+
+        if include_workflow_caller_audit:
+            from .workflow_caller_audit import make_workflow_caller_audit_tool
+
+            tools.append(make_workflow_caller_audit_tool(repo_dir))
 
         tools.extend(ro)
 

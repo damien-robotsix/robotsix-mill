@@ -104,6 +104,26 @@ def test_mill_ships_an_audit_overlay():
     )
 
 
+def test_run_audit_agent_wires_workflow_caller_audit(monkeypatch):
+    """run_audit_agent forwards include_workflow_caller_audit=True (and the
+    jscpd flag) through to run_periodic_agent."""
+    captured: dict = {}
+
+    def fake_run_periodic(**kwargs):
+        captured["kwargs"] = kwargs
+        return auditing.AuditResult()
+
+    import robotsix_mill.agents.periodic_base as periodic_base
+
+    monkeypatch.setattr(periodic_base, "run_periodic_agent", fake_run_periodic)
+
+    auditing.run_audit_agent(settings=Settings())
+
+    kw = captured["kwargs"]
+    assert kw["include_workflow_caller_audit"] is True
+    assert kw["include_jscpd"] is True
+
+
 def test_audit_agent_result_model():
     """AuditResult has the expected fields."""
     result = auditing.AuditResult(
