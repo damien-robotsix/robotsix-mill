@@ -305,7 +305,9 @@ def make_workflow_caller_audit_tool(repo_dir: Path) -> Callable[[], str]:
 
     from .tool_registry import ToolInfo, ToolRegistry
 
-    if not any(t.name == "audit_workflow_callers" for t in ToolRegistry.list_tools()):
+    if not any(
+        t.name == "audit_workflow_callers" for t in ToolRegistry.list_tools()
+    ):
         ToolRegistry.register(
             ToolInfo(
                 name="audit_workflow_callers",
