@@ -308,6 +308,47 @@ def test_active_with_items(client):
         client.app.dependency_overrides.clear()
 
 
+def test_active_repo_id_meta_filters_by_board(client):
+    """GET /active?repo_id=meta returns 200 and filters on board_id == 'meta'.
+
+    ``meta`` is a synthetic board id, not a registered repo, so it must
+    skip the repo-registry validation (mirroring the /traces handler).
+    """
+    from types import SimpleNamespace
+
+    tickets = {
+        "ticket-meta": SimpleNamespace(board_id="meta"),
+        "ticket-other": SimpleNamespace(board_id="test-board"),
+    }
+
+    class FakeWorker:
+        _active = {
+            "ticket-meta": {"stage": "implement", "started_at": "t0"},
+            "ticket-other": {"stage": "refine", "started_at": "t0"},
+        }
+        ctx = SimpleNamespace(service=SimpleNamespace(get=tickets.get))
+
+    from robotsix_mill.runtime.deps import get_worker as _get_worker
+
+    client.app.dependency_overrides[_get_worker] = lambda: FakeWorker()
+
+    try:
+        r = client.get("/active?repo_id=meta")
+        assert r.status_code == 200
+        data = r.json()
+        ids = {e["ticket_id"] for e in data}
+        assert ids == {"ticket-meta"}
+    finally:
+        client.app.dependency_overrides.clear()
+
+
+def test_active_unknown_repo_returns_400(client):
+    """GET /active?repo_id=<unknown> still returns 400."""
+    r = client.get("/active?repo_id=definitely-not-a-repo")
+    assert r.status_code == 400
+    assert "Unknown repo" in r.json()["detail"]
+
+
 # -- GET /costs/by-agent -------------------------------------------------
 
 
