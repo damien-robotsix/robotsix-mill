@@ -466,9 +466,18 @@ def _build_meta_investigation_workspace(
     tool returns "workspace repo directory does not exist" and the agent
     blocks (live: ticket 6e68, a multi-repo PyPI-publication audit). This
     builds the SAME workspace the refine/implement stages use: each required
-    repo cloned into ``<ws>/repos/<id>``, exposed as investigation roots.
+    repo cloned into ``<ws>/repos/<id>``.
 
-    Returns ``(meta_repo_dir, meta_extra_roots, blocking_result)``. For a
+    The investigation root is the **common parent** of the clones
+    (``<ws>/repos``), NOT the first clone. ``run_command`` and ``explore``
+    sandbox to the root dir only (``sandbox.run(repo_dir=root)`` does not
+    mount ``extra_roots``), so rooting at the first clone would let the agent
+    ``read_file`` siblings but leave them invisible to ``run_command``/``ls``/
+    ``explore`` — the audit then reports "8/9 repos absent" (live: 6e68).
+    Rooting at the parent makes every clone a subdir of the one mounted root,
+    so all tools traverse all repos via ``<repo-id>/...`` paths.
+
+    Returns ``(meta_root, meta_extra_roots, blocking_result)``. For a
     non-meta ticket returns ``(None, [], None)``. When the meta workspace
     can't be built, ``blocking_result`` is a failing
     :class:`MaintenanceResult` the caller should return directly.
@@ -492,7 +501,11 @@ def _build_meta_investigation_workspace(
                 note=meta_outcome.note or "meta workspace build failed",
             ),
         )
-    return meta_repo_dir, meta_roots or [], None
+    # Root at the clones' shared parent (``<ws>/repos``) so the sandboxed
+    # tools see every clone as a subdir; keep the individual clones as
+    # extra_roots too (belt-and-suspenders for path-based tools).
+    meta_root = meta_repo_dir.parent if meta_repo_dir is not None else None
+    return meta_root, meta_roots or [], None
 
 
 def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResult:
@@ -518,7 +531,8 @@ def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResul
 
     # 2b. Meta-board tickets are cross-repo — build the multi-repo
     # investigation workspace (see _build_meta_investigation_workspace).
-    meta_repo_dir, meta_extra_roots, meta_block = _build_meta_investigation_workspace(
+    # ``meta_root`` is the clones' shared parent dir (``<ws>/repos``).
+    meta_root, meta_extra_roots, meta_block = _build_meta_investigation_workspace(
         ctx, ticket, ws, draft
     )
     if meta_block is not None:
@@ -547,7 +561,7 @@ def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResul
         investigation_root = (
             ctx.settings.investigation_workspace
             if ctx.settings.investigation_workspace is not None
-            else (meta_repo_dir if meta_repo_dir is not None else ws.repo_dir)
+            else (meta_root if meta_root is not None else ws.repo_dir)
         )
 
         # Investigation tools can read the maintenance clone (clone_dir) AND
@@ -645,9 +659,13 @@ def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResul
             repo_context += (
                 "\n# Pre-cloned repositories (read these directly)\n"
                 "These repos are already cloned locally for this cross-repo "
-                "task — inspect them with list_dir/read_file/run_command. Do "
-                "NOT call clone_repo for them.\n"
-                + "\n".join(f"- {p.name}: {p}" for p in meta_extra_roots)
+                "task, each as a SUBDIRECTORY of your working root. Inspect "
+                "them with list_dir/read_file/run_command/explore using "
+                "``<repo-id>/...`` relative paths (e.g. "
+                "``read_file('robotsix-mill/pyproject.toml')`` or "
+                "``run_command('cd robotsix-mill && git log -1')``). Do NOT "
+                "call clone_repo for them.\n"
+                + "\n".join(f"- {p.name}" for p in meta_extra_roots)
                 + "\n"
             )
         elif remote_url:
