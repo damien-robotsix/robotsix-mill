@@ -123,6 +123,30 @@ def _reset_secrets_each_test():
     _reset_repos_config()
 
 
+@pytest.fixture(autouse=True)
+def _restore_tool_registry():
+    """Keep the module-global ``ToolRegistry`` order-independent.
+
+    Several tests call ``ToolRegistry._tools.clear()`` to exercise tool
+    self-registration in isolation, but tools only register once via
+    import side-effects — a cleared entry never comes back on re-import.
+    Under ``pytest-xdist`` (CI runs ``-n auto --dist loadscope``) a
+    clearing module can land on the same worker just before a test that
+    builds an agent, whose build-time tool-directive guard reads
+    ``ToolRegistry.list_tools()`` and then wrongly flags every prompt
+    directive as unavailable. Snapshot the registry before each test and
+    re-add any entry a test removed afterwards (without overwriting
+    newly-registered tools), so the catalog only ever grows."""
+    from robotsix_mill.agents.tool_registry import ToolRegistry
+
+    snapshot = dict(ToolRegistry._tools)
+    try:
+        yield
+    finally:
+        for name, info in snapshot.items():
+            ToolRegistry._tools.setdefault(name, info)
+
+
 @pytest.fixture
 def secrets_set():
     """Fixture that lets tests inject secret values into ``get_secrets()``.
