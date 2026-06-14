@@ -61,7 +61,7 @@ ARG INSTALL_EXTRAS=tracing
 WORKDIR /build
 # Copy only what uv needs to install the package (avoids baking the full
 # source tree into the production image).
-COPY pyproject.toml README.md ./
+COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
 # DO NOT switch this to `uv sync` / `UV_PROJECT_ENVIRONMENT=system`. That
 # env var is a venv PATH, not a mode: uv builds a venv at /build/system and
@@ -71,7 +71,14 @@ COPY src/ ./src/
 # the system interpreter (/usr/local), keeps uv's speed, and lands the
 # script where the COPY expects it. (Regressed twice — see PR #491.)
 RUN pip install uv --no-cache-dir \
-    && uv pip install --system --no-cache ".[${INSTALL_EXTRAS}]"
+    && EXTRA_FLAGS="" \
+    && IFS=',' read -ra _extras <<< "${INSTALL_EXTRAS}" \
+    && for e in "${_extras[@]}"; do [ -n "$e" ] && EXTRA_FLAGS="$EXTRA_FLAGS --extra $e"; done \
+    && uv export --frozen --no-emit-project --no-default-groups $EXTRA_FLAGS \
+         --format requirements-txt -o /tmp/requirements.txt \
+    && uv pip install --system --no-cache -r /tmp/requirements.txt \
+    && uv pip install --system --no-cache --no-deps . \
+    && rm -f /tmp/requirements.txt
 
 # =============================================================================
 # Stage 2: base — shared runtime setup (not built directly; extended by
