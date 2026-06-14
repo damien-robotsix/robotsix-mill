@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from typing import Any
 
 from ..config import Settings
 from .diagnostic_checks import DiagnosticCheckResult, get_registered_checks
@@ -35,7 +36,7 @@ class DiagnosticPassResult:
     optionally ``result.summary``.
     """
 
-    drafts_created: list[dict] = field(default_factory=list)
+    drafts_created: list[dict[str, Any]] = field(default_factory=list)
     summary: str = ""
 
 
@@ -74,7 +75,7 @@ def run_diagnostic_pass(session_id: str) -> DiagnosticPassResult:
                 )
             )
 
-    drafts_created: list[dict] = []
+    drafts_created: list[dict[str, Any]] = []
     for r in results:
         drafts_created.extend(r.drafts_created)
     failed = sum(1 for r in results if not r.ok)

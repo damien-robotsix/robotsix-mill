@@ -125,7 +125,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         self._meta_task: asyncio.Task | None = None
         self._cost_analyst_task: asyncio.Task | None = None
         self._run_health_task: asyncio.Task | None = None
-        self._diagnostic_task: asyncio.Task | None = None
+        self._diagnostic_task: asyncio.Task[None] | None = None
         self._stale_branch_task: asyncio.Task | None = None
         # board_id -> per-repo bespoke supervisor task. The supervisor
         # itself owns each repo's per-bespoke child tasks; cancelling

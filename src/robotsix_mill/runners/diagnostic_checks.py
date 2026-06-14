@@ -13,7 +13,7 @@ later tickets populate it (error detection, draft-count validation, …).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 @dataclass
@@ -32,7 +32,7 @@ class DiagnosticCheckResult:
     name: str
     ok: bool
     summary: str
-    drafts_created: list[dict] = field(default_factory=list)
+    drafts_created: list[dict[str, Any]] = field(default_factory=list)
 
 
 @runtime_checkable
