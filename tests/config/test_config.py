@@ -1395,6 +1395,57 @@ class TestLoadReposConfig:
         assert rr.repos["repo-a"].deployed_log_folder == "/var/log/repo-a"
         assert rr.repos["repo-b"].deployed_log_folder is None
 
+    def test_cross_repo_target_with_gitlab_forge_raises(self, tmp_path, monkeypatch):
+        """A ``cross_repo_target`` on a repo while ``FORGE_KIND=gitlab`` →
+        ``ConfigError`` naming the repo (cross-fork MRs are GitHub-only)."""
+        from robotsix_mill.config import load_repos_config
+        from robotsix_mill.config.loader import ConfigError
+
+        monkeypatch.setenv("FORGE_KIND", "gitlab")
+        monkeypatch.setenv("FORGE_REMOTE_URL", "https://gitlab.com/o/r.git")
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text(
+            "repos:\n"
+            "  repo-a:\n"
+            "    board_id: board-a\n"
+            "    cross_repo_target:\n"
+            "      upstream_remote_url: https://gitlab.com/up/r.git\n"
+            "      fork_remote_url: https://gitlab.com/fork/r.git\n"
+        )
+        with pytest.raises(ConfigError, match="repo-a.*GitHub-only"):
+            load_repos_config(str(repos_file))
+
+    def test_cross_repo_target_with_github_forge_loads(self, tmp_path, monkeypatch):
+        """A ``cross_repo_target`` on a repo while ``FORGE_KIND=github`` →
+        loads OK (cross-fork MRs are supported by the GitHub adapter)."""
+        from robotsix_mill.config import load_repos_config
+
+        monkeypatch.setenv("FORGE_KIND", "github")
+        monkeypatch.setenv("FORGE_REMOTE_URL", "https://github.com/o/r.git")
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text(
+            "repos:\n"
+            "  repo-a:\n"
+            "    board_id: board-a\n"
+            "    cross_repo_target:\n"
+            "      upstream_remote_url: https://github.com/up/r.git\n"
+            "      fork_remote_url: https://github.com/fork/r.git\n"
+        )
+        rr = load_repos_config(str(repos_file))
+        assert rr.repos["repo-a"].cross_repo_target is not None
+
+    def test_gitlab_forge_without_cross_repo_target_loads(self, tmp_path, monkeypatch):
+        """``FORGE_KIND=gitlab`` with no ``cross_repo_target`` on any repo →
+        loads OK (regression: existing GitLab configs keep loading)."""
+        from robotsix_mill.config import load_repos_config
+
+        monkeypatch.setenv("FORGE_KIND", "gitlab")
+        monkeypatch.setenv("FORGE_REMOTE_URL", "https://gitlab.com/o/r.git")
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text("repos:\n  repo-a:\n    board_id: board-a\n")
+        rr = load_repos_config(str(repos_file))
+        assert rr.repos["repo-a"].cross_repo_target is None
+
     def test_meta_block_builds_dedicated_repo_config(self, tmp_path):
         """A top-level ``meta:`` block with langfuse keys → ``rr.meta`` is a
         RepoConfig for the synthetic meta board, kept OUT of ``repos``."""
