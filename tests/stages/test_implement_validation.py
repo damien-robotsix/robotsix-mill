@@ -312,6 +312,61 @@ def test_scope_guardrail_flood_guard_blocks_without_llm(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# _is_binary_artifact — binary detection heuristic
+# ---------------------------------------------------------------------------
+
+
+def test_is_binary_artifact_extension_match(tmp_path):
+    # Known binary extension → True regardless of content.
+    f = tmp_path / "lib.o"
+    f.write_text("// C source pretending to be object file")
+    assert validation_mod._is_binary_artifact(tmp_path, str(f), "main") is True
+
+
+def test_is_binary_artifact_null_byte_in_untracked_file(tmp_path):
+    # Untracked file (no prior git history) with a null byte → binary.
+    f = tmp_path / "uv"
+    f.write_bytes(b"\x7fELF\x00\x01\x02\x03")
+    assert validation_mod._is_binary_artifact(tmp_path, str(f), "main") is True
+
+
+def test_is_binary_artifact_no_null_byte_text_file(tmp_path):
+    # Regular text file → not binary.
+    f = tmp_path / "README.md"
+    f.write_text("# Hello\n")
+    assert validation_mod._is_binary_artifact(tmp_path, str(f), "main") is False
+
+
+def test_is_binary_artifact_nonexistent_file(tmp_path):
+    # File that doesn't exist on disk → not binary.
+    assert (
+        validation_mod._is_binary_artifact(
+            tmp_path, str(tmp_path / "nonexistent"), "main"
+        )
+        is False
+    )
+
+
+def test_is_binary_artifact_osi_error_is_silent(tmp_path, monkeypatch):
+    # When open() raises OSError, the function should return False (not crash).
+    import builtins
+
+    f = tmp_path / "unreadable"
+    f.write_text("content")
+
+    def _raising_open(file, *a, **kw):
+        if str(file) == str(f):
+            raise OSError("permission denied")
+        return open(file, *a, **kw)
+
+    monkeypatch.setattr(builtins, "open", _raising_open)
+    # Extension check passes first, so use a path with no binary extension.
+    assert (
+        validation_mod._is_binary_artifact(tmp_path, str(f), "main") is False
+    )
+
+
+# ---------------------------------------------------------------------------
 # smoke_paths_match — pure path-scoped smoke gate
 # ---------------------------------------------------------------------------
 
