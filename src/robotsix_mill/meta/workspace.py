@@ -23,12 +23,13 @@ from ..vcs import git_ops
 
 if TYPE_CHECKING:
     from ..core.models import Ticket
+    from ..core.workspace import Workspace
     from ..stages.base import Outcome, StageContext
 
 log = logging.getLogger("robotsix_mill.meta.workspace")
 
 
-def _write_meta_triage(ws, repo_ids: list[str], fallback: bool) -> None:
+def _write_meta_triage(ws: "Workspace", repo_ids: list[str], fallback: bool) -> None:
     """Persist the repo-triage decision to ``artifacts/meta_triage.json``.
 
     Schema::
@@ -52,7 +53,7 @@ def _write_meta_triage(ws, repo_ids: list[str], fallback: bool) -> None:
 
 
 def build_meta_workspace(
-    settings: Settings, ws, repo_ids: list[str]
+    settings: Settings, ws: "Workspace", repo_ids: list[str]
 ) -> tuple[Path | None, list[Path]]:
     """Clone each repo in *repo_ids* fresh under ``ws.dir / "repos"``.
 
@@ -117,7 +118,7 @@ def build_meta_workspace(
 def build_triaged_meta_workspace(
     ctx: "StageContext",
     ticket: "Ticket",
-    ws,
+    ws: "Workspace",
     spec: str,
     *,
     author: str,
