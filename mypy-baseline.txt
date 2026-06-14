@@ -323,7 +323,6 @@ src/robotsix_mill/runners/pass_runner.py:0: error: Missing type arguments for ge
 src/robotsix_mill/runners/pass_runner.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/runners/pass_runner.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/runners/pass_runner.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
-src/robotsix_mill/stages/dependency_fix.py:0: error: "list?[robotsix_mill.core.models.Ticket]" has no attribute "__iter__" (not iterable)  [attr-defined]
 src/robotsix_mill/stages/implement/_shared.py:0: error: Missing type arguments for generic type "list"  [type-arg]
 src/robotsix_mill/stages/implement/_shared.py:0: error: Missing type arguments for generic type "tuple"  [type-arg]
 src/robotsix_mill/runners/cost_reconciliation_runner.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
