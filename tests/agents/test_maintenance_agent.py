@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from types import ModuleType
 from unittest.mock import MagicMock
 
 import pydantic_ai
@@ -592,13 +591,18 @@ class TestStageIntegration:
         assert callable(mod.run_maintenance_agent)
 
     def test_remove_injected_mock(self):
-        """Sanity check: no leftover mock module from the stage test
-        (it uses a try/finally to remove its injection, but this
-        confirms no leak)."""
+        """Sanity check: the REAL maintenance module is importable and is not
+        a leftover mock (the stage test injects a mock under a try/finally;
+        this confirms no leak). Imports the module explicitly so the test is
+        order- and xdist-worker-independent — it must NOT assume some prior
+        test in the same worker already imported it (under ``--dist loadscope``
+        the worker running this class may not have)."""
+        import robotsix_mill.agents.maintenance as mod
+
+        # The explicit import guarantees presence in sys.modules; the real
+        # module (not a bare mock) exposes MaintenanceResult.
         assert "robotsix_mill.agents.maintenance" in sys.modules
-        mod = sys.modules["robotsix_mill.agents.maintenance"]
-        # Should be the real module, not a mock
-        assert not isinstance(mod, ModuleType) or hasattr(mod, "MaintenanceResult")
+        assert hasattr(mod, "MaintenanceResult")
 
 
 # ── Repo context, request cap, and board wiring (regressions from the
