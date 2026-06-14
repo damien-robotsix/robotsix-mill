@@ -135,6 +135,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Copy-paste pass",
         "format": "memory_drafts",
     },
+    "forge-parity": {
+        "module": "runners.forge_parity_runner",
+        "function": "run_forge_parity_pass",
+        "label": "Forge-parity pass",
+        "format": "memory_drafts",
+    },
     "module-curator": {
         "module": "runners.module_curator_runner",
         "function": "run_module_curator_pass",
@@ -682,6 +688,16 @@ def main(argv: list[str] | None = None) -> int:
         "copy-paste", help="run a copy-paste / code-duplication detection pass"
     )
     p_copy_paste.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
+    # --- forge-parity command ---
+    p_forge_parity = sub.add_parser(
+        "forge-parity", help="run a forge-parity drift detection pass"
+    )
+    p_forge_parity.add_argument(
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",

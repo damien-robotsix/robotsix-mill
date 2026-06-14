@@ -225,6 +225,16 @@ def test_copy_paste_registered_in_runners():
     assert entry["format"] == "memory_drafts"
 
 
+def test_forge_parity_registered_in_runners():
+    """The forge-parity pass is wired into the generic _RUNNERS dispatch table."""
+    from robotsix_mill.cli import _RUNNERS
+
+    entry = _RUNNERS["forge-parity"]
+    assert entry["module"] == "runners.forge_parity_runner"
+    assert entry["function"] == "run_forge_parity_pass"
+    assert entry["format"] == "memory_drafts"
+
+
 def test_board_cleanup_registered_in_runners():
     """The board-cleanup pass is wired into the _RUNNERS dispatch table.
 
@@ -506,3 +516,17 @@ def test_copy_paste_cli_command(monkeypatch):
     )
 
     assert main(["copy-paste"]) == 0
+
+
+def test_forge_parity_cli_command(monkeypatch):
+    """`main(["forge-parity"])` dispatches into the runner and exits 0."""
+    from robotsix_mill.runners.periodic_runner import ForgeParityPassResult
+
+    def mock_run(session_id=None):
+        return ForgeParityPassResult(updated_memory="mem", drafts_created=[])
+
+    monkeypatch.setattr(
+        "robotsix_mill.runners.forge_parity_runner.run_forge_parity_pass", mock_run
+    )
+
+    assert main(["forge-parity"]) == 0
