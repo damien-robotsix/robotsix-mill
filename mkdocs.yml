@@ -9,6 +9,7 @@ theme:
 
 nav:
   - Home: index.md
+  - Agent Communication Research: agent-communication-research.md
   - Configuration & Deployment:
       - Configuration reference: configuration.md
       - Observability: observability.md
