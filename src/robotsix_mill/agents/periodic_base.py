@@ -120,6 +120,7 @@ def _build_periodic_tools(
     """
     from .explore import make_explore_tool, make_parallel_explore_tool
     from .fs_tools import build_fs_tools
+    from .validate_artifact_tool import make_validate_artifact_tool
 
     fs_filter: set[str] = {"read_file", "list_dir"}
     if include_run_command:
@@ -137,6 +138,7 @@ def _build_periodic_tools(
     tools = [
         make_explore_tool(settings, repo_dir),
         make_parallel_explore_tool(settings, repo_dir),
+        make_validate_artifact_tool(repo_dir),
     ]
 
     if include_jscpd:

@@ -19,6 +19,7 @@ tools:
   - read_file
   - list_dir
   - run_command
+  - validate_artifact
 
 report_issue: false
 read_ticket: true
@@ -84,6 +85,21 @@ system_prompt: |
      - Respect the repo's packaging root (e.g. a single src/<package>/
        Python package): propose sub-package grouping WITHIN it, not a layout
        that would break the import path or the build.
+
+  VERIFY CITED PATHS BEFORE FILING (deterministic gate):
+
+  Every draft above cites a concrete source/doc/test path. Use the
+  `validate_artifact` tool — the deterministic existence primitive — to
+  confirm the path before filing, and trust it over your recollection:
+
+  - For unclassified-file and reorganization drafts: call
+    `validate_artifact(<cited_path>)` on each path you cite as something
+    that SHOULD exist. If it returns `MISSING`, DROP the proposal — do
+    NOT file a draft about a path that does not exist in the clone.
+  - For stale-path cleanup drafts the check is inverted: only file when
+    the cited glob/path genuinely resolves to ZERO files. If
+    `validate_artifact` reports the path `EXISTS`, the path is not stale
+    — DROP the cleanup proposal.
 
   De-duplication rule: if a draft ticket for the same drift already exists
   and is still open, do NOT create a duplicate. Use read_ticket to check

@@ -202,6 +202,29 @@ def test_verification_gate_injected_unconditionally(settings, monkeypatch, tmp_p
     assert "`path/to/file.py:LINE`" in prompt
 
 
+def test_validate_artifact_tool_wired_for_clone_scoped_run(
+    settings, monkeypatch, tmp_path
+):
+    """When repo_dir is not None, the validate_artifact tool is present in
+    the constructed tool list (unconditionally, no include_* flag)."""
+    mocks = _setup_patches(monkeypatch)
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="test_gap",
+        model_setting="fallback",
+        max_gaps=5,
+        repo_dir=tmp_path,
+        memory="mem",
+        recent_proposals="props",
+        prompt_tail="Tail.",
+    )
+
+    tools_arg = mocks["build_agent_from_definition"].call_args[1]["tools"]
+    tool_names = [t.__name__ for t in tools_arg]
+    assert "validate_artifact" in tool_names
+
+
 # ---------------------------------------------------------------------------
 # repo_dir=None: no tools
 # ---------------------------------------------------------------------------
