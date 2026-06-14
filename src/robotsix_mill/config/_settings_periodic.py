@@ -417,3 +417,7 @@ class _PeriodicSettings(BaseModel):
     diagnostic_interval_seconds: int = Field(default=86400)
     # Board the diagnostic agent routes board/trace activity to.
     diagnostic_target_repo_id: str = Field(default="robotsix-mill")
+    # Repos the daily diagnostic agent monitors each pass. Empty (default)
+    # falls back to the single `diagnostic_target_repo_id` for backward
+    # compatibility. Add/remove repos here — no code change required.
+    diagnostic_monitored_repo_ids: list[str] = Field(default_factory=list)

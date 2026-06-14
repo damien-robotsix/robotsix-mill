@@ -224,6 +224,7 @@ periodic:
     enabled: false        # skeleton ships disabled; later tickets add checks then enable
     interval_seconds: 86400
     target_repo_id: robotsix-mill
+    monitored_repo_ids: []  # empty → falls back to target_repo_id (single repo)
 
   # -- audit agent — meta-audit for quality/security coverage gaps ---------
   audit:

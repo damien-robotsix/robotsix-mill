@@ -15,6 +15,16 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
+from ..config import Settings
+
+
+@dataclass
+class DiagnosticCheckContext:
+    """Per-repo context the runner passes to each check on every pass."""
+
+    board_id: str
+    settings: Settings
+
 
 @dataclass
 class DiagnosticCheckResult:
@@ -39,17 +49,18 @@ class DiagnosticCheckResult:
 class DiagnosticCheck(Protocol):
     """Protocol every diagnostic check satisfies.
 
-    A check exposes a ``name`` and a parameterless :meth:`run` that
-    returns a :class:`DiagnosticCheckResult`. The ``run`` signature is
-    deliberately parameterless for now — checks pull their own
-    ``Settings()`` like the existing runners. A later ticket may widen it
-    to accept a shared context if one is needed.
+    A check exposes a ``name`` and a :meth:`run` that takes a
+    :class:`DiagnosticCheckContext` and returns a
+    :class:`DiagnosticCheckResult`. The runner builds one context per
+    monitored repo and invokes every registered check with it, so a
+    check reads ``ctx.board_id`` / ``ctx.settings`` rather than pulling
+    its own ``Settings()`` or the singular target board.
     """
 
     name: str
 
-    def run(self) -> DiagnosticCheckResult:
-        """Execute the check and return its result."""
+    def run(self, ctx: DiagnosticCheckContext) -> DiagnosticCheckResult:
+        """Execute the check for *ctx* and return its result."""
         ...
 
 

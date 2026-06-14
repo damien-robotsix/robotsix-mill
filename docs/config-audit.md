@@ -239,7 +239,16 @@ other code depends on.
 | `MILL_SURVEY_INTERVAL_SECONDS` | `survey_interval_seconds` | `86400` | `int` | Settings | non-sensitive | default | §16 | `runtime/worker.py` | |
 | `MILL_SURVEY_MEMORY_PATH` | `survey_memory_path` | `None` | `Path\|None` | Settings | non-sensitive | default | §16 | `survey_runner.py` | |
 
-### 1.20  Action-agent memory paths
+### 1.20  Periodic agents — diagnostic
+
+| Env var | Field | Default | Type | Source | Sensitivity | YAML | Docs | Consumers | Notes |
+|---|---|---|---|---|---|---|---|---|---|
+| `MILL_DIAGNOSTIC_PERIODIC` | `diagnostic_periodic` | `false` | `bool` | Settings | non-sensitive | `periodic.diagnostic.enabled` | §12 | `diagnostic_runner.py`, `runtime/worker.py` | Deterministic pass (no LLM) |
+| `MILL_DIAGNOSTIC_INTERVAL_SECONDS` | `diagnostic_interval_seconds` | `86400` | `int` | Settings | non-sensitive | `periodic.diagnostic.interval_seconds` | §12 | `runtime/worker.py` | |
+| `MILL_DIAGNOSTIC_TARGET_REPO_ID` | `diagnostic_target_repo_id` | `robotsix-mill` | `str` | Settings | non-sensitive | `periodic.diagnostic.target_repo_id` | §12 | `diagnostic_runner.py` | Single-repo fallback when monitored list is empty |
+| `MILL_DIAGNOSTIC_MONITORED_REPO_IDS` | `diagnostic_monitored_repo_ids` | `[]` | `list[str]` | Settings | non-sensitive | `periodic.diagnostic.monitored_repo_ids` | §12 | `diagnostic_runner.py` | Repos monitored each pass; empty -> falls back to `target_repo_id` |
+
+### 1.21  Action-agent memory paths
 
 | Env var | Field | Default | Type | Source | Sensitivity | YAML | Docs | Consumers | Notes |
 |---|---|---|---|---|---|---|---|---|---|
@@ -249,13 +258,13 @@ other code depends on.
 | `MILL_REBASE_MEMORY_PATH` | `rebase_memory_path` | `None` | `Path\|None` | Settings | non-sensitive | default | §18 | Rebase agent | |
 | `MILL_CI_PATTERNS_PATH` | `ci_patterns_path` | `None` | `Path\|None` | Settings | non-sensitive | default | §18 | CI-fix agent (pattern memory) | |
 
-### 1.21  Notifications
+### 1.22  Notifications
 
 | Env var | Field | Default | Type | Source | Sensitivity | YAML | Docs | Consumers | Notes |
 |---|---|---|---|---|---|---|---|---|---|
 | `NTFY_URL` | `ntfy_url` | `None` | `str\|None` | Settings | identifying | absent | Non-prefixed | `notify.py` | Empty string disables |
 
-### 1.22  Computed properties (derived from the above)
+### 1.23  Computed properties (derived from the above)
 
 | Property | Derivation | Type | Consumers | Notes |
 |---|---|---|---|---|
@@ -274,7 +283,7 @@ other code depends on.
 | `rebase_memory_file` | `rebase_memory_path or data_dir / "rebase_memory.md"` | `Path` | Rebase agent | |
 | `ci_patterns_file` | `ci_patterns_path or data_dir / "ci_patterns.json"` | `Path` | CI-fix agent (pattern memory) | |
 
-### 1.23  Compose/CI overrides and non-Settings vars
+### 1.24  Compose/CI overrides and non-Settings vars
 
 This table covers vars that appear outside `config.py` — either as
 compose `environment:` overrides of Settings fields (rows 5–7), a
