@@ -996,9 +996,7 @@ class RefineAgentMixin:
             # when the batch includes a create/initialize-repo child
             # the repo-populating siblings depend on it so they cannot
             # run before the repo exists.
-            for child_id, deps in plan_child_dependencies(
-                created_children
-            ).items():
+            for child_id, deps in plan_child_dependencies(created_children).items():
                 ctx.service.set_depends_on(child_id, deps)
             # Apply the breakdown's revised epic body if any.
             if breakdown.epic_body and breakdown.epic_body.strip():
