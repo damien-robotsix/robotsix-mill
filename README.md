@@ -141,6 +141,7 @@ docker compose exec mill robotsix-mill ticket approve <id>
 docker compose exec mill robotsix-mill audit
 docker compose exec mill robotsix-mill trace-health
 docker compose exec mill robotsix-mill copy-paste
+docker compose exec mill robotsix-mill forge-parity
 docker compose exec mill robotsix-mill cost-reconciliation
 
 # Local:
@@ -150,6 +151,7 @@ docker compose exec mill robotsix-mill cost-reconciliation
 .venv/bin/robotsix-mill audit
 .venv/bin/robotsix-mill trace-health
 .venv/bin/robotsix-mill copy-paste
+.venv/bin/robotsix-mill forge-parity
 make test
 ```
 

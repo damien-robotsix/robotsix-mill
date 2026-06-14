@@ -573,7 +573,7 @@ Each periodic agent shares this pattern:
 
 Periodic agents: `audit`, `board_cleanup`, `trace_health`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_monitor`, `config_sync`, `member_sync`, `bc_check`,
-`completeness_check`, `cost_reconciliation`, `diagnostic`, `module_curator`.
+`completeness_check`, `cost_reconciliation`, `diagnostic`, `forge_parity`, `module_curator`.
 
 > ¹ `survey` is the exception — its default is `enabled: true`.
 >
