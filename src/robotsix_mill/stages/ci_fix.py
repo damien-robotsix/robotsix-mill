@@ -497,7 +497,9 @@ class CIFixStage(Stage):
                 ci_fix_memory_path = s.memory_file_for(
                     "ci_fix", ctx.memory_board_id(ticket)
                 )
-                memory_text = load_memory(ci_fix_memory_path)
+                memory_text = load_memory(
+                    ci_fix_memory_path, max_chars=s.max_memory_chars
+                )
                 result = run_ci_fix_agent(
                     settings=s,
                     repo_dir=repo_dir,

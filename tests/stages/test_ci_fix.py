@@ -126,6 +126,110 @@ def test_fix_success_push_success_returns_implement_complete(tmp_path, monkeypat
     assert _read_counter(counter) == 0
 
 
+# --- Memory ledger read is capped at max_memory_chars ---
+
+
+def test_ci_fix_memory_read_is_tail_truncated(tmp_path, monkeypatch):
+    """When the on-disk ci_fix_memory.md exceeds max_memory_chars, the memory
+    string handed to the ci-fix agent is tail-truncated and begins with the
+    ``[... memory truncated: N chars omitted]`` marker."""
+    ctx = _gh(tmp_path, max_memory_chars="100")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "lint", "summary": "err", "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    seen = {}
+
+    def fake_agent(**k):
+        seen["memory"] = k["memory"]
+        return CiFixResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        fake_agent,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
+        lambda *a, **k: None,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    # Seed a ledger larger than max_memory_chars (multi-line so tail_keep can
+    # advance to a newline boundary).
+    mem_path = ctx.settings.memory_file_for("ci_fix", ctx.memory_board_id(t))
+    mem_path.parent.mkdir(parents=True, exist_ok=True)
+    big = "".join(f"line {i} of the ci_fix memory ledger\n" for i in range(50))
+    mem_path.write_text(big, encoding="utf-8")
+    assert len(big) > 100
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert seen["memory"].startswith("[... memory truncated:")
+    # The kept tail (everything after the marker) is bounded by the cap.
+    assert big[-100:].splitlines()[-1] in seen["memory"]
+
+
+def test_ci_fix_memory_read_passthrough_when_small(tmp_path, monkeypatch):
+    """When the ledger is smaller than max_memory_chars, the content is passed
+    through unchanged (no truncation marker)."""
+    ctx = _gh(tmp_path, max_memory_chars="8000")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "lint", "summary": "err", "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    seen = {}
+
+    def fake_agent(**k):
+        seen["memory"] = k["memory"]
+        return CiFixResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        fake_agent,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
+        lambda *a, **k: None,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    mem_path = ctx.settings.memory_file_for("ci_fix", ctx.memory_board_id(t))
+    mem_path.parent.mkdir(parents=True, exist_ok=True)
+    small = "a short ci_fix ledger\n"
+    mem_path.write_text(small, encoding="utf-8")
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert seen["memory"] == small
+    assert "memory truncated:" not in seen["memory"]
+
+
 # --- Fix succeeds but makes no code changes → no-change counter → BLOCKED ---
 
 
