@@ -55,7 +55,7 @@ modules:
       - src/robotsix_mill/core/duration.py
       - src/robotsix_mill/core/dedup.py
       - src/robotsix_mill/core/draft_target.py
-      - tests/test_dedup.py
+      - tests/core/test_core_dedup.py
       - tests/core/test_models.py
       - tests/core/test_states.py
       - tests/core/test_service.py
@@ -674,9 +674,9 @@ modules:
       - tests/__init__.py
       - tests/conftest.py
       - tests/script_loader.py
-      - tests/test_docs_nav.py
-      - tests/test_modules_yaml_paths.py
-      - tests/test_check_config_sync.py
+      - tests/meta/test_docs_nav.py
+      - tests/meta/test_modules_yaml_paths.py
+      - tests/runners/test_check_config_sync.py
     dependencies: []
 
   # -------------------------------------------------------------------
