@@ -424,5 +424,3 @@ def run_trace_inspector(
     finally:
         _close_async_client(client)
     return result.output
-
-

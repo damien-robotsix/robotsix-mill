@@ -71,5 +71,3 @@ async def run_web_research(*, settings: Settings, query: str) -> str:
     finally:
         await _aclose_async_client(client)
     return str(result.output)
-
-

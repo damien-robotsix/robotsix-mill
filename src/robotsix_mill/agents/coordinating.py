@@ -148,6 +148,7 @@ class ValidationResult(BaseModel):
             iterations_used=iterations,
         )
 
+
 def run_coordinator(
     *,
     settings: Settings,
