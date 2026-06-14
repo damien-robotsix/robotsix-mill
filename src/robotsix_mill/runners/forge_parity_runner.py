@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 from ..config import RepoConfig, Settings  # noqa: F401 — Settings kept for monkeypatch seam
 from .periodic_runner import (
     ForgeParityPassResult,
@@ -15,9 +17,12 @@ def run_forge_parity_pass(
     session_id: str, repo_config: RepoConfig | None = None
 ) -> ForgeParityPassResult:
     settings = Settings()
-    return run_periodic_pass(
-        session_id,
-        repo_config,
-        config=PERIODIC_PASS_CONFIGS["forge_parity"],
-        settings=settings,
+    return cast(
+        ForgeParityPassResult,
+        run_periodic_pass(
+            session_id,
+            repo_config,
+            config=PERIODIC_PASS_CONFIGS["forge_parity"],
+            settings=settings,
+        ),
     )
