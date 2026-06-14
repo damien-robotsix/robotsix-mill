@@ -28,8 +28,9 @@ import re
 import time
 from urllib.parse import urlsplit, urlunsplit
 
+from robotsix_llmio.core import html_to_text
+
 from ..config import Settings
-from ..core.text_utils import html_to_text
 
 log = logging.getLogger(__name__)
 
