@@ -65,15 +65,7 @@ _SECRETS_EXAMPLE_YAML = _REPO_ROOT / "config" / "secrets.example.yaml"
 # ``_YAML_PATH_TO_ALIAS`` (invariant 2). Each entry documents where the
 # value is actually consumed — it is NOT routed through the YAML→alias
 # flatten flow.
-_DEFAULTS_KEYS_NOT_IN_ALIAS: frozenset[str] = frozenset(
-    {
-        # Read directly by sandbox.py via Settings.sandbox_network /
-        # Settings.sandbox_proxy_url; kept out of the flatten map (Docker
-        # infrastructure wiring, not a per-run override surface).
-        "sandbox.network",
-        "sandbox.proxy_url",
-    }
-)
+_DEFAULTS_KEYS_NOT_IN_ALIAS: frozenset[str] = frozenset()
 
 # ``Secrets`` fields that are intentionally NOT user-configurable via
 # ``config/secrets.yaml`` (invariant 4), so they never appear in
