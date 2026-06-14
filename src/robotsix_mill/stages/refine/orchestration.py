@@ -22,10 +22,13 @@ import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, cast
 
 from ...agents import refining
+from ...config.settings import Settings
 from ...core.models import Ticket
 from ...core.states import State
+from ...core.workspace import Workspace
 from ...vcs import git_ops
 from ..base import Outcome, StageContext
 from ..pause import (
@@ -186,10 +189,10 @@ class RefineAgentMixin:
         ticket: Ticket,
         draft: str,
         repo_dir: Path | None,
-        epic_ctx: dict | None,
+        epic_ctx: str,
         title: str,
-        ws,
-        s,
+        ws: Workspace,
+        s: Settings,
         extra_roots: list[Path] | None = None,
     ) -> Outcome:
         """Run the full refine-agent pipeline and handle the result.
@@ -230,6 +233,9 @@ class RefineAgentMixin:
         )
         if outcome is not None:
             return outcome
+        # Contract: when ``_run_and_collect`` returns no short-circuit
+        # outcome, the ``RefineResult`` is always present.
+        result = cast(refining.RefineResult, result)
 
         outcome = RefineAgentMixin._gitignored_guard(ticket, result, repo_dir)
         if outcome is not None:
@@ -319,7 +325,7 @@ class RefineAgentMixin:
         ctx: StageContext,
         ticket: Ticket,
         draft: str,
-        ws,
+        ws: Workspace,
         reviewer_comments: str | None,
     ) -> Outcome | None:
         """Skip re-refinement for split children.
@@ -398,8 +404,8 @@ class RefineAgentMixin:
         repo_dir: Path | None,
         extra_roots: list[Path] | None,
         title: str,
-        ws,
-        s,
+        ws: Workspace,
+        s: Settings,
         reviewer_comments: str | None,
     ) -> Outcome | None:
         """Triage phase 1: LLM classifier (3-way: SKIP / MAINTENANCE / REFINE).
@@ -484,12 +490,12 @@ class RefineAgentMixin:
         ticket: Ticket,
         draft: str,
         repo_dir: Path | None,
-        epic_ctx: dict | None,
-        ws,
-        s,
+        epic_ctx: str,
+        ws: Workspace,
+        s: Settings,
         extra_roots: list[Path] | None,
         reviewer_comments: str | None,
-    ):
+    ) -> tuple[Outcome | None, refining.RefineResult | None]:
         """Invoke ``refining.run_refine_agent`` and handle pause/errors.
 
         Resolves memory, resume-from-pause history, and the deployed-log
@@ -656,7 +662,7 @@ class RefineAgentMixin:
 
     @staticmethod
     def _gitignored_guard(
-        ticket: Ticket, result, repo_dir: Path | None
+        ticket: Ticket, result: refining.RefineResult, repo_dir: Path | None
     ) -> Outcome | None:
         """Reject a spec whose deliverable files target gitignored paths.
 
@@ -693,10 +699,10 @@ class RefineAgentMixin:
         ctx: StageContext,
         ticket: Ticket,
         draft: str,
-        ws,
-        s,
-        epic_ctx: dict | None,
-        result,
+        ws: Workspace,
+        s: Settings,
+        epic_ctx: str,
+        result: refining.RefineResult,
     ) -> None:
         """Persist memory, title, epic body, draft, and artifact files.
 
@@ -766,8 +772,8 @@ class RefineAgentMixin:
         draft: str,
         repo_dir: Path | None,
         title: str,
-        ws,
-        result,
+        ws: Workspace,
+        result: refining.RefineResult,
     ) -> Outcome | None:
         """Handle the ``no_change_needed`` result mode.
 
@@ -907,7 +913,12 @@ class RefineAgentMixin:
 
     @staticmethod
     def _promote_to_epic_path(
-        ctx: StageContext, ticket: Ticket, draft: str, ws, s, result
+        ctx: StageContext,
+        ticket: Ticket,
+        draft: str,
+        ws: Workspace,
+        s: Settings,
+        result: refining.RefineResult,
     ) -> Outcome:
         """Handle the ``promote_to_epic`` result mode.
 
@@ -1008,9 +1019,9 @@ class RefineAgentMixin:
     def _single_scope_path(
         ctx: StageContext,
         ticket: Ticket,
-        ws,
-        s,
-        result,
+        ws: Workspace,
+        s: Settings,
+        result: refining.RefineResult,
         reviewer_comments: str | None,
         open_thread_ids: set[int],
     ) -> Outcome:
@@ -1051,10 +1062,10 @@ class RefineAgentMixin:
         ctx: StageContext,
         ticket: Ticket,
         draft: str,
-        ws,
-        s,
-        epic_ctx: dict | None,
-        result,
+        ws: Workspace,
+        s: Settings,
+        epic_ctx: str,
+        result: refining.RefineResult,
         reviewer_comments: str | None,
         open_thread_ids: set[int],
     ) -> Outcome:
@@ -1098,13 +1109,13 @@ class RefineAgentMixin:
             )
 
         # Validate and collect valid children.
-        valid_children: list[dict] = []
-        for child in children_raw:
-            child_title = (child.title or "").strip()
-            spec_md = (child.spec_markdown or "").strip()
+        valid_children: list[dict[str, Any]] = []
+        for spec_child in children_raw:
+            child_title = (spec_child.title or "").strip()
+            spec_md = (spec_child.spec_markdown or "").strip()
             if not child_title or not spec_md:
                 continue
-            deps = child.depends_on or []
+            deps = spec_child.depends_on or []
             if not isinstance(deps, list):
                 deps = []
             # Keep only non-negative integer indices.
