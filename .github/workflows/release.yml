@@ -1,0 +1,22 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    permissions:
+      # Bounded by the caller: grant what the reusable workflow's jobs request.
+      # `publish` needs id-token for OIDC trusted publishing; `github-release`
+      # needs contents:write to attach the built distributions to the release.
+      id-token: write
+      contents: write
+    uses: ./.github/workflows/python-release.yml
+    with:
+      python-version: "3.14"
+      uv-version: "0.8.15"
+      github-release: true
