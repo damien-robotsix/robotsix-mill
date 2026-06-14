@@ -52,7 +52,9 @@ class FakeService:
 
     def get(self, ticket_id):
         if self._existing_labels is not None:
-            return SimpleNamespace(id=ticket_id, labels=json.dumps(self._existing_labels))
+            return SimpleNamespace(
+                id=ticket_id, labels=json.dumps(self._existing_labels)
+            )
         return SimpleNamespace(id=ticket_id, labels=None)
 
     def set_labels(self, ticket_id, labels):
@@ -234,7 +236,10 @@ def test_label_dedup_ignores_terminal_tickets() -> None:
         id="fix-done", title="t", state=State.DONE, labels=json.dumps(["ci_fp:abc"])
     )
     errored = SimpleNamespace(
-        id="fix-errored", title="t", state=State.ERRORED, labels=json.dumps(["ci_fp:abc"])
+        id="fix-errored",
+        title="t",
+        state=State.ERRORED,
+        labels=json.dumps(["ci_fp:abc"]),
     )
     service = FakeService(
         recent_tickets_data=[closed, done, errored],
@@ -306,7 +311,7 @@ def test_label_dedup_skipped_when_dedup_labels_none() -> None:
     )
     service = FakeService(proposals=[existing])
 
-    outcome = _spawn(service)  # no dedup_labels
+    _spawn(service)  # no dedup_labels
 
     assert service.create_calls == []
     assert service.set_labels_calls == []
@@ -318,7 +323,7 @@ def test_label_dedup_skipped_when_board_id_none() -> None:
     skipped and title-based dedup runs instead."""
     service = FakeService(created_id="fix-new")
     ticket = SimpleNamespace(id="orig-1")
-    outcome = spawn_dependency_fix(
+    spawn_dependency_fix(
         ticket,
         _ctx(service, board_id=None),
         title="t",
@@ -353,7 +358,7 @@ def test_label_dedup_falls_back_to_title_when_no_label_match() -> None:
         proposals=[title_match],
     )
 
-    outcome = _spawn(service, dedup_labels=["ci_fp:abc"])
+    _spawn(service, dedup_labels=["ci_fp:abc"])
 
     # Title-based dedup reuses the existing title match.
     assert service.create_calls == []
