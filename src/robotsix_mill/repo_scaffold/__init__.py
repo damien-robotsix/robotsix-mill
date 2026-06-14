@@ -201,6 +201,9 @@ def _scaffold_initial_commit(
         language = params.get("language", "python")
         if language == "python":
             _write_python_skeleton(workspace_dir, name)
+            # Reusable-workflow callers (CI + docs). Only python repos get
+            # these — the shared workflows are `python-*`.
+            _write_github_workflows(workspace_dir)
 
         # Per-repo mill config: the repo owns its test_command + languages in
         # its own .robotsix-mill/config.yaml (not the operator's repos.yaml).
@@ -291,6 +294,60 @@ packages = ["src/{pkg_name}"]
     tests_dir = repo_dir / "tests"
     tests_dir.mkdir(parents=True, exist_ok=True)
     (tests_dir / "__init__.py").write_text("", encoding="utf-8")
+
+
+def _write_github_workflows(repo_dir: Path) -> None:
+    """Write the reusable-workflow caller files for a new python member repo.
+
+    Mill hosts the shared reusable workflows, so its OWN callers reference
+    them via the LOCAL path ``./.github/workflows/python-ci.yml``. A member
+    repo must instead use the CROSS-REPO form
+    ``damien-robotsix/robotsix-mill/.github/workflows/python-ci.yml@main``
+    (resp. ``python-docs.yml``). Generating these by construction avoids the
+    two recurring hand-authoring mistakes that produce a ``startup_failure``:
+    the wrong org (``robotsix`` instead of ``damien-robotsix``) and a calling
+    job that grants no ``permissions:`` block.
+    """
+    workflows_dir = repo_dir / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True, exist_ok=True)
+
+    ci_yml = """name: CI
+
+on: [pull_request, push]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    permissions:
+      contents: read
+      security-events: write
+    uses: damien-robotsix/robotsix-mill/.github/workflows/python-ci.yml@main
+"""
+    (workflows_dir / "ci.yml").write_text(ci_yml, encoding="utf-8")
+
+    docs_yml = """name: Docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    permissions:
+      contents: write
+    uses: damien-robotsix/robotsix-mill/.github/workflows/python-docs.yml@main
+"""
+    (workflows_dir / "docs.yml").write_text(docs_yml, encoding="utf-8")
 
 
 def _write_repo_config(repo_dir: Path, language: str) -> None:

@@ -21,6 +21,7 @@ from robotsix_mill.forge.base import NotConfiguredError, RepoInfo
 from robotsix_mill.repo_scaffold import (
     _append_repo_config,
     _sanitize_repo_id,
+    _write_github_workflows,
     _write_periodic_presence_files,
     run_repo_scaffold,
 )
@@ -521,6 +522,95 @@ def test_write_periodic_presence_files(tmp_path):
     assert audit.exists() and health.exists()
     assert yaml.safe_load(audit.read_text()) == {"name": "audit"}
     assert yaml.safe_load(health.read_text()) == {"name": "health"}
+
+
+# ---------------------------------------------------------------------------
+# _write_github_workflows
+# ---------------------------------------------------------------------------
+
+
+def test_write_github_workflows(tmp_path):
+    """The scaffold writes reusable-workflow callers that reference the
+    correct CROSS-REPO org (`damien-robotsix`, NOT `robotsix`) and grant
+    the permissions the called workflows require — so generated callers are
+    correct by construction and never trip a `startup_failure`."""
+    _write_github_workflows(tmp_path)
+
+    ci = tmp_path / ".github" / "workflows" / "ci.yml"
+    docs = tmp_path / ".github" / "workflows" / "docs.yml"
+    assert ci.exists() and docs.exists()
+
+    ci_text = ci.read_text()
+    assert (
+        "uses: damien-robotsix/robotsix-mill/.github/workflows/"
+        "python-ci.yml@main" in ci_text
+    )
+    # Cross-repo form, NOT the local `./...` form mill uses for itself.
+    assert "./.github/workflows/python-ci.yml" not in ci_text
+    # Wrong org (`robotsix/...` instead of `damien-robotsix/...`) must never
+    # appear as a `uses:` target.
+    assert "uses: robotsix/robotsix-mill" not in ci_text
+    ci_data = yaml.safe_load(ci_text)
+    ci_perms = ci_data["jobs"]["ci"]["permissions"]
+    assert ci_perms["contents"] == "read"
+    assert ci_perms["security-events"] == "write"
+
+    docs_text = docs.read_text()
+    assert (
+        "uses: damien-robotsix/robotsix-mill/.github/workflows/"
+        "python-docs.yml@main" in docs_text
+    )
+    assert "uses: robotsix/robotsix-mill" not in docs_text
+    docs_data = yaml.safe_load(docs_text)
+    assert docs_data["jobs"]["deploy"]["permissions"]["contents"] == "write"
+
+
+def test_non_python_scaffold_writes_no_workflows(tmp_path, monkeypatch):
+    """A non-python scaffold writes NO `.github/workflows/` callers — the
+    shared reusable workflows are `python-*` and don't apply."""
+    from robotsix_mill.forge.base import RepoInfo
+
+    settings = _make_settings(tmp_path)
+    monkeypatch.setenv("MILL_REPOS_FILE", "")
+
+    init_dest = {}
+
+    def _fake_init_repo(dest, branch):
+        init_dest["dest"] = dest
+        dest.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        "robotsix_mill.repo_scaffold.git_ops.init_repo", _fake_init_repo
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.repo_scaffold.git_ops.commit_all",
+        lambda repo, message: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.repo_scaffold.git_ops.push",
+        lambda repo, branch, remote_url, token: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.repo_scaffold.github_token",
+        lambda s, repo_config=None: "fake-token",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.repo_scaffold.shutil.rmtree",
+        lambda path, ignore_errors=False: None,
+    )
+
+    repo_info = RepoInfo(
+        id=1,
+        name="my-cpp-repo",
+        clone_url="https://github.com/x/my-cpp-repo.git",
+        html_url="https://github.com/x/my-cpp-repo",
+    )
+    from robotsix_mill.repo_scaffold import _scaffold_initial_commit
+
+    _scaffold_initial_commit(settings, repo_info, _make_params(language="cpp"))
+
+    dest = init_dest["dest"]
+    assert not (dest / ".github" / "workflows").exists()
 
 
 # ---------------------------------------------------------------------------
