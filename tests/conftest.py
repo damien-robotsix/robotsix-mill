@@ -127,24 +127,32 @@ def _reset_secrets_each_test():
 def _restore_tool_registry():
     """Keep the module-global ``ToolRegistry`` order-independent.
 
-    Several tests call ``ToolRegistry._tools.clear()`` to exercise tool
-    self-registration in isolation, but tools only register once via
-    import side-effects — a cleared entry never comes back on re-import.
-    Under ``pytest-xdist`` (CI runs ``-n auto --dist loadscope``) a
-    clearing module can land on the same worker just before a test that
-    builds an agent, whose build-time tool-directive guard reads
-    ``ToolRegistry.list_tools()`` and then wrongly flags every prompt
-    directive as unavailable. Snapshot the registry before each test and
-    re-add any entry a test removed afterwards (without overwriting
-    newly-registered tools), so the catalog only ever grows."""
+    The registry leaks in *both* directions across tests, and serial
+    runs mask it via execution order. Some tests call
+    ``ToolRegistry._tools.clear()`` to exercise tool self-registration
+    in isolation; others register lazily-built tools (e.g.
+    ``parallel_explore``, registered only when its tool-maker is called
+    while building an explore-enabled agent) that then linger in the
+    global catalog. Under ``pytest-xdist`` (CI runs
+    ``-n auto --dist loadscope``) either kind of mutation can land on
+    the same worker just before a test whose build-time tool-directive
+    guard reads ``ToolRegistry.list_tools()``: a cleared catalog makes
+    it under-report tools, while a leaked-in tool makes it flag a prompt
+    directive for a tool that test's agent legitimately lacks (e.g. the
+    audit agent built without ``repo_dir`` lacks ``parallel_explore``).
+
+    Snapshot the registry before each test and restore it *exactly*
+    afterwards — re-adding entries a test removed and dropping entries a
+    test added — so every test sees the same import-time catalog
+    regardless of execution order."""
     from robotsix_mill.agents.tool_registry import ToolRegistry
 
     snapshot = dict(ToolRegistry._tools)
     try:
         yield
     finally:
-        for name, info in snapshot.items():
-            ToolRegistry._tools.setdefault(name, info)
+        ToolRegistry._tools.clear()
+        ToolRegistry._tools.update(snapshot)
 
 
 @pytest.fixture
