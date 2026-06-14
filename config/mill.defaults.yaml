@@ -66,7 +66,7 @@ core:
     triage_requests: 8                # per-call cap for pre-refine triage agent
     doc_classifier_requests: 3         # per-call cap for doc-classifier gate
     doc_classifier_diff_max_chars: 6000  # cap diff fed to doc-classifier gate (truncation safe: conservative user_facing bias)
-    review_requests: 40                # per-call cap for review agent (counts tool calls + reasoning steps; 40 covers a 4-6 file PR)
+    review_requests: 80                # per-call cap for review agent (counts tool calls + reasoning steps; 80 covers a 4-6 file PR)
     max_fix_iterations: 8              # implement→test fix loop iterations before BLOCK
     max_stuck_cycles: 3                # re-entries to same stage without progress before BLOCK
     max_spend_usd_per_ticket: 20.0     # dollar cap per ticket — universal runaway-loop backstop (0.0 = disabled)
