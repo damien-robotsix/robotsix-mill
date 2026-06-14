@@ -1,4 +1,5 @@
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 
@@ -419,6 +420,80 @@ def test_enqueue_orders_late_stage_before_draft(ctx, service):
     assert popped == [late.id, mid.id, early.id], (
         f"expected late-stage tickets first; got {popped}"
     )
+
+
+def _fake_ticket(tid, *, board_id="", state=State.DRAFT, priority=False):
+    """Minimal Ticket-like object for queue-routing unit tests — only the
+    attributes ``enqueue`` / ``_stage_rank`` read (id, board_id, state,
+    priority), so no DB is needed."""
+    return SimpleNamespace(id=tid, board_id=board_id, state=state, priority=priority)
+
+
+def _fake_worker(tickets):
+    """Build a Worker whose ``ctx.service.get`` resolves *tickets* (a dict
+    id -> fake ticket) without touching a DB."""
+    ctx = SimpleNamespace(service=SimpleNamespace(get=lambda tid: tickets.get(tid)))
+    return Worker(ctx)
+
+
+def test_stage_rank_maps_known_states_to_explicit_values():
+    """Every state in the _STAGE_RANK table resolves to its declared rank."""
+    for state, rank in Worker._STAGE_RANK.items():
+        assert Worker._stage_rank(_fake_ticket("t", state=state)) == rank
+
+
+def test_stage_rank_falls_back_for_unknown_state_and_none():
+    """An unranked state (or a missing ticket) yields _DEFAULT_STAGE_RANK
+    rather than raising KeyError — the starvation guard's safety valve."""
+    assert Worker._stage_rank(None) == Worker._DEFAULT_STAGE_RANK
+    # BLOCKED is deliberately absent from the rank table.
+    assert State.BLOCKED not in Worker._STAGE_RANK
+    assert (
+        Worker._stage_rank(_fake_ticket("t", state=State.BLOCKED))
+        == Worker._DEFAULT_STAGE_RANK
+    )
+
+
+def test_enqueue_routes_tickets_to_per_board_queues():
+    """Each ticket lands on its own board's queue; board-less tickets fall
+    through to the default queue — no cross-board leakage."""
+    tickets = {
+        "a1": _fake_ticket("a1", board_id="board-A"),
+        "b1": _fake_ticket("b1", board_id="board-B"),
+        "none1": _fake_ticket("none1", board_id=""),
+    }
+    w = _fake_worker(tickets)
+    w.enqueue("a1")
+    w.enqueue("b1")
+    w.enqueue("none1")
+    assert set(w.queues) == {Worker._DEFAULT_BOARD, "board-A", "board-B"}
+    assert w.queues["board-A"].get_nowait()[-1] == "a1"
+    assert w.queues["board-B"].get_nowait()[-1] == "b1"
+    assert w.queues[Worker._DEFAULT_BOARD].get_nowait()[-1] == "none1"
+
+
+def test_enqueue_priority_tickets_pop_before_normal():
+    """Within one board, a priority ticket (rank 0) pops before an
+    earlier-enqueued normal ticket (rank 1) at the same stage rank."""
+    tickets = {
+        "norm": _fake_ticket("norm", board_id="b", priority=False),
+        "prio": _fake_ticket("prio", board_id="b", priority=True),
+    }
+    w = _fake_worker(tickets)
+    w.enqueue("norm")  # enqueued first...
+    w.enqueue("prio")  # ...but priority should still pop first
+    q = w.queues["b"]
+    assert [q.get_nowait()[-1] for _ in range(2)] == ["prio", "norm"]
+
+
+def test_queue_for_empty_board_returns_default_and_creates_lazily():
+    """``_queue_for("")`` aliases the default queue; an unknown board id
+    materializes a fresh queue on first use."""
+    w = _fake_worker({})
+    assert w._queue_for("") is w.queues[Worker._DEFAULT_BOARD]
+    assert "fresh" not in w.queues
+    q = w._queue_for("fresh")
+    assert w.queues["fresh"] is q
 
 
 async def test_start_creates_per_repo_consumer_pools(ctx, monkeypatch):
