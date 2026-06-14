@@ -86,14 +86,18 @@ def list_active(
         repos = request.app.state.repos
         if repo_id == "all":
             pass  # no filtering
-        elif repo_id not in repos.repos:
+        elif repo_id != "meta" and repo_id not in repos.repos:
             raise HTTPException(
                 status_code=400,
                 detail=f"Unknown repo: '{repo_id}'. Known repos: "
                 f"{sorted(repos.repos.keys())}",
             )
         else:
-            target_board = repos.repos[repo_id].board_id
+            # The synthetic meta board is a valid board id even though it is
+            # not a registered repo; filter on its board_id directly.
+            target_board = (
+                "meta" if repo_id == "meta" else repos.repos[repo_id].board_id
+            )
             # Look up each active ticket's board_id from the service
             filtered = []
             for item in active:
