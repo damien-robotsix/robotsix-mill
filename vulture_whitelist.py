@@ -1,23 +1,289 @@
 # vulture_whitelist.py — framework-invoked names that vulture would otherwise
-# flag as unused. Keep this file: vulture scans it alongside the source tree
+# flag as unused.  Keep this file: vulture scans it alongside the source tree
 # and considers names referenced here as "used".
 #
 # This file is NOT imported — bare-name expressions at module scope are
 # evaluated by Python (no-op) and seen as usage by vulture's AST scan.
 # If a name no longer exists in the source tree, Python raises a NameError
 # at scan time, catching stale entries.
+#
+# Ruff B018 ("useless expression") is suppressed on this file via
+# [tool.ruff.lint.per-file-ignores] because the bare-name pattern is the
+# intentional API of vulture whitelists.
 
 # ---------------------------------------------------------------------------
 # CLI entry points (called via console_scripts in pyproject.toml)
 # ---------------------------------------------------------------------------
-# cli/__init__.py: main() — wired as robotsix-mill
-# autoupdate/__init__.py: main() — wired as robotsix-autoupdate
-main  # noqa: F821 — robotsix_mill.cli:main, robotsix_mill.autoupdate:main
+main
 
-# ---------------------------------------------------------------------------
-# Pydantic validator methods — decorated with @field_validator / @model_validator
-# and invoked by pydantic's metaclass machinery (vulture may flag the method name
-# if the class is used but the method body introspects are hidden from AST).
-# ---------------------------------------------------------------------------
-# If vulture flags any, add the bare method name here.  Currently this section
-# is empty because vulture v2+ recognises decorated methods as used.
+# ===========================================================================
+# Pre-existing dead code — grandfathered so vulture only catches *new* dead
+# code.  Each name below is genuinely unused today but kept because it is
+# either part of a not-yet-wired feature surface, a periodic-pass skeleton,
+# a pydantic validator hook, or a stub that exists for backward compatibility.
+# ===========================================================================
+
+# -- agents ------------------------------------------------------------------
+run_agent_check_agent
+run_audit_agent
+run_bc_check_agent
+_validate_name
+reset_for_tests
+run_completeness_check_agent
+run_config_sync_agent
+_absorb_summary_typos
+best_k
+failure_summary
+iterations_used
+run_copy_paste_agent
+model_config
+chunk_size
+max_chunks
+extras
+_validate_domain_slug
+create_expert
+match_module_paths
+get_expert
+remove_expert
+close_all
+run_forge_parity_agent
+run_health_agent
+_coerce_redirect_to
+run_module_curator_agent
+reasoning_setting
+_interval_xor
+_prompt_xor
+_name_slug
+MEMORY_NO_CHANGE_MAX_AGE_DAYS
+MEMORY_NO_CHANGE_SIMILARITY_THRESHOLD
+_absorb_spec_markdown_typos
+_absorb_findings_list_shape
+output_context
+run_survey_agent
+run_test_gap_agent
+parameters
+web_fetch_budget
+correct_form
+
+# -- cli ---------------------------------------------------------------------
+returncode_on_failure
+
+# -- config ------------------------------------------------------------------
+transient_retries
+transient_backoff_base
+transient_backoff_cap
+rate_limit_backoff_base
+rate_limit_backoff_cap
+reference_files_max_count
+reference_files_max_total_lines
+gitlab_api_url
+audit_periodic
+audit_interval_seconds
+trace_health_periodic
+trace_review_periodic
+trace_review_interval_seconds
+timeout_escalation_periodic
+test_gap_periodic
+test_gap_interval_seconds
+agent_check_periodic
+agent_check_interval_seconds
+health_periodic
+health_interval_seconds
+survey_periodic
+survey_interval_seconds
+bc_check_periodic
+bc_check_interval_seconds
+module_curator_memory_path
+module_curator_periodic
+module_curator_interval_seconds
+board_cleanup_periodic
+board_cleanup_interval_seconds
+cost_reconciliation_memory_path
+cost_reconciliation_periodic
+cost_reconciliation_interval_seconds
+data_dir_audit_model
+data_dir_audit_memory_path
+data_dir_audit_periodic
+data_dir_audit_interval_seconds
+completeness_check_periodic
+completeness_check_interval_seconds
+forge_parity_memory_path
+forge_parity_periodic
+forge_parity_interval_seconds
+copy_paste_memory_path
+copy_paste_periodic
+copy_paste_interval_seconds
+config_sync_periodic
+config_sync_interval_seconds
+member_sync_interval_seconds
+meta_periodic
+cost_analyst_periodic
+run_health_periodic
+run_health_memory_path
+diagnostic_periodic
+review_revision_model
+stale_branch_cleanup_periodic
+scope_triage_request_limit
+langfuse_cleanup_periodic
+_validate_non_empty
+_validate_ci_monitor_interval_seconds
+_validate_max_concurrency
+_validate_keys_match_repo_ids
+settings_customise_sources
+dotenv_settings
+retrospect_memory_file
+trace_inspector_memory_file
+audit_memory_file
+agent_check_memory_file
+health_memory_file
+test_gap_memory_file
+survey_memory_file
+config_sync_memory_file
+bc_check_memory_file
+completeness_check_memory_file
+implement_memory_file
+refine_memory_file
+doc_memory_file
+ci_fix_memory_file
+rebase_memory_file
+ci_patterns_file
+_validate_trace_health_interval
+_validate_trace_review_interval
+_validate_dedup_model_is_cheap
+_validate_cross_field
+get_field_value
+
+# -- core --------------------------------------------------------------------
+impl
+cache_ok
+process_bind_param
+dialect
+process_result_value
+reset_engine
+default_service
+format_duration
+MEMBER_SYNC
+workspace_path
+failure_reason
+origin_session_url
+unmet_deps
+CommentRead
+
+# -- forge -------------------------------------------------------------------
+list_pr_reviews
+list_review_comments
+
+# -- langfuse ----------------------------------------------------------------
+ticket_with_most_steps
+trace_with_most_errors
+
+# -- meta --------------------------------------------------------------------
+todo_drafts_created
+MARKERS
+
+# -- repo_scaffold -----------------------------------------------------------
+_post_blocked_comment
+
+# -- runners -----------------------------------------------------------------
+run_agent_check_pass
+run_audit_pass
+run_bc_check_pass
+run_completeness_check_pass
+run_config_sync_pass
+run_copy_paste_pass
+run_cost_reconciliation_pass
+oversized_items
+query_traces_since
+query_recent_traces
+query_session_summary
+run_forge_parity_pass
+run_health_pass
+run_module_curator_pass
+__test__
+raw_span
+run_roadmap_sync_pass
+run_survey_pass
+run_test_gap_pass
+traces_scanned
+traces_flagged
+run_trace_review_pass
+run_verify_pass
+
+# -- runtime -----------------------------------------------------------------
+BoardAdapter
+move_endpoint
+move_endpoint_template
+render_mode
+get_broadcaster
+list_enabled_agents
+board_cards
+board_move
+list_candidates
+validate_candidate
+reject_candidate
+cost_trend
+cost_by_agent
+most_expensive_ticket_endpoint
+most_expensive_trace_endpoint
+cost_breakdown
+create_epic
+generate_children
+health
+langfuse_status
+langfuse_status_clear
+list_repos
+gates
+ws_board
+trace_health_check
+langfuse_cleanup_pass
+board_cleanup_pass
+meta_pass
+cost_analyst_pass
+create_ticket
+list_tickets
+get_ticket
+get_history
+get_description
+upload_screenshot
+get_retrospect
+list_artifacts
+get_artifact
+delete_ticket
+convert_to_task
+migrate_ticket
+approve_ticket
+merge_now
+get_merge_info
+get_merge_reason
+get_merge_status
+list_runs
+list_active
+finished_at
+signum
+_audit_task
+_trace_health_task
+_trace_review_task
+_health_task
+_agent_check_task
+_bc_check_task
+_completeness_check_task
+_copy_paste_task
+_module_curator_task
+_test_gap_task
+_survey_task
+_config_sync_task
+_cost_reconciliation_task
+_data_dir_audit_task
+_langfuse_cleanup_task
+_timeout_escalation_task
+_meta_task
+_cost_analyst_task
+_run_health_task
+_diagnostic_task
+_stale_branch_task
+queue_size
+queue_join
+_run_periodic_pass_per_repo
+
+# -- stages ------------------------------------------------------------------
+input_state

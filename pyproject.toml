@@ -130,6 +130,11 @@ max-complexity = 10
 "tests/**" = ["S"]
 "dev/**" = ["S"]
 "scripts/**" = ["S"]
+# vulture_whitelist.py is a tool configuration file whose syntax
+# (bare-name expressions marking "used" identifiers for vulture's
+# dead-code scanner) triggers B018 ("useless expression") and F821
+# ("undefined name") on every entry.  Both are the intended API.
+"vulture_whitelist.py" = ["B018", "F821"]
 # test_datetime_utils.py exercises TZDateTime's handling of naive
 # datetime inputs on purpose — DTZ001 (no tzinfo) is the contract
 # under test, not a defect.
