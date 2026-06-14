@@ -361,9 +361,7 @@ def test_is_binary_artifact_osi_error_is_silent(tmp_path, monkeypatch):
 
     monkeypatch.setattr(builtins, "open", _raising_open)
     # Extension check passes first, so use a path with no binary extension.
-    assert (
-        validation_mod._is_binary_artifact(tmp_path, str(f), "main") is False
-    )
+    assert validation_mod._is_binary_artifact(tmp_path, str(f), "main") is False
 
 
 # ---------------------------------------------------------------------------
