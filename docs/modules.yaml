@@ -366,6 +366,7 @@ modules:
       - src/robotsix_mill/agents/web_knowledge.py
       - src/robotsix_mill/agents/report_issue.py
       - src/robotsix_mill/agents/jscpd_tool.py
+      - src/robotsix_mill/agents/workflow_caller_audit.py
       - src/robotsix_mill/agents/langfuse_tools.py
       - src/robotsix_mill/agents/log_tools.py
       - src/robotsix_mill/agents/list_threads.py
@@ -390,6 +391,7 @@ modules:
       - tests/agents/test_consult_expert.py
       - tests/agents/test_ci_patterns.py
       - tests/agents/test_jscpd_tool.py
+      - tests/agents/test_workflow_caller_audit.py
       - tests/agents/test_langfuse_tools.py
       - tests/agents/test_log_tools.py
       - tests/agents/test_list_threads.py

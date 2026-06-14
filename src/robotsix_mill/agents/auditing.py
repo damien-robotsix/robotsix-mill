@@ -92,6 +92,7 @@ def run_audit_agent(
         prompt_tail="Perform the audit and return your result.",
         include_forge_url=True,
         include_jscpd=True,
+        include_workflow_caller_audit=True,
         include_run_command=True,
         usage_limits=limits,
     )
