@@ -314,6 +314,8 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "sandbox.test_command": "test_command",
     "sandbox.smoke_command": "smoke_command",
     "sandbox.skills_dir": "skills_dir",
+    "sandbox.network": "sandbox_network",
+    "sandbox.proxy_url": "sandbox_proxy_url",
     # -- web --
     "web.search_enabled": "web_search",
     "web.research_model": "web_research_model",
