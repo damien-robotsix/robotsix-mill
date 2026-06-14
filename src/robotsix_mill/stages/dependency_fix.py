@@ -42,7 +42,7 @@ def _label_dedup(
     Returns the id of the first open (non-terminal) ticket whose labels
     intersect with *dedup_labels*, or ``None`` if no match is found.
     """
-    candidates = ctx.service.recent_tickets(limit=200, board_id=board_id)
+    candidates: list[Ticket] = ctx.service.recent_tickets(limit=200, board_id=board_id)
     for cand in candidates:
         if cand.state in (State.CLOSED, State.DONE, State.ERRORED):
             continue
@@ -58,7 +58,8 @@ def _title_dedup(
     title: str,
 ) -> str | None:
     """Search proposals of *source_kind* for an open ticket with the same *title*."""
-    for cand in ctx.service.recent_proposals_for(source_kind, limit=100):
+    proposals: list[Ticket] = ctx.service.recent_proposals_for(source_kind, limit=100)
+    for cand in proposals:
         if cand.title == title and cand.state not in (State.CLOSED, State.DONE):
             return cand.id
     return None
