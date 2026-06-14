@@ -108,7 +108,11 @@ jobs:
         if: ${{ inputs.run-deptry }}
         env:
           UV_PROJECT_ENVIRONMENT: system
-        run: uv run deptry .
+        # Provision deptry via --with so consumers need not declare it as a
+        # dev dependency (mirrors the bandit step). A bare `uv run deptry`
+        # fails with "Failed to spawn: deptry" for any repo that doesn't
+        # ship deptry itself.
+        run: uv run --with deptry deptry .
 
       - name: Ruff (lint + format check)
         env:
@@ -127,7 +131,8 @@ jobs:
         # and commit the updated mypy-baseline.txt.
         env:
           UV_PROJECT_ENVIRONMENT: system
-        run: uv run mypy src/ --strict | uv run mypy-baseline filter
+        # mypy-baseline provisioned via --with (consumers need not declare it).
+        run: uv run mypy src/ --strict | uv run --with mypy-baseline mypy-baseline filter
 
       - name: Mypy (baseline burndown nudge)
         if: ${{ inputs.mypy-advisory }}
@@ -138,7 +143,7 @@ jobs:
         # CI checks out in detached HEAD with only the remote-tracking
         # ref available, so point suggest's git-diff at origin/main
         # (the default "main" is not a local branch here).
-        run: uv run mypy-baseline suggest --exit-zero --default-branch origin/main
+        run: uv run --with mypy-baseline mypy-baseline suggest --exit-zero --default-branch origin/main
 
       - name: Mypy (static type check)
         if: ${{ !inputs.mypy-advisory }}
