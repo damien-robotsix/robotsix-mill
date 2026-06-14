@@ -72,3 +72,10 @@ def register_check(check: DiagnosticCheck) -> DiagnosticCheck:
 def get_registered_checks() -> list[DiagnosticCheck]:
     """Return a copy of the current check registry (used by the runner)."""
     return list(DIAGNOSTIC_CHECKS)
+
+
+# Register concrete checks via import side-effect. Placed at the bottom so
+# register_check is already defined; the import is cached so registration
+# runs exactly once. The back-reference from diagnostic_check_errors to
+# this module resolves against the already-populated module above.
+from . import diagnostic_check_errors  # noqa: E402,F401

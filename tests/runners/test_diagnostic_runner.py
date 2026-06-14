@@ -64,15 +64,22 @@ def test_yaml_aliases_present():
 
 
 def test_empty_registry_pass_is_safe(caplog):
-    assert dc.get_registered_checks() == []
-    with caplog.at_level(logging.INFO, logger=dr.log.name):
-        result = dr.run_diagnostic_pass("sess")
-    assert isinstance(result, dr.DiagnosticPassResult)
-    assert result.drafts_created == []
-    assert result.summary  # non-crashing, non-empty
-    messages = [r.getMessage() for r in caplog.records]
-    assert any("Diagnostic pass starting" in m for m in messages)
-    assert any("Diagnostic pass complete" in m for m in messages)
+    # Concrete checks now self-register via import side-effect, so clear
+    # the registry to exercise the empty-registry path in isolation.
+    snapshot = list(dc.DIAGNOSTIC_CHECKS)
+    try:
+        dc.DIAGNOSTIC_CHECKS[:] = []
+        assert dc.get_registered_checks() == []
+        with caplog.at_level(logging.INFO, logger=dr.log.name):
+            result = dr.run_diagnostic_pass("sess")
+        assert isinstance(result, dr.DiagnosticPassResult)
+        assert result.drafts_created == []
+        assert result.summary  # non-crashing, non-empty
+        messages = [r.getMessage() for r in caplog.records]
+        assert any("Diagnostic pass starting" in m for m in messages)
+        assert any("Diagnostic pass complete" in m for m in messages)
+    finally:
+        dc.DIAGNOSTIC_CHECKS[:] = snapshot
 
 
 # --- pluggability ----------------------------------------------------------
