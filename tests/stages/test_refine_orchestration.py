@@ -15,6 +15,8 @@ ticket service, and repo_dir are real on ``tmp_path``.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from robotsix_mill.agents import refining
@@ -534,3 +536,501 @@ def test_gitignored_file_map_blocks(ctx_factory, monkeypatch, tmp_path):
 
     assert out.next_state is State.BLOCKED
     assert "x.py" in out.note
+
+
+# ===========================================================================
+# _collect_reviewer_comments
+# ===========================================================================
+
+
+def test_collect_reviewer_comments_user_open_thread(ctx_factory):
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    c = ctx.service.add_comment(t.id, "Please clarify the error class.", author="user")
+
+    reviewer_comments, open_thread_ids = RefineStage._collect_reviewer_comments(ctx, t)
+
+    assert reviewer_comments is not None
+    assert f"[id={c.id}" in reviewer_comments
+    assert "Please clarify the error class." in reviewer_comments
+    assert open_thread_ids == {c.id}
+
+
+def test_collect_reviewer_comments_non_feedback_authors_filtered(ctx_factory):
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    ctx.service.add_comment(t.id, "trace link: https://example/x", author="mill")
+    ctx.service.add_comment(t.id, "timeout escalation ping", author="system")
+
+    reviewer_comments, open_thread_ids = RefineStage._collect_reviewer_comments(ctx, t)
+
+    assert reviewer_comments is None
+    assert open_thread_ids == set()
+
+
+def test_collect_reviewer_comments_closed_thread_excluded(ctx_factory):
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    c = ctx.service.add_comment(t.id, "Resolved already.", author="user")
+    ctx.service.close_thread(c.id, ticket_id=t.id)
+
+    reviewer_comments, open_thread_ids = RefineStage._collect_reviewer_comments(ctx, t)
+
+    assert reviewer_comments is None
+    assert open_thread_ids == set()
+
+
+def test_collect_reviewer_comments_reply_to_closed_excluded(ctx_factory):
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    # An open top-level thread that must survive.
+    open_c = ctx.service.add_comment(t.id, "Still open feedback.", author="user")
+    # A second thread that gets closed, with a reply hanging off it.
+    closed_c = ctx.service.add_comment(t.id, "Closed feedback.", author="user")
+    reply = ctx.service.add_comment(
+        t.id, "Reply under the closed thread.", author="user", parent_id=closed_c.id
+    )
+    ctx.service.close_thread(closed_c.id, ticket_id=t.id)
+
+    reviewer_comments, open_thread_ids = RefineStage._collect_reviewer_comments(ctx, t)
+
+    assert reviewer_comments is not None
+    assert "Still open feedback." in reviewer_comments
+    # The closed thread and its reply are both excluded.
+    assert "Closed feedback." not in reviewer_comments
+    assert "Reply under the closed thread." not in reviewer_comments
+    assert open_thread_ids == {open_c.id}
+    assert reply.id not in open_thread_ids
+
+
+# ===========================================================================
+# _split_child_fast_path
+# ===========================================================================
+
+
+def _spy_refine(monkeypatch, **overrides):
+    """Apply default mocks with a call-recording ``run_refine_agent`` spy.
+
+    Returns the ``calls`` list so a test can assert the full refine agent
+    was (or was not) invoked.
+    """
+    calls: list[dict] = []
+
+    def _spy(**kw):
+        calls.append(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    _apply_default_mocks(monkeypatch, run_refine_agent=_spy, **overrides)
+    return calls
+
+
+def test_split_child_parent_closed_short_circuits(ctx_factory, monkeypatch, tmp_path):
+    ctx = ctx_factory()
+    parent = _ticket(ctx, title="Umbrella")
+    child = _ticket(ctx, title="Child", parent_id=parent.id)
+    ctx.service.transition(
+        parent.id, State.CLOSED, note=f"split into {child.id}, other-child"
+    )
+    calls = _spy_refine(monkeypatch)
+
+    out = _run_agent(ctx, child, tmp_path, draft=_REAL_SPEC)
+
+    assert out.note.startswith("split child — spec already refined")
+    assert out.next_state in (State.READY, State.HUMAN_ISSUE_APPROVAL)
+    ws = ctx.service.workspace(child)
+    file_map = ws.artifacts_dir / "file_map.json"
+    assert json.loads(file_map.read_text(encoding="utf-8")) == []
+    assert (ws.artifacts_dir / "draft-original.md").exists()
+    assert calls == []  # full refine agent never ran
+
+
+def test_split_child_own_history_split_from_short_circuits(
+    ctx_factory, monkeypatch, tmp_path
+):
+    ctx = ctx_factory()
+    child = _ticket(ctx, title="Reparented child")
+    # A reparented child carries the "split from" note in its own history
+    # (its direct parent is the umbrella epic, not a CLOSED ticket).
+    ctx.service.transition(
+        child.id,
+        State.HUMAN_ISSUE_APPROVAL,
+        note="split from 20250101T000000Z-parent-aa",
+    )
+    child = ctx.service.get(child.id)
+    calls = _spy_refine(monkeypatch)
+
+    out = _run_agent(ctx, child, tmp_path, draft=_REAL_SPEC)
+
+    assert out.note.startswith("split child — spec already refined")
+    assert calls == []
+
+
+def test_split_child_with_reviewer_comment_runs_full_agent(
+    ctx_factory, monkeypatch, tmp_path
+):
+    ctx = ctx_factory()
+    parent = _ticket(ctx, title="Umbrella")
+    child = _ticket(ctx, title="Child", parent_id=parent.id)
+    ctx.service.transition(parent.id, State.CLOSED, note=f"split into {child.id}")
+    ctx.service.add_comment(
+        child.id, "Reviewer wants a different scope.", author="user"
+    )
+    calls = _spy_refine(monkeypatch)
+
+    out = _run_agent(ctx, child, tmp_path, draft=_REAL_SPEC)
+
+    # Open reviewer comment forces the full refine agent even for a split child.
+    assert len(calls) == 1
+    assert out.note.startswith("refined")
+    assert (
+        ctx.service.workspace(child).description_path.read_text(encoding="utf-8")
+        == _REAL_SPEC
+    )
+
+
+def test_split_child_empty_description_blocks(ctx_factory, monkeypatch, tmp_path):
+    ctx = ctx_factory()
+    parent = _ticket(ctx, title="Umbrella")
+    child = _ticket(ctx, title="Child", parent_id=parent.id)
+    ctx.service.transition(parent.id, State.CLOSED, note=f"split into {child.id}")
+    _spy_refine(monkeypatch)
+
+    out = _run_agent(ctx, child, tmp_path, draft="   ")
+
+    assert out.next_state is State.BLOCKED
+    assert out.note == "split child has empty description"
+
+
+def test_parent_closed_non_split_does_not_short_circuit(
+    ctx_factory, monkeypatch, tmp_path
+):
+    ctx = ctx_factory()
+    parent = _ticket(ctx, title="Umbrella")
+    child = _ticket(ctx, title="Child", parent_id=parent.id)
+    # Parent CLOSED for a non-split reason (e.g. retrospect) — must NOT
+    # be treated as a split child.
+    ctx.service.transition(parent.id, State.CLOSED, note="retrospected: complete")
+    calls = _spy_refine(monkeypatch)
+
+    out = _run_agent(ctx, child, tmp_path, draft=_REAL_SPEC)
+
+    assert len(calls) == 1  # full refine agent ran
+    assert out.note.startswith("refined")
+
+
+# ===========================================================================
+# _triage_skip — MAINTENANCE + SKIP path-extraction
+# ===========================================================================
+
+
+def test_triage_maintenance_routes_to_maintenance(ctx_factory, monkeypatch, tmp_path):
+    ctx = ctx_factory(maintenance_triage_enabled=True)
+    t = _ticket(ctx)
+    calls = _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(decision="MAINTENANCE", reason="restart the worker"),
+    )
+
+    out = _run_agent(ctx, t, tmp_path, draft="Please restart the deploy.")
+
+    assert out.next_state is State.MAINTENANCE
+    assert out.note.startswith("maintenance triage (LLM):")
+    assert calls == []  # full refine agent never ran
+    ws = ctx.service.workspace(t)
+    assert (ws.artifacts_dir / "draft-original.md").exists()
+
+
+def test_triage_skip_extracts_backtick_paths(ctx_factory, monkeypatch, tmp_path):
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    calls = _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(decision="SKIP", reason="already precise"),
+    )
+
+    out = _run_agent(
+        ctx,
+        t,
+        tmp_path,
+        draft="Raise a clear error in `src/foo/bar.py` when the file is absent.",
+    )
+
+    assert out.note.startswith("triage SKIP")
+    assert calls == []
+    ws = ctx.service.workspace(t)
+    file_map = json.loads(
+        (ws.artifacts_dir / "file_map.json").read_text(encoding="utf-8")
+    )
+    assert {"file": "src/foo/bar.py", "note": "from draft"} in file_map
+
+
+# ===========================================================================
+# _no_change_path — external-fix claim re-verification branch
+# ===========================================================================
+
+
+def test_no_change_external_fix_claim_routes_to_implement(
+    ctx_factory, monkeypatch, tmp_path
+):
+    ctx = ctx_factory()
+    t = _ticket(ctx)  # no branch
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_returns(
+            RefineResult(
+                no_change_needed=True,
+                no_change_rationale=(
+                    "The fix was **already shipped** in commit abc1234; "
+                    "nothing to change."
+                ),
+            )
+        ),
+    )
+
+    out = _run_agent(ctx, t, tmp_path)
+
+    assert out.next_state in (State.READY, State.HUMAN_ISSUE_APPROVAL)
+    assert out.next_state is not State.DONE
+    assert "unverified 'already implemented' claim routed to implement" in out.note
+    desc = ctx.service.workspace(t).description_path.read_text(encoding="utf-8")
+    assert "re-verify before closing" in desc
+    assert "## Acceptance criteria" in desc
+
+
+# ===========================================================================
+# _apply_agent_side_effects
+# ===========================================================================
+
+
+def test_side_effect_applies_agent_title(ctx_factory, monkeypatch, tmp_path):
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_returns(
+            RefineResult(spec_markdown=_REAL_SPEC, title="New title")
+        ),
+    )
+
+    _run_agent(ctx, t, tmp_path)
+
+    assert ctx.service.get(t.id).title == "New title"
+
+
+def test_side_effect_writes_reference_files(ctx_factory, monkeypatch, tmp_path):
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_returns(
+            RefineResult(spec_markdown=_REAL_SPEC, reference_files=["a.py", "b.py"])
+        ),
+    )
+
+    _run_agent(ctx, t, tmp_path)
+
+    ws = ctx.service.workspace(t)
+    ref_path = ws.artifacts_dir / "reference_files.json"
+    assert ref_path.exists()
+    assert json.loads(ref_path.read_text(encoding="utf-8")) == [
+        {"path": "a.py"},
+        {"path": "b.py"},
+    ]
+
+
+def test_side_effect_persists_updated_memory(ctx_factory, monkeypatch, tmp_path):
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    persisted: list[str] = []
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_returns(
+            RefineResult(spec_markdown=_REAL_SPEC, updated_memory="new memory")
+        ),
+        persist_memory=lambda memory_file, text: persisted.append(text),
+    )
+
+    _run_agent(ctx, t, tmp_path)
+
+    assert persisted == ["new memory"]
+
+
+def test_side_effect_writes_file_map(ctx_factory, monkeypatch, tmp_path):
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_returns(
+            RefineResult(
+                spec_markdown=_REAL_SPEC,
+                file_map=[FileMapEntry(file="x.py", note="n")],
+            )
+        ),
+    )
+    # Non-gitignored repo — the deliverable path is git-tracked.
+    monkeypatch.setattr(git_ops, "ignored_paths", lambda repo, paths: [])
+
+    _run_agent(ctx, t, tmp_path)
+
+    ws = ctx.service.workspace(t)
+    file_map = json.loads(
+        (ws.artifacts_dir / "file_map.json").read_text(encoding="utf-8")
+    )
+    assert file_map == [{"file": "x.py", "note": "n"}]
+
+
+# ===========================================================================
+# _multi_scope_path
+# ===========================================================================
+
+
+def test_multi_scope_resolves_depends_on_chain(ctx_factory, monkeypatch, tmp_path):
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_returns(
+            RefineResult(
+                split=True,
+                children=[
+                    ChildSpec(title="C0", spec_markdown=_REAL_SPEC),
+                    ChildSpec(title="C1", spec_markdown=_REAL_SPEC, depends_on=[0]),
+                    ChildSpec(title="C2", spec_markdown=_REAL_SPEC, depends_on=[1]),
+                ],
+            )
+        ),
+    )
+
+    out = _run_agent(ctx, t, tmp_path)
+
+    assert out.next_state is State.CLOSED
+    child_ids = out.note.removeprefix("split into ").split(", ")
+    assert len(child_ids) == 3
+
+    def _deps(cid):
+        raw = ctx.service.get(cid).depends_on
+        return json.loads(raw) if raw else []
+
+    assert _deps(child_ids[0]) == []
+    assert _deps(child_ids[1]) == [child_ids[0]]
+    assert _deps(child_ids[2]) == [child_ids[1]]
+
+
+def test_multi_scope_reparents_under_existing_epic(ctx_factory, monkeypatch, tmp_path):
+    ctx = ctx_factory()
+    epic = ctx.service.create("Epic umbrella", "epic body", kind="epic")
+    t = _ticket(ctx, parent_id=epic.id)
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_returns(
+            RefineResult(
+                split=True,
+                children=[
+                    ChildSpec(title="Child A", spec_markdown=_REAL_SPEC),
+                    ChildSpec(title="Child B", spec_markdown=_REAL_SPEC),
+                ],
+            )
+        ),
+    )
+
+    out = _run_agent(ctx, t, tmp_path, epic_ctx="")
+
+    assert out.next_state is State.CLOSED
+    child_ids = out.note.removeprefix("split into ").split(", ")
+    for cid in child_ids:
+        assert ctx.service.get(cid).parent_id == epic.id
+    # No NEW umbrella epic was created — only the pre-existing one.
+    epics = [tk for tk in ctx.service.list() if tk.kind == "epic"]
+    assert len(epics) == 1
+    assert epics[0].id == epic.id
+
+
+def test_multi_scope_creates_new_umbrella_epic(ctx_factory, monkeypatch, tmp_path):
+    ctx = ctx_factory()
+    t = _ticket(ctx)  # no parent
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_returns(
+            RefineResult(
+                split=True,
+                children=[
+                    ChildSpec(title="Child A", spec_markdown=_REAL_SPEC),
+                    ChildSpec(title="Child B", spec_markdown=_REAL_SPEC),
+                ],
+            )
+        ),
+    )
+
+    out = _run_agent(ctx, t, tmp_path)
+
+    assert out.next_state is State.CLOSED
+    child_ids = out.note.removeprefix("split into ").split(", ")
+    epics = [tk for tk in ctx.service.list() if tk.kind == "epic"]
+    assert len(epics) == 1
+    umbrella = epics[0]
+    for cid in child_ids:
+        assert ctx.service.get(cid).parent_id == umbrella.id
+
+
+def test_multi_scope_no_valid_children_blocks(ctx_factory, monkeypatch, tmp_path):
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_returns(
+            RefineResult(
+                split=True,
+                children=[
+                    ChildSpec(title="", spec_markdown=_REAL_SPEC),
+                    ChildSpec(title="Has title", spec_markdown="   "),
+                ],
+            )
+        ),
+    )
+
+    out = _run_agent(ctx, t, tmp_path)
+
+    assert out.next_state is State.BLOCKED
+    assert out.note == "refiner produced no valid split children"
+
+
+# ===========================================================================
+# _ack_threads / reviewer-comment suppression of the conciseness review
+# ===========================================================================
+
+
+def test_ack_threads_and_review_suppression_single_scope(
+    ctx_factory, monkeypatch, tmp_path
+):
+    # spec_review_enabled so the conciseness review *would* run absent
+    # reviewer comments — proving the suppression is reviewer-driven.
+    ctx = ctx_factory(spec_review_enabled=True)
+    t = _ticket(ctx)
+    c = ctx.service.add_comment(t.id, "Please tighten the scope.", author="user")
+
+    acked: list[set[int]] = []
+    monkeypatch.setattr(
+        orch_module,
+        "acknowledge_unanswered_threads",
+        lambda ctx_, ticket_, thread_ids: acked.append(set(thread_ids)),
+    )
+
+    review_calls: list[int] = []
+
+    def _review(*, settings, spec_markdown, **kw):
+        review_calls.append(1)
+        return SpecReviewResult(concise_spec=_CONCISE_SPEC, stripped_summary="x")
+
+    _apply_default_mocks(monkeypatch, review_spec_for_conciseness=_review)
+
+    out = _run_agent(ctx, t, tmp_path)
+
+    assert out.note.startswith("refined")
+    # Open thread acknowledged at outcome time.
+    assert acked == [{c.id}]
+    # Conciseness review skipped because reviewer comments were present.
+    assert review_calls == []
+    assert (
+        ctx.service.workspace(t).description_path.read_text(encoding="utf-8")
+        == _REAL_SPEC
+    )
