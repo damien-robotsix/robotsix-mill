@@ -446,6 +446,19 @@ class PeriodicPassesMixin(_WorkerBase):
                     self.run_registry.finish_error(run_id, str(e))
             await asyncio.sleep(interval)
 
+    async def _diagnostic_pass_loop(self) -> None:
+        """Global daily diagnostic loop — fires once per interval.
+
+        Delegates to the shared ``_run_periodic_pass`` helper, which owns
+        the initial delay, the sleep loop, run-registry lifecycle, tracing
+        root span, and per-pass error survival. The runner is the
+        deterministic check orchestrator (no LLM).
+        """
+        from robotsix_mill.runners.diagnostic_runner import run_diagnostic_pass
+
+        interval = max(60, self.ctx.settings.diagnostic_interval_seconds)
+        await self._run_periodic_pass("diagnostic", run_diagnostic_pass, interval)
+
     async def _stale_branch_cleanup_loop(self) -> None:
         """Periodic stale-branch cleanup loop. Only runs when
         ``MILL_STALE_BRANCH_CLEANUP_PERIODIC=true``.

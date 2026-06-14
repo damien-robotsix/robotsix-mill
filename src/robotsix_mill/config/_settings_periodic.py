@@ -407,3 +407,13 @@ class _PeriodicSettings(BaseModel):
     # Path to the run-health agent's Markdown memory ledger. Override to pin
     # a specific path; unset (default) derives <data_dir>/<board>/run_health_memory.md.
     run_health_memory_path: Path | None = Field(default=None)
+
+    # --- diagnostic (daily deterministic diagnostic agent) ---
+    # When True, a global daily pass iterates the pluggable diagnostic check
+    # registry. Off by default — the skeleton ships with zero checks; later
+    # tickets add checks then operators opt in.
+    diagnostic_periodic: bool = Field(default=False)
+    # Seconds between automatic diagnostic passes. Default 86400 (1 day).
+    diagnostic_interval_seconds: int = Field(default=86400)
+    # Board the diagnostic agent routes board/trace activity to.
+    diagnostic_target_repo_id: str = Field(default="robotsix-mill")

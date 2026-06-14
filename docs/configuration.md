@@ -573,13 +573,13 @@ Each periodic agent shares this pattern:
 
 Periodic agents: `audit`, `board_cleanup`, `trace_health`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_monitor`, `config_sync`, `member_sync`, `bc_check`,
-`completeness_check`, `cost_reconciliation`, `module_curator`.
+`completeness_check`, `cost_reconciliation`, `diagnostic`, `module_curator`.
 
 > ¹ `survey` is the exception — its default is `enabled: true`.
 >
-> ² `trace_health`, `ci_monitor`, and `member_sync` do **not** have a
+> ² `trace_health`, `ci_monitor`, `member_sync`, and `diagnostic` do **not** have a
 > `memory_path` field — they write no per-agent memory ledger
-> (`member_sync` is a deterministic pass with no LLM agent).
+> (`member_sync` and `diagnostic` are deterministic passes with no LLM agent).
 >
 >
 > ³ In multi-repo mode, the default memory file path is

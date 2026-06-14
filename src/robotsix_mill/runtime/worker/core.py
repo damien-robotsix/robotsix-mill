@@ -125,6 +125,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         self._meta_task: asyncio.Task | None = None
         self._cost_analyst_task: asyncio.Task | None = None
         self._run_health_task: asyncio.Task | None = None
+        self._diagnostic_task: asyncio.Task[None] | None = None
         self._stale_branch_task: asyncio.Task | None = None
         # board_id -> per-repo bespoke supervisor task. The supervisor
         # itself owns each repo's per-bespoke child tasks; cancelling
@@ -595,6 +596,13 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             log_args=(self.ctx.settings.run_health_interval_seconds,),
         )
         self._start_poll_loop_pass(
+            "diagnostic",
+            self._diagnostic_pass_loop,
+            "_diagnostic_task",
+            log_msg="Periodic diagnostic enabled: interval %ds",
+            log_args=(self.ctx.settings.diagnostic_interval_seconds,),
+        )
+        self._start_poll_loop_pass(
             "stale-branch-cleanup",
             self._stale_branch_cleanup_loop,
             "_stale_branch_task",
@@ -676,6 +684,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             "_meta_task",
             "_cost_analyst_task",
             "_run_health_task",
+            "_diagnostic_task",
             "_stale_branch_task",
         ):
             t = getattr(self, attr)

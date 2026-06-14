@@ -219,6 +219,12 @@ pipeline:
 
 periodic:
 
+  # -- diagnostic agent — daily deterministic check orchestrator -----------
+  diagnostic:
+    enabled: false        # skeleton ships disabled; later tickets add checks then enable
+    interval_seconds: 86400
+    target_repo_id: robotsix-mill
+
   # -- audit agent — meta-audit for quality/security coverage gaps ---------
   audit:
     model: deepseek/deepseek-v4-flash  # read-only proposer, flash sufficient

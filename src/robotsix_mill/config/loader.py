@@ -245,6 +245,10 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     # Cross-repo meta-agent pass (surveys all repos for extraction/alignment).
     "core.meta_periodic": "meta_periodic",
     "core.meta_interval_seconds": "meta_interval_seconds",
+    # Daily diagnostic agent (deterministic check orchestrator).
+    "periodic.diagnostic.enabled": "diagnostic_periodic",
+    "periodic.diagnostic.interval_seconds": "diagnostic_interval_seconds",
+    "periodic.diagnostic.target_repo_id": "diagnostic_target_repo_id",
     # Cross-repo cost-analyst pass (aggregate cost-reduction proposals).
     "core.cost_analyst_periodic": "cost_analyst_periodic",
     "core.cost_analyst_interval_seconds": "cost_analyst_interval_seconds",

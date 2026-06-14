@@ -117,6 +117,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Run-health pass",
         "format": "memory_notes",
     },
+    "diagnostic": {
+        "module": "runners.diagnostic_runner",
+        "function": "run_diagnostic_pass",
+        "label": "Diagnostic pass",
+        "format": "drafts",
+    },
     "survey": {
         "module": "runners.survey_runner",
         "function": "run_survey_pass",
@@ -307,6 +313,16 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                     indent=2,
                 )
             )
+        elif entry["format"] == "drafts":
+            print(
+                json.dumps(
+                    {
+                        "summary": result.summary,
+                        "tickets_created": result.drafts_created,
+                    },
+                    indent=2,
+                )
+            )
         else:
             print(
                 json.dumps(
@@ -364,6 +380,15 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
             if result.filed_tickets:
                 for rid, tid in result.filed_tickets.items():
                     print(f"  Build-out ticket {tid} filed for {rid}")
+        elif entry["format"] == "drafts":
+            print(f"{entry['label']} complete.")
+            print(result.summary)
+            if result.drafts_created:
+                print(f"Draft tickets created: {len(result.drafts_created)}")
+                for d in result.drafts_created:
+                    print(f"  - {d['id']}: {d.get('title', '')}")
+            else:
+                print("No new draft tickets created.")
         else:
             print(f"{entry['label']} complete.")
             print(f"Memory updated: {len(result.updated_memory)} chars")
@@ -668,6 +693,17 @@ def main(argv: list[str] | None = None) -> int:
         help="run a health analysis pass over recent run outcomes",
     )
     p_run_health.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
+    # --- diagnostic command ---
+    p_diagnostic = sub.add_parser(
+        "diagnostic",
+        help="run a single daily-diagnostic pass over the registered checks",
+    )
+    p_diagnostic.add_argument(
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",
