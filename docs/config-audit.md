@@ -56,7 +56,7 @@ other code depends on.
 | `MILL_RETROSPECT_MODEL` | `retrospect_model` | `deepseek/deepseek-v4-pro` | `str` | Settings | non-sensitive | default | §1, §10 | `stages/retrospect.py` | Mentioned in both §1 and §10 |
 | `MILL_AUDIT_MODEL` | `audit_model` | `deepseek/deepseek-v4-pro` | `str` | Settings | non-sensitive | default | §1, §11 | `audit_runner.py` | Mentioned in both §1 and §11 |
 | `MILL_DEDUP_MODEL` | `dedup_model` | `deepseek/deepseek-v4-pro` | `str` | Settings | non-sensitive | default | §1, §17 | `stages/refine.py` (pre-refine dedup) | Mentioned in both §1 and §17 |
-| `MILL_WEB_RESEARCH_MODEL` | `web_research_model` | `deepseek/deepseek-v4-pro` | `str` | Settings | non-sensitive | default | §1, §8 | Web-research sub-agent | Mentioned in both §1 and §8 |
+| `MILL_WEB_RESEARCH_MODEL` | `web_research_model` | `deepseek/deepseek-v4-flash` | `str` | Settings | non-sensitive | default | §1, §8 | Web-research sub-agent | Mentioned in both §1 and §8 |
 | `MILL_REVIEW_MODEL` | `review_model` | `deepseek/deepseek-v4-pro` | `str` | Settings | non-sensitive | default | §1, §6 | `stages/review.py` | Mentioned in both §1 and §6 |
 | `MILL_TRACE_INSPECTOR_MODEL` | `trace_inspector_model` | `deepseek/deepseek-v4-pro` | `str` | Settings | non-sensitive | default | §1, §10 | Trace-inspector sub-agent | Mentioned in both §1 and §10 |
 | `MILL_TEST_GAP_MODEL` | `test_gap_model` | `deepseek/deepseek-v4-pro` | `str` | Settings | non-sensitive | default | §1, §14 | `test_gap_runner.py` | Mentioned in both §1 and §14 |

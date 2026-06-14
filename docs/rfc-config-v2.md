@@ -142,7 +142,7 @@ marked `→ secrets` are loaded from `config/secrets.yaml` into a separate
 | `MILL_RETROSPECT_MODEL` | `core.models.retrospect` | `deepseek/deepseek-v4-pro` | |
 | `MILL_AUDIT_MODEL` | `core.models.audit` | `deepseek/deepseek-v4-pro` | |
 | `MILL_DEDUP_MODEL` | `core.models.dedup` | `deepseek/deepseek-v4-pro` | |
-| `MILL_WEB_RESEARCH_MODEL` | `core.models.web_research` | `deepseek/deepseek-v4-pro` | |
+| `MILL_WEB_RESEARCH_MODEL` | `core.models.web_research` | `deepseek/deepseek-v4-flash` | |
 | `MILL_REVIEW_MODEL` | `core.models.review` | `deepseek/deepseek-v4-pro` | |
 | `MILL_TRACE_INSPECTOR_MODEL` | `core.models.trace_inspector` | `deepseek/deepseek-v4-pro` | |
 | `MILL_TEST_GAP_MODEL` | `core.models.test_gap` | `deepseek/deepseek-v4-pro` | |
