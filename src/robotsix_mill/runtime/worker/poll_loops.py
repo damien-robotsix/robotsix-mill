@@ -499,7 +499,7 @@ class PollLoopsMixin(_WorkerBase):
         target: str,
         now: float,
         ttl_seconds: int,
-        ansi_re: re.Pattern,
+        ansi_re: re.Pattern[str],
     ) -> None:
         """Execute one CI monitor poll cycle for a single repo."""
         from ...core.service import TicketService
