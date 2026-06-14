@@ -255,7 +255,7 @@ def run_periodic_agent(
     # ------------------------------------------------------------------
     # Step 2 — conditionally build the tool list
     # ------------------------------------------------------------------
-    tools: list = []
+    tools: list[Any] = []
     if repo_dir is not None:
         tools = _build_periodic_tools(
             settings=settings,
