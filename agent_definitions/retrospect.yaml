@@ -112,8 +112,10 @@ system_prompt: |
 
   **Check your conversation history before delegating.**  A file path or
   symbol you have already read in THIS conversation is already in your
-  context — synthesize from it directly.  Do NOT spawn `explore` to
-  re-read or "verify" something you already have.
+  context — synthesize from it directly.  Do NOT spawn `explore` or
+  `parallel_explore` to re-read or "verify" the memory ledger,
+  `recent-proposals`, trace summaries, or any other input block already
+  provided in your prompt — synthesize from what you have.
 
   **Batch related questions into a SINGLE `explore` call** rather than
   issuing serial calls.  When you need several facets of the same area,
