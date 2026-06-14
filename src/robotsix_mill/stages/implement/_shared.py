@@ -57,12 +57,16 @@ _FLOOD_SAMPLE_SIZE = 20
 def _is_binary_artifact(repo_dir: Path, path: str, target_branch: str) -> bool:
     """Return True if *path* is a binary artifact.
 
-    Uses two orthogonal signals; either is sufficient:
+    Uses three orthogonal signals; any is sufficient:
 
     1. **Extension-based**: the path suffix matches a known binary
        extension (``.db``, ``.pyc``, ``.so``, …).
     2. **Git-based**: ``git diff --numstat origin/<target> -- <path>``
        returns ``-\t-\t<path>`` — the canonical binary marker.
+    3. **Null-byte**: reads the first 8192 bytes of the file; a null
+       byte identifies ELF, PE, Mach-O, PNG, JPG, and other binary
+       formats regardless of extension.  This catches **untracked**
+       files (which produce no ``git diff`` output).
     """
     # Extension-based check (fast path).
     suffix = Path(path).suffix.lower()
@@ -95,6 +99,20 @@ def _is_binary_artifact(repo_dir: Path, path: str, target_branch: str) -> bool:
             path,
             exc_info=True,
         )
+
+    # Untracked-files check: files not yet tracked by git produce no
+    # diff numstat output.  Read a small prefix and check for null bytes
+    # — a standard heuristic that catches ELF, PE, Mach-O, PNG, JPG, etc.
+    # regardless of file extension.
+    try:
+        file_path = repo_dir / path
+        if file_path.is_file():
+            with open(file_path, "rb") as f:
+                head = f.read(8192)
+            if b"\0" in head:
+                return True
+    except OSError:
+        pass
 
     return False
 
