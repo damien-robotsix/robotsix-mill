@@ -122,3 +122,34 @@ def test_required_repos_empty_when_no_clonable_repos(monkeypatch):
     monkeypatch.setattr(meta_triage, "get_repos_config", lambda: reg)
     out = meta_triage.required_repos_for(settings=MagicMock(), spec="x")
     assert out == []
+
+
+def test_required_repos_uses_dedicated_capable_meta_triage_model(monkeypatch):
+    """The routing decision runs on settings.meta_triage_model (the capable
+    tier), NOT the cheap module_curator_model it used to share."""
+    reg = _reg(("mill", "https://gh/m.git"))
+    monkeypatch.setattr(meta_triage, "get_repos_config", lambda: reg)
+    captured: dict = {}
+
+    def _fake_run(*, settings, definition_name, tools, model_name, prompt, what):
+        captured["model_name"] = model_name
+        return MagicMock(output=RequiredReposResult(repo_ids=["mill"], rationale="r"))
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.yaml_loader.load_and_run_agent", _fake_run
+    )
+    settings = MagicMock()
+    settings.meta_triage_model = "deepseek/deepseek-v4-pro"
+    settings.module_curator_model = "deepseek/deepseek-v4-flash"
+    meta_triage.required_repos_for(settings=settings, spec="x")
+    assert captured["model_name"] == "deepseek/deepseek-v4-pro"
+
+
+def test_meta_triage_model_defaults_to_capable_tier():
+    """Default must be a non-flash (capable) model so routing isn't done by
+    the weakest tier."""
+    from robotsix_mill.config import Settings
+
+    model = Settings().meta_triage_model
+    assert model == "deepseek/deepseek-v4-pro"
+    assert "flash" not in model

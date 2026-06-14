@@ -140,6 +140,13 @@ class _CoreSettings(BaseModel):
     # decides whether changed-out-of-scope files are legitimate
     # expansions or scope creep. Must be fast and inexpensive.
     scope_triage_model: str = Field(default="deepseek/deepseek-v4-flash")
+    # Model for the META repo-triage call (meta.triage.required_repos_for) —
+    # decides which registered repo(s) a meta-board proposal targets. This is
+    # a consequential ROUTING decision (a wrong pick delivers the work to the
+    # wrong repo, which then closes it as "not applicable"), so it runs on the
+    # CAPABLE tier, not flash. Decoupled from module_curator_model (a cheap
+    # periodic agent it previously, accidentally, shared).
+    meta_triage_model: str = Field(default="deepseek/deepseek-v4-pro")
     # Per-call request caps (bound each role's loop). Sized for slow
     # deepseek-v4-pro + complex tickets: a medium ticket (53de) used
     # ~49 implement calls, so 200 leaves generous headroom; raising it
