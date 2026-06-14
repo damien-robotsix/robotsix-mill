@@ -127,7 +127,7 @@ The OpenRouter model identifier. Supports two forms:
    | `${MILL_AUDIT_MODEL}` | `audit_model` | `"deepseek/deepseek-v4-pro"` |
    | `${MILL_DEDUP_MODEL}` | `dedup_model` | `"deepseek/deepseek-v4-pro"` |
    | `${MILL_TRIAGE_MODEL}` | `triage_model` | `"openai/gpt-4o-mini"` |
-   | `${MILL_WEB_RESEARCH_MODEL}` | `web_research_model` | `"deepseek/deepseek-v4-pro"` |
+   | `${MILL_WEB_RESEARCH_MODEL}` | `web_research_model` | `"deepseek/deepseek-v4-flash"` |
    | `${MILL_AUTO_APPROVE_MODEL}` | `auto_approve_model` | `"openai/gpt-4o-mini"` |
    | `${MILL_REVIEW_MODEL}` | `review_model` | `"deepseek/deepseek-v4-pro"` |
    | `${MILL_DOC_MODEL}` | `doc_model` | `"deepseek/deepseek-v4-pro"` |
