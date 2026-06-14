@@ -63,6 +63,13 @@ jobs:
   tests:
     runs-on: ${{ inputs.runs-on }}
     permissions:
+      # contents:read is REQUIRED for actions/checkout to clone PRIVATE
+      # caller repos. Declaring any permissions block resets all unlisted
+      # scopes to `none`; without contents:read the checkout of a private
+      # consumer fails with "Repository not found" (public callers are
+      # unaffected — their clone needs no token). security-events:write is
+      # for the SARIF upload.
+      contents: read
       security-events: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
