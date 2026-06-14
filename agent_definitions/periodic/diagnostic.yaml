@@ -1,0 +1,26 @@
+# Diagnostic agent — daily deterministic check orchestrator.
+#
+# This is NOT an LLM agent: ``run_diagnostic_pass`` is plain Python that
+# iterates a pluggable check registry (see runners/diagnostic_checks.py).
+# The definition exists so the per-repo schedule-override mechanism
+# (``_resolve_periodic_schedule``) and presence files recognise the
+# ``diagnostic`` workflow. Only the scheduling fields (interval / enabled)
+# are load-bearing; the model + prompt are required by the loader schema
+# but are unused by the deterministic runner.
+
+name: diagnostic
+description: >-
+  Daily deterministic diagnostic pass that iterates the pluggable check
+  registry; ships disabled with zero checks until later tickets add them
+
+category: periodic
+
+interval: 1d
+enabled: false
+
+model: default
+
+system_prompt: |
+  Deterministic diagnostic orchestrator — no LLM. The pass is driven by
+  run_diagnostic_pass(), which iterates the registered diagnostic checks.
+  This prompt is unused at runtime.

@@ -34,6 +34,7 @@ class RunEntry:
         "cost-reconciliation",
         "data-dir-audit",
         "data_dir_audit",
+        "diagnostic",
         "epic-breakdown",
         "health",
         "langfuse-cleanup",

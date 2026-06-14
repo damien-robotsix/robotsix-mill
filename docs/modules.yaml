@@ -197,6 +197,8 @@ modules:
       - src/robotsix_mill/runners/cost_reconciliation_runner.py
       - src/robotsix_mill/runners/cost_analyst_runner.py
       - src/robotsix_mill/runners/run_health_runner.py
+      - src/robotsix_mill/runners/diagnostic_runner.py
+      - src/robotsix_mill/runners/diagnostic_checks.py
       - src/robotsix_mill/runners/config_sync_runner.py
       - src/robotsix_mill/runners/member_sync_runner.py
       - src/robotsix_mill/runners/health_runner.py
@@ -225,6 +227,7 @@ modules:
       - tests/runners/test_cost_reconciliation_runner.py
       - tests/runners/test_cost_analyst_runner.py
       - tests/runners/test_run_health_runner.py
+      - tests/runners/test_diagnostic_runner.py
       - tests/runners/test_config_sync_runner.py
       - tests/runners/test_member_sync_runner.py
       - tests/runners/test_roadmap_sync_runner.py
