@@ -5,12 +5,16 @@ import json
 import logging
 import re
 import time
-from datetime import timezone
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ...config import RepoConfig, get_repos_config, target_branch_for
-from ...core.models import Comment, SourceKind
+from ...core.models import Comment, SourceKind, Ticket
 from ..run_registry import RunRegistry
+
+if TYPE_CHECKING:
+    from ...core.service import TicketService
 
 from ._base import _WorkerBase
 
@@ -437,6 +441,227 @@ class PollLoopsMixin(_WorkerBase):
                 log.exception("timeout-escalation poll failed")
             await asyncio.sleep(interval)
 
+    def _ticket_last_activity(
+        self, service: "TicketService", ticket: Ticket
+    ) -> datetime:
+        """Return ``max(ticket.created_at, max(c.created_at for c in comments))``,
+        normalising naïve datetimes to UTC.
+        """
+        last_activity = ticket.created_at
+        if last_activity.tzinfo is None:
+            last_activity = last_activity.replace(tzinfo=timezone.utc)
+        comments: list[Comment] = []
+        try:
+            comments = service.list_comments(ticket.id)
+        except Exception:
+            comments = []
+        for c in comments:
+            c_at = c.created_at
+            if c_at.tzinfo is None:
+                c_at = c_at.replace(tzinfo=timezone.utc)
+            if c_at > last_activity:
+                last_activity = c_at
+        return last_activity
+
+    def _find_canonical_ci_ticket(
+        self,
+        existing: list[Ticket],
+        service: "TicketService",
+        wf_name: str,
+        target: str,
+    ) -> tuple[Ticket | None, datetime | None]:
+        """Scan *existing* for a non-terminal CI ticket matching the workflow
+        + branch markers; return the most-recently-active match.
+        """
+        wf_marker = f"**Workflow:** {wf_name}"
+        branch_marker = f"**Branch:** {target}"
+        canonical: Ticket | None = None
+        canonical_activity: datetime | None = None
+        for t in existing:
+            if t.source != SourceKind.CI:
+                continue
+            if t.state.value in ("closed", "done"):
+                continue
+            body_text = service.workspace(t).read_description() or ""
+            if wf_marker not in body_text:
+                continue
+            if branch_marker not in body_text:
+                continue
+            last_activity = self._ticket_last_activity(service, t)
+            if canonical_activity is None or last_activity > canonical_activity:
+                canonical = t
+                canonical_activity = last_activity
+        return canonical, canonical_activity
+
+    async def _poll_one_repo_ci(
+        self,
+        rc: RepoConfig,
+        target: str,
+        now: float,
+        ttl_seconds: int,
+        ansi_re: re.Pattern,
+    ) -> None:
+        """Execute one CI monitor poll cycle for a single repo."""
+        from ...core.service import TicketService
+        from ...forge import get_forge
+
+        settings = self.ctx.settings
+        repo_label = rc.repo_id
+
+        state_dir = settings.data_dir / rc.repo_id
+        service = TicketService(settings, board_id=rc.board_id)
+
+        state_dir.mkdir(parents=True, exist_ok=True)
+        state_path = state_dir / "ci_monitor_state.json"
+        log.info("CI monitor poll starting for repo %s", repo_label)
+
+        # 1. Load dedup state.
+        state: dict = {"seen": {}}
+        if state_path.exists():
+            try:
+                state = json.loads(state_path.read_text("utf-8"))
+            except json.JSONDecodeError, OSError:
+                state = {"seen": {}}
+        seen = state.setdefault("seen", {})
+
+        # 2. Prune entries older than TTL.
+        stale = [
+            key
+            for key, val in seen.items()
+            if isinstance(val, (int, float)) and (now - val) > ttl_seconds
+        ]
+        for key in stale:
+            del seen[key]
+
+        # 3. List completed workflow runs on the target branch.
+        forge = get_forge(settings, repo_config=rc)
+        runs = forge.list_workflow_runs(
+            branch=target,
+        )
+
+        # 4. Only the LATEST run per workflow reflects current
+        # state (the GitHub API returns runs newest-first). Take
+        # one run per workflow_id and act only on that — never
+        # backfill every historical failed run.
+        latest_by_wf: dict = {}
+        for run in runs:
+            wf = run.get("workflow_id")
+            if wf is not None and wf not in latest_by_wf:
+                latest_by_wf[wf] = run
+
+        existing = service.list()
+
+        for wf, run in latest_by_wf.items():
+            if run.get("conclusion") != "failure":
+                continue
+
+            wf_name = run.get("name", "unknown")
+            run_id_val = run.get("id")
+            title = f"CI failure: {wf_name} on {target}"
+
+            # Cheap first guard: avoid re-filing or re-commenting
+            # for the exact same failing commit.
+            key = f"{wf}:{run.get('head_sha')}"
+            if key in seen:
+                continue
+
+            # Robust (workflow, branch) dedup: consolidate
+            # recurring failures into the canonical ticket via a
+            # comment instead of filing a new ticket.
+            canonical, _ = self._find_canonical_ci_ticket(
+                existing, service, wf_name, target
+            )
+
+            if canonical is not None:
+                log.info(
+                    "CI monitor (%s): recurring failure — %s "
+                    "(run %s) on %s, consolidating into %s",
+                    repo_label,
+                    wf_name,
+                    run_id_val,
+                    target,
+                    canonical.id,
+                )
+                comment_body = (
+                    f"Run [{run_id_val}]({run.get('html_url', '')}) "
+                    f"also failed at commit "
+                    f"`{run.get('head_sha', '')}` on "
+                    f"{run.get('created_at', '')} "
+                    f"({wf_name} on {target})."
+                )
+                try:
+                    service.add_comment(canonical.id, body=comment_body)
+                except Exception:
+                    log.warning(
+                        "CI monitor: failed to add consolidation "
+                        "comment to %s for run %s",
+                        canonical.id,
+                        run_id_val,
+                    )
+                # Mark the commit as handled regardless, so a
+                # transient comment failure does not loop-spam.
+                seen[key] = now
+                continue
+
+            log.info(
+                "CI monitor (%s): new failure — %s (run %s) on %s",
+                repo_label,
+                wf_name,
+                run_id_val,
+                target,
+            )
+
+            # Fetch job logs.
+            logs = ""
+            try:
+                logs = forge.fetch_workflow_job_logs(run_id=run_id_val)
+            except Exception:
+                log.warning(
+                    "CI monitor: failed to fetch logs for run %s",
+                    run_id_val,
+                )
+
+            # Build draft body.
+            body_parts = [
+                f"**Workflow:** {wf_name}",
+                f"**Branch:** {target}",
+                f"**Run:** [{run_id_val}]({run.get('html_url', '')})",
+                f"**Commit:** `{run.get('head_sha', '')}`",
+                f"**Created:** {run.get('created_at', '')}",
+                "",
+            ]
+            if logs:
+                stripped = ansi_re.sub("", logs)
+                if len(stripped) > 200_000:
+                    stripped = stripped[-200_000:]
+                body_parts.append("```")
+                body_parts.append(stripped)
+                body_parts.append("```")
+
+            body = "\n".join(body_parts)
+
+            try:
+                service.create(
+                    title=title,
+                    description=body,
+                    source=SourceKind.CI,
+                    priority=True,
+                )
+            except Exception:
+                log.exception(
+                    "CI monitor: failed to create draft for run %s",
+                    run_id_val,
+                )
+                continue
+
+            # Mark as seen.
+            seen[key] = now
+
+        # 5. Persist state.
+        state_path.write_text(json.dumps(state), "utf-8")
+
+        log.info("CI monitor poll completed for repo %s", repo_label)
+
     async def _ci_monitor_poll_loop(self) -> None:
         """Periodic CI monitor poll: watch the forge target branch for
         completed workflow-run failures and file a ``source="ci"`` draft
@@ -446,9 +671,6 @@ class PollLoopsMixin(_WorkerBase):
         fields in ``config/repos.yaml``.  The loop runs when *any*
         registered repo has ``ci_monitor_enabled=True``.
         """
-        from ...core.service import TicketService
-        from ...forge import get_forge
-
         settings = self.ctx.settings
         ttl_seconds = 30 * 86400  # 30 days
 
@@ -486,201 +708,7 @@ class PollLoopsMixin(_WorkerBase):
                     continue
 
                 try:
-                    state_dir = settings.data_dir / rc.repo_id
-                    service = TicketService(settings, board_id=rc.board_id)
-
-                    state_dir.mkdir(parents=True, exist_ok=True)
-                    state_path = state_dir / "ci_monitor_state.json"
-                    log.info("CI monitor poll starting for repo %s", repo_label)
-
-                    # 1. Load dedup state.
-                    state: dict = {"seen": {}}
-                    if state_path.exists():
-                        try:
-                            state = json.loads(state_path.read_text("utf-8"))
-                        except json.JSONDecodeError, OSError:
-                            state = {"seen": {}}
-                    seen = state.setdefault("seen", {})
-
-                    # 2. Prune entries older than TTL.
-                    stale = [
-                        key
-                        for key, val in seen.items()
-                        if isinstance(val, (int, float)) and (now - val) > ttl_seconds
-                    ]
-                    for key in stale:
-                        del seen[key]
-
-                    # 3. List completed workflow runs on the target branch.
-                    forge = get_forge(settings, repo_config=rc)
-                    runs = forge.list_workflow_runs(
-                        branch=target,
-                    )
-
-                    # 4. Only the LATEST run per workflow reflects current
-                    # state (the GitHub API returns runs newest-first). Take
-                    # one run per workflow_id and act only on that — never
-                    # backfill every historical failed run.
-                    latest_by_wf: dict = {}
-                    for run in runs:
-                        wf = run.get("workflow_id")
-                        if wf is not None and wf not in latest_by_wf:
-                            latest_by_wf[wf] = run
-
-                    existing = service.list()
-
-                    for wf, run in latest_by_wf.items():
-                        if run.get("conclusion") != "failure":
-                            continue
-
-                        wf_name = run.get("name", "unknown")
-                        run_id_val = run.get("id")
-                        title = f"CI failure: {wf_name} on {target}"
-
-                        # Cheap first guard: avoid re-filing or re-commenting
-                        # for the exact same failing commit.
-                        key = f"{wf}:{run.get('head_sha')}"
-                        if key in seen:
-                            continue
-
-                        # Robust (workflow, branch) dedup: consolidate
-                        # recurring failures into the canonical ticket via a
-                        # comment instead of filing a new ticket. The canonical
-                        # ticket is identified by the stable body markers
-                        # (which survive a title rename). Consolidation applies
-                        # indefinitely to any non-terminal matching canonical —
-                        # recurring CI failures legitimately recur over
-                        # hours/days. The closed/done terminal state is the
-                        # natural boundary: once the failure is resolved the
-                        # canonical is closed, and a genuinely new recurrence
-                        # afterward correctly files a fresh ticket.
-                        wf_marker = f"**Workflow:** {wf_name}"
-                        branch_marker = f"**Branch:** {target}"
-                        canonical = None
-                        canonical_activity = None
-                        for t in existing:
-                            if t.source != SourceKind.CI:
-                                continue
-                            if t.state.value in ("closed", "done"):
-                                continue
-                            body_text = service.workspace(t).read_description() or ""
-                            if wf_marker not in body_text:
-                                continue
-                            if branch_marker not in body_text:
-                                continue
-                            # last-activity = max(created_at, latest comment).
-                            last_activity = t.created_at
-                            if last_activity.tzinfo is None:
-                                last_activity = last_activity.replace(
-                                    tzinfo=timezone.utc
-                                )
-                            comments: list[Comment] = []
-                            try:
-                                comments = service.list_comments(t.id)
-                            except Exception:
-                                comments = []
-                            for c in comments:
-                                c_at = c.created_at
-                                if c_at.tzinfo is None:
-                                    c_at = c_at.replace(tzinfo=timezone.utc)
-                                if c_at > last_activity:
-                                    last_activity = c_at
-                            if (
-                                canonical_activity is None
-                                or last_activity > canonical_activity
-                            ):
-                                canonical = t
-                                canonical_activity = last_activity
-
-                        if canonical is not None:
-                            log.info(
-                                "CI monitor (%s): recurring failure — %s "
-                                "(run %s) on %s, consolidating into %s",
-                                repo_label,
-                                wf_name,
-                                run_id_val,
-                                target,
-                                canonical.id,
-                            )
-                            comment_body = (
-                                f"Run [{run_id_val}]({run.get('html_url', '')}) "
-                                f"also failed at commit "
-                                f"`{run.get('head_sha', '')}` on "
-                                f"{run.get('created_at', '')} "
-                                f"({wf_name} on {target})."
-                            )
-                            try:
-                                service.add_comment(canonical.id, body=comment_body)
-                            except Exception:
-                                log.warning(
-                                    "CI monitor: failed to add consolidation "
-                                    "comment to %s for run %s",
-                                    canonical.id,
-                                    run_id_val,
-                                )
-                            # Mark the commit as handled regardless, so a
-                            # transient comment failure does not loop-spam.
-                            seen[key] = now
-                            continue
-
-                        log.info(
-                            "CI monitor (%s): new failure — %s (run %s) on %s",
-                            repo_label,
-                            wf_name,
-                            run_id_val,
-                            target,
-                        )
-
-                        # Fetch job logs.
-                        logs = ""
-                        try:
-                            logs = forge.fetch_workflow_job_logs(run_id=run_id_val)
-                        except Exception:
-                            log.warning(
-                                "CI monitor: failed to fetch logs for run %s",
-                                run_id_val,
-                            )
-
-                        # Build draft body.
-                        body_parts = [
-                            f"**Workflow:** {wf_name}",
-                            f"**Branch:** {target}",
-                            f"**Run:** [{run_id_val}]({run.get('html_url', '')})",
-                            f"**Commit:** `{run.get('head_sha', '')}`",
-                            f"**Created:** {run.get('created_at', '')}",
-                            "",
-                        ]
-                        if logs:
-                            stripped = _ansi_re.sub("", logs)
-                            if len(stripped) > 200_000:
-                                stripped = stripped[-200_000:]
-                            body_parts.append("```")
-                            body_parts.append(stripped)
-                            body_parts.append("```")
-
-                        body = "\n".join(body_parts)
-
-                        try:
-                            service.create(
-                                title=title,
-                                description=body,
-                                source=SourceKind.CI,
-                                priority=True,
-                            )
-                        except Exception:
-                            log.exception(
-                                "CI monitor: failed to create draft for run %s",
-                                run_id_val,
-                            )
-                            continue
-
-                        # Mark as seen.
-                        seen[key] = now
-
-                    # 5. Persist state.
-                    state_path.write_text(json.dumps(state), "utf-8")
-
-                    log.info("CI monitor poll completed for repo %s", repo_label)
+                    await self._poll_one_repo_ci(rc, target, now, ttl_seconds, _ansi_re)
                 except Exception:  # noqa: BLE001 — never let the poll die
                     log.exception("CI monitor poll failed for repo %s", repo_label)
 
