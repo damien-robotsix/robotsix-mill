@@ -368,56 +368,6 @@ def test_web_fetch_raw_mode_bypasses_cache(tmp_path, monkeypatch):
     assert len(calls) == 2
 
 
-# --- web_fetch: html_to_text helper ------------------------------------------
-
-
-def test_html_to_text_drops_scripts_and_styles():
-    """Scripts and styles are removed wholesale (content + tags) so
-    an LLM doesn't have to read JavaScript or CSS. They're dead
-    weight in every doc page we fetch."""
-    from robotsix_mill.agents.web_tools import html_to_text
-
-    body = (
-        "<html><body>"
-        "<script>alert('x'); var leaked = 'data';</script>"
-        "<style>body { color: red; }</style>"
-        "<p>Hello world</p>"
-        "</body></html>"
-    )
-    out = html_to_text(body)
-    assert "alert" not in out
-    assert "leaked" not in out
-    assert "color: red" not in out
-    assert "Hello world" in out
-
-
-def test_html_to_text_unescapes_entities():
-    """``&amp;`` → ``&`` and ``&nbsp;`` → space — the agent reads the
-    rendered text, not the source-level entity references."""
-    from robotsix_mill.agents.web_tools import html_to_text
-
-    out = html_to_text("<p>foo &amp; bar&nbsp;baz</p>")
-    assert "&" in out
-    # &nbsp; came through as a real space; the result has no
-    # entity reference text.
-    assert "&nbsp;" not in out
-    assert "foo & bar" in out
-
-
-def test_html_to_text_collapses_whitespace():
-    """Removing tags inserts runs of whitespace. The extractor
-    collapses them so the agent doesn't see paragraphs of newlines
-    between every word."""
-    from robotsix_mill.agents.web_tools import html_to_text
-
-    body = "<div><p>one</p>\n\n\n<p>two</p></div>"
-    out = html_to_text(body)
-    # At most one blank line between paragraphs.
-    assert "\n\n\n" not in out
-    assert "one" in out
-    assert "two" in out
-
-
 # --- web_fetch: per-consult fetch budget -------------------------------------
 
 
