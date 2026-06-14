@@ -8,7 +8,6 @@ from ..config import RepoConfig, Settings  # noqa: F401 — Settings kept for mo
 from .periodic_runner import (
     ForgeParityPassResult,
     PERIODIC_PASS_CONFIGS,
-    _clone_token,
     run_periodic_pass,
 )
 
