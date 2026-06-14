@@ -766,6 +766,7 @@ def test_audit_agent_tool_set(tmp_path, monkeypatch):
     assert cap["tools"] == [
         "ask_user",
         "ask_web_knowledge",
+        "audit_workflow_callers_tool",
         "close_thread",
         "detect_duplication",
         "explore",
