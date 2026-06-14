@@ -6,7 +6,6 @@ from ..config import RepoConfig, Settings  # noqa: F401 — Settings kept for mo
 from .periodic_runner import (
     PERIODIC_PASS_CONFIGS,
     SurveyPassResult,
-    _clone_token,
     run_periodic_pass,
 )
 

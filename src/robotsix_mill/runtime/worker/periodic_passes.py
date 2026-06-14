@@ -661,7 +661,7 @@ class PeriodicPassesMixin(_WorkerBase):
         """
         from ...agents.bespoke_loader import load_bespoke_definitions
         from ...agents.periodic_loader import discover_periodic_workflows
-        from ...runners.audit_runner import _clone_token
+        from ...runners.periodic_runner import _clone_token
         from ...runners.member_sync_runner import run_member_sync_pass
         from ...vcs import git_ops
 
