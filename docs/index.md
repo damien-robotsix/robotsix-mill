@@ -12,6 +12,7 @@ A self-contained LLM-driven ticket solver with a SQLite-backed management plane,
 - **[Observability](observability.md)** — per-repo Langfuse + deployed-log config the refine agent consults.
 - **[Operations](cost-and-resilience.md)** — Monitor costs, manage notifications, track ticket provenance, and clean up workspaces.
 - **[Attaching screenshots](screenshots.md)** — Attach an image to a ticket from the board so the refine agent has visual context.
+- **[Agent communication research](agent-communication-research.md)** — Phase 1 survey of existing agent-to-agent communication approaches feeding the planned architecture decision.
 
 ## Links
 
