@@ -7,7 +7,6 @@ import robotsix_mill.agents.trace_inspector as trace_inspector_mod
 from robotsix_mill.agents.trace_inspector import (
     _SYSTEM_PROMPT,
     TraceInspectResult,
-    make_trace_inspect_tool,
 )
 from robotsix_mill.config import Settings, Secrets, _reset_secrets
 
@@ -329,123 +328,6 @@ class TestRunTraceInspector:
         assert len(result.findings) == 1
         assert result.findings[0].category == "agent_limitation"
         assert "fix loop" in result.findings[0].symptom
-
-
-# ---------------------------------------------------------------------------
-# make_trace_inspect_tool tests
-# ---------------------------------------------------------------------------
-
-
-class TestMakeTraceInspectTool:
-    """Tests for the trace_inspect tool closure — monkeypatch
-    run_trace_inspector to inject synthetic results, verifying the
-    tool closure works end-to-end (trace fetch → inspect → format)."""
-
-    def test_tool_returns_formatted_summary(self, monkeypatch):
-        """The tool closure returns a Markdown-formatted summary."""
-        settings = _settings_with_api_key()
-
-        # Inject synthetic trace detail via fetch_trace_detail
-        monkeypatch.setattr(
-            "robotsix_mill.langfuse.client.fetch_trace_detail",
-            lambda s, tid: {"id": tid, "name": "test-trace", "observations": []},
-        )
-        # Inject synthetic inspection result
-        from robotsix_mill.agents.trace_inspector import TraceFinding
-
-        monkeypatch.setattr(
-            trace_inspector_mod,
-            "run_trace_inspector",
-            lambda **kwargs: TraceInspectResult(
-                findings=[
-                    TraceFinding(
-                        category="tool_error",
-                        symptom="error A",
-                        root_cause="",
-                        proposed_solution="",
-                    ),
-                    TraceFinding(
-                        category="agent_limitation",
-                        symptom="loop B",
-                        root_cause="",
-                        proposed_solution="",
-                    ),
-                    TraceFinding(
-                        category="optimization",
-                        symptom="cache C",
-                        root_cause="",
-                        proposed_solution="",
-                    ),
-                ]
-            ),
-        )
-        tool = make_trace_inspect_tool(settings)
-        output = tool("trace-1")
-        assert "## trace trace-1 inspection" in output
-        assert "### Tool Errors" in output
-        assert "- error A" in output
-        assert "### Agent Limitations" in output
-        assert "- loop B" in output
-        assert "### Optimizations" in output
-        assert "- cache C" in output
-
-    def test_tool_degradation_trace_unavailable(self, monkeypatch):
-        """When fetch_trace_detail returns None, the tool returns a
-        degradation message instead of raising."""
-        settings = _settings_with_api_key()
-        monkeypatch.setattr(
-            "robotsix_mill.langfuse.client.fetch_trace_detail",
-            lambda s, tid: None,
-        )
-        tool = make_trace_inspect_tool(settings)
-        output = tool("missing-trace")
-        assert "trace missing-trace unavailable" in output
-
-    def test_tool_clean_trace_no_issues(self, monkeypatch):
-        """When no issues found, a short 'no issues' message is included."""
-        settings = _settings_with_api_key()
-        monkeypatch.setattr(
-            "robotsix_mill.langfuse.client.fetch_trace_detail",
-            lambda s, tid: {"id": tid, "name": "clean", "observations": []},
-        )
-        monkeypatch.setattr(
-            trace_inspector_mod,
-            "run_trace_inspector",
-            lambda **kwargs: TraceInspectResult(),
-        )
-        tool = make_trace_inspect_tool(settings)
-        output = tool("clean-trace")
-        assert "(no issues found in this trace)" in output
-
-    def test_tool_partial_result_one_category(self, monkeypatch):
-        """When only tool_error findings are present, only that section appears."""
-        settings = _settings_with_api_key()
-        monkeypatch.setattr(
-            "robotsix_mill.langfuse.client.fetch_trace_detail",
-            lambda s, tid: {"id": tid, "name": "partial", "observations": []},
-        )
-        from robotsix_mill.agents.trace_inspector import TraceFinding
-
-        monkeypatch.setattr(
-            trace_inspector_mod,
-            "run_trace_inspector",
-            lambda **kwargs: TraceInspectResult(
-                findings=[
-                    TraceFinding(
-                        category="tool_error",
-                        symptom="only error",
-                        root_cause="",
-                        proposed_solution="",
-                    ),
-                ]
-            ),
-        )
-        tool = make_trace_inspect_tool(settings)
-        output = tool("partial-trace")
-        assert "### Tool Errors" in output
-        assert "### Agent Limitations" not in output
-        assert "### Optimizations" not in output
-        assert "(no issues found" not in output
 
 
 # ---------------------------------------------------------------------------

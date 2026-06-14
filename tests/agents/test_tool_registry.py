@@ -139,7 +139,6 @@ def test_all_tools_registered(tmp_path, monkeypatch):
     monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
     monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
 
-    from robotsix_mill.agents import coordinating
     from robotsix_mill.agents.explore import make_explore_tool
     from robotsix_mill.agents.fs_tools import build_fs_tools
     from robotsix_mill.agents.base import build_agent
@@ -167,7 +166,6 @@ def test_all_tools_registered(tmp_path, monkeypatch):
         tools=[
             make_explore_tool(s, tmp_path),
             *fs_tools,
-            _make_run_tests_tool := coordinating.make_run_tests_tool(s, tmp_path),
         ],
         web_knowledge=True,
         name="implement",
@@ -185,7 +183,6 @@ def test_all_tools_registered(tmp_path, monkeypatch):
         "list_threads",
         "run_command",
         "explore",
-        "run_tests",
         "ask_web_knowledge",
         "report_issue",
         "reply_to_thread",
