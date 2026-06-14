@@ -363,7 +363,7 @@ Every setting below shows:
 | `core.models.audit` | `MILL_AUDIT_MODEL` | `deepseek/deepseek-v4-flash` | Audit agent — meta-audit for quality/security coverage gaps |
 | `core.models.dedup` | `MILL_DEDUP_MODEL` | `deepseek/deepseek-v4-pro` | Dedup agent — pre-refine duplicate/already-done check |
 | `core.models.obsolescence` | `MILL_OBSOLESCENCE_MODEL` | `deepseek/deepseek-v4-flash` | Obsolescence agent — pre-refine gap re-validation check |
-| `core.models.web_research` | `MILL_WEB_RESEARCH_MODEL` | `deepseek/deepseek-v4-pro` | Web-research sub-agent — web lookups, conclusion only |
+| `core.models.web_research` | `MILL_WEB_RESEARCH_MODEL` | `deepseek/deepseek-v4-flash` | Web-research sub-agent — web lookups, conclusion only |
 | `core.models.review` | `MILL_REVIEW_MODEL` | `deepseek/deepseek-v4-pro` | Review agent — blind dual-model diff audit (opt-in) |
 | `core.models.review_revision` | `MILL_REVIEW_REVISION_MODEL` | `deepseek/deepseek-v4-pro` | Review-revision agent — autonomously implements changes requested by human reviewers (opt-in) |
 | `core.models.trace_inspector` | `MILL_TRACE_INSPECTOR_MODEL` | `deepseek/deepseek-v4-flash` | Trace-inspector sub-agent — inspects full Langfuse observation tree |
@@ -516,7 +516,7 @@ robotsix-llmio Claude Agent SDK transport.
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `web.search_enabled` | `MILL_WEB_SEARCH` | `true` | Enable web-search capability (delegated to sub-agent) |
-| `web.research_model` | `MILL_WEB_RESEARCH_MODEL` | `deepseek/deepseek-v4-pro` | Web-research sub-agent model (also reachable via `core.models.web_research`) |
+| `web.research_model` | `MILL_WEB_RESEARCH_MODEL` | `deepseek/deepseek-v4-flash` | Web-research sub-agent model (also reachable via `core.models.web_research`) |
 | `web.research_request_limit` | `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `8` | Per-call request cap for web research (also reachable via `core.limits.web_research_requests`) |
 | `web.fetch_image` | `MILL_FETCH_IMAGE` | `curlimages/curl:8.17.0` | Docker image for isolated `web_fetch` container |
 | `web.fetch_max_bytes` | `MILL_WEB_FETCH_MAX_BYTES` | `2000000` | Max bytes fetched per URL |

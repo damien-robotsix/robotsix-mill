@@ -31,7 +31,7 @@ core:
     retrospect: deepseek/deepseek-v4-flash                # audits finished tickets; extractive summarise/extract-lessons — flash sufficient (cost: was 12.3% of spend on pro tier)
     audit: deepseek/deepseek-v4-flash                     # periodic quality/security scan; flash is enough — read-only proposer, no code-writing risk
     dedup: deepseek/deepseek-v4-flash                     # pre-refine duplicate/already-done check — flash is plenty for text comparison
-    web_research: *default_model                          # web lookups — conclusion only
+    web_research: deepseek/deepseek-v4-flash              # web lookups — conclusion only
     review: deepseek/deepseek-v4-pro                      # blind diff audit — full tier as the last automated merge gate; a weak reviewer lets defects escape into costly ci_fix loops
     trace_inspector: deepseek/deepseek-v4-flash           # inspects Langfuse observation tree — flash is plenty for summarisation
     test_gap: deepseek/deepseek-v4-flash                  # periodic "untested modules" finder — read-only, flash sufficient
@@ -139,7 +139,7 @@ sandbox:
 
 web:
   search_enabled: true                        # enable web-search capability
-  research_model: *default_model              # web-research sub-agent model
+  research_model: deepseek/deepseek-v4-flash   # web-research sub-agent model
   research_request_limit: 8                   # per-call request cap for web research
   fetch_image: curlimages/curl:8.17.0         # Docker image for isolated web_fetch container
   fetch_max_bytes: 2000000                    # max bytes fetched per URL (network-level cap)
