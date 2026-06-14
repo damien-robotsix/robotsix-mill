@@ -1,0 +1,2562 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../board-operations/">
+      
+      
+        <link rel="next" href="../notifications/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Cost controls & resilience - robotsix-mill</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#cost-controls-resilience" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="robotsix-mill" class="md-header__button md-logo" aria-label="robotsix-mill" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            robotsix-mill
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Cost controls & resilience
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="robotsix-mill" class="md-nav__button md-logo" aria-label="robotsix-mill" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    robotsix-mill
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agent-communication-research/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent Communication Research
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration & Deployment
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Configuration & Deployment
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../observability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Continuous deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../publishing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Publishing to PyPI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reusable-workflow-callers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reusable-workflow callers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docker-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../github-app/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GitHub App / PAT
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ci-policy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CI policy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../config-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rfc-config-v2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    RFC: config v2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Pipeline
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent catalog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../approval-gate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Approval gate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dedup-guard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dedup guard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../merge-stage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Merge stage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../epic-dedup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Epic dedup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../inquiry-to-task/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inquiry to task
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../proposed-actions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Proposed actions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agent-md-candidates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AGENT.md candidates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scope-triage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scope triage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents & Internals
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Agents & Internals
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../audit-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../blocked-ticket-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Blocked ticket recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../retrospect-memory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Retrospect memory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../trace-health/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trace-health check
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../expert-yaml-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Expert YAML schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agent-yaml-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent YAML schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../meta-board/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Meta board
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../board-operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Board operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost controls & resilience
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost controls & resilience
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#per-ticket-cost-cost_usd" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-ticket cost (cost_usd)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Per-ticket cost (cost_usd)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How it works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#graceful-degradation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Graceful degradation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#accuracy-requirement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Accuracy requirement
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cost-baseline-on-redraft" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cost baseline on redraft
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cost-dashboard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cost dashboard
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cost dashboard">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#langfuse-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Langfuse functions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cost-reconciliation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cost reconciliation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cost reconciliation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How it works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Usage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sources-of-divergence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sources of divergence
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#draft-tickets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Draft tickets
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Limitations
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cost-controls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cost controls
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notifications/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Notifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ticket-provenance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ticket provenance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../workspace-cleanup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workspace cleanup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../board-cleanup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Board cleanup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../screenshots/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Attaching screenshots
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../design/cost-indicators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost indicators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../design/forge-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Forge architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/core/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/runtime/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/stages/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Stages
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#per-ticket-cost-cost_usd" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-ticket cost (cost_usd)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Per-ticket cost (cost_usd)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How it works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#graceful-degradation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Graceful degradation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#accuracy-requirement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Accuracy requirement
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cost-baseline-on-redraft" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cost baseline on redraft
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cost-dashboard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cost dashboard
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cost dashboard">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#langfuse-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Langfuse functions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cost-reconciliation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cost reconciliation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cost reconciliation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How it works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Usage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sources-of-divergence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sources of divergence
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#draft-tickets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Draft tickets
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Limitations
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cost-controls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cost controls
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="cost-controls-resilience">Cost controls &amp; resilience</h1>
+<h2 id="per-ticket-cost-cost_usd">Per-ticket cost (<code>cost_usd</code>)</h2>
+<p>Each ticket card on the board shows a cumulative LLM spend (e.g.
+<code>$0.0943</code>), stored in the <code>ticket.cost_usd</code> DB column. Cost is derived
+from <strong>Langfuse session totals</strong> — not from in-process accumulation.</p>
+<h3 id="how-it-works">How it works</h3>
+<p>Every traced model call carries <code>session.id = &lt;ticket id&gt;</code> (set in
+<code>runtime/tracing.py</code>). Langfuse attributes cost per session correctly
+regardless of concurrency. Cost is read <strong>on-demand</strong> from the Langfuse
+public API via <code>session_cost()</code> in <code>langfuse/client.py</code> — there is no
+persistent store and no background sync loop. Results are cached for
+<strong>60 seconds</strong> (<code>_COST_TTL_SECONDS</code>) to avoid hammering Langfuse on
+board renders.</p>
+<p>The actual population happens in <code>runtime/deps.py:with_cost</code>, which
+mutates the ticket object in-place:</p>
+<ul>
+<li><strong>Blocking path</strong> (<code>blocking=True</code>): calls <code>session_cost()</code> which
+  hits Langfuse (or returns the cached value if within the TTL).</li>
+<li><strong>Non-blocking path</strong> (<code>blocking=False</code>): calls <code>session_cost_cached()</code>
+  which returns the cached value if present, else <code>0.0</code>, and <strong>never</strong>
+  hits the network. This is used by the <code>/tickets</code> list endpoint,
+  which the board polls every 1 second — otherwise N cold-cache
+  tickets would issue N serial Langfuse HTTP calls.</li>
+</ul>
+<p>The board and <code>/tickets</code> API read <code>cost_usd</code> directly from the DB
+after in-place population — <strong>zero Langfuse calls on render</strong> once
+cached. The ticket detail drawer likewise shows the cached value.</p>
+<p>This design replaces an earlier periodic sync loop (<code>_cost_sync_loop</code>
++ <code>MILL_COST_SYNC_SECONDS</code>) that no longer exists. Cost lives in
+Langfuse; mill reads and briefly caches it.</p>
+<h3 id="graceful-degradation">Graceful degradation</h3>
+<p>When Langfuse is unconfigured (Langfuse secrets absent from
+<code>config/secrets.yaml</code>) or unreachable, <code>session_cost()</code> returns <code>0.0</code>
+— no errors, no blocked pipeline. The board displays <code>$0.0000</code>.</p>
+<h3 id="accuracy-requirement">Accuracy requirement</h3>
+<p>Accurate per-ticket cost <strong>requires Langfuse configured</strong> with
+<code>langfuse_public_key</code>, <code>langfuse_secret_key</code>, and <code>langfuse_base_url</code>
+set in <code>config/repos.yaml</code> for the selected repo. Session-summed cost is only complete if
+every trace carries the session id — the trace-health system enforces
+this across all agent runs.</p>
+<h3 id="cost-baseline-on-redraft">Cost baseline on redraft</h3>
+<p>When a ticket is redrafted (reset back to DRAFT from any active state),
+the full Langfuse session cost at that moment is captured as
+<code>pre_redraft_cost_usd</code>. The effective per-attempt cost is then computed
+as <code>max(0.0, session_total - pre_redraft_cost_usd)</code>. This means:</p>
+<ul>
+<li>The dollar-cap limit restarts at zero for the new attempt — only spend
+  accrued after the redraft counts toward the limit.</li>
+<li>The full session cost (including pre-redraft spend) remains available
+  for informational/historical display via the <code>pre_redraft_cost_usd</code> baseline.</li>
+<li>A second redraft re-snapshots the baseline to the then-current session
+  total, tracking the cost hierarchy across multiple attempts.</li>
+</ul>
+<p>Worked example — a ticket redrafted twice:</p>
+<ul>
+<li><strong>Attempt 1</strong> spends $5.00 → session total <code>$5.00</code>, baseline
+  <code>pre_redraft_cost_usd = $0.00</code>, effective per-attempt cost
+  <code>max(0.0, 5.00 - 0.00) = $5.00</code>.</li>
+<li><strong>Redraft</strong> → baseline re-snapshotted to <code>pre_redraft_cost_usd = $5.00</code>;
+  effective cost restarts at <code>max(0.0, 5.00 - 5.00) = $0.00</code>.</li>
+<li><strong>Attempt 2</strong> spends $3.00 → session total <code>$8.00</code>, baseline
+  <code>pre_redraft_cost_usd = $5.00</code>, effective per-attempt cost
+  <code>max(0.0, 8.00 - 5.00) = $3.00</code>.</li>
+</ul>
+<p>The informational/historical <strong>total</strong> (the raw Langfuse session total)
+is <code>$8.00</code>, while the dollar cap only ever sees the <code>$3.00</code> effective
+cost for the current attempt.</p>
+<h2 id="cost-dashboard">Cost dashboard</h2>
+<p>The board's <strong>Cost Dashboard</strong> (💰 button in the drawer header) shows
+aggregate spend across all tickets for a configurable lookback window
+(1 hour – 7 days). It calls three Langfuse-backed endpoints in
+parallel:</p>
+<table>
+<thead>
+<tr>
+<th>Endpoint</th>
+<th>What it returns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /costs/trend?lookback_hours=N&amp;repo_id=X</code></td>
+<td>Time-bucketed cost for the sparkline chart</td>
+</tr>
+<tr>
+<td><code>GET /costs/by-agent?lookback_hours=N&amp;repo_id=X</code></td>
+<td>Per-agent-name cost bars (total cost + trace count)</td>
+</tr>
+<tr>
+<td><code>GET /costs/most-expensive-ticket?lookback_hours=N&amp;repo_id=X</code></td>
+<td>The single ticket with the highest LLM spend in the window</td>
+</tr>
+<tr>
+<td><code>GET /costs/most-expensive-trace?lookback_hours=N&amp;repo_id=X</code></td>
+<td>The single most expensive individual agent run (trace) in the window</td>
+</tr>
+</tbody>
+</table>
+<p>All four endpoints accept <strong>two mutually exclusive filter modes</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Mode</th>
+<th>Clamping</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>lookback_hours</code> (default <code>24</code>)</td>
+<td>Time-window</td>
+<td><code>[1, 168]</code></td>
+<td>All traces in the last <em>N</em> hours</td>
+</tr>
+<tr>
+<td><code>max_tickets</code> (optional)</td>
+<td>Last-N-tickets</td>
+<td><code>[1, 1000]</code></td>
+<td>All traces belonging to the last <em>N</em> distinct ticket sessions</td>
+</tr>
+</tbody>
+</table>
+<p>When both parameters are present, <code>max_tickets</code> takes precedence and
+the time window is ignored (with a debug-level log noting the override).
+The frontend never sends both — a <strong>mode toggle</strong> in the cost dashboard
+switches between time-window (with options 1h/6h/24h/3d/7d) and
+ticket-count mode (with options 20/100/1000).  On first load the
+dashboard defaults to time-window, 24 hours.</p>
+<p>When tracing is disabled or no data exists, the most-expensive
+endpoints return <code>null</code> and the dashboard shows a muted "No data"
+placeholder that adapts its wording to the active mode — the per-agent
+bar chart continues to render independently.</p>
+<p>The optional <code>repo_id</code> query parameter scopes the query to a single
+repo's Langfuse project.  Use <code>repo_id=all</code> to aggregate across every
+registered repo.  When omitted in single-repo mode the sole repo is
+used; in multi-repo mode the parameter is required.</p>
+<h3 id="langfuse-functions">Langfuse functions</h3>
+<p>Four aggregation functions in <code>langfuse/client.py</code> back the cost
+endpoints, each accepting both <code>lookback_hours</code> and an optional
+<code>max_tickets</code>:</p>
+<ul>
+<li>
+<p><strong><code>aggregate_cost_trend(settings, lookback_hours=24, max_tickets=None)</code></strong> —
+  returns time-bucketed cost.  In time-window mode buckets span the
+  lookback period (hourly if ≤ 24 h, daily otherwise).  In ticket-count
+  mode buckets span the time range covered by the collected traces,
+  with the same hourly/daily rule applied to that span.</p>
+</li>
+<li>
+<p><strong><code>aggregate_cost_by_name(settings, lookback_hours=24, max_tickets=None)</code></strong> —
+  aggregates <code>totalCost</code> and trace count by agent/stage name.</p>
+</li>
+<li>
+<p><strong><code>most_expensive_ticket(settings, lookback_hours=24, max_tickets=None)</code></strong> —
+  groups traces by <code>sessionId</code>, sums <code>totalCost</code> per session, returns
+  the session with the highest total cost (or <code>None</code> when tracing is
+  disabled / the API errors).  The route then looks up the matching
+  ticket by <code>session_id</code>.</p>
+</li>
+<li>
+<p><strong><code>most_expensive_trace(settings, lookback_hours=24, max_tickets=None)</code></strong> —
+  scans traces for the single highest <code>totalCost</code>, skipping
+  unnamed/in-flight traces (same <code>_named</code> filter as
+  <code>list_recent_traces</code>).  Returns the trace dict directly.</p>
+</li>
+</ul>
+<p>All four functions share a common helper, <code>_fetch_traces_for_tickets</code>,
+which paginates Langfuse traces by <code>timestamp.desc</code> (no <code>fromTimestamp</code>),
+tracks distinct <code>sessionId</code> values, and stops after collecting traces
+from the requested number of distinct sessions.</p>
+<p><strong>Safety caps:</strong> In time-window mode <code>most_expensive_ticket</code> and
+<code>most_expensive_trace</code> cap at 500 traces (<code>EXAMINE_CAP</code>).  In
+ticket-count mode all four functions cap at 100 pages × 100 traces
+(10 000 traces).  All functions catch exceptions and return gracefully
+(<code>None</code> or <code>[]</code>) rather than crashing the dashboard.</p>
+<h2 id="cost-reconciliation">Cost reconciliation</h2>
+<p>The cost-reconciliation pass detects drift between OpenRouter usage
+accounting and Langfuse span-derived cost totals — a silent cost leak
+that can otherwise go unnoticed for days.</p>
+<h3 id="how-it-works_1">How it works</h3>
+<p>The pass can be triggered in two ways:</p>
+<ul>
+<li><strong>Periodic</strong> — Once per day (opt-in via <code>MILL_COST_RECONCILIATION_PERIODIC=true</code>),
+  the worker calls <code>run_cost_reconciliation_pass()</code>.</li>
+<li><strong>On-demand</strong> — <code>POST /cost-reconciliation</code> returns <code>202 Accepted</code>
+  immediately and runs the pass in a background daemon thread. The run
+  appears in the board's "Runs" drawer (via <code>RunRegistry</code>).</li>
+</ul>
+<p>The pass proceeds as follows:</p>
+<ol>
+<li><strong>Fetch OpenRouter total</strong> — <code>GET /api/v1/activity?date=&lt;yesterday&gt;</code>
+   using <code>openrouter_management_key</code> from secrets. Sums <code>usage</code> +
+   <code>byok_usage_inference</code> across all model entries.</li>
+<li><strong>Fetch Langfuse total</strong> — paginates <code>/api/public/traces</code> for the
+   same UTC day window, sums <code>totalCost</code> across all traces (capped at
+   2000 for safety).</li>
+<li><strong>Compare</strong> — if <code>|delta| ≤ $1.00</code>, logs clean and returns (no
+   agent call, no ticket).</li>
+<li><strong>Investigate</strong> — if delta &gt; $1.00, invokes the cost-reconciliation
+   agent (a single LLM call with zero tools) and creates a DRAFT ticket
+   with the analysis.</li>
+</ol>
+<h3 id="usage">Usage</h3>
+<p><strong>CLI:</strong>
+<div class="highlight"><pre><span></span><code>robotsix-mill<span class="w"> </span>cost-reconciliation<span class="w">              </span><span class="c1"># summary output</span>
+robotsix-mill<span class="w"> </span>cost-reconciliation<span class="w"> </span>--json<span class="w">       </span><span class="c1"># full JSON result</span>
+</code></pre></div></p>
+<p><strong>API:</strong>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8077/cost-reconciliation
+</code></pre></div></p>
+<h3 id="sources-of-divergence">Sources of divergence</h3>
+<p>The agent considers these possible causes:</p>
+<ul>
+<li><strong>Non-OpenRouter models</strong> routed through OpenRouter that don't support
+  usage accounting (cost missing from spans → Langfuse under-reports).</li>
+<li><strong>Streaming-only providers</strong> where OpenRouter can't compute cost until
+  the stream completes (timing skew).</li>
+<li><strong>OTel export gaps</strong> — if the OTLP exporter is down or a span is
+  dropped, Langfuse never sees the cost.</li>
+<li><strong>BYOK models</strong> where OpenRouter charges a routing fee but the
+  inference cost hits the user's own provider key.</li>
+<li><strong>Ingestion lag</strong> — Langfuse is near-real-time but OpenRouter's
+  activity endpoint reflects completed UTC days.</li>
+</ul>
+<h3 id="configuration">Configuration</h3>
+<table>
+<thead>
+<tr>
+<th>YAML path</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>periodic.cost_reconciliation.enabled</code></td>
+<td><code>MILL_COST_RECONCILIATION_PERIODIC</code></td>
+<td><code>false</code></td>
+<td>Enable daily cost-reconciliation passes</td>
+</tr>
+<tr>
+<td><code>periodic.cost_reconciliation.interval_seconds</code></td>
+<td><code>MILL_COST_RECONCILIATION_INTERVAL_SECONDS</code></td>
+<td><code>86400</code></td>
+<td>Seconds between passes (min 60)</td>
+</tr>
+<tr>
+<td><code>periodic.cost_reconciliation.model</code></td>
+<td><code>MILL_COST_RECONCILIATION_MODEL</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td>Model for the analysis agent</td>
+</tr>
+<tr>
+<td><code>periodic.cost_reconciliation.memory_path</code></td>
+<td><code>MILL_COST_RECONCILIATION_MEMORY_PATH</code></td>
+<td><code>None</code></td>
+<td>Override path for memory ledger (defaults to <code>&lt;data_dir&gt;/cost_reconciliation_memory.md</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>The <code>openrouter_management_key</code> secret is <strong>optional</strong> — if absent, the
+pass skips OpenRouter-side fetching and logs a warning.</p>
+<h3 id="draft-tickets">Draft tickets</h3>
+<p>When a discrepancy is found, the ticket is created with
+<code>source=cost_reconciliation</code> (amber badge on the board). The body
+includes the agent's analysis and conclusion, plus the raw OpenRouter
+and Langfuse breakdowns. Each ticket includes a date-based gap-id
+marker (<code>&lt;!-- cost_reconciliation-gap-id: YYYY-MM-DD --&gt;</code>) for
+deduplication — the same day is never reported twice.</p>
+<h3 id="limitations">Limitations</h3>
+<ul>
+<li><strong>Daily only</strong> — each pass looks at exactly one UTC day (yesterday).
+  No multi-day trending or real-time alerting.</li>
+<li><strong>No auto-fix</strong> — the agent only explains the discrepancy; it never
+  modifies config, API keys, or tracing.</li>
+<li><strong>No per-model reconciliation</strong> — comparison is at daily-total level.
+  Per-model drill-down lives in the agent's analysis, not in the
+  comparison logic.</li>
+</ul>
+<h2 id="cost-controls">Cost controls</h2>
+<ul>
+<li><strong>Implement agent + two lean sub-agents (each its own model).</strong> A
+  capable agent (<code>MILL_MODEL</code>) reads and edits the repo <strong>itself</strong>,
+  kept lean by:</li>
+<li><code>explore(question)</code> — a cheap <strong>scout</strong> (<code>MILL_EXPLORE_MODEL</code>,
+    <code>MILL_EXPLORE_REQUEST_LIMIT</code>) that returns concise pointers
+    (paths/symbols/line-ranges), <strong>never whole files</strong>; the main
+    agent then <code>read_file</code>s only what it needs.</li>
+<li><code>run_tests()</code> — a cheap <strong>test sub-agent</strong> (<code>MILL_TEST_MODEL</code>)
+    runs the suite in the sandbox and <strong>distills</strong> failures into
+    actionable feedback (never the raw log in the conversation).</li>
+<li><code>web_research(query)</code> — cheap web lookups, conclusion only, never
+    <code>:online</code>.</li>
+<li><code>report_issue(title, body, category)</code> — <strong>every</strong> agent (built via
+    <code>build_agent</code>) gets this by default: file a <code>source="agent"</code> DRAFT
+    ticket when it hits a system issue (missing tool, error, workflow
+    gap, missing input). Dedup-guarded — a looping agent can't spam the
+    same ticket while a non-terminal one with that title exists.</li>
+<li>
+<p><code>edit_file(path, old, new)</code> — preferred surgical-edit tool that
+    replaces a unique substring; <code>write_file</code> is the fallback for
+    new files or when <code>edit_file</code> can't apply.
+  It loops read→edit→<code>run_tests</code> (≤<code>MILL_MAX_FIX_ITERATIONS</code>) until
+  green or BLOCK-resumable. Refine likewise authors the spec with a
+  <code>web_research</code> delegate. Each role has its own model so cheap models
+  can be slotted in per-agent for cost leverage (all default to the
+  capable model). No implement sub-agent and no <code>deep_*</code> layer — both
+  re-explored everything and never converged.</p>
+</li>
+<li>
+<p><strong>Dollar-cap safety net.</strong> If a ticket's per-attempt Langfuse-traced
+  LLM spend (effective cost after subtracting the pre-redraft baseline)
+  exceeds <code>MILL_MAX_SPEND_USD_PER_TICKET</code> (default <code>0.0</code> = disabled),
+  the worker escalates it to <code>BLOCKED</code>. The effective cost is computed
+  as <code>max(0.0, session_total - pre_redraft_cost_usd)</code> so the limit
+  restarts at zero when a ticket is redrafted. Enforced inline in
+  <code>worker.py:_check_progress</code>.</p>
+</li>
+<li>
+<p><strong>No-progress safety net.</strong> If a ticket re-enters the same
+  model-driven stage <code>MILL_MAX_STUCK_CYCLES</code> times (default 3) without
+  ever advancing — e.g. a run repeatedly killed before any checkpoint —
+  the worker escalates it to <code>blocked</code> (resumable) and notifies, rather
+  than silently re-billing the LLM on every requeue. Poll stages
+  (<code>in_review</code> waiting on an open PR) are exempt.</p>
+</li>
+<li>
+<p><strong>Stage timeout.</strong> If a single stage invocation runs longer than
+  <code>MILL_STAGE_TIMEOUT_SECONDS</code> (default 1800 s = 30 min), the worker
+  escalates the ticket to <code>BLOCKED</code> with a note and frees the worker
+  slot.  Per-stage overrides are available via
+  <code>MILL_STAGE_TIMEOUT_OVERRIDES</code> (JSON dict, e.g.
+  <code>{"merge":0}</code> to disable timeout on merge).  This complements the
+  stuck-cycle detector by catching hangs <em>within</em> a single stage
+  invocation (hung LLM call, runaway shell command, asyncio deadlock).
+  Set to 0 to disable entirely.</p>
+</li>
+</ul>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><a href="../">index.md</a> — documentation home</li>
+<li><a href="../configuration/">docs/configuration.md</a> — full env-var reference</li>
+<li><a href="../agents/">docs/agents.md</a> — agent catalog with model-var mapping</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "search.suggest", "search.highlight"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
