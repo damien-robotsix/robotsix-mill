@@ -210,6 +210,84 @@ def test_board_mill_js_sets_repo_filtered_refresh_url(client):
     assert "/board/cards?repo_id=" in js
 
 
+def test_board_cards_closed_sorted_newest_first(client, service, settings):
+    """Closed and epic_closed cards are returned most-recent-first
+    (updated_at descending), while non-closed cards remain
+    created_at ascending (oldest first)."""
+    from datetime import datetime, timezone
+
+    from robotsix_mill.core.db import session as db_session
+    from robotsix_mill.core.models import Ticket
+
+    # Create tickets via the service (sets created_at).
+    # We'll then use direct DB access to set deterministic timestamps.
+    board_id = "test-board"
+    t_draft = service.create("Draft oldest")
+    t_draft2 = service.create("Draft newest")
+    t_closed_old = service.create("Closed old")
+    t_closed_new = service.create("Closed new")
+    t_epic_closed = service.create("Epic closed ticket", kind="epic")
+
+    # Walk legal edges to reach closed / epic_closed.
+    service.transition(t_closed_old.id, State.DONE)
+    service.transition(t_closed_old.id, State.CLOSED)
+    service.transition(t_closed_new.id, State.DONE)
+    service.transition(t_closed_new.id, State.CLOSED)
+    service.transition(t_epic_closed.id, State.EPIC_CLOSED)
+
+    # Set deterministic timestamps via direct DB session.
+    with db_session(settings, board_id) as s:
+        # Draft: created_at ascending → draft-oldest before draft-newest.
+        d1 = s.get(Ticket, t_draft.id)
+        d1.created_at = datetime(2025, 1, 1, tzinfo=timezone.utc)
+        d2 = s.get(Ticket, t_draft2.id)
+        d2.created_at = datetime(2025, 1, 2, tzinfo=timezone.utc)
+
+        # Closed: updated_at descending → newest-first.
+        c_old = s.get(Ticket, t_closed_old.id)
+        c_old.updated_at = datetime(2025, 1, 10, tzinfo=timezone.utc)
+        c_new = s.get(Ticket, t_closed_new.id)
+        c_new.updated_at = datetime(2025, 1, 20, tzinfo=timezone.utc)
+
+        # Epic closed.
+        e = s.get(Ticket, t_epic_closed.id)
+        e.updated_at = datetime(2025, 1, 15, tzinfo=timezone.utc)
+
+        for obj in (d1, d2, c_old, c_new, e):
+            s.add(obj)
+        s.commit()
+
+    cards = client.get("/board/cards").json()
+    ids = [c["id"] for c in cards]
+
+    # Non-closed cards (drafts) should appear oldest-first.
+    draft_positions = {t_draft.id: ids.index(t_draft.id),
+                       t_draft2.id: ids.index(t_draft2.id)}
+    assert draft_positions[t_draft.id] < draft_positions[t_draft2.id], (
+        "draft-oldest must appear before draft-newest (created_at ascending)"
+    )
+
+    # Closed cards should appear newest-first (updated_at descending).
+    closed_ids = [t_closed_new.id, t_epic_closed.id, t_closed_old.id]
+    closed_positions = {cid: ids.index(cid) for cid in closed_ids}
+    assert closed_positions[t_closed_new.id] < closed_positions[t_closed_old.id], (
+        "closed-newest must appear before closed-oldest (updated_at descending)"
+    )
+    assert closed_positions[t_closed_new.id] < closed_positions[t_epic_closed.id], (
+        "epic_closed (Jan 15) must appear after closed-newest (Jan 20)"
+    )
+    assert closed_positions[t_epic_closed.id] < closed_positions[t_closed_old.id], (
+        "epic_closed (Jan 15) must appear before closed-oldest (Jan 10)"
+    )
+
+    # All closed cards should come after all non-closed cards
+    # (sort group 1 comes after group 0).
+    for cid in closed_ids:
+        assert ids.index(cid) > draft_positions[t_draft2.id], (
+            f"closed card {cid} must appear after all non-closed cards"
+        )
+
+
 def test_create_and_get(client):
     r = client.post("/tickets", json={"title": "T", "description": "body"})
     assert r.status_code == 201
