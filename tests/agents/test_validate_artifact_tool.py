@@ -29,12 +29,17 @@ def test_validate_artifact_path_missing(tmp_path):
 
 
 def test_validate_artifact_path_escape_is_missing(tmp_path):
-    """A path escaping repo_dir is reported as MISSING, never traversed."""
-    # Create a sibling file outside the repo dir that genuinely exists.
-    outside = tmp_path.parent / "outside.txt"
-    outside.write_text("secret")
+    """A path escaping repo_dir is reported as MISSING via the confinement
+    guard — even when the escaped path resolves to a file that genuinely
+    exists outside the clone."""
     repo = tmp_path / "repo"
     repo.mkdir()
+    # Place a real file at the location ``../outside.txt`` resolves to
+    # (``tmp_path/outside.txt``). Without the confinement guard the
+    # filesystem check would report EXISTS; the guard must override that
+    # to MISSING so the tool never reports artifacts outside the clone.
+    (repo.parent / "outside.txt").write_text("secret")
+    assert (repo / "../outside.txt").resolve().is_file()  # escaped target exists
     result = validate_artifact_tool.validate_artifact_path(repo, "../outside.txt")
     assert result == "MISSING: ../outside.txt does not exist in the repository"
 
