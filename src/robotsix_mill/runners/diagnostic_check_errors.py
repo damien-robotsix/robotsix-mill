@@ -17,10 +17,10 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from ..config import Settings
 from ..core.models import SourceKind
 from ..core.service import TicketService
 from .diagnostic_checks import (
+    DiagnosticCheckContext,
     DiagnosticCheckResult,
     register_check,
 )
@@ -59,9 +59,9 @@ class ErroredRunsCheck:
 
     name = "errored_runs"
 
-    def run(self) -> DiagnosticCheckResult:
+    def run(self, ctx: DiagnosticCheckContext) -> DiagnosticCheckResult:
         try:
-            return self._run()
+            return self._run(ctx)
         except Exception:  # noqa: BLE001 — preserve the log-and-swallow contract
             log.exception("errored_runs check failed")
             return DiagnosticCheckResult(
@@ -70,9 +70,9 @@ class ErroredRunsCheck:
                 summary="errored_runs check raised an exception",
             )
 
-    def _run(self) -> DiagnosticCheckResult:
-        settings = Settings()
-        board_id = settings.diagnostic_target_repo_id
+    def _run(self, ctx: DiagnosticCheckContext) -> DiagnosticCheckResult:
+        settings = ctx.settings
+        board_id = ctx.board_id
 
         since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")

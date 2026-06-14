@@ -249,6 +249,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.diagnostic.enabled": "diagnostic_periodic",
     "periodic.diagnostic.interval_seconds": "diagnostic_interval_seconds",
     "periodic.diagnostic.target_repo_id": "diagnostic_target_repo_id",
+    "periodic.diagnostic.monitored_repo_ids": "diagnostic_monitored_repo_ids",
     # Cross-repo cost-analyst pass (aggregate cost-reduction proposals).
     "core.cost_analyst_periodic": "cost_analyst_periodic",
     "core.cost_analyst_interval_seconds": "cost_analyst_interval_seconds",
