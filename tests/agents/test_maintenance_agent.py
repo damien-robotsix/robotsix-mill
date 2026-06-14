@@ -791,9 +791,10 @@ class TestMetaMultiRepoWorkspace:
     def test_meta_workspace_roots_flow_into_tools_and_prompt(
         self, tmp_path, monkeypatch
     ):
-        """For a meta ticket, build_triaged_meta_workspace's repo_dir becomes
-        the investigation_root and its clones become extra_roots on every
-        investigation tool; the prompt lists the pre-cloned repos."""
+        """For a meta ticket, the investigation_root is the clones' shared
+        PARENT (so sandboxed run_command/explore see every repo as a subdir),
+        the clones flow through as extra_roots on every investigation tool,
+        and the prompt lists the pre-cloned repos."""
         s = _settings(tmp_path)
         cap: dict = {}
         captured: dict = {}
@@ -802,6 +803,7 @@ class TestMetaMultiRepoWorkspace:
 
         primary = tmp_path / "ws" / "repos" / "robotsix-mill"
         second = tmp_path / "ws" / "repos" / "robotsix-modules"
+        repos_parent = primary.parent  # tmp_path/ws/repos
 
         def fake_build(ctx_, ticket_, ws_, spec, *, author):
             assert author == "maintenance"
@@ -815,9 +817,10 @@ class TestMetaMultiRepoWorkspace:
         result = run_maintenance_agent(ticket, ctx)
 
         assert result.success is True
-        # investigation_root is the meta primary clone, NOT ws.repo_dir
-        assert captured["fs_root"] == primary
-        assert captured["explore_root"] == primary
+        # investigation_root is the clones' PARENT (so the sandbox mounts all
+        # repos), NOT a single clone and NOT ws.repo_dir
+        assert captured["fs_root"] == repos_parent
+        assert captured["explore_root"] == repos_parent
         # both meta clones reach every investigation tool's extra_roots
         for key in ("fs", "explore", "parallel_explore"):
             names = {p.name for p in captured[key]}
