@@ -317,6 +317,7 @@ _GROWTH_CLASS_ACTIVE = "active ticket workspace (transient)"
 _GROWTH_CLASS_TERMINAL = "terminal ticket workspace (clone GC reclaims)"
 _GROWTH_CLASS_ORPHAN = "orphan workspace (reported by the orphan check)"
 _GROWTH_CLASS_PERIODIC = "periodic-pass clone (re-cloned every pass)"
+_GROWTH_CLASS_META_CLONE_CACHE = "meta board clone cache (transient, re-cloned)"
 _GROWTH_CLASS_OTHER = "other"
 
 # Fraction of a directory's growth that must be attributable to
@@ -348,8 +349,24 @@ def _workspace_ticket_states(
     return states
 
 
+def _is_meta_clone_cache_path(path: str) -> bool:
+    """Return ``True`` when *path* lies in the meta board's clone cache.
+
+    The meta board persists a clone cache at the board-root ``workspace/``
+    (singular) directory, which fluctuates naturally as upstream repos
+    update. Growth-flag ``path`` values are POSIX paths relative to the
+    board root, so the leading segment is ``workspace`` for both the
+    aggregate ``workspace/`` flag and per-repo ``workspace/<repo>/...``
+    flags. This is distinct from the per-ticket ``workspaces/`` (plural)
+    directory matched by :func:`_workspace_ticket_id_for_path`.
+    """
+    return path.split("/", 1)[0] == "workspace"
+
+
 def _classify_growth_path(path: str, ticket_states: dict[str, str]) -> str:
     """Classify a growth path against the workspace/periodic taxonomy."""
+    if _is_meta_clone_cache_path(path):
+        return _GROWTH_CLASS_META_CLONE_CACHE
     if _is_periodic_pass_workspace_path(path):
         return _GROWTH_CLASS_PERIODIC
     tid = _workspace_ticket_id_for_path(path)
@@ -403,6 +420,8 @@ def _annotate_and_filter_growth_flags(
     Suppression rules (each logged):
 
     - periodic-pass workspace paths — wiped and re-cloned every pass;
+    - meta board clone cache paths (``workspace/...``) — transient
+      infrastructure that fluctuates as upstream repos update;
     - paths inside ACTIVE ticket workspaces — expected transient
       runtime data (e.g. the ``repo/`` clone);
     - paths inside TERMINAL ticket workspaces when the terminal-clone

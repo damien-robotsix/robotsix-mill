@@ -43,6 +43,7 @@ from robotsix_mill.runners.data_dir_audit_runner import (
     _enumerate_boards,
     _file_findings_as_tickets,
     _growth_state_path,
+    _is_meta_clone_cache_path,
     _is_periodic_pass_workspace_path,
     _load_growth_state,
     _prune_closed_workspaces,
@@ -2121,6 +2122,52 @@ def test_is_periodic_pass_workspace_path():
     assert not _is_periodic_pass_workspace_path(
         "workspaces/20260101T000000Z-active-ab12/repo"
     )
+
+
+def test_is_meta_clone_cache_path():
+    """Unit cases for ``_is_meta_clone_cache_path``."""
+    # Aggregate meta board clone cache dir.
+    assert _is_meta_clone_cache_path("workspace/")
+    # Per-repo clone inside the cache.
+    assert _is_meta_clone_cache_path("workspace/robotsix-auto-mail/")
+    assert _is_meta_clone_cache_path("workspace/robotsix-auto-mail/repo/src/foo.py")
+    # Plain top-level file → False.
+    assert not _is_meta_clone_cache_path("big.log")
+    # Per-ticket ``workspaces/`` (plural) is NOT the meta clone cache.
+    assert not _is_meta_clone_cache_path("workspaces/20260101T000000Z-active-ab12/repo")
+    assert not _is_meta_clone_cache_path("health_workspace/repo")
+
+
+def test_growth_suppressed_for_meta_clone_cache(tmp_path, monkeypatch, caplog):
+    """Growth inside the meta board clone cache (``workspace/...``) is
+    suppressed unconditionally and an INFO line is logged."""
+    s = _make_settings(tmp_path)
+    monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
+    board_id = "meta"
+    db.init_db(s, board_id)
+    # Seed a small clone file so the cache path exists in the baseline
+    # snapshot; the second pass then observes a large delta.
+    _write_bytes(
+        s.data_dir / board_id / "workspace" / "robotsix-auto-mail" / "objects.bin",
+        100,
+    )
+
+    run_data_dir_audit_pass()  # baseline
+    _write_bytes(
+        s.data_dir / board_id / "workspace" / "robotsix-auto-mail" / "objects.bin",
+        20_000_000,
+    )
+
+    with caplog.at_level(logging.INFO, logger="robotsix_mill.data_dir_audit"):
+        result = run_data_dir_audit_pass()
+
+    assert not any(f["path"].startswith("workspace/") for f in result.growth_flags)
+    assert any(
+        "suppressing growth flag" in rec.message
+        and "meta board clone cache" in rec.message
+        for rec in caplog.records
+    )
+    db.reset_engine()
 
 
 def test_growth_suppressed_for_periodic_pass_workspace(tmp_path, monkeypatch, caplog):
