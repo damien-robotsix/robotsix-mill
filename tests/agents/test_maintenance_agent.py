@@ -709,3 +709,145 @@ class TestAgentRunWiring:
         ticket, ctx = self._ticket_ctx(tmp_path, s)
         run_maintenance_agent(ticket, ctx)
         assert seen.get("board_id") == "board-x"
+
+
+# ── Meta multi-repo workspace wiring (regression: ticket 6e68 — a
+#    meta-board PyPI-audit blocked because the single-repo maintenance
+#    model pointed every fs tool at the non-existent ``<ws>/repo`` dir
+#    instead of the pre-cloned ``<ws>/repos/<id>`` clones) ──────────────
+
+
+class TestMetaMultiRepoWorkspace:
+    def _fake_model_stack(self, monkeypatch, cap):
+        class FakeModel:
+            def __init__(self, name, **kw):
+                pass
+
+        class FakeAgent:
+            def __init__(self, **kw):
+                pass
+
+            def run_sync(self, prompt, *, usage_limits=None, **kw):
+                cap["prompt"] = prompt
+                return type(
+                    "R", (), {"output": MaintenanceResult(success=True, note="ok")}
+                )()
+
+        monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+        monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+        monkeypatch.setattr(
+            "robotsix_mill.agents.openrouter_cost.CostInstrumentedOpenRouterModel",
+            FakeModel,
+        )
+
+    def _capture_fs_tools(self, monkeypatch, captured):
+        def _dummy(name):
+            def _fn(*a, **k):
+                pass
+
+            _fn.__name__ = name
+            return _fn
+
+        def fake_build_fs_tools(root, settings, *, pre_seeded=None, extra_roots=None):
+            captured["fs_root"] = root
+            captured["fs"] = extra_roots
+            return [_dummy(n) for n in ("read_file", "list_dir", "run_command")]
+
+        def fake_make_explore_tool(settings, repo_dir, extra_roots=None):
+            captured["explore_root"] = repo_dir
+            captured["explore"] = extra_roots
+            return _dummy("explore")
+
+        def fake_make_parallel_explore_tool(settings, repo_dir, extra_roots=None):
+            captured["parallel_explore"] = extra_roots
+            return _dummy("parallel_explore")
+
+        monkeypatch.setattr(
+            "robotsix_mill.agents.fs_tools.build_fs_tools", fake_build_fs_tools
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.explore.make_explore_tool", fake_make_explore_tool
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.explore.make_parallel_explore_tool",
+            fake_make_parallel_explore_tool,
+        )
+
+    def _meta_ticket_ctx(self, tmp_path, s):
+        ticket = MagicMock()
+        ticket.id = "t-meta"
+        ticket.board_id = "meta"
+        ticket.title = "Audit repos"
+        ctx = MagicMock()
+        ctx.settings = s
+        ctx.repo_config = None
+        ws_mock = MagicMock()
+        ws_mock.dir = tmp_path / "ws"
+        ws_mock.repo_dir = tmp_path / "ws" / "repo"
+        ws_mock.read_description.return_value = "Audit all repos for PyPI"
+        ctx.service.workspace.return_value = ws_mock
+        return ticket, ctx
+
+    def test_meta_workspace_roots_flow_into_tools_and_prompt(
+        self, tmp_path, monkeypatch
+    ):
+        """For a meta ticket, build_triaged_meta_workspace's repo_dir becomes
+        the investigation_root and its clones become extra_roots on every
+        investigation tool; the prompt lists the pre-cloned repos."""
+        s = _settings(tmp_path)
+        cap: dict = {}
+        captured: dict = {}
+        self._fake_model_stack(monkeypatch, cap)
+        self._capture_fs_tools(monkeypatch, captured)
+
+        primary = tmp_path / "ws" / "repos" / "robotsix-mill"
+        second = tmp_path / "ws" / "repos" / "robotsix-modules"
+
+        def fake_build(ctx_, ticket_, ws_, spec, *, author):
+            assert author == "maintenance"
+            return primary, [primary, second], None
+
+        monkeypatch.setattr(
+            "robotsix_mill.meta.workspace.build_triaged_meta_workspace", fake_build
+        )
+
+        ticket, ctx = self._meta_ticket_ctx(tmp_path, s)
+        result = run_maintenance_agent(ticket, ctx)
+
+        assert result.success is True
+        # investigation_root is the meta primary clone, NOT ws.repo_dir
+        assert captured["fs_root"] == primary
+        assert captured["explore_root"] == primary
+        # both meta clones reach every investigation tool's extra_roots
+        for key in ("fs", "explore", "parallel_explore"):
+            names = {p.name for p in captured[key]}
+            assert {"robotsix-mill", "robotsix-modules"} <= names, key
+        # prompt steers the agent to the pre-cloned repos, away from clone_repo
+        assert "Pre-cloned repositories" in cap["prompt"]
+        assert "robotsix-modules" in cap["prompt"]
+
+    def test_meta_workspace_build_failure_blocks(self, tmp_path, monkeypatch):
+        """When build_triaged_meta_workspace returns a blocking Outcome,
+        run_maintenance_agent surfaces it as MaintenanceResult(success=False)
+        without running the agent."""
+        from robotsix_mill.core.states import State
+        from robotsix_mill.stages.base import Outcome
+
+        s = _settings(tmp_path)
+        cap: dict = {}
+        self._fake_model_stack(monkeypatch, cap)
+
+        def fake_build(ctx_, ticket_, ws_, spec, *, author):
+            return None, None, Outcome(State.BLOCKED, "meta repo-triage failed")
+
+        monkeypatch.setattr(
+            "robotsix_mill.meta.workspace.build_triaged_meta_workspace", fake_build
+        )
+
+        ticket, ctx = self._meta_ticket_ctx(tmp_path, s)
+        result = run_maintenance_agent(ticket, ctx)
+
+        assert result.success is False
+        assert "meta repo-triage failed" in result.note
+        # the agent never ran (no prompt captured)
+        assert "prompt" not in cap
