@@ -16,6 +16,7 @@ from robotsix_mill.stages.ci_fix import (
     _write_counter,
     _build_failing_summary,
     _partition_alerts_by_diff,
+    _ci_failure_fingerprint,
 )
 from robotsix_mill.agents.ci_fixing import CiFixResult
 
@@ -1774,3 +1775,109 @@ def test_reconcile_diverged_blocks_without_pushing(tmp_path, monkeypatch):
     assert out.next_state is State.BLOCKED
     assert pushed["called"] is False
     assert "diverged" in (out.note or "").lower()
+
+
+# ---------------------------------------------------------------------------
+# CI-failure fingerprint
+# ---------------------------------------------------------------------------
+
+
+def test_ci_failure_fingerprint_is_stable() -> None:
+    """Same failing_summary + repo_id always produces the same fingerprint."""
+    summary = (
+        "## Failing check #1: lint / ruff\n"
+        "**Summary:**\nFound 3 errors\n\n"
+        "**Job logs:**\n```\n(timestamp: 2025-06-14T12:00:00Z)\n"
+        "error: unused import\n```\n"
+    )
+    fp1 = _ci_failure_fingerprint(summary, "test-board")
+    fp2 = _ci_failure_fingerprint(summary, "test-board")
+    assert fp1 == fp2
+    assert len(fp1) == 16
+    # All hex chars.
+    assert all(c in "0123456789abcdef" for c in fp1)
+
+
+def test_ci_failure_fingerprint_differs_for_different_checks() -> None:
+    """Different failing check names produce different fingerprints."""
+    s1 = "## Failing check #1: lint\n**Summary:**\nerror\n\n**Job logs:**\n```\nlog\n```\n"
+    s2 = "## Failing check #1: pytest\n**Summary:**\nerror\n\n**Job logs:**\n```\nlog\n```\n"
+    fp1 = _ci_failure_fingerprint(s1, "board")
+    fp2 = _ci_failure_fingerprint(s2, "board")
+    assert fp1 != fp2
+
+
+def test_ci_failure_fingerprint_differs_for_different_repos() -> None:
+    """Same failure on different repos produces different fingerprints."""
+    summary = "## Failing check #1: lint\n**Summary:**\nerror\n\n**Job logs:**\n```\nx\n```\n"
+    fp1 = _ci_failure_fingerprint(summary, "board-a")
+    fp2 = _ci_failure_fingerprint(summary, "board-b")
+    assert fp1 != fp2
+
+
+def test_ci_failure_fingerprint_truncates_at_job_logs_marker() -> None:
+    """The **Job logs:** marker and everything after is excluded from the hash."""
+    base = "## Failing check #1: lint\n**Summary:**\nerror\n\n"
+    s1 = base + "**Job logs:**\n```\nlog-v1\n```\n"
+    s2 = base + "**Job logs:**\n```\nlog-v2-different-timestamps\n```\n"
+    assert _ci_failure_fingerprint(s1, "b") == _ci_failure_fingerprint(s2, "b")
+
+
+def test_ci_failure_fingerprint_truncates_at_2000_chars_when_no_marker() -> None:
+    """Without a **Job logs:** marker, the input is truncated to 2000 chars."""
+    # Build a summary > 2000 chars with no marker.
+    prefix = "## Failing check #1: lint\n**Summary:**\n" + ("x" * 3000)
+    suffix = "\nmore stuff that differs"
+    s1 = prefix + suffix
+    s2 = prefix + "-different-suffix"
+    # Both share the same first 2000 chars → same fingerprint.
+    assert _ci_failure_fingerprint(s1, "b") == _ci_failure_fingerprint(s2, "b")
+
+
+def test_ci_failure_fingerprint_empty_summary() -> None:
+    """Empty failing_summary produces a valid fingerprint (does not crash)."""
+    fp = _ci_failure_fingerprint("", "board")
+    assert len(fp) == 16
+    assert all(c in "0123456789abcdef" for c in fp)
+
+
+def test_ci_failure_fingerprint_passed_to_spawn_via_dedup_labels(
+    tmp_path, monkeypatch
+) -> None:
+    """When _handle_out_of_scope runs, it computes a fingerprint and passes
+    dedup_labels=[ci_fp:<hex>] to spawn_dependency_fix."""
+    ctx = _gh(tmp_path)
+    _oos_forge(monkeypatch)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: _oos_result(),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
+        lambda *a, **k: None,
+    )
+    # Capture the call to spawn_dependency_fix.
+    spawn_kwargs = {}
+
+    def fake_spawn(ticket, ctx, **kwargs):
+        spawn_kwargs.update(kwargs)
+        # Return a valid Outcome so the stage doesn't crash.
+        from robotsix_mill.stages.base import Outcome
+
+        return Outcome(State.BLOCKED, "test")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.dependency_fix.spawn_dependency_fix",
+        fake_spawn,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    CIFixStage().run(t, ctx)
+
+    assert "dedup_labels" in spawn_kwargs
+    labels = spawn_kwargs["dedup_labels"]
+    assert len(labels) == 1
+    assert labels[0].startswith("ci_fp:")
+    assert len(labels[0]) == len("ci_fp:") + 16  # "ci_fp:" + 16 hex chars

@@ -7,6 +7,7 @@ exercised without a real database.
 
 from __future__ import annotations
 
+import json
 import logging
 from types import SimpleNamespace
 
@@ -25,6 +26,8 @@ class FakeService:
         proposals: list[SimpleNamespace] | None = None,
         created_id: str = "fix-1",
         note_failures: set[str] | None = None,
+        recent_tickets_data: list[SimpleNamespace] | None = None,
+        existing_labels: list[str] | None = None,
     ) -> None:
         self.proposals = proposals or []
         self.created_id = created_id
@@ -33,13 +36,27 @@ class FakeService:
         self.depends_on_calls: list[tuple[str, list[str]]] = []
         self.unblocks_calls: list[tuple[str, list[str]]] = []
         self.history_notes: list[tuple[str, str]] = []
+        self.set_labels_calls: list[tuple[str, list[str]]] = []
+        self.recent_tickets_data = recent_tickets_data or []
+        self._existing_labels = existing_labels
 
     def recent_proposals_for(self, source, limit=100):
         return self.proposals
 
+    def recent_tickets(self, limit=100, *, sources=None, board_id=None):
+        return self.recent_tickets_data
+
     def create(self, **kwargs):
         self.create_calls.append(kwargs)
         return SimpleNamespace(id=self.created_id)
+
+    def get(self, ticket_id):
+        if self._existing_labels is not None:
+            return SimpleNamespace(id=ticket_id, labels=json.dumps(self._existing_labels))
+        return SimpleNamespace(id=ticket_id, labels=None)
+
+    def set_labels(self, ticket_id, labels):
+        self.set_labels_calls.append((ticket_id, labels))
 
     def set_depends_on(self, ticket_id, deps):
         self.depends_on_calls.append((ticket_id, deps))
@@ -181,3 +198,163 @@ def test_board_id_none_when_no_repo_config() -> None:
     )
     assert service.create_calls[0]["board_id"] is None
     assert outcome.next_state == State.BLOCKED
+
+
+# ---------------------------------------------------------------------------
+# Label-based dedup (fingerprint)
+# ---------------------------------------------------------------------------
+
+
+def test_label_dedup_reuses_open_ticket_with_matching_label() -> None:
+    """When dedup_labels contains a label that matches an existing open
+    ticket, that ticket is reused and no new ticket is created."""
+    existing = SimpleNamespace(
+        id="fix-existing",
+        title="different title",  # title doesn't match
+        state=State.READY,
+        labels=json.dumps(["ci_fp:abc123", "bug"]),
+    )
+    service = FakeService(recent_tickets_data=[existing])
+
+    outcome = _spawn(service, dedup_labels=["ci_fp:abc123"])
+
+    # No new ticket created; the existing one is reused via label match.
+    assert service.create_calls == []
+    assert service.depends_on_calls == [("orig-1", ["fix-existing"])]
+    assert "fix-existing" in (outcome.note or "")
+
+
+def test_label_dedup_ignores_terminal_tickets() -> None:
+    """CLOSED, DONE, and ERRORED tickets are skipped by label dedup,
+    causing a fresh create."""
+    closed = SimpleNamespace(
+        id="fix-closed", title="t", state=State.CLOSED, labels=json.dumps(["ci_fp:abc"])
+    )
+    done = SimpleNamespace(
+        id="fix-done", title="t", state=State.DONE, labels=json.dumps(["ci_fp:abc"])
+    )
+    errored = SimpleNamespace(
+        id="fix-errored", title="t", state=State.ERRORED, labels=json.dumps(["ci_fp:abc"])
+    )
+    service = FakeService(
+        recent_tickets_data=[closed, done, errored],
+        created_id="fix-new",
+    )
+
+    outcome = _spawn(service, dedup_labels=["ci_fp:abc"])
+
+    # All candidates are terminal → fresh create.
+    assert len(service.create_calls) == 1
+    assert "fix-new" in (outcome.note or "")
+
+
+def test_label_dedup_no_match_creates_new() -> None:
+    """When no existing ticket has any of the dedup labels, a fresh ticket
+    is created."""
+    other = SimpleNamespace(
+        id="fix-other",
+        title="t",
+        state=State.READY,
+        labels=json.dumps(["ci_fp:xyz"]),
+    )
+    service = FakeService(
+        recent_tickets_data=[other],
+        created_id="fix-new",
+    )
+
+    outcome = _spawn(service, dedup_labels=["ci_fp:abc"])
+
+    assert len(service.create_calls) == 1
+    assert "fix-new" in (outcome.note or "")
+
+
+def test_label_stored_on_new_ticket() -> None:
+    """When a fresh ticket is created with dedup_labels, the labels are
+    stored on the new ticket via set_labels."""
+    service = FakeService(created_id="fix-7")
+
+    _spawn(service, dedup_labels=["ci_fp:abc123", "ci_fp:def456"])
+
+    assert len(service.set_labels_calls) == 1
+    tid, labels = service.set_labels_calls[0]
+    assert tid == "fix-7"
+    assert "ci_fp:abc123" in labels
+    assert "ci_fp:def456" in labels
+
+
+def test_label_stored_preserves_existing_labels() -> None:
+    """When the newly created ticket already has labels (e.g. from create),
+    dedup_labels are appended, not overwritten."""
+    service = FakeService(
+        created_id="fix-7",
+        existing_labels=["priority"],
+    )
+
+    _spawn(service, dedup_labels=["ci_fp:abc"])
+
+    assert len(service.set_labels_calls) == 1
+    _tid, labels = service.set_labels_calls[0]
+    assert labels == ["priority", "ci_fp:abc"]
+
+
+def test_label_dedup_skipped_when_dedup_labels_none() -> None:
+    """When dedup_labels is None (caller doesn't pass it), the function
+    behaves exactly as before — title-based dedup only, no recent_tickets
+    call, no set_labels call."""
+    existing = SimpleNamespace(
+        id="fix-existing", title="fix the thing", state=State.READY
+    )
+    service = FakeService(proposals=[existing])
+
+    outcome = _spawn(service)  # no dedup_labels
+
+    assert service.create_calls == []
+    assert service.set_labels_calls == []
+    assert service.depends_on_calls == [("orig-1", ["fix-existing"])]
+
+
+def test_label_dedup_skipped_when_board_id_none() -> None:
+    """When there is no board_id (repo_config is None), label dedup is
+    skipped and title-based dedup runs instead."""
+    service = FakeService(created_id="fix-new")
+    ticket = SimpleNamespace(id="orig-1")
+    outcome = spawn_dependency_fix(
+        ticket,
+        _ctx(service, board_id=None),
+        title="t",
+        description="d",
+        source_kind=SourceKind.CI_FIX_DEPENDENCY,
+        block_reason_prefix="prefix",
+        dedup_labels=["ci_fp:abc"],
+    )
+    # No board_id → label dedup skipped → fresh create.
+    assert len(service.create_calls) == 1
+    # Labels still stored on the new ticket.
+    assert len(service.set_labels_calls) == 1
+
+
+def test_label_dedup_falls_back_to_title_when_no_label_match() -> None:
+    """When dedup_labels are provided but no label match is found, the
+    existing title-based dedup still runs as a fallback."""
+    # recent_tickets has no label match, but proposals has a title match.
+    label_mismatch = SimpleNamespace(
+        id="fix-label",
+        title="different",
+        state=State.READY,
+        labels=json.dumps(["ci_fp:xyz"]),
+    )
+    title_match = SimpleNamespace(
+        id="fix-title",
+        title="fix the thing",
+        state=State.READY,
+    )
+    service = FakeService(
+        recent_tickets_data=[label_mismatch],
+        proposals=[title_match],
+    )
+
+    outcome = _spawn(service, dedup_labels=["ci_fp:abc"])
+
+    # Title-based dedup reuses the existing title match.
+    assert service.create_calls == []
+    assert service.depends_on_calls == [("orig-1", ["fix-title"])]

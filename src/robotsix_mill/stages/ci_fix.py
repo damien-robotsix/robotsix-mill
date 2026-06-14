@@ -12,6 +12,7 @@ Failure after max attempts escalates to BLOCKED (resumable).
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -193,6 +194,29 @@ def _build_failing_summary(
         parts.append("```")
         parts.append("")
     return "\n".join(parts)
+
+
+def _ci_failure_fingerprint(failing_summary: str, repo_id: str) -> str:
+    """Compute a stable hex fingerprint for a CI failure.
+
+    The fingerprint is derived from *failing_summary* up to the
+    ``**Job logs:**`` marker (exclusive), or the first 2000 characters
+    when there is no marker.  The marker-trimmed summary is combined
+    with *repo_id* and hashed with SHA-256; the first 16 hex digits
+    become the fingerprint.
+
+    This is deterministic (same input → same output) and stable across
+    different PRs that hit the same underlying CI failure, while
+    remaining specific enough to distinguish different failures.
+    """
+    marker = "**Job logs:**"
+    idx = failing_summary.find(marker)
+    if idx != -1:
+        core_summary = failing_summary[:idx].rstrip()
+    else:
+        core_summary = failing_summary[:2000]
+    data = f"{repo_id}\n{core_summary}"
+    return hashlib.sha256(data.encode("utf-8")).hexdigest()[:16]
 
 
 class _FailingContext(NamedTuple):
@@ -451,7 +475,7 @@ class CIFixStage(Stage):
             )
 
         if result is not None and result.status == "OUT_OF_SCOPE":
-            return self._handle_out_of_scope(ticket, ctx, branch, result)
+            return self._handle_out_of_scope(ticket, ctx, branch, result, failing_summary)
 
         # Agent failed (result is None on crash, or status == "FAILED").
         if attempt < max_attempts:
@@ -541,6 +565,7 @@ class CIFixStage(Stage):
         ctx: StageContext,
         branch: str,
         result: CiFixResult,
+        failing_summary: str,
     ) -> Outcome:
         """Route an out-of-scope CI failure to a dedicated fix ticket.
 
@@ -636,6 +661,10 @@ class CIFixStage(Stage):
             )
         block_reason = "CI failure is out of scope for this ticket"
 
+        fingerprint = _ci_failure_fingerprint(
+            failing_summary,
+            ctx.repo_config.board_id if ctx.repo_config else "",
+        )
         outcome = dependency_fix.spawn_dependency_fix(
             ticket,
             ctx,
@@ -644,6 +673,7 @@ class CIFixStage(Stage):
             source_kind=SourceKind.CI_FIX_DEPENDENCY,
             block_reason_prefix=block_reason,
             priority=ticket.priority,
+            dedup_labels=[f"ci_fp:{fingerprint}"],
         )
 
         # Reset the per-ticket ci_fix counters so a later re-entry (after
