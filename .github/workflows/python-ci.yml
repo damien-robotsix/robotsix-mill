@@ -33,6 +33,11 @@ on:
         required: false
         type: string
         default: -m "not docker"
+      pytest-numprocesses:
+        description: Value passed to pytest-xdist -n (e.g. "auto" or a fixed int like "4" for runners whose advertised cores exceed real vCPUs).
+        required: false
+        type: string
+        default: "auto"
       runs-on:
         description: Runner label for the tests job.
         required: false
@@ -165,6 +170,7 @@ jobs:
           UV_PROJECT_ENVIRONMENT: system
           GIT_BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD~1' }}
           PYTEST_EXTRA_ARGS: ${{ inputs.pytest-args }}
+          PYTEST_NUMPROCESSES: ${{ inputs.pytest-numprocesses }}
           COV_PACKAGE: ${{ inputs.cov-package }}
           COVERAGE_THRESHOLD: ${{ inputs.coverage-threshold }}
         # Docker integration tests (pytest.mark.docker) require the
@@ -178,4 +184,4 @@ jobs:
         # pytest would collect 0 tests).
         run: |
           eval "set -- $PYTEST_EXTRA_ARGS"
-          uv run pytest tests/ -x "$@" --tb=long --cov="$COV_PACKAGE" --cov-fail-under="$COVERAGE_THRESHOLD" --cov-report=term-missing
+          uv run pytest tests/ -n "$PYTEST_NUMPROCESSES" --dist loadscope -x "$@" --tb=long --cov="$COV_PACKAGE" --cov-fail-under="$COVERAGE_THRESHOLD" --cov-report=term-missing
