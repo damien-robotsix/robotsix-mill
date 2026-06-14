@@ -38,7 +38,7 @@ _CI_REFRESH_COUNTER = "ci_fix_refresh_attempts.txt"
 def _read_counter(path) -> int:
     try:
         return int(path.read_text(encoding="utf-8").strip())
-    except FileNotFoundError, ValueError:
+    except (FileNotFoundError, ValueError):
         return 0
 
 
