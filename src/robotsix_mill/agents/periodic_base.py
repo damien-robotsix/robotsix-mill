@@ -104,6 +104,55 @@ class PeriodicAgentResult(BaseModel):
     proposed_actions: list[ProposedActionItem] = Field(default_factory=list)
 
 
+def _build_periodic_tools(
+    *,
+    settings: Settings,
+    repo_dir: Path,
+    include_jscpd: bool,
+    include_workflow_caller_audit: bool,
+    include_run_command: bool,
+    extra_roots: list[Path] | None,
+) -> list:
+    """Build the conditional tool list for a periodic agent run.
+
+    Extracted from :func:`run_periodic_agent` so the entry point stays
+    under the cyclomatic-complexity gate.
+    """
+    from .explore import make_explore_tool, make_parallel_explore_tool
+    from .fs_tools import build_fs_tools
+
+    fs_filter: set[str] = {"read_file", "list_dir"}
+    if include_run_command:
+        fs_filter.add("run_command")
+
+    ro = [
+        t
+        for t in build_fs_tools(
+            repo_dir,
+            settings,
+            extra_roots=extra_roots or None,
+        )
+        if t.__name__ in fs_filter
+    ]
+    tools = [
+        make_explore_tool(settings, repo_dir),
+        make_parallel_explore_tool(settings, repo_dir),
+    ]
+
+    if include_jscpd:
+        from .jscpd_tool import make_jscpd_tool
+
+        tools.append(make_jscpd_tool(repo_dir))
+
+    if include_workflow_caller_audit:
+        from .workflow_caller_audit import make_workflow_caller_audit_tool
+
+        tools.append(make_workflow_caller_audit_tool(repo_dir))
+
+    tools.extend(ro)
+    return tools
+
+
 def run_periodic_agent(
     *,
     settings: Settings,
@@ -208,38 +257,14 @@ def run_periodic_agent(
     # ------------------------------------------------------------------
     tools: list = []
     if repo_dir is not None:
-        from .explore import make_explore_tool, make_parallel_explore_tool
-        from .fs_tools import build_fs_tools
-
-        fs_filter: set[str] = {"read_file", "list_dir"}
-        if include_run_command:
-            fs_filter.add("run_command")
-
-        ro = [
-            t
-            for t in build_fs_tools(
-                repo_dir,
-                settings,
-                extra_roots=extra_roots or None,
-            )
-            if t.__name__ in fs_filter
-        ]
-        tools = [
-            make_explore_tool(settings, repo_dir),
-            make_parallel_explore_tool(settings, repo_dir),
-        ]
-
-        if include_jscpd:
-            from .jscpd_tool import make_jscpd_tool
-
-            tools.append(make_jscpd_tool(repo_dir))
-
-        if include_workflow_caller_audit:
-            from .workflow_caller_audit import make_workflow_caller_audit_tool
-
-            tools.append(make_workflow_caller_audit_tool(repo_dir))
-
-        tools.extend(ro)
+        tools = _build_periodic_tools(
+            settings=settings,
+            repo_dir=repo_dir,
+            include_jscpd=include_jscpd,
+            include_workflow_caller_audit=include_workflow_caller_audit,
+            include_run_command=include_run_command,
+            extra_roots=extra_roots,
+        )
 
     # ------------------------------------------------------------------
     # Step 3 — resolve the system prompt
