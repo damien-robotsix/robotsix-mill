@@ -279,6 +279,7 @@ modules:
       - src/robotsix_mill/stages/retrospect.py
       - src/robotsix_mill/stages/short_circuit_verify.py
       - src/robotsix_mill/stages/dependency_fix.py
+      - tests/stages/test_dependency_fix.py
       - tests/stages/test_registry.py
       - tests/stages/test_implement.py
       - tests/stages/test_implement_validation.py
