@@ -605,6 +605,32 @@ def introduced_files(repo: Path, target_branch: str) -> list[str]:
     return seen
 
 
+def added_files(repo: Path, target_branch: str) -> list[str]:
+    """Return every file the BRANCH ADDS (git status ``A``) relative to
+    its merge base with ``origin/<target_branch>``.
+
+    Uses ``git diff --name-status --diff-filter=A
+    origin/<target>...HEAD`` (THREE-dot, against the merge base) so files
+    that ``origin/<target>`` independently added after the branch was cut
+    do NOT appear — only brand-new files the branch itself introduces.
+    Modified / deleted / renamed paths are excluded.
+    """
+    out = _git(
+        repo,
+        "diff",
+        "--name-status",
+        "--diff-filter=A",
+        f"origin/{target_branch}...HEAD",
+    )
+    added: list[str] = []
+    if out:
+        for line in out.split("\n"):
+            parts = line.split("\t")
+            if len(parts) >= 2 and parts[0].startswith("A") and parts[-1]:
+                added.append(parts[-1])
+    return added
+
+
 def restore_paths(repo: Path, target_branch: str, paths: list[str]) -> None:
     """Drop *paths* from the branch's effective diff vs ``origin/<target>``.
 

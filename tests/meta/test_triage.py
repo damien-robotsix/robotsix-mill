@@ -77,6 +77,46 @@ def test_required_repos_falls_back_to_all_when_empty(monkeypatch):
     assert out == ["auto", "mill"]  # fallback: all clonable, sorted
 
 
+def test_fallback_flag_set_only_on_clone_everything(monkeypatch):
+    """The result carries ``fallback=True`` only when triage could not
+    match a repo (empty agent output → clone everything). A confident
+    match leaves it False so deliver's misroute guard stays off."""
+    reg = _reg(("mill", "https://gh/m.git"), ("auto", "https://gh/a.git"))
+    monkeypatch.setattr(meta_triage, "get_repos_config", lambda: reg)
+
+    # Confident match → fallback False.
+    handle = _patch_agent(monkeypatch, ["mill"])
+    with (
+        patch(
+            "robotsix_mill.agents.base.build_agent_from_definition", return_value=handle
+        ),
+        patch(
+            "robotsix_mill.agents.retry.run_agent",
+            lambda agent, make_run, **k: make_run(agent),
+        ),
+    ):
+        matched = meta_triage.required_repos_for(
+            settings=MagicMock(), spec="touch mill"
+        )
+    assert matched == ["mill"]
+    assert getattr(matched, "fallback", False) is False
+
+    # No usable ids → clone-everything fallback flagged.
+    handle = _patch_agent(monkeypatch, [])
+    with (
+        patch(
+            "robotsix_mill.agents.base.build_agent_from_definition", return_value=handle
+        ),
+        patch(
+            "robotsix_mill.agents.retry.run_agent",
+            lambda agent, make_run, **k: make_run(agent),
+        ),
+    ):
+        fell_back = meta_triage.required_repos_for(settings=MagicMock(), spec="vague")
+    assert fell_back == ["auto", "mill"]
+    assert fell_back.fallback is True
+
+
 def test_required_repos_empty_when_no_clonable_repos(monkeypatch):
     reg = _reg(("noclone", None))  # no forge_remote_url
     monkeypatch.setattr(meta_triage, "get_repos_config", lambda: reg)

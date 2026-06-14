@@ -931,7 +931,10 @@ class RefineAgentMixin:
         sits in EPIC_OPEN — its children flow through refine
         individually on their own cycles.
         """
-        from ...agents.epic_breakdown import run_epic_breakdown_agent
+        from ...agents.epic_breakdown import (
+            plan_child_dependencies,
+            run_epic_breakdown_agent,
+        )
 
         epic_body = (result.epic_body or result.spec_markdown or "").strip()
         if not epic_body:
@@ -965,7 +968,7 @@ class RefineAgentMixin:
                 s,
                 datetime.now(timezone.utc),
             )
-            created_ids: list[str] = []
+            created_children: list[tuple[str, str, str]] = []
             for child_title, child_body, dup_note in zip(
                 child_titles,
                 child_bodies,
@@ -986,14 +989,15 @@ class RefineAgentMixin:
                     kind="task",
                     parent_id=ticket.id,
                 )
-                created_ids.append(child.id)
-            # Linear dependency chain (C0 → C1 → C2 → …) — matches
-            # the /generate-children route's default behaviour.
-            for i in range(1, len(created_ids)):
-                ctx.service.set_depends_on(
-                    created_ids[i],
-                    [created_ids[i - 1]],
-                )
+                created_children.append((child.id, child_title, child_body))
+            created_ids = [cid for cid, _t, _b in created_children]
+            # Dependency wiring: a linear chain (C0 → C1 → C2 → …) by
+            # default — matching the /generate-children route — but
+            # when the batch includes a create/initialize-repo child
+            # the repo-populating siblings depend on it so they cannot
+            # run before the repo exists.
+            for child_id, deps in plan_child_dependencies(created_children).items():
+                ctx.service.set_depends_on(child_id, deps)
             # Apply the breakdown's revised epic body if any.
             if breakdown.epic_body and breakdown.epic_body.strip():
                 revised_hash = ws.write_description(

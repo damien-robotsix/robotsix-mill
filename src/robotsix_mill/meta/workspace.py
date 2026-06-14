@@ -10,6 +10,7 @@ every required repository.
 
 from __future__ import annotations
 
+import json
 import logging
 import shutil
 import subprocess
@@ -22,13 +23,37 @@ from ..vcs import git_ops
 
 if TYPE_CHECKING:
     from ..core.models import Ticket
+    from ..core.workspace import Workspace
     from ..stages.base import Outcome, StageContext
 
 log = logging.getLogger("robotsix_mill.meta.workspace")
 
 
+def _write_meta_triage(ws: "Workspace", repo_ids: list[str], fallback: bool) -> None:
+    """Persist the repo-triage decision to ``artifacts/meta_triage.json``.
+
+    Schema::
+
+        {"repo_ids": [str, ...], "fallback": bool}
+
+    ``fallback`` is ``True`` only when triage could not match a target
+    repo and cloned every clonable repo — the deliver-time guard reads
+    this to refuse silently misrouting brand-new top-level files. Best
+    effort: a write failure is logged, not raised.
+    """
+    try:
+        (ws.artifacts_dir / "meta_triage.json").write_text(
+            json.dumps(
+                {"repo_ids": list(repo_ids), "fallback": bool(fallback)}, indent=2
+            ),
+            encoding="utf-8",
+        )
+    except OSError:
+        log.warning("could not write meta_triage.json", exc_info=True)
+
+
 def build_meta_workspace(
-    settings: Settings, ws, repo_ids: list[str]
+    settings: Settings, ws: "Workspace", repo_ids: list[str]
 ) -> tuple[Path | None, list[Path]]:
     """Clone each repo in *repo_ids* fresh under ``ws.dir / "repos"``.
 
@@ -93,7 +118,7 @@ def build_meta_workspace(
 def build_triaged_meta_workspace(
     ctx: "StageContext",
     ticket: "Ticket",
-    ws,
+    ws: "Workspace",
     spec: str,
     *,
     author: str,
@@ -115,6 +140,7 @@ def build_triaged_meta_workspace(
 
     try:
         repo_ids = required_repos_for(settings=ctx.settings, spec=spec)
+        fallback = bool(getattr(repo_ids, "fallback", False))
     except Exception as e:
         from ..runtime.transient_errors import reraise_if_transient
 
@@ -127,6 +153,11 @@ def build_triaged_meta_workspace(
             author=author,
         )
         return None, None, Outcome(State.BLOCKED, "meta repo-triage failed")
+
+    # Persist the triage decision so the deliver-time guard can tell a
+    # confident/all-repos match (proceed) from a "no match → clone
+    # everything" fallback (block brand-new top-level files).
+    _write_meta_triage(ws, list(repo_ids), fallback)
 
     repo_dir, extra_roots = build_meta_workspace(ctx.settings, ws, repo_ids)
     if repo_dir is None:

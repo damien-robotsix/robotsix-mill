@@ -3,6 +3,8 @@
 from robotsix_mill.agents.epic_breakdown import (
     SYSTEM_PROMPT,
     EpicBreakdownResult,
+    _is_init_repo_child,
+    plan_child_dependencies,
     run_epic_breakdown_agent,
 )
 
@@ -51,6 +53,77 @@ def test_epic_breakdown_result_model():
     )
     assert result.child_titles == ["A", "B"]
     assert result.child_bodies == ["Body A", "Body B"]
+
+
+def test_is_init_repo_child_detection():
+    """Create/initialize-repository children are recognised by title or body."""
+    assert _is_init_repo_child("Create repo robotsix-agent-comm", "")
+    assert _is_init_repo_child("Create repository for X", "")
+    # The live-incident title — keyword split across the phrase.
+    assert _is_init_repo_child("Initialize communication system repository", "")
+    assert _is_init_repo_child("Bootstrap the agent-comm repository", "")
+    assert _is_init_repo_child("Set up the new repository", "")
+    # Detected from the body too.
+    assert _is_init_repo_child(
+        "Foundation work", "First, initialize the repository skeleton."
+    )
+    # Populating / unrelated children are NOT init-repo actions.
+    assert not _is_init_repo_child("Design the architecture", "Write the design doc.")
+    assert not _is_init_repo_child(
+        "Add repository pattern to the data layer", "refactor"
+    )
+
+
+def test_plan_child_dependencies_linear_chain_without_init_repo():
+    """No init-repo child → preserve the existing linear chain."""
+    children = [
+        ("c0", "Design API", "body"),
+        ("c1", "Implement API", "body"),
+        ("c2", "Document API", "body"),
+    ]
+    edges = plan_child_dependencies(children)
+    assert edges == {"c1": ["c0"], "c2": ["c1"]}
+
+
+def test_plan_child_dependencies_linear_chain_with_predecessor():
+    children = [("c0", "A", "b"), ("c1", "B", "b")]
+    edges = plan_child_dependencies(children, predecessor_id="existing-9")
+    assert edges == {"c0": ["existing-9"], "c1": ["c0"]}
+
+
+def test_plan_child_dependencies_wires_populating_children_to_init_repo():
+    """An epic with an init-repo child plus repo-populating children:
+    every populating child depends on the init-repo child so it stays
+    blocked until the repo exists — regardless of agent order."""
+    # The init-repo child comes AFTER a populating sibling in agent
+    # order (mirrors the live incident where the design child ran first).
+    children = [
+        ("design", "Design agent communication architecture", "write design doc"),
+        ("init", "Initialize communication system repository", "create the repo"),
+        ("transport", "Implement the transport layer", "code"),
+    ]
+    edges = plan_child_dependencies(children)
+    # Populating children depend on the init-repo child.
+    assert edges["design"] == ["init"]
+    assert edges["transport"] == ["init"]
+    # The init-repo child gains no dependency on its populating siblings.
+    assert "init" not in edges
+
+
+def test_plan_child_dependencies_init_repo_anchored_to_predecessor():
+    """With a predecessor, the init-repo child anchors to it and the
+    populating children depend on the init-repo child."""
+    children = [
+        ("init", "Create repo robotsix-agent-comm", "scaffold"),
+        ("pop", "Populate the new repo", "files"),
+    ]
+    edges = plan_child_dependencies(children, predecessor_id="prev-1")
+    assert edges["init"] == ["prev-1"]
+    assert edges["pop"] == ["init"]
+
+
+def test_plan_child_dependencies_empty():
+    assert plan_child_dependencies([]) == {}
 
 
 def test_comments_parameter_appended_to_prompt(monkeypatch):

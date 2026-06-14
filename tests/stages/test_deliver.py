@@ -945,3 +945,128 @@ def test_missing_branch_in_touched_repo_is_blocked_resumable(tmp_path, monkeypat
     assert "re-run implement" in out.note.lower()
     assert "repo-a" in out.note
     assert not pr_called
+
+
+# --- meta-triage fallback guard (new top-level file misroute) ----------
+
+
+def _write_meta_triage(ctx, ticket, *, fallback: bool, repo_ids: list[str]) -> None:
+    ws = ctx.service.workspace(ticket)
+    (ws.artifacts_dir / "meta_triage.json").write_text(
+        json.dumps({"repo_ids": repo_ids, "fallback": fallback}, indent=2),
+        encoding="utf-8",
+    )
+
+
+def test_meta_triage_fallback_blocks_new_top_level_files(tmp_path, monkeypatch):
+    """When triage fell back to clone-everything (no repo matched) and the
+    branch adds brand-new top-level files, deliver BLOCKS instead of
+    merging them into an arbitrarily-chosen primary repo."""
+    remote, _ = _bare_in(tmp_path, "a")
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL=remote,
+        FORGE_TOKEN="t",
+    )
+    _install_repos_registry([("repo-a", remote)])
+
+    pr_called = False
+    push_called = False
+
+    def fake_pr(self, *, source_branch, title, body):
+        nonlocal pr_called
+        pr_called = True
+        return "https://github.com/o/r/pull/99"
+
+    def fake_push(*a, **k):
+        nonlocal push_called
+        push_called = True
+
+    monkeypatch.setattr(github.GitHubForge, "open_merge_request", fake_pr)
+    monkeypatch.setattr(git_ops, "push", fake_push)
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    ws = ctx.service.workspace(t)
+    # _make_repo_clone adds a brand-new top-level file (feature-<id>.txt).
+    entry = _make_repo_clone(ws.dir, "repo-a", remote, branch, with_commit=True)
+    _write_touched_repos(ctx, t, [entry])
+    _write_meta_triage(ctx, t, fallback=True, repo_ids=["repo-a"])
+
+    out = DeliverStage().run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert "could not be determined" in out.note
+    assert "feature-repo-a.txt" in out.note
+    assert not pr_called, "must not open a PR for misrouted new files"
+    assert not push_called, "must not push for misrouted new files"
+
+
+def test_genuine_all_repos_ticket_still_delivers_new_files(tmp_path, monkeypatch):
+    """A genuine all-repos ticket (triage matched → fallback=False) still
+    delivers brand-new top-level files normally."""
+    remote, _ = _bare_in(tmp_path, "a")
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL=remote,
+        FORGE_TOKEN="t",
+    )
+    _install_repos_registry([("repo-a", remote)])
+
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "open_merge_request",
+        lambda self, *, source_branch, title, body: "https://github.com/o/a/pull/1",
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    ws = ctx.service.workspace(t)
+    entry = _make_repo_clone(ws.dir, "repo-a", remote, branch, with_commit=True)
+    _write_touched_repos(ctx, t, [entry])
+    _write_meta_triage(ctx, t, fallback=False, repo_ids=["repo-a"])
+
+    out = DeliverStage().run(t, ctx)
+
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert "https://github.com/o/a/pull/1" in out.note
+
+
+def test_meta_triage_fallback_allows_non_top_level_files(tmp_path, monkeypatch):
+    """Fallback guard is scoped to brand-new TOP-LEVEL files: a branch
+    that only adds nested files (e.g. under ``docs/``) still delivers."""
+    remote, _ = _bare_in(tmp_path, "a")
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL=remote,
+        FORGE_TOKEN="t",
+    )
+    _install_repos_registry([("repo-a", remote)])
+
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "open_merge_request",
+        lambda self, *, source_branch, title, body: "https://github.com/o/a/pull/2",
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    ws = ctx.service.workspace(t)
+    repo = ws.dir / "repos" / "repo-a"
+    repo.parent.mkdir(parents=True, exist_ok=True)
+    git_ops.clone(remote, repo, "main", None)
+    git_ops.create_branch(repo, branch)
+    (repo / "docs").mkdir()
+    (repo / "docs" / "design.md").write_text("nested design doc")
+    git_ops.commit_all(repo, "impl nested")
+    entry = {"repo_id": "repo-a", "branch": branch, "repo_path": str(repo)}
+    _write_touched_repos(ctx, t, [entry])
+    _write_meta_triage(ctx, t, fallback=True, repo_ids=["repo-a"])
+
+    out = DeliverStage().run(t, ctx)
+
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert "https://github.com/o/a/pull/2" in out.note

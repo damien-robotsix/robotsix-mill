@@ -35,6 +35,26 @@ class RequiredReposResult(BaseModel):
     rationale: str = ""
 
 
+class TriagedRepos(list[str]):
+    """The clonable repo ids a meta proposal requires.
+
+    A plain ``list[str]`` subclass so existing callers/tests that treat
+    the result as a list (equality, iteration, ``", ".join(...)``) keep
+    working unchanged — with one extra bit: :attr:`fallback` is ``True``
+    only when triage could NOT confidently match any repo and fell back
+    to cloning *every* clonable repo.
+
+    Deliver consults that bit to refuse merging brand-new top-level files
+    into an arbitrarily-chosen primary repo (see
+    :mod:`robotsix_mill.stages.deliver`).  ``fallback`` stays ``False``
+    for both a confident match and a genuine all-repos ticket (the agent
+    explicitly named every repo), so legitimate cross-repo audits still
+    proceed.
+    """
+
+    fallback: bool = False
+
+
 def _registered_repos_block() -> str:
     """A ``<registered-repos>`` block: one line per repo with a forge URL."""
     repos_config = get_repos_config()
@@ -82,11 +102,16 @@ def required_repos_for(*, settings: Settings, spec: str) -> list[str]:
             seen.add(rid)
     if not valid:
         # Safe fallback: clone everything so the work is at least possible.
+        # Flag it so deliver can refuse to merge brand-new top-level files
+        # into an arbitrarily-chosen primary repo (the work may target a
+        # not-yet-created repo).
         log.info(
             "meta-triage: no usable repo_ids (%r) — falling back to all "
             "clonable repos %s",
             out.repo_ids,
             sorted(clonable),
         )
-        return sorted(clonable)
-    return valid
+        fell_back = TriagedRepos(sorted(clonable))
+        fell_back.fallback = True
+        return fell_back
+    return TriagedRepos(valid)

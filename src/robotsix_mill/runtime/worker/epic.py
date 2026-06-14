@@ -474,7 +474,10 @@ def _run_epic_reprocess(epic_id: str, comment_body: str, settings) -> None:
        child.
     """
     from ...core.service import TicketService
-    from ...agents.epic_breakdown import run_epic_breakdown_agent
+    from ...agents.epic_breakdown import (
+        plan_child_dependencies,
+        run_epic_breakdown_agent,
+    )
 
     # Discover the epic's board via fanout, then bind the service to
     # it so subsequent writes go to the right per-repo DB.
@@ -551,7 +554,7 @@ def _run_epic_reprocess(epic_id: str, comment_body: str, settings) -> None:
             datetime.now(timezone.utc),
         )
 
-        created_ids: list[str] = []
+        created_children: list[tuple[str, str, str]] = []
         for title, body, dup_note in zip(
             new_titles, new_bodies, overlap_notes, strict=True
         ):
@@ -569,16 +572,18 @@ def _run_epic_reprocess(epic_id: str, comment_body: str, settings) -> None:
                 kind="task",
                 parent_id=epic_id,
             )
-            created_ids.append(child.id)
+            created_children.append((child.id, title, body))
+        created_ids = [cid for cid, _t, _b in created_children]
 
-        # Build linear dependency chain: new children chained
-        # together, appended after the last existing child.
-        if existing:
-            last_existing_id = existing[-1].id
-            if created_ids:
-                svc.set_depends_on(created_ids[0], [last_existing_id])
-        for i in range(1, len(created_ids)):
-            svc.set_depends_on(created_ids[i], [created_ids[i - 1]])
+        # Dependency wiring: a linear chain appended after the last
+        # existing child — unless the batch includes a create/initialize-
+        # repo child, in which case repo-populating siblings depend on it
+        # so they cannot run before the repo exists.
+        predecessor_id = existing[-1].id if existing else None
+        for child_id, deps in plan_child_dependencies(
+            created_children, predecessor_id=predecessor_id
+        ).items():
+            svc.set_depends_on(child_id, deps)
 
         log.info(
             "epic %s: re-processed — created %d new children: %s",
