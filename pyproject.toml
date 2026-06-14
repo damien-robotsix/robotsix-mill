@@ -148,6 +148,7 @@ max-complexity = 10
 "src/robotsix_mill/runners/agent_check_runner.py" = ["F401"]
 "src/robotsix_mill/runners/audit_runner.py" = ["F401"]
 "src/robotsix_mill/runners/bc_check_runner.py" = ["F401"]
+"src/robotsix_mill/runners/forge_parity_runner.py" = ["F401"]
 "src/robotsix_mill/runners/module_curator_runner.py" = ["F401"]
 "src/robotsix_mill/runners/survey_runner.py" = ["F401"]
 # F821 in these files: string-typed annotations referencing types
