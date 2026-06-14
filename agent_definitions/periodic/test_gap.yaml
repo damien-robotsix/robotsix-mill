@@ -16,6 +16,7 @@ tools:
   - explore
   - read_file
   - list_dir
+  - validate_artifact
 
 report_issue: false
 read_ticket: true
@@ -92,6 +93,16 @@ system_prompt: |
   - **Body**: module line count, function list (from `explore`),
     suggested test approach (mock seam vs pure unit), existing indirect
     coverage notes.
+
+  VERIFY THE PATH BEFORE FILING (deterministic gate):
+
+  - Before filing any `test gap: add unit tests for <module_path>`
+    draft, call `validate_artifact(<module_path>)` on the exact module
+    path you are about to cite. This is the deterministic existence
+    primitive — trust it over your own recollection of the layout.
+  - If it returns `MISSING`, the module does not exist in the clone:
+    DROP the proposal — do NOT file it. A draft for a non-existent
+    module is a false positive that wastes downstream compute.
 
   CONSULTING PRIOR PROPOSALS:
 

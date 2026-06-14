@@ -776,6 +776,7 @@ def test_audit_agent_tool_set(tmp_path, monkeypatch):
         "read_file",
         "read_ticket",
         "run_command",
+        "validate_artifact",
     ]
 
 
