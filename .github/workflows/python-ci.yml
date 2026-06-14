@@ -184,4 +184,9 @@ jobs:
         # pytest would collect 0 tests).
         run: |
           eval "set -- $PYTEST_EXTRA_ARGS"
-          uv run pytest tests/ -n "$PYTEST_NUMPROCESSES" --dist loadscope -x "$@" --tb=long --cov="$COV_PACKAGE" --cov-fail-under="$COVERAGE_THRESHOLD" --cov-report=term-missing
+          # pytest-xdist provisioned via --with so the default `-n auto`
+          # parallelism works for EVERY consumer without each having to
+          # declare pytest-xdist (mirrors the deptry/mypy-baseline steps).
+          # Without this, a bare `uv run pytest -n auto` fails for any repo
+          # that does not itself ship pytest-xdist.
+          uv run --with pytest-xdist pytest tests/ -n "$PYTEST_NUMPROCESSES" --dist loadscope -x "$@" --tb=long --cov="$COV_PACKAGE" --cov-fail-under="$COVERAGE_THRESHOLD" --cov-report=term-missing
