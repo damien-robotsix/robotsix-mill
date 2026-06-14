@@ -5,7 +5,6 @@ import subprocess
 from robotsix_mill import sandbox
 from robotsix_mill.agents import web_research as wr
 from robotsix_mill.agents.base import compose_prompt, _model_name
-from robotsix_mill.agents.web_research import make_web_research_tool
 from robotsix_mill.agents.web_tools import make_web_fetch
 from robotsix_mill.config import Settings, Secrets, _reset_secrets
 
@@ -53,24 +52,6 @@ def test_main_model_never_online(tmp_path):
 
 
 # --- web research sub-agent (the cost fix) ------------------------------
-
-
-def test_web_research_tool_delegates_to_seam(tmp_path, monkeypatch):
-    """The tool exposed to the main agent must return EXACTLY the
-    sub-agent seam's conclusion string (no raw pages leak through)."""
-    s = _settings(tmp_path)
-    seen = {}
-
-    async def fake(*, settings, query):
-        seen["query"] = query
-        return f"CONCLUSION about {query}"
-
-    monkeypatch.setattr(wr, "run_web_research", fake)
-    tool = make_web_research_tool(s)
-    assert asyncio.run(tool("python 3.14 release date")) == (
-        "CONCLUSION about python 3.14 release date"
-    )
-    assert seen["query"] == "python 3.14 release date"
 
 
 def test_web_research_no_key_degrades(tmp_path):

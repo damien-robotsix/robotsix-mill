@@ -73,27 +73,3 @@ async def run_web_research(*, settings: Settings, query: str) -> str:
     return str(result.output)
 
 
-def make_web_research_tool(settings: Settings):
-    """Build the ``web_research`` tool exposed to the main agent. It
-    only ever returns the sub-agent's conclusion string."""
-
-    async def web_research(query: str) -> str:
-        """Research a question on the web and return a concise factual
-        conclusion with inline source URLs. Use for current docs, API
-        details, versions, best practices — anything not already in the
-        repo. A cheaper model does the searching; you get only the
-        answer."""
-        return await run_web_research(settings=settings, query=query)
-
-    from .tool_registry import ToolInfo, ToolRegistry
-
-    ToolRegistry.register(
-        ToolInfo(
-            name="web_research",
-            description="Research a question on the web and return a concise factual conclusion with inline source URLs.",
-            category="web",
-            parameters={"query": "str"},
-        )
-    )
-
-    return web_research

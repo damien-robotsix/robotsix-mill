@@ -13,7 +13,6 @@ it to inject synthetic results without a real LLM or Langfuse.
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,7 +21,6 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from ..config import RepoConfig, Settings, get_secrets
-from .langfuse_tools import render_trace_findings
 from .prompt_blocks import section
 
 log = logging.getLogger("robotsix_mill.trace_inspector")
@@ -428,32 +426,3 @@ def run_trace_inspector(
     return result.output
 
 
-def make_trace_inspect_tool(settings: Settings):
-    """Build the ``trace_inspect`` tool exposed to the retrospect agent
-    in deep-analysis mode.  It fetches the full trace from Langfuse,
-    delegates to ``run_trace_inspector``, and returns a formatted text
-    summary — or a degradation message if the trace is unavailable."""
-
-    def trace_inspect(trace_id: str) -> str:
-        """Inspect a single Langfuse trace by ID. Returns a text summary
-        of tool errors, agent limitations, and optimisation
-        opportunities found in the full observation tree. Use this for
-        EACH trace in the session when doing deep analysis."""
-        from ..langfuse import client as langfuse_client
-
-        detail = langfuse_client.fetch_trace_detail(settings, trace_id)
-        if detail is None:
-            return f"trace {trace_id} unavailable"
-
-        # Serialise to compact JSON. NB: retrospect's deep-analysis path
-        # calls this without a repo_dir — that's intentional. Retrospect
-        # is itself a tool-bearing agent; trace_inspect here just adds a
-        # quick per-trace summary to the synthesis. The full Deep Review
-        # surface uses run_trace_inspector directly with repo_dir set,
-        # to get solution-bearing findings.
-        trace_data = json.dumps(detail, default=str)
-        result = run_trace_inspector(settings=settings, trace_data=trace_data)
-
-        return render_trace_findings(result.findings, trace_id, result.error or None)
-
-    return trace_inspect
