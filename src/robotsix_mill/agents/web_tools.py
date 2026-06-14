@@ -23,13 +23,13 @@ in the mill YAML config.
 
 from __future__ import annotations
 
-import html
 import logging
 import re
 import time
 from urllib.parse import urlsplit, urlunsplit
 
 from ..config import Settings
+from ..core.text_utils import html_to_text
 
 log = logging.getLogger(__name__)
 
@@ -40,12 +40,6 @@ _HTML_SNIFF = re.compile(
     rb"<!doctype html|<html[\s>]|<body[\s>]|<head[\s>]",
     re.IGNORECASE,
 )
-
-# Tags whose entire content (open → close, inclusive) must be
-# dropped before tag stripping. Script and style payloads are
-# never useful for an LLM and they're often the bulk of a docs
-# page's byte budget.
-_BLOCK_TAGS = ("script", "style", "noscript", "svg")
 
 _PER_RUN_CACHE_TTL_SECONDS = 30
 # Per-process LRU cache keyed on canonical URL. One entry =
@@ -128,54 +122,6 @@ def _looks_like_html(body: bytes | str) -> bool:
     if isinstance(body, str):
         body = body.encode("utf-8", errors="ignore")
     return _HTML_SNIFF.search(body[:1024]) is not None
-
-
-def _strip_block_tag(body: str, tag: str) -> str:
-    """Remove every ``<tag>...</tag>`` block (including content) from
-    *body*. Case-insensitive; tolerant of attributes on the open tag.
-
-    Implemented with a non-greedy regex rather than a real HTML
-    parser — wrong for adversarial input, fine for the docs pages
-    we routinely fetch. The LLM is the eventual consumer, not a
-    browser, so layout fidelity doesn't matter."""
-    pattern = re.compile(
-        rf"<{tag}\b[^>]*>.*?</{tag}\s*>",
-        re.IGNORECASE | re.DOTALL,
-    )
-    return pattern.sub(" ", body)
-
-
-def html_to_text(body: str) -> str:
-    """Strip *body* of HTML markup, return whitespace-collapsed text.
-
-    - drops ``<script>``, ``<style>``, ``<noscript>``, ``<svg>``
-      blocks entirely (content + tags);
-    - removes all remaining tags;
-    - unescapes HTML entities (``&amp;`` → ``&``, ``&nbsp;`` → space);
-    - collapses runs of whitespace to a single space, then squashes
-      multiple blank lines back to one (preserve paragraph breaks).
-
-    Dependency-free — regex + ``html.unescape``. Adequate for the
-    docs pages mill fetches; a malicious page could trick this into
-    leaking script content as text, but the agent's context is the
-    only consumer and a script-tag dump is just noise to the LLM.
-    """
-    for tag in _BLOCK_TAGS:
-        body = _strip_block_tag(body, tag)
-    # Strip remaining tags.
-    body = re.sub(r"<[^>]+>", " ", body)
-    # Unescape entities.
-    body = html.unescape(body)
-    # Collapse whitespace: runs of horizontal whitespace → one space,
-    # but keep newlines so the LLM still sees paragraph structure.
-    body = re.sub(r"[ \t]+", " ", body)
-    # Collapse 3+ consecutive newlines (created by the tag stripping)
-    # to exactly two.
-    body = re.sub(r"\n{3,}", "\n\n", body)
-    # Strip leading/trailing whitespace on each line.
-    body = "\n".join(line.strip() for line in body.split("\n"))
-    # And drop pure-empty surrounding lines.
-    return body.strip()
 
 
 def _prune_cache(now: float) -> None:
