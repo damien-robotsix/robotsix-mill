@@ -149,6 +149,26 @@ def generate_pr_description(
         return spec
 
 
+def _meta_triage_was_fallback(artifacts_dir: Path) -> bool:
+    """True when meta repo-triage fell back to cloning *every* repo.
+
+    Reads the ``meta_triage.json`` artifact written by
+    :func:`robotsix_mill.meta.workspace.build_triaged_meta_workspace`.
+    Returns ``False`` when the artifact is absent or unreadable (the
+    safe default — a missing signal must not block delivery), and when
+    triage confidently matched a repo or the ticket genuinely targets
+    all repos.
+    """
+    path = artifacts_dir / "meta_triage.json"
+    if not path.exists():
+        return False
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except OSError, ValueError:
+        return False
+    return isinstance(data, dict) and bool(data.get("fallback"))
+
+
 def _write_pr_urls(artifacts_dir: Path, entries: list[dict]) -> None:
     """Atomically (re)write the ``pr_urls.json`` manifest.
 
@@ -311,6 +331,35 @@ class DeliverStage(Stage):
                 State.DONE,
                 "no change needed — no repos were modified by implement",
             )
+
+        # Safety guard: when triage could NOT confidently match a target
+        # repo (it fell back to cloning every repo), refuse to merge
+        # brand-new top-level files into an arbitrarily-chosen primary
+        # repo — they most likely belong to a repo that does not exist
+        # yet.  Genuine all-repos tickets (the agent explicitly named
+        # every repo) are not flagged as a fallback and proceed.
+        if _meta_triage_was_fallback(ws.artifacts_dir):
+            for entry in touched_repos:
+                repo_id = entry.get("repo_id", "")
+                repo_dir = Path(entry.get("repo_path", ""))
+                try:
+                    rc = get_repo_config(repo_id)
+                except ConfigError:
+                    continue
+                if not (repo_dir / ".git").exists():
+                    continue
+                target = target_branch_for(s, rc)
+                new_top_level = sorted(
+                    f for f in git_ops.added_files(repo_dir, target) if "/" not in f
+                )
+                if new_top_level:
+                    return Outcome(
+                        State.BLOCKED,
+                        "meta target repo could not be determined — does it "
+                        "need a not-yet-created repo? Refusing to merge "
+                        f"brand-new top-level file(s) into {repo_id}: "
+                        f"{', '.join(new_top_level)}",
+                    )
 
         opened: list[dict] = []
         skipped: list[str] = []

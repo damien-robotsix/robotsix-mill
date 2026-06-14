@@ -153,7 +153,10 @@ def generate_children(
     def _run() -> None:
         try:
             from .. import tracing
-            from ...agents.epic_breakdown import run_epic_breakdown_agent
+            from ...agents.epic_breakdown import (
+                plan_child_dependencies,
+                run_epic_breakdown_agent,
+            )
 
             session_id = ticket_id
             with tracing.start_ticket_root_span(
@@ -193,7 +196,7 @@ def generate_children(
                     datetime.now(timezone.utc),
                 )
 
-                created_ids: list[str] = []
+                created_children: list[tuple[str, str, str]] = []
                 for title, body, dup_note in zip(
                     child_titles,
                     child_bodies,
@@ -214,11 +217,17 @@ def generate_children(
                         kind="task",
                         parent_id=ticket_id,
                     )
-                    created_ids.append(child.id)
+                    created_children.append((child.id, title, body))
+                created_ids = [cid for cid, _t, _b in created_children]
 
-                # Build linear dependency chain: C0 ← C1 ← C2 ← ...
-                for i in range(1, len(created_ids)):
-                    epic_svc.set_depends_on(created_ids[i], [created_ids[i - 1]])
+                # Dependency wiring: linear chain (C0 ← C1 ← C2 ← …) by
+                # default, but when the batch includes a create/initialize-
+                # repo child the repo-populating siblings depend on it so
+                # they cannot run before the repo exists.
+                for child_id, deps in plan_child_dependencies(
+                    created_children
+                ).items():
+                    epic_svc.set_depends_on(child_id, deps)
 
                 # Apply the revised epic body to the epic immediately
                 # (generate-children is a one-shot manual trigger).
