@@ -151,14 +151,8 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
     # -- parse remote --------------------------------------------------------
     # "<remote>/<branch>" — split at the FIRST slash so branch names that
     # themselves contain slashes (origin/feature/x) keep the full branch
-    # part. Falls back to whitespace splitting for a legacy "origin main"
-    # form, defaulting the branch to "main".
-    if "/" in args.remote:
-        remote_name, _, remote_branch = args.remote.partition("/")
-    else:
-        remote_parts = args.remote.split(maxsplit=1)
-        remote_name = remote_parts[0]
-        remote_branch = remote_parts[1] if len(remote_parts) > 1 else "main"
+    # part.
+    remote_name, _, remote_branch = args.remote.partition("/")
 
     # -- determine whether idle checking is active ---------------------------
     do_idle_check = bool(args.idle_check_cmd) and not args.no_idle_check
