@@ -42,6 +42,7 @@ core:
     triage: &cheap_model deepseek/deepseek-v4-flash       # pre-refine triage — fast/cheap classification
     auto_approve: *cheap_model                            # auto-approve triage — flash is plenty for spec-shape classification
     scope_triage: *cheap_model                            # scope-violation triage — fast and cheap
+    meta_triage: *default_model                           # META repo-routing (required_repos_for) — CAPABLE tier; a wrong pick mis-delivers the ticket to the wrong repo
     doc_classifier: *cheap_model                          # doc-diff classifier gate (fast + cheap)
     rate_limit_fallback: ""                               # empty = disabled; switch when rate-limit exhausted
 

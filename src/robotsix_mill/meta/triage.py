@@ -87,7 +87,7 @@ def required_repos_for(*, settings: Settings, spec: str) -> list[str]:
         settings=settings,
         definition_name="pipeline/meta_triage",
         tools=[],
-        model_name=settings.module_curator_model,
+        model_name=settings.meta_triage_model,
         prompt=prompt,
         what="meta-triage",
     )
