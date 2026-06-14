@@ -361,7 +361,7 @@ Every setting below shows:
 | `core.models.ask_to_ticket` | `MILL_ASK_TO_TICKET_MODEL` | `deepseek/deepseek-v4-pro` | Ask-to-ticket agent — drafts task tickets from answered inquiries' Q&A |
 | `core.models.retrospect` | `MILL_RETROSPECT_MODEL` | `deepseek/deepseek-v4-flash` | Retrospect agent — audits finished tickets; proposes improvements |
 | `core.models.audit` | `MILL_AUDIT_MODEL` | `deepseek/deepseek-v4-flash` | Audit agent — meta-audit for quality/security coverage gaps |
-| `core.models.dedup` | `MILL_DEDUP_MODEL` | `deepseek/deepseek-v4-pro` | Dedup agent — pre-refine duplicate/already-done check |
+| `core.models.dedup` | `MILL_DEDUP_MODEL` | `deepseek/deepseek-v4-flash` | Dedup agent — pre-refine duplicate/already-done check |
 | `core.models.obsolescence` | `MILL_OBSOLESCENCE_MODEL` | `deepseek/deepseek-v4-flash` | Obsolescence agent — pre-refine gap re-validation check |
 | `core.models.web_research` | `MILL_WEB_RESEARCH_MODEL` | `deepseek/deepseek-v4-flash` | Web-research sub-agent — web lookups, conclusion only |
 | `core.models.review` | `MILL_REVIEW_MODEL` | `deepseek/deepseek-v4-pro` | Review agent — blind dual-model diff audit (opt-in) |
