@@ -59,10 +59,17 @@ on:
         type: string
         default: "medium"
       mypy-advisory:
-        description: When true, mypy runs but never blocks CI; when false, mypy failures block.
+        description: >-
+          When true, mypy runs in baseline-ratchet mode against a committed
+          mypy-baseline.txt (new errors block, pre-existing ones are tolerated);
+          REQUIRES the consumer to ship mypy-baseline.txt or the step crashes.
+          When false, plain `mypy --strict` runs as a blocking gate (no baseline
+          needed). Default is false so consumers without a baseline get a working
+          strict gate; repos that maintain a baseline (e.g. robotsix-mill) opt in
+          with true.
         required: false
         type: boolean
-        default: true
+        default: false
 
 jobs:
   tests:
