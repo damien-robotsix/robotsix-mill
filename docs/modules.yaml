@@ -57,6 +57,7 @@ modules:
       - src/robotsix_mill/core/dedup.py
       - src/robotsix_mill/core/draft_target.py
       - tests/core/test_core_dedup.py
+      - tests/core/test_db.py
       - tests/core/test_models.py
       - tests/core/test_states.py
       - tests/core/test_service.py
