@@ -79,17 +79,25 @@ Use YAML block-scalar syntax (`|` or `|-`) for readability.
 | Type | `string` (enum) |
 | Required | no |
 | Default | `null` |
-| Valid values | `"pipeline"`, `"periodic"`, `"sub_agent"` |
+| Valid values | `"pipeline"`, `"periodic"`, `"sub_agent"`, `"interactive"`, `"sandboxed"` |
 
 Which class of agent this is:
 
 - **`pipeline`** — an agent invoked as a stage in the ticket-processing
-  pipeline (refine, implement, review, test, rebase, ci_fix, document,
-  epic_breakdown, epic_status, dedup, answer, agent_check).
+  pipeline (refine, implement, review, triage, document, retrospect,
+  dedup, epic_breakdown, obsolescence, auto-approve, maintenance,
+  scope_triage, spec-review, tester, doc_classifier,
+  pipeline/meta_triage).
 - **`periodic`** — an agent run on a schedule or as a background task
-  (audit, health, survey, retrospect, test_gap).
+  (audit, health, survey, test_gap, agent_check, epic_status, bc_check,
+  board_cleanup, completeness_check, copy_paste, cost_analyst,
+  diagnostic, forge_parity, meta, module_curator, run_health).
 - **`sub_agent`** — a utility agent called by other agents as a tool
   (explore, web_research, trace_inspector).
+- **`sandboxed`** — an agent that executes in an ephemeral sandbox
+  (ci_fix, rebase, review_revision).
+- **`interactive`** — a prompt-to-ticket or Q&A agent triggered by user
+  interaction (ask_to_ticket, answer).
 
 ---
 
