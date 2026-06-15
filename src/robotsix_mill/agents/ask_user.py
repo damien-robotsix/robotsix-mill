@@ -39,9 +39,9 @@ def make_ask_user_tool(settings: Settings, agent_name: str):
             return "__ASK_USER_PAUSE__"
         _called[0] = True
 
-        from ..runtime.tracing import current_session
+        from ..runtime.tracing import current_ticket_id
 
-        ticket_id = current_session()
+        ticket_id = current_ticket_id()
         if ticket_id is None:
             return "Error: no active ticket session — cannot determine current ticket."
 

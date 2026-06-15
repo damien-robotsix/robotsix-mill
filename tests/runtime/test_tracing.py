@@ -304,7 +304,8 @@ def test_start_ticket_root_span_enters_llmio_contexts(monkeypatch):
     )
     with tracing.start_ticket_root_span("ticket-1", "refine", repo_config=rc) as root:
         assert root is not None
-    assert ("session", "ticket-1") in calls
+    # The Langfuse session is repo-qualified for a legible single-project view.
+    assert ("session", "r · ticket-1") in calls
     assert ("project", "pk-a") in calls
 
 
@@ -477,6 +478,52 @@ def test_make_session_id_all_unique():
     assert len(set(ids)) == 1000
     for sid in ids:
         assert sid.startswith("smoke-")
+
+
+# --- qualify_session / current_ticket_id (single-project sessions) ------
+
+
+def _rc(repo_id):
+    return RepoConfig(
+        repo_id=repo_id,
+        board_id=repo_id,
+        langfuse_project_name="p",
+        langfuse_public_key="pk",
+        langfuse_secret_key="sk",
+    )
+
+
+def test_qualify_session_prefixes_repo():
+    assert (
+        tracing.qualify_session("20260615T-x-ffea", _rc("robotsix-llmio"))
+        == "robotsix-llmio · 20260615T-x-ffea"
+    )
+
+
+def test_qualify_session_idempotent_and_none_repo():
+    rc = _rc("robotsix-llmio")
+    once = tracing.qualify_session("t-1", rc)
+    assert tracing.qualify_session(once, rc) == once  # not double-prefixed
+    assert tracing.qualify_session("bare", None) == "bare"  # legacy path
+
+
+def test_make_session_id_repo_qualified():
+    sid = tracing.make_session_id("audit", _rc("robotsix-board"))
+    assert sid.startswith("robotsix-board · audit-")
+
+
+def test_current_ticket_id_strips_repo_prefix(monkeypatch):
+    monkeypatch.setattr(
+        tracing, "current_session", lambda: "robotsix-llmio · 20260615T-x-ffea"
+    )
+    assert tracing.current_ticket_id() == "20260615T-x-ffea"
+
+
+def test_current_ticket_id_passthrough_when_unqualified(monkeypatch):
+    monkeypatch.setattr(tracing, "current_session", lambda: "20260615T-x-ffea")
+    assert tracing.current_ticket_id() == "20260615T-x-ffea"
+    monkeypatch.setattr(tracing, "current_session", lambda: None)
+    assert tracing.current_ticket_id() is None
 
 
 # --- install_signal_handlers & flush_tracing timeout -------------------

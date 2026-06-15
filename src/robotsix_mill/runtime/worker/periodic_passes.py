@@ -217,7 +217,7 @@ class PeriodicPassesMixin(_WorkerBase):
         # /runs list (not the lead repo's).
         reg = self._registry_for(repo_config)
         repo_label = repo_config.repo_id if repo_config else label
-        session_id = tracing.make_session_id(label)
+        session_id = tracing.make_session_id(label, repo_config)
         try:
             log.info(
                 "Starting periodic %s pass for repo %s",

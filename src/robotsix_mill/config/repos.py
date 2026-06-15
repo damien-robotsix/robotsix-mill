@@ -375,7 +375,64 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
                 "base_url", "https://cloud.langfuse.com"
             ),
         )
+
+    # Single-project consolidation: when ``langfuse_shared_master`` is set
+    # at the top level, force EVERY repo (and the meta board) onto that
+    # master repo's Langfuse project, overriding any per-repo ``langfuse``
+    # block. One switch collapses the whole workspace into one project
+    # (sessions stay legible via the repo-qualified session id — see
+    # runtime.tracing.qualify_session).
+    meta_config = _apply_langfuse_shared_master(repos, meta_config, config_file)
+
     return ReposRegistry(repos=repos, meta=meta_config)
+
+
+def _apply_langfuse_shared_master(
+    repos: dict[str, RepoConfig],
+    meta_config: RepoConfig | None,
+    config_file: str | None,
+) -> RepoConfig | None:
+    """Force all repos + meta onto ``langfuse_shared_master``'s project.
+
+    No-op (returns *meta_config* unchanged) when the switch is unset.
+    Raises :class:`ConfigError` when the named master is unknown or
+    carries no Langfuse keys to share.
+    """
+    from .loader import ConfigError, load_langfuse_shared_master
+
+    shared_master = load_langfuse_shared_master(config_file)
+    if shared_master is None:
+        return meta_config
+    if shared_master not in repos:
+        raise ConfigError(
+            f"langfuse_shared_master='{shared_master}' is not a known repo. "
+            f"Known repos: {sorted(repos.keys())}"
+        )
+    master = repos[shared_master]
+    if not (master.langfuse_public_key and master.langfuse_secret_key):
+        raise ConfigError(
+            f"langfuse_shared_master='{shared_master}' must itself carry "
+            f"Langfuse keys (public_key + secret_key) to share."
+        )
+    lf_fields = {
+        "langfuse_project_name": master.langfuse_project_name,
+        "langfuse_public_key": master.langfuse_public_key,
+        "langfuse_secret_key": master.langfuse_secret_key,
+        "langfuse_base_url": master.langfuse_base_url,
+    }
+    for repo_id, cfg in list(repos.items()):
+        if repo_id != shared_master:
+            repos[repo_id] = cfg.model_copy(update=lf_fields)
+    if meta_config is not None:
+        return meta_config.model_copy(update=lf_fields)
+    return RepoConfig(
+        repo_id="meta",
+        board_id="meta",
+        langfuse_project_name=master.langfuse_project_name,
+        langfuse_public_key=master.langfuse_public_key,
+        langfuse_secret_key=master.langfuse_secret_key,
+        langfuse_base_url=master.langfuse_base_url,
+    )
 
 
 def get_repos_config() -> ReposRegistry:
