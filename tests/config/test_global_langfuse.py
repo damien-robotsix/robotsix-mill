@@ -1,23 +1,17 @@
-"""The top-level ``langfuse`` block is the ONE place Langfuse is configured:
-``load_repos_config`` populates every repo and the meta board from it. There
-is no per-repo Langfuse config — a ``langfuse`` block on an individual repo
-entry is ignored."""
+"""Langfuse is configured in ONE place — the ``langfuse_*`` keys in
+secrets.yaml (``Secrets``). ``load_repos_config`` populates every repo and
+the meta board from them. There is no per-repo Langfuse config — a
+``langfuse`` block on an individual repo entry is ignored."""
 
 from robotsix_mill.config import load_repos_config
 
-_GLOBAL = """\
-langfuse:
-  project_name: "robotsix-mill"
-  public_key: "pk-global"
-  secret_key: "sk-global"
-  base_url: "https://lf.example.com"
+_REPOS = """\
 repos:
   bare:
     board_id: "bare"
   has_stale_block:
     board_id: "has_stale_block"
     langfuse:
-      project_name: "ignored-proj"
       public_key: "pk-ignored"
       secret_key: "sk-ignored"
 """
@@ -29,8 +23,14 @@ def _write(tmp_path, body):
     return str(f)
 
 
-def test_global_block_configures_every_repo(tmp_path):
-    reg = load_repos_config(_write(tmp_path, _GLOBAL))
+def test_global_secrets_configure_every_repo(tmp_path, secrets_set):
+    secrets_set(
+        langfuse_public_key="pk-global",
+        langfuse_secret_key="sk-global",
+        langfuse_project_name="robotsix-mill",
+        langfuse_base_url="https://lf.example.com",
+    )
+    reg = load_repos_config(_write(tmp_path, _REPOS))
     for rid in ("bare", "has_stale_block"):
         r = reg.repos[rid]
         assert r.langfuse_public_key == "pk-global"
@@ -39,22 +39,35 @@ def test_global_block_configures_every_repo(tmp_path):
         assert r.langfuse_base_url == "https://lf.example.com"
 
 
-def test_per_repo_langfuse_block_is_ignored(tmp_path):
+def test_per_repo_langfuse_block_is_ignored(tmp_path, secrets_set):
     """A leftover per-repo ``langfuse`` block does NOT override the global."""
-    reg = load_repos_config(_write(tmp_path, _GLOBAL))
+    secrets_set(langfuse_public_key="pk-global", langfuse_secret_key="sk-global")
+    reg = load_repos_config(_write(tmp_path, _REPOS))
     assert reg.repos["has_stale_block"].langfuse_public_key == "pk-global"
-    assert reg.repos["has_stale_block"].langfuse_project_name == "robotsix-mill"
 
 
-def test_meta_board_uses_global(tmp_path):
-    reg = load_repos_config(_write(tmp_path, _GLOBAL))
+def test_meta_board_uses_global(tmp_path, secrets_set):
+    secrets_set(
+        langfuse_public_key="pk-global",
+        langfuse_secret_key="sk-global",
+        langfuse_project_name="robotsix-mill",
+    )
+    reg = load_repos_config(_write(tmp_path, _REPOS))
     assert reg.meta is not None
     assert reg.meta.langfuse_public_key == "pk-global"
     assert reg.meta.langfuse_project_name == "robotsix-mill"
 
 
-def test_no_global_block_means_observability_off(tmp_path):
-    body = "repos:\n  bare:\n    board_id: bare\n"
-    reg = load_repos_config(_write(tmp_path, body))
+def test_no_secrets_means_observability_off(tmp_path):
+    # No secrets injected → langfuse off (conftest sets MILL_SECRETS_FILE="").
+    reg = load_repos_config(_write(tmp_path, "repos:\n  bare:\n    board_id: bare\n"))
+    assert reg.repos["bare"].langfuse_public_key == ""
+    assert reg.meta is None
+
+
+def test_only_public_key_in_secrets_is_off(tmp_path, secrets_set):
+    """Both keys are required; a lone public key → observability off."""
+    secrets_set(langfuse_public_key="pk-only")
+    reg = load_repos_config(_write(tmp_path, "repos:\n  bare:\n    board_id: bare\n"))
     assert reg.repos["bare"].langfuse_public_key == ""
     assert reg.meta is None
