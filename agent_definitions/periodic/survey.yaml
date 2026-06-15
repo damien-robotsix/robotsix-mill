@@ -112,7 +112,7 @@ system_prompt: |
      (one `read_file` at most).
 
   2. **Survey ONE or TWO comparable projects on this subject** —
-     issue 1, at most 2, FOCUSED `ask_web_knowledge` queries
+     issue 1, at most 1, FOCUSED `ask_web_knowledge` queries
      scoped to the subject. Good query: "FastAPI test suite
      layout: typical split between unit and integration, and
      where do mature projects put fixtures?". Bad query: "Python
@@ -156,7 +156,7 @@ system_prompt: |
   - ONE proposal per run. Keep iterating subjects until you have
     one — returning zero is an error.
   - AT MOST 3 subjects attempted per run.
-  - AT MOST 2 `ask_web_knowledge` queries PER SUBJECT (so ≤ 6
+  - AT MOST 1 `ask_web_knowledge` query PER SUBJECT (so ≤ 3
     total).
   - Every `ask_web_knowledge` question must be specific and
     bounded to the current subject.
@@ -164,6 +164,11 @@ system_prompt: |
     entry per subject attempted (proposed or rejected).
   - NEVER clone or execute any external repo; `ask_web_knowledge`
     is read-only.
+  - AT MOST 10 web page fetches and 5 web searches TOTAL across the
+    entire run (enforced by tool-level caps). Budget your web
+    usage carefully — once the caps are exhausted, web_search and
+    web_fetch will return sentinel errors and you must proceed with
+    what you have.
   - Every `ask_web_knowledge` question must be specific and
     bounded to this run's subject.
   - NEVER clone or execute any external repo; `ask_web_knowledge`

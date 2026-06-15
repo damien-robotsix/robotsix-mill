@@ -485,4 +485,107 @@ def test_survey_cli_failure(capsys, monkeypatch):
     assert "survey failed" in captured.err
 
 
+# --- Trace budget wiring tests ---
+
+
+class TestSurveyRunnerTraceBudgetWiring:
+    """Verify run_survey_pass calls both budget resets before run_periodic_pass."""
+
+    def test_run_survey_pass_calls_trace_budget_resets(self, tmp_path, monkeypatch):
+        """run_survey_pass resets both web_fetch and web_search trace
+        budgets with the configured settings values before delegating
+        to run_periodic_pass."""
+        from robotsix_mill.runners.periodic_runner import SurveyPassResult
+
+        settings = _make_settings(
+            tmp_path,
+            survey_web_fetch_max_calls=10,
+            survey_web_fetch_max_total_bytes=500_000,
+            survey_web_search_max_calls=5,
+        )
+
+        # Track calls.
+        fetch_reset_calls = []
+        search_reset_calls = []
+
+        def fake_fetch_reset(max_calls, max_bytes):
+            fetch_reset_calls.append((max_calls, max_bytes))
+
+        def fake_search_reset(max_calls):
+            search_reset_calls.append(max_calls)
+
+        # Monkeypatch the modules where survey_runner imports from.
+        import robotsix_mill.agents.web_tools as wt
+        import robotsix_mill.agents.web_knowledge as wk
+        import robotsix_mill.runners.survey_runner as sr
+
+        monkeypatch.setattr(wt, "reset_trace_web_fetch_budget", fake_fetch_reset)
+        monkeypatch.setattr(wk, "reset_trace_web_search_budget", fake_search_reset)
+        monkeypatch.setattr(sr, "Settings", lambda: settings)
+
+        # Stub run_periodic_pass.
+        def fake_run_periodic(session_id, repo_config, *, config, settings):
+            return SurveyPassResult(
+                updated_memory="ok", drafts_created=[], session_id=session_id
+            )
+
+        monkeypatch.setattr(sr, "run_periodic_pass", fake_run_periodic)
+
+        repo_config = _test_repo_config()
+        result = sr.run_survey_pass(session_id="test-sid", repo_config=repo_config)
+
+        # Verify both resets were called with configured values.
+        assert len(fetch_reset_calls) == 1
+        assert fetch_reset_calls[0] == (10, 500_000)
+
+        assert len(search_reset_calls) == 1
+        assert search_reset_calls[0] == 5
+
+        # Verify the result propagated.
+        assert result.session_id == "test-sid"
+        assert result.updated_memory == "ok"
+
+    def test_run_survey_pass_respects_custom_budget_values(self, tmp_path, monkeypatch):
+        """When settings have different budget values, those are passed
+        to the reset functions."""
+        from robotsix_mill.runners.periodic_runner import SurveyPassResult
+
+        settings = _make_settings(
+            tmp_path,
+            survey_web_fetch_max_calls=7,
+            survey_web_fetch_max_total_bytes=300_000,
+            survey_web_search_max_calls=3,
+        )
+
+        fetch_reset_calls = []
+        search_reset_calls = []
+
+        def fake_fetch_reset(max_calls, max_bytes):
+            fetch_reset_calls.append((max_calls, max_bytes))
+
+        def fake_search_reset(max_calls):
+            search_reset_calls.append(max_calls)
+
+        import robotsix_mill.agents.web_tools as wt
+        import robotsix_mill.agents.web_knowledge as wk
+        import robotsix_mill.runners.survey_runner as sr
+
+        monkeypatch.setattr(wt, "reset_trace_web_fetch_budget", fake_fetch_reset)
+        monkeypatch.setattr(wk, "reset_trace_web_search_budget", fake_search_reset)
+        monkeypatch.setattr(sr, "Settings", lambda: settings)
+
+        def fake_run_periodic(session_id, repo_config, *, config, settings):
+            return SurveyPassResult(
+                updated_memory="ok", drafts_created=[], session_id=session_id
+            )
+
+        monkeypatch.setattr(sr, "run_periodic_pass", fake_run_periodic)
+
+        repo_config = _test_repo_config()
+        sr.run_survey_pass(session_id="test-sid", repo_config=repo_config)
+
+        assert fetch_reset_calls == [(7, 300_000)]
+        assert search_reset_calls == [3]
+
+
 # --- Worker periodic tests ---

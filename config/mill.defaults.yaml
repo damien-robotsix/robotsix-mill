@@ -144,7 +144,7 @@ web:
   research_request_limit: 8                   # per-call request cap for web research
   fetch_image: curlimages/curl:8.17.0         # Docker image for isolated web_fetch container
   fetch_max_bytes: 2000000                    # max bytes fetched per URL (network-level cap)
-  fetch_max_text_bytes: 200000                # max bytes returned to the agent AFTER HTML→text extraction
+  fetch_max_text_bytes: 40000                 # max bytes returned to the agent AFTER HTML→text extraction (~10K tokens)
   fetch_timeout: 30                           # timeout (seconds) per web fetch
   fetch_raw: false                            # when true, skip HTML→text + per-run URL dedupe (operator opt-in)
   fetch_max_calls: 15                         # max web_fetch calls per web-knowledge consult (cache hits free)
@@ -320,6 +320,9 @@ periodic:
     enabled: true                   # enable periodic survey passes (on by default)
     interval_seconds: 86400         # seconds between passes (min 60 enforced in worker)
     memory_path: null               # defaults to <data_dir>/survey_memory.md
+    web_fetch_max_calls: 10         # per-survey-run cap on web_fetch calls (across all ask_web_knowledge consults)
+    web_fetch_max_total_bytes: 500000  # per-survey-run cumulative byte cap on web_fetch returned text
+    web_search_max_calls: 5         # per-survey-run cap on web_search invocations
 
   # -- module_curator agent — detects drift in the module taxonomy ---------
   module_curator:

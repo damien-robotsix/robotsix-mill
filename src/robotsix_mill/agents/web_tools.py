@@ -57,6 +57,16 @@ _cache_max_total_bytes = 1_000_000
 _fetch_calls: int = 0
 _fetch_bytes: int = 0
 
+# Per-survey-run web_fetch budget — a second tier that spans the
+# entire survey run (not reset between ask_web_knowledge consults).
+# Activated only when the survey runner calls reset_trace_web_fetch_budget
+# with non-zero caps; otherwise a no-op so refine/implement/answer agents
+# are unaffected.
+_trace_fetch_calls: int = 0
+_trace_fetch_bytes: int = 0
+_trace_budget_max_calls: int = 0
+_trace_budget_max_bytes: int = 0
+
 
 def reset_web_fetch_budget() -> None:
     """Zero the per-consult web_fetch budget counters. Called at the
@@ -68,6 +78,45 @@ def reset_web_fetch_budget() -> None:
     _fetch_bytes = 0
 
 
+def reset_trace_web_fetch_budget(max_calls: int, max_bytes: int) -> None:
+    """Zero the per-survey-run web_fetch budget counters and store new caps.
+
+    Call with ``max_calls=0`` AND ``max_bytes=0`` to deactivate the trace
+    budget (return to per-consult-only gating). The per-consult budget
+    (``reset_web_fetch_budget``) is NOT affected by this call.
+    """
+    global _trace_fetch_calls, _trace_fetch_bytes
+    global _trace_budget_max_calls, _trace_budget_max_bytes
+    _trace_fetch_calls = 0
+    _trace_fetch_bytes = 0
+    _trace_budget_max_calls = max_calls
+    _trace_budget_max_bytes = max_bytes
+
+
+def _trace_budget_sentinel() -> str | None:
+    """Return the budget-exhausted sentinel when the per-survey-run
+    trace budget is spent, else ``None``. Returns ``None`` when the
+    trace budget is inactive (both caps are 0)."""
+    if _trace_budget_max_calls <= 0 and _trace_budget_max_bytes <= 0:
+        return None
+    if _trace_fetch_calls >= _trace_budget_max_calls or (
+        _trace_budget_max_bytes > 0 and _trace_fetch_bytes >= _trace_budget_max_bytes
+    ):
+        log.info(
+            "web_fetch: trace budget exhausted (%d calls / %d bytes)",
+            _trace_fetch_calls,
+            _trace_fetch_bytes,
+        )
+        return (
+            "web_fetch trace budget exhausted for this survey run "
+            f"(cap: {_trace_budget_max_calls} fetches / "
+            f"{_trace_budget_max_bytes:,} bytes). "
+            "Answer from already-retrieved information; do not request "
+            "more pages."
+        )
+    return None
+
+
 def web_fetch_budget() -> tuple[int, int]:
     """Return the current ``(calls, bytes)`` consumed against the
     budget. Exposed for tests."""
@@ -75,10 +124,12 @@ def web_fetch_budget() -> tuple[int, int]:
 
 
 def _budget_sentinel(settings: Settings) -> str | None:
-    """Return the budget-exhausted sentinel string when the per-consult
-    fetch budget is spent, else ``None``. Checked before a real sandbox
-    fetch (cache hits / raw-mode never reach here). A
-    ``web_fetch_max_total_bytes`` of 0 disables the byte ceiling."""
+    """Return the budget-exhausted sentinel string when either the
+    per-consult fetch budget OR the per-survey-run trace budget is
+    spent, else ``None``. Checked before a real sandbox fetch (cache
+    hits / raw-mode never reach here). A ``web_fetch_max_total_bytes``
+    of 0 disables the byte ceiling."""
+    # Check the per-consult budget first.
     max_calls = settings.web_fetch_max_calls
     max_total_bytes = settings.web_fetch_max_total_bytes
     if _fetch_calls >= max_calls or (
@@ -95,6 +146,9 @@ def _budget_sentinel(settings: Settings) -> str | None:
             "Answer from already-fetched content; do not request more "
             "pages."
         )
+    # Then check the trace-level (per-survey-run) budget.
+    if (ts := _trace_budget_sentinel()) is not None:
+        return ts
     return None
 
 
@@ -144,17 +198,14 @@ def _prune_cache(now: float) -> None:
 
 def _apply_text_cap(body: str, max_bytes: int) -> str:
     """Truncate *body* if it exceeds *max_bytes* of UTF-8 encoded
-    text, appending a clear truncation marker so the agent knows
-    it isn't seeing the full payload."""
+    text, using boundary-aware truncation that preserves sentence /
+    paragraph boundaries instead of a hard byte cut."""
     encoded = body.encode("utf-8", errors="ignore")
     if len(encoded) <= max_bytes:
         return body
-    truncated = encoded[:max_bytes].decode("utf-8", errors="ignore")
-    return (
-        f"{truncated}\n"
-        f"... [truncated, fetched {len(encoded):,} chars total, "
-        f"showing first {max_bytes:,}]"
-    )
+    from ..core.text_utils import truncate_at_boundary
+
+    return truncate_at_boundary(body, max_bytes)
 
 
 def make_web_fetch(settings: Settings):  # noqa: C901 — adds a per-consult fetch budget gate to the existing cache/extract/cap pipeline
@@ -179,7 +230,7 @@ def make_web_fetch(settings: Settings):  # noqa: C901 — adds a per-consult fet
         budget-exhausted sentinel string.
     """
 
-    def web_fetch(url: str) -> str:
+    def web_fetch(url: str) -> str:  # noqa: C901 — budget gates + cache + extract + cap pipeline
         """Fetch an http(s) URL and return its text content (size
         capped). Use for official docs, source files, package
         metadata. Runs in an isolated, no-local-access network
@@ -247,13 +298,43 @@ def make_web_fetch(settings: Settings):  # noqa: C901 — adds a per-consult fet
                     exc_info=True,
                 )
         body = _apply_text_cap(body, settings.web_fetch_max_text_bytes)
+
+        # --- trace budget byte ceiling (post-fetch) -------------------
+        # The per-survey-run trace budget checks cumulative bytes *after*
+        # the body is processed so that the byte count reflects what the
+        # agent's context actually receives.  If storing this body would
+        # overshoot the trace byte cap, decline the fetch and keep the
+        # counters unchanged.
+        global _trace_fetch_calls, _trace_fetch_bytes
+        if (
+            _trace_budget_max_bytes > 0
+            and _trace_fetch_bytes + len(body.encode("utf-8", errors="ignore"))
+            > _trace_budget_max_bytes
+        ):
+            log.info(
+                "web_fetch: trace byte budget would overshoot (%d + %d > %d)",
+                _trace_fetch_bytes,
+                len(body.encode("utf-8", errors="ignore")),
+                _trace_budget_max_bytes,
+            )
+            return (
+                "web_fetch trace budget exhausted for this survey run "
+                f"(cap: {_trace_budget_max_calls} fetches / "
+                f"{_trace_budget_max_bytes:,} bytes). "
+                "Answer from already-retrieved information; do not "
+                "request more fetches."
+            )
+
         _cache[canonical] = (now, (rc, body))
-        # Charge the budget for this real (cache-miss, non-raw) fetch —
-        # at the same point the result enters the cache, so the byte
-        # count reflects what the agent's context actually receives.
+        # Charge both the per-consult and the per-survey-run budgets for
+        # this real (cache-miss, non-raw) fetch — at the same point the
+        # result enters the cache, so the byte count reflects what the
+        # agent's context actually receives.
         global _fetch_calls, _fetch_bytes
         _fetch_calls += 1
         _fetch_bytes += len(body.encode("utf-8", errors="ignore"))
+        _trace_fetch_calls += 1
+        _trace_fetch_bytes += len(body.encode("utf-8", errors="ignore"))
         return body
 
     return web_fetch
