@@ -980,10 +980,13 @@ class _LifecycleMixin(_ServiceBase):
             return
 
         excess = len(candidates) - max_actions
-        for pa in candidates[:excess]:
-            s2 = db.session(self.settings, self.board_id)
-            with s2 as s:
-                row = s.get(ProposedAction, pa.id)
-                if row is not None:
-                    s.delete(row)
-                    s.commit()
+        # Batch all deletes inside a single session + commit to avoid
+        # one DB round-trip per row when the excess is large.
+        to_delete_ids = [pa.id for pa in candidates[:excess]]
+        if to_delete_ids:
+            with db.session(self.settings, self.board_id) as s:
+                for pa_id in to_delete_ids:
+                    row = s.get(ProposedAction, pa_id)
+                    if row is not None:
+                        s.delete(row)
+                s.commit()

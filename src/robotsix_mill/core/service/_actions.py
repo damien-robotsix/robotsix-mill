@@ -60,8 +60,6 @@ class _ActionMixin(_ServiceBase):
                 s.add(pa)
                 s.commit()
                 s.refresh(pa)
-                self._maybe_purge_stale_proposed_actions()
-                return pa
         except Exception:
             log.warning(
                 "create_proposed_action: failed to persist proposal "
@@ -71,6 +69,18 @@ class _ActionMixin(_ServiceBase):
                 exc_info=True,
             )
             return None
+
+        # Purge stale proposals AFTER the commit succeeds so a purge
+        # failure cannot hide an already-committed proposal row (the
+        # caller would see None and may retry, creating a duplicate).
+        try:
+            self._maybe_purge_stale_proposed_actions()
+        except Exception:
+            log.warning(
+                "create_proposed_action: purge stale actions failed",
+                exc_info=True,
+            )
+        return pa
 
     def approve_proposed_action(
         self, action_id: int, decided_by: str = "human"
