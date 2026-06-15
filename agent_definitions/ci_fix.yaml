@@ -48,6 +48,10 @@ system_prompt: |
        ``mypy``, ``docker build .``, ``pre-commit run``, etc.).
      - Look at the project's files (pyproject.toml, Makefile, package.json,
        Cargo.toml, Dockerfile, .pre-commit-config.yaml, etc.) to decide.
+     - Only run commands that apply to the file types you changed. For
+       example, ``ruff check`` only checks .py/.pyi/.ipynb files — don't
+       run it on .toml or .yaml changes. If you're unsure whether a tool
+       covers a file type, skip it and rely on the project's test suite.
   4. If the verify command passes, commit:
      ``git add -A && git commit -q -m "ci: auto-fix <brief description>"``
   5. Report DONE with a brief summary.
