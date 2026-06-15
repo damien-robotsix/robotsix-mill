@@ -580,16 +580,31 @@ def test_run_test_agent_fails_with_distill(monkeypatch, tmp_path):
 
 def test_run_test_agent_loads_file_map(tmp_path, monkeypatch):
     """file_map=None triggers _load_file_map from artifacts/file_map.json."""
+    from robotsix_mill.agents import testing
+
     monkeypatch.setattr(
         "robotsix_mill.agents.testing.load_repo_test_command",
         lambda _: "pytest",
     )
 
-    # Create file_map.json in artifacts sibling
+    # Create the workspace checkout layout: repo dir + sibling artifacts/
+    repo = tmp_path / "repo"
+    repo.mkdir()
     artifacts = tmp_path / "artifacts"
     artifacts.mkdir()
     fm = artifacts / "file_map.json"
     fm.write_text(json.dumps([{"file": "src/x.py"}]))
+
+    # Wrap _load_file_map so we can verify it was actually invoked
+    original_load = testing._load_file_map
+    load_called = False
+
+    def _load_spy(repo_dir):
+        nonlocal load_called
+        load_called = True
+        return original_load(repo_dir)
+
+    monkeypatch.setattr(testing, "_load_file_map", _load_spy)
 
     def fake_run(cmd, *, repo_dir, settings, install_project, sandbox_image):
         return (0, "ok")
@@ -599,8 +614,9 @@ def test_run_test_agent_loads_file_map(tmp_path, monkeypatch):
     )
 
     s = _make_settings_for_gate(tmp_path)
-    passed, msg = run_test_agent(settings=s, repo_dir=tmp_path)
+    passed, msg = run_test_agent(settings=s, repo_dir=repo)
     assert passed is True
+    assert load_called
 
 
 def test_run_test_agent_repo_config_sandbox_image(monkeypatch, tmp_path):
