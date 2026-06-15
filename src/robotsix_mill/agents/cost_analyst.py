@@ -81,7 +81,7 @@ def run_cost_analyst_agent(
         tools=[],
         web_knowledge=False,
         report_issue=False,
-        read_ticket=True,
+        read_ticket=False,
         reply_to_thread=False,
         close_thread=False,
         ask_user=False,
