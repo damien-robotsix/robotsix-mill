@@ -60,7 +60,7 @@ def setup_logging() -> None:
         handler.addFilter(RequestIDLogFilter())
         if handler.formatter is not None and hasattr(handler.formatter, "_fmt"):
             old_fmt = handler.formatter._fmt
-            if "%(request_id)s" not in old_fmt:
+            if old_fmt is not None and "%(request_id)s" not in old_fmt:
                 new_fmt = old_fmt.replace(
                     "[%(trace_id)s]", "[%(trace_id)s] [%(request_id)s]"
                 )
