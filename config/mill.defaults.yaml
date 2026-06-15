@@ -260,6 +260,8 @@ periodic:
     enabled: true                   # enable periodic test-gap passes
     interval_seconds: 86400         # seconds between passes
     memory_path: null               # defaults to <data_dir>/test_gap_memory.md
+    max_tool_calls: 100             # max tool calls per test-gap pass
+    max_errors: 20                  # max errors before aborting the pass
 
   # -- agent-check — audits agent definitions for coherence ----------------
   agent_check:
