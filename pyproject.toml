@@ -20,6 +20,11 @@ dependencies = [
     # Shared YAML config-cascade library, consumed via git like robotsix-llmio.
     # Imported by config_loader.py in the follow-on integration ticket.
     "robotsix-yaml-config @ git+https://github.com/damien-robotsix/robotsix-yaml-config.git@main",
+    # Agent-comm board agent: exposes the mill board's full ticket lifecycle
+    # over agent-comm structured ops, so other agents can drive a board
+    # programmatically (query, file, comment, transition, approve, merge,
+    # resume, migrate).
+    "robotsix-board-agent",
     "pydantic-settings>=2",
     "pyyaml>=6",
     "sqlmodel>=0.0.22",
@@ -60,6 +65,9 @@ tracing = [
 # pip-based audit install and the runtime image).
 dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "pytest-xdist>=3", "bandit[toml]>=1.8", "mypy>=1.15", "mypy-baseline>=0.7", "ruff==0.15.15", "deptry>=0.25", "vulture>=2", "robotsix-modules @ git+https://github.com/damien-robotsix/robotsix-modules@main"]
 docs = ["mkdocs-material>=9", "mkdocstrings[python]>=0.27"]
+
+[tool.uv.sources]
+robotsix-board-agent = { git = "https://github.com/damien-robotsix/robotsix-board-agent.git", rev = "main" }
 
 [tool.uv]
 # `uv sync` pulls the dev group automatically, so CI/contributors don't need

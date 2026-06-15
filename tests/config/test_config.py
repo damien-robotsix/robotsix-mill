@@ -76,6 +76,17 @@ def test_default_max_spend_sentinel():
     assert s.max_spend_usd_per_ticket == 20.0
 
 
+def test_default_board_agent_disabled():
+    """Board agent is opt-in — off by default with localhost URL and
+    writes enabled when turned on."""
+    s = Settings()
+    assert s.board_agent_enabled is False
+    assert s.board_agent_api_url == "http://localhost:8000"
+    assert s.board_agent_api_token == ""
+    assert s.board_agent_repo_id == ""
+    assert s.board_agent_write_ops is True
+
+
 def test_default_review_model_is_pro():
     """The review agent — the last automated merge gate — defaults to the
     full DeepSeek tier (regression guard against drift back to flash)."""
@@ -392,6 +403,22 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     # --- notifications ---
     ("ntfy_url", "NTFY_URL", "https://ntfy.example.com", "https://ntfy.example.com"),
     ("ntfy_token", "NTFY_TOKEN", "tk-test", "tk-test"),
+    # --- board agent ---
+    ("board_agent_enabled", "MILL_BOARD_AGENT_ENABLED", "true", True),
+    (
+        "board_agent_api_url",
+        "MILL_BOARD_AGENT_API_URL",
+        "https://board.example.com",
+        "https://board.example.com",
+    ),
+    (
+        "board_agent_api_token",
+        "MILL_BOARD_AGENT_API_TOKEN",
+        "sk-board-token",
+        "sk-board-token",
+    ),
+    ("board_agent_repo_id", "MILL_BOARD_AGENT_REPO_ID", "my-repo", "my-repo"),
+    ("board_agent_write_ops", "MILL_BOARD_AGENT_WRITE_OPS", "false", False),
 ]
 
 

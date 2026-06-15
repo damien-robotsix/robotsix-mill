@@ -43,12 +43,13 @@ nav:
       - Agent YAML schema: agent-yaml-schema.md
       - Meta board: meta-board.md
   - Operations:
+      - Board agent: board-agent.md
+      - Board cleanup: board-cleanup.md
       - Board operations: board-operations.md
       - Cost controls & resilience: cost-and-resilience.md
       - Notifications: notifications.md
       - Ticket provenance: ticket-provenance.md
       - Workspace cleanup: workspace-cleanup.md
-      - Board cleanup: board-cleanup.md
       - Attaching screenshots: screenshots.md
   - Design:
       - Cost indicators: design/cost-indicators.md
