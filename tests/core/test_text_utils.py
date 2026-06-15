@@ -2,7 +2,11 @@
 
 import pytest
 
-from robotsix_mill.core.text_utils import head_tail_keep, tail_keep, truncate_at_boundary
+from robotsix_mill.core.text_utils import (
+    head_tail_keep,
+    tail_keep,
+    truncate_at_boundary,
+)
 
 
 def test_under_limit_returns_unchanged():
@@ -133,7 +137,9 @@ _BOUNDARY_CASES = [
 ]
 
 
-@pytest.mark.parametrize("boundary_label,body,max_chars,expected_truncated", _BOUNDARY_CASES)
+@pytest.mark.parametrize(
+    "boundary_label,body,max_chars,expected_truncated", _BOUNDARY_CASES
+)
 def test_truncate_at_each_boundary_type(
     boundary_label: str, body: str, max_chars: int, expected_truncated: str
 ) -> None:
