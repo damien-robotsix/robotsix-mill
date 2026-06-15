@@ -2435,6 +2435,8 @@ def test_no_change_info_only_still_closes_to_done(
         "a parallel ticket shipped the fix",
         "the parallel ticket covers this",
         "fixed in 59f312b already on main",
+        "Fixed by PR #1386 — uv copied into the base stage…",
+        "Addressed in #42 with the config patch.",
     ],
 )
 def test_rationale_claims_external_fix_true(rationale):

@@ -865,7 +865,10 @@ def test_dedup_legit_implemented_candidate_accepted(ctx, service, monkeypatch):
     t = service.create("Add feature Z", _DEDUP_BODY)
     cand = service.create("Add feature Z (shipped)", _DEDUP_BODY)
 
-    # Genuinely implemented and merged.
+    # Genuinely implemented and merged — set a branch so the
+    # human-closed-with-claim guard (gates.py) does not reject this
+    # candidate as an unverified external-fix claim.
+    service.set_branch(cand.id, "feat/z")
     service.transition(cand.id, State.DONE, note="implemented and merged in PR #7")
 
     def fake_dedup(

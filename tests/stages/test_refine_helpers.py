@@ -101,12 +101,33 @@ def test_rationale_ref_plus_verb_fires():
         )
         is True
     )
+    # PR / MR number reference + resolved verb co-occurrence.
+    assert (
+        refine_module._rationale_claims_external_fix(
+            "Fixed by PR #1386 — uv copied into the base stage…"
+        )
+        is True
+    )
+    assert (
+        refine_module._rationale_claims_external_fix("Addressed by #42 last week.")
+        is True
+    )
+    assert (
+        refine_module._rationale_claims_external_fix("Merged in MR !15.")
+        is True
+    )
 
 
 def test_rationale_ref_without_verb_does_not_fire():
     assert (
         refine_module._rationale_claims_external_fix(
             "See ticket 20260101T000000Z for background context."
+        )
+        is False
+    )
+    assert (
+        refine_module._rationale_claims_external_fix(
+            "See PR #1234 for background context."
         )
         is False
     )
