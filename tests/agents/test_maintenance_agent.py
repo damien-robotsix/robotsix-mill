@@ -339,6 +339,39 @@ class TestCommandAllowlist:
         assert "rm" in err
         assert "git" in err  # allowed commands are listed
 
+    def test_pipe_inside_single_quotes_not_treated_as_separator(self):
+        """A ``|`` inside single quotes is part of a grep regex, not a pipe."""
+        assert _validate_command("grep 'error|warning' file.txt") is None
+        assert _validate_command("grep -E 'foo|bar|baz' *.py") is None
+
+    def test_pipe_inside_double_quotes_not_treated_as_separator(self):
+        """A ``|`` inside double quotes is part of a grep regex, not a pipe."""
+        assert _validate_command('grep "error|warning" file.txt') is None
+        assert _validate_command('grep -E "foo|bar|baz" *.py') is None
+
+    def test_real_pipe_between_safe_commands_still_works(self):
+        """Real (unquoted) pipes between safe commands are still allowed."""
+        assert _validate_command("grep error | grep warning") is None
+        assert _validate_command("ls -la | wc -l") is None
+
+    def test_pipe_inside_quotes_with_real_pipe(self):
+        """A quoted ``|`` in one segment plus a real pipe in another."""
+        assert _validate_command("grep 'a|b' file.txt | sort | uniq -c") is None
+
+    def test_semicolon_inside_quotes_not_split(self):
+        """A ``;`` inside quotes is not treated as a command separator."""
+        assert _validate_command("grep 'foo;bar' file.txt") is None
+
+    def test_unmatched_quote_does_not_crash(self):
+        """An unmatched single quote does not raise an exception."""
+        result = _validate_command("grep 'unmatched")
+        # The grep binary itself is allowed; the command is malformed
+        # but validation should not crash.
+        assert result is None
+
+        result = _validate_command("grep \"unmatched")
+        assert result is None
+
 
 # ── YAML definition ──────────────────────────────────────────────────
 

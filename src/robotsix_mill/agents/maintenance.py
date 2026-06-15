@@ -65,23 +65,69 @@ _MAINTENANCE_SAFE_COMMANDS: frozenset[str] = frozenset(
 )
 
 
+def _scan_quoted(command: str, i: int, quote_char: str) -> tuple[list[str], int]:
+    """Scan from *i* past *quote_char* through the closing quote, returning
+    the characters consumed and the advanced index."""
+    chars: list[str] = [quote_char]
+    i += 1
+    n = len(command)
+    while i < n and command[i] != quote_char:
+        chars.append(command[i])
+        i += 1
+    if i < n:
+        chars.append(command[i])
+        i += 1
+    return chars, i
+
+
+def _split_shell_separators(command: str) -> list[str]:
+    """Split *command* on ``&&``, ``||``, ``|``, ``;``, respecting
+    single- and double-quoted regions so that ``|`` inside quotes
+    (e.g. ``grep 'error|warning'``) is not mistaken for a pipe."""
+    segments: list[str] = []
+    current: list[str] = []
+    i = 0
+    n = len(command)
+    while i < n:
+        ch = command[i]
+        if ch in ("'", '"'):
+            quoted, i = _scan_quoted(command, i, ch)
+            current.extend(quoted)
+        elif ch == "&" and i + 1 < n and command[i + 1] == "&":
+            segments.append("".join(current))
+            segments.append("&&")
+            current = []
+            i += 2
+        elif ch == "|" and i + 1 < n and command[i + 1] == "|":
+            segments.append("".join(current))
+            segments.append("||")
+            current = []
+            i += 2
+        elif ch in ("|", ";"):
+            segments.append("".join(current))
+            segments.append(ch)
+            current = []
+            i += 1
+        else:
+            current.append(ch)
+            i += 1
+    segments.append("".join(current))
+    return segments
+
+
 def _validate_command(command: str) -> str | None:
     """Return an error string if *command* contains a non-allowlisted
     executable, or ``None`` if every segment passes.
 
-    Splits on ``&&``, ``||``, ``|``, ``;`` and checks the first
-    whitespace-delimited word of each segment against
+    Splits on ``&&``, ``||``, ``|``, ``;`` (respecting shell quoting
+    so that ``|`` inside quotes is not treated as a pipe) and checks
+    the first whitespace-delimited word of each segment against
     ``_MAINTENANCE_SAFE_COMMANDS``.  Segments that are pure ``cd``
     (with or without a directory argument) are skipped — this lets the
     agent navigate between repo subdirectories via ``cd <dir> && ...``
     or ``cd <dir> || ...`` chains.
     """
-    import re
-
-    # Split on shell separators (capturing parens keep the separators
-    # in the result list, but we only examine every other element —
-    # the actual command segments).
-    segments = re.split(r"(&&|\|\||\||;)", command)
+    segments = _split_shell_separators(command)
     for i in range(0, len(segments), 2):
         segment = segments[i].strip()
         if not segment:
@@ -588,9 +634,11 @@ def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResul
         def run_command(command: str) -> str:
             """Run a sandboxed read-only shell command in the investigation workspace.
 
-            Only safe, read-only commands are allowed (git, grep, ls, find,
-            cat, head, tail, wc, sort, uniq, diff, ...).  Write-capable or
-            destructive commands are rejected before execution.
+            Only safe, read-only commands are allowed.  Allowed: git, grep,
+            ls, find, cat, head, tail, wc, sort, uniq, diff, sed, awk, cut,
+            tr, xargs, echo, dirname, basename, realpath, readlink, stat,
+            file, du, tree, cd.  Write-capable or destructive commands are
+            rejected before execution.
             """
             err = _validate_command(command)
             if err is not None:
