@@ -5,8 +5,7 @@ from __future__ import annotations
 import logging
 import uuid
 from contextvars import ContextVar
-
-from starlette.types import ASGIApp, Message, Receive, Scope, Send
+from typing import Any
 
 request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
 
@@ -21,10 +20,10 @@ class RequestIDMiddleware:
     ID to the client in the ``X-Request-ID`` response header.
     """
 
-    def __init__(self, app: ASGIApp) -> None:
+    def __init__(self, app: Any) -> None:
         self.app = app
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -44,7 +43,7 @@ class RequestIDMiddleware:
         state = scope.setdefault("state", {})
         state["request_id"] = request_id
 
-        async def send_wrapper(message: Message) -> None:
+        async def send_wrapper(message: Any) -> None:
             if message["type"] == "http.response.start":
                 headers = list(message.get("headers", []))
                 headers.append((b"x-request-id", request_id.encode("ascii")))
