@@ -532,7 +532,7 @@ class TestEditFile:
         _make_file(root, "f.py", "x = 1\ny = 2\n")
         tools = _build(root, settings)
         result = tools["edit_file"]("f.py", "y = 2", "y = 3")
-        assert "replaced 1 occurrence in f.py" in result
+        assert "replaced 1 occurrence(s) in f.py" in result
         assert (root / "f.py").read_text() == "x = 1\ny = 3\n"
 
     def test_not_found(self, tmp_path, settings):
@@ -551,8 +551,30 @@ class TestEditFile:
         content = "cat dog cat\n"
         _make_file(root, "f.txt", content)
         tools = _build(root, settings)
+        # default count=1 on a 2-occurrence string: must reject to
+        # preserve the "unique string" contract; file left unchanged.
         result = tools["edit_file"]("f.txt", "cat", "CAT")
-        assert "appears 2 times" in result
+        assert "old_string appears 2 times" in result
+        assert (root / "f.txt").read_text() == content  # unchanged
+
+    def test_multiple_occurrences_count_2(self, tmp_path, settings):
+        root = tmp_path / "repo"
+        root.mkdir()
+        content = "cat dog cat\n"
+        _make_file(root, "f.txt", content)
+        tools = _build(root, settings)
+        result = tools["edit_file"]("f.txt", "cat", "CAT", count=2)
+        assert "replaced 2 occurrence(s)" in result
+        assert (root / "f.txt").read_text() == "CAT dog CAT\n"
+
+    def test_multiple_occurrences_count_too_high(self, tmp_path, settings):
+        root = tmp_path / "repo"
+        root.mkdir()
+        content = "cat dog cat\n"
+        _make_file(root, "f.txt", content)
+        tools = _build(root, settings)
+        result = tools["edit_file"]("f.txt", "cat", "CAT", count=5)
+        assert "but 5 replacement(s) were requested" in result
         assert (root / "f.txt").read_text() == content  # unchanged
 
     def test_empty_old_string(self, tmp_path, settings):
@@ -561,9 +583,10 @@ class TestEditFile:
         _make_file(root, "f.txt", "hello")
         tools = _build(root, settings)
         result = tools["edit_file"]("f.txt", "", "X")
-        # empty string: str.count('') returns len+1, so "appears 6 times"
-        assert "appears 6 times" in result
-        assert (root / "f.txt").read_text() == "hello"  # unchanged
+        # empty string: str.count('') returns len+1=6, but count=1 still
+        # proceeds (replacing the first empty occurrence at position 0).
+        assert "replaced 1 occurrence(s)" in result
+        assert (root / "f.txt").read_text() == "Xhello"
 
     def test_edit_outside_root(self, tmp_path, settings):
         root = tmp_path / "repo"
@@ -590,7 +613,7 @@ class TestEditFile:
         _make_file(extra, "f.py", "x = 1\ny = 2\n")
         tools = _build_extra(root, settings, [extra])
         result = tools["edit_file"]("../extra/f.py", "y = 2", "y = 3")
-        assert "replaced 1 occurrence in ../extra/f.py" in result
+        assert "replaced 1 occurrence(s) in ../extra/f.py" in result
         assert (extra / "f.py").read_text() == "x = 1\ny = 3\n"
 
     def test_edit_file_python_syntax_error_refused(self, tmp_path, settings):
