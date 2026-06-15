@@ -2223,9 +2223,7 @@ def test_growth_suppressed_for_memory_ledger(tmp_path, monkeypatch, caplog):
     with caplog.at_level(logging.INFO, logger="robotsix_mill.data_dir_audit"):
         result = run_data_dir_audit_pass()
 
-    assert not any(
-        f["path"] == "copy_paste_memory.md" for f in result.growth_flags
-    )
+    assert not any(f["path"] == "copy_paste_memory.md" for f in result.growth_flags)
     assert any(
         "suppressing growth flag" in rec.message
         and "bounded memory ledger" in rec.message
