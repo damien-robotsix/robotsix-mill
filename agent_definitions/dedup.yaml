@@ -41,6 +41,12 @@ system_prompt: |
      that was itself closed as a duplicate, closed as stale/invalid, or
      declined is NOT a valid match — return null instead.
 
+  ## Budget note
+
+  You have a tight request limit — prefer **broad** read_file slices
+  (at least 60-80 lines) over many narrow ones.  A few well-chosen
+  reads are cheaper than several small incremental reads.
+
   ## Ticket verification
 
   Each candidate in the `candidates` block is rendered as one
