@@ -51,6 +51,22 @@ def setup_logging() -> None:
     logging.getLogger("robotsix_mill").propagate = True
     logging.getLogger("robotsix_llmio").propagate = True
 
+    # Inject request-id into every log record and into the formatter
+    # so [%(request_id)s] appears alongside the trace-id field.
+    from .middleware import RequestIDLogFilter
+
+    mill_logger = logging.getLogger("robotsix_mill")
+    for handler in mill_logger.handlers:
+        handler.addFilter(RequestIDLogFilter())
+        if handler.formatter is not None and hasattr(handler.formatter, "_fmt"):
+            old_fmt = handler.formatter._fmt
+            if "%(request_id)s" not in old_fmt:
+                new_fmt = old_fmt.replace(
+                    "[%(trace_id)s]", "[%(trace_id)s] [%(request_id)s]"
+                )
+                handler.setFormatter(logging.Formatter(new_fmt))
+        break  # only the first (llmio-placed) handler
+
 
 # Called at import time so logging is configured before any lifespan or
 # route code logs — the idempotency guard makes this safe to repeat.
