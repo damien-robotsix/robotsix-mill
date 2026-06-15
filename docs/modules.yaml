@@ -507,6 +507,7 @@ modules:
       - tests/agents/test_timeout_escalation.py
       - tests/agents/test_cost.py
       - tests/agents/test_bespoke_loader.py
+      - tests/agents/test_bespoke.py
       - tests/agents/test_epic_status.py
     dependencies: [config, core, agent-infra, agent-tools, forge, vcs, runners, langfuse, sandbox]
 
