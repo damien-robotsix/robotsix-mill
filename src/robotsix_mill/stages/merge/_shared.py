@@ -1,0 +1,238 @@
+"""Shared leaf module for the merge stage package.
+
+Pure leaf (Pattern A): holds every module-level name that more than one
+merge submodule needs — constants, helper functions, and the package
+``log``. Imports only **outward** (``..base``, stdlib); it must NOT
+import any sibling mixin or ``core`` so the package import graph stays
+an acyclic DAG.
+
+The ``log`` here is bound to the logger name
+``"robotsix_mill.stages.merge"`` so existing
+``caplog.at_level(logger="robotsix_mill.stages.merge")`` assertions
+keep capturing through the package split.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import subprocess
+from pathlib import Path
+from typing import Any
+
+from ...config import ConfigError, RepoConfig, get_repo_config
+
+log = logging.getLogger("robotsix_mill.stages.merge")
+
+_REBASE_COUNTER = "rebase_attempts.txt"
+_MERGE_REASON = "merge_reason.txt"
+_REV_REV_COUNTER = "review_revision_attempts.txt"
+
+
+def _load_pr_urls(ws_artifacts_dir: Path) -> list[dict] | None:
+    """Read ``pr_urls.json``.
+
+    Returns the list when present + parseable, ``None`` when the file
+    is absent (single-repo path), or raises ``ValueError`` on a
+    corrupt file so the caller can BLOCK-resumable.
+
+    The schema mirrors what :func:`deliver._write_pr_urls` writes::
+
+        [{"repo_id": str, "branch": str, "url": str}, ...]
+    """
+    path = ws_artifacts_dir / "pr_urls.json"
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        raise ValueError(f"pr_urls.json could not be parsed: {e}") from e
+    if not isinstance(data, list):
+        raise ValueError("pr_urls.json is not a JSON list")
+    return data
+
+
+def _repo_config_for_entry(entry: dict) -> RepoConfig:
+    """Resolve a per-repo :class:`RepoConfig` from a ``pr_urls.json``
+    entry. Propagates :class:`ConfigError` when the ``repo_id`` is
+    missing, non-string, empty, or not registered so the caller's
+    existing ``except ConfigError`` arm translates to a BLOCKED
+    outcome (instead of bubbling a ``KeyError`` from ``entry['repo_id']``
+    when the manifest is malformed)."""
+    repo_id = entry.get("repo_id")
+    if not isinstance(repo_id, str) or not repo_id:
+        raise ConfigError("pr_urls.json entry is missing a non-empty string 'repo_id'")
+    return get_repo_config(repo_id)
+
+
+def _read_counter(path) -> int:
+    try:
+        return int(path.read_text(encoding="utf-8").strip())
+    except FileNotFoundError, ValueError:
+        return 0
+
+
+def _write_counter(path, value: int) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(str(value), encoding="utf-8")
+
+
+def _build_failing_summary(
+    failing: list[dict],
+    log_text: str = "",
+    alerts: list[dict] | None = None,
+    changed_paths: set[str] | None = None,
+) -> str:
+    """Markdown summary of failing checks for the CI-fix agent.
+
+    A thin wrapper over ``stages.ci_fix._build_failing_summary`` (imported
+    lazily to avoid a module-load cycle) so the multi-repo path renders the
+    same job-logs + code-scanning-alert detail as the single-repo path. When
+    *changed_paths* is provided the alerts are partitioned against the PR's
+    own diff and labelled in-scope / out-of-scope, mirroring the single-repo
+    ``ci_fix._build_failure_detail`` path.
+    """
+    from ..ci_fix import _build_failing_summary as _ci_fix_summary
+
+    return _ci_fix_summary(failing, log_text, alerts, changed_paths)
+
+
+def _read_reason(path) -> str:
+    try:
+        return path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return ""
+
+
+def _write_reason(path, reason: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(reason, encoding="utf-8")
+
+
+def _workspace_repo_dir(ctx, ticket) -> str | None:
+    """Return the ticket's workspace clone dir, or None if missing."""
+    ws = ctx.service.workspace(ticket)
+    repo = ws.dir / "repo"
+    if not (repo / ".git").exists():
+        return None
+    return str(repo)
+
+
+def _verify_merge_ancestor(
+    repo_dir: str | None,
+    sha: str,
+    ticket_id: str,
+    target_branch: str = "main",
+) -> bool:
+    """Verify that commit *sha* is an ancestor of origin/<target_branch>.
+
+    Fetches origin/<target_branch> to ensure the local ref is current,
+    then runs ``git merge-base --is-ancestor <sha> origin/<target_branch>``.
+    When the direct ancestry check fails (exit 1), falls back to
+    squash-merge detection: greps the origin/<target_branch> log for
+    *ticket_id*.
+
+    Returns True when the merge is confirmed (ancestor or squash-
+    merge found).  Returns False only when the check runs and
+    confirms the commit is NOT on origin/<target_branch>.  When the
+    repo is unavailable or a git error occurs, returns True
+    (best-effort — do not block the pipeline on transient tooling
+    issues).
+    """
+    if repo_dir is None or not sha:
+        # Nothing to verify — best-effort allow.
+        return True
+    try:
+        subprocess.run(
+            ["git", "-C", repo_dir, "fetch", "origin", target_branch],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError:
+        log.warning(
+            "%s: git fetch origin %s failed — allowing merge (best-effort)",
+            ticket_id,
+            target_branch,
+        )
+        return True
+
+    result = subprocess.run(
+        [
+            "git",
+            "-C",
+            repo_dir,
+            "merge-base",
+            "--is-ancestor",
+            sha,
+            f"origin/{target_branch}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return True  # sha is an ancestor of origin/<target_branch>
+    if result.returncode == 1:
+        # Not a direct ancestor — maybe it was a squash-merge.
+        grep = subprocess.run(
+            [
+                "git",
+                "-C",
+                repo_dir,
+                "log",
+                f"origin/{target_branch}",
+                "--oneline",
+                "--fixed-strings",
+                f"--grep={ticket_id}",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if grep.returncode == 0 and grep.stdout.strip():
+            log.info(
+                "%s: commit %s is not an ancestor of origin/%s, "
+                "but a commit referencing this ticket was found on "
+                "origin/%s — treating as squash-merged",
+                ticket_id,
+                sha[:8],
+                target_branch,
+                target_branch,
+            )
+            return True
+        log.info(
+            "%s: commit %s is NOT an ancestor of origin/%s — merge not confirmed",
+            ticket_id,
+            sha[:8],
+            target_branch,
+        )
+        return False
+    # Any other exit code — git error, best-effort allow.
+    log.warning(
+        "%s: git merge-base --is-ancestor failed for %s — allowing merge (best-effort)",
+        ticket_id,
+        sha[:8],
+    )
+    return True
+
+
+def _latest_failing_workflows(runs: list[dict[str, Any]]) -> set[str]:
+    """Reduce a list of workflow-run dicts to the set of currently
+    failing workflow names.
+
+    The latest completed run per ``workflow_id`` wins (compared by the
+    ``created_at`` string), so a later green run supersedes an earlier
+    red one for the same workflow (and vice-versa). Returns the names
+    of those latest-per-workflow runs whose ``conclusion`` is
+    ``"failure"`` (blank names are dropped)."""
+    latest: dict[Any, dict[str, Any]] = {}
+    for run in runs:
+        wid = run.get("workflow_id")
+        if wid not in latest or run.get("created_at", "") > latest[wid].get(
+            "created_at", ""
+        ):
+            latest[wid] = run
+    return {
+        (r.get("name") or "").strip()
+        for r in latest.values()
+        if r.get("conclusion") == "failure" and (r.get("name") or "").strip()
+    }

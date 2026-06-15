@@ -278,7 +278,14 @@ modules:
       - src/robotsix_mill/stages/refine/orchestration.py
       - src/robotsix_mill/stages/refine/helpers.py
       - src/robotsix_mill/stages/answer.py
-      - src/robotsix_mill/stages/merge.py
+      - src/robotsix_mill/stages/merge/__init__.py
+      - src/robotsix_mill/stages/merge/_base.py
+      - src/robotsix_mill/stages/merge/_shared.py
+      - src/robotsix_mill/stages/merge/ci_poll.py
+      - src/robotsix_mill/stages/merge/core.py
+      - src/robotsix_mill/stages/merge/multi_repo.py
+      - src/robotsix_mill/stages/merge/rebase.py
+      - src/robotsix_mill/stages/merge/review_revision.py
       - src/robotsix_mill/stages/ci_fix.py
       - src/robotsix_mill/stages/pause.py
       - src/robotsix_mill/stages/retrospect.py
