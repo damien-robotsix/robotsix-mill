@@ -22,6 +22,8 @@ tools:
   - validate_artifact
 
 report_issue: false
+close_thread: false
+list_threads: false
 read_ticket: true
 reply_to_thread: false
 output_type: ModuleCuratorResult

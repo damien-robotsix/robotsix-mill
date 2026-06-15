@@ -14,6 +14,8 @@ tools: []
 
 ask_user: false
 report_issue: false
+close_thread: false
+list_threads: false
 output_type: EpicBreakdownResult
 retries: 2
 module: epic_breakdown
