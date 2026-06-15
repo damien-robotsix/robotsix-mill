@@ -53,6 +53,8 @@ nav:
   - Design:
       - Cost indicators: design/cost-indicators.md
       - Forge architecture: design/forge-architecture.md
+  - Guides:
+      - Adding a New Agent: guides/adding-a-new-agent.md
   - API Reference:
       - Agents: reference/agents.md
       - Core: reference/core.md
