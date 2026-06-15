@@ -8,6 +8,8 @@ model to keep ``settings.py`` under 800 lines. Assembled into the final
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -195,6 +197,12 @@ class _StagesSettings(BaseModel):
     # explicitly enable this and ensure the GitHub App installation has
     # the necessary repository-creation scope.
     enable_repo_creation: bool = Field(default=False)
+    # Default visibility for newly created repositories.
+    # "public" — repos are public unless the caller specifies private=True.
+    # "private" — repos are private unless the caller specifies private=False.
+    repo_visibility_default: Literal["public", "private"] = Field(
+        default="public", alias="MILL_REPO_VISIBILITY_DEFAULT"
+    )
     # When True, the merge stage deletes the per-ticket head branch on the
     # forge after a ticket merges to DONE. Default True — cleans up
     # mill/<id> branches automatically; set False to keep them.

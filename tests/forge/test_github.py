@@ -1576,6 +1576,109 @@ def test_create_repo_clamps_long_description(tmp_path, monkeypatch):
     assert len(captured["payload"]["description"]) <= 350
 
 
+def test_create_repo_defaults_to_public_from_config(tmp_path, monkeypatch):
+    """When private is not passed, repo_visibility_default (default 'public')
+    resolves to private=False in the POST payload."""
+    captured = {"payload": None}
+
+    class PayloadClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            return _make_response(404, [], "")
+
+        def post(self, url, headers=None, json=None, **kwargs):
+            captured["payload"] = json
+            return _make_response(
+                201, {"id": 1, "name": "b", "clone_url": "x", "html_url": "y"}
+            )
+
+    monkeypatch.setattr(real_httpx, "Client", PayloadClient)
+
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    forge.create_repo(name="b", owner="o", description="d")
+
+    assert captured["payload"]["private"] is False
+
+
+def test_create_repo_respects_private_default_config(tmp_path, monkeypatch):
+    """When repo_visibility_default is 'private', omitted private resolves
+    to True in the POST payload."""
+    captured = {"payload": None}
+
+    class PayloadClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            return _make_response(404, [], "")
+
+        def post(self, url, headers=None, json=None, **kwargs):
+            captured["payload"] = json
+            return _make_response(
+                201, {"id": 1, "name": "b", "clone_url": "x", "html_url": "y"}
+            )
+
+    monkeypatch.setattr(real_httpx, "Client", PayloadClient)
+
+    forge = _forge(
+        tmp_path,
+        enable_repo_creation=True,
+        MILL_REPO_VISIBILITY_DEFAULT="private",
+    )
+    forge.create_repo(name="b", owner="o", description="d")
+
+    assert captured["payload"]["private"] is True
+
+
+def test_create_repo_explicit_private_overrides_config(tmp_path, monkeypatch):
+    """Explicit private=False still wins when repo_visibility_default='private'."""
+    captured = {"payload": None}
+
+    class PayloadClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            return _make_response(404, [], "")
+
+        def post(self, url, headers=None, json=None, **kwargs):
+            captured["payload"] = json
+            return _make_response(
+                201, {"id": 1, "name": "b", "clone_url": "x", "html_url": "y"}
+            )
+
+    monkeypatch.setattr(real_httpx, "Client", PayloadClient)
+
+    forge = _forge(
+        tmp_path,
+        enable_repo_creation=True,
+        MILL_REPO_VISIBILITY_DEFAULT="private",
+    )
+    forge.create_repo(name="b", owner="o", private=False, description="d")
+
+    assert captured["payload"]["private"] is False
+
+
 # ---------------------------------------------------------------------------
 # fork_repo
 # ---------------------------------------------------------------------------

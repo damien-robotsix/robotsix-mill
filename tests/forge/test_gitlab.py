@@ -1736,6 +1736,88 @@ def test_create_repo_other_error_raises_runtimeerror(tmp_path, monkeypatch):
         forge.create_repo(name="proj", owner="ns", private=True, description="d")
 
 
+def test_create_repo_defaults_to_public_from_config(tmp_path, monkeypatch):
+    """When private is not passed, repo_visibility_default (default 'public')
+    resolves to visibility=public in the POST payload."""
+    created = {
+        "id": 1,
+        "path": "proj",
+        "name": "proj",
+        "http_url_to_repo": "https://gitlab.com/ns/proj.git",
+        "web_url": "https://gitlab.com/ns/proj",
+    }
+    get_map = {
+        "namespaces/ns": _make_response(200, {"id": 9}),
+    }
+    captured = _mock_httpx(
+        monkeypatch,
+        get_map=get_map,
+        post_response=_make_response(201, created),
+    )
+
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    forge.create_repo(name="proj", owner="ns", description="d")
+
+    assert captured["post_payload"]["visibility"] == "public"
+
+
+def test_create_repo_respects_private_default_config(tmp_path, monkeypatch):
+    """When repo_visibility_default is 'private', omitted private resolves
+    to visibility=private in the POST payload."""
+    created = {
+        "id": 1,
+        "path": "proj",
+        "name": "proj",
+        "http_url_to_repo": "https://gitlab.com/ns/proj.git",
+        "web_url": "https://gitlab.com/ns/proj",
+    }
+    get_map = {
+        "namespaces/ns": _make_response(200, {"id": 9}),
+    }
+    captured = _mock_httpx(
+        monkeypatch,
+        get_map=get_map,
+        post_response=_make_response(201, created),
+    )
+
+    forge = _forge(
+        tmp_path,
+        enable_repo_creation=True,
+        MILL_REPO_VISIBILITY_DEFAULT="private",
+    )
+    forge.create_repo(name="proj", owner="ns", description="d")
+
+    assert captured["post_payload"]["visibility"] == "private"
+
+
+def test_create_repo_explicit_private_overrides_config(tmp_path, monkeypatch):
+    """Explicit private=False still wins when repo_visibility_default='private'."""
+    created = {
+        "id": 1,
+        "path": "proj",
+        "name": "proj",
+        "http_url_to_repo": "https://gitlab.com/ns/proj.git",
+        "web_url": "https://gitlab.com/ns/proj",
+    }
+    get_map = {
+        "namespaces/ns": _make_response(200, {"id": 9}),
+    }
+    captured = _mock_httpx(
+        monkeypatch,
+        get_map=get_map,
+        post_response=_make_response(201, created),
+    )
+
+    forge = _forge(
+        tmp_path,
+        enable_repo_creation=True,
+        MILL_REPO_VISIBILITY_DEFAULT="private",
+    )
+    forge.create_repo(name="proj", owner="ns", private=False, description="d")
+
+    assert captured["post_payload"]["visibility"] == "public"
+
+
 # ---------------------------------------------------------------------------
 # fork_repo
 # ---------------------------------------------------------------------------
