@@ -19,6 +19,7 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
+from ._settings_board_agent import _BoardAgentSettings
 from ._settings_core import _CoreSettings
 from ._settings_observability import _ObservabilitySettings
 from ._settings_periodic import _PeriodicSettings
@@ -34,7 +35,8 @@ class Settings(
     # order because pydantic collects fields in reverse-MRO order; listing
     # the mixins back-to-front here preserves the original
     # ``Settings.model_fields`` ordering (core → stages → periodic →
-    # observability).
+    # observability → board-agent).
+    _BoardAgentSettings,
     _ObservabilitySettings,
     _PeriodicSettings,
     _StagesSettings,

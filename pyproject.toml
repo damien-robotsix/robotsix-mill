@@ -32,6 +32,7 @@ dependencies = [
     # parameterized by a BoardAdapter Protocol and a render-mode switch.
     # Consumed via git dependency — see robotsix-board README for API docs.
     "robotsix-board @ git+https://github.com/damien-robotsix/robotsix-board.git@main",
+    "robotsix-board-agent",
 ]
 
 [project.optional-dependencies]
@@ -283,3 +284,6 @@ python_version = "3.14"
 packages = ["src/robotsix_mill"]
 ignore_missing_imports = true
 show_error_codes = true
+
+[tool.uv.sources]
+robotsix-board-agent = { git = "https://github.com/damien-robotsix/robotsix-board-agent.git", rev = "main" }

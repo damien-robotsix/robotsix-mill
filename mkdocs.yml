@@ -44,6 +44,7 @@ nav:
       - Meta board: meta-board.md
   - Operations:
       - Board operations: board-operations.md
+      - Board agent (agent-comm): board-agent.md
       - Cost controls & resilience: cost-and-resilience.md
       - Notifications: notifications.md
       - Ticket provenance: ticket-provenance.md

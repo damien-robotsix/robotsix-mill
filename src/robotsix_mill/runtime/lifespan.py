@@ -56,10 +56,53 @@ def setup_logging() -> None:
 # route code logs — the idempotency guard makes this safe to repeat.
 setup_logging()
 
+log = logging.getLogger(__name__)
+
 # Module-level process start time, set at the beginning of the lifespan
 # startup phase. Accessible without an ``app`` reference so the
 # trace-review runner can import it directly for restart correlation.
 _process_started_at: datetime | None = None
+
+
+async def _start_board_agent(settings: Settings, app: FastAPI) -> None:
+    """Start the board-agent bridge if ``board_agent_enabled`` is True.
+
+    The import is deferred and guarded with ``try/except ImportError``
+    so deployments that keep the agent off pay zero overhead and don't
+    need the ``robotsix-board-agent`` package installed.
+    """
+    if not settings.board_agent_enabled:
+        return
+
+    try:
+        from robotsix_agent_comm import Registry  # noqa: F811
+        from robotsix_board_agent import BoardAgent
+    except ImportError:
+        log.warning(
+            "board_agent_enabled=True but robotsix-board-agent is not "
+            "installed; skipping board agent startup"
+        )
+        return
+
+    registry = Registry()
+    app.state.agent_comm_registry = registry
+
+    agent = BoardAgent(
+        settings,
+        registry,
+        agent_id=f"board-{settings.board_agent_repo_id}",
+    )
+    await agent.start()
+    app.state.board_agent = agent
+    log.info("Board agent started (repo_id=%s)", settings.board_agent_repo_id)
+
+
+async def _stop_board_agent(app: FastAPI) -> None:
+    """Stop the board-agent bridge if it was started."""
+    agent = getattr(app.state, "board_agent", None)
+    if agent is not None:
+        await agent.stop()
+        log.info("Board agent stopped")
 
 
 def create_lifespan(
@@ -135,9 +178,11 @@ def create_lifespan(
         tracing.install_signal_handlers()
         worker.start()
         worker.requeue_unfinished()  # resume anything left mid-pipeline
+        await _start_board_agent(settings, app)
         try:
             yield
         finally:
+            await _stop_board_agent(app)
             await worker.stop()
 
     return lifespan
