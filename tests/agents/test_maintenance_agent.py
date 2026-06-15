@@ -369,7 +369,7 @@ class TestCommandAllowlist:
         # but validation should not crash.
         assert result is None
 
-        result = _validate_command("grep \"unmatched")
+        result = _validate_command('grep "unmatched')
         assert result is None
 
 
