@@ -51,9 +51,9 @@ class TestSetupLogging:
         from robotsix_mill.runtime.middleware import RequestIDLogFilter
 
         handler = root.handlers[0]
-        assert any(
-            isinstance(f, RequestIDLogFilter) for f in handler.filters
-        ), "Expected a RequestIDLogFilter on the handler"
+        assert any(isinstance(f, RequestIDLogFilter) for f in handler.filters), (
+            "Expected a RequestIDLogFilter on the handler"
+        )
 
     def test_formatter_includes_request_id(self):
         """After setup_logging, the handler formatter includes %(request_id)s."""

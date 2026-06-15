@@ -1,4 +1,5 @@
 """ASGI middleware: request-ID injection and logging integration."""
+
 from __future__ import annotations
 
 import logging
