@@ -507,6 +507,7 @@ modules:
       - tests/agents/test_retrospect.py
       - tests/agents/test_trace_inspector.py
       - tests/agents/test_test_gap.py
+      - tests/agents/test_testing.py
       - tests/agents/test_timeout_escalation.py
       - tests/agents/test_cost.py
       - tests/agents/test_bespoke_loader.py
