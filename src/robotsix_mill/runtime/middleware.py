@@ -6,6 +6,8 @@ import logging
 import uuid
 from contextvars import ContextVar
 
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
 request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
 
 
@@ -19,10 +21,10 @@ class RequestIDMiddleware:
     ID to the client in the ``X-Request-ID`` response header.
     """
 
-    def __init__(self, app):
+    def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
-    async def __call__(self, scope, receive, send):
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -42,7 +44,7 @@ class RequestIDMiddleware:
         state = scope.setdefault("state", {})
         state["request_id"] = request_id
 
-        async def send_wrapper(message):
+        async def send_wrapper(message: Message) -> None:
             if message["type"] == "http.response.start":
                 headers = list(message.get("headers", []))
                 headers.append((b"x-request-id", request_id.encode("ascii")))
@@ -58,6 +60,6 @@ class RequestIDMiddleware:
 class RequestIDLogFilter(logging.Filter):
     """stdlib logging filter that injects the current request ID."""
 
-    def filter(self, record):
+    def filter(self, record: logging.LogRecord) -> bool:
         record.request_id = request_id_var.get()
         return True
