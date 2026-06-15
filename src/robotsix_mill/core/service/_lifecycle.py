@@ -6,7 +6,9 @@ from __future__ import annotations
 import logging
 import shutil
 from datetime import datetime, timezone
+from pathlib import Path
 from secrets import token_hex
+from typing import Any
 
 from sqlmodel import Session, col, select
 
@@ -742,6 +744,232 @@ class _LifecycleMixin(_ServiceBase):
         State.MAINTENANCE,
     }
 
+    _MIGRATABLE_EPIC_STATES: set[State] = _MIGRATABLE_STATES | {
+        State.EPIC_OPEN,
+        State.EPIC_CLOSED,
+    }
+
+    @staticmethod
+    def _collect_subtree(session: Session, root_id: str) -> list[Ticket]:
+        """Collect the full descendant subtree rooted at *root_id*.
+
+        Returns tickets in insertion order (root first, then BFS
+        children, grandchildren, ...).  Uses an iterative scan — no
+        recursion — so deep trees cannot overflow the Python stack.
+        """
+        root = session.get(Ticket, root_id)
+        if root is None:
+            raise KeyError(root_id)
+        subtree: list[Ticket] = [root]
+        i = 0
+        while i < len(subtree):
+            children = list(
+                session.exec(
+                    select(Ticket).where(Ticket.parent_id == subtree[i].id)
+                ).all()
+            )
+            subtree.extend(children)
+            i += 1
+        return subtree
+
+    def _migrate_epic_subtree(
+        self,
+        s: Session,
+        root: Ticket,
+        src_board: str,
+        dst_board: str,
+        note: str | None = None,
+    ) -> Ticket:
+        """Migrate an epic and its entire descendant subtree atomically.
+
+        *s* is the already-open source-DB session (read-only — we only
+        snapshot from it).  All mutations happen in fresh sessions.
+        """
+        # 1. Collect the full subtree (root first, then BFS).
+        subtree = self._collect_subtree(s, root.id)
+
+        # 2. Validate states for every ticket in the subtree.
+        blockers: list[str] = []
+        for t in subtree:
+            state = State(t.state)
+            if t.kind == "epic":
+                if state not in self._MIGRATABLE_EPIC_STATES:
+                    blockers.append(f"  {t.id}: epic in state {state.value!r}")
+            else:
+                if state not in self._MIGRATABLE_STATES:
+                    blockers.append(f"  {t.id}: in state {state.value!r}")
+        if blockers:
+            allowed = ", ".join(sorted(st.value for st in self._MIGRATABLE_STATES))
+            epic_allowed = ", ".join(
+                sorted(st.value for st in self._MIGRATABLE_EPIC_STATES)
+            )
+            raise ValueError(
+                f"migrate: cannot migrate epic subtree — the following "
+                f"tickets are in non-migratable states (allowed: "
+                f"[{allowed}]; epic allowed: [{epic_allowed}]):\n" + "\n".join(blockers)
+            )
+
+        # 3. Snapshot every ticket's data from the source DB.
+        snapshots: dict[str, Any] = {}
+        for t in subtree:
+            snapshots[t.id] = {
+                "ticket": t.model_dump(),
+                "events": [
+                    ev.model_dump()
+                    for ev in s.exec(
+                        select(TicketEvent)
+                        .where(TicketEvent.ticket_id == t.id)
+                        .order_by(col(TicketEvent.id))
+                    ).all()
+                ],
+                "comments": [
+                    c.model_dump()
+                    for c in s.exec(
+                        select(Comment)
+                        .where(Comment.ticket_id == t.id)
+                        .order_by(col(Comment.id))
+                    ).all()
+                ],
+                "actions": [
+                    a.model_dump()
+                    for a in s.exec(
+                        select(ProposedAction)
+                        .where(ProposedAction.target_ticket_id == t.id)
+                        .order_by(col(ProposedAction.id))
+                    ).all()
+                ],
+            }
+
+        # 4. Move workspace dirs (fail early, before any DB write).
+        dst_root = self.settings.workspaces_dir_for(dst_board)
+        dst_root.mkdir(parents=True, exist_ok=True)
+        ws_moves: list[tuple[Path, Path, bool]] = []  # (src, dst, moved)
+        for t in subtree:
+            src_ws = self.settings.workspaces_dir_for(src_board) / t.id
+            dst_ws = dst_root / t.id
+            if dst_ws.exists():
+                raise ValueError(f"migrate: workspace already exists at {dst_ws}")
+            moved = src_ws.exists()
+            if moved:
+                shutil.move(str(src_ws), str(dst_ws))
+            else:
+                dst_ws.mkdir(parents=True, exist_ok=True)
+            # Drop repo-specific leftovers: clones target the OLD repo
+            # and a cached baseline verdict would replay against the
+            # wrong tree.
+            shutil.rmtree(dst_ws / "repo", ignore_errors=True)
+            shutil.rmtree(dst_ws / "repos", ignore_errors=True)
+            (dst_ws / "artifacts" / "baseline_check.json").unlink(missing_ok=True)
+            ws_moves.append((src_ws, dst_ws, moved))
+
+        # 5. Insert every ticket into the target DB (parent-before-child).
+        global_id_map: dict[int, int] = {}
+        try:
+            with db.session(self.settings, dst_board) as s2:
+                for t in subtree:
+                    snap = snapshots[t.id]
+                    td = snap["ticket"]
+                    dst_ws = dst_root / t.id
+                    migration_note = (
+                        f"migrated from board {src_board!r} to {dst_board!r}"
+                    )
+                    old_state = State(td["state"])
+                    if old_state is not State.DRAFT:
+                        migration_note += f" (was {old_state.value})"
+                    if note and t.id == root.id:
+                        migration_note += f": {note}"
+
+                    td.update(
+                        state=State.DRAFT,
+                        board_id=dst_board,
+                        workspace_path=str(dst_ws),
+                        branch=None,
+                        blocked_from=None,
+                        paused_from=None,
+                        review_rounds=0,
+                        retry_attempt=0,
+                        last_transient_error=None,
+                        next_retry_at=None,
+                        updated_at=datetime.now(timezone.utc),
+                    )
+                    s2.add(Ticket(**td))
+
+                    for ev in snap["events"]:
+                        ev["id"] = None
+                        s2.add(TicketEvent(**ev))
+
+                    for cd in snap["comments"]:
+                        old_id = cd["id"]
+                        cd["id"] = None
+                        if cd.get("parent_id") is not None:
+                            cd["parent_id"] = global_id_map.get(cd["parent_id"])
+                        comment = Comment(**cd)
+                        s2.add(comment)
+                        s2.flush()
+                        if comment.id is None:  # pragma: no cover
+                            raise RuntimeError(
+                                "migrate: comment id missing after flush"
+                            )
+                        global_id_map[old_id] = comment.id
+
+                    for ad in snap["actions"]:
+                        ad["id"] = None
+                        s2.add(ProposedAction(**ad))
+
+                    s2.flush()
+                    s2.add(
+                        _make_event(
+                            s2,
+                            ticket_id=t.id,
+                            state=State.DRAFT,
+                            note=migration_note,
+                        )
+                    )
+                s2.commit()
+        except Exception:
+            # Roll workspace dirs back to the source board.
+            for src_ws, dst_ws, moved in ws_moves:
+                if moved:
+                    if dst_ws.exists():
+                        shutil.move(str(dst_ws), str(src_ws))
+                else:
+                    shutil.rmtree(dst_ws, ignore_errors=True)
+            raise
+
+        # 6. Delete every ticket from the source DB (reverse order).
+        with db.session(self.settings, src_board) as s3:
+            for t in reversed(subtree):
+                for action in s3.exec(
+                    select(ProposedAction).where(
+                        ProposedAction.target_ticket_id == t.id
+                    )
+                ).all():
+                    s3.delete(action)
+                for comment in s3.exec(
+                    select(Comment).where(Comment.ticket_id == t.id)
+                ).all():
+                    s3.delete(comment)
+                for ev in s3.exec(
+                    select(TicketEvent).where(TicketEvent.ticket_id == t.id)
+                ).all():
+                    s3.delete(ev)
+                src_ticket = s3.get(Ticket, t.id)
+                if src_ticket is not None:
+                    s3.delete(src_ticket)
+            s3.commit()
+
+        log.info(
+            "migrate: epic subtree %s (%d tickets) %s -> %s",
+            root.id,
+            len(subtree),
+            src_board,
+            dst_board,
+        )
+        migrated = self.get(root.id)
+        if migrated is None:  # pragma: no cover - defensive
+            raise RuntimeError(f"migrate: {root.id} vanished during migration")
+        return migrated
+
     def migrate(
         self, ticket_id: str, target_board: str, note: str | None = None
     ) -> Ticket:
@@ -794,7 +1022,7 @@ class _LifecycleMixin(_ServiceBase):
             if ticket is None:
                 raise KeyError(ticket_id)
             if ticket.kind == "epic":
-                raise ValueError("migrate: epics cannot be migrated")
+                return self._migrate_epic_subtree(s, ticket, src_board, dst_board, note)
             if ticket.parent_id:
                 raise ValueError(
                     f"migrate: {ticket_id} is linked to parent "

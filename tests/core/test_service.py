@@ -2200,13 +2200,23 @@ def test_migrate_rejects_bad_targets_and_states(migrate_env):
     with pytest.raises(KeyError):
         service.migrate("nonexistent-id", "other-board")
 
+    # Leaf epic (no children) CAN be migrated — the old hard-block is
+    # lifted so that mis-filed epics can be moved.
     epic = service.create("an epic", kind="epic")
-    with pytest.raises(ValueError, match="epics cannot be migrated"):
-        service.migrate(epic.id, "other-board")
+    migrated_epic = service.migrate(epic.id, "other-board")
+    assert migrated_epic.board_id == "other-board"
+    assert migrated_epic.state is State.DRAFT
 
-    child = service.create("child", parent_id=epic.id)
+    # A non-epic child still linked to a parent is blocked.
+    parent = service.create("parent task")
+    child = service.create("child task", parent_id=parent.id)
     with pytest.raises(ValueError, match="linked to parent"):
         service.migrate(child.id, "other-board")
+
+    # A non-epic parent with children is still blocked (the subtree
+    # path only triggers for kind == "epic").
+    with pytest.raises(ValueError, match="has child tickets"):
+        service.migrate(parent.id, "other-board")
 
     # In-flight states refuse migration.
     busy = service.create("busy", "b")
@@ -2214,3 +2224,168 @@ def test_migrate_rejects_bad_targets_and_states(migrate_env):
     service.transition(busy.id, State.DELIVERABLE)
     with pytest.raises(ValueError, match="can be migrated"):
         service.migrate(busy.id, "other-board")
+
+
+# ---------------------------------------------------------------------------
+# Epic subtree migration
+# ---------------------------------------------------------------------------
+
+
+def test_migrate_epic_subtree_moves_all_tickets(settings, migrate_env):
+    """An epic with children and grandchildren migrates atomically:
+    all tickets land on the target board with parent_id links intact,
+    and none remain on the source board."""
+    service, other = migrate_env
+
+    # Build a 3-level tree: epic → child_a → grandchild
+    #                           epic → child_b
+    epic = service.create("Epic", kind="epic")
+    child_a = service.create("Child A", parent_id=epic.id)
+    child_b = service.create("Child B", parent_id=epic.id)
+    grandchild = service.create("Grandchild", parent_id=child_a.id)
+
+    # Add comments and history to some tickets so we verify preservation.
+    service.add_comment(epic.id, "epic comment")
+    service.add_comment(child_a.id, "child comment")
+
+    # Workspace dirs — create marker files so we can verify the move.
+    for tid in [epic.id, child_a.id, child_b.id, grandchild.id]:
+        ws = settings.workspaces_dir_for("test-board") / tid
+        ws.mkdir(parents=True, exist_ok=True)
+        (ws / "description.md").write_text(f"desc-{tid}")
+
+    migrated = service.migrate(epic.id, "other-board", note="wrong board")
+
+    # Root ticket returned.
+    assert migrated.id == epic.id
+    assert migrated.board_id == "other-board"
+    assert migrated.state is State.DRAFT
+
+    # All four tickets exist on the target board.
+    for tid in [epic.id, child_a.id, child_b.id, grandchild.id]:
+        t = other.get(tid)
+        assert t is not None, f"{tid} missing from target board"
+        assert t.board_id == "other-board"
+        assert t.state is State.DRAFT
+
+    # Parent links intact.
+    assert other.get(child_a.id).parent_id == epic.id
+    assert other.get(child_b.id).parent_id == epic.id
+    assert other.get(grandchild.id).parent_id == child_a.id
+
+    # All four tickets gone from source board.
+    from robotsix_mill.core import db as _db
+    from robotsix_mill.core.models import Ticket as TicketModel
+
+    for tid in [epic.id, child_a.id, child_b.id, grandchild.id]:
+        with _db.session(settings, "test-board") as s:
+            assert s.get(TicketModel, tid) is None, f"{tid} still on source board"
+
+    # Workspace dirs moved to target board.
+    for tid in [epic.id, child_a.id, child_b.id, grandchild.id]:
+        src_ws = settings.workspaces_dir_for("test-board") / tid
+        dst_ws = settings.workspaces_dir_for("other-board") / tid
+        assert not src_ws.exists(), f"source workspace {tid} still exists"
+        assert dst_ws.exists(), f"target workspace {tid} missing"
+        assert (dst_ws / "description.md").read_text() == f"desc-{tid}"
+
+    # History preserved: each ticket has at least a creation event and
+    # a migration event.
+    for tid in [epic.id, child_a.id, child_b.id, grandchild.id]:
+        hist = other.history(tid)
+        assert len(hist) >= 2, f"{tid}: expected ≥2 events, got {len(hist)}"
+        assert hist[0].note == "created"
+        assert "migrated from board 'test-board' to 'other-board'" in hist[-1].note
+
+    # Comments preserved.
+    assert [c.body for c in other.list_comments(epic.id)] == ["epic comment"]
+    assert [c.body for c in other.list_comments(child_a.id)] == ["child comment"]
+    assert other.list_comments(child_b.id) == []
+    assert other.list_comments(grandchild.id) == []
+
+    # Hash chain intact for each ticket.
+    for tid in [epic.id, child_a.id, child_b.id, grandchild.id]:
+        hist = other.history(tid)
+        for prev, cur in zip(hist, hist[1:], strict=False):
+            assert cur.prev_hash == prev.hash, f"{tid}: broken hash chain"
+
+
+def test_migrate_epic_subtree_rejects_non_migratable_child(migrate_env):
+    """A child in a non-migratable state blocks the entire subtree
+    migration with a clear error naming the offending ticket."""
+    service, _ = migrate_env
+
+    epic = service.create("Epic", kind="epic")
+    child_ok = service.create("OK child", parent_id=epic.id)
+    child_bad = service.create("Bad child", parent_id=epic.id)
+    # Transition child_bad to DELIVERABLE — not in _MIGRATABLE_STATES.
+    service.transition(child_bad.id, State.READY)
+    service.transition(child_bad.id, State.DELIVERABLE)
+
+    with pytest.raises(ValueError, match="non-migratable states"):
+        service.migrate(epic.id, "other-board")
+
+    # The error should name the blocking child.
+    with pytest.raises(ValueError, match=child_bad.id):
+        service.migrate(epic.id, "other-board")
+
+    # Verify nothing moved: the epic and children still on source board.
+    assert service.get(epic.id) is not None
+    assert service.get(child_ok.id) is not None
+    assert service.get(child_bad.id) is not None
+
+
+def test_migrate_epic_subtree_rolls_back_on_db_failure(settings, migrate_env):
+    """When the target DB insert fails mid-subtree, workspace dirs are
+    rolled back to the source board and the source DB is untouched."""
+    service, other = migrate_env
+
+    epic = service.create("Epic", kind="epic")
+    child = service.create("Child", parent_id=epic.id)
+
+    # Create workspace dirs with marker files.
+    for tid in [epic.id, child.id]:
+        ws = settings.workspaces_dir_for("test-board") / tid
+        ws.mkdir(parents=True, exist_ok=True)
+        (ws / "description.md").write_text(f"desc-{tid}")
+
+    # Pre-create a ticket with the same ID as the child on the target
+    # board, so the insert of the child row will fail with an integrity
+    # error — triggering the rollback path.
+    from robotsix_mill.core import db as _db
+    from robotsix_mill.core.models import Ticket as TicketModel
+
+    with _db.session(settings, "other-board") as s:
+        s.add(
+            TicketModel(
+                id=child.id,
+                title="collision",
+                board_id="other-board",
+                workspace_path=str(
+                    settings.workspaces_dir_for("other-board") / child.id
+                ),
+            )
+        )
+        s.commit()
+
+    import sqlalchemy.exc
+
+    with pytest.raises(sqlalchemy.exc.IntegrityError):
+        service.migrate(epic.id, "other-board")
+
+    # Workspace dirs rolled back: source still has them, target does not.
+    for tid in [epic.id, child.id]:
+        src_ws = settings.workspaces_dir_for("test-board") / tid
+        dst_ws = settings.workspaces_dir_for("other-board") / tid
+        assert src_ws.exists(), f"source workspace {tid} was not rolled back"
+        assert (
+            src_ws / "description.md"
+        ).read_text() == f"desc-{tid}", f"source workspace {tid} content lost"
+        # Target dirs should not exist (or be empty if created then rolled back).
+        assert not dst_ws.exists() or not any(dst_ws.iterdir()), (
+            f"target workspace {tid} not cleaned up"
+        )
+
+    # Source DB untouched: both tickets still present.
+    assert service.get(epic.id) is not None
+    assert service.get(child.id) is not None
