@@ -891,3 +891,75 @@ class TestMetaMultiRepoWorkspace:
         assert "meta repo-triage failed" in result.note
         # the agent never ran (no prompt captured)
         assert "prompt" not in cap
+
+
+class TestCloneDirPrecreation:
+    """Regression: the maintenance clone target must exist before the
+    agent runs (live case: 81f1 Fatal-blocked with
+    ``FileNotFoundError: /tmp/maintenance_*/repo`` when a tool touched
+    ``clone_dir`` before ``clone_repo`` populated it)."""
+
+    def test_clone_dir_exists_when_agent_runs(self, tmp_path, monkeypatch):
+        from types import SimpleNamespace
+
+        from robotsix_mill.core import db
+        from robotsix_mill.agents import base, maintenance
+        from robotsix_mill.agents import retry as retry_mod
+        from robotsix_mill.config import RepoConfig
+        from robotsix_mill.core.service import TicketService
+        from robotsix_mill.stages import StageContext
+
+        s = _settings(tmp_path)
+        db.reset_engine()
+        db.init_db(s, board_id="test-board")
+        service = TicketService(s, board_id="test-board")
+        repo_config = RepoConfig(
+            repo_id="test-repo",
+            board_id="test-board",
+            langfuse_project_name="test-project",
+            langfuse_public_key="pk-test",
+            langfuse_secret_key="sk-test",
+        )
+        ticket = service.create("Bump lockfile", "investigate the failure")
+        # The singular investigation root must exist (fs tools' root).
+        service.workspace(ticket).repo_dir.mkdir(parents=True, exist_ok=True)
+        ctx = StageContext(settings=s, service=service, repo_config=repo_config)
+
+        # Capture the tempdir that clone_repo would clone into.
+        captured: dict[str, Path] = {}
+        real_make_clone = maintenance.make_clone_repo_tool
+
+        def cap_make_clone(settings, root):
+            captured["tmpdir"] = root
+            return real_make_clone(settings, root)
+
+        monkeypatch.setattr(maintenance, "make_clone_repo_tool", cap_make_clone)
+        # No real meta workspace / LLM agent / remote resolution.
+        monkeypatch.setattr(
+            maintenance,
+            "_build_meta_investigation_workspace",
+            lambda ctx, ticket, ws, draft: (None, [], None),
+        )
+        monkeypatch.setattr(
+            base, "build_agent_from_definition", lambda *a, **k: SimpleNamespace()
+        )
+        monkeypatch.setattr(base, "_safe_close", lambda agent: None)
+        monkeypatch.setattr(
+            "robotsix_mill.forge.auth._resolve_remote_url",
+            lambda settings, rc: "https://github.com/test/test.git",
+        )
+
+        seen: dict[str, bool] = {}
+
+        def fake_run_agent(agent, fn, *, settings, what):
+            # The clone target must already exist when the agent runs.
+            seen["clone_exists"] = (captured["tmpdir"] / "repo").exists()
+            return SimpleNamespace(output=MaintenanceResult(success=True, note="ok"))
+
+        monkeypatch.setattr(retry_mod, "run_agent", fake_run_agent)
+
+        result = run_maintenance_agent(ticket, ctx)
+
+        assert seen.get("clone_exists") is True
+        assert result.success is True
+        db.reset_engine()

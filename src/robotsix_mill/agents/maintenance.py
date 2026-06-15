@@ -594,6 +594,15 @@ def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResul
         # Must mirror make_clone_repo_tool's ``workspace_root / "repo"``
         # clone target so the investigation tools can read the clone.
         clone_dir = tmpdir / "repo"
+        # Pre-create the clone target as an empty dir. ``clone_dir`` is
+        # wired into the filesystem/explore tools as an extra root before
+        # the agent calls ``clone_repo`` to populate it, so an agent that
+        # reads/lists a path under it first would otherwise hit an
+        # unhandled ``FileNotFoundError`` on the missing directory and
+        # Fatal-block the ticket (live case: 81f1). An empty dir lets the
+        # tools return graceful "not found" errors instead; ``clone_repo``
+        # rmtrees the target before cloning, so this is a no-op for it.
+        clone_dir.mkdir(parents=True, exist_ok=True)
         tools: list[Any] = []
         tools.append(make_create_repo_tool(ctx.settings, ctx, draft))
         tools.append(make_fork_repo_tool(ctx.settings))
