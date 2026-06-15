@@ -567,7 +567,7 @@ Each periodic agent shares this pattern:
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `periodic.<name>.enabled` | `MILL_<NAME>_PERIODIC` | `false`¹ | Enable periodic passes |
+| `periodic.<name>.enabled` | `MILL_<NAME>_PERIODIC` | `true`¹ | Enable periodic passes |
 | `periodic.<name>.interval_seconds` | `MILL_<NAME>_INTERVAL_SECONDS` | `86400` | Seconds between automatic passes |
 | `periodic.<name>.memory_path` | `MILL_<NAME>_MEMORY_PATH` | `None` | Override path for memory ledger ² ³ |
 
@@ -575,7 +575,7 @@ Periodic agents: `audit`, `board_cleanup`, `trace_health`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_monitor`, `config_sync`, `member_sync`, `bc_check`,
 `completeness_check`, `cost_reconciliation`, `diagnostic`, `forge_parity`, `module_curator`.
 
-> ¹ `survey` is the exception — its default is `enabled: true`.
+> ¹ Most agents default to `enabled: true`. Exceptions: `diagnostic`, `stale_branch_cleanup`, `meta_periodic`, `cost_analyst_periodic`, and `run_health_periodic` default to `false`.
 >
 > ² `trace_health`, `ci_monitor`, `member_sync`, and `diagnostic` do **not** have a
 > `memory_path` field — they write no per-agent memory ledger
