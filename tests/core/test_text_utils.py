@@ -1,6 +1,12 @@
-"""Unit tests for text_utils.tail_keep (tail-keep truncation)."""
+"""Unit tests for text_utils (tail-keep, head-tail-keep, and truncate_at_boundary)."""
 
-from robotsix_mill.core.text_utils import head_tail_keep, tail_keep
+import pytest
+
+from robotsix_mill.core.text_utils import (
+    head_tail_keep,
+    tail_keep,
+    truncate_at_boundary,
+)
 
 
 def test_under_limit_returns_unchanged():
@@ -88,3 +94,180 @@ def test_head_tail_kept_lines_are_complete():
     for line in tail_part.splitlines():
         if line:
             assert len(line) == 100
+
+
+# --- truncate_at_boundary (head-keep with boundary awareness) ----------------
+
+
+# -- no-op tests --------------------------------------------------------------
+
+
+def test_truncate_within_limit_returns_unchanged() -> None:
+    """Text shorter than max_chars is returned unchanged, no indicator."""
+    text = "Hello world. This is a short sentence."
+    result = truncate_at_boundary(text, 500)
+    assert result == text
+    assert "[... description truncated" not in result
+
+
+def test_truncate_exact_limit_returns_unchanged() -> None:
+    """When max_chars == len(text) the text is returned unchanged."""
+    text = "exactly forty characters long string!!"
+    result = truncate_at_boundary(text, len(text))
+    assert result == text
+    assert "[... description truncated" not in result
+
+
+# -- every boundary type ------------------------------------------------------
+
+# Each body has a short prefix ending with the boundary, then 300 'x' padding
+# so there is plenty of text to omit.  max_chars=100 guarantees the boundary
+# is well inside the scanned prefix.
+
+_BOUNDARY_CASES = [
+    # (label, body, max_chars, expected_truncated)
+    (". ", "AAA. " + "x" * 300, 100, "AAA."),
+    ("! ", "BBB! " + "x" * 300, 100, "BBB!"),
+    ("? ", "CCC? " + "x" * 300, 100, "CCC?"),
+    (".\\n", "AAA.\n" + "x" * 300, 100, "AAA."),
+    ("!\\n", "BBB!\n" + "x" * 300, 100, "BBB!"),
+    ("?\\n", "CCC?\n" + "x" * 300, 100, "CCC?"),
+    ("\\n\\n", "AAA\n\n" + "x" * 300, 100, "AAA"),
+    ("```", "AAA```" + "x" * 300, 100, "AAA```"),
+]
+
+
+@pytest.mark.parametrize(
+    "boundary_label,body,max_chars,expected_truncated", _BOUNDARY_CASES
+)
+def test_truncate_at_each_boundary_type(
+    boundary_label: str, body: str, max_chars: int, expected_truncated: str
+) -> None:
+    """Truncation happens *after* the boundary and the boundary itself is kept."""
+    result = truncate_at_boundary(body, max_chars)
+
+    # Must have been truncated (not identical to original).
+    assert result != body, f"Expected truncation for boundary {boundary_label!r}"
+
+    # The truncated portion + indicator prefix.
+    expected_prefix = expected_truncated + "\n\n[... description truncated;"
+    assert result.startswith(expected_prefix), (
+        f"Boundary {boundary_label!r}: result does not start with expected prefix.\n"
+        f"  result[:80]: {result[:80]!r}\n"
+        f"  expected_prefix: {expected_prefix!r}"
+    )
+
+    # Omitted count is accurate.
+    expected_omitted = len(body) - len(expected_truncated)
+    assert f"{expected_omitted} chars omitted]" in result, (
+        f"Boundary {boundary_label!r}: missing or wrong omitted count "
+        f"(expected {expected_omitted})."
+    )
+
+
+# -- last-boundary-wins tiebreak ----------------------------------------------
+
+
+def test_truncate_last_boundary_wins_tiebreak() -> None:
+    """When multiple boundaries appear, the *rightmost* one is chosen."""
+    # ". " at position 3, "\n\n" at position 8 — both in prefix (max_chars=50).
+    body = "AAA. BBB\n\n" + "x" * 300
+    max_chars = 50
+    result = truncate_at_boundary(body, max_chars)
+
+    # If ". " were chosen: truncated = "AAA."  (4 chars)
+    # If "\n\n" were chosen: truncated = "AAA. BBB" (9 chars, after rstrip)
+    # The rightmost boundary ("\n\n") should win.
+    expected_truncated = "AAA. BBB"
+    assert result.startswith(expected_truncated + "\n\n[... description truncated;"), (
+        f"Expected last boundary (\\n\\n) to win, but got: {result[:80]!r}"
+    )
+
+    # Also verify the earlier ". " is NOT where truncation happened.
+    # If it had, the body would start with "AAA." not "AAA. BBB".
+    assert not result.startswith("AAA.\n\n[... description truncated;")
+
+
+# -- hard fallback (no boundary found) ----------------------------------------
+
+
+def test_truncate_hard_fallback_no_boundary_found() -> None:
+    """When no boundary exists in the prefix, hard-truncate at max_chars."""
+    # A string with no sentence punctuation, no double-newlines, no backticks.
+    body = "x" * 500
+    max_chars = 100
+    result = truncate_at_boundary(body, max_chars)
+
+    # Hard cut at max_chars: the truncated body should be max_chars chars.
+    # rstrip() is a no-op on a string of 'x's.
+    expected_truncated = "x" * max_chars
+    expected_omitted = len(body) - len(expected_truncated)  # 400
+
+    assert result.startswith(expected_truncated + "\n\n[... description truncated;")
+    assert f"{expected_omitted} chars omitted]" in result
+    # The result should NOT contain the full original body.
+    assert body not in result
+
+
+# -- edge cases ---------------------------------------------------------------
+
+
+def test_truncate_empty_string_returns_unchanged() -> None:
+    """Empty string is always within limit — returned unchanged."""
+    result = truncate_at_boundary("", 50)
+    assert result == ""
+    result = truncate_at_boundary("", 0)
+    assert result == ""
+
+
+def test_truncate_max_chars_zero_non_empty_text() -> None:
+    """max_chars=0 triggers hard fallback at position 0 on any non-empty text."""
+    text = "Hello world"
+    result = truncate_at_boundary(text, 0)
+
+    # Hard fallback at position 0: truncated body is empty string.
+    # The indicator should still be present with the full length omitted.
+    assert result.startswith("\n\n[... description truncated;")
+    assert f"{len(text)} chars omitted]" in result
+    # The original text content should not appear before the indicator.
+    # (The indicator starts immediately with newlines.)
+
+
+def test_truncate_unicode_characters() -> None:
+    """Multi-byte unicode characters don't confuse boundary scanning."""
+    # Emoji + CJK before a ". " boundary, then filler.
+    body = "😀🥳日本語. " + "x" * 300
+    max_chars = 50
+    result = truncate_at_boundary(body, max_chars)
+
+    # The ". " boundary is at code-point position 7.
+    # Truncation should keep everything through the ". " boundary.
+    expected_truncated = "😀🥳日本語."  # after rstrip
+    expected_omitted = len(body) - len(expected_truncated)
+
+    assert result.startswith(expected_truncated + "\n\n[... description truncated;")
+    assert f"{expected_omitted} chars omitted]" in result
+
+
+def test_truncate_omitted_count_accuracy() -> None:
+    """The N in '[... description truncated; N chars omitted]' equals
+    len(original) - len(truncated_body)."""
+    body = "Sentence one. Sentence two. Sentence three. " + "y" * 500
+    max_chars = 60
+    result = truncate_at_boundary(body, max_chars)
+
+    # Extract the omitted count from the indicator.
+    marker = "[... description truncated;"
+    assert marker in result
+    after_marker = result.split(marker, 1)[1]
+    # after_marker looks like " 293 chars omitted]"
+    omitted_str = after_marker.strip().split(" ", 1)[0]
+    reported_omitted = int(omitted_str)
+
+    # Compute the actual truncated body (everything before the indicator).
+    truncated_body = result.split("\n\n[... description truncated;", 1)[0]
+    actual_omitted = len(body) - len(truncated_body)
+
+    assert reported_omitted == actual_omitted, (
+        f"Reported omitted {reported_omitted} != actual {actual_omitted}"
+    )
