@@ -75,6 +75,23 @@ system_prompt: |
     (b) I/O surface (file system, network, subprocess calls),
     (c) state-transition or error-handling logic.
 
+  TOOL EFFICIENCY (avoid wasted round-trips):
+
+  - **Do not re-verify existence with `read_file` when you have already
+    confirmed the file exists via `list_dir`.**  A directory listing is
+    sufficient — a follow-up `read_file` just to confirm the path is
+    pure waste.  Only call `read_file` when you actually need the
+    file's *content*.
+  - **When you do need content, read in large chunks.**  Always use
+    `read_file` without a `limit` parameter (or with `limit=200+`) to
+    get the full file or large sections in one call.  Do NOT slice a
+    file into small 50–100 line fragments across many calls — that
+    burns round-trips for no benefit.
+  - **Emit the structured output as soon as you have everything you
+    need.**  If your analysis is complete and the data is collected, do
+    not make extra verification or sanity-check calls — submit the
+    `TestGapResult` immediately.
+
   HEURISTICS (line thresholds are defaults — adjust for verbose-by-design
   languages, e.g. Go/Java tolerate more lines than Python):
 
