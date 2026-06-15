@@ -958,6 +958,166 @@ def test_render_module_map_truncation(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# compose_prompt
+# ---------------------------------------------------------------------------
+
+
+def test_compose_prompt_base_case():
+    """With no skills and modules=False, the prompt is returned unchanged."""
+    from robotsix_mill.agents.base import compose_prompt
+
+    s = Settings()
+    result = compose_prompt(s, "Hello, world.")
+    assert result == "Hello, world."
+
+
+def test_compose_prompt_single_skill_strips_frontmatter(tmp_path):
+    """A skill SKILL.md is loaded and its YAML frontmatter is stripped."""
+    from robotsix_mill.agents.base import compose_prompt
+
+    skill_dir = tmp_path / "skills" / "board"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\ntitle: Board\n---\n\nBoard skill body.\n",
+        encoding="utf-8",
+    )
+
+    s = Settings(skills_dir=tmp_path / "skills")
+    result = compose_prompt(s, "Hello.", skills=["board"])
+
+    assert "## Skills" in result
+    assert "Board skill body." in result
+    # Frontmatter must be stripped.
+    assert "---" not in result
+    assert "title:" not in result
+
+
+def test_compose_prompt_multiple_skills_concatenated(tmp_path):
+    """Multiple skills are concatenated under a single ## Skills heading."""
+    from robotsix_mill.agents.base import compose_prompt
+
+    for name in ("board", "explore"):
+        skill_dir = tmp_path / "skills" / name
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            f"---\ntitle: {name}\n---\n\n{name} skill body.\n",
+            encoding="utf-8",
+        )
+
+    s = Settings(skills_dir=tmp_path / "skills")
+    result = compose_prompt(s, "Hello.", skills=["board", "explore"])
+
+    assert "## Skills" in result
+    assert "board skill body." in result
+    assert "explore skill body." in result
+    # Heading should appear exactly once.
+    assert result.count("## Skills") == 1
+
+
+def test_compose_prompt_missing_skill_logs_warning(tmp_path, caplog):
+    """A missing skill file logs a warning but does not crash; prompt unchanged."""
+    import logging
+
+    from robotsix_mill.agents.base import compose_prompt
+
+    s = Settings(skills_dir=tmp_path / "skills")
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.agents.base"):
+        result = compose_prompt(s, "Hello.", skills=["nonexistent"])
+
+    assert "Skill file not found" in caplog.text
+    assert result == "Hello."
+
+
+def test_compose_prompt_modules_true_appends_map(tmp_path, monkeypatch):
+    """modules=True loads docs/modules.yaml and appends a rendered module map."""
+    import pathlib
+
+    from robotsix_mill.agents.base import compose_prompt
+
+    # Write a minimal taxonomy to a temp file so we don't depend on the
+    # real docs/modules.yaml content.
+    modules_yaml = tmp_path / "modules.yaml"
+    modules_yaml.write_text(
+        """modules:
+- id: test-mod
+  description: A test module.
+  paths:
+    - src/test.py
+  dependencies: []
+""",
+        encoding="utf-8",
+    )
+
+    original_open = pathlib.Path.open
+
+    def fake_open(self, *args, **kwargs):
+        if str(self) == "docs/modules.yaml":
+            return original_open(modules_yaml, *args, **kwargs)
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(pathlib.Path, "open", fake_open)
+
+    s = Settings()
+    result = compose_prompt(s, "Hello.", modules=True)
+
+    assert "## Module Map" in result
+    assert result.startswith("Hello.")
+    assert "### test-mod" in result
+    assert "A test module." in result
+    assert "- `src/test.py`" in result
+
+
+def test_compose_prompt_missing_modules_yaml_no_crash(monkeypatch):
+    """When docs/modules.yaml is missing, the prompt is returned without the
+    module block (and no crash)."""
+    import pathlib
+
+    from robotsix_mill.agents.base import compose_prompt
+
+    original_open = pathlib.Path.open
+
+    def fake_open(self, *args, **kwargs):
+        if str(self) == "docs/modules.yaml":
+            raise FileNotFoundError("nope")
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(pathlib.Path, "open", fake_open)
+
+    s = Settings()
+    result = compose_prompt(s, "Hello.", modules=True)
+
+    assert "## Module Map" not in result
+    assert result == "Hello."
+
+
+def test_compose_prompt_unparseable_modules_yaml_no_crash(tmp_path, monkeypatch):
+    """When docs/modules.yaml is unparseable, the prompt is returned without
+    the module block (and no crash)."""
+    import io
+    import pathlib
+
+    from robotsix_mill.agents.base import compose_prompt
+
+    # Redirect Path("docs/modules.yaml").open() to a StringIO containing
+    # bad YAML so that yaml.safe_load naturally raises YAMLError — without
+    # globally patching yaml.safe_load (which would break Settings()).
+    original_open = pathlib.Path.open
+
+    def fake_open(self, *args, **kwargs):
+        if str(self) == "docs/modules.yaml":
+            return io.StringIO(": bad: ::: yaml [[[")
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(pathlib.Path, "open", fake_open)
+
+    s = Settings()
+    result = compose_prompt(s, "Hello.", modules=True)
+
+    assert "## Module Map" not in result
+    assert result == "Hello."
+
+
+# ---------------------------------------------------------------------------
 # build_openrouter_model
 # ---------------------------------------------------------------------------
 
