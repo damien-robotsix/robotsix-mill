@@ -501,7 +501,7 @@ class GitLabForge(Forge):
     ) -> list[dict]:
         """GET /projects/:id/pipelines?ref=…&sha=…&per_page=30."""
         pid = self._resolve_project_id(project_path)
-        params: dict = {"per_page": 30}
+        params: dict = {"per_page": 30, "status": "success,failed,canceled,skipped"}
         if branch is not None:
             params["ref"] = branch
         if head_sha is not None:
