@@ -65,6 +65,7 @@
     roadmap_sync: '#9333ea',
     trace_review: '#0ea5e9',
     module_curator: '#f97316',
+    forge_parity: '#a78bfa',
     copy_paste: '#ec4899',
     board_cleanup: '#10b981',
     meta: '#a855f7',
@@ -86,7 +87,8 @@
     cost_reconciliation: "cost-reconciliation",
     completeness_check: "completeness-check",
     "trace-review": "trace-review",
-    roadmap_sync: "roadmap-sync"
+    roadmap_sync: "roadmap-sync",
+    forge_parity: "forge-parity",
   };
 
   const STATE_ARTIFACT = {
@@ -1964,6 +1966,23 @@
     }
   }
 
+  async function runForgeParity() {
+    var btn = event.target;
+    btn.disabled = true; btn.textContent = 'Running...';
+    try {
+      var repoId = getRepoId();
+      var url = repoId !== "all" ? "/forge-parity?repo_id=" + encodeURIComponent(repoId) : "/forge-parity";
+      var r = await jpost(url);
+      if (!r.ok) { throw new Error(await r.text()); }
+      alert("Forge Parity started — it compares forge adapter implementations against the Forge ABC, flags drift, and files at most 3 draft tickets per pass. New drafts appear on the board when it finishes.");
+      setTimeout(refresh, 4000);
+    } catch (e) {
+      alert("Forge Parity failed to start: " + e);
+    } finally {
+      btn.disabled = false; btn.textContent = 'Forge Parity';
+    }
+  }
+
   async function runCopyPaste() {
     var btn = event.target;
     btn.disabled = true; btn.textContent = 'Running...';
@@ -2538,6 +2557,7 @@
   window.runAgentCheck = runAgentCheck;
   window.runSurvey = runSurvey;
   window.runModuleCurator = runModuleCurator;
+  window.runForgeParity = runForgeParity;
   window.runCopyPaste = runCopyPaste;
   window.runBoardCleanup = runBoardCleanup;
   window.runBcCheck = runBcCheck;

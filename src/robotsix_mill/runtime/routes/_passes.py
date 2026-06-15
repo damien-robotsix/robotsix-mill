@@ -276,6 +276,20 @@ module_curator_pass = _make_background_pass(
 router.post("/module-curator", status_code=202)(module_curator_pass)
 
 
+forge_parity_pass = _make_background_pass(
+    kind="forge-parity",
+    runner_module="robotsix_mill.runners.forge_parity_runner",
+    runner_func="run_forge_parity_pass",
+    docstring="""Kick off a forge-parity pass in the BACKGROUND and return at once.
+
+    The forge-parity agent compares forge adapter implementations (GitHub vs GitLab)
+    against the Forge ABC, flags drift (single-adapter overrides, divergent
+    implementations, extra methods), and files at most 3 draft tickets per pass.
+    New drafts appear on the board when it finishes.""",
+)
+router.post("/forge-parity", status_code=202)(forge_parity_pass)
+
+
 config_sync_pass = _make_background_pass(
     kind="config-sync",
     runner_module="robotsix_mill.runners.config_sync_runner",

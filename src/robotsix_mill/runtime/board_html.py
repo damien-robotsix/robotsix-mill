@@ -107,6 +107,7 @@ BOARD_HTML = """<!doctype html><html><head><meta charset="utf-8">
     <button onclick="runRoadmapSync()" data-agent="roadmap_sync">Roadmap Sync</button>
     <button onclick="runTraceReview()" data-agent="trace_review">Trace Review</button>
     <button onclick="runModuleCurator()" data-agent="module_curator">Module Curator</button>
+    <button onclick="runForgeParity()" data-agent="forge_parity">Forge Parity</button>
     <button onclick="runCopyPaste()" data-agent="copy_paste">Copy Paste</button>
     <button onclick="runBoardCleanup()" data-agent="board_cleanup">Board Cleanup</button>
     <button onclick="runMeta()" data-agent="meta" class="meta-only">Meta</button>
