@@ -500,7 +500,11 @@ class TestTraceWebSearchBudget:
         async def fake_run_web_research(*, settings, query):
             return f"conclusion for: {query}"
 
-        monkeypatch.setattr(web_knowledge, "run_web_research", fake_run_web_research)
+        # web_search closure lazy-imports web_research inside _make_tools,
+        # so monkeypatch the web_research module, not web_knowledge.
+        import robotsix_mill.agents.web_research as wr_mod
+
+        monkeypatch.setattr(wr_mod, "run_web_research", fake_run_web_research)
 
         reset_trace_web_search_budget(2)
         tools = _make_tools(s)
@@ -532,7 +536,11 @@ class TestTraceWebSearchBudget:
         async def fake_run_web_research(*, settings, query):
             return f"ok: {query}"
 
-        monkeypatch.setattr(web_knowledge, "run_web_research", fake_run_web_research)
+        # web_search closure lazy-imports web_research inside _make_tools,
+        # so monkeypatch the web_research module, not web_knowledge.
+        import robotsix_mill.agents.web_research as wr_mod
+
+        monkeypatch.setattr(wr_mod, "run_web_research", fake_run_web_research)
 
         reset_trace_web_search_budget(0)  # deactivated
         tools = _make_tools(s)

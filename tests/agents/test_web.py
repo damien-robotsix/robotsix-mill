@@ -5,7 +5,7 @@ import subprocess
 from robotsix_mill import sandbox
 from robotsix_mill.agents import web_research as wr
 from robotsix_mill.agents.base import compose_prompt, _model_name
-from robotsix_mill.agents.web_tools import make_web_fetch
+from robotsix_mill.agents.web_tools import make_web_fetch, reset_web_fetch_budget, reset_trace_web_fetch_budget
 from robotsix_mill.config import Settings, Secrets, _reset_secrets
 
 
@@ -121,6 +121,8 @@ def test_compose_prompt_does_not_inject_tool_table(tmp_path):
 
 
 def test_web_fetch_tool_uses_sandbox_fetch(tmp_path, monkeypatch):
+    reset_web_fetch_budget()
+    reset_trace_web_fetch_budget(0, 0)
     s = _settings(tmp_path)
     monkeypatch.setattr(sandbox, "fetch", lambda url, *, settings: (0, f"BODY:{url}"))
     wf = make_web_fetch(s)
@@ -128,6 +130,8 @@ def test_web_fetch_tool_uses_sandbox_fetch(tmp_path, monkeypatch):
 
 
 def test_web_fetch_tool_reports_errors(tmp_path, monkeypatch):
+    reset_web_fetch_budget()
+    reset_trace_web_fetch_budget(0, 0)
     s = _settings(tmp_path)
 
     def boom(url, *, settings):
@@ -205,7 +209,7 @@ def test_web_fetch_strips_html_to_prose(tmp_path, monkeypatch):
     The exact prose content + ordering is what the LLM reads; the
     markup is dead weight.
     """
-    from robotsix_mill.agents.web_tools import make_web_fetch, _cache
+    from robotsix_mill.agents.web_tools import make_web_fetch, reset_web_fetch_budget, reset_trace_web_fetch_budget, _cache
 
     _cache.clear()
 
@@ -273,9 +277,9 @@ def test_web_fetch_applies_text_cap(tmp_path, monkeypatch):
     body = "x" * 500
     monkeypatch.setattr(sandbox, "fetch", lambda url, *, settings: (0, body))
     out = make_web_fetch(s)("https://x.test/big")
-    # First 100 chars present, then the marker.
+    # First 100 chars present, then the truncation marker.
     assert out.startswith("x" * 100)
-    assert "[truncated, fetched 500 chars total" in out
+    assert "[... description truncated; 400 chars omitted]" in out
 
 
 # --- web_fetch: per-run URL dedupe -------------------------------------------
@@ -662,10 +666,13 @@ class TestTraceWebFetchBudget:
         assert wf("https://x.test/a") == "x" * 300
         assert len(calls) == 1
 
-        # Second fetch: cumulative 600 >= 500 limit.
+        # Second fetch: cumulative 600 > 500 limit.  The call cap
+        # check is pre-fetch, but the byte ceiling is enforced
+        # post-fetch (after the body is processed) so the sandbox
+        # call still fires but the body is rejected.
         out = wf("https://x.test/b")
         assert "trace budget exhausted" in out.lower()
-        assert len(calls) == 1  # refused, no new fetch
+        assert len(calls) == 2  # sandbox call fired; body rejected post-fetch
 
         # Per-consult reset doesn't help.
         reset_web_fetch_budget()
@@ -709,9 +716,7 @@ class TestTraceWebFetchBudget:
         assert "budget exhausted" in out  # per-consult, NOT trace
         assert "trace" not in out.lower()
 
-    def test_reset_trace_web_fetch_budget_zeroes_counters(
-        self, tmp_path, monkeypatch
-    ):
+    def test_reset_trace_web_fetch_budget_zeroes_counters(self, tmp_path, monkeypatch):
         """Calling reset_trace_web_fetch_budget mid-run zeroes the trace
         counters."""
         from robotsix_mill.agents.web_tools import (
