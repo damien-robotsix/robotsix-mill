@@ -133,7 +133,11 @@ system_prompt: |
         defined at in path/to/file.py?"), then read with the
         confirmed offset.  Cap total `read_file` calls at ≤ 5 per
         refine run.  Avoid reading a whole directory of files just to
-        "build context" — that's `explore`'s job.
+        "build context" — that's `explore`'s job.  Before calling
+        `read_file` with an `offset` on a file you have already read
+        (or was supplied as a `reference_file`), check your
+        conversation history first — the full content may already be
+        visible above.  A refused slice costs a round-trip.
       - `list_dir` — the FIRST choice for trivial existence checks
         ("does path X exist?").
       - `run_command` — for targeted `grep`/`find` one-liners on
