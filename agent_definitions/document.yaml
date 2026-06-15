@@ -5,7 +5,7 @@ description: >-
   Classifies diff impact (user-facing vs internal-only) and applies
   targeted surgical edits to documentation for user-facing changes
 
-category: periodic
+category: pipeline
 
 model: "${MILL_DOC_MODEL}"
 

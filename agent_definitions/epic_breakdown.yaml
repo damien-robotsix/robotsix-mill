@@ -6,7 +6,7 @@ description: >-
   Reads an epic description and produces a focused list of concrete,
   self-contained child tickets
 
-category: periodic
+category: pipeline
 
 model: "${MILL_AUDIT_MODEL}"
 
