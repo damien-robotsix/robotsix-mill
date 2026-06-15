@@ -220,7 +220,7 @@ def _review_attempt(
             "verdict": "APPROVE",
             "comments": (
                 "The diff looks correct — all files match the spec. "
-                'Minor note: consider adding a docstring to the new function.'
+                "Minor note: consider adding a docstring to the new function."
             ),
             "request_changes": [],
             "auto_merge_eligible": True,
@@ -237,7 +237,7 @@ def _review_attempt(
         "Valid example:\n"
         f"{example_json}\n\n"
         "CRITICAL: all string values must be valid JSON — escape any "
-        'inner double quotes with backslash (\\\"). '
+        'inner double quotes with backslash (\\"). '
         "Do not include raw newlines inside string values; use \\n instead."
     )
     result = reprompt_if_unstructured(
