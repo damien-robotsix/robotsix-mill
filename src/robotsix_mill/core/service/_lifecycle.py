@@ -8,7 +8,7 @@ import shutil
 from datetime import datetime, timezone
 from secrets import token_hex
 
-from sqlmodel import col, select
+from sqlmodel import Session, col, select
 
 from .. import db
 from ..models import (
@@ -240,7 +240,9 @@ class _LifecycleMixin(_ServiceBase):
             s.add(ticket)
             s.commit()
 
-    def _has_open_ask_user_threads(self, ticket_id: str, session) -> list[Comment]:
+    def _has_open_ask_user_threads(
+        self, ticket_id: str, session: Session
+    ) -> list[Comment]:
         """Return open top-level ``[ASK_USER]`` comment threads on
         *ticket_id* (those with ``closed_at IS NULL``)."""
         stmt = select(Comment).where(
