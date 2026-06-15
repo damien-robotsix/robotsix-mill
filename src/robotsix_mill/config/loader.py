@@ -132,8 +132,7 @@ def _load_repos_document(file_path: str | None = None) -> dict:
     """Read and parse the full ``config/repos.yaml`` document.
 
     Shared by :func:`load_repos_yaml` (which extracts the ``repos``
-    mapping) and :func:`load_meta_yaml` (which extracts the optional
-    cross-repo ``meta`` block). Returns the raw top-level mapping, or
+    mapping). Returns the raw top-level mapping, or
     ``{}`` for a missing file / explicit ``""`` (no-file) path.
     """
     # Determine the path: explicit arg > env var > default.
@@ -157,19 +156,6 @@ def _load_repos_document(file_path: str | None = None) -> dict:
     except YamlConfigError as exc:
         raise ConfigError(str(exc)) from exc
     return data if isinstance(data, dict) else {}
-
-
-def load_meta_yaml(file_path: str | None = None) -> dict:
-    """Return the optional top-level ``meta`` block from ``repos.yaml``.
-
-    The synthetic cross-repo *meta* board is not a registered repo, so it
-    lives outside the ``repos`` mapping. Operators give it its own
-    Langfuse project by adding a sibling ``meta:`` block (with a
-    ``langfuse`` sub-dict), parsed here. Returns ``{}`` when absent.
-    """
-    data = _load_repos_document(file_path)
-    meta = data.get("meta")
-    return dict(meta) if isinstance(meta, dict) else {}
 
 
 def load_global_langfuse(file_path: str | None = None) -> dict[str, Any]:
@@ -210,8 +196,7 @@ def load_repos_yaml(file_path: str | None = None) -> dict:
             )
         return dict(repos_data)
     # Legacy flat format: the document IS the repo mapping. The sibling
-    # ``meta`` block (cross-repo board Langfuse config — see
-    # load_meta_yaml) is not a repo, so never surface it as one.
+    # ``meta`` block is not a repo, so never surface it as one.
     return {k: v for k, v in data.items() if k != "meta"}
 
 
