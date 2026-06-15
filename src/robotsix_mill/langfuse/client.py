@@ -1166,7 +1166,7 @@ def _observation_is_error(obs: dict) -> bool:
 
 
 _ERROR_OBS_PATTERN = re.compile(
-    r"(error:|refused:|Traceback \(most recent call last\)|"
+    r"(error:|Traceback \(most recent call last\)|"
     r"UsageLimitExceeded|UnexpectedModelBehavior|non-zero exit status)",
     re.IGNORECASE,
 )
