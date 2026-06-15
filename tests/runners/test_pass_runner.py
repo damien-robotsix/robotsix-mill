@@ -3294,6 +3294,123 @@ def test_module_curator_premise_check_malformed_modules_yaml(tmp_path):
 # --- guard only fires for MODULE_CURATOR + repo_dir set ---
 
 
+# ------------------------------------------------------------------ persist_memory max_chars (write-side trimming)
+
+
+def test_persist_memory_trims_when_over_max_chars(tmp_path, caplog):
+    """When max_chars is set and text exceeds it, the persisted file is
+    trimmed to ≤ max_chars + note overhead, newest entries preserved,
+    truncation note prepended."""
+    import logging
+
+    memory_file = tmp_path / "memory.md"
+    # Build a text with clear dated sections — oldest first, newest last.
+    sections = []
+    for i in range(50):
+        sections.append(f"## Entry {i}\nObservation {i}.\n" + ("x" * 200) + "\n")
+    text = "\n".join(sections)
+    assert len(text) > 8000
+
+    caplog.set_level(logging.WARNING)
+    persist_memory(memory_file, text, max_chars=8000)
+
+    written = memory_file.read_text(encoding="utf-8")
+    # Must be ≤ max_chars + truncation note overhead (~60 chars)
+    assert len(written) <= 8000 + 100
+    # Truncation note present
+    assert written.startswith("[... memory truncated:")
+    assert "chars omitted]" in written.split("\n")[0]
+    # Latest entries preserved (Entry 49)
+    assert "Entry 49" in written
+    # Earliest entries dropped
+    assert "Entry 0" not in written
+    # Warning logged (same pattern as load_memory)
+    assert "truncated:" in caplog.text
+
+
+def test_persist_memory_noop_when_under_max_chars(tmp_path, caplog):
+    """When text is under max_chars, it is written unchanged — no
+    truncation note, no warning."""
+    import logging
+
+    memory_file = tmp_path / "memory.md"
+    text = "## Only entry\nShort observation.\n"
+    assert len(text) < 8000
+
+    caplog.set_level(logging.WARNING)
+    persist_memory(memory_file, text, max_chars=8000)
+
+    written = memory_file.read_text(encoding="utf-8")
+    assert written == text
+    # No truncation warning
+    assert "truncated" not in caplog.text
+
+
+def test_persist_memory_max_chars_none_backward_compat(tmp_path, caplog):
+    """max_chars=None (the default) writes the full text without trimming."""
+    import logging
+
+    memory_file = tmp_path / "memory.md"
+    text = "x" * 12000  # well over any typical cap
+    assert len(text) > 8000
+
+    caplog.set_level(logging.WARNING)
+    persist_memory(memory_file, text, max_chars=None)
+
+    written = memory_file.read_text(encoding="utf-8")
+    assert written == text
+    assert "truncated" not in caplog.text
+
+
+def test_persist_memory_max_chars_default_none_backward_compat(tmp_path, caplog):
+    """Calling persist_memory without max_chars (positional only)
+    writes full text — backward compatible with existing callers."""
+    import logging
+
+    memory_file = tmp_path / "memory.md"
+    text = "x" * 12000
+    assert len(text) > 8000
+
+    caplog.set_level(logging.WARNING)
+    persist_memory(memory_file, text)
+
+    written = memory_file.read_text(encoding="utf-8")
+    assert written == text
+    assert "truncated" not in caplog.text
+
+
+def test_persist_memory_still_strips_ephemeral_with_max_chars(tmp_path):
+    """Even when max_chars triggers truncation, ephemeral sections are
+    still stripped BEFORE the truncation check. The tail_keep after
+    stripping preserves the newest content."""
+    memory_file = tmp_path / "memory.md"
+    # Build text with a long prefix (oldest), an ephemeral table in the
+    # middle, and a short tail with the newest marker content. After
+    # stripping the ephemeral table, the remaining text is still over
+    # max_chars because of the long prefix — tail_keep drops the old
+    # prefix and preserves the newest tail marker.
+    old_prefix = ("## Old prefix\n" + ("z " * 3000) + "\n")
+    ephemeral_part = (
+        "## Prior proposals — verified state\n\n"
+        "| gap_id | ticket_id | state | resolution |\n"
+        "|--------|-----------|-------|------------|\n"
+        "| foo | T-1 | CLOSED | merged |\n\n"
+    )
+    tail_marker = "## Patterns\nRecent observation — keep this.\n"
+    text = old_prefix + ephemeral_part + tail_marker
+
+    persist_memory(memory_file, text, max_chars=4000)
+    written = memory_file.read_text(encoding="utf-8")
+    # Ephemeral table must not appear
+    assert "Prior proposals" not in written
+    assert "T-1" not in written
+    # The tail marker (newest content) should be preserved
+    assert "## Patterns" in written
+    assert "Recent observation — keep this." in written
+    # The old prefix (oldest content) should be dropped
+    assert "## Old prefix" not in written
+
+
 def test_module_curator_guard_not_fired_for_other_sources(tmp_path):
     """A non-MODULE_CURATOR source with the same 'missing file' title is
     never suppressed, even when the file exists."""
