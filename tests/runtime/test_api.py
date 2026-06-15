@@ -705,6 +705,14 @@ def test_board_js_escapes_js_string_handlers(client):
     assert "open_('${" not in js
 
 
+def test_board_js_includes_move_to_board(client):
+    """The mill board overlay JS includes the moveToBoard function and
+    the /migrate endpoint call for the board-to-board migration UI."""
+    js = client.get("/static/mill/board-mill.js").text
+    assert "function moveToBoard(" in js, "board-mill.js must define moveToBoard()"
+    assert "/migrate" in js, "board-mill.js must call the /migrate endpoint"
+
+
 def test_board_js_includes_origin_session_rendering(client):
     """The mill board overlay JS includes origin_session and
     origin_session_url rendering logic for the ticket detail drawer."""

@@ -408,6 +408,26 @@
     hideEmptyColumns();
   }
 
+  function applyMoveButtons() {
+    document.querySelectorAll('.board-card').forEach(function(card) {
+      var ticketId = card.dataset.cardId;
+      if (!ticketId) return;
+      var existing = card.querySelector('.move-btn');
+      if (existing) return;
+      var btn = document.createElement('button');
+      btn.className = 'move-btn';
+      btn.textContent = 'Move to board…';
+      btn.title = 'Move ticket to another board';
+      btn.setAttribute('style', 'background:#374151;color:#cfd3db;border:1px solid #4b5563;border-radius:4px;padding:2px 6px;font-size:10px;cursor:pointer;margin-top:4px');
+      btn.onclick = function(e) {
+        e.stopPropagation();
+        e.preventDefault();
+        moveToBoard(ticketId);
+      };
+      card.appendChild(btn);
+    });
+  }
+
   // Hide board columns that currently hold no cards. robotsix-board's
   // board.js renders every configured column (22 of them) whether or
   // not it has tickets; the mill only wants populated columns visible.
@@ -488,7 +508,7 @@
           refresh();
         } else if (msg.type === "ticket_update") {
           window.robotsixBoardRefresh();
-          setTimeout(function() { fetchActive().then(applyActiveLabels); }, 500);
+          setTimeout(function() { fetchActive().then(applyActiveLabels).then(applyMoveButtons); }, 500);
         }
       } catch (e) { /* ignore malformed messages */ }
     };
@@ -687,6 +707,7 @@
       '<button class="' + prioClass + '" title="Pulled from the queue ahead of non-priority tickets" onclick="event.stopPropagation();togglePriority(' + jsq(t.id) + ',' + (t.priority ? "false" : "true") + ')">' + prioLabel + '</button>' +
       (t.kind === "inquiry" && t.state === "answered" ?
         '<button class="redraft-btn" title="Turn this Q&A into an actionable task" onclick="event.stopPropagation();convertToTicket(' + jsq(t.id) + ')">Convert to ticket</button>' : "") +
+      '<button class="move-btn" title="Move ticket to another board" style="background:#374151;color:#cfd3db;border:1px solid #4b5563;border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer;margin-left:4px;margin-top:5px;display:inline-block" onclick="event.stopPropagation();moveToBoard(' + jsq(t.id) + ',' + jsq(t.board_id) + ')">Move to board…</button>' +
       '<button class="del-btn" title="Delete ticket" style="position:static;opacity:1;margin-left:4px;margin-top:5px;display:inline-block" onclick="event.stopPropagation();del_(' + jsq(t.id) + ')">✕</button>';
   }
 
@@ -1136,6 +1157,75 @@
       var r = await jdel("/tickets/" + id);
       if (!r.ok && r.status !== 204) { var e = await r.text(); alert("delete failed: " + e); }
       else refresh();
+    });
+  }
+
+  async function moveToBoard(id, boardId) {
+    // Fetch ticket to get current board_id when not passed (card-level call).
+    if (boardId === undefined) {
+      var t = await jget("/tickets/" + id);
+      if (!t) { alert("ticket not found"); return; }
+      boardId = t.board_id;
+    }
+    var backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop";
+    var modal = document.createElement("div");
+    modal.className = "modal";
+    modal.innerHTML =
+      '<h2>Move Ticket</h2>' +
+      '<p style="color:#9ca3af;font-size:12px;margin:0 0 12px 0">Ticket <code>' + esc(id) + '</code></p>' +
+      '<label class="modal-label">Target board <span class="modal-req">*</span></label>' +
+      '<select class="modal-input" id="modal-board" style="width:100%">' +
+        '<option value="">Select board…</option>' +
+        (reposCache || []).filter(function(r) { return r.board_id !== boardId; }).map(function(r) {
+          return '<option value="' + esc(r.repo_id) + '">' + esc(r.repo_id) + (r.board_id === "meta" ? " (meta)" : "") + '</option>';
+        }).join("") +
+      '</select>' +
+      '<label class="modal-label" style="margin-top:12px">Note (optional)</label>' +
+      '<input type="text" class="modal-input" id="modal-note" placeholder="Why is this ticket moving?" autocomplete="off">' +
+      '<div class="modal-buttons">' +
+       '<span class="modal-submit-error" id="modal-submit-err"></span>' +
+       '<button type="button" class="modal-btn-cancel" id="modal-cancel">Cancel</button>' +
+       '<button type="button" class="modal-btn-create" id="modal-move">Move</button>' +
+      '</div>';
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+
+    var boardEl = document.getElementById("modal-board");
+    var noteEl = document.getElementById("modal-note");
+    var submitErr = document.getElementById("modal-submit-err");
+    var moveBtn = document.getElementById("modal-move");
+
+    function close() { document.body.removeChild(backdrop); }
+    function showSubmitErr(msg) { submitErr.textContent = msg; }
+    function clearSubmitErr() { submitErr.textContent = ""; }
+
+    async function doSubmit() {
+      var repoId = boardEl.value;
+      if (!repoId) { showSubmitErr("Select a target board"); boardEl.focus(); return; }
+      clearSubmitErr();
+      await lockWhile(async function () {
+        moveBtn.disabled = true; moveBtn.textContent = "Moving…";
+        var r = await jpost("/tickets/" + id + "/migrate", { repo_id: repoId, note: noteEl.value.trim() || undefined });
+        if (!r.ok) {
+          var e = await r.text();
+          if (r.status === 404) { alert("ticket not found"); close(); return; }
+          showSubmitErr(e || "migrate failed");
+          moveBtn.disabled = false; moveBtn.textContent = "Move";
+        } else {
+          close();
+          if (sel === id) close_();
+          refresh();
+        }
+      });
+    }
+
+    backdrop.addEventListener("click", function(e) { if (e.target === backdrop) close(); });
+    document.getElementById("modal-cancel").addEventListener("click", close);
+    moveBtn.addEventListener("click", doSubmit);
+    modal.addEventListener("keydown", function(e) {
+      if (e.key === "Escape") { e.preventDefault(); close(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); doSubmit(); return; }
     });
   }
 
@@ -2404,7 +2494,7 @@
     // After a short delay, fetch active labels and apply to cards
     setTimeout(function() {
       if (refreshSeq === tok) {
-        fetchActive().then(applyActiveLabels);
+        fetchActive().then(applyActiveLabels).then(applyMoveButtons);
       }
     }, 600);
   }
@@ -2446,7 +2536,7 @@
 
     // Initial board render via robotsix-board, then active labels
     window.robotsixBoardRefresh();
-    setTimeout(function() { fetchActive().then(applyActiveLabels); }, 600);
+    setTimeout(function() { fetchActive().then(applyActiveLabels).then(applyMoveButtons); }, 600);
 
     // Intercept clicks on board cards BEFORE robotsix-board's handler
     var board = document.getElementById("board");
@@ -2456,6 +2546,7 @@
         var card = evt.target.closest('.board-card');
         if (!card) return;
         if (evt.target.closest('.board-card-move')) return;
+        if (evt.target.closest('.move-btn')) return;
         evt.stopPropagation();
         evt.preventDefault();
         var ticketId = card.dataset.cardId;
@@ -2488,7 +2579,7 @@
       else if (sel) refreshDetail(sel);
       // Refresh active labels on the board every 5s when drawer is closed
       if (!sel && !runsOpen && !costDashboardOpen && !candidatesOpen && !proposalsOpen) {
-        fetchActive().then(applyActiveLabels);
+        fetchActive().then(applyActiveLabels).then(applyMoveButtons);
       }
     }, 1000);
   }
@@ -2522,6 +2613,7 @@
   window.reopenThread = reopenThread;
   window.togglePriority = togglePriority;
   window.convertToTicket = convertToTicket;
+  window.moveToBoard = moveToBoard;
   window.generateChildren = generateChildren;
   window.newChildTicket = newChildTicket;
   window.toggleAgentsMenu = toggleAgentsMenu;
