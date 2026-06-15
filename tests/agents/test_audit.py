@@ -78,9 +78,7 @@ def test_audit_prompt_covers_codebase_health_and_tooling():
     assert "re-verification budget" in p, (
         "audit prompt missing re-verification budget bullet"
     )
-    assert "~$0.01" in p, (
-        "audit prompt missing cost signal (~$0.01)"
-    )
+    assert "~$0.01" in p, "audit prompt missing cost signal (~$0.01)"
     assert "capped at ≤ 3" in p, (
         "audit prompt missing re-verification budget cap (capped at ≤ 3)"
     )
