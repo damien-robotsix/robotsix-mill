@@ -125,6 +125,30 @@ For each gap you decide to propose as a draft ticket, provide:
 - ``draft_body``: concrete description of the gap and suggested
   improvement — cite the specific alias, file, and default value
 - ``gap_id``: a short snake_case identifier for dedup in the memory
+
+CONTEXT AND BUDGET DISCIPLINE:
+
+- ⚠️ **BUDGET WARNING:** Every top-level ``read_file``, ``list_dir``,
+  and ``run_command`` call burns one request against your limited
+  request budget.  ``explore`` calls do NOT — the sub-agent has its
+  own independent request budget.  Prefer delegation to ``explore``
+  for any work beyond trivial single-step lookups.
+- **Check your conversation history before calling ``read_file``.**
+  A file you have already read via a prior ``read_file`` call (or
+  that was preloaded via ``reference_files``) in THIS conversation
+  is already in your context — quote from it directly.  Do NOT
+  re-read a file you already have.
+- **Partial slices of already-loaded files WILL be refused.**  If
+  you call ``read_file`` with an ``offset`` on a file whose full
+  content is already in your context, the tool will return a
+  refusal string.  This wastes a round-trip.  Always check your
+  history first.
+- **Batch multi-step research into ``explore`` calls.**  When you
+  need to cross-reference several files or answer multiple related
+  questions, put them as sub-questions inside a SINGLE ``explore``
+  request rather than issuing serial ``read_file`` calls.  Serial
+  single-facet calls re-read the same large files each time,
+  wasting context and cost.
 """
 
 MAX_GAPS = 5
