@@ -40,6 +40,7 @@ This module is a thin façade (Pattern A) over the ``merge`` package:
 
 - ``_shared`` — module-level helpers, constants, and the package ``log``
 - ``core`` — :class:`MergeStage` (run dispatch + shared class-level helpers)
+- ``ci_fix_mixin`` — :class:`MultiRepoCiFixMixin` (inline CI-fix recovery)
 - ``multi_repo`` — :class:`MultiRepoMixin`
 - ``ci_poll`` — :class:`CIPollMixin`
 - ``rebase`` — :class:`RebaseMixin`

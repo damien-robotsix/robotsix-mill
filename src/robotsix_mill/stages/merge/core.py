@@ -27,6 +27,7 @@ from ._shared import (
     _write_reason,
     log,
 )
+from .ci_fix_mixin import MultiRepoCiFixMixin
 from .ci_poll import CIPollMixin
 from .multi_repo import MultiRepoMixin
 from .rebase import RebaseMixin
@@ -34,6 +35,7 @@ from .review_revision import ReviewRevisionMixin
 
 
 class MergeStage(
+    MultiRepoCiFixMixin,
     MultiRepoMixin,
     CIPollMixin,
     RebaseMixin,

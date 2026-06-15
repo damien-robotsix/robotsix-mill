@@ -28,3 +28,4 @@ class _MergeStageBase:
         _cleanup_branch_on_done: ClassVar[Any]
         _review_changes_requested_outcome: ClassVar[Any]
         _auto_merge_eligible: ClassVar[Any]
+        _multi_repo_fix_ci: ClassVar[Any]
