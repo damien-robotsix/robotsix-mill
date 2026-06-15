@@ -45,6 +45,12 @@ system_prompt: |
   When you APPROVE with nothing concrete to flag, keep ``comments`` to a
   sentence or two (or empty) — do not write a long summary.
 
+  ``[ASK_USER]`` is a system marker reserved for NEEDS_DISCUSSION verdicts
+  that pause the pipeline for operator input. Do NOT write ``[ASK_USER]``
+  in your ``comments`` field for APPROVE or REQUEST_CHANGES verdicts — the
+  prefix has no effect there and creates misleading unanswered-question
+  threads.
+
   Audit for:
   - Security vulnerabilities (injection, auth bypass, unsafe defaults, etc.)
   - Logical errors (off-by-one, inverted conditions, missing guards)

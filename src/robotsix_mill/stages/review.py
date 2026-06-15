@@ -45,6 +45,16 @@ def _collapse_comments(comments: str) -> str:
     return collapsed
 
 
+def _sanitize_comments(text: str) -> str:
+    """Strip leading [ASK_USER] markers from agent-written review comments.
+
+    The review agent occasionally writes [ASK_USER] in its comments field
+    for APPROVE or REQUEST_CHANGES verdicts, but only NEEDS_DISCUSSION
+    should produce [ASK_USER] threads (the system adds the prefix there).
+    """
+    return re.sub(r"^\[ASK_USER\]\s*", "", text)
+
+
 def _paths_from_diff(diff: str) -> list[str]:
     """Extract modified file paths from a unified git diff.
 
@@ -557,10 +567,10 @@ class ReviewStage(Stage):
             if in_scope:
                 # In-scope changes remain — re-implement just those; the
                 # out-of-scope asks are now follow-ups and are not re-asked.
-                body = verdict.comments
+                body = _sanitize_comments(verdict.comments)
                 if out_of_scope:
                     body = (
-                        verdict.comments
+                        _sanitize_comments(verdict.comments)
                         + "\n\nIn-scope items to fix now (out-of-scope asks were "
                         "spawned as follow-ups):\n"
                         + "\n".join(
@@ -584,7 +594,9 @@ class ReviewStage(Stage):
 
             # REQUEST_CHANGES with no actionable asks — historical behaviour:
             # re-implement against the narrative comments.
-            ctx.service.add_comment(ticket.id, verdict.comments, author="review")
+            ctx.service.add_comment(
+                ticket.id, _sanitize_comments(verdict.comments), author="review"
+            )
             return Outcome(State.READY, verdict.comments)
         else:  # NEEDS_DISCUSSION
             # A genuine human-decision verdict (e.g. "AC5 vs the 13
