@@ -5,7 +5,7 @@ description: >-
   Conservative duplicate detector that inspects a draft against existing
   tickets to decide whether it's a duplicate or already implemented
 
-category: periodic
+category: pipeline
 
 model: "${MILL_DEDUP_MODEL}"
 

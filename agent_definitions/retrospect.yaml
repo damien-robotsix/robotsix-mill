@@ -6,7 +6,7 @@ description: >-
   Analyses a finished ticket's workflow, Langfuse session, and memory
   ledger to propose concrete pipeline improvements
 
-category: periodic
+category: pipeline
 
 model: "${MILL_RETROSPECT_MODEL}"
 

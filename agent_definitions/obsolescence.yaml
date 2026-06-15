@@ -5,7 +5,7 @@ description: >-
   Conservative gap re-validator that re-reads a spawned follow-up draft's
   cited evidence gap at HEAD to decide whether it was already resolved
 
-category: periodic
+category: pipeline
 
 model: "${MILL_OBSOLESCENCE_MODEL}"
 
