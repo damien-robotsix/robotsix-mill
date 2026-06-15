@@ -64,6 +64,25 @@ _LAST_UPDATED_RE = re.compile(
 )
 _GENERAL_FILENAME = "_general.md"
 
+# Per-survey-run web_search budget — caps web_search invocations across
+# all ask_web_knowledge consults in a single survey pass. Activated only
+# when the survey runner calls reset_trace_web_search_budget with a
+# non-zero cap; otherwise a no-op so other agents are unaffected.
+_trace_search_calls: int = 0
+_trace_search_max_calls: int = 0
+
+
+def reset_trace_web_search_budget(max_calls: int) -> None:
+    """Zero the per-survey-run web_search counter and set a new cap.
+
+    Call with ``max_calls=0`` to deactivate the trace budget (return to
+    unlimited searches across consults). The per-consult web_fetch budget
+    is NOT affected by this call.
+    """
+    global _trace_search_calls, _trace_search_max_calls
+    _trace_search_calls = 0
+    _trace_search_max_calls = max_calls
+
 
 # ---------------------------------------------------------------------------
 # Path helpers
@@ -300,6 +319,15 @@ def _make_tools(settings: Settings) -> list:  # noqa: C901 — factory intention
         cached files when they cover the question. Returns the
         web-research sub-agent's distilled conclusion (it has already
         read pages for you)."""
+        global _trace_search_calls
+        if _trace_search_max_calls > 0 and _trace_search_calls >= _trace_search_max_calls:
+            return (
+                "web_search trace budget exhausted for this survey run "
+                f"(cap: {_trace_search_max_calls} searches). "
+                "Answer from already-retrieved information; do not request "
+                "more searches."
+            )
+        _trace_search_calls += 1
         return await run_web_research(settings=settings, query=query)
 
     return [
@@ -443,4 +471,5 @@ def make_ask_web_knowledge_tool(settings: Settings):
 __all__ = [
     "run_web_knowledge",
     "make_ask_web_knowledge_tool",
+    "reset_trace_web_search_budget",
 ]

@@ -157,6 +157,14 @@ class _PeriodicSettings(BaseModel):
     # Path to the survey agent's Markdown memory ledger. Override to pin
     # a specific path; unset (default) derives <data_dir>/survey_memory.md.
     survey_memory_path: Path | None = Field(default=None)
+    # Per-survey-run web_fetch budget — a second tier of budget tracking
+    # that spans the entire survey run (not reset between ask_web_knowledge
+    # consults). Defaults to 10 calls / 500 KB total bytes.
+    survey_web_fetch_max_calls: int = Field(default=10, ge=1)
+    survey_web_fetch_max_total_bytes: int = Field(default=500_000, ge=0)
+    # Per-survey-run web_search budget — caps web_search invocations at 5
+    # per survey run regardless of how many ask_web_knowledge consults.
+    survey_web_search_max_calls: int = Field(default=5, ge=1)
     # Opt-in periodic survey pass. Defaults to True (on by default —
     # "default yes"). Flip to false to disable the automatic daily
     # cadence while still allowing on-demand POST /survey and

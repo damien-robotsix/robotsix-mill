@@ -45,7 +45,7 @@ class _StagesSettings(BaseModel):
     # 200 KB ≈ 50K tokens — enough for one doc page worth of prose,
     # not enough to nuke a refine context with a 315 KB markup dump.
     # Configured via ``web.fetch_max_text_bytes`` in the YAML config.
-    web_fetch_max_text_bytes: int = 200_000
+    web_fetch_max_text_bytes: int = 40_000
     # When True, web_fetch returns the raw response body verbatim
     # (no HTML→text stripping, no per-run URL dedupe). Operator
     # escape hatch for the rare case the agent needs the markup
