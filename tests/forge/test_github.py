@@ -2378,12 +2378,27 @@ def test_conclusion_for_check_cancelled_is_pending():
     a false failure that spawns ci_fix churn."""
     from robotsix_mill.forge.github import _conclusion_for_check
 
-    assert _conclusion_for_check({"status": "completed", "conclusion": "cancelled"}) == "pending"
-    assert _conclusion_for_check({"status": "completed", "conclusion": "stale"}) == "pending"
+    assert (
+        _conclusion_for_check({"status": "completed", "conclusion": "cancelled"})
+        == "pending"
+    )
+    assert (
+        _conclusion_for_check({"status": "completed", "conclusion": "stale"})
+        == "pending"
+    )
     # Genuine terminal failures stay failures.
-    assert _conclusion_for_check({"status": "completed", "conclusion": "failure"}) == "failure"
-    assert _conclusion_for_check({"status": "completed", "conclusion": "startup_failure"}) == "failure"
-    assert _conclusion_for_check({"status": "completed", "conclusion": "success"}) == "neutral"
+    assert (
+        _conclusion_for_check({"status": "completed", "conclusion": "failure"})
+        == "failure"
+    )
+    assert (
+        _conclusion_for_check({"status": "completed", "conclusion": "startup_failure"})
+        == "failure"
+    )
+    assert (
+        _conclusion_for_check({"status": "completed", "conclusion": "success"})
+        == "neutral"
+    )
 
 
 def test_derive_conclusion_cancelled_among_passing_is_pending():
