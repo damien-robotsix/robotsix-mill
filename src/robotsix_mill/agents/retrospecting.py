@@ -396,7 +396,12 @@ def run_retrospect_agent(
     if sibling_context:
         prompt += f"\n\n{sibling_context}"
     if repo_dir is not None and repo_dir.exists():
-        prompt += f"\n\nRepository working directory: {repo_dir}\n"
+        prompt += (
+            f"\n\nRepository working directory: {repo_dir}\n"
+            "The filesystem tools (read_file, list_dir, run_command) are restricted "
+            "to this directory only — paths above it will fail. The memory ledger "
+            "is already provided inline in this prompt; do not read_file it separately.\n"
+        )
     from .retry import run_agent
 
     try:
