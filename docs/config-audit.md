@@ -161,7 +161,7 @@ other code depends on.
 | `MILL_REQUIRE_APPROVAL` | `require_approval` | `true` | `bool` | Settings | non-sensitive | default | §6 | `stages/refine.py`, `runtime/worker.py` | |
 | `MILL_AUTO_APPROVE_ENABLED` | `auto_approve_enabled` | `false` | `bool` | Settings | non-sensitive | default | §6 | `stages/refine.py` | Local YAML overrides default `false` → `true` |
 | `MILL_REVIEW_ENABLED` | `review_enabled` | `false` | `bool` | Settings | non-sensitive | default | §6 | `runtime/worker.py` | Local YAML overrides default `false` → `true` |
-| `MILL_AUTO_MERGE_ENABLED` | `auto_merge_enabled` | `false` | `bool` | Settings | non-sensitive | default | **missing** | `stages/merge.py` | ⚠️ Undocumented |
+| `MILL_AUTO_MERGE_ENABLED` | `auto_merge_enabled` | `false` | `bool` | Settings | non-sensitive | default | **missing** | `stages/merge/` | ⚠️ Undocumented |
 | `MILL_REFINE_TRIAGE_ENABLED` | `refine_triage_enabled` | `true` | `bool` | Settings | non-sensitive | default | **missing** | `stages/refine.py` | ⚠️ Undocumented |
 | `MILL_SPEC_REVIEW_ENABLED` | `spec_review_enabled` | `false` | `bool` | Settings | non-sensitive | default | **missing** | `stages/refine.py` | ⚠️ Undocumented |
 | `MILL_REVIEW_MAX_ROUNDS` | `review_max_rounds` | `3` | `int` | Settings | non-sensitive | default | **missing** | `stages/review.py` | ⚠️ Undocumented |
@@ -178,11 +178,11 @@ other code depends on.
 
 | Env var | Field | Default | Type | Source | Sensitivity | YAML | Docs | Consumers | Notes |
 |---|---|---|---|---|---|---|---|---|---|
-| `MILL_MERGE_POLL_SECONDS` | `merge_poll_seconds` | `120` | `int` | Settings | non-sensitive | default | §9 | `stages/merge.py` | |
+| `MILL_MERGE_POLL_SECONDS` | `merge_poll_seconds` | `120` | `int` | Settings | non-sensitive | default | §9 | `stages/merge/` | |
 | `MILL_PRUNE_CLONE_ON_CLOSE` | `prune_clone_on_close` | `true` | `bool` | Settings | non-sensitive | default | **missing** | `core/service.py` (ticket close) | ⚠️ Undocumented |
 | `MILL_MAX_ARCHIVED_TICKETS` | `max_archived_tickets` | `100` | `int` | Settings | non-sensitive | default | **missing** | `core/service.py` (ticket purge) | ⚠️ Undocumented |
-| `MILL_REBASE_MAX_ATTEMPTS` | `rebase_max_attempts` | `5` | `int` | Settings | non-sensitive | default | §9 | `stages/merge.py` | |
-| `MILL_CI_FIX_MAX_ATTEMPTS` | `ci_fix_max_attempts` | `2` | `int` | Settings | non-sensitive | default | §9 | `stages/merge.py` | |
+| `MILL_REBASE_MAX_ATTEMPTS` | `rebase_max_attempts` | `5` | `int` | Settings | non-sensitive | default | §9 | `stages/merge/` | |
+| `MILL_CI_FIX_MAX_ATTEMPTS` | `ci_fix_max_attempts` | `2` | `int` | Settings | non-sensitive | default | §9 | `stages/merge/` | |
 
 ### 1.13  CI monitor (log cap only; enabled/interval are per-repo)
 
