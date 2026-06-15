@@ -386,7 +386,7 @@ class RefineGatesMixin:
                     existing_labels = json.loads(current.labels)
                     if not isinstance(existing_labels, list):
                         existing_labels = []
-                except (json.JSONDecodeError, TypeError):
+                except json.JSONDecodeError, TypeError:
                     pass
             if label not in existing_labels:
                 ctx.service.set_labels(ticket.id, existing_labels + [label])

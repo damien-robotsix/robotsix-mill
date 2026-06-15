@@ -708,6 +708,7 @@ def test_inflight_advisory_non_ci_does_not_store_labels(ctx_factory, monkeypatch
     # No ci_fp: labels were added.
     if t2.labels:
         import json
+
         labels = json.loads(t2.labels)
         assert not any(lbl.startswith("ci_fp:") for lbl in labels)
 
@@ -749,12 +750,10 @@ def test_inflight_advisory_ci_overlap_end_to_end(ctx_factory, monkeypatch):
     RefineStage._run_inflight_advisory(ctx, t1, _CI_DRAFT_BODY, ws1, ctx.settings)
 
     # Second CI ticket with SAME error fingerprint (different run metadata).
-    same_error_body = _CI_DRAFT_BODY.replace(
-        "1234567890", "9999999999"
-    ).replace(
-        "abc123def456", "deadbeef9999"
-    ).replace(
-        "2024-01-15T10:30:45.123456+00:00", "2024-06-15T08:00:00Z"
+    same_error_body = (
+        _CI_DRAFT_BODY.replace("1234567890", "9999999999")
+        .replace("abc123def456", "deadbeef9999")
+        .replace("2024-01-15T10:30:45.123456+00:00", "2024-06-15T08:00:00Z")
     )
     t2 = _ticket(ctx, title="CI failure: CI on main", source="ci")
     ws2 = ctx.service.workspace(t2)
@@ -775,7 +774,9 @@ def test_inflight_advisory_ci_overlap_end_to_end(ctx_factory, monkeypatch):
     assert t1.id in result
 
 
-def test_inflight_advisory_ci_different_fingerprint_no_overlap(ctx_factory, monkeypatch):
+def test_inflight_advisory_ci_different_fingerprint_no_overlap(
+    ctx_factory, monkeypatch
+):
     """Two CI tickets with DIFFERENT error fingerprints do NOT flag each
     other — the title-only fallback is suppressed."""
     ctx = ctx_factory()
@@ -786,9 +787,11 @@ def test_inflight_advisory_ci_different_fingerprint_no_overlap(ctx_factory, monk
 
     # Run advisory on t1 — stores its fingerprint.
     saved = []
+
     def _capture_overlap(*a, **k):
         saved.append(k)
         return None
+
     monkeypatch.setattr(dedup_top, "find_inflight_overlap", _capture_overlap)
     RefineStage._run_inflight_advisory(ctx, t1, _CI_DRAFT_BODY, ws1, ctx.settings)
     monkeypatch.undo()

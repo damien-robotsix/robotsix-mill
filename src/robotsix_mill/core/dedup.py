@@ -56,9 +56,7 @@ _ISO8601_RE = re.compile(
 )
 
 # GitHub Actions run URL: ``https://github.com/owner/repo/actions/runs/1234567890/…``.
-_GH_RUN_URL_RE = re.compile(
-    r"https?://github\.com/[^/\s]+/[^/\s]+/actions/runs/\d+\S*"
-)
+_GH_RUN_URL_RE = re.compile(r"https?://github\.com/[^/\s]+/[^/\s]+/actions/runs/\d+\S*")
 
 
 def _ci_draft_fingerprint(body: str) -> str:
@@ -188,7 +186,7 @@ def find_prior_matching_ticket(
                         parsed = json.loads(ticket.labels)
                         if isinstance(parsed, list):
                             cand_labels = parsed
-                    except (json.JSONDecodeError, TypeError):
+                    except json.JSONDecodeError, TypeError:
                         pass
                 if any(label in cand_labels for label in dedup_labels):
                     return ticket
