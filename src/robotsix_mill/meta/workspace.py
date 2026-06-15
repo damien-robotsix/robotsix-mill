@@ -85,7 +85,15 @@ def build_meta_workspace(
         try:
             token = github_token(settings, repo_config=rc)
         except RuntimeError:
-            token = None  # no creds — clone may still work for public repos
+            # No creds resolved — a public repo still clones, but a private
+            # one will fail below (and be caught by the partial-clone guard
+            # in build_triaged_meta_workspace). Log so it is diagnosable.
+            token = None
+            log.warning(
+                "build_meta_workspace: no credentials for %r — clone will "
+                "fail if the repo is private",
+                repo_id,
+            )
 
         try:
             git_ops.clone(
@@ -172,6 +180,37 @@ def build_triaged_meta_workspace(
             None,
             Outcome(State.BLOCKED, "meta workspace: no repos could be cloned"),
         )
+
+    # Partial clone guard: when triage *confidently* named the required
+    # repos (not the clone-everything fallback), every one of them must be
+    # present — otherwise the implement agent is handed a workspace missing
+    # a target repo and, unable to find/modify it, pauses with a confused
+    # "repo not present, cannot clone" question instead of doing the work.
+    # Block clearly and actionably rather than proceed with a partial tree.
+    if not fallback:
+        cloned = {p.name for p in extra_roots}
+        missing = [r for r in repo_ids if r not in cloned]
+        if missing:
+            ctx.service.add_comment(
+                ticket.id,
+                "[BLOCKED] meta workspace: required repo(s) "
+                f"{', '.join(missing)} could not be cloned (private repo "
+                "without usable credentials, or a clone error). A meta ticket "
+                "must have every target repo checked out so the agent can "
+                "modify it — proceeding with a partial workspace would force a "
+                "spurious clarifying question. Fix repo access/credentials and "
+                "resume.",
+                author=author,
+            )
+            return (
+                None,
+                None,
+                Outcome(
+                    State.BLOCKED,
+                    f"meta workspace: required repos not cloned: {', '.join(missing)}",
+                ),
+            )
+
     log.info(
         "%s: meta workspace built — %d repo(s): %s",
         ticket.id,

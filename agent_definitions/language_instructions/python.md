@@ -66,6 +66,29 @@ ruff check . && ruff format .
 mypy .
 ```
 
+## CI steps that run a tool (vulture, bandit, pip-audit, etc.)
+
+When you add a CI job — or a pre-commit hook, or a `Makefile`
+target — that runs a developer tool which is **not** a declared
+project dependency, invoke it with `uv run --with <pkg>` so `uv`
+provisions it on the fly:
+
+```yaml
+# CORRECT — uv provisions vulture for this run
+- run: uv run --with vulture vulture src/ tests/
+# WRONG — fails in CI with "Failed to spawn: `vulture` … No such file
+# or directory" because vulture is not installed in the synced env
+- run: uv run vulture src/ tests/
+```
+
+This applies to any tool not listed in `[project.dependencies]` or a
+`[dependency-groups]` group that CI installs (`vulture`, `bandit`,
+`pip-audit`, `zizmor`, `deptry`, …). Tools that **are** declared deps
+(e.g. `ruff`, `mypy`, `pytest` when in a dev group synced by CI) do
+not need `--with`. When unsure whether CI installs a tool, add
+`--with <pkg>` — it is a harmless no-op when the package is already
+present, but its absence is a hard CI failure.
+
 ## Redundant checks
 
 - Never run `mypy`, `ruff`, or `pytest` twice against unchanged
