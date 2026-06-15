@@ -112,10 +112,7 @@ def test_rationale_ref_plus_verb_fires():
         refine_module._rationale_claims_external_fix("Addressed by #42 last week.")
         is True
     )
-    assert (
-        refine_module._rationale_claims_external_fix("Merged in MR !15.")
-        is True
-    )
+    assert refine_module._rationale_claims_external_fix("Merged in MR !15.") is True
 
 
 def test_rationale_ref_without_verb_does_not_fire():
