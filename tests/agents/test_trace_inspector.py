@@ -2,11 +2,13 @@
 
 import json
 
+import pytest
 
 import robotsix_mill.agents.trace_inspector as trace_inspector_mod
 from robotsix_mill.agents.trace_inspector import (
     _SYSTEM_PROMPT,
     TraceInspectResult,
+    _wrap_tools_with_error_limit,
 )
 from robotsix_mill.config import Settings, Secrets, _reset_secrets
 
@@ -401,3 +403,213 @@ class TestTraceInspectResult:
         # Round-trip preserves solution + confidence.
         assert parsed.findings[0].proposed_solution == "sol"
         assert parsed.findings[2].confidence == "high"
+
+
+# ---------------------------------------------------------------------------
+# Termination guardrails — tool-call / error limits
+# ---------------------------------------------------------------------------
+
+
+class TestWrapToolsWithErrorLimit:
+    """Unit tests for _wrap_tools_with_error_limit."""
+
+    def test_sync_tool_passthrough_on_success(self):
+        """Successful sync tool calls pass through unchanged."""
+
+        def ok_tool(x: int) -> int:
+            """Add one."""
+            return x + 1
+
+        wrapped = _wrap_tools_with_error_limit([ok_tool], max_errors=3)
+        assert wrapped[0](5) == 6
+
+    def test_sync_tool_counts_errors(self):
+        """Each failing sync call increments the shared error counter."""
+
+        def fail_tool() -> None:
+            raise ValueError("boom")
+
+        wrapped = _wrap_tools_with_error_limit([fail_tool], max_errors=3)
+        for _ in range(3):
+            with pytest.raises(ValueError, match="boom"):
+                wrapped[0]()
+        # Fourth error exceeds limit → UsageLimitExceeded
+        with pytest.raises(Exception) as exc_info:
+            wrapped[0]()
+        assert "Error limit (3) exceeded" in str(exc_info.value)
+
+    def test_sync_tool_preserves_metadata(self):
+        """Wrapped sync tools preserve name, docstring, and annotations."""
+
+        def my_tool(path: str, mode: int = 0) -> str:
+            """Read a file."""
+            return path
+
+        wrapped = _wrap_tools_with_error_limit([my_tool], max_errors=3)
+        w = wrapped[0]
+        assert w.__name__ == "my_tool"
+        assert w.__doc__ == "Read a file."
+        assert "path" in w.__annotations__
+        assert w.__annotations__["path"] is str
+
+    def test_async_tool_passthrough_on_success(self):
+        """Successful async tool calls pass through unchanged."""
+        import asyncio
+
+        async def ok_tool(x: int) -> int:
+            return x + 1
+
+        wrapped = _wrap_tools_with_error_limit([ok_tool], max_errors=3)
+        result = asyncio.run(wrapped[0](5))
+        assert result == 6
+
+    def test_async_tool_counts_errors(self):
+        """Each failing async call increments the shared error counter."""
+        import asyncio
+
+        async def fail_tool() -> None:
+            raise RuntimeError("async boom")
+
+        wrapped = _wrap_tools_with_error_limit([fail_tool], max_errors=2)
+        for _ in range(2):
+            with pytest.raises(RuntimeError, match="async boom"):
+                asyncio.run(wrapped[0]())
+        # Third error exceeds limit
+        with pytest.raises(Exception) as exc_info:
+            asyncio.run(wrapped[0]())
+        assert "Error limit (2) exceeded" in str(exc_info.value)
+
+    def test_shared_counter_across_tools(self):
+        """Multiple tools share the same error budget."""
+
+        def tool_a() -> None:
+            raise ValueError("a")
+
+        def tool_b() -> None:
+            raise ValueError("b")
+
+        wrapped = _wrap_tools_with_error_limit([tool_a, tool_b], max_errors=2)
+        with pytest.raises(ValueError, match="a"):
+            wrapped[0]()
+        with pytest.raises(ValueError, match="b"):
+            wrapped[1]()
+        # Third error (from either tool) exceeds limit
+        with pytest.raises(Exception) as exc_info:
+            wrapped[0]()
+        assert "Error limit (2) exceeded" in str(exc_info.value)
+
+    def test_model_retry_not_counted(self):
+        """ModelRetry passes through without consuming error budget."""
+        from pydantic_ai.exceptions import ModelRetry
+
+        def retry_tool() -> None:
+            raise ModelRetry("bad args")
+
+        wrapped = _wrap_tools_with_error_limit([retry_tool], max_errors=1)
+        for _ in range(5):
+            with pytest.raises(ModelRetry):
+                wrapped[0]()
+        # Budget untouched — a subsequent real error still fires at limit
+
+        def real_fail() -> None:
+            raise ValueError("real")
+
+        wrapped2 = _wrap_tools_with_error_limit([real_fail], max_errors=1)
+        with pytest.raises(ValueError, match="real"):
+            wrapped2[0]()
+        with pytest.raises(Exception) as exc_info:
+            wrapped2[0]()
+        assert "Error limit (1) exceeded" in str(exc_info.value)
+
+    def test_usage_limit_exceeded_not_double_counted(self):
+        """UsageLimitExceeded from the tool-call limit passes through."""
+        from pydantic_ai.exceptions import UsageLimitExceeded
+
+        def limited_tool() -> None:
+            raise UsageLimitExceeded("too many calls")
+
+        wrapped = _wrap_tools_with_error_limit([limited_tool], max_errors=1)
+        with pytest.raises(UsageLimitExceeded, match="too many calls"):
+            wrapped[0]()
+        # Budget untouched — a real error still counts
+
+        def real_fail() -> None:
+            raise ValueError("real")
+
+        wrapped2 = _wrap_tools_with_error_limit([real_fail], max_errors=1)
+        with pytest.raises(ValueError):
+            wrapped2[0]()
+        with pytest.raises(Exception) as exc_info:
+            wrapped2[0]()
+        assert "Error limit (1) exceeded" in str(exc_info.value)
+
+    def test_max_errors_zero_disables(self):
+        """max_errors=0 → no wrapping, original tool returned as-is."""
+
+        def ok_tool() -> str:
+            return "hi"
+
+        wrapped = _wrap_tools_with_error_limit([ok_tool], max_errors=0)
+        # Should be the same function object, not a wrapper
+        assert wrapped[0] is ok_tool
+
+
+class TestToolCallsLimitInUsageLimits:
+    """Verify tool_calls_limit is wired into UsageLimits for tools-on path."""
+
+    def test_tools_on_path_sets_tool_calls_limit(self, monkeypatch):
+        """When repo_dir is provided, tool_calls_limit is set on UsageLimits."""
+        captured_limits: list = []
+
+        class _Handle:
+            def run_sync(self, prompt, **kw):
+                captured_limits.append(kw.get("usage_limits"))
+                return type("_R", (), {"output": TraceInspectResult()})()
+
+        def fake_run_agent(agent, make_run, **kw):
+            return make_run(_Handle())
+
+        monkeypatch.setattr(
+            "robotsix_mill.agents.retry.run_agent",
+            fake_run_agent,
+        )
+
+        from pathlib import Path
+
+        settings = _settings_with_api_key()
+        trace_inspector_mod.run_trace_inspector(
+            settings=settings,
+            trace_data=_fake_trace_clean(),
+            repo_dir=Path("/tmp"),
+        )
+        assert len(captured_limits) == 1
+        limits = captured_limits[0]
+        assert limits.tool_calls_limit == settings.trace_review_max_tool_calls
+        assert limits.tool_calls_limit == 100  # default
+
+    def test_tool_less_path_omits_tool_calls_limit(self, monkeypatch):
+        """When repo_dir is None, tool_calls_limit stays None."""
+        captured_limits: list = []
+
+        class _Handle:
+            def run_sync(self, prompt, **kw):
+                captured_limits.append(kw.get("usage_limits"))
+                return type("_R", (), {"output": TraceInspectResult()})()
+
+        def fake_run_agent(agent, make_run, **kw):
+            return make_run(_Handle())
+
+        monkeypatch.setattr(
+            "robotsix_mill.agents.retry.run_agent",
+            fake_run_agent,
+        )
+
+        settings = _settings_with_api_key()
+        trace_inspector_mod.run_trace_inspector(
+            settings=settings,
+            trace_data=_fake_trace_clean(),
+            repo_dir=None,
+        )
+        assert len(captured_limits) == 1
+        limits = captured_limits[0]
+        assert limits.tool_calls_limit is None

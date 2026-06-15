@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -276,6 +276,72 @@ def _shrink_trace_data(trace_data: str, max_chars: int = 400_000) -> str:
     )
 
 
+def _wrap_tools_with_error_limit(
+    tools: list[Any],
+    max_errors: int,
+) -> list[Any]:
+    """Wrap each tool with a shared error counter.
+
+    When *max_errors* tool-call errors have been observed, the wrapper
+    raises ``UsageLimitExceeded`` to terminate the agent run.  The
+    pydantic-ai special exceptions ``UsageLimitExceeded`` and
+    ``ModelRetry`` are NOT counted as errors — they pass through
+    unchanged.
+
+    Returns the original *tools* unchanged when *max_errors* <= 0.
+    """
+    if max_errors <= 0:
+        return tools
+
+    import functools
+    import inspect as _inspect
+    from collections.abc import Callable
+
+    from pydantic_ai.exceptions import ModelRetry, UsageLimitExceeded
+
+    state: dict[str, int] = {"errors": 0}
+
+    def _make_wrapper(fn: Callable[..., Any]) -> Callable[..., Any]:
+        if _inspect.iscoroutinefunction(fn):
+
+            @functools.wraps(fn)
+            async def wrapper(*args: Any, **kwargs: Any) -> Any:
+                try:
+                    return await fn(*args, **kwargs)
+                except UsageLimitExceeded, ModelRetry:
+                    raise
+                except Exception:
+                    state["errors"] += 1
+                    if state["errors"] > max_errors:
+                        raise UsageLimitExceeded(
+                            f"Error limit ({max_errors}) exceeded "
+                            f"after {state['errors']} tool errors"
+                        ) from None
+                    raise
+
+            return wrapper
+        else:
+
+            @functools.wraps(fn)
+            def wrapper(*args: Any, **kwargs: Any) -> Any:
+                try:
+                    return fn(*args, **kwargs)
+                except UsageLimitExceeded, ModelRetry:
+                    raise
+                except Exception:
+                    state["errors"] += 1
+                    if state["errors"] > max_errors:
+                        raise UsageLimitExceeded(
+                            f"Error limit ({max_errors}) exceeded "
+                            f"after {state['errors']} tool errors"
+                        ) from None
+                    raise
+
+            return wrapper
+
+    return [_make_wrapper(t) for t in tools]
+
+
 def run_trace_inspector(
     *,
     settings: Settings,
@@ -360,6 +426,15 @@ def run_trace_inspector(
     # Tool-less path stays cheap (3 reqs); tools-on path needs room
     # to read → reason → emit (20 reqs is generous but bounded).
     request_limit = 20 if repo_dir is not None else 3
+    # Guard against runaway tool loops: cap total tool calls and
+    # errors per trace.  pydantic-ai's built-in ``tool_calls_limit``
+    # counts successful calls; a custom error-counter wrapper handles
+    # the error budget.
+    tool_calls_limit = (
+        settings.trace_review_max_tool_calls if repo_dir is not None else None
+    )
+    error_limit = settings.trace_review_max_errors if repo_dir is not None else 0
+    tools = _wrap_tools_with_error_limit(tools, max_errors=error_limit)
 
     model, client = build_openrouter_model(
         settings, model_name or settings.trace_inspector_model
@@ -372,7 +447,7 @@ def run_trace_inspector(
         output_type=PromptedOutput(TraceInspectResult),
         tools=tools,
     )
-    limits = UsageLimits(request_limit=request_limit)
+    limits = UsageLimits(request_limit=request_limit, tool_calls_limit=tool_calls_limit)
     flags_section = (
         section("classifier_flags", ", ".join(classifier_flags)) + "\n\n"
         if classifier_flags
