@@ -978,26 +978,48 @@ class TestProposedActionPurge:
         assert count == 5
 
     def test_deletes_oldest_on_cap_exceeded(self, service, settings):
-        """Oldest ProposedAction rows are purged when the cap is exceeded."""
-        settings.max_proposed_actions = 3
-        t = service.create("target")
-        pa1 = service.create_proposed_action("test", t.id, "close", "oldest")
-        pa2 = service.create_proposed_action("test", t.id, "close", "middle")
-        pa3 = service.create_proposed_action("test", t.id, "close", "newer")
-        # Exceed cap with a 4th — the oldest (pa1) should be purged.
-        pa4 = service.create_proposed_action("test", t.id, "close", "newest")
-
+        """Oldest terminal-status ProposedAction rows are purged when the
+        cap is exceeded.  PENDING rows are preserved."""
         from sqlmodel import select
 
         from robotsix_mill.core import db
-        from robotsix_mill.core.models import ProposedAction
+        from robotsix_mill.core.models import ProposedAction, ProposedActionStatus
+
+        settings.max_proposed_actions = 3
+        t = service.create("target")
+
+        # Create 5 proposals: 3 EXECUTED (oldest), 1 PENDING, 1
+        # EXECUTED (newest).  The two oldest EXECUTED should be purged.
+        pa1 = service.create_proposed_action("test", t.id, "close", "oldest-ex")
+        pa2 = service.create_proposed_action("test", t.id, "close", "middle-ex")
+        pa3 = service.create_proposed_action("test", t.id, "close", "pending")
+        pa4 = service.create_proposed_action("test", t.id, "close", "newest-ex")
+
+        # Set statuses directly via the DB session.
+        with db.session(service.settings, service.board_id) as s:
+            for pa_id, status in [
+                (pa1.id, ProposedActionStatus.EXECUTED),
+                (pa2.id, ProposedActionStatus.EXECUTED),
+                # pa3 stays PENDING
+                (pa4.id, ProposedActionStatus.EXECUTED),
+            ]:
+                row = s.get(ProposedAction, pa_id)
+                row.status = status
+                s.add(row)
+            s.commit()
+
+        # One more proposal triggers purge (total 5, cap 3 → excess 2).
+        pa5 = service.create_proposed_action(
+            "test", t.id, "close", "trigger-purge"
+        )
 
         with db.session(service.settings, service.board_id) as s:
             ids = {pa.id for pa in s.exec(select(ProposedAction)).all()}
-        assert pa1.id not in ids  # oldest purged
-        assert pa2.id in ids
-        assert pa3.id in ids
-        assert pa4.id in ids
+        assert pa1.id not in ids  # oldest EXECUTED, purged
+        assert pa2.id not in ids  # second-oldest EXECUTED, purged
+        assert pa3.id in ids  # PENDING preserved
+        assert pa4.id in ids  # third EXECUTED preserved (within cap)
+        assert pa5.id in ids  # the trigger row
 
     def test_max_proposed_actions_zero_disables_purge(self, service, settings):
         """Setting max_proposed_actions = 0 disables purging entirely."""
@@ -1036,8 +1058,43 @@ class TestProposedActionPurge:
         with db.session(service.settings, service.board_id) as s:
             assert s.get(ProposedAction, pa.id) is None
 
+    def test_delete_cascades_to_comments(self, service, settings):
+        """Deleting a ticket also removes its Comment rows."""
+        settings.max_proposed_actions = 0  # disable purge for this test
+        t = service.create("target")
+        c = service.add_comment(t.id, "will be cascade-deleted", author="test")
 
-# ---------------------------------------------------------------------------
+        from robotsix_mill.core import db
+        from robotsix_mill.core.models import Comment
+
+        # Confirm it exists before delete.
+        with db.session(service.settings, service.board_id) as s:
+            assert s.get(Comment, c.id) is not None
+
+        service.delete(t.id)
+
+        # After ticket delete, the comment should be gone.
+        with db.session(service.settings, service.board_id) as s:
+            assert s.get(Comment, c.id) is None
+
+    def test_cap_soft_when_only_pending_and_approved(self, service, settings):
+        """When cap is exceeded but only PENDING/APPROVED rows exist,
+        nothing is deleted."""
+        settings.max_proposed_actions = 1
+        t = service.create("target")
+        for i in range(3):
+            service.create_proposed_action(
+                "test", t.id, "close", f"rationale {i}"
+            )
+
+        from sqlmodel import select
+
+        from robotsix_mill.core import db
+        from robotsix_mill.core.models import ProposedAction
+
+        with db.session(service.settings, service.board_id) as s:
+            count = len(s.exec(select(ProposedAction)).all())
+        assert count == 3  # nothing purged — all are PENDING# ---------------------------------------------------------------------------
 # _all_descendants cycle-safety
 # ---------------------------------------------------------------------------
 

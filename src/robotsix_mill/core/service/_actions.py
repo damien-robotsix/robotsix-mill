@@ -150,28 +150,57 @@ class _ActionMixin(_ServiceBase):
     # --- proposed-action upkeep ------------------------------------------
 
     def _maybe_purge_stale_proposed_actions(self) -> None:
-        """Purge oldest ProposedAction rows when the cap is exceeded.
+        """Purge oldest terminal-status ``ProposedAction`` rows when
+        the cap is exceeded.
 
         Reads ``max_proposed_actions`` from settings.  If <= 0 the
-        purge is disabled.  Queries all ProposedAction rows ordered by
-        ``created_at`` ascending and deletes the oldest until the count
-        is within the cap.
+        purge is disabled.  Queries all ``ProposedAction`` rows; if the
+        count exceeds the cap, deletes the oldest rows in terminal
+        statuses (REJECTED, EXECUTED, FAILED) until the count is within
+        the cap.  PENDING and APPROVED rows are never purged — they are
+        still actionable.  If the cap is exceeded but no terminal rows
+        exist, logs a warning and returns without deleting anything.
         """
         max_actions = self.settings.max_proposed_actions
         if max_actions <= 0:
             return
 
-        with db.session(self.settings, self.board_id) as s:
-            stmt = select(ProposedAction).order_by(col(ProposedAction.created_at))
-            candidates = list(s.exec(stmt).all())
+        _TERMINAL = {
+            ProposedActionStatus.REJECTED,
+            ProposedActionStatus.EXECUTED,
+            ProposedActionStatus.FAILED,
+        }
 
-        if len(candidates) <= max_actions:
+        with db.session(self.settings, self.board_id) as s:
+            total = len(s.exec(select(ProposedAction)).all())
+
+        if total <= max_actions:
             return
 
-        excess = len(candidates) - max_actions
-        # Batch all deletes inside a single session + commit to avoid
-        # one DB round-trip per row when the excess is large.
-        to_delete_ids = [pa.id for pa in candidates[:excess]]
+        excess = total - max_actions
+
+        with db.session(self.settings, self.board_id) as s:
+            stmt = (
+                select(ProposedAction)
+                .where(ProposedAction.status.in_(_TERMINAL))
+                .order_by(col(ProposedAction.created_at))
+            )
+            terminal_rows = list(s.exec(stmt).all())
+
+        if not terminal_rows:
+            log.warning(
+                "_maybe_purge_stale_proposed_actions: cap %d exceeded "
+                "(total %d) but no terminal-status rows exist — "
+                "nothing to purge",
+                max_actions,
+                total,
+            )
+            return
+
+        # Batch all deletes inside a single session + commit.
+        to_delete_ids = [
+            pa.id for pa in terminal_rows[:excess]
+        ]
         if to_delete_ids:
             with db.session(self.settings, self.board_id) as s:
                 for pa_id in to_delete_ids:
