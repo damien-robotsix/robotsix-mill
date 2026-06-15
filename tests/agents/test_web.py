@@ -5,7 +5,11 @@ import subprocess
 from robotsix_mill import sandbox
 from robotsix_mill.agents import web_research as wr
 from robotsix_mill.agents.base import compose_prompt, _model_name
-from robotsix_mill.agents.web_tools import make_web_fetch, reset_web_fetch_budget, reset_trace_web_fetch_budget
+from robotsix_mill.agents.web_tools import (
+    make_web_fetch,
+    reset_web_fetch_budget,
+    reset_trace_web_fetch_budget,
+)
 from robotsix_mill.config import Settings, Secrets, _reset_secrets
 
 

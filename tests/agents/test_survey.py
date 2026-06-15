@@ -545,9 +545,7 @@ class TestSurveyRunnerTraceBudgetWiring:
         assert result.session_id == "test-sid"
         assert result.updated_memory == "ok"
 
-    def test_run_survey_pass_respects_custom_budget_values(
-        self, tmp_path, monkeypatch
-    ):
+    def test_run_survey_pass_respects_custom_budget_values(self, tmp_path, monkeypatch):
         """When settings have different budget values, those are passed
         to the reset functions."""
         from robotsix_mill.runners.periodic_runner import SurveyPassResult

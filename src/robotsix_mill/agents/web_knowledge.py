@@ -83,6 +83,7 @@ def reset_trace_web_search_budget(max_calls: int) -> None:
     _trace_search_calls = 0
     _trace_search_max_calls = max_calls
 
+
 # ---------------------------------------------------------------------------
 # Path helpers
 # ---------------------------------------------------------------------------
@@ -319,7 +320,10 @@ def _make_tools(settings: Settings) -> list:  # noqa: C901 — factory intention
         web-research sub-agent's distilled conclusion (it has already
         read pages for you)."""
         global _trace_search_calls
-        if _trace_search_max_calls > 0 and _trace_search_calls >= _trace_search_max_calls:
+        if (
+            _trace_search_max_calls > 0
+            and _trace_search_calls >= _trace_search_max_calls
+        ):
             return (
                 "web_search trace budget exhausted for this survey run "
                 f"(cap: {_trace_search_max_calls} searches). "
