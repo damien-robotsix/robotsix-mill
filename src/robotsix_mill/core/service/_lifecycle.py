@@ -253,6 +253,26 @@ class _LifecycleMixin(_ServiceBase):
         )
         return list(session.exec(stmt).all())
 
+    def close_open_ask_user_threads(self, ticket_id: str) -> int:
+        """Close every open ``[ASK_USER]`` thread on *ticket_id*; return the
+        count closed.
+
+        Used when the pipeline AUTO-completes a ticket (e.g. a merged PR
+        reaching DONE) whose open questions are now moot — the work shipped,
+        so a stale thread must not block the terminal transition (which would
+        otherwise raise ``TransitionError`` and crash the worker consumer in a
+        loop). The thread is closed-with-record (not deleted), so the question
+        text is preserved in history.
+        """
+        with db.session(self.settings, self._board_for(ticket_id)) as s:
+            open_threads = self._has_open_ask_user_threads(ticket_id, s)
+            now = datetime.now(timezone.utc)
+            for c in open_threads:
+                c.closed_at = now
+                s.add(c)
+            s.commit()
+            return len(open_threads)
+
     def transition(self, ticket_id: str, dst: State, note: str | None = None) -> Ticket:
         """Move a ticket to *dst* state.
 

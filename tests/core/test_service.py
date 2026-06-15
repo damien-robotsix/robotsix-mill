@@ -121,6 +121,26 @@ def test_transition_to_done_rejected_when_ask_user_open(service):
     assert service.get(t.id).state is State.DONE
 
 
+def test_close_open_ask_user_threads_unblocks_terminal(service):
+    """close_open_ask_user_threads closes all open [ASK_USER] threads so an
+    auto-completing ticket (e.g. merged PR → DONE) can reach the terminal
+    state instead of crashing the worker on the open-thread guard."""
+    t = service.create("Merged but a question is open")
+    service.add_comment(t.id, "[ASK_USER]\n\nQ1?", author="refine")
+    service.add_comment(t.id, "[ASK_USER]\n\nQ2?", author="implement")
+
+    with pytest.raises(TransitionError, match="cannot transition to"):
+        service.transition(t.id, State.DONE)
+
+    closed = service.close_open_ask_user_threads(t.id)
+    assert closed == 2
+    # Idempotent: a second call finds nothing left to close.
+    assert service.close_open_ask_user_threads(t.id) == 0
+
+    service.transition(t.id, State.DONE)
+    assert service.get(t.id).state is State.DONE
+
+
 def test_transition_to_errored_rejected_when_ask_user_open(service):
     """Same guard applies to ERRORED."""
     t = service.create("Ask-user blocks errored")
