@@ -954,6 +954,90 @@ class TestArchivedPurge:
 
 
 # ---------------------------------------------------------------------------
+# proposed-action purge
+# ---------------------------------------------------------------------------
+
+
+class TestProposedActionPurge:
+    """Purge of stale ProposedAction rows when `max_proposed_actions` is
+    exceeded."""
+
+    def test_no_op_when_under_cap(self, service, settings):
+        """Creating proposals under the cap does not delete anything."""
+        settings.max_proposed_actions = 10
+        t = service.create("target")
+        for i in range(5):
+            service.create_proposed_action("test", t.id, "close", f"rationale {i}")
+        from sqlmodel import select
+
+        from robotsix_mill.core import db
+        from robotsix_mill.core.models import ProposedAction
+
+        with db.session(service.settings, service.board_id) as s:
+            count = len(s.exec(select(ProposedAction)).all())
+        assert count == 5
+
+    def test_deletes_oldest_on_cap_exceeded(self, service, settings):
+        """Oldest ProposedAction rows are purged when the cap is exceeded."""
+        settings.max_proposed_actions = 3
+        t = service.create("target")
+        pa1 = service.create_proposed_action("test", t.id, "close", "oldest")
+        pa2 = service.create_proposed_action("test", t.id, "close", "middle")
+        pa3 = service.create_proposed_action("test", t.id, "close", "newer")
+        # Exceed cap with a 4th — the oldest (pa1) should be purged.
+        pa4 = service.create_proposed_action("test", t.id, "close", "newest")
+
+        from sqlmodel import select
+
+        from robotsix_mill.core import db
+        from robotsix_mill.core.models import ProposedAction
+
+        with db.session(service.settings, service.board_id) as s:
+            ids = {pa.id for pa in s.exec(select(ProposedAction)).all()}
+        assert pa1.id not in ids  # oldest purged
+        assert pa2.id in ids
+        assert pa3.id in ids
+        assert pa4.id in ids
+
+    def test_max_proposed_actions_zero_disables_purge(self, service, settings):
+        """Setting max_proposed_actions = 0 disables purging entirely."""
+        settings.max_proposed_actions = 0
+        t = service.create("target")
+        for i in range(50):
+            service.create_proposed_action("test", t.id, "close", f"rationale {i}")
+        from sqlmodel import select
+
+        from robotsix_mill.core import db
+        from robotsix_mill.core.models import ProposedAction
+
+        with db.session(service.settings, service.board_id) as s:
+            count = len(s.exec(select(ProposedAction)).all())
+        assert count == 50
+
+    def test_delete_cascades_to_proposed_actions(self, service, settings):
+        """Deleting a ticket also removes its ProposedAction rows."""
+        settings.max_proposed_actions = 0  # disable purge for this test
+        t = service.create("target")
+        pa = service.create_proposed_action(
+            "test", t.id, "close", "will be cascade-deleted"
+        )
+        assert pa is not None
+
+        from robotsix_mill.core import db
+        from robotsix_mill.core.models import ProposedAction
+
+        # Confirm it exists before delete.
+        with db.session(service.settings, service.board_id) as s:
+            assert s.get(ProposedAction, pa.id) is not None
+
+        service.delete(t.id)
+
+        # After ticket delete, the proposed action should be gone.
+        with db.session(service.settings, service.board_id) as s:
+            assert s.get(ProposedAction, pa.id) is None
+
+
+# ---------------------------------------------------------------------------
 # _all_descendants cycle-safety
 # ---------------------------------------------------------------------------
 

@@ -691,6 +691,12 @@ class _LifecycleMixin(_ServiceBase):
                 select(TicketEvent).where(TicketEvent.ticket_id == ticket_id)
             ).all():
                 s.delete(ev)
+            for pa in s.exec(
+                select(ProposedAction).where(
+                    ProposedAction.target_ticket_id == ticket_id
+                )
+            ).all():
+                s.delete(pa)
             s.delete(ticket)
             s.commit()
         # Remove the workspace dir directly (don't construct Workspace —
@@ -953,3 +959,31 @@ class _LifecycleMixin(_ServiceBase):
                 continue
             self.delete(ticket.id)
             deleted += 1
+
+    def _maybe_purge_stale_proposed_actions(self) -> None:
+        """Purge oldest ProposedAction rows when the cap is exceeded.
+
+        Reads ``max_proposed_actions`` from settings.  If <= 0 the
+        purge is disabled.  Queries all ProposedAction rows ordered by
+        ``created_at`` ascending and deletes the oldest until the count
+        is within the cap.
+        """
+        max_actions = self.settings.max_proposed_actions
+        if max_actions <= 0:
+            return
+
+        with db.session(self.settings, self.board_id) as s:
+            stmt = select(ProposedAction).order_by(ProposedAction.created_at)
+            candidates = list(s.exec(stmt).all())
+
+        if len(candidates) <= max_actions:
+            return
+
+        excess = len(candidates) - max_actions
+        for pa in candidates[:excess]:
+            s2 = db.session(self.settings, self.board_id)
+            with s2 as s:
+                row = s.get(ProposedAction, pa.id)
+                if row is not None:
+                    s.delete(row)
+                    s.commit()

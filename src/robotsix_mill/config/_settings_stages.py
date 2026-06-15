@@ -389,6 +389,11 @@ class _StagesSettings(BaseModel):
     # (by created_at) are purged — unless they are the parent of an
     # active (non-terminal) child.  Set to 0 to disable purging.
     max_archived_tickets: int = Field(default=100, ge=0)
+    # Maximum number of ProposedAction rows to retain across all
+    # tickets.  When a new proposal is created and the total count
+    # exceeds this cap, the oldest proposals (by created_at) are
+    # purged.  Set to 0 to disable purging.
+    max_proposed_actions: int = Field(default=500, ge=0)
 
     # --- merge stage: auto-rebase of stale PRs ---
     # When a PR in human_mr_approval becomes conflicting (other PRs merged to

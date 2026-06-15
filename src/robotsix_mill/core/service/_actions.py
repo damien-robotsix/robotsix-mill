@@ -60,6 +60,7 @@ class _ActionMixin(_ServiceBase):
                 s.add(pa)
                 s.commit()
                 s.refresh(pa)
+                self._maybe_purge_stale_proposed_actions()
                 return pa
         except Exception:
             log.warning(
