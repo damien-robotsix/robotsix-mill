@@ -231,6 +231,7 @@ generate_children
 health
 langfuse_status
 langfuse_status_clear
+worker_status
 list_repos
 gates
 ws_board

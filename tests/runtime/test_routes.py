@@ -1661,3 +1661,18 @@ def test_migrate_ticket_404(migrate_client):
         "/tickets/nonexistent/migrate", json={"repo_id": "other-repo"}
     )
     assert r.status_code == 404
+
+
+# -- GET /worker-status -------------------------------------------------
+
+
+def test_worker_status_shape(client):
+    """GET /worker-status returns live queue/_pending/task-health introspection."""
+    r = client.get("/worker-status")
+    assert r.status_code == 200
+    d = r.json()
+    for key in ("queues", "pending", "tasks_total", "tasks_alive", "dead_tasks"):
+        assert key in d, f"missing {key}: {d}"
+    assert isinstance(d["queues"], dict)
+    assert isinstance(d["pending"], list)
+    assert isinstance(d["dead_tasks"], list)
