@@ -40,6 +40,53 @@ class TestSetupLogging:
             "setup_logging should be idempotent"
         )
 
+    def test_adds_request_id_log_filter(self):
+        """After setup_logging, the handler carries a RequestIDLogFilter."""
+        root = logging.getLogger("robotsix_mill")
+        for h in list(root.handlers):
+            root.removeHandler(h)
+
+        setup_logging()
+
+        from robotsix_mill.runtime.middleware import RequestIDLogFilter
+
+        handler = root.handlers[0]
+        assert any(
+            isinstance(f, RequestIDLogFilter) for f in handler.filters
+        ), "Expected a RequestIDLogFilter on the handler"
+
+    def test_formatter_includes_request_id(self):
+        """After setup_logging, the handler formatter includes %(request_id)s."""
+        root = logging.getLogger("robotsix_mill")
+        for h in list(root.handlers):
+            root.removeHandler(h)
+
+        setup_logging()
+
+        handler = root.handlers[0]
+        assert handler.formatter is not None
+        assert "%(request_id)s" in handler.formatter._fmt, (
+            "Formatter should contain request_id field"
+        )
+        assert "%(trace_id)s" in handler.formatter._fmt, (
+            "Formatter should still contain trace_id field"
+        )
+
+    def test_formatter_update_is_idempotent_on_fmt(self):
+        """Calling setup_logging twice does not mangle the format string."""
+        root = logging.getLogger("robotsix_mill")
+        for h in list(root.handlers):
+            root.removeHandler(h)
+
+        setup_logging()
+        fmt_after_first = root.handlers[0].formatter._fmt
+        setup_logging()
+        fmt_after_second = root.handlers[0].formatter._fmt
+
+        assert fmt_after_first == fmt_after_second, (
+            "Formatter should not change on second call"
+        )
+
 
 # ---------------------------------------------------------------------------
 # create_lifespan

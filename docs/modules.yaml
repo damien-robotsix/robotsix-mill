@@ -127,6 +127,7 @@ modules:
       - src/robotsix_mill/runtime/worker/*.py
       - src/robotsix_mill/runtime/deps.py
       - src/robotsix_mill/runtime/lifespan.py
+      - src/robotsix_mill/runtime/middleware.py
       - src/robotsix_mill/runtime/tracing.py
       - src/robotsix_mill/runtime/transient_errors.py
       - src/robotsix_mill/runtime/board_html.py

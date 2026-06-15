@@ -21,6 +21,7 @@ from .exception_handlers import (
     transition_error_handler,
 )
 from .lifespan import create_lifespan, setup_logging  # noqa: F401 — re-exported
+from .middleware import RequestIDMiddleware
 from . import routes
 
 
@@ -50,6 +51,8 @@ def create_app(
     app.add_exception_handler(TransitionError, transition_error_handler)
     app.add_exception_handler(NotConfiguredError, not_configured_error_handler)
     app.add_exception_handler(Exception, catchall_handler)
+
+    app.add_middleware(RequestIDMiddleware)
 
     # Mill-specific static assets (board-mill.js, board-mill.css) are
     # served from a sub-path.  This mount must come BEFORE the /static
