@@ -32,7 +32,6 @@ dependencies = [
     # parameterized by a BoardAdapter Protocol and a render-mode switch.
     # Consumed via git dependency — see robotsix-board README for API docs.
     "robotsix-board @ git+https://github.com/damien-robotsix/robotsix-board.git@main",
-    "robotsix-board-agent",
 ]
 
 [project.optional-dependencies]
@@ -41,6 +40,12 @@ tracing = [
     "langfuse>=3",
     "opentelemetry-sdk>=1.20.0",
     "opentelemetry-exporter-otlp-proto-http>=1.20.0",
+]
+# Board-agent bridge — opt-in, guarded by ``board_agent_enabled`` setting
+# and a try/except ImportError in the lifespan.  The git repo is private,
+# so CI (which runs without credentials) does not install this extra.
+board-agent = [
+    "robotsix-board-agent",
 ]
 
 # Internal CI/contributor tooling — NOT published package extras. PEP 735
