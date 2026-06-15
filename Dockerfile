@@ -137,6 +137,13 @@ RUN npm install -g @anthropic-ai/claude-code@2.1.158 \
 COPY --from=builder /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/site-packages
 COPY --from=builder /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=builder /usr/local/bin/robotsix-mill /usr/local/bin/robotsix-mill
+# uv must be ON $PATH and world-executable here in `base` for the SAME reason
+# as `gh` above: the live sandbox runs `robotsix/mill:dev` (config
+# `sandbox.image`), so `uv lock`/`uv sync` are unusable unless uv is in the
+# base stage that dev extends. A fresh `pip install uv` in a child stage is a
+# no-op (uv is already in the inherited site-packages but its /usr/local/bin
+# launcher was not copied → "uv: not found"), so copy the launcher explicitly.
+COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
 
 # Non-root user.  UID 1000 matches the typical first-host-user UID so the
 # named volume lines up without extra chown when bind-mounted.
