@@ -602,3 +602,214 @@ def test_obsolescence_gate_check_raises_is_swallowed(ctx_factory, monkeypatch):
     out = RefineStage._run_obsolescence_gate(ctx, t, _DEDUP_DRAFT, None, ctx.settings)
 
     assert out is None
+
+
+# ===========================================================================
+# 6. _run_inflight_advisory — CI fingerprint label path
+# ===========================================================================
+
+_CI_DRAFT_BODY = """\
+**Workflow:** CI
+**Branch:** main
+**Run:** [1234567890](https://github.com/owner/repo/actions/runs/1234567890)
+**Commit:** `abc123def456`
+**Created:** 2024-01-15T10:30:45.123456+00:00
+
+Error: process completed with exit code 1.
+error: could not find `--no-emit-project` flag
+"""
+
+
+def test_inflight_advisory_ci_stores_fingerprint_label(ctx_factory, monkeypatch):
+    """When the ticket source is CI, the fingerprint label is stored on
+    the ticket via set_labels (idempotent — only once)."""
+    import json
+
+    ctx = ctx_factory()
+    t = _ticket(ctx, source="ci")
+    ws = ctx.service.workspace(t)
+
+    # Suppress overlap so we only observe the label side-effect.
+    monkeypatch.setattr(dedup_top, "find_inflight_overlap", lambda *a, **k: None)
+
+    _ = RefineStage._run_inflight_advisory(ctx, t, _CI_DRAFT_BODY, ws, ctx.settings)
+
+    # Re-fetch ticket; verify a ci_fp: label was stored.
+    t2 = ctx.service.get(t.id)
+    assert t2.labels is not None
+    labels = json.loads(t2.labels)
+    ci_fp_labels = [lbl for lbl in labels if lbl.startswith("ci_fp:")]
+    assert len(ci_fp_labels) == 1
+    assert len(ci_fp_labels[0]) == len("ci_fp:") + 16  # ci_fp: + 16 hex chars
+
+
+def test_inflight_advisory_ci_label_storage_is_idempotent(ctx_factory, monkeypatch):
+    """Calling _run_inflight_advisory twice on the same CI ticket does
+    not duplicate the ci_fp: label."""
+    import json
+
+    ctx = ctx_factory()
+    t = _ticket(ctx, source="ci")
+    ws = ctx.service.workspace(t)
+
+    monkeypatch.setattr(dedup_top, "find_inflight_overlap", lambda *a, **k: None)
+
+    RefineStage._run_inflight_advisory(ctx, t, _CI_DRAFT_BODY, ws, ctx.settings)
+    # Second call with same draft — must not add a duplicate label.
+    RefineStage._run_inflight_advisory(ctx, t, _CI_DRAFT_BODY, ws, ctx.settings)
+
+    t2 = ctx.service.get(t.id)
+    labels = json.loads(t2.labels)
+    ci_fp_labels = [lbl for lbl in labels if lbl.startswith("ci_fp:")]
+    assert len(ci_fp_labels) == 1
+
+
+def test_inflight_advisory_ci_passes_dedup_labels(ctx_factory, monkeypatch):
+    """When the ticket source is CI, dedup_labels is computed and passed
+    to find_inflight_overlap."""
+    ctx = ctx_factory()
+    t = _ticket(ctx, source="ci")
+    ws = ctx.service.workspace(t)
+
+    captured: list = []
+
+    def _spy(*a, dedup_labels=None, **k):
+        captured.append(dedup_labels)
+        return None
+
+    monkeypatch.setattr(dedup_top, "find_inflight_overlap", _spy)
+
+    RefineStage._run_inflight_advisory(ctx, t, _CI_DRAFT_BODY, ws, ctx.settings)
+
+    assert len(captured) == 1
+    assert captured[0] is not None
+    assert len(captured[0]) == 1
+    assert captured[0][0].startswith("ci_fp:")
+
+
+def test_inflight_advisory_non_ci_does_not_store_labels(ctx_factory, monkeypatch):
+    """Non-CI tickets never get ci_fp: labels and pass dedup_labels=None."""
+    ctx = ctx_factory()
+    t = _ticket(ctx, source="trace_review")  # NOT CI
+    ws = ctx.service.workspace(t)
+
+    captured: list = []
+
+    def _spy(*a, dedup_labels=None, **k):
+        captured.append(dedup_labels)
+        return None
+
+    monkeypatch.setattr(dedup_top, "find_inflight_overlap", _spy)
+
+    RefineStage._run_inflight_advisory(ctx, t, _DEDUP_DRAFT, ws, ctx.settings)
+
+    assert captured == [None]
+    t2 = ctx.service.get(t.id)
+    # No ci_fp: labels were added.
+    if t2.labels:
+        import json
+        labels = json.loads(t2.labels)
+        assert not any(lbl.startswith("ci_fp:") for lbl in labels)
+
+
+def test_inflight_advisory_ci_label_preserves_existing_labels(ctx_factory, monkeypatch):
+    """When the CI ticket already has other labels, the ci_fp: label is
+    appended without disturbing them."""
+    import json
+
+    ctx = ctx_factory()
+    t = _ticket(ctx, source="ci")
+    ctx.service.set_labels(t.id, ["priority:high", "area:ci"])
+    ws = ctx.service.workspace(t)
+
+    monkeypatch.setattr(dedup_top, "find_inflight_overlap", lambda *a, **k: None)
+
+    RefineStage._run_inflight_advisory(ctx, t, _CI_DRAFT_BODY, ws, ctx.settings)
+
+    t2 = ctx.service.get(t.id)
+    labels = json.loads(t2.labels)
+    assert "priority:high" in labels
+    assert "area:ci" in labels
+    ci_fp_labels = [lbl for lbl in labels if lbl.startswith("ci_fp:")]
+    assert len(ci_fp_labels) == 1
+
+
+def test_inflight_advisory_ci_overlap_end_to_end(ctx_factory, monkeypatch):
+    """End-to-end: two CI tickets with same error fingerprint are flagged
+    as duplicates; two with different fingerprints are not."""
+    ctx = ctx_factory()
+    # First CI ticket (the "prior").
+    t1 = _ticket(ctx, title="CI failure: CI on main", source="ci")
+    ws1 = ctx.service.workspace(t1)
+    # Write the CI draft body.
+    ws1.write_description(_CI_DRAFT_BODY)
+
+    # Run advisory on t1 — stores its fingerprint label, no overlap yet.
+    monkeypatch.setattr(dedup_top, "find_inflight_overlap", lambda *a, **k: None)
+    RefineStage._run_inflight_advisory(ctx, t1, _CI_DRAFT_BODY, ws1, ctx.settings)
+
+    # Second CI ticket with SAME error fingerprint (different run metadata).
+    same_error_body = _CI_DRAFT_BODY.replace(
+        "1234567890", "9999999999"
+    ).replace(
+        "abc123def456", "deadbeef9999"
+    ).replace(
+        "2024-01-15T10:30:45.123456+00:00", "2024-06-15T08:00:00Z"
+    )
+    t2 = _ticket(ctx, title="CI failure: CI on main", source="ci")
+    ws2 = ctx.service.workspace(t2)
+    ws2.write_description(same_error_body)
+
+    # Now let find_inflight_overlap run for real (not mocked).
+    monkeypatch.undo()
+    # But we need to control the overlap result.  The real find_inflight_overlap
+    # calls find_prior_matching_ticket which checks labels.  t1 now has the
+    # ci_fp label, and t2 will get the same one via _ci_draft_fingerprint.
+    # So the label should match.
+
+    result = RefineStage._run_inflight_advisory(
+        ctx, t2, same_error_body, ws2, ctx.settings
+    )
+    # The draft should be annotated with a warning.
+    assert "[!warning]" in result
+    assert t1.id in result
+
+
+def test_inflight_advisory_ci_different_fingerprint_no_overlap(ctx_factory, monkeypatch):
+    """Two CI tickets with DIFFERENT error fingerprints do NOT flag each
+    other — the title-only fallback is suppressed."""
+    ctx = ctx_factory()
+    # First CI ticket.
+    t1 = _ticket(ctx, title="CI failure: CI on main", source="ci")
+    ws1 = ctx.service.workspace(t1)
+    ws1.write_description(_CI_DRAFT_BODY)
+
+    # Run advisory on t1 — stores its fingerprint.
+    saved = []
+    def _capture_overlap(*a, **k):
+        saved.append(k)
+        return None
+    monkeypatch.setattr(dedup_top, "find_inflight_overlap", _capture_overlap)
+    RefineStage._run_inflight_advisory(ctx, t1, _CI_DRAFT_BODY, ws1, ctx.settings)
+    monkeypatch.undo()
+
+    # Second CI ticket with DIFFERENT error.
+    different_body = """\
+**Workflow:** CI
+**Branch:** main
+**Run:** [5555555555](https://github.com/owner/repo/actions/runs/5555555555)
+**Commit:** `ccccddddeeee`
+**Created:** 2024-06-14T22:11:33Z
+
+Error: process completed with exit code 1.
+error: missing `contents:read` permission
+"""
+    t2 = _ticket(ctx, title="CI failure: CI on main", source="ci")
+    ws2 = ctx.service.workspace(t2)
+    ws2.write_description(different_body)
+
+    result = RefineStage._run_inflight_advisory(
+        ctx, t2, different_body, ws2, ctx.settings
+    )
+    # No annotation — fingerprints differ, title fallback suppressed.
+    assert "[!warning]" not in result

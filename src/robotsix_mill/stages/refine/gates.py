@@ -10,6 +10,7 @@ pure helpers from :mod:`.helpers` and the agent modules from
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -369,6 +370,27 @@ class RefineGatesMixin:
 
         from ...core.dedup import annotate_child_body, find_inflight_overlap
 
+        dedup_labels: list[str] | None = None
+        if ticket.source == SourceKind.CI:
+            from ...core.dedup import _ci_draft_fingerprint
+
+            fp = _ci_draft_fingerprint(draft)
+            label = f"ci_fp:{fp}"
+            dedup_labels = [label]
+            # Store fingerprint label on THIS ticket for future dedup checks.
+            # Re-fetch from DB to avoid stale in-memory labels.
+            current = ctx.service.get(ticket.id)
+            existing_labels: list[str] = []
+            if current is not None and current.labels:
+                try:
+                    existing_labels = json.loads(current.labels)
+                    if not isinstance(existing_labels, list):
+                        existing_labels = []
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            if label not in existing_labels:
+                ctx.service.set_labels(ticket.id, existing_labels + [label])
+
         note = find_inflight_overlap(
             ctx.service,
             ticket.id,
@@ -376,6 +398,7 @@ class RefineGatesMixin:
             draft,
             s,
             datetime.now(timezone.utc),
+            dedup_labels=dedup_labels,
         )
         if not note:
             return draft

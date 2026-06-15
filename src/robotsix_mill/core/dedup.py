@@ -12,6 +12,8 @@ The matcher is best-effort: any query failure logs and returns
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import re
 from collections.abc import Collection, Sequence
@@ -32,6 +34,60 @@ def normalize(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", s.casefold()).strip()
 
 
+# ---------------------------------------------------------------------------
+# _ci_draft_fingerprint
+# ---------------------------------------------------------------------------
+
+# Metadata line prefixes from CI monitor draft bodies.
+_CI_DRAFT_META_PREFIXES = (
+    "**Workflow:**",
+    "**Branch:**",
+    "**Run:**",
+    "**Commit:**",
+    "**Created:**",
+)
+
+# ANSI escape sequences (e.g. ``\x1b[31m``, ``\x1b[0m``).
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+
+# ISO 8601 timestamp: ``2024-01-15T10:30:45Z``, ``2024-01-15T10:30:45.123456+00:00``.
+_ISO8601_RE = re.compile(
+    r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?"
+)
+
+# GitHub Actions run URL: ``https://github.com/owner/repo/actions/runs/1234567890/…``.
+_GH_RUN_URL_RE = re.compile(
+    r"https?://github\.com/[^/\s]+/[^/\s]+/actions/runs/\d+\S*"
+)
+
+
+def _ci_draft_fingerprint(body: str) -> str:
+    """Compute a stable hex fingerprint from a CI monitor draft *body*.
+
+    Strips metadata lines, run-specific data (URLs, commit SHAs,
+    timestamps), and ANSI escapes so the fingerprint reflects the
+    ERROR CONTENT only.  Returns the first 16 hex digits of SHA-256.
+    """
+    lines: list[str] = []
+    for line in body.splitlines():
+        stripped = line.strip()
+        # Skip metadata lines.
+        if any(stripped.startswith(p) for p in _CI_DRAFT_META_PREFIXES):
+            continue
+        # Strip ANSI escapes.
+        cleaned = _ANSI_ESCAPE_RE.sub("", stripped)
+        # Strip timestamps.
+        cleaned = _ISO8601_RE.sub("", cleaned)
+        # Strip GitHub run URLs.
+        cleaned = _GH_RUN_URL_RE.sub("", cleaned)
+        if cleaned:
+            lines.append(cleaned)
+
+    # Collapse remaining whitespace.
+    collapsed = re.sub(r"\s+", " ", " ".join(lines)).strip()
+    return hashlib.sha256(collapsed.encode("utf-8")).hexdigest()[:16]
+
+
 def find_prior_matching_ticket(
     service: TicketService,
     board_id: str,
@@ -46,6 +102,7 @@ def find_prior_matching_ticket(
     require_scope_for_single_path: bool = False,
     target_concern_tokens: set[str] | None = None,
     concern_min_overlap: int = 1,
+    dedup_labels: list[str] | None = None,
 ) -> Ticket | None:
     """Look up recent tickets on *board_id* and return the first one
     that matches the given fix signal.
@@ -120,6 +177,27 @@ def find_prior_matching_ticket(
                 # else: fall through, this is a match-eligible candidate.
             # DONE or any non-terminal (DRAFT/READY/IMPLEMENTING/etc.)
             # falls through here as a match-eligible candidate.
+
+            # Label-based dedup (strong signal — runs before file-path/title
+            # checks so a ``ci_fp:*`` label match short-circuits, and a
+            # ``ci_fp:*`` label mismatch suppresses the weak title fallback).
+            if dedup_labels:
+                cand_labels: list[str] = []
+                if ticket.labels:
+                    try:
+                        parsed = json.loads(ticket.labels)
+                        if isinstance(parsed, list):
+                            cand_labels = parsed
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                if any(label in cand_labels for label in dedup_labels):
+                    return ticket
+                # Label mismatch: a ``ci_fp:*`` fingerprint differs — skip
+                # this candidate entirely rather than falling through to
+                # the weak title-only fallback, which is the source of
+                # false positives for CI failure tickets.
+                if any(label.startswith("ci_fp:") for label in dedup_labels):
+                    continue
 
             # File-path substring check (body).
             if target_files:
@@ -374,6 +452,8 @@ def find_inflight_overlap(
     body: str,
     settings: Settings,
     now: datetime,
+    *,
+    dedup_labels: list[str] | None = None,
 ) -> str | None:
     """Advisory pre-refine dedup for an INDEPENDENT (non-epic) draft.
 
@@ -417,6 +497,7 @@ def find_inflight_overlap(
             require_scope_for_single_path=True,
             target_concern_tokens=concern_tokens,
             concern_min_overlap=3,
+            dedup_labels=dedup_labels,
         )
         if prior is None:
             return None
