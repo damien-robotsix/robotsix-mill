@@ -10,6 +10,8 @@ Design: `docs/rfc-config-v2.md` §6 (Load order and precedence).
 
 from __future__ import annotations
 
+from typing import Any
+
 import os
 from pathlib import Path
 
@@ -170,18 +172,16 @@ def load_meta_yaml(file_path: str | None = None) -> dict:
     return dict(meta) if isinstance(meta, dict) else {}
 
 
-def load_langfuse_shared_master(file_path: str | None = None) -> str | None:
-    """Return the optional top-level ``langfuse_shared_master`` repo id.
+def load_global_langfuse(file_path: str | None = None) -> dict[str, Any]:
+    """Return the single top-level ``langfuse`` block from ``repos.yaml``.
 
-    When set, every repo (and the meta board) is forced to send its
-    traces to THAT repo's Langfuse project, regardless of any per-repo
-    ``langfuse`` block — a one-line switch to consolidate the whole
-    workspace into a single project (see ``load_repos_config``). Returns
-    ``None`` when absent.
+    This is the ONE place Langfuse is configured: ``load_repos_config``
+    populates every repo and the meta board from it. There is no per-repo
+    Langfuse configuration. Returns ``{}`` when absent (observability off).
     """
     data = _load_repos_document(file_path)
-    val = data.get("langfuse_shared_master")
-    return val if isinstance(val, str) and val.strip() else None
+    lf = data.get("langfuse")
+    return dict(lf) if isinstance(lf, dict) else {}
 
 
 def load_repos_yaml(file_path: str | None = None) -> dict:

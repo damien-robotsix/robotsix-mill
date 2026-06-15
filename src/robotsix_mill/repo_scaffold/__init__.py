@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from ..forge.base import Forge
     from ..stages.base import Outcome, StageContext
 
-from ..config import _reset_repos_config, get_repos_config
+from ..config import _reset_repos_config
 from ..core.states import State
 from ..forge.auth import github_token
 from ..forge.base import NotConfiguredError, RepoInfo
@@ -445,37 +445,11 @@ def _append_repo_config(
 
     repo_id = _sanitize_repo_id(repo_info.name)
 
-    # Copy Langfuse keys from the robotsix-mill repo config
-    mill_repo_id = settings.trace_review_target_repo_id
-    if mill_repo_id:
-        try:
-            mill_repo_config = get_repos_config().repos[mill_repo_id]
-            lf_public_key = mill_repo_config.langfuse_public_key
-            lf_secret_key = mill_repo_config.langfuse_secret_key
-            lf_base_url = mill_repo_config.langfuse_base_url
-        except KeyError:
-            log.warning(
-                "trace_review_target_repo_id=%r not found in repos config; "
-                "using empty Langfuse keys for new repo %r",
-                mill_repo_id,
-                repo_id,
-            )
-            lf_public_key = ""
-            lf_secret_key = ""
-            lf_base_url = "https://cloud.langfuse.com"
-    else:
-        lf_public_key = ""
-        lf_secret_key = ""
-        lf_base_url = "https://cloud.langfuse.com"
-
+    # Langfuse is configured globally (top-level ``langfuse`` block in
+    # repos.yaml); the new repo inherits it automatically — no per-repo
+    # langfuse stanza is written.
     new_entry: dict[str, Any] = {
         "board_id": repo_id,
-        "langfuse": {
-            "project_name": repo_id,
-            "public_key": lf_public_key,
-            "secret_key": lf_secret_key,
-            "base_url": lf_base_url,
-        },
         "forge_remote_url": repo_info.clone_url,
         # Per-repo `test_command` + `language(s)` are NOT configured here —
         # they live in the new repo's own .robotsix-mill/config.yaml (written

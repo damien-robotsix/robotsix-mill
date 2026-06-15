@@ -9,7 +9,6 @@ import yaml
 
 from robotsix_mill.config import (
     RepoConfig,
-    ReposRegistry,
     Settings,
     _reset_repos_config,
 )
@@ -141,17 +140,6 @@ class TestAppendRepoConfig:
         db.reset_engine()
         db.init_db(settings, board_id="meta")
 
-        # Register the mill repo so its Langfuse keys can be copied
-        mill_cfg = _repo_cfg(
-            "robotsix-mill",
-            board_id="robotsix-mill",
-            langfuse_public_key="pk-mill-123",
-            langfuse_secret_key="sk-mill-456",
-            langfuse_base_url="https://langfuse.example.com",
-        )
-        reg = ReposRegistry(repos={"robotsix-mill": mill_cfg})
-        monkeypatch.setattr("robotsix_mill.repo_scaffold.get_repos_config", lambda: reg)
-
         repo_info = RepoInfo(
             id=42,
             name="my-new-repo",
@@ -171,10 +159,9 @@ class TestAppendRepoConfig:
         entry = repos["my-new-repo"]
 
         assert entry["board_id"] == "my-new-repo"
-        assert entry["langfuse"]["project_name"] == "my-new-repo"
-        assert entry["langfuse"]["public_key"] == "pk-mill-123"
-        assert entry["langfuse"]["secret_key"] == "sk-mill-456"
-        assert entry["langfuse"]["base_url"] == "https://langfuse.example.com"
+        # Langfuse is configured globally (top-level ``langfuse`` block); the
+        # new repo inherits it — no per-repo langfuse stanza is written.
+        assert "langfuse" not in entry
         assert entry["forge_remote_url"] == "https://github.com/my-org/my-new-repo.git"
         # test_command + language are NOT written to repos.yaml — they live in
         # the new repo's own .robotsix-mill/config.yaml (the scaffold commit).
@@ -186,27 +173,15 @@ class TestAppendRepoConfig:
 
         _reset_repos_config()
 
-    def test_langfuse_keys_copied_from_mill_repo(self, tmp_path, monkeypatch):
-        """Verify new stanza copies langfuse keys from the mill repo config."""
+    def test_new_repo_has_no_per_repo_langfuse_stanza(self, tmp_path, monkeypatch):
+        """The scaffolded stanza carries NO langfuse block — observability is
+        configured globally and the new repo inherits it."""
         repos_file = tmp_path / "repos.yaml"
         monkeypatch.setenv("MILL_REPOS_FILE", str(repos_file))
 
-        settings = _make_settings(
-            tmp_path,
-            trace_review_target_repo_id="robotsix-mill",
-        )
+        settings = _make_settings(tmp_path)
         db.reset_engine()
         db.init_db(settings, board_id="meta")
-
-        mill_cfg = _repo_cfg(
-            "robotsix-mill",
-            board_id="robotsix-mill",
-            langfuse_public_key="pk-custom",
-            langfuse_secret_key="sk-custom",
-            langfuse_base_url="https://lf.custom.com",
-        )
-        reg = ReposRegistry(repos={"robotsix-mill": mill_cfg})
-        monkeypatch.setattr("robotsix_mill.repo_scaffold.get_repos_config", lambda: reg)
 
         repo_info = RepoInfo(
             id=1,
@@ -221,10 +196,7 @@ class TestAppendRepoConfig:
         with open(repos_file, "r") as fh:
             data = yaml.safe_load(fh)
 
-        entry = data["repos"]["new-repo"]
-        assert entry["langfuse"]["public_key"] == "pk-custom"
-        assert entry["langfuse"]["secret_key"] == "sk-custom"
-        assert entry["langfuse"]["base_url"] == "https://lf.custom.com"
+        assert "langfuse" not in data["repos"]["new-repo"]
 
         _reset_repos_config()
 
@@ -255,9 +227,6 @@ class TestAppendRepoConfig:
         db.reset_engine()
         db.init_db(settings, board_id="meta")
 
-        mill_cfg = _repo_cfg("robotsix-mill", board_id="robotsix-mill")
-        reg = ReposRegistry(repos={"robotsix-mill": mill_cfg})
-        monkeypatch.setattr("robotsix_mill.repo_scaffold.get_repos_config", lambda: reg)
 
         repo_info = RepoInfo(
             id=2,
@@ -311,9 +280,6 @@ class TestRunRepoScaffold:
         db.init_db(settings, board_id="meta")
 
         # Register mill repo for langfuse key copy
-        mill_cfg = _repo_cfg("robotsix-mill", board_id="robotsix-mill")
-        reg = ReposRegistry(repos={"robotsix-mill": mill_cfg})
-        monkeypatch.setattr("robotsix_mill.repo_scaffold.get_repos_config", lambda: reg)
 
         # Set up repos.yaml path
         repos_file = tmp_path / "repos.yaml"

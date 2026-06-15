@@ -118,7 +118,9 @@ def test_run_member_sync_pass_adds_members(tmp_path, monkeypatch):
     assert zeta["forge_remote_url"] == "https://github.com/upstream/zeta.git"
     assert zeta["working_branch"] == "lyrical"
     assert zeta["member_of"] == "ros2-workspace"
-    assert zeta["langfuse_from"] == "ros2-workspace"
+    # Langfuse is global now — member entries carry no per-repo langfuse config.
+    assert "langfuse_from" not in zeta
+    assert "langfuse" not in zeta
     _reset_repos_config()
     db.reset_engine()
 
