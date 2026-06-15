@@ -198,9 +198,7 @@ class _ActionMixin(_ServiceBase):
             return
 
         # Batch all deletes inside a single session + commit.
-        to_delete_ids = [
-            pa.id for pa in terminal_rows[:excess]
-        ]
+        to_delete_ids = [pa.id for pa in terminal_rows[:excess]]
         if to_delete_ids:
             with db.session(self.settings, self.board_id) as s:
                 for pa_id in to_delete_ids:

@@ -1009,9 +1009,7 @@ class TestProposedActionPurge:
             s.commit()
 
         # One more proposal triggers purge (total 5, cap 3 → excess 2).
-        pa5 = service.create_proposed_action(
-            "test", t.id, "close", "trigger-purge"
-        )
+        pa5 = service.create_proposed_action("test", t.id, "close", "trigger-purge")
 
         with db.session(service.settings, service.board_id) as s:
             ids = {pa.id for pa in s.exec(select(ProposedAction)).all()}
@@ -1083,9 +1081,7 @@ class TestProposedActionPurge:
         settings.max_proposed_actions = 1
         t = service.create("target")
         for i in range(3):
-            service.create_proposed_action(
-                "test", t.id, "close", f"rationale {i}"
-            )
+            service.create_proposed_action("test", t.id, "close", f"rationale {i}")
 
         from sqlmodel import select
 
@@ -1094,7 +1090,11 @@ class TestProposedActionPurge:
 
         with db.session(service.settings, service.board_id) as s:
             count = len(s.exec(select(ProposedAction)).all())
-        assert count == 3  # nothing purged — all are PENDING# ---------------------------------------------------------------------------
+        assert (
+            count == 3
+        )  # nothing purged — all are PENDING# ---------------------------------------------------------------------------
+
+
 # _all_descendants cycle-safety
 # ---------------------------------------------------------------------------
 
