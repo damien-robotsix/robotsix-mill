@@ -10,19 +10,35 @@ from robotsix_mill.core.states import State
 from robotsix_mill.stages.maintenance import MaintenanceStage
 
 
+_MAINT_MOD = "robotsix_mill.agents.maintenance"
+_saved_maintenance_mod: object = None
+
+
 def _inject_mock_maintenance_agent():
     """Inject a mock ``robotsix_mill.agents.maintenance`` module into
     ``sys.modules`` so the lazy import inside ``MaintenanceStage.run()``
-    resolves. Mock the real module so unit tests don't require an LLM."""
-    mock_agent_mod = ModuleType("robotsix_mill.agents.maintenance")
+    resolves. Mock the real module so unit tests don't require an LLM.
+
+    Saves the real module so :func:`_remove_mock_maintenance_agent`
+    RESTORES it rather than popping — popping forces a fresh re-import on
+    the next access, creating a duplicate module whose namespace diverges
+    from already-bound symbols (broke test_maintenance_agent's
+    ``run_maintenance_agent.__globals__`` patching across files)."""
+    global _saved_maintenance_mod
+    _saved_maintenance_mod = sys.modules.get(_MAINT_MOD)
+    mock_agent_mod = ModuleType(_MAINT_MOD)
     mock_agent_mod.run_maintenance_agent = MagicMock()
-    sys.modules["robotsix_mill.agents.maintenance"] = mock_agent_mod
+    sys.modules[_MAINT_MOD] = mock_agent_mod
     return mock_agent_mod.run_maintenance_agent
 
 
 def _remove_mock_maintenance_agent():
-    """Remove the injected mock module so it doesn't leak into other tests."""
-    sys.modules.pop("robotsix_mill.agents.maintenance", None)
+    """Restore the original module (or pop if there was none) so the mock
+    never leaks into other tests."""
+    if _saved_maintenance_mod is not None:
+        sys.modules[_MAINT_MOD] = _saved_maintenance_mod
+    else:
+        sys.modules.pop(_MAINT_MOD, None)
 
 
 class TestMaintenanceStage:

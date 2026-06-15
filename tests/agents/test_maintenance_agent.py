@@ -903,7 +903,7 @@ class TestCloneDirPrecreation:
         from types import SimpleNamespace
 
         from robotsix_mill.core import db
-        from robotsix_mill.agents import base, maintenance
+        from robotsix_mill.agents import base
         from robotsix_mill.agents import retry as retry_mod
         from robotsix_mill.config import RepoConfig
         from robotsix_mill.core.service import TicketService
@@ -925,18 +925,25 @@ class TestCloneDirPrecreation:
         service.workspace(ticket).repo_dir.mkdir(parents=True, exist_ok=True)
         ctx = StageContext(settings=s, service=service, repo_config=repo_config)
 
-        # Capture the tempdir that clone_repo would clone into.
+        # Capture the tempdir that clone_repo would clone into. Patch the
+        # function's OWN globals (not the imported ``maintenance`` module):
+        # tests/stages/test_maintenance.py swaps a mock module into
+        # ``sys.modules`` and pops it, so a later ``import maintenance`` can
+        # resolve to a fresh re-imported duplicate while the already-bound
+        # ``run_maintenance_agent`` keeps using the original namespace.
+        # Patching ``__globals__`` targets exactly what the function reads.
+        glob = run_maintenance_agent.__globals__
         captured: dict[str, Path] = {}
-        real_make_clone = maintenance.make_clone_repo_tool
+        real_make_clone = glob["make_clone_repo_tool"]
 
         def cap_make_clone(settings, root):
             captured["tmpdir"] = root
             return real_make_clone(settings, root)
 
-        monkeypatch.setattr(maintenance, "make_clone_repo_tool", cap_make_clone)
+        monkeypatch.setitem(glob, "make_clone_repo_tool", cap_make_clone)
         # No real meta workspace / LLM agent / remote resolution.
-        monkeypatch.setattr(
-            maintenance,
+        monkeypatch.setitem(
+            glob,
             "_build_meta_investigation_workspace",
             lambda ctx, ticket, ws, draft: (None, [], None),
         )
