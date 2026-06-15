@@ -101,6 +101,42 @@ def test_illegal_transition_rejected(service):
         service.transition(t.id, State.HUMAN_MR_APPROVAL)
 
 
+def test_transition_to_done_rejected_when_ask_user_open(service):
+    """A transition to a terminal state (DONE, CLOSED, ERRORED) is
+    refused when an open [ASK_USER] thread exists on the ticket."""
+    t = service.create("Ask-user still open")
+    # DRAFT → DONE is normally allowed (refine's no_change_needed bypass).
+    assert can_transition(State.DRAFT, State.DONE)
+
+    # Add an open [ASK_USER] thread.
+    c = service.add_comment(t.id, "[ASK_USER]\n\nQuestion?", author="refine")
+
+    # Transition to DONE must be rejected.
+    with pytest.raises(TransitionError, match="cannot transition to"):
+        service.transition(t.id, State.DONE)
+
+    # Close the thread, then transition succeeds.
+    service.close_thread(c.id)
+    service.transition(t.id, State.DONE)
+    assert service.get(t.id).state is State.DONE
+
+
+def test_transition_to_errored_rejected_when_ask_user_open(service):
+    """Same guard applies to ERRORED."""
+    t = service.create("Ask-user blocks errored")
+    # Take it to READY first — READY → ERRORED is allowed.
+    service.transition(t.id, State.READY)
+    assert can_transition(State.READY, State.ERRORED)
+
+    c = service.add_comment(t.id, "[ASK_USER]\n\nBlocking?", author="implement")
+    with pytest.raises(TransitionError, match="cannot transition to"):
+        service.transition(t.id, State.ERRORED)
+
+    service.close_thread(c.id)
+    service.transition(t.id, State.ERRORED)
+    assert service.get(t.id).state is State.ERRORED
+
+
 def test_state_machine_edges():
     # draft → ready → deliverable → implement_complete → human_mr_approval(PR) → done(merged) → reviewed
     assert can_transition(State.DRAFT, State.READY)

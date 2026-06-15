@@ -8,7 +8,7 @@ import shutil
 from datetime import datetime, timezone
 from secrets import token_hex
 
-from sqlmodel import col, select
+from sqlmodel import Session, col, select
 
 from .. import db
 from ..models import (
@@ -39,6 +39,14 @@ _UNBLOCK_TRIGGER_STATES: set[State] = {
     State.DONE,
     State.CLOSED,
     State.EPIC_CLOSED,
+}
+
+# States that represent a terminal pipeline outcome — transitions to
+# these are gated on having no open [ASK_USER] threads.
+_TERMINAL_STATES: set[State] = {
+    State.DONE,
+    State.CLOSED,
+    State.ERRORED,
 }
 
 
@@ -232,6 +240,19 @@ class _LifecycleMixin(_ServiceBase):
             s.add(ticket)
             s.commit()
 
+    def _has_open_ask_user_threads(
+        self, ticket_id: str, session: Session
+    ) -> list[Comment]:
+        """Return open top-level ``[ASK_USER]`` comment threads on
+        *ticket_id* (those with ``closed_at IS NULL``)."""
+        stmt = select(Comment).where(
+            Comment.ticket_id == ticket_id,
+            Comment.parent_id == None,  # noqa: E711 (SQLAlchemy IS NULL)
+            Comment.body.startswith("[ASK_USER]"),
+            Comment.closed_at == None,  # noqa: E711
+        )
+        return list(session.exec(stmt).all())
+
     def transition(self, ticket_id: str, dst: State, note: str | None = None) -> Ticket:
         """Move a ticket to *dst* state.
 
@@ -241,6 +262,10 @@ class _LifecycleMixin(_ServiceBase):
 
         When transitioning to :class:`State.BLOCKED`, the originating
         state is recorded in ``blocked_from`` so it can be resumed later.
+
+        Transitions to terminal states — :class:`State.DONE`,
+        :class:`State.CLOSED`, or :class:`State.ERRORED` — are rejected
+        when the ticket has any open ``[ASK_USER]`` comment threads.
         """
         with db.session(self.settings, self._board_for(ticket_id)) as s:
             ticket = s.get(Ticket, ticket_id)
@@ -252,6 +277,18 @@ class _LifecycleMixin(_ServiceBase):
                 raise TransitionError(
                     f"{ticket_id}: {ticket.state} -> {dst} not allowed"
                 )
+            # Refuse to transition to a terminal state while any
+            # [ASK_USER] threads remain open — those questions must be
+            # resolved (thread closed) before the pipeline completes.
+            if dst in _TERMINAL_STATES:
+                open_threads = self._has_open_ask_user_threads(ticket_id, s)
+                if open_threads:
+                    ids = ", ".join(str(t.id) for t in open_threads)
+                    raise TransitionError(
+                        f"{ticket_id}: cannot transition to {dst} while "
+                        f"{len(open_threads)} [ASK_USER] thread(s) are "
+                        f"open (IDs: {ids})"
+                    )
             # Record originating state when blocking; clear when leaving
             # BLOCKED (regardless of resume or override path).
             if dst is State.BLOCKED:
