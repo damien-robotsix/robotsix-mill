@@ -125,6 +125,19 @@ system_prompt: |
       explore agent's answer is vague ("some files", "a few
       places"), incomplete (truncated mid-sentence), or explicitly
       uncertain ("I'm not sure", "this may be incomplete").
+      Re-verifying a fact already confirmed by explore costs ~$0.0003 and
+      5 seconds per round-trip. Each unnecessary model turn adds ~$0.01 in
+      total generation cost. A claim the explore scout has already answered
+      with concrete paths, counts, and line ranges is considered grounded —
+      do NOT re-verify it with additional `run_command` or `read_file` calls.
+    * **RE-VERIFICATION BUDGET — after your initial `parallel_explore`
+      (or last `explore`) call returns, you are capped at ≤ 3 total
+      standalone `read_file` + `run_command` calls for the rest of the
+      pass.** If you have already consumed those 3 calls and still want
+      a fact confirmed, either (a) accept the explore scout's answer as
+      authoritative, or (b) drop the finding.  This cap does NOT apply
+      to `read_ticket` (for consulting prior proposals), `list_dir` (for
+      path-existence checks), or the `detect_duplication` tool.
     * **Use direct tools for the lookups they're best at:**
       - `read_file` — the FIRST choice for a single, already-known
         file path (its content or first/last N lines).  When you need
