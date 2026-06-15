@@ -124,14 +124,14 @@ jobs:
         # dev dependency (mirrors the bandit step). A bare `uv run deptry`
         # fails with "Failed to spawn: deptry" for any repo that doesn't
         # ship deptry itself.
-        run: uv run --with deptry deptry .
+        run: uv run --frozen --with deptry deptry .
 
       - name: Ruff (lint + format check)
         env:
           UV_PROJECT_ENVIRONMENT: system
         run: |
-          uv run ruff check --output-format=github .
-          uv run ruff format --check --diff .
+          uv run --frozen ruff check --output-format=github .
+          uv run --frozen ruff format --check --diff .
 
       - name: Mypy (static type check, baseline ratchet)
         if: ${{ inputs.mypy-advisory }}
@@ -144,7 +144,7 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: system
         # mypy-baseline provisioned via --with (consumers need not declare it).
-        run: uv run mypy src/ --strict | uv run --with mypy-baseline mypy-baseline filter
+        run: uv run --frozen mypy src/ --strict | uv run --frozen --with mypy-baseline mypy-baseline filter
 
       - name: Mypy (baseline burndown nudge)
         if: ${{ inputs.mypy-advisory }}
@@ -155,13 +155,13 @@ jobs:
         # CI checks out in detached HEAD with only the remote-tracking
         # ref available, so point suggest's git-diff at origin/main
         # (the default "main" is not a local branch here).
-        run: uv run --with mypy-baseline mypy-baseline suggest --exit-zero --default-branch origin/main
+        run: uv run --frozen --with mypy-baseline mypy-baseline suggest --exit-zero --default-branch origin/main
 
       - name: Mypy (static type check)
         if: ${{ !inputs.mypy-advisory }}
         env:
           UV_PROJECT_ENVIRONMENT: system
-        run: uv run mypy src/ --strict
+        run: uv run --frozen mypy src/ --strict
 
       - name: Bandit (security SAST)
         if: ${{ inputs.run-bandit }}
@@ -170,7 +170,7 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: system
           BANDIT_SEVERITY: ${{ inputs.bandit-severity }}
-        run: uv run --with 'bandit[toml]' bandit -c pyproject.toml -r src/ --severity-level "$BANDIT_SEVERITY"
+        run: uv run --frozen --with 'bandit[toml]' bandit -c pyproject.toml -r src/ --severity-level "$BANDIT_SEVERITY"
 
       - name: Run tests
         env:
@@ -196,4 +196,4 @@ jobs:
           # declare pytest-xdist (mirrors the deptry/mypy-baseline steps).
           # Without this, a bare `uv run pytest -n auto` fails for any repo
           # that does not itself ship pytest-xdist.
-          uv run --with pytest-xdist pytest tests/ -n "$PYTEST_NUMPROCESSES" --dist loadscope -x "$@" --tb=long --cov="$COV_PACKAGE" --cov-fail-under="$COVERAGE_THRESHOLD" --cov-report=term-missing
+          uv run --frozen --with pytest-xdist pytest tests/ -n "$PYTEST_NUMPROCESSES" --dist loadscope -x "$@" --tb=long --cov="$COV_PACKAGE" --cov-fail-under="$COVERAGE_THRESHOLD" --cov-report=term-missing
