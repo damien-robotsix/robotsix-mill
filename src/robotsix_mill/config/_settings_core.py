@@ -272,9 +272,10 @@ class _CoreSettings(BaseModel):
     # doc agent still receives the untruncated diff.
     doc_classifier_diff_max_chars: int = Field(default=6000)
     # Maximum characters of the memory ledger to load per agent pass.
-    # When the file exceeds this, the oldest entries are dropped (read-side
-    # only — persist_memory is unchanged).  Applies to all memory ledgers
-    # (refine, audit, health, agent-check, etc.).
+    # When the file exceeds this, the oldest entries are dropped from the
+    # loaded view; persist_memory also applies the cap on write when
+    # max_chars is passed. Applies to all memory ledgers (refine, audit,
+    # health, agent-check, etc.).
     max_memory_chars: int = Field(default=8000, ge=0)
     # Maximum characters of the retrospect stage's history + comments
     # logs fed to the agent. These are chronological, so the most-recent

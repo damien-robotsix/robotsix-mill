@@ -278,6 +278,82 @@ def test_expert_persists_updated_memory(tmp_path, monkeypatch):
     assert "ticket-42: X uses Y" in memory_file.read_text(encoding="utf-8")
 
 
+def test_expert_persist_memory_receives_max_chars_kwarg(tmp_path, monkeypatch):
+    """run_consult_expert passes max_chars=definition.memory.max_memory_chars
+    to persist_memory, capping the written memory ledger."""
+    from robotsix_mill.agents import expert_manager
+    from robotsix_mill.agents.consult_expert import ExpertConsultResult
+    from robotsix_mill.agents.expert_loader import (
+        ExpertMemoryConfig,
+        ExpertDefinition,
+    )
+    from robotsix_mill.runners import pass_runner
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+
+    class FakeModel:
+        def __init__(self, name, **kw):
+            pass
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            pass
+
+        async def run(self, prompt, **kw):
+            class R:
+                output = ExpertConsultResult(
+                    answer="here is the answer",
+                    updated_memory="## What I learned\n- ticket-42: X uses Y\n",
+                )
+
+            return R()
+
+    def fake_load_defs(self, definitions_dir=None):
+        return {
+            "python-backend": ExpertDefinition(
+                domain="python-backend",
+                module_paths=["src/**/*.py"],
+                system_prompt="You are a Python expert.",
+                model="",
+                memory=ExpertMemoryConfig(max_memory_chars=8000),
+                tools=["explore", "read_file", "list_dir"],
+            ),
+        }
+
+    monkeypatch.setattr(
+        expert_manager.ExpertManager, "load_definitions", fake_load_defs
+    )
+    import pydantic_ai
+    import pydantic_ai.providers.openrouter as orp
+    from robotsix_mill.agents import openrouter_cost as oc, fs_tools as ft, base as bmod
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(ft, "build_fs_tools", lambda root, settings, **kw: [])
+    monkeypatch.setattr(bmod, "timeout_http_client", lambda s: None)
+
+    # Capture the kwargs passed to persist_memory.
+    persist_kwargs = {}
+
+    def fake_persist_memory(memory_file, text, **kwargs):
+        persist_kwargs["file"] = memory_file
+        persist_kwargs["text"] = text
+        persist_kwargs["kwargs"] = kwargs
+
+    monkeypatch.setattr(pass_runner, "persist_memory", fake_persist_memory)
+
+    out = run_consult_expert(
+        settings=s,
+        repo_dir=tmp_path,
+        domain="python-backend",
+        question="where is X?",
+        board_id="myboard",
+    )
+    assert out == "here is the answer"
+    assert persist_kwargs["kwargs"].get("max_chars") == 8000
+
+
 def test_expert_skips_persist_when_updated_memory_empty(tmp_path, monkeypatch):
     """When ``updated_memory`` is empty/whitespace, the memory file is
     NOT created — preserves any existing ledger as-is."""

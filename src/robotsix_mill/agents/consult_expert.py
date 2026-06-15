@@ -174,7 +174,11 @@ async def run_consult_expert(
         try:
             from ..runners.pass_runner import persist_memory
 
-            persist_memory(memory_path, output.updated_memory)
+            persist_memory(
+                memory_path,
+                output.updated_memory,
+                max_chars=definition.memory.max_memory_chars,
+            )
         except Exception:  # noqa: BLE001 — memory persistence is best-effort
             log.warning(
                 "could not persist memory for expert %s at %s",
