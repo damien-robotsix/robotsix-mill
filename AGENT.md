@@ -74,6 +74,47 @@ enterprise process. These are hard rules, learned the hard way.
 - If something is genuinely underspecified or a tool is missing, say
   so (or `report_issue`) — don't guess and gold-plate.
 
+## Agent definition conventions
+
+Every agent definition under `agent_definitions/` **must** set a
+`category` matching its runtime role. The five valid categories,
+validated by `test_category_is_valid` in
+`tests/agents/test_yaml_loader.py` (the `_VALID_CATEGORIES` frozenset),
+are:
+
+- **`pipeline`** — stage agents called by the pipeline state machine
+  (e.g. `refine.yaml`, `implement.yaml`, `review.yaml`, `triage.yaml`,
+  `document.yaml`, `retrospect.yaml`, `dedup.yaml`,
+  `epic_breakdown.yaml`, `obsolescence.yaml`, `auto-approve.yaml`,
+  `doc_classifier.yaml`, `maintenance.yaml`, `scope_triage.yaml`,
+  `spec-review.yaml`, `tester.yaml`, `pipeline/meta_triage.yaml`).
+
+- **`periodic`** — background scheduled agents, almost always under
+  `agent_definitions/periodic/` (e.g. `periodic/audit.yaml`,
+  `periodic/health.yaml`, `periodic/survey.yaml`,
+  `periodic/meta.yaml`, `periodic/test_gap.yaml`,
+  `periodic/agent_check.yaml`, `periodic/bc_check.yaml`,
+  `periodic/board_cleanup.yaml`, `periodic/completeness_check.yaml`,
+  `periodic/copy_paste.yaml`, `periodic/cost_analyst.yaml`,
+  `periodic/diagnostic.yaml`, `periodic/forge_parity.yaml`,
+  `periodic/module_curator.yaml`, `periodic/run_health.yaml`, and
+  `epic_status.yaml` at the root).
+
+- **`sandboxed`** — agents that execute in ephemeral sandboxes
+  (e.g. `ci_fix.yaml`, `rebase.yaml`, `review_revision.yaml`).
+
+- **`interactive`** — prompt-to-ticket or Q&A agents triggered by user
+  interaction (e.g. `ask_to_ticket.yaml`, `answer.yaml`).
+
+- **`sub_agent`** — utility agents called by other agents as a tool
+  (e.g. `explore`, `web_research`, `trace_inspector`). These live in
+  `agent_definitions/` but their definitions are tool-wired, not
+  pipeline-dispatched.
+
+Validation lives in `tests/agents/test_yaml_loader.py` — there is no
+Pydantic validator on the production `AgentDefinition` model. See
+`docs/agent-yaml-schema.md` for the full field reference.
+
 ## Meta-agent
 
 The **meta-agent** is a cross-repo survey agent that runs **daily**
