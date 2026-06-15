@@ -961,7 +961,9 @@ def test_pr_url_for_multi_repo_returns_value(monkeypatch):
     """When multi-repo manifest returns a value, that value is returned."""
     monkeypatch.setattr(
         "robotsix_mill.runtime.deps._pr_urls_for_multi_repo",
-        lambda ticket, service: "https://multi.example.com/1, https://multi.example.com/2",
+        lambda ticket, service: (
+            "https://multi.example.com/1, https://multi.example.com/2"
+        ),
     )
     single_calls = []
     monkeypatch.setattr(
