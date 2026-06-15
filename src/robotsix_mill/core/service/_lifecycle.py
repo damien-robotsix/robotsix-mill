@@ -691,6 +691,12 @@ class _LifecycleMixin(_ServiceBase):
                 select(TicketEvent).where(TicketEvent.ticket_id == ticket_id)
             ).all():
                 s.delete(ev)
+            for pa in s.exec(
+                select(ProposedAction).where(
+                    ProposedAction.target_ticket_id == ticket_id
+                )
+            ).all():
+                s.delete(pa)
             s.delete(ticket)
             s.commit()
         # Remove the workspace dir directly (don't construct Workspace —
@@ -953,3 +959,5 @@ class _LifecycleMixin(_ServiceBase):
                 continue
             self.delete(ticket.id)
             deleted += 1
+
+    # _maybe_purge_stale_proposed_actions moved to _ActionMixin.
