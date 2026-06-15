@@ -256,7 +256,7 @@ class GitLabForge(Forge):
         return self._fetch_pipeline_job_logs(project_path=project_path, run_id=run_id)
 
     def create_repo(
-        self, *, name: str, owner: str, private: bool, description: str
+        self, *, name: str, owner: str, private: bool | None = None, description: str
     ) -> RepoInfo:
         if not self.settings.enable_repo_creation:
             raise NotConfiguredError(
@@ -584,11 +584,14 @@ class GitLabForge(Forge):
         *,
         name: str,
         owner: str,
-        private: bool,
+        private: bool | None = None,
         description: str,
     ) -> RepoInfo:
         """POST /projects → RepoInfo. Resolves *owner* to a namespace id."""
         from urllib.parse import quote
+
+        if private is None:
+            private = self.settings.repo_visibility_default == "private"
 
         from ..config import get_secrets
 

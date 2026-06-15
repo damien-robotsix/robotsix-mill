@@ -197,7 +197,7 @@ class Forge(ABC):
 
     @abstractmethod
     def create_repo(
-        self, *, name: str, owner: str, private: bool, description: str
+        self, *, name: str, owner: str, private: bool | None = None, description: str
     ) -> RepoInfo:
         """Create a new repository under *owner* and return its metadata.
 

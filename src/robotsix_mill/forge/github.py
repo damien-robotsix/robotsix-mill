@@ -357,10 +357,13 @@ class GitHubForge(Forge):
         *,
         name: str,
         owner: str,
-        private: bool,
+        private: bool | None = None,
         description: str,
     ) -> RepoInfo:
         import time
+
+        if private is None:
+            private = self.settings.repo_visibility_default == "private"
 
         from ..config import get_secrets
 
@@ -806,14 +809,14 @@ class GitHubForge(Forge):
         )
 
     def create_repo(
-        self, *, name: str, owner: str, private: bool, description: str
+        self, *, name: str, owner: str, private: bool | None = None, description: str
     ) -> RepoInfo:
         """Create a new GitHub repository and return its :class:`RepoInfo`.
 
         :param name: repository name.
         :param owner: org/user namespace to create under (empty falls back
             to the authenticated user).
-        :param private: whether the repo is private.
+        :param private: whether the repo is private (defaults to config).
         :param description: repo description (clamped to GitHub's limit).
         Mutates remote state: creates the repo via the GitHub API. Raises
         :class:`NotConfiguredError` when ``enable_repo_creation`` is off.

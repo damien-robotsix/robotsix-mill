@@ -221,8 +221,8 @@ def make_create_repo_tool(
     def create_repo(
         name: str,
         owner: str,
-        private: bool,
         description: str,
+        private: bool | None = None,
         language: str = "python",
     ) -> str:
         """Create a new repository under *owner* and return its metadata.
@@ -230,8 +230,8 @@ def make_create_repo_tool(
         Args:
             name: Repository name.
             owner: Owner (user or organization).
-            private: Whether the repo is private.
             description: Short description.
+            private: Whether the repo is private (defaults to config).
             language: Project language (default ``"python"``).
 
         Returns:
@@ -298,7 +298,7 @@ def make_create_repo_tool(
             parameters={
                 "name": "str",
                 "owner": "str",
-                "private": "bool",
+                "private": "bool (optional, defaults to repo_visibility_default config)",
                 "description": "str",
                 "language": "str (optional, default 'python')",
             },

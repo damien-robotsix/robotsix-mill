@@ -93,6 +93,7 @@ core:
   claude_sdk_agents: []                 # agent names routed to the Claude SDK backend (empty = none)
   claude_sdk_vision_enabled: false      # allow image input on Claude-SDK-routed agents
   enable_repo_creation: false           # allow the new-repo meta flow to create repositories
+  repo_visibility_default: public      # "public" | "private" — default visibility for new repos
   lint_on_edit: true                    # run ruff after each agent file edit
   meta_periodic: false                  # enable the cross-repo meta-agent pass
   meta_interval_seconds: 86400          # seconds between meta-agent passes
