@@ -940,7 +940,7 @@ def _map_pipeline_status(status: str) -> str | None:
     """Map GitLab pipeline status to standard conclusion."""
     if status == "success":
         return "success"
-    if status in ("failed", "canceled"):
+    if status == "failed":
         return "failure"
     if status in (
         "pending",
@@ -950,6 +950,11 @@ def _map_pipeline_status(status: str) -> str | None:
         "preparing",
         "manual",
         "scheduled",
+        # Canceled / superseded pipelines don't represent a real verdict;
+        # treating them as failure triggers the same false-fix loop that
+        # GitHub's _INCONCLUSIVE_CONCLUSIONS guards against.
+        "canceled",
+        "skipped",
     ):
         return "pending"
     return None
