@@ -2430,3 +2430,47 @@ def test_derive_conclusion_real_failure_still_fails_despite_cancelled():
     out = _derive_check_conclusion(None, "", "o", "r", {}, runs)
     assert out["conclusion"] == "failure"
     assert [f for f in out["failing"]]
+
+
+def test_derive_conclusion_superseded_cancelled_same_name_uses_success():
+    """SAME check name with both a superseded `cancelled` run and the
+    authoritative `success` run → success, not pending-forever. Regression
+    for green PRs stuck in IMPLEMENT_COMPLETE (llmio c273/55f1/d932/fcf4):
+    concurrency cancels the old run, so each name carries cancelled+success;
+    feeding both made the aggregate read pending. Order-independent."""
+    from robotsix_mill.forge.github import _derive_check_conclusion
+
+    runs = [
+        {
+            "id": 1,
+            "name": "ci (3.11) / tests",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "started_at": "2026-06-15T10:00:00Z",
+        },
+        {
+            "id": 2,
+            "name": "ci (3.11) / tests",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-06-15T10:05:00Z",
+        },
+        # reversed order for a second name: success listed before its cancelled
+        {
+            "id": 3,
+            "name": "ci (3.12) / tests",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-06-15T10:05:00Z",
+        },
+        {
+            "id": 4,
+            "name": "ci (3.12) / tests",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "started_at": "2026-06-15T10:00:00Z",
+        },
+    ]
+    out = _derive_check_conclusion(None, "", "o", "r", {}, runs)
+    assert out["conclusion"] == "success"
+    assert out["failing"] == []

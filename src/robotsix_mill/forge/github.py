@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
+from typing import Any
 
 import httpx
 
@@ -1510,6 +1511,41 @@ def _conclusion_for_check(cr: dict) -> str:
     return "neutral"
 
 
+def _latest_definitive_runs(check_runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Collapse multiple runs of the SAME check name to one representative.
+
+    A check context (e.g. ``ci (3.11) / tests``) can have several runs at
+    one commit: GitHub's concurrency control ``cancelled`` the superseded
+    run when a newer one started, so the same name carries both a
+    ``cancelled`` AND a ``success`` run. ``_conclusion_for_check`` maps
+    ``cancelled``→``pending`` (so a genuinely-cancelling churn isn't read as
+    a false failure — see ``_INCONCLUSIVE_CONCLUSIONS``); but feeding BOTH
+    runs to the aggregator makes the whole PR read ``pending`` forever even
+    though the authoritative run is green — the ticket then sits in
+    IMPLEMENT_COMPLETE and never merges (live: llmio c273/55f1/d932/fcf4).
+
+    Per name, prefer the latest run with a DEFINITIVE conclusion
+    (success/failure — not cancelled/stale/running); fall back to the
+    latest run overall when only inconclusive/in-flight runs exist (so a
+    still-churning check correctly stays pending). Ordering is by
+    ``started_at`` (ISO strings sort chronologically).
+    """
+    by_name: dict[str, list[dict[str, Any]]] = {}
+    for cr in check_runs:
+        by_name.setdefault(cr.get("name", ""), []).append(cr)
+    reps: list[dict[str, Any]] = []
+    for runs in by_name.values():
+        runs_sorted = sorted(runs, key=lambda r: r.get("started_at") or "")
+        definitive = [
+            r
+            for r in runs_sorted
+            if r.get("status", "") not in _PENDING_STATUSES
+            and (r.get("conclusion") or "") not in _INCONCLUSIVE_CONCLUSIONS
+        ]
+        reps.append(definitive[-1] if definitive else runs_sorted[-1])
+    return reps
+
+
 def _extract_annotations(
     client,
     api: str,
@@ -1573,6 +1609,10 @@ def _derive_check_conclusion(
     """Derive the overall conclusion and build the failing list."""
     if not check_runs:
         return {"conclusion": None, "failing": []}
+
+    # Collapse same-name reruns so a superseded ``cancelled`` run doesn't
+    # mask the authoritative ``success`` and pin the PR at pending forever.
+    check_runs = _latest_definitive_runs(check_runs)
 
     has_pending = False
     has_failure = False
