@@ -10,7 +10,6 @@ Design: `docs/rfc-config-v2.md` §6 (Load order and precedence).
 
 from __future__ import annotations
 
-from typing import Any
 
 import os
 from pathlib import Path
@@ -156,18 +155,6 @@ def _load_repos_document(file_path: str | None = None) -> dict:
     except YamlConfigError as exc:
         raise ConfigError(str(exc)) from exc
     return data if isinstance(data, dict) else {}
-
-
-def load_global_langfuse(file_path: str | None = None) -> dict[str, Any]:
-    """Return the single top-level ``langfuse`` block from ``repos.yaml``.
-
-    This is the ONE place Langfuse is configured: ``load_repos_config``
-    populates every repo and the meta board from it. There is no per-repo
-    Langfuse configuration. Returns ``{}`` when absent (observability off).
-    """
-    data = _load_repos_document(file_path)
-    lf = data.get("langfuse")
-    return dict(lf) if isinstance(lf, dict) else {}
 
 
 def load_repos_yaml(file_path: str | None = None) -> dict:
