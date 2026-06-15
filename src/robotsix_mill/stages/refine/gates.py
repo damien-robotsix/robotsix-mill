@@ -28,6 +28,7 @@ from .helpers import (
     OPERATOR_SENDBACK_PREFIX,
     REFINE_PROGRESS_STATES,
     _build_candidates_block,
+    _rationale_claims_external_fix,
     log,
 )
 
@@ -308,6 +309,25 @@ class RefineGatesMixin:
                     NON_IMPLEMENTATION_CLOSE_PREFIXES
                 ):
                     return False
+
+            # Human-closed-with-claim guard: if the candidate reached DONE via
+            # a human mark_done (no branch) and the close note claims an
+            # external fix (PR/commit reference), the claim is unverified —
+            # reject the dedup target so refine proceeds and produces a spec
+            # that goes through implement for live re-check against HEAD.
+            if not cand.branch:
+                for ev in history:  # type: ignore[attr-defined]
+                    if ev.state == State.DONE:
+                        note = (ev.note or "").lower()
+                        if _rationale_claims_external_fix(note):
+                            log.info(
+                                "%s: dedup candidate %s was human-closed with an "
+                                "external-fix claim — not a valid dedup target "
+                                "(unverified), proceeding with refine",
+                                ticket.id,
+                                candidate_id,
+                            )
+                            return False
 
             # The candidate reached DONE via a real implementation, but if
             # that implementation lives only on an unmerged branch the work

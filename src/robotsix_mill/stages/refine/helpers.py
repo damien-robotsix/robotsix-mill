@@ -286,9 +286,12 @@ _EXTERNAL_FIX_PHRASES: tuple[str, ...] = (
 # Repo ticket-id shape and commit-SHA-like token.
 _TICKET_ID_RE = re.compile(r"\b\d{8}T\d{6}Z\b")
 _COMMIT_SHA_RE = re.compile(r"\b[0-9a-f]{7,40}\b")
+# PR / MR number references: e.g. "#1386", "!123", "PR #42".
+_PR_MR_REF_RE = re.compile(r"(?<!\w)(?:#|!)\d+\b")
 
-# Resolved-claim verbs that, co-occurring with a cited ticket id / commit,
-# imply an external-fix claim even without one of the canned phrases.
+# Resolved-claim verbs that, co-occurring with a cited ticket id / commit /
+# PR/MR reference, imply an external-fix claim even without one of the
+# canned phrases.
 _RESOLVED_VERB_RE = re.compile(
     r"\b(implemented|fixed|shipped|merged|applied|resolved|addressed|landed)\b"
 )
@@ -320,7 +323,8 @@ def _rationale_claims_external_fix(rationale: str) -> bool:
     elsewhere (so the fix's live presence must be re-verified, not trusted).
 
     Fires on an unambiguous "already shipped elsewhere" phrase, or on a
-    cited ticket id / commit SHA co-occurring with a resolved-claim verb.
+    cited ticket id / commit SHA / PR-MR number co-occurring with a
+    resolved-claim verb.
     Returns ``False`` for the two legitimate no-change subclasses — detector
     false-positives and information-only deliverables — so they keep closing
     to DONE.  Empty/whitespace rationale → ``False``.  Bias is toward NOT
@@ -341,8 +345,13 @@ def _rationale_claims_external_fix(rationale: str) -> bool:
     ):
         return False
 
-    # Cited ticket id / commit SHA co-occurring with a resolved-claim verb.
-    has_ref = bool(_TICKET_ID_RE.search(text) or _COMMIT_SHA_RE.search(text))
+    # Cited ticket id / commit SHA / PR-MR number co-occurring with a
+    # resolved-claim verb.
+    has_ref = bool(
+        _TICKET_ID_RE.search(text)
+        or _COMMIT_SHA_RE.search(text)
+        or _PR_MR_REF_RE.search(text)
+    )
     if has_ref and _RESOLVED_VERB_RE.search(text):
         return True
 
