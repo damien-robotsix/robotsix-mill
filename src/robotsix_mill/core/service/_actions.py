@@ -182,7 +182,7 @@ class _ActionMixin(_ServiceBase):
         with db.session(self.settings, self.board_id) as s:
             stmt = (
                 select(ProposedAction)
-                .where(ProposedAction.status.in_(_TERMINAL))
+                .where(ProposedAction.status.in_(_TERMINAL))  # type: ignore[attr-defined]
                 .order_by(col(ProposedAction.created_at))
             )
             terminal_rows = list(s.exec(stmt).all())
