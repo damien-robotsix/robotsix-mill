@@ -515,10 +515,10 @@ def test_mergeable_pr_never_enters_rebasing(tmp_path, monkeypatch):
         assert "REBASING" not in str(out.next_state.value)
 
 
-def test_rebasing_skips_rebase_when_pr_already_mergeable(tmp_path, monkeypatch):
-    """A ticket stuck in REBASING whose PR is already mergeable skips the
-    rebase entirely (no reconcile → no diverged-clone BLOCK) and re-polls
-    the gates via IMPLEMENT_COMPLETE."""
+def test_rebasing_skips_rebase_when_pr_clean(tmp_path, monkeypatch):
+    """A ticket stuck in REBASING whose PR is genuinely CLEAN (mergeable,
+    up-to-date, checks passing) skips the rebase entirely (no reconcile →
+    no diverged-clone BLOCK) and re-polls the gates via IMPLEMENT_COMPLETE."""
     from robotsix_mill.stages import merge as merge_mod
 
     ctx = _gh(tmp_path)
@@ -530,11 +530,12 @@ def test_rebasing_skips_rebase_when_pr_already_mergeable(tmp_path, monkeypatch):
             "state": "open",
             "url": "u",
             "mergeable": True,
+            "mergeable_state": "clean",
         },
     )
 
     def _boom(*a, **k):  # pragma: no cover - must not be called
-        raise AssertionError("rebase reconcile must be skipped for a mergeable PR")
+        raise AssertionError("rebase reconcile must be skipped for a clean PR")
 
     monkeypatch.setattr(
         merge_mod.git_ops, "reconcile_with_remote_pr", _boom, raising=False
@@ -542,6 +543,40 @@ def test_rebasing_skips_rebase_when_pr_already_mergeable(tmp_path, monkeypatch):
 
     out = MergeStage().run(_in_rebasing(ctx), ctx)
     assert out.next_state is State.IMPLEMENT_COMPLETE
+
+
+@pytest.mark.parametrize("mstate", ["behind", "unstable", "blocked"])
+def test_rebasing_does_not_skip_when_not_clean(tmp_path, monkeypatch, mstate):
+    """A mergeable-but-not-clean PR (behind main / failing CI) must NOT skip
+    the rebase — that was the oscillation bug (implement_complete↔rebasing
+    forever, branch never catching up to a fixed main). It proceeds to the
+    conflict/rebase handler instead."""
+    from robotsix_mill.stages.merge.rebase import RebaseMixin
+
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "mergeable_state": mstate,
+        },
+    )
+
+    called = {}
+
+    def _fake_handle(self, ticket, ctx, branch):
+        called["handled"] = True
+        return Outcome(State.REBASING)
+
+    monkeypatch.setattr(RebaseMixin, "_handle_conflict", _fake_handle)
+
+    out = MergeStage().run(_in_rebasing(ctx), ctx)
+    assert called.get("handled") is True
+    assert out.next_state is State.REBASING
 
 
 # --- HUMAN_MR_APPROVAL silent fallback: conflicting → IMPLEMENT_COMPLETE ---
