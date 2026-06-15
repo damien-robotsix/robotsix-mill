@@ -25,6 +25,8 @@ modules:
       - config/mill.local.example.yaml
       - config/repos.example.yaml
       - config/secrets.example.yaml
+      - .robotsix-mill/config.yaml
+      - .robotsix-mill/periodic/*.yaml
       - tests/config/test_config.py
       - tests/config/test_repo_settings.py
       - tests/config/test_workspace_members.py
