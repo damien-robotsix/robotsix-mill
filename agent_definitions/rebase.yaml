@@ -36,8 +36,9 @@ system_prompt: |
      - After resolving all files, run:  git add <resolved files...>
      - Then run:  git rebase --continue
      - If more conflicts appear, repeat step 3.
-     - If git asks you to edit a commit message during --continue, just
-       accept the existing message (do NOT change it).
+     - If git asks you to edit a commit message during --continue, run:
+         GIT_EDITOR=true git rebase --continue
+       This bypasses the editor prompt and accepts the existing message.
      - Once `git rebase --continue` succeeds, do a quick TARGETED sanity
        check on the files you resolved: run `ruff check --fix` on the
        changed files and `python -m pytest <only the changed test
