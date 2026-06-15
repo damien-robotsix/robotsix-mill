@@ -2378,9 +2378,9 @@ def test_migrate_epic_subtree_rolls_back_on_db_failure(settings, migrate_env):
         src_ws = settings.workspaces_dir_for("test-board") / tid
         dst_ws = settings.workspaces_dir_for("other-board") / tid
         assert src_ws.exists(), f"source workspace {tid} was not rolled back"
-        assert (
-            src_ws / "description.md"
-        ).read_text() == f"desc-{tid}", f"source workspace {tid} content lost"
+        assert (src_ws / "description.md").read_text() == f"desc-{tid}", (
+            f"source workspace {tid} content lost"
+        )
         # Target dirs should not exist (or be empty if created then rolled back).
         assert not dst_ws.exists() or not any(dst_ws.iterdir()), (
             f"target workspace {tid} not cleaned up"
