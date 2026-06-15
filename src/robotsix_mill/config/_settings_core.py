@@ -264,6 +264,14 @@ class _CoreSettings(BaseModel):
     # 50 calls on a genuine run — 80 gives headroom matching the audit
     # agent's budget for a similar broad-scan workload.
     test_gap_request_limit: int = Field(default=80, ge=1)
+    # Hard cap on total tool calls per test_gap trace. 100 tool calls
+    # is far beyond what any legitimate test-coverage scan requires —
+    # only clearly broken runs are terminated.
+    test_gap_max_tool_calls: int = Field(default=100, ge=1)
+    # Hard cap on tool-call errors before auto-termination. A healthy
+    # inspection should have near-zero errors; 20 indicates a broken
+    # execution loop.
+    test_gap_max_errors: int = Field(default=20, ge=0)
     doc_request_limit: int = Field(default=8)
     # Cheap classifier gate that runs *before* the full doc agent.
     doc_classifier_model: str = Field(default="deepseek/deepseek-v4-flash")

@@ -389,6 +389,8 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.test_gap.enabled": "test_gap_periodic",
     "periodic.test_gap.interval_seconds": "test_gap_interval_seconds",
     "periodic.test_gap.memory_path": "test_gap_memory_path",
+    "periodic.test_gap.max_tool_calls": "test_gap_max_tool_calls",
+    "periodic.test_gap.max_errors": "test_gap_max_errors",
     # -- periodic.agent_check --
     "periodic.agent_check.model": "agent_check_model",
     "periodic.agent_check.enabled": "agent_check_periodic",

@@ -173,6 +173,7 @@ def run_periodic_agent(
     extra_roots: list[Path] | None = None,
     usage_limits: Any = None,
     definition_override: Any = None,
+    max_errors: int = 0,
 ) -> Any:
     """Run a periodic agent through the standard 7-step pipeline.
 
@@ -224,6 +225,11 @@ def run_periodic_agent(
     usage_limits:
         When not ``None``, passed as ``usage_limits=…`` to
         ``agent.run_sync(prompt, …)``.
+    max_errors:
+        When > 0, tools are wrapped with a shared error counter that
+        raises ``UsageLimitExceeded`` after *max_errors* tool-call
+        errors — terminating runaway agent loops.  Defaults to 0
+        (no error limit).
 
     Returns
     -------
@@ -267,6 +273,12 @@ def run_periodic_agent(
             include_run_command=include_run_command,
             extra_roots=extra_roots,
         )
+    # Wrap tools with an error budget when the caller requests one
+    # (mirrors the trace_inspector guardrail for runaway tool loops).
+    if max_errors > 0:
+        from .trace_inspector import _wrap_tools_with_error_limit
+
+        tools = _wrap_tools_with_error_limit(tools, max_errors=max_errors)
 
     # ------------------------------------------------------------------
     # Step 3 — resolve the system prompt
