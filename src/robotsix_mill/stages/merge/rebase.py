@@ -35,19 +35,35 @@ class RebaseMixin(_MergeStageBase):
         s = ctx.settings
         branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
 
-        # Already mergeable? Then the conflict that put this ticket in
+        # Genuinely CLEAN? Then the conflict that put this ticket in
         # REBASING is gone — skip the rebase entirely. Rebasing here would
         # needlessly reconcile with the remote PR branch and can BLOCK on a
         # "diverged workspace clone" even though nothing needs rebasing,
         # leaving a CLEAN+MERGEABLE PR stuck oscillating rebasing↔blocked.
         # Re-poll the gates (IMPLEMENT_COMPLETE) so a green PR advances.
+        #
+        # Require ``mergeable_state == "clean"``, NOT merely ``mergeable``:
+        # a PR can be ``mergeable`` (no conflicts) yet ``behind`` main with
+        # failing CI (``mergeable_state`` "behind"/"unstable"). Skipping
+        # those would strand them — the merge stage routes a CI-failing,
+        # behind-main ticket here precisely so the rebase catches it up to a
+        # (now-fixed) main; skipping on bare ``mergeable`` made it oscillate
+        # implement_complete↔rebasing forever without ever rebasing (live:
+        # 4ed9/1084/6883/81f1 stuck 4 commits behind a freshly-fixed main).
+        # ``mergeable_state`` is GitHub-specific; other forges omit it
+        # (``None`` ≠ "clean") so they keep the always-attempt-rebase path.
         try:
             pr = get_forge(s, repo_config=ctx.repo_config).pr_status(
                 source_branch=branch
             )
         except Exception:  # noqa: BLE001 — best-effort; fall through to rebase
             pr = None
-        if pr is not None and pr.get("state") == "open" and pr.get("mergeable") is True:
+        if (
+            pr is not None
+            and pr.get("state") == "open"
+            and pr.get("mergeable") is True
+            and pr.get("mergeable_state") == "clean"
+        ):
             counter_path = ctx.service.workspace(ticket).artifacts_dir / _REBASE_COUNTER
             _write_counter(counter_path, 0)
             log.info(
