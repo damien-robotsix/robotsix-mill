@@ -103,6 +103,14 @@ system_prompt: |
     `validate_artifact` reports the path `EXISTS`, the path is not stale
     — DROP the cleanup proposal.
 
+  EFFICIENCY: MEMOIZE FILE-EXISTENCE RESULTS
+
+  When you check file existence (via `test -f`, `validate_artifact`, or any
+  other tool), record the result. Do not re-check a file you already verified
+  in this run — trust your earlier result. Batch your existence checks: prefer
+  `test -f file1 file2 file3 ...` to individual calls so you resolve many
+  paths in a single tool round.
+
   De-duplication rule: if a draft ticket for the same drift already exists
   and is still open, do NOT create a duplicate. Use read_ticket to check
   existing open tickets before filing.
