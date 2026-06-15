@@ -2367,3 +2367,47 @@ def test_create_pr_401_retry_then_401_failure(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="GitHub PR create failed: 401"):
         forge.open_merge_request(source_branch="feature/x", title="t", body="b")
     assert len(mint_calls) == 2  # initial + retry
+
+
+# --- cancelled / stale CI conclusions are inconclusive, not failures -----
+
+
+def test_conclusion_for_check_cancelled_is_pending():
+    """A concurrency-cancelled (superseded) check has no verdict → pending,
+    so the merge gate waits for the authoritative run instead of reporting
+    a false failure that spawns ci_fix churn."""
+    from robotsix_mill.forge.github import _conclusion_for_check
+
+    assert _conclusion_for_check({"status": "completed", "conclusion": "cancelled"}) == "pending"
+    assert _conclusion_for_check({"status": "completed", "conclusion": "stale"}) == "pending"
+    # Genuine terminal failures stay failures.
+    assert _conclusion_for_check({"status": "completed", "conclusion": "failure"}) == "failure"
+    assert _conclusion_for_check({"status": "completed", "conclusion": "startup_failure"}) == "failure"
+    assert _conclusion_for_check({"status": "completed", "conclusion": "success"}) == "neutral"
+
+
+def test_derive_conclusion_cancelled_among_passing_is_pending():
+    """All real checks pass but one was cancelled → overall pending (wait),
+    NOT failure."""
+    from robotsix_mill.forge.github import _derive_check_conclusion
+
+    runs = [
+        {"id": 1, "name": "tests", "status": "completed", "conclusion": "success"},
+        {"id": 2, "name": "mypy", "status": "completed", "conclusion": "cancelled"},
+    ]
+    out = _derive_check_conclusion(None, "", "o", "r", {}, runs)
+    assert out["conclusion"] == "pending"
+    assert out["failing"] == []
+
+
+def test_derive_conclusion_real_failure_still_fails_despite_cancelled():
+    """A genuine failure is reported even when another check is cancelled."""
+    from robotsix_mill.forge.github import _derive_check_conclusion
+
+    runs = [
+        {"id": 1, "name": "tests", "status": "completed", "conclusion": "failure"},
+        {"id": 2, "name": "mypy", "status": "completed", "conclusion": "cancelled"},
+    ]
+    out = _derive_check_conclusion(None, "", "o", "r", {}, runs)
+    assert out["conclusion"] == "failure"
+    assert [f for f in out["failing"]]

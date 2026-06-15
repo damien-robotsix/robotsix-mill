@@ -64,17 +64,25 @@ _REMOTE_RE = re.compile(
     r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$"
 )
 
-# Check-run conclusions that are not "success"-like.
+# Check-run conclusions that are genuine, terminal failures.
 _FAILING_CONCLUSIONS = frozenset(
     {
         "failure",
         "timed_out",
         "action_required",
-        "cancelled",
         "startup_failure",
-        "stale",
     }
 )
+
+# Inconclusive conclusions: the check produced NO verdict because a newer
+# run superseded it (GitHub Actions ``concurrency: cancel-in-progress``
+# marks the old run ``cancelled``; ``stale`` is the equivalent for status
+# checks). Treating these as failures turned routine concurrency churn
+# into false CI failures — which spawned ci_fix tickets whose pushes
+# cancelled yet more runs, a self-sustaining loop. Classify them as
+# PENDING instead so the merge gate waits for a real verdict; once the
+# false failures stop, the last (uncancelled) run completes and resolves.
+_INCONCLUSIVE_CONCLUSIONS = frozenset({"cancelled", "stale"})
 
 # Statuses that mean the check is still in-flight.
 _PENDING_STATUSES = frozenset(
@@ -1512,7 +1520,12 @@ def _conclusion_for_check(cr: dict) -> str:
     """Classify a single check run as 'pending', 'failure', or 'neutral'."""
     if cr.get("status", "") in _PENDING_STATUSES:
         return "pending"
-    if cr.get("conclusion") in _FAILING_CONCLUSIONS:
+    conclusion = cr.get("conclusion")
+    if conclusion in _INCONCLUSIVE_CONCLUSIONS:
+        # Superseded / no-verdict → wait for the authoritative run rather
+        # than reporting a false failure (see _INCONCLUSIVE_CONCLUSIONS).
+        return "pending"
+    if conclusion in _FAILING_CONCLUSIONS:
         return "failure"
     return "neutral"
 
