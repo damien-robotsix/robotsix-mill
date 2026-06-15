@@ -94,15 +94,52 @@ def clear_export_failures() -> None:
         _export_failures.clear()
 
 
-def make_session_id(kind: str) -> str:
-    """Build a Langfuse session id: ``<kind>-<UTC-ts>-<uuid8>``.
+# Separator between the repo qualifier and the underlying id in a
+# Langfuse session. Chosen for readability in the session list and so
+# ``current_ticket_id`` can split it back off. Repo ids never contain it.
+SESSION_SEP = " · "
+
+
+def qualify_session(base_id: str, repo_config: "RepoConfig | None") -> str:
+    """Prefix *base_id* (a ticket id or ``make_session_id`` value) with the
+    repo so a single shared Langfuse project's session list is legible —
+    e.g. ``robotsix-llmio · 20260615T…-ffea``.
+
+    Returns *base_id* unchanged when no repo is known or it is already
+    qualified (idempotent), so legacy single-repo flows are untouched.
+    """
+    if repo_config is None or not repo_config.repo_id:
+        return base_id
+    if base_id.startswith(repo_config.repo_id + SESSION_SEP):
+        return base_id
+    return f"{repo_config.repo_id}{SESSION_SEP}{base_id}"
+
+
+def make_session_id(kind: str, repo_config: "RepoConfig | None" = None) -> str:
+    """Build a Langfuse session id: ``<kind>-<UTC-ts>-<uuid8>``, optionally
+    repo-qualified (``<repo> · <kind>-…``) when *repo_config* is given.
 
     Use for non-ticket-driven flows (audit, health, agent-check,
     trace-health, deep-review).  Ticket-driven flows pass the ticket id
     directly to ``start_ticket_root_span`` — the ticket id is already a
     self-unique ``<ts>-<slug>-<hash>`` and serves as its own session id.
     """
-    return f"{kind}-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}-{uuid.uuid4().hex[:8]}"
+    base = f"{kind}-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}-{uuid.uuid4().hex[:8]}"
+    return qualify_session(base, repo_config)
+
+
+def current_ticket_id() -> str | None:
+    """Return the bare ticket id for the in-scope session, stripping any
+    ``<repo> · `` qualifier added by :func:`qualify_session`.
+
+    Agent tools that resolve "the current ticket" must use THIS rather
+    than :func:`current_session` (which returns the full, repo-qualified
+    Langfuse session id used for trace linking).
+    """
+    session = current_session()
+    if session and SESSION_SEP in session:
+        return session.split(SESSION_SEP, 1)[1]
+    return session
 
 
 def _build_langfuse_url(
@@ -410,12 +447,17 @@ def start_ticket_root_span(
     else:
         pk = get_secrets().langfuse_public_key or ""
 
+    # Repo-qualified Langfuse session id so a single shared project's
+    # session list reads clearly (e.g. ``robotsix-llmio · <ticket-id>``).
+    # The bare ticket id remains recoverable via ``current_ticket_id()``.
+    session_id = qualify_session(ticket_id, repo_config)
+
     with ExitStack() as stack:
-        stack.enter_context(_llmio_tracing.langfuse_session(ticket_id))
+        stack.enter_context(_llmio_tracing.langfuse_session(session_id))
         if pk:
             stack.enter_context(_llmio_tracing.langfuse_project(pk))
         tracer = trace.get_tracer("robotsix-mill")
-        attrs: dict[str, str] = {"session.id": ticket_id}
+        attrs: dict[str, str] = {"session.id": session_id}
         if extra_attributes:
             attrs.update(extra_attributes)
         with tracer.start_as_current_span(

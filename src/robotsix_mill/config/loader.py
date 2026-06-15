@@ -170,6 +170,20 @@ def load_meta_yaml(file_path: str | None = None) -> dict:
     return dict(meta) if isinstance(meta, dict) else {}
 
 
+def load_langfuse_shared_master(file_path: str | None = None) -> str | None:
+    """Return the optional top-level ``langfuse_shared_master`` repo id.
+
+    When set, every repo (and the meta board) is forced to send its
+    traces to THAT repo's Langfuse project, regardless of any per-repo
+    ``langfuse`` block — a one-line switch to consolidate the whole
+    workspace into a single project (see ``load_repos_config``). Returns
+    ``None`` when absent.
+    """
+    data = _load_repos_document(file_path)
+    val = data.get("langfuse_shared_master")
+    return val if isinstance(val, str) and val.strip() else None
+
+
 def load_repos_yaml(file_path: str | None = None) -> dict:
     """Read ``config/repos.yaml`` (or ``MILL_REPOS_FILE`` if set).
 

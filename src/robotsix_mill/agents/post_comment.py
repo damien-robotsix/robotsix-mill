@@ -68,9 +68,9 @@ def make_post_comment_tool(settings: Settings, agent_name: str):
         if h in _seen:
             return "post_comment: duplicate body in this run — skipped"
 
-        from ..runtime.tracing import current_session
+        from ..runtime.tracing import current_ticket_id
 
-        ticket_id = current_session()
+        ticket_id = current_ticket_id()
         if ticket_id is None:
             return (
                 "post_comment: no active ticket session — cannot "

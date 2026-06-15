@@ -27,9 +27,9 @@ def make_list_threads_tool(settings: Settings, agent_name: str):
         and the first line of each comment body, or "(no threads)" if
         none exist.
         """
-        from ..runtime.tracing import current_session
+        from ..runtime.tracing import current_ticket_id
 
-        ticket_id = current_session()
+        ticket_id = current_ticket_id()
         if ticket_id is None:
             return "Error: no active ticket session — cannot determine current ticket."
 

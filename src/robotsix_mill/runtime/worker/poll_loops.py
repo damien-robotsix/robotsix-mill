@@ -187,7 +187,7 @@ class PollLoopsMixin(_WorkerBase):
         await asyncio.sleep(initial)
         while True:
             run_id = None
-            session_id = tracing.make_session_id(label)
+            session_id = tracing.make_session_id(label, repo_config)
             try:
                 log.info(
                     "Starting bespoke pass %r for repo %s",
