@@ -583,6 +583,8 @@ def test_check_status_no_pipeline(tmp_path, monkeypatch):
         "preparing",
         "manual",
         "scheduled",
+        "canceled",
+        "skipped",
     ],
 )
 def test_check_status_pipeline_pending_variants(tmp_path, monkeypatch, status):
@@ -609,8 +611,9 @@ def test_check_status_pipeline_pending_variants(tmp_path, monkeypatch, status):
     assert result["conclusion"] == "pending"
 
 
-def test_check_status_pipeline_canceled_is_failure(tmp_path, monkeypatch):
-    """Pipeline status=canceled → conclusion=failure."""
+def test_check_status_pipeline_canceled_is_pending(tmp_path, monkeypatch):
+    """Pipeline status=canceled → conclusion=pending (like GitHub's
+    _INCONCLUSIVE_CONCLUSIONS, avoids false CI-failure loops)."""
     project_json = {"id": 42}
     mr = {
         "iid": 7,
@@ -631,7 +634,7 @@ def test_check_status_pipeline_canceled_is_failure(tmp_path, monkeypatch):
 
     forge = _forge(tmp_path)
     result = forge.check_status(source_branch="feature/x")
-    assert result["conclusion"] == "failure"
+    assert result["conclusion"] == "pending"
 
 
 # ---------------------------------------------------------------------------
