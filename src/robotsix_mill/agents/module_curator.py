@@ -78,17 +78,9 @@ def run_module_curator_agent(
             / "module_curator.yaml"
         )
 
-    tools: list = []
-    if repo_dir is not None:
-        from .explore import make_explore_tool
-        from .fs_tools import build_fs_tools
+    from ._repo_tools import _build_repo_tools
 
-        ro = [
-            t
-            for t in build_fs_tools(repo_dir, settings)
-            if t.__name__ in ("read_file", "list_dir", "run_command")
-        ]
-        tools = [make_explore_tool(settings, repo_dir), *ro]
+    tools = _build_repo_tools(repo_dir, settings)
 
     if definition_override is not None:
         system_prompt = definition.system_prompt

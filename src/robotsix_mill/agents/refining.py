@@ -788,24 +788,11 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
         Path(__file__).parent.parent.parent.parent / "agent_definitions" / "refine.yaml"
     )
 
-    tools: list = []
-    if repo_dir is not None:
-        from .explore import make_explore_tool, make_parallel_explore_tool
-        from .fs_tools import build_fs_tools
+    from ._repo_tools import _build_repo_tools
 
-        ro = [
-            t
-            for t in build_fs_tools(repo_dir, settings, extra_roots=extra_roots)
-            if t.__name__ in ("read_file", "list_dir", "run_command")
-        ]
-        tools = [
-            make_explore_tool(settings, repo_dir, extra_roots=extra_roots),
-            # Fan-out scout: split genuinely long work (e.g. enumerating
-            # warnings across test subsets) across concurrent subagents so it
-            # fits the stage budget instead of running serially.
-            make_parallel_explore_tool(settings, repo_dir, extra_roots=extra_roots),
-            *ro,
-        ]
+    tools = _build_repo_tools(
+        repo_dir, settings, extra_roots=extra_roots, include_parallel_explore=True
+    )
 
     # Langfuse read tools — always available (four simple closures).
     from .langfuse_tools import _build_langfuse_tools

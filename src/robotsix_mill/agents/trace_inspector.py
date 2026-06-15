@@ -354,21 +354,9 @@ def run_trace_inspector(
     # Wire read-only fs tools + explore when repo_dir is provided.
     # NEVER include write_file/edit_file/delete_file: the inspector
     # is analysis-only, no side effects.
-    tools: list = []
-    if repo_dir is not None:
-        from .fs_tools import build_fs_tools
-        from .explore import make_explore_tool, make_parallel_explore_tool
+    from ._repo_tools import _build_repo_tools
 
-        ro = [
-            t
-            for t in build_fs_tools(repo_dir, settings)
-            if t.__name__ in ("read_file", "list_dir", "run_command")
-        ]
-        tools = [
-            make_parallel_explore_tool(settings, repo_dir),
-            make_explore_tool(settings, repo_dir),
-            *ro,
-        ]
+    tools = _build_repo_tools(repo_dir, settings, include_parallel_explore=True)
     # Tool-less path stays cheap (3 reqs); tools-on path needs room
     # to read → reason → emit (20 reqs is generous but bounded).
     request_limit = 20 if repo_dir is not None else 3

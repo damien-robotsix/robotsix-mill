@@ -431,6 +431,7 @@ modules:
       epic breakdown/status, cost reconciliation, environment sync,
       and retrospect.
     paths:
+      - src/robotsix_mill/agents/_repo_tools.py
       - src/robotsix_mill/agents/coordinating.py
       - src/robotsix_mill/agents/coding.py
       - src/robotsix_mill/agents/testing.py
