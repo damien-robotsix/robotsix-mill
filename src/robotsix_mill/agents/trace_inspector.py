@@ -357,14 +357,18 @@ def run_trace_inspector(
     tools: list = []
     if repo_dir is not None:
         from .fs_tools import build_fs_tools
-        from .explore import make_explore_tool
+        from .explore import make_explore_tool, make_parallel_explore_tool
 
         ro = [
             t
             for t in build_fs_tools(repo_dir, settings)
             if t.__name__ in ("read_file", "list_dir", "run_command")
         ]
-        tools = [make_explore_tool(settings, repo_dir), *ro]
+        tools = [
+            make_parallel_explore_tool(settings, repo_dir),
+            make_explore_tool(settings, repo_dir),
+            *ro,
+        ]
     # Tool-less path stays cheap (3 reqs); tools-on path needs room
     # to read → reason → emit (20 reqs is generous but bounded).
     request_limit = 20 if repo_dir is not None else 3
