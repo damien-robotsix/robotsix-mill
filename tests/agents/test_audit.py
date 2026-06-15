@@ -74,6 +74,15 @@ def test_audit_prompt_covers_codebase_health_and_tooling():
             "shipped audit YAML — move it to mill's overlay file."
         )
 
+    # Post-explore re-verification guardrails (cost signals + budget cap).
+    assert "re-verification budget" in p, (
+        "audit prompt missing re-verification budget bullet"
+    )
+    assert "~$0.01" in p, "audit prompt missing cost signal (~$0.01)"
+    assert "capped at ≤ 3" in p, (
+        "audit prompt missing re-verification budget cap (capped at ≤ 3)"
+    )
+
 
 def test_mill_ships_an_audit_overlay():
     """Mill's own audit overlay is git-tracked as a ``prompt_overlay:`` in its
