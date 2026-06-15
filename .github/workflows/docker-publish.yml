@@ -130,6 +130,16 @@ jobs:
           IMAGE: ${{ steps.scan-ref.outputs.image }}
         run: docker run --rm --entrypoint gh "$IMAGE" --version
 
+      # `uv` MUST be reachable by the NON-root runtime user — sandbox.py
+      # launches containers with `--user $UID:$GID` + HOME=/tmp. The
+      # installer's default target (/root/.local/bin) is off-PATH and
+      # unreadable under that user, which silently breaks `uv lock` /
+      # `uv sync`. Run the check AS a non-root uid to catch that drift.
+      - name: Assert uv reachable as the non-root runtime user
+        env:
+          IMAGE: ${{ steps.scan-ref.outputs.image }}
+        run: docker run --rm --user 1000:1000 -e HOME=/tmp --entrypoint uv "$IMAGE" --version
+
       # Gate: only CRITICAL, fixable CVEs block the pipeline. Runs in
       # table format so the failing CVE row is visible in the CI log
       # (SARIF mode would silently swallow it — see below).
@@ -285,6 +295,16 @@ jobs:
         env:
           IMAGE: ${{ steps.scan-ref.outputs.image }}
         run: docker run --rm --entrypoint gh "$IMAGE" --version
+
+      # `uv` MUST be reachable by the NON-root runtime user — sandbox.py
+      # launches containers with `--user $UID:$GID` + HOME=/tmp. The
+      # installer's default target (/root/.local/bin) is off-PATH and
+      # unreadable under that user, which silently breaks `uv lock` /
+      # `uv sync`. Run the check AS a non-root uid to catch that drift.
+      - name: Assert uv reachable as the non-root runtime user
+        env:
+          IMAGE: ${{ steps.scan-ref.outputs.image }}
+        run: docker run --rm --user 1000:1000 -e HOME=/tmp --entrypoint uv "$IMAGE" --version
 
       - name: Trivy vulnerability scan (gate)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0

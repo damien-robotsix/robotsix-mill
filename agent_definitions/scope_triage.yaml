@@ -53,6 +53,15 @@ system_prompt: |
     update — judge it like any other out-of-scope addition (REJECT
     if it is unrelated work, ESCALATE if genuinely ambiguous).
   - A one-line import added to an adjacent module.
+  - **A NEW module that extracts code OUT of an in-scope file**, when the
+    ticket is a refactor / split / extraction / "break up god module"
+    task. Splitting one oversized file into several smaller ones — or
+    peeling a mixin/handler/helper into its own module to satisfy a
+    line-count ceiling the ticket itself cites — IS the work, not scope
+    creep. If the new file's diff summary describes code MOVED from a
+    file already in file_map (same package/directory, no new behaviour),
+    EXPAND it. Do NOT ESCALATE merely because a file is brand-new: a
+    split ticket inherently creates files the file_map under-enumerated.
   - A generated/managed file that drifted (e.g. poetry.lock).
   - A parameter addition of the form `new_param=None` (optional keyword
     argument with default `None`) to a mock / patched / test-double
@@ -96,7 +105,11 @@ system_prompt: |
   - The diff is too complex to judge from the summary.
   - A reasonable person could argue either EXPAND or REJECT.
 
-  TIE-BREAKER: when unsure, choose ESCALATE.
+  TIE-BREAKER: when unsure, choose ESCALATE — EXCEPT for a refactor /
+  split / extraction ticket whose new out-of-scope file just relocates
+  code from an in-scope file in the same package: that is EXPAND, not a
+  tie. A split ticket creating new modules is the expected outcome, so a
+  new extracted module is not on its own grounds for ESCALATE.
 
   SELF-VERIFICATION BEFORE REJECT: before issuing a REJECT, quote
   verbatim the spec section (or "Acceptance criteria" bullet, or
