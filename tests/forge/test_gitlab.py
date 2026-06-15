@@ -2039,3 +2039,47 @@ def test_list_open_pr_branches_exception_returns_empty(tmp_path, monkeypatch):
     _mock_httpx_list(monkeypatch, branch_url="/merge_requests", raise_on_list=True)
     forge = _forge(tmp_path)
     assert forge.list_open_pr_branches() == set()
+
+
+# ---------------------------------------------------------------------------
+# _capture_failure_window with GitLab-specific regex
+# ---------------------------------------------------------------------------
+
+
+def test_capture_failure_window_gitlab_anchors_on_error():
+    """GitLab-style failure markers (^ERROR:, Job failed) trigger anchoring."""
+    from robotsix_mill.forge._log_utils import _capture_failure_window
+    from robotsix_mill.forge.gitlab import _LOG_FAILURE_RE
+
+    real = "ERROR: failed to build proxy image: COPY filter not found\n"
+    filler = "noise line padding the log\n" * 5000
+    mask = "Job failed: exit code 1\n"
+    log = real + filler + mask
+    out = _capture_failure_window(log, max_bytes=4000, failure_re=_LOG_FAILURE_RE)
+    assert "failed to build proxy image" in out
+    assert "anchored on first failure marker" in out
+    assert len(out) <= 4000 + 100
+
+
+def test_capture_failure_window_gitlab_fatal_marker():
+    """GitLab regex matches 'fatal:' patterns."""
+    from robotsix_mill.forge._log_utils import _capture_failure_window
+    from robotsix_mill.forge.gitlab import _LOG_FAILURE_RE
+
+    # Put the fatal marker early enough that it falls outside the tail window
+    # when max_bytes is small relative to total log length.
+    log = "fatal: unable to access 'https://gitlab.com/...'\n" + ("noise\n" * 5000)
+    out = _capture_failure_window(log, max_bytes=2000, failure_re=_LOG_FAILURE_RE)
+    assert "fatal:" in out
+    assert "anchored on first failure marker" in out
+
+
+def test_capture_failure_window_gitlab_tailcaps_without_marker():
+    """No GitLab failure marker → degrade to tail-cap."""
+    from robotsix_mill.forge._log_utils import _capture_failure_window
+    from robotsix_mill.forge.gitlab import _LOG_FAILURE_RE
+
+    out = _capture_failure_window(
+        "x" * 100_000, max_bytes=65536, failure_re=_LOG_FAILURE_RE
+    )
+    assert out == "x" * 65536

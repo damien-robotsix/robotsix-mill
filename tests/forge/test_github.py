@@ -614,13 +614,14 @@ def test_capture_failure_window_anchors_on_first_error():
     """An if:always() cascade: the REAL build failure errors early, a masking
     step re-errors near the tail. A plain tail-cap would show only the mask;
     _capture_failure_window must surface the EARLY real failure."""
-    from robotsix_mill.forge.github import _capture_failure_window
+    from robotsix_mill.forge._log_utils import _capture_failure_window
+    from robotsix_mill.forge.github import _LOG_FAILURE_RE
 
     real = "ERROR: failed to build proxy image: COPY filter not found\n##[error]Process completed with exit code 1\n"
     filler = "noise line padding the log\n" * 5000  # skipped-step noise
     mask = "FATAL could not parse reference: .\n##[error]Process completed with exit code 1\n"
     log = real + filler + mask
-    out = _capture_failure_window(log, max_bytes=4000)
+    out = _capture_failure_window(log, max_bytes=4000, failure_re=_LOG_FAILURE_RE)
     assert "failed to build proxy image" in out  # the real, earliest failure
     assert "anchored on first failure marker" in out  # window was anchored
     assert len(out) <= 4000 + 100
@@ -628,9 +629,12 @@ def test_capture_failure_window_anchors_on_first_error():
 
 def test_capture_failure_window_tailcaps_without_marker():
     """No failure marker → degrade to historical tail-cap (last N bytes)."""
-    from robotsix_mill.forge.github import _capture_failure_window
+    from robotsix_mill.forge._log_utils import _capture_failure_window
+    from robotsix_mill.forge.github import _LOG_FAILURE_RE
 
-    out = _capture_failure_window("x" * 100_000, max_bytes=65536)
+    out = _capture_failure_window(
+        "x" * 100_000, max_bytes=65536, failure_re=_LOG_FAILURE_RE
+    )
     assert out == "x" * 65536  # plain tail, no anchor prefix
 
 
