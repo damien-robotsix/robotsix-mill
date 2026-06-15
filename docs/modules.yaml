@@ -65,6 +65,7 @@ modules:
       - tests/core/test_duration.py
       - tests/core/test_prune_clone.py
       - tests/core/test_proposed_action_executor.py
+      - tests/core/test_workspace.py
       - tests/core/test_workspace_screenshots.py
     dependencies: [config]
 
@@ -525,7 +526,7 @@ modules:
       - tests/meta/test_todo_scan.py
       - tests/meta/test_triage.py
       - tests/meta/test_runner.py
-      - tests/meta/test_workspace.py
+      - tests/meta/test_meta_workspace.py
     dependencies: [config, core, agent-infra, agent-tools, forge, vcs, runners, runtime]
 
   # -------------------------------------------------------------------
