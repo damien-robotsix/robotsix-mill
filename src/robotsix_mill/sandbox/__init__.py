@@ -249,6 +249,8 @@ def run(  # noqa: C901 — extra-packages loading adds one branch; tightly-coupl
         "/tmp:exec,rw,nosuid,nodev",  # nosec B108 — /tmp here is a Docker tmpfs INSIDE the sandbox, not the host's
         "-e",
         "HOME=/tmp",  # nosec B108
+        "-e",
+        "GIT_TERMINAL_PROMPT=0",
         *_repo_mount(repo_dir, settings),
         "-w",
         str(repo_dir),

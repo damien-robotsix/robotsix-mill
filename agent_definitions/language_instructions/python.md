@@ -23,6 +23,22 @@ The agent **cannot** run `pip install`, `cargo build`, `npm install`,
 or any other command that fetches from the network — only `uv`
 commands can reach the internet (and only to PyPI/GitHub).
 
+### `uv lock` fails with git credential errors
+
+The sandbox has no GitHub credentials, so `uv lock` **will fail**
+when `pyproject.toml` contains a git dependency (e.g. under
+`[tool.uv.sources]`). The `GIT_TERMINAL_PROMPT=0` env var in the
+sandbox container prevents hangs, but `uv lock` will still exit
+non-zero with a credential error.
+
+**Workaround:** temporarily remove the git dependency from
+`pyproject.toml` and its `[tool.uv.sources]` entry, run `uv lock`,
+then restore both. The lockfile will be generated without the git
+dependency, which is acceptable when the git dependency is not
+needed for the current change. If the dependency *is* needed, note
+in your summary that a human must run `uv lock` with credentials
+and commit the updated lockfile.
+
 When non-`uv` package-manager commands would fail due to lack of
 network:
 - Commit the manifest change.
