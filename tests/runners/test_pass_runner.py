@@ -3357,3 +3357,164 @@ def test_module_curator_guard_not_fired_without_repo_dir(tmp_path):
     assert len(service.list()) == 1
 
     db.reset_engine()
+
+
+# ==================================================================
+# persist_memory truncation tests (write-side max_chars)
+# ==================================================================
+
+
+def test_persist_memory_under_limit_no_truncation(tmp_path):
+    """Text ≤ max_chars is written unchanged."""
+    memory_file = tmp_path / "memory.md"
+    content = "## Entry 1\nObservation.\n## Entry 2\nMore observation.\n"
+    persist_memory(memory_file, content, max_chars=8000)
+    assert memory_file.read_text(encoding="utf-8") == content
+
+
+def test_persist_memory_over_limit_tail_truncates(tmp_path, caplog):
+    """Text > max_chars is tail-truncated: oldest content dropped,
+    truncation note prepended."""
+    import logging
+
+    memory_file = tmp_path / "memory.md"
+    # Build content with chronological entries, oldest first.
+    sections = []
+    for i in range(50):
+        sections.append(f"## Entry {i}\nObservation {i}.\n" + ("x" * 200) + "\n")
+    content = "\n".join(sections)
+    assert len(content) > 8000
+
+    caplog.set_level(logging.WARNING)
+    persist_memory(memory_file, content, max_chars=8000)
+
+    written = memory_file.read_text(encoding="utf-8")
+    # Must be ≤ max_chars + truncation note overhead (~60 chars)
+    assert len(written) <= 8000 + 100
+    # Must start with the truncation note
+    assert written.startswith("[... memory truncated:")
+    assert "chars omitted]" in written.split("\n")[0]
+    # Latest entries preserved
+    assert "Entry 49" in written
+    # Earliest entries dropped
+    assert "Entry 0" not in written
+    # Warning logged
+    assert "truncated on write" in caplog.text
+
+
+def test_persist_memory_max_chars_none_no_truncation(tmp_path):
+    """max_chars=None (default) writes full text unchanged (backward compat)."""
+    memory_file = tmp_path / "memory.md"
+    content = "x" * 12000
+    persist_memory(memory_file, content, max_chars=None)
+    assert memory_file.read_text(encoding="utf-8") == content
+
+
+def test_persist_memory_max_chars_none_default_parameter(tmp_path):
+    """max_chars omitted (default) writes full text unchanged."""
+    memory_file = tmp_path / "memory.md"
+    content = "x" * 12000
+    persist_memory(memory_file, content)  # max_chars NOT passed
+    assert memory_file.read_text(encoding="utf-8") == content
+
+
+def test_persist_memory_truncation_after_strip_ephemeral(tmp_path):
+    """Truncation happens AFTER ephemeral sections are stripped.
+    Ephemeral content doesn't waste the cap budget."""
+    memory_file = tmp_path / "memory.md"
+    # Build content where the ephemeral sections take up ~500 chars
+    # and the real entries + padding take up the rest.
+    # After stripping, the real content should fit under the cap.
+    real_lines = ["## Real entry\nObservation that matters.\n"]
+    for _i in range(60):
+        real_lines.append("z" * 80)
+    real_content = "\n".join(real_lines)  # ~4900 chars
+    ephemeral = "\n\n## Prior proposals — verified state\n\n" + "\n".join(
+        f"| gap_{i} | T-{1000+i} | CLOSED | merged |"
+        for i in range(20)
+    )  # ~1000 chars
+    content = real_content + ephemeral
+    assert len(content) > 5000
+
+    persist_memory(memory_file, content, max_chars=6000)
+
+    written = memory_file.read_text(encoding="utf-8")
+    # Ephemeral sections must NOT be in the written file
+    assert "Prior proposals" not in written
+    assert "gap_0" not in written
+    # The real content must be fully preserved (under the cap after strip)
+    assert "## Real entry" in written
+    assert "Observation that matters" in written
+    # No truncation note should appear (real content fits under cap)
+    assert "[... memory truncated:" not in written
+
+
+def test_persist_memory_still_truncates_after_strip_when_still_over(tmp_path):
+    """When content is still over max_chars after stripping ephemeral
+    sections, truncation still applies."""
+    memory_file = tmp_path / "memory.md"
+    # Build real content structured as chronological entries (oldest
+    # first).  max_chars=500, post-strip content ~6000 chars.
+    # The tail should contain the "recent" marker lines.
+    oldest = "## Old entry\n" + ("a" * 5500) + "\n"
+    recent = "## Recent entry\nObservation that must survive.\n"
+    real_content = oldest + recent
+    # Add ephemeral that will be stripped.
+    ephemeral = (
+        "\n\n## Prior proposals — verified state\n\n"
+        "| gap_id | ticket_id | state | resolution |\n"
+        "|--------|-----------|-------|------------|\n"
+        "| gap_1 | T-1 | CLOSED | merged |\n"
+    )
+    content = real_content + ephemeral
+
+    persist_memory(memory_file, content, max_chars=500)
+
+    written = memory_file.read_text(encoding="utf-8")
+    # Ephemeral stripped
+    assert "Prior proposals" not in written
+    # Truncation applied on the remaining real content
+    assert written.startswith("[... memory truncated:")
+    assert "chars omitted]" in written.split("\n")[0]
+    # The tail (most recent) content is preserved.  "## Recent entry"
+    # is at the very end of the real content so tail_keep preserves it.
+    assert "## Recent entry" in written
+    assert "Observation that must survive" in written
+
+
+def test_persist_memory_exact_max_chars_no_truncation(tmp_path):
+    """Content length exactly equals max_chars — no truncation."""
+    memory_file = tmp_path / "memory.md"
+    content = "a" * 200
+    persist_memory(memory_file, content, max_chars=200)
+    assert memory_file.read_text(encoding="utf-8") == content
+
+
+def test_persist_memory_one_char_over_truncates(tmp_path):
+    """Content is 1 char over max_chars — truncation triggers."""
+    memory_file = tmp_path / "memory.md"
+    content = "a" * 201
+    persist_memory(memory_file, content, max_chars=200)
+    written = memory_file.read_text(encoding="utf-8")
+    assert written.startswith("[... memory truncated:")
+    assert "chars omitted]" in written.split("\n")[0]
+
+
+def test_persist_memory_empty_text_noop_regardless_of_max_chars(tmp_path):
+    """Empty text is always a no-op, even with max_chars set."""
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("original", encoding="utf-8")
+    persist_memory(memory_file, "", max_chars=8000)
+    assert memory_file.read_text(encoding="utf-8") == "original"
+
+
+def test_persist_memory_creates_parent_dirs_with_truncation(tmp_path):
+    """Parent directory creation still works when truncation is active."""
+    memory_file = tmp_path / "sub" / "deep" / "memory.md"
+    assert not memory_file.exists()
+    content = "x" * 5000
+    persist_memory(memory_file, content, max_chars=2000)
+    assert memory_file.exists()
+    written = memory_file.read_text(encoding="utf-8")
+    assert written.startswith("[... memory truncated:")
+    assert len(written) <= 2000 + 100

@@ -328,15 +328,32 @@ def load_memory(memory_file: Path, max_chars: int | None = None) -> str:
     return ""
 
 
-def persist_memory(memory_file: Path, text: str) -> None:
+def persist_memory(
+    memory_file: Path, text: str, max_chars: int | None = None
+) -> None:
     """Write *text* to *memory_file*, creating parent dirs as needed.
 
     Strips the ephemeral ``## Prior proposals — verified state`` and
     ``## Proposed actions — pending`` tables an agent may have copied
     back into its memory output — those blocks are injected fresh each
     run from the DB and must never accrete in the cross-run ledger.
+
+    When *max_chars* is set and ``len(text) > max_chars``, the text is
+    tail-truncated via :func:`tail_keep` before writing — the same
+    primitive and label already used by :func:`load_memory`.  Ephemeral
+    sections are stripped BEFORE the cap check so the budget isn't
+    wasted on content that would be stripped anyway.
     """
     text = strip_ephemeral_sections(text)
+    if max_chars is not None and len(text) > max_chars:
+        original_size = len(text)
+        text = tail_keep(text, max_chars, label="memory")
+        log.warning(
+            "memory file %s truncated on write: %d → %d chars",
+            memory_file,
+            original_size,
+            len(text),
+        )
     if text or not memory_file.exists():
         try:
             memory_file.parent.mkdir(parents=True, exist_ok=True)
@@ -661,7 +678,9 @@ def run_agent_pass(
 
     # 5. Persist the agent's updated memory verbatim.
     if res.updated_memory:
-        persist_memory(memory_file, res.updated_memory)
+        persist_memory(
+            memory_file, res.updated_memory, max_chars=settings.max_memory_chars
+        )
 
     # 5b. Persist proposed actions (proposed-action subsystem).
     proposed_actions = getattr(res, "proposed_actions", [])
