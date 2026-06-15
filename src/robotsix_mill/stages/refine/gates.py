@@ -316,7 +316,7 @@ class RefineGatesMixin:
             # reject the dedup target so refine proceeds and produces a spec
             # that goes through implement for live re-check against HEAD.
             if not cand.branch:
-                for ev in history:
+                for ev in history:  # type: ignore[attr-defined]
                     if ev.state == State.DONE:
                         note = (ev.note or "").lower()
                         if _rationale_claims_external_fix(note):
