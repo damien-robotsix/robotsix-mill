@@ -243,8 +243,11 @@ class _CoreSettings(BaseModel):
     # pydantic-ai default of 50 that blocked the data-dir audit tickets
     # with an opaque "Fatal: UsageLimitExceeded: … request_limit of 50".
     maintenance_request_limit: int = Field(default=60, ge=1)
-    # Per-call cap for the dedup check — one cheap call, so keep it tight.
-    dedup_request_limit: int = Field(default=4, ge=1)
+    # Per-call cap for the dedup check — the agent reads candidate
+    # ticket bodies to verify matches, so allow a slightly larger
+    # budget than a naive single-call (bumped from 4 after the agent
+    # exhausted its budget on narrow read_file slices).
+    dedup_request_limit: int = Field(default=6, ge=1)
     # Per-call cap for the obsolescence gate — the agent reads a few
     # cited files to verify the gap, so allow a slightly larger budget
     # than the dedup check.
