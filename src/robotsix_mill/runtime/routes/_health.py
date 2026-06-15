@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
+
+if TYPE_CHECKING:
+    from ..worker import Worker
 from fastapi.responses import HTMLResponse
 
 from ..board_adapter import MillBoardAdapter
 from ..board_html import build_board_skeleton, render_board_html
 from ...core.states import State
-from ..deps import enrich_ticket_read, get_repos_registry, get_settings
+from ..deps import enrich_ticket_read, get_repos_registry, get_settings, get_worker
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +46,36 @@ def langfuse_status() -> dict:
 
     failures = get_export_failures()
     return {"failures": failures, "count": len(failures)}
+
+
+@router.get("/worker-status")
+def worker_status(worker: "Worker" = Depends(get_worker)) -> dict[str, object]:
+    """Live worker introspection for diagnosing stuck tickets.
+
+    Reports per-board queue depth, the in-flight ``_pending`` set, and
+    consumer-task health (incl. the exception of any task that died — a
+    dead per-board consumer is why a ``ready`` ticket on that board would
+    never be popped). Read-only.
+    """
+    tasks = list(getattr(worker, "_tasks", []))
+    dead: list[dict[str, str]] = []
+    for t in tasks:
+        if t.done() and not t.cancelled():
+            exc = t.exception()
+            if exc is not None:
+                dead.append(
+                    {"repr": repr(t), "exception": f"{type(exc).__name__}: {exc}"}
+                )
+    poll = getattr(worker, "_poll_task", None)
+    return {
+        "queues": {bid: q.qsize() for bid, q in worker.queues.items()},
+        "pending": sorted(worker._pending),
+        "tasks_total": len(tasks),
+        "tasks_alive": sum(1 for t in tasks if not t.done()),
+        "tasks_done": sum(1 for t in tasks if t.done()),
+        "dead_tasks": dead,
+        "poll_task_alive": (poll is not None and not poll.done()),
+    }
 
 
 @router.post("/langfuse-status/clear", status_code=204)
