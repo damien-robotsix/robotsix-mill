@@ -308,7 +308,7 @@ def _wrap_tools_with_error_limit(
             async def wrapper(*args: Any, **kwargs: Any) -> Any:
                 try:
                     return await fn(*args, **kwargs)
-                except (UsageLimitExceeded, ModelRetry):
+                except UsageLimitExceeded, ModelRetry:
                     raise
                 except Exception:
                     state["errors"] += 1
@@ -326,7 +326,7 @@ def _wrap_tools_with_error_limit(
             def wrapper(*args: Any, **kwargs: Any) -> Any:
                 try:
                     return fn(*args, **kwargs)
-                except (UsageLimitExceeded, ModelRetry):
+                except UsageLimitExceeded, ModelRetry:
                     raise
                 except Exception:
                     state["errors"] += 1
@@ -430,7 +430,9 @@ def run_trace_inspector(
     # errors per trace.  pydantic-ai's built-in ``tool_calls_limit``
     # counts successful calls; a custom error-counter wrapper handles
     # the error budget.
-    tool_calls_limit = settings.trace_review_max_tool_calls if repo_dir is not None else None
+    tool_calls_limit = (
+        settings.trace_review_max_tool_calls if repo_dir is not None else None
+    )
     error_limit = settings.trace_review_max_errors if repo_dir is not None else 0
     tools = _wrap_tools_with_error_limit(tools, max_errors=error_limit)
 
