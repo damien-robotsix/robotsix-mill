@@ -530,30 +530,37 @@ def test_build_agent_unregistered_tool_in_prompt_raises(monkeypatch, settings):
 
     _cfg._secrets = Secrets(openrouter_api_key="sk-test")
 
-    # Register a known tool name so the guard detects it.
-    ToolRegistry.register(
-        ToolInfo(
-            name="fake_tool",
-            description="A fake tool.",
-            category="fs",
-            parameters={},
+    # Snapshot and restore _tools so the fake_tool registration
+    # doesn't leak into other tests.
+    saved_tools = dict(ToolRegistry._tools)
+    try:
+        # Register a known tool name so the guard detects it.
+        ToolRegistry.register(
+            ToolInfo(
+                name="fake_tool",
+                description="A fake tool.",
+                category="fs",
+                parameters={},
+            )
         )
-    )
 
-    # Compose a prompt that calls `fake_tool(` but don't include
-    # fake_tool in the tools list.
-    prompt_with_call = "Do something with `fake_tool(…)`."
+        # Compose a prompt that calls `fake_tool(` but don't include
+        # fake_tool in the tools list.
+        prompt_with_call = "Do something with `fake_tool(…)`."
 
-    monkeypatch.setattr(bmod, "compose_prompt", lambda *a, **kw: prompt_with_call)
+        monkeypatch.setattr(bmod, "compose_prompt", lambda *a, **kw: prompt_with_call)
 
-    with pytest.raises(ValueError, match="fake_tool"):
-        bmod.build_agent(
-            settings,
-            system_prompt=prompt_with_call,
-            tools=[],  # empty — fake_tool is not here
-            report_issue=False,
-            web_knowledge=False,
-        )
+        with pytest.raises(ValueError, match="fake_tool"):
+            bmod.build_agent(
+                settings,
+                system_prompt=prompt_with_call,
+                tools=[],  # empty — fake_tool is not here
+                report_issue=False,
+                web_knowledge=False,
+            )
+    finally:
+        ToolRegistry._tools.clear()
+        ToolRegistry._tools.update(saved_tools)
 
 
 def test_build_agent_missing_api_key_raises(monkeypatch, settings):
