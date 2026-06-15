@@ -193,17 +193,9 @@ def run_config_sync_agent(
 
     from .base import build_agent, _safe_close
 
-    tools: list = []
-    if repo_dir is not None:
-        from .explore import make_explore_tool
-        from .fs_tools import build_fs_tools
+    from ._repo_tools import _build_repo_tools
 
-        ro = [
-            t
-            for t in build_fs_tools(repo_dir, settings)
-            if t.__name__ in ("read_file", "list_dir")
-        ]
-        tools = [make_explore_tool(settings, repo_dir), *ro]
+    tools = _build_repo_tools(repo_dir, settings, tool_names=("read_file", "list_dir"))
 
     agent = build_agent(
         settings,
