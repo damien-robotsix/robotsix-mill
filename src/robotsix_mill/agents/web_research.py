@@ -28,6 +28,14 @@ answer. If you cannot find a reliable answer, say so briefly.
 When fetching source files from GitHub, GitLab, or Bitbucket, use the
 raw content URL (e.g. https://raw.githubusercontent.com/... for GitHub,
 or append ?raw=true) to get plain text without navigation HTML.
+
+When checking whether a file exists in a GitHub repo, prefer the GitHub
+Contents API (GET /repos/<org>/<repo>/contents/<path>) — it works
+across all branches and returns 404 reliably for missing files without
+needing to enumerate branch names. If you do use raw URLs: check the
+default branch (main/master) first. A 404 there means the file does not
+exist — do NOT probe every branch. One 404 on the default branch is
+sufficient.
 """
 
 
