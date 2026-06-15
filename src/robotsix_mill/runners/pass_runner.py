@@ -328,9 +328,7 @@ def load_memory(memory_file: Path, max_chars: int | None = None) -> str:
     return ""
 
 
-def persist_memory(
-    memory_file: Path, text: str, max_chars: int | None = None
-) -> None:
+def persist_memory(memory_file: Path, text: str, max_chars: int | None = None) -> None:
     """Write *text* to *memory_file*, creating parent dirs as needed.
 
     Strips the ephemeral ``## Prior proposals — verified state`` and

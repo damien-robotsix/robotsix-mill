@@ -3430,8 +3430,7 @@ def test_persist_memory_truncation_after_strip_ephemeral(tmp_path):
         real_lines.append("z" * 80)
     real_content = "\n".join(real_lines)  # ~4900 chars
     ephemeral = "\n\n## Prior proposals — verified state\n\n" + "\n".join(
-        f"| gap_{i} | T-{1000+i} | CLOSED | merged |"
-        for i in range(20)
+        f"| gap_{i} | T-{1000 + i} | CLOSED | merged |" for i in range(20)
     )  # ~1000 chars
     content = real_content + ephemeral
     assert len(content) > 5000
