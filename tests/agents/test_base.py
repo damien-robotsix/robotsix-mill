@@ -801,6 +801,156 @@ def test_build_deepseek_handle_requires_api_key(monkeypatch, settings):
 
 
 # ---------------------------------------------------------------------------
+# _render_module_map
+# ---------------------------------------------------------------------------
+
+
+def test_render_module_map_few_modules_lists_all():
+    """With ≤20 modules, every module gets a ### heading, description,
+    paths, and dependency hints."""
+    from robotsix_mill.agents.base import _render_module_map
+
+    modules = [
+        {
+            "id": "config",
+            "description": "Configuration layer.",
+            "paths": ["src/robotsix_mill/config/*.py"],
+            "dependencies": [],
+        },
+        {
+            "id": "agents",
+            "description": "Agent infrastructure.",
+            "paths": ["src/robotsix_mill/agents/*.py", "tests/agents/test_base.py"],
+            "dependencies": ["config"],
+        },
+    ]
+
+    result = _render_module_map(modules)
+
+    # Both modules should appear as ### sub-headings.
+    assert "### config" in result
+    assert "### agents" in result
+    # Descriptions should appear.
+    assert "Configuration layer." in result
+    assert "Agent infrastructure." in result
+    # Paths should appear as `-` bullet items.
+    assert "- `src/robotsix_mill/config/*.py`" in result
+    assert "- `src/robotsix_mill/agents/*.py`" in result
+    assert "- `tests/agents/test_base.py`" in result
+    # Dependency hint for the module that has dependencies.
+    assert "Depends on: config" in result
+    # The module with empty dependencies should NOT have a "Depends on:" line.
+    assert "Depends on:" not in result.split("### config")[1].split("###")[0]
+
+
+def test_render_module_map_many_modules_only_top_level():
+    """With >20 modules, only top-level (no-dependency) modules are
+    rendered, with a pointer to docs/modules.yaml."""
+    from robotsix_mill.agents.base import _render_module_map
+
+    # Build 25 modules: 3 top-level (no dependencies), 22 with dependencies.
+    modules: list[dict] = []
+    for i in range(3):
+        modules.append(
+            {
+                "id": f"top-level-{i}",
+                "description": f"Top-level module {i}.",
+                "paths": [f"src/top_{i}.py"],
+                "dependencies": [],
+            }
+        )
+    for i in range(22):
+        modules.append(
+            {
+                "id": f"sub-module-{i}",
+                "description": f"Sub module {i}.",
+                "paths": [f"src/sub_{i}.py"],
+                "dependencies": ["config"],
+            }
+        )
+
+    result = _render_module_map(modules)
+
+    # Top-level modules appear.
+    for i in range(3):
+        assert f"### top-level-{i}" in result
+        assert f"Top-level module {i}." in result
+    # Sub-modules must NOT appear (they have dependencies).
+    for i in range(22):
+        assert f"### sub-module-{i}" not in result
+    # Pointer to docs/modules.yaml must appear.
+    assert "See `docs/modules.yaml` for additional sub-divisions" in result
+
+
+def test_render_module_map_top_level_without_dependencies_key():
+    """Modules missing the ``dependencies`` key are treated as top-level
+    (equivalent to an empty list) and appear in the >20 output."""
+    from robotsix_mill.agents.base import _render_module_map
+
+    # 21 modules total: 1 without a dependencies key, 20 with dependencies.
+    modules: list[dict] = [
+        {
+            "id": "orphan",
+            "description": "No deps key at all.",
+            "paths": ["src/orphan.py"],
+        }
+    ]
+    for i in range(20):
+        modules.append(
+            {
+                "id": f"dep-{i}",
+                "description": f"Dep module {i}.",
+                "paths": [f"src/dep_{i}.py"],
+                "dependencies": ["config"],
+            }
+        )
+
+    result = _render_module_map(modules)
+
+    assert "### orphan" in result
+    assert "No deps key at all." in result
+    for i in range(20):
+        assert f"### dep-{i}" not in result
+
+
+def test_render_module_map_truncation(monkeypatch):
+    """When the rendered output exceeds MODULE_MAP_MAX_CHARS, it is
+    truncated on a line boundary and a pointer is appended."""
+    import robotsix_mill.agents.base as bmod
+
+    # Force a very small budget to trigger truncation.
+    monkeypatch.setattr(bmod, "MODULE_MAP_MAX_CHARS", 200)
+
+    # Use ≤20 modules so every module is rendered (the else branch),
+    # but with enough content to exceed the 200-char budget.
+    modules: list[dict] = []
+    for i in range(10):
+        modules.append(
+            {
+                "id": f"mod-{i}",
+                "description": "A" * 80,  # long description to blow the budget
+                "paths": [f"src/mod_{i}.py"],
+                "dependencies": [],
+            }
+        )
+
+    result = bmod._render_module_map(modules)
+
+    pointer = "…(module map truncated — see docs/modules.yaml for the full taxonomy)"
+    assert pointer in result
+    assert result.endswith(pointer)
+    # The rendered text must not exceed MODULE_MAP_MAX_CHARS.
+    assert len(result) <= 200
+    # The prefix before the pointer should not end mid-line — the last
+    # character before the pointer should be a newline (since rsplit on
+    # \n drops the trailing partial line).  Exception: if the budget was
+    # so small that only the header survived, the prefix is just the
+    # header line with no trailing newline.
+    prefix = result[: -len(pointer)]
+    assert prefix.endswith("\n") or prefix == "## Module Map"
+
+
+# ---------------------------------------------------------------------------
 # build_openrouter_model
 # ---------------------------------------------------------------------------
 
