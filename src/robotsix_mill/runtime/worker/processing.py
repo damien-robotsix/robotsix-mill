@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 
 from ...stages import StageContext, get_stage
 from ...core.states import STAGE_FOR_STATE, State
+from ...core.service._helpers import TransitionError
+from ...core.service._lifecycle import _TERMINAL_STATES
 from ...notify import send_notification, _TRIGGER_STATES
 from .. import tracing
 from ..tracing import langfuse_trace_url
@@ -399,7 +401,27 @@ async def _process_ticket_inner(
                 outcome.next_state,
             )
         else:
-            ctx.service.transition(ticket_id, outcome.next_state, outcome.note)
+            try:
+                ctx.service.transition(ticket_id, outcome.next_state, outcome.note)
+            except TransitionError as e:
+                # The pipeline auto-completing a ticket (e.g. merge → DONE
+                # once the PR merged) must not be blocked by a stale
+                # [ASK_USER] thread — the work shipped, so the question is
+                # moot. Closing it (record preserved) and retrying beats
+                # crash-looping the consumer on every poll.
+                if outcome.next_state in _TERMINAL_STATES and "[ASK_USER]" in str(e):
+                    n = ctx.service.close_open_ask_user_threads(ticket_id)
+                    log.warning(
+                        "%s: %s auto-completing to %s — closed %d stale "
+                        "[ASK_USER] thread(s) that would have blocked it",
+                        stage_name,
+                        ticket_id,
+                        outcome.next_state,
+                        n,
+                    )
+                    ctx.service.transition(ticket_id, outcome.next_state, outcome.note)
+                else:
+                    raise
             log.info("%s: %s -> %s", stage_name, ticket_id, outcome.next_state)
         # Best-effort push notification for human-attention states.
         if outcome.next_state in _TRIGGER_STATES:
