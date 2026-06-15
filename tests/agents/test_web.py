@@ -209,7 +209,7 @@ def test_web_fetch_strips_html_to_prose(tmp_path, monkeypatch):
     The exact prose content + ordering is what the LLM reads; the
     markup is dead weight.
     """
-    from robotsix_mill.agents.web_tools import make_web_fetch, reset_web_fetch_budget, reset_trace_web_fetch_budget, _cache
+    from robotsix_mill.agents.web_tools import make_web_fetch, _cache
 
     _cache.clear()
 

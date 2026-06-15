@@ -495,7 +495,6 @@ class TestSurveyRunnerTraceBudgetWiring:
         """run_survey_pass resets both web_fetch and web_search trace
         budgets with the configured settings values before delegating
         to run_periodic_pass."""
-        from robotsix_mill.config import Settings, RepoConfig
         from robotsix_mill.runners.periodic_runner import SurveyPassResult
 
         settings = _make_settings(
@@ -551,7 +550,6 @@ class TestSurveyRunnerTraceBudgetWiring:
     ):
         """When settings have different budget values, those are passed
         to the reset functions."""
-        from robotsix_mill.config import RepoConfig
         from robotsix_mill.runners.periodic_runner import SurveyPassResult
 
         settings = _make_settings(
