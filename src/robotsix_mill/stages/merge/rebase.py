@@ -48,9 +48,7 @@ class RebaseMixin(_MergeStageBase):
         except Exception:  # noqa: BLE001 — best-effort; fall through to rebase
             pr = None
         if pr is not None and pr.get("state") == "open" and pr.get("mergeable") is True:
-            counter_path = (
-                ctx.service.workspace(ticket).artifacts_dir / _REBASE_COUNTER
-            )
+            counter_path = ctx.service.workspace(ticket).artifacts_dir / _REBASE_COUNTER
             _write_counter(counter_path, 0)
             log.info(
                 "%s: PR already mergeable — skipping rebase, re-checking gates",
