@@ -34,6 +34,30 @@ class RebaseMixin(_MergeStageBase):
         """Execute the rebase agent for a ticket already in REBASING."""
         s = ctx.settings
         branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
+
+        # Already mergeable? Then the conflict that put this ticket in
+        # REBASING is gone — skip the rebase entirely. Rebasing here would
+        # needlessly reconcile with the remote PR branch and can BLOCK on a
+        # "diverged workspace clone" even though nothing needs rebasing,
+        # leaving a CLEAN+MERGEABLE PR stuck oscillating rebasing↔blocked.
+        # Re-poll the gates (IMPLEMENT_COMPLETE) so a green PR advances.
+        try:
+            pr = get_forge(s, repo_config=ctx.repo_config).pr_status(
+                source_branch=branch
+            )
+        except Exception:  # noqa: BLE001 — best-effort; fall through to rebase
+            pr = None
+        if pr is not None and pr.get("state") == "open" and pr.get("mergeable") is True:
+            counter_path = (
+                ctx.service.workspace(ticket).artifacts_dir / _REBASE_COUNTER
+            )
+            _write_counter(counter_path, 0)
+            log.info(
+                "%s: PR already mergeable — skipping rebase, re-checking gates",
+                ticket.id,
+            )
+            return Outcome(State.IMPLEMENT_COMPLETE)
+
         return self._handle_conflict(ticket, ctx, branch)
 
     def _handle_conflict(

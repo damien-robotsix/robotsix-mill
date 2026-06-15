@@ -515,6 +515,35 @@ def test_mergeable_pr_never_enters_rebasing(tmp_path, monkeypatch):
         assert "REBASING" not in str(out.next_state.value)
 
 
+def test_rebasing_skips_rebase_when_pr_already_mergeable(tmp_path, monkeypatch):
+    """A ticket stuck in REBASING whose PR is already mergeable skips the
+    rebase entirely (no reconcile → no diverged-clone BLOCK) and re-polls
+    the gates via IMPLEMENT_COMPLETE."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+        },
+    )
+
+    def _boom(*a, **k):  # pragma: no cover - must not be called
+        raise AssertionError("rebase reconcile must be skipped for a mergeable PR")
+
+    monkeypatch.setattr(
+        merge_mod.git_ops, "reconcile_with_remote_pr", _boom, raising=False
+    )
+
+    out = MergeStage().run(_in_rebasing(ctx), ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+
 # --- HUMAN_MR_APPROVAL silent fallback: conflicting → IMPLEMENT_COMPLETE ---
 
 
@@ -698,7 +727,7 @@ def test_rebasing_clean_rebase_returns_to_implement_complete(tmp_path, monkeypat
             "merged": False,
             "state": "open",
             "url": "u",
-            "mergeable": True,
+            "mergeable": False,
         },
     )
 
@@ -760,7 +789,7 @@ def test_rebasing_push_targets_per_repo_remote(tmp_path, monkeypatch):
             "merged": False,
             "state": "open",
             "url": "u",
-            "mergeable": True,
+            "mergeable": False,
         },
     )
 
@@ -1041,7 +1070,7 @@ def test_implement_complete_to_rebasing_and_back(tmp_path, monkeypatch):
             "merged": False,
             "state": "open",
             "url": "u",
-            "mergeable": True,
+            "mergeable": False,
         },
     )
 
@@ -1219,8 +1248,10 @@ def test_rebase_counter_resets_only_when_pr_becomes_mergeable(tmp_path, monkeypa
         "robotsix_mill.stages.merge.git_ops.fetch",
         lambda *a, **k: None,
     )
-    # pr_status mock needed because step 2 rebase succeeds+pushes and
-    # the post-rebase routing checks whether a PR exists.
+    # The PR is conflicting (mergeable=False) WHILE rebasing, then becomes
+    # mergeable once the conflict is truly resolved. A mutable holder lets
+    # the final IMPLEMENT_COMPLETE poll see mergeable=True.
+    mergeable = [False]
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
@@ -1228,7 +1259,7 @@ def test_rebase_counter_resets_only_when_pr_becomes_mergeable(tmp_path, monkeypa
             "merged": False,
             "state": "open",
             "url": "u",
-            "mergeable": True,
+            "mergeable": mergeable[0],
         },
     )
 
@@ -1261,6 +1292,7 @@ def test_rebase_counter_resets_only_when_pr_becomes_mergeable(tmp_path, monkeypa
     # Now the IMPLEMENT_COMPLETE poll sees a genuinely mergeable + CI green PR
     # → the conflict is really gone → counter resets to 0 AND ticket
     # promotes to HUMAN_MR_APPROVAL (gates passed).
+    mergeable[0] = True
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
