@@ -348,6 +348,7 @@ modules:
       - src/robotsix_mill/agents/overlays.py
       - src/robotsix_mill/agents/periodic_base.py
       - tests/agents/test_agent_definitions_validation.py
+      - tests/agents/test_base.py
       - tests/agents/test_build_agent_from_definition.py
       - tests/agents/test_yaml_loader.py
       - tests/agents/test_expert_loader.py
