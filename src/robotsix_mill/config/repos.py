@@ -11,7 +11,6 @@ here (which read the package attribute at call time).
 
 from __future__ import annotations
 
-from typing import Any
 
 from pydantic import BaseModel, field_validator, model_validator
 
@@ -61,14 +60,10 @@ class RepoConfig(BaseModel):
     langfuse_public_key: str
     langfuse_secret_key: str
     langfuse_base_url: str = "https://cloud.langfuse.com"
-    # Optional reference to another repo_id whose Langfuse project this
-    # repo inherits. When set, this repo MUST NOT supply its own langfuse
-    # keys; load_repos_config resolves the reference by copying the
-    # referenced (master) repo's langfuse_project_name/public_key/
-    # secret_key/base_url into this entry, so the whole workspace shares
-    # one Langfuse project. Populated by the workspace member-sync
-    # mechanism. None -> this repo uses its own langfuse block.
-    langfuse_from: str | None = None
+    # NOTE: the langfuse_* fields above are populated centrally from the
+    # single top-level ``langfuse`` block in repos.yaml (see
+    # _apply_global_langfuse). They are identical across every repo — there
+    # is no per-repo Langfuse configuration.
     # Per-repo OpenRouter inference key. When set, cost-reconciliation runs in
     # PER-KEY mode for this repo (snapshot this key's cumulative usage each pass
     # + diff against the prior snapshot) so its provider spend reconciles
@@ -173,43 +168,6 @@ class ReposRegistry(BaseModel):
         return self
 
 
-def _validate_no_partial_langfuse(
-    repos: dict[str, RepoConfig], raw_langfuse: dict[str, dict[str, Any]]
-) -> None:
-    """Reject a partially-specified Langfuse block.
-
-    The public/secret key pair is the canonical "observability is
-    configured" signal (mirrors the meta-config logic in
-    :func:`load_repos_config`, which builds a project only when BOTH keys
-    are present). Both present → configured; both absent/empty → no
-    observability (unchanged behavior). Exactly one present is a
-    half-configured block that would fail opaquely at runtime — raise
-    :class:`~robotsix_mill.config.loader.ConfigError`. Repos that inherit
-    via ``langfuse_from`` carry no own keys and are validated separately,
-    so they are skipped here.
-    """
-    from .loader import ConfigError
-
-    for repo_id, cfg in repos.items():
-        if cfg.langfuse_from is not None:
-            continue
-        own_langfuse = raw_langfuse.get(repo_id, {})
-        has_public = bool(own_langfuse.get("public_key"))
-        has_secret = bool(own_langfuse.get("secret_key"))
-        if has_public and not has_secret:
-            raise ConfigError(
-                f"Repo '{repo_id}' supplies langfuse.public_key but is missing "
-                f"langfuse.secret_key; both are required to enable observability "
-                f"(or omit the langfuse block entirely)."
-            )
-        if has_secret and not has_public:
-            raise ConfigError(
-                f"Repo '{repo_id}' supplies langfuse.secret_key but is missing "
-                f"langfuse.public_key; both are required to enable observability "
-                f"(or omit the langfuse block entirely)."
-            )
-
-
 def _validate_cross_repo_forge_compat(
     repos: dict[str, RepoConfig], forge_kind: str
 ) -> None:
@@ -245,14 +203,11 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
     constructs a :class:`RepoConfig` for each entry, validates, and
     returns a :class:`ReposRegistry`.
     """
-    from .loader import load_meta_yaml, load_repos_yaml
+    from .loader import load_repos_yaml
 
     raw = load_repos_yaml(config_file)
     repos: dict[str, RepoConfig] = {}
-    raw_langfuse: dict[str, dict] = {}
     for repo_id, repo_data in raw.items():
-        langfuse = repo_data.get("langfuse", {}) if isinstance(repo_data, dict) else {}
-        raw_langfuse[repo_id] = langfuse if isinstance(langfuse, dict) else {}
         ci_monitor = (
             repo_data.get("ci_monitor", {}) if isinstance(repo_data, dict) else {}
         )
@@ -264,15 +219,17 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             if isinstance(cross_repo_raw, dict)
             else None
         )
+        # Langfuse is configured GLOBALLY (top-level ``langfuse`` block —
+        # see _apply_global_langfuse), never per repo. Each repo starts
+        # with empty langfuse fields and is populated from the global block.
         repos[repo_id] = RepoConfig(
             repo_id=repo_id,
             board_id=repo_data.get("board_id", "")
             if isinstance(repo_data, dict)
             else "",
-            langfuse_project_name=langfuse.get("project_name", ""),
-            langfuse_public_key=langfuse.get("public_key", ""),
-            langfuse_secret_key=langfuse.get("secret_key", ""),
-            langfuse_base_url=langfuse.get("base_url", "https://cloud.langfuse.com"),
+            langfuse_project_name="",
+            langfuse_public_key="",
+            langfuse_secret_key="",
             openrouter_api_key=repo_data.get("openrouter_api_key")
             if isinstance(repo_data, dict)
             else None,
@@ -283,9 +240,6 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             if isinstance(repo_data, dict)
             else None,
             working_branch=repo_data.get("working_branch")
-            if isinstance(repo_data, dict)
-            else None,
-            langfuse_from=repo_data.get("langfuse_from")
             if isinstance(repo_data, dict)
             else None,
             sandbox_image=repo_data.get("sandbox_image")
@@ -303,135 +257,56 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             else 1,
         )
 
-    # Resolve ``langfuse_from`` references: a member repo inherits the
-    # referenced master's Langfuse project, so the whole workspace shares one
-    # project. Enforce the operator rule that a referencing repo must NOT
-    # carry its own keys, and reject unknown / chained / self references.
-    from .loader import ConfigError
-
-    for repo_id, cfg in list(repos.items()):
-        if cfg.langfuse_from is None:
-            continue
-        own_langfuse = raw_langfuse.get(repo_id, {})
-        if (
-            own_langfuse.get("project_name")
-            or own_langfuse.get("public_key")
-            or own_langfuse.get("secret_key")
-        ):
-            raise ConfigError(
-                f"Repo '{repo_id}' sets langfuse_from='{cfg.langfuse_from}' but "
-                f"also supplies its own langfuse keys; a repo inheriting a "
-                f"Langfuse project must not carry separate keys."
-            )
-        if cfg.langfuse_from not in repos:
-            known = sorted(repos.keys())
-            raise ConfigError(
-                f"Repo '{repo_id}' references unknown langfuse_from "
-                f"'{cfg.langfuse_from}'. Known repos: {known}"
-            )
-        master = repos[cfg.langfuse_from]
-        if master.langfuse_from is not None:
-            raise ConfigError(
-                f"Repo '{repo_id}' references langfuse_from "
-                f"'{cfg.langfuse_from}', which itself sets langfuse_from "
-                f"'{master.langfuse_from}'; langfuse_from must point at a "
-                f"master repo that holds its own keys (no chaining or "
-                f"self-reference)."
-            )
-        repos[repo_id] = cfg.model_copy(
-            update={
-                "langfuse_project_name": master.langfuse_project_name,
-                "langfuse_public_key": master.langfuse_public_key,
-                "langfuse_secret_key": master.langfuse_secret_key,
-                "langfuse_base_url": master.langfuse_base_url,
-            }
-        )
-
-    # Reject a partially-specified Langfuse block (extracted to keep this
-    # function's cyclomatic complexity in check).
-    _validate_no_partial_langfuse(repos, raw_langfuse)
-
     # Reject a cross_repo_target on any repo when the global forge kind is
     # GitLab (the GitLab adapter has no cross-fork MR support).
     from .settings import load_settings
 
     _validate_cross_repo_forge_compat(repos, load_settings().forge_kind)
 
-    # Optional dedicated Langfuse project for the synthetic cross-repo
-    # meta board. Built only when a ``meta:`` block supplies usable
-    # credentials (public + secret key); otherwise the meta-agent traces
-    # nowhere, exactly as before this block existed.
-    meta_raw = load_meta_yaml(config_file)
-    meta_langfuse = meta_raw.get("langfuse", {}) if isinstance(meta_raw, dict) else {}
-    meta_config: RepoConfig | None = None
-    if meta_langfuse.get("public_key") and meta_langfuse.get("secret_key"):
-        meta_config = RepoConfig(
-            repo_id="meta",
-            board_id="meta",
-            langfuse_project_name=meta_langfuse.get("project_name", "meta"),
-            langfuse_public_key=meta_langfuse["public_key"],
-            langfuse_secret_key=meta_langfuse["secret_key"],
-            langfuse_base_url=meta_langfuse.get(
-                "base_url", "https://cloud.langfuse.com"
-            ),
-        )
-
-    # Single-project consolidation: when ``langfuse_shared_master`` is set
-    # at the top level, force EVERY repo (and the meta board) onto that
-    # master repo's Langfuse project, overriding any per-repo ``langfuse``
-    # block. One switch collapses the whole workspace into one project
-    # (sessions stay legible via the repo-qualified session id — see
-    # runtime.tracing.qualify_session).
-    meta_config = _apply_langfuse_shared_master(repos, meta_config, config_file)
+    # Single global Langfuse project: the one top-level ``langfuse`` block in
+    # repos.yaml configures observability for EVERY repo and the meta board.
+    # There is no per-repo Langfuse config (sessions stay per-repo legible via
+    # the repo-qualified session id — see runtime.tracing.qualify_session).
+    meta_config = _apply_global_langfuse(repos, config_file)
 
     return ReposRegistry(repos=repos, meta=meta_config)
 
 
-def _apply_langfuse_shared_master(
+def _apply_global_langfuse(
     repos: dict[str, RepoConfig],
-    meta_config: RepoConfig | None,
     config_file: str | None,
-) -> RepoConfig | None:
-    """Force all repos + meta onto ``langfuse_shared_master``'s project.
+) -> "RepoConfig | None":
+    """Populate every repo and the meta board from the single top-level
+    ``langfuse`` block in repos.yaml — the only place Langfuse is configured.
 
-    No-op (returns *meta_config* unchanged) when the switch is unset.
-    Raises :class:`ConfigError` when the named master is unknown or
-    carries no Langfuse keys to share.
+    Returns the meta-board ``RepoConfig`` (or ``None`` when the global block
+    is absent / incomplete, i.e. observability is off). There is no per-repo
+    Langfuse configuration: a ``langfuse`` block on an individual repo entry
+    is ignored.
     """
-    from .loader import ConfigError, load_langfuse_shared_master
+    from .loader import load_global_langfuse
 
-    shared_master = load_langfuse_shared_master(config_file)
-    if shared_master is None:
-        return meta_config
-    if shared_master not in repos:
-        raise ConfigError(
-            f"langfuse_shared_master='{shared_master}' is not a known repo. "
-            f"Known repos: {sorted(repos.keys())}"
-        )
-    master = repos[shared_master]
-    if not (master.langfuse_public_key and master.langfuse_secret_key):
-        raise ConfigError(
-            f"langfuse_shared_master='{shared_master}' must itself carry "
-            f"Langfuse keys (public_key + secret_key) to share."
-        )
+    g = load_global_langfuse(config_file)
+    pk, sk = g.get("public_key"), g.get("secret_key")
+    if not (pk and sk):
+        return None
+    project_name = g.get("project_name", "")
+    base_url = g.get("base_url", "https://cloud.langfuse.com")
     lf_fields = {
-        "langfuse_project_name": master.langfuse_project_name,
-        "langfuse_public_key": master.langfuse_public_key,
-        "langfuse_secret_key": master.langfuse_secret_key,
-        "langfuse_base_url": master.langfuse_base_url,
+        "langfuse_project_name": project_name,
+        "langfuse_public_key": pk,
+        "langfuse_secret_key": sk,
+        "langfuse_base_url": base_url,
     }
     for repo_id, cfg in list(repos.items()):
-        if repo_id != shared_master:
-            repos[repo_id] = cfg.model_copy(update=lf_fields)
-    if meta_config is not None:
-        return meta_config.model_copy(update=lf_fields)
+        repos[repo_id] = cfg.model_copy(update=lf_fields)
     return RepoConfig(
         repo_id="meta",
         board_id="meta",
-        langfuse_project_name=master.langfuse_project_name,
-        langfuse_public_key=master.langfuse_public_key,
-        langfuse_secret_key=master.langfuse_secret_key,
-        langfuse_base_url=master.langfuse_base_url,
+        langfuse_project_name=project_name,
+        langfuse_public_key=pk,
+        langfuse_secret_key=sk,
+        langfuse_base_url=base_url,
     )
 
 

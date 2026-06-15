@@ -117,8 +117,9 @@ class TestRegistration:
         assert entry["forge_remote_url"] == "https://github.com/upstream/zeta.git"
         assert entry["working_branch"] == "lyrical"
         assert entry["member_of"] == "ros2-workspace"
-        # Inherit the master's Langfuse project by reference (Ticket 4).
-        assert entry["langfuse_from"] == "ros2-workspace"
+        # Langfuse is configured globally; member repos carry NO per-repo
+        # langfuse config (neither a block nor a langfuse_from reference).
+        assert "langfuse_from" not in entry
         assert "langfuse" not in entry
         # cross_repo_target derived from the manifest policy.
         assert entry["cross_repo_target"]["fork_remote_url"] == (
@@ -236,9 +237,9 @@ class TestRegistration:
         sync_workspace_members(settings, "ros2-workspace", members, file_tickets=False)
 
         entry = _read(repos_file)["repos"]["src-alpha-pkg"]
-        # Member-sync always writes langfuse_from unconditionally;
-        # validation of the master's existence happens at config-load time.
-        assert entry["langfuse_from"] == "ros2-workspace"
+        # Langfuse is configured globally — member entries carry NO per-repo
+        # langfuse config (neither a block nor a langfuse_from reference).
+        assert "langfuse_from" not in entry
         assert "langfuse" not in entry
         _reset_repos_config()
 

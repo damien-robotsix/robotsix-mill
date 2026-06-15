@@ -223,9 +223,8 @@ def _member_entry(
     """Build the ``config/repos.yaml`` stanza for a detected member."""
     entry: dict[str, Any] = {
         "board_id": repo_id,
-        # Inherit the master's Langfuse project by reference — resolved
-        # at config-load time so the whole workspace shares one project.
-        "langfuse_from": master_repo_id,
+        # Langfuse is configured globally (top-level ``langfuse`` block);
+        # member repos inherit it automatically — no per-repo stanza.
         "forge_remote_url": member.url,
         # Provenance: lets a later pass distinguish member-sync entries from
         # manually configured repos (and scope disappearance detection).

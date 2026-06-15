@@ -10,6 +10,8 @@ Design: `docs/rfc-config-v2.md` §6 (Load order and precedence).
 
 from __future__ import annotations
 
+from typing import Any
+
 import os
 from pathlib import Path
 
@@ -130,8 +132,7 @@ def _load_repos_document(file_path: str | None = None) -> dict:
     """Read and parse the full ``config/repos.yaml`` document.
 
     Shared by :func:`load_repos_yaml` (which extracts the ``repos``
-    mapping) and :func:`load_meta_yaml` (which extracts the optional
-    cross-repo ``meta`` block). Returns the raw top-level mapping, or
+    mapping). Returns the raw top-level mapping, or
     ``{}`` for a missing file / explicit ``""`` (no-file) path.
     """
     # Determine the path: explicit arg > env var > default.
@@ -157,31 +158,16 @@ def _load_repos_document(file_path: str | None = None) -> dict:
     return data if isinstance(data, dict) else {}
 
 
-def load_meta_yaml(file_path: str | None = None) -> dict:
-    """Return the optional top-level ``meta`` block from ``repos.yaml``.
+def load_global_langfuse(file_path: str | None = None) -> dict[str, Any]:
+    """Return the single top-level ``langfuse`` block from ``repos.yaml``.
 
-    The synthetic cross-repo *meta* board is not a registered repo, so it
-    lives outside the ``repos`` mapping. Operators give it its own
-    Langfuse project by adding a sibling ``meta:`` block (with a
-    ``langfuse`` sub-dict), parsed here. Returns ``{}`` when absent.
+    This is the ONE place Langfuse is configured: ``load_repos_config``
+    populates every repo and the meta board from it. There is no per-repo
+    Langfuse configuration. Returns ``{}`` when absent (observability off).
     """
     data = _load_repos_document(file_path)
-    meta = data.get("meta")
-    return dict(meta) if isinstance(meta, dict) else {}
-
-
-def load_langfuse_shared_master(file_path: str | None = None) -> str | None:
-    """Return the optional top-level ``langfuse_shared_master`` repo id.
-
-    When set, every repo (and the meta board) is forced to send its
-    traces to THAT repo's Langfuse project, regardless of any per-repo
-    ``langfuse`` block — a one-line switch to consolidate the whole
-    workspace into a single project (see ``load_repos_config``). Returns
-    ``None`` when absent.
-    """
-    data = _load_repos_document(file_path)
-    val = data.get("langfuse_shared_master")
-    return val if isinstance(val, str) and val.strip() else None
+    lf = data.get("langfuse")
+    return dict(lf) if isinstance(lf, dict) else {}
 
 
 def load_repos_yaml(file_path: str | None = None) -> dict:
@@ -210,8 +196,7 @@ def load_repos_yaml(file_path: str | None = None) -> dict:
             )
         return dict(repos_data)
     # Legacy flat format: the document IS the repo mapping. The sibling
-    # ``meta`` block (cross-repo board Langfuse config — see
-    # load_meta_yaml) is not a repo, so never surface it as one.
+    # ``meta`` block is not a repo, so never surface it as one.
     return {k: v for k, v in data.items() if k != "meta"}
 
 

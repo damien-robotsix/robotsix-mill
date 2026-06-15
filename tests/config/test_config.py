@@ -1091,72 +1091,6 @@ class TestLoadReposYaml:
         assert result == {}
 
 
-class TestLoadMetaYaml:
-    """Tests for ``config_loader.load_meta_yaml``."""
-
-    def test_missing_file_returns_empty(self):
-        from robotsix_mill.config.loader import load_meta_yaml
-
-        assert load_meta_yaml("/nonexistent/repos.yaml") == {}
-
-    def test_returns_meta_block(self, tmp_path):
-        from robotsix_mill.config.loader import load_meta_yaml
-
-        repos_file = tmp_path / "repos.yaml"
-        repos_file.write_text(
-            "repos:\n"
-            "  my-repo:\n"
-            "    board_id: my-board\n"
-            "meta:\n"
-            "  langfuse:\n"
-            "    project_name: robotsix-meta\n"
-            "    public_key: pk-meta\n"
-            "    secret_key: sk-meta\n"
-        )
-        meta = load_meta_yaml(str(repos_file))
-        assert meta == {
-            "langfuse": {
-                "project_name": "robotsix-meta",
-                "public_key": "pk-meta",
-                "secret_key": "sk-meta",
-            }
-        }
-
-    def test_no_meta_block_returns_empty(self, tmp_path):
-        from robotsix_mill.config.loader import load_meta_yaml
-
-        repos_file = tmp_path / "repos.yaml"
-        repos_file.write_text("repos:\n  my-repo:\n    board_id: my-board\n")
-        assert load_meta_yaml(str(repos_file)) == {}
-
-    # -- edge-case paths ------------------------------------------------
-
-    def test_empty_string_path_returns_empty(self):
-        """``load_meta_yaml("")`` returns ``{}`` (explicit no-file)."""
-        from robotsix_mill.config.loader import load_meta_yaml
-
-        assert load_meta_yaml("") == {}
-
-    def test_malformed_yaml_raises(self, tmp_path):
-        """Malformed YAML raises ``ConfigError``."""
-        from robotsix_mill.config.loader import ConfigError, load_meta_yaml
-
-        repos_file = tmp_path / "repos.yaml"
-        repos_file.write_text("{ invalid: yaml: : }")
-        with pytest.raises(ConfigError, match="YAML parse error"):
-            load_meta_yaml(str(repos_file))
-
-    def test_meta_not_dict_returns_empty(self, tmp_path):
-        """A ``meta:`` value that is a string (not a mapping) returns ``{}``."""
-        from robotsix_mill.config.loader import load_meta_yaml
-
-        repos_file = tmp_path / "repos.yaml"
-        repos_file.write_text(
-            "repos:\n  my-repo:\n    board_id: my-board\nmeta: not-a-mapping\n"
-        )
-        assert load_meta_yaml(str(repos_file)) == {}
-
-
 class TestRepoConfig:
     """Tests for the ``RepoConfig`` model."""
 
@@ -1335,13 +1269,13 @@ class TestLoadReposConfig:
 
         repos_file = tmp_path / "repos.yaml"
         repos_file.write_text(
+            "langfuse:\n"
+            "  project_name: proj-a\n"
+            "  public_key: pk-a\n"
+            "  secret_key: sk-a\n"
             "repos:\n"
             "  repo-a:\n"
             "    board_id: board-a\n"
-            "    langfuse:\n"
-            "      project_name: proj-a\n"
-            "      public_key: pk-a\n"
-            "      secret_key: sk-a\n"
         )
         rr = load_repos_config(str(repos_file))
         assert isinstance(rr, ReposRegistry)
@@ -1350,6 +1284,7 @@ class TestLoadReposConfig:
         assert isinstance(rc, RepoConfig)
         assert rc.repo_id == "repo-a"
         assert rc.board_id == "board-a"
+        # Langfuse comes from the single top-level block, not per repo.
         assert rc.langfuse_project_name == "proj-a"
         assert rc.langfuse_public_key == "pk-a"
         assert rc.langfuse_secret_key == "sk-a"
@@ -1446,26 +1381,21 @@ class TestLoadReposConfig:
         rr = load_repos_config(str(repos_file))
         assert rr.repos["repo-a"].cross_repo_target is None
 
-    def test_meta_block_builds_dedicated_repo_config(self, tmp_path):
-        """A top-level ``meta:`` block with langfuse keys → ``rr.meta`` is a
-        RepoConfig for the synthetic meta board, kept OUT of ``repos``."""
+    def test_meta_board_inherits_global_langfuse(self, tmp_path):
+        """The synthetic meta board is configured from the single top-level
+        ``langfuse`` block (kept OUT of ``repos``)."""
         from robotsix_mill.config import load_repos_config
 
         repos_file = tmp_path / "repos.yaml"
         repos_file.write_text(
+            "langfuse:\n"
+            "  project_name: robotsix-mill\n"
+            "  public_key: pk-global\n"
+            "  secret_key: sk-global\n"
+            "  base_url: https://lf.example.net\n"
             "repos:\n"
             "  repo-a:\n"
             "    board_id: board-a\n"
-            "    langfuse:\n"
-            "      project_name: proj-a\n"
-            "      public_key: pk-a\n"
-            "      secret_key: sk-a\n"
-            "meta:\n"
-            "  langfuse:\n"
-            "    project_name: robotsix-meta\n"
-            "    public_key: pk-meta\n"
-            "    secret_key: sk-meta\n"
-            "    base_url: https://lf.example.net\n"
         )
         rr = load_repos_config(str(repos_file))
         # meta is NOT a repo
@@ -1473,9 +1403,9 @@ class TestLoadReposConfig:
         assert rr.meta is not None
         assert rr.meta.repo_id == "meta"
         assert rr.meta.board_id == "meta"
-        assert rr.meta.langfuse_project_name == "robotsix-meta"
-        assert rr.meta.langfuse_public_key == "pk-meta"
-        assert rr.meta.langfuse_secret_key == "sk-meta"
+        assert rr.meta.langfuse_project_name == "robotsix-mill"
+        assert rr.meta.langfuse_public_key == "pk-global"
+        assert rr.meta.langfuse_secret_key == "sk-global"
         assert rr.meta.langfuse_base_url == "https://lf.example.net"
 
     def test_meta_absent_yields_none(self, tmp_path):
@@ -1563,13 +1493,13 @@ class TestLoadReposConfig:
 
         repos_file = tmp_path / "repos.yaml"
         repos_file.write_text(
+            "langfuse:\n"
+            "  project_name: my-proj\n"
+            "  public_key: pk\n"
+            "  secret_key: sk\n"
             "repos:\n"
             "  my-repo:\n"
             "    board_id: my-board\n"
-            "    langfuse:\n"
-            "      project_name: my-proj\n"
-            "      public_key: pk\n"
-            "      secret_key: sk\n"
         )
         _reset_repos_config()
         import robotsix_mill.config as _cfg
