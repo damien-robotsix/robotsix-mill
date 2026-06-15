@@ -3325,7 +3325,7 @@ def test_persist_memory_trims_when_over_max_chars(tmp_path, caplog):
     # Earliest entries dropped
     assert "Entry 0" not in written
     # Warning logged (same pattern as load_memory)
-    assert "truncated:" in caplog.text
+    assert "truncated on write:" in caplog.text
 
 
 def test_persist_memory_noop_when_under_max_chars(tmp_path, caplog):
@@ -3389,7 +3389,7 @@ def test_persist_memory_still_strips_ephemeral_with_max_chars(tmp_path):
     # stripping the ephemeral table, the remaining text is still over
     # max_chars because of the long prefix — tail_keep drops the old
     # prefix and preserves the newest tail marker.
-    old_prefix = ("## Old prefix\n" + ("z " * 3000) + "\n")
+    old_prefix = "## Old prefix\n" + ("z " * 3000) + "\n"
     ephemeral_part = (
         "## Prior proposals — verified state\n\n"
         "| gap_id | ticket_id | state | resolution |\n"
