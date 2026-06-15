@@ -24,6 +24,7 @@ report_issue: false
 read_ticket: true
 reply_to_thread: false
 close_thread: false
+list_threads: false
 ask_user: false
 output_type: MetaAgentResult
 retries: 4

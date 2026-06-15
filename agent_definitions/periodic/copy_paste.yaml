@@ -20,6 +20,8 @@ tools:
   - list_dir
 
 report_issue: false
+close_thread: false
+list_threads: false
 read_ticket: true
 output_type: CopyPasteResult
 retries: 4

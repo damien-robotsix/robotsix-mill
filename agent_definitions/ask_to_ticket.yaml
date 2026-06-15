@@ -18,6 +18,8 @@ tools:
 
 web_knowledge: true
 report_issue: false
+close_thread: false
+list_threads: false
 # output_type absent → AskToTicketResult supplied programmatically by runner
 retries: 2
 module: ask_to_ticket
