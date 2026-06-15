@@ -697,6 +697,10 @@ class _LifecycleMixin(_ServiceBase):
                 )
             ).all():
                 s.delete(pa)
+            for c in s.exec(
+                select(Comment).where(Comment.ticket_id == ticket_id)
+            ).all():
+                s.delete(c)
             s.delete(ticket)
             s.commit()
         # Remove the workspace dir directly (don't construct Workspace —
