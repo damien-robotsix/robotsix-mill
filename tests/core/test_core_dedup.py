@@ -21,6 +21,7 @@ from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.core.workspace import Workspace
 from robotsix_mill.core.dedup import (
+    _ci_draft_fingerprint,
     _describe_recent_signal,
     _extract_concern_tokens,
     _extract_paths,
@@ -1168,3 +1169,262 @@ def test_describe_recent_signal_direct_title_fallback(settings):
     overlap' regardless of body content."""
     svc, prior = _seed(settings, title="some prior", body="some body")
     assert _describe_recent_signal(prior, [], settings, _BOARD) == "title overlap"
+
+
+# ---------------------------------------------------------------------------
+# _ci_draft_fingerprint
+# ---------------------------------------------------------------------------
+
+_DRAFT_BODY_SAMPLE = """\
+**Workflow:** CI
+**Branch:** main
+**Run:** [1234567890](https://github.com/owner/repo/actions/runs/1234567890)
+**Commit:** `abc123def456`
+**Created:** 2024-01-15T10:30:45.123456+00:00
+
+Error: process completed with exit code 1.
+error: could not find `--no-emit-project` flag
+some/path/to/file.rs:42: unexpected token
+  |
+42 |   let x = ;
+  |           ^ expected expression
+  |
+"""
+
+_DRAFT_BODY_DIFFERENT_ERROR = """\
+**Workflow:** CI
+**Branch:** main
+**Run:** [9999999999](https://github.com/owner/repo/actions/runs/9999999999)
+**Commit:** `deadbeef9999`
+**Created:** 2024-06-14T22:11:33Z
+
+Error: process completed with exit code 1.
+error: missing `contents:read` permission
+Please add the following to your workflow:
+permissions:
+  contents: read
+"""
+
+_DRAFT_BODY_SAME_ERROR_DIFFERENT_RUN = """\
+**Workflow:** CI
+**Branch:** main
+**Run:** [8888888888](https://github.com/owner/repo/actions/runs/8888888888)
+**Commit:** `feedfeed8888`
+**Created:** 2024-06-15T08:00:00.000000+00:00
+
+Error: process completed with exit code 1.
+error: could not find `--no-emit-project` flag
+some/path/to/file.rs:42: unexpected token
+  |
+42 |   let x = ;
+  |           ^ expected expression
+  |
+"""
+
+
+def test_ci_draft_fingerprint_is_stable():
+    """Same error content → same fingerprint across multiple calls."""
+    fp1 = _ci_draft_fingerprint(_DRAFT_BODY_SAMPLE)
+    fp2 = _ci_draft_fingerprint(_DRAFT_BODY_SAMPLE)
+    assert fp1 == fp2
+    assert len(fp1) == 16
+    assert all(c in "0123456789abcdef" for c in fp1)
+
+
+def test_ci_draft_fingerprint_distinguishes_different_errors():
+    """Different root causes produce different fingerprints."""
+    fp1 = _ci_draft_fingerprint(_DRAFT_BODY_SAMPLE)
+    fp2 = _ci_draft_fingerprint(_DRAFT_BODY_DIFFERENT_ERROR)
+    assert fp1 != fp2
+
+
+def test_ci_draft_fingerprint_immune_to_run_specific_noise():
+    """Same error, different run/commit/timestamp → same fingerprint."""
+    fp1 = _ci_draft_fingerprint(_DRAFT_BODY_SAMPLE)
+    fp2 = _ci_draft_fingerprint(_DRAFT_BODY_SAME_ERROR_DIFFERENT_RUN)
+    assert fp1 == fp2
+
+
+def test_ci_draft_fingerprint_strips_ansi_escapes():
+    """ANSI escape sequences in the log body are stripped before hashing."""
+    body_with_ansi = _DRAFT_BODY_SAMPLE.replace(
+        "error: could not find",
+        "\x1b[31merror\x1b[0m: could not find",
+    )
+    fp1 = _ci_draft_fingerprint(_DRAFT_BODY_SAMPLE)
+    fp2 = _ci_draft_fingerprint(body_with_ansi)
+    assert fp1 == fp2
+
+
+def test_ci_draft_fingerprint_handles_empty_body():
+    """An empty body produces a fingerprint (hash of empty string)."""
+    fp = _ci_draft_fingerprint("")
+    assert len(fp) == 16
+    # Repeated calls produce the same fingerprint.
+    assert _ci_draft_fingerprint("") == fp
+
+
+def test_ci_draft_fingerprint_handles_metadata_only_body():
+    """A body with only metadata lines (no log content) produces a stable
+    fingerprint (hash of empty text after stripping all lines)."""
+    meta_only = (
+        "**Workflow:** CI\n"
+        "**Branch:** main\n"
+        "**Run:** [1](https://github.com/o/r/actions/runs/1)\n"
+        "**Commit:** `abc`\n"
+        "**Created:** 2024-01-01T00:00:00Z\n"
+    )
+    fp = _ci_draft_fingerprint(meta_only)
+    assert len(fp) == 16
+    assert _ci_draft_fingerprint(meta_only) == fp
+
+
+# ---------------------------------------------------------------------------
+# label-based dedup in find_prior_matching_ticket
+# ---------------------------------------------------------------------------
+
+
+def test_label_dedup_match_returns_candidate(settings):
+    """When a candidate carries one of the dedup_labels, it is returned
+    immediately — even when file paths and titles don't match."""
+    svc, ticket = _seed(
+        settings,
+        title="completely unrelated title",
+        body="body that does NOT name any target file",
+    )
+    svc.transition(ticket.id, State.READY, note="refined")
+    # Store a ci_fp label on the candidate.
+    svc.set_labels(ticket.id, ["ci_fp:abc123def4567890"])
+
+    match = find_prior_matching_ticket(
+        _svc(settings),
+        _BOARD,
+        ["non/existent/path.py"],
+        "a symptom that does not appear in any title",
+        settings,
+        _now(),
+        dedup_labels=["ci_fp:abc123def4567890"],
+    )
+    assert match is not None
+    assert match.id == ticket.id
+
+
+def test_label_dedup_ci_fp_mismatch_suppresses_title_fallback(settings):
+    """When dedup_labels contains a ci_fp:* label that the candidate does
+    NOT have, the candidate is skipped — even when titles match."""
+    svc, ticket = _seed(
+        settings,
+        title="CI failure: CI on main",
+        body="body that names no file paths",
+    )
+    svc.transition(ticket.id, State.READY, note="refined")
+    # Candidate has a DIFFERENT ci_fp label.
+    svc.set_labels(ticket.id, ["ci_fp:1111222233334444"])
+
+    match = find_prior_matching_ticket(
+        _svc(settings),
+        _BOARD,
+        [],
+        "CI failure: CI on main",
+        settings,
+        _now(),
+        dedup_labels=["ci_fp:aaaabbbbccccdddd"],
+    )
+    # The candidate has a ci_fp:* label but it DOESN'T match —
+    # title fallback is suppressed, so no match.
+    assert match is None
+
+
+def test_label_dedup_non_ci_fp_label_no_match_falls_through(settings):
+    """When dedup_labels contains a non-ci_fp label that doesn't match,
+    the candidate still falls through to file-path/title checks (the
+    suppression only applies to ci_fp:* labels)."""
+    svc, ticket = _seed(
+        settings,
+        title="CI failure: CI on main",
+        body=f"prior body mentioning {_TARGET_PATH}",
+    )
+    svc.transition(ticket.id, State.READY, note="refined")
+
+    # dedup_labels has a non-ci_fp label — no match, so fall through.
+    match = find_prior_matching_ticket(
+        _svc(settings),
+        _BOARD,
+        [_TARGET_PATH],
+        "unrelated fingerprint",
+        settings,
+        _now(),
+        dedup_labels=["some:other:label"],
+    )
+    # Falls through to file-path check, which matches.
+    assert match is not None
+    assert match.id == ticket.id
+
+
+def test_label_dedup_none_preserves_existing_behavior(settings):
+    """When dedup_labels is None (the default), existing behavior is
+    completely unchanged."""
+    svc, ticket = _seed(
+        settings,
+        title="CI failure: CI on main",
+        body="body that names no file paths",
+    )
+    svc.transition(ticket.id, State.READY, note="refined")
+
+    # Without dedup_labels, the title fingerprint match still works.
+    match = find_prior_matching_ticket(
+        _svc(settings),
+        _BOARD,
+        [],
+        "CI failure: CI on main",
+        settings,
+        _now(),
+    )
+    assert match is not None
+    assert match.id == ticket.id
+
+
+def test_label_dedup_empty_list_falls_through(settings):
+    """An empty dedup_labels list is falsy and falls through to the
+    existing checks."""
+    svc, ticket = _seed(
+        settings,
+        title="CI failure: CI on main",
+        body="some body",
+    )
+    svc.transition(ticket.id, State.READY, note="refined")
+
+    match = find_prior_matching_ticket(
+        _svc(settings),
+        _BOARD,
+        [],
+        "CI failure: CI on main",
+        settings,
+        _now(),
+        dedup_labels=[],
+    )
+    assert match is not None  # title match still works
+
+
+def test_label_dedup_ci_fp_mismatch_without_candidate_labels(settings):
+    """When dedup_labels has a ci_fp:* label but the candidate has NO
+    labels at all, the candidate is skipped — title fallback suppressed."""
+    svc, ticket = _seed(
+        settings,
+        title="CI failure: CI on main",
+        body="body with no labels",
+    )
+    svc.transition(ticket.id, State.READY, note="refined")
+    # Candidate has no labels at all.
+
+    match = find_prior_matching_ticket(
+        _svc(settings),
+        _BOARD,
+        [],
+        "CI failure: CI on main",
+        settings,
+        _now(),
+        dedup_labels=["ci_fp:aaaabbbbccccdddd"],
+    )
+    # No labels on candidate → can't match ci_fp:* → suppression kicks in.
+    assert match is None
