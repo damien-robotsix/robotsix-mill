@@ -334,6 +334,20 @@ class _StagesSettings(BaseModel):
     trace_review_max_repeated_tool: int = Field(
         default=50,
     )
+    # Hard cap on the total number of tool calls the trace inspector
+    # may make per trace.  100 tool calls is far beyond what any
+    # legitimate trace analysis requires — only clearly broken runs
+    # are terminated.  When exceeded, the inspector raises
+    # ``UsageLimitExceeded`` and the trace is marked as errored.
+    trace_review_max_tool_calls: int = Field(
+        default=100,
+    )
+    # Hard cap on the number of tool-call errors before the trace
+    # inspector is auto-terminated.  A healthy inspection should have
+    # near-zero errors; 20 indicates a broken execution loop.
+    trace_review_max_errors: int = Field(
+        default=20,
+    )
     # Hard cap on the total number of drafts a single trace-review
     # pass may file. The inspector emits one finding per flagged trace
     # and a typical batch flags 5-10 traces with 2-5 findings each →
