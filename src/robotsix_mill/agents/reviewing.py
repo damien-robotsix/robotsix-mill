@@ -8,6 +8,7 @@ APPROVE / REQUEST_CHANGES / NEEDS_DISCUSSION.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from pathlib import Path
@@ -213,17 +214,37 @@ def _review_attempt(
         settings=settings,
         what="review",
     )
+    schema_json = json.dumps(ReviewVerdict.model_json_schema(), indent=2)
+    example_json = json.dumps(
+        {
+            "verdict": "APPROVE",
+            "comments": (
+                "The diff looks correct — all files match the spec. "
+                "Minor note: consider adding a docstring to the new function."
+            ),
+            "request_changes": [],
+            "auto_merge_eligible": True,
+        },
+        indent=2,
+        ensure_ascii=False,
+    )
+    reprompt_message = (
+        "Your last response did not produce a structured "
+        "ReviewVerdict. Reply now with a valid JSON object matching "
+        "the expected schema below.\n\n"
+        "Expected JSON schema:\n"
+        f"{schema_json}\n\n"
+        "Valid example:\n"
+        f"{example_json}\n\n"
+        "CRITICAL: all string values must be valid JSON — escape any "
+        'inner double quotes with backslash (\\"). '
+        "Do not include raw newlines inside string values; use \\n instead."
+    )
     result = reprompt_if_unstructured(
         result=result,
         agent=agent,
         expected_type=ReviewVerdict,
-        reprompt_message=(
-            "Your last response did not produce a structured "
-            "ReviewVerdict. Reply now with a JSON object containing "
-            "the required fields: verdict (one of APPROVE, "
-            "REQUEST_CHANGES, NEEDS_DISCUSSION), comments, and "
-            "request_changes."
-        ),
+        reprompt_message=reprompt_message,
         settings=settings,
         what="review (re-prompt after prose-only)",
         run_kwargs={"usage_limits": limits},
