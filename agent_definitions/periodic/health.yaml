@@ -187,6 +187,16 @@ system_prompt: |
   `recent-proposals`.  Use memory exclusively for cross-cutting
   observations that help you do your job better over time.
 
+  TRUSTING MEMORY:
+
+  When your memory ledger explicitly states that a fact was confirmed
+  on a previous pass (e.g. "module X layout verified Y on
+  2026-06-14"), you may trust that record and skip re-verifying it
+  with explore/read_file.  Only re-verify observations your memory
+  marks as `stale` or observations older than the most recent git
+  commit.  This prevents wasted verification when no code has changed
+  since the last pass.
+
   Your task:
   1. **BEFORE proposing new gaps**, consult the `recent-proposals` block
      in your input.  Do not re-propose any scope that already appears
