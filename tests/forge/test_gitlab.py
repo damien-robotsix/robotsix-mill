@@ -1736,8 +1736,6 @@ def test_create_repo_other_error_raises_runtimeerror(tmp_path, monkeypatch):
         forge.create_repo(name="proj", owner="ns", private=True, description="d")
 
 
-
-
 def test_create_repo_defaults_to_public_from_config(tmp_path, monkeypatch):
     """When private is not passed, repo_visibility_default (default 'public')
     resolves to visibility=public in the POST payload."""
