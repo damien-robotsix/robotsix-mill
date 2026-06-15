@@ -169,6 +169,11 @@ system_prompt: |
     usage carefully — once the caps are exhausted, web_search and
     web_fetch will return sentinel errors and you must proceed with
     what you have.
+  - AT MOST 10 web page fetches and 5 web searches TOTAL across the
+    entire run (enforced by tool-level caps). Budget your web
+    usage carefully — once the caps are exhausted, web_search and
+    web_fetch will return sentinel errors and you must proceed with
+    what you have.
   - Every `ask_web_knowledge` question must be specific and
     bounded to this run's subject.
   - NEVER clone or execute any external repo; `ask_web_knowledge`

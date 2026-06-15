@@ -472,3 +472,73 @@ class TestMakeTool:
         make_ask_web_knowledge_tool(s)
         info = ToolRegistry._tools["ask_web_knowledge"]
         assert "question" in info.parameters
+
+
+# ---------------------------------------------------------------------------
+# TestTraceWebSearchBudget — per-survey-run web_search budget
+# ---------------------------------------------------------------------------
+
+
+class TestTraceWebSearchBudget:
+    """Per-survey-run web_search budget — trace-level cap that survives
+    across multiple ask_web_knowledge consults."""
+
+    def test_trace_web_search_cap(self, tmp_path, monkeypatch):
+        """After reset_trace_web_search_budget(2), the 3rd web_search call
+        returns a budget-exhausted sentinel, regardless of how many
+        run_web_knowledge consults it spans."""
+        import asyncio
+
+        from robotsix_mill.agents.web_knowledge import (
+            reset_trace_web_search_budget,
+            _make_tools,
+        )
+
+        s = _settings(tmp_path)
+
+        # Stub run_web_research to return a fake conclusion.
+        async def fake_run_web_research(*, settings, query):
+            return f"conclusion for: {query}"
+
+        monkeypatch.setattr(web_knowledge, "run_web_research", fake_run_web_research)
+
+        reset_trace_web_search_budget(2)
+        tools = _make_tools(s)
+        web_search = tools[-1]  # web_search is the last tool
+
+        # First two searches succeed.
+        r1 = asyncio.run(web_search("query 1"))
+        r2 = asyncio.run(web_search("query 2"))
+        assert "conclusion for: query 1" == r1
+        assert "conclusion for: query 2" == r2
+
+        # Third search hits the trace budget cap.
+        r3 = asyncio.run(web_search("query 3"))
+        assert "trace budget exhausted" in r3.lower()
+        assert "web_search trace budget exhausted" in r3
+
+    def test_trace_web_search_inactive_when_not_set(self, tmp_path, monkeypatch):
+        """reset_trace_web_search_budget(0) or never called → no-op.
+        All searches succeed (bounded only by per-consult caps)."""
+        import asyncio
+
+        from robotsix_mill.agents.web_knowledge import (
+            reset_trace_web_search_budget,
+            _make_tools,
+        )
+
+        s = _settings(tmp_path)
+
+        async def fake_run_web_research(*, settings, query):
+            return f"ok: {query}"
+
+        monkeypatch.setattr(web_knowledge, "run_web_research", fake_run_web_research)
+
+        reset_trace_web_search_budget(0)  # deactivated
+        tools = _make_tools(s)
+        web_search = tools[-1]
+
+        # Many searches all succeed — trace budget is inactive.
+        for i in range(10):
+            r = asyncio.run(web_search(f"query {i}"))
+            assert f"ok: query {i}" == r

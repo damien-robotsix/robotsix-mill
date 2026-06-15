@@ -323,6 +323,9 @@ periodic:
     web_fetch_max_calls: 10         # per-survey-run cap on web_fetch calls (across all ask_web_knowledge consults)
     web_fetch_max_total_bytes: 500000  # per-survey-run cumulative byte cap on web_fetch returned text
     web_search_max_calls: 5         # per-survey-run cap on web_search invocations
+    web_fetch_max_calls: 10         # per-survey-run cap on web_fetch calls (across all ask_web_knowledge consults)
+    web_fetch_max_total_bytes: 500000  # per-survey-run cumulative byte cap on web_fetch returned text
+    web_search_max_calls: 5         # per-survey-run cap on web_search invocations
 
   # -- module_curator agent — detects drift in the module taxonomy ---------
   module_curator:

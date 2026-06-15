@@ -83,7 +83,6 @@ def reset_trace_web_search_budget(max_calls: int) -> None:
     _trace_search_calls = 0
     _trace_search_max_calls = max_calls
 
-
 # ---------------------------------------------------------------------------
 # Path helpers
 # ---------------------------------------------------------------------------
