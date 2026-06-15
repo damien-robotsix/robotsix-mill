@@ -41,6 +41,8 @@ def _build_repo_tools(
     explore_kwargs: dict = {"extra_roots": extra_roots} if extra_roots else {}
     tools: list = [make_explore_tool(settings, repo_dir, **explore_kwargs)]
     if include_parallel_explore:
-        tools.insert(0, make_parallel_explore_tool(settings, repo_dir, **explore_kwargs))
+        tools.insert(
+            0, make_parallel_explore_tool(settings, repo_dir, **explore_kwargs)
+        )
     tools.extend(ro)
     return tools
