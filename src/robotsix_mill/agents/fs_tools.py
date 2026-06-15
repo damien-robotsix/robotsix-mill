@@ -655,7 +655,12 @@ def build_fs_tools(
             name="edit_file",
             description="Replace a unique string in a file.",
             category="fs",
-            parameters={"path": "str", "old_string": "str", "new_string": "str", "count": "int = 1"},
+            parameters={
+                "path": "str",
+                "old_string": "str",
+                "new_string": "str",
+                "count": "int = 1",
+            },
         )
     )
     ToolRegistry.register(
