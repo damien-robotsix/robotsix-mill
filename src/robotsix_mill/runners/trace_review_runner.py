@@ -59,7 +59,7 @@ log = logging.getLogger("robotsix_mill.trace_review")
 # ---------------------------------------------------------------------------
 
 _TOOL_ERR_PATTERNS = re.compile(
-    r"(error:|refused:|Traceback \(most recent call last\)|"
+    r"(error:|Traceback \(most recent call last\)|"
     r"UsageLimitExceeded|UnexpectedModelBehavior|"
     r"non-zero exit status)",
     re.IGNORECASE,
