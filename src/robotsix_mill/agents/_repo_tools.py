@@ -8,6 +8,7 @@ config_syncing, trace_inspector, and refining agents.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from ..config import Settings
 
@@ -19,7 +20,7 @@ def _build_repo_tools(
     tool_names: tuple[str, ...] = ("read_file", "list_dir", "run_command"),
     extra_roots: list[Path] | None = None,
     include_parallel_explore: bool = False,
-) -> list:
+) -> list[Any]:
     """Return repo-scoped tools when *repo_dir* is set, else [].
 
     Builds a list of exploration + read-only filesystem tools that
@@ -38,8 +39,8 @@ def _build_repo_tools(
         for t in build_fs_tools(repo_dir, settings, extra_roots=extra_roots)
         if t.__name__ in tool_names
     ]
-    explore_kwargs: dict = {"extra_roots": extra_roots} if extra_roots else {}
-    tools: list = [make_explore_tool(settings, repo_dir, **explore_kwargs)]
+    explore_kwargs: dict[str, Any] = {"extra_roots": extra_roots} if extra_roots else {}
+    tools: list[Any] = [make_explore_tool(settings, repo_dir, **explore_kwargs)]
     if include_parallel_explore:
         tools.insert(
             0, make_parallel_explore_tool(settings, repo_dir, **explore_kwargs)
