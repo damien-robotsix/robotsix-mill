@@ -11,13 +11,22 @@ from typing import Any
 import httpx
 
 from ._http import _ApiClient
+from ._log_utils import _capture_failure_window
 from .auth import gitlab_token
 from .base import BranchInfo, Forge, NotConfiguredError, RepoInfo
 from .github import (
     _ANSI_RE,
     _MAX_FAILED_JOBS,
-    _capture_failure_window,
     _parse_iso_utc,
+)
+
+# Earliest-failure markers in a GitLab CI job log.  GitLab jobs don't
+# emit GitHub Actions–style ``##[error]`` lines; instead we match the
+# patterns that GitLab Runner / common build tools emit on failure.
+_LOG_FAILURE_RE = re.compile(
+    r"(?:^ERROR:\s|^ERROR\[|Job failed|exit code [1-9]|"
+    r"^\s*FAIL\b|FAILED\s|fatal:)",
+    re.MULTILINE,
 )
 
 
@@ -397,7 +406,11 @@ class GitLabForge(Forge):
                 except Exception:
                     raw = ""
 
-                clean = _capture_failure_window(_ANSI_RE.sub("", raw), log_max)
+                clean = _capture_failure_window(
+                    _ANSI_RE.sub("", raw),
+                    log_max,
+                    failure_re=_LOG_FAILURE_RE,
+                )
                 summary = clean or None
                 text = clean or None
                 if summary and len(summary) > 2000:
@@ -571,7 +584,11 @@ class GitLabForge(Forge):
                         raw = f"[log fetch returned empty body for job {job_id}]"
 
                 clean = _ANSI_RE.sub("", raw)
-                clean = _capture_failure_window(clean, log_max)
+                clean = _capture_failure_window(
+                    clean,
+                    log_max,
+                    failure_re=_LOG_FAILURE_RE,
+                )
 
                 parts.append(f"### Job: {job_name} (id={job_id})\n")
                 parts.append(clean)
