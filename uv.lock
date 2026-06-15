@@ -1636,7 +1636,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6" },
     { name = "robotsix-board", git = "https://github.com/damien-robotsix/robotsix-board.git?rev=main" },
     { name = "robotsix-llmio", extras = ["openrouter-deepseek", "claude-sdk"], git = "https://github.com/damien-robotsix/robotsix-llmio?rev=main" },
-    { name = "robotsix-yaml-config", git = "https://github.com/damien-robotsix/robotsix-yaml-config?rev=main" },
+    { name = "robotsix-yaml-config", git = "https://github.com/damien-robotsix/robotsix-yaml-config.git?rev=main" },
     { name = "sqlmodel", specifier = ">=0.0.22" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
@@ -1673,7 +1673,7 @@ dependencies = [
 [[package]]
 name = "robotsix-yaml-config"
 version = "0.1.0"
-source = { git = "https://github.com/damien-robotsix/robotsix-yaml-config?rev=main#a8ab530cf3f426b08f0985fcfdfb2a19182a9929" }
+source = { git = "https://github.com/damien-robotsix/robotsix-yaml-config.git?rev=main#a8ab530cf3f426b08f0985fcfdfb2a19182a9929" }
 dependencies = [
     { name = "pyyaml" },
 ]
