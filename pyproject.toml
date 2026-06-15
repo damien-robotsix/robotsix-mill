@@ -44,8 +44,10 @@ tracing = [
 # Board-agent bridge — opt-in, guarded by ``board_agent_enabled`` setting
 # and a try/except ImportError in the lifespan.  The git repo is private,
 # so CI (which runs without credentials) does not install this extra.
+# The git URL is inlined here (not via [tool.uv.sources]) so uv only
+# resolves it when `--extra board-agent` is explicitly requested.
 board-agent = [
-    "robotsix-board-agent",
+    "robotsix-board-agent @ git+https://github.com/damien-robotsix/robotsix-board-agent.git@main",
 ]
 
 # Internal CI/contributor tooling — NOT published package extras. PEP 735
@@ -289,6 +291,3 @@ python_version = "3.14"
 packages = ["src/robotsix_mill"]
 ignore_missing_imports = true
 show_error_codes = true
-
-[tool.uv.sources]
-robotsix-board-agent = { git = "https://github.com/damien-robotsix/robotsix-board-agent.git", rev = "main" }
