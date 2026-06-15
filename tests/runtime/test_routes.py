@@ -1663,6 +1663,32 @@ def test_migrate_ticket_404(migrate_client):
     assert r.status_code == 404
 
 
+def test_migrate_epic_via_route(migrate_client, service):
+    """POST /tickets/{epic_id}/migrate moves an epic (and its subtree)
+    to the target board and returns the root as a DRAFT there."""
+    epic = service.create("Epic on wrong board", kind="epic")
+    child = service.create("Epic child", parent_id=epic.id)
+
+    r = migrate_client.post(
+        f"/tickets/{epic.id}/migrate",
+        json={"repo_id": "other-repo", "note": "mis-filed"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["board_id"] == "other-board"
+    assert data["state"] == "draft"
+
+    # Both tickets landed on the target board.
+    for tid in [epic.id, child.id]:
+        r2 = migrate_client.get(f"/tickets/{tid}")
+        assert r2.status_code == 200
+        assert r2.json()["board_id"] == "other-board"
+
+    # History includes migration note.
+    r3 = migrate_client.get(f"/tickets/{epic.id}/history")
+    assert any("migrated from board" in (e["note"] or "") for e in r3.json())
+
+
 # -- GET /worker-status -------------------------------------------------
 
 
