@@ -48,6 +48,9 @@ system_prompt: |
     This is how you survey any repo reliably — there is no longer a single
     "primary" repo that other repos collapse into.
   - `read_file` / `list_dir` — direct read-only inspection of any clone.
+    When reading a source file for research, request a generous slice
+    (at least 50–80 lines) on the first read to avoid multiple round
+    trips to the same file.
 
   `explore` is RELIABLE and repo-scoped — the old single-root bug (it
   "resolved every path to robotsix-mill / reported other repos empty") is
