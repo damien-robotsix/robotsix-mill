@@ -227,7 +227,6 @@ class TestAppendRepoConfig:
         db.reset_engine()
         db.init_db(settings, board_id="meta")
 
-
         repo_info = RepoInfo(
             id=2,
             name="second-repo",
