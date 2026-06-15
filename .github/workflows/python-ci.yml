@@ -196,4 +196,10 @@ jobs:
           # declare pytest-xdist (mirrors the deptry/mypy-baseline steps).
           # Without this, a bare `uv run pytest -n auto` fails for any repo
           # that does not itself ship pytest-xdist.
-          uv run --with pytest-xdist pytest tests/ -n "$PYTEST_NUMPROCESSES" --dist loadscope -x "$@" --tb=long --cov="$COV_PACKAGE" --cov-fail-under="$COVERAGE_THRESHOLD" --cov-report=term-missing
+          # pytest-cov is provisioned via --with (mirrors pytest-xdist) so the
+          # --cov flags below work for EVERY consumer without each having to
+          # declare pytest-cov in its dev group. Without this, a minimal
+          # consumer (e.g. a freshly-scaffolded member repo) fails with
+          # "pytest: error: unrecognized arguments: --cov" because the plugin
+          # is not installed.
+          uv run --with pytest-xdist --with pytest-cov pytest tests/ -n "$PYTEST_NUMPROCESSES" --dist loadscope -x "$@" --tb=long --cov="$COV_PACKAGE" --cov-fail-under="$COVERAGE_THRESHOLD" --cov-report=term-missing
