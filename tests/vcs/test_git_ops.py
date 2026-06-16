@@ -1124,6 +1124,28 @@ class TestWorkingBranchRegression:
         files = git_ops.changed_files(dest, "rolling")
         assert "new.txt" in files
 
+    def test_changed_files_tolerates_missing_origin_ref(self, tmp_path, caplog):
+        """changed_files does not raise when origin/<target> is unresolvable."""
+        remote = _make_custom_branch_repo(tmp_path, "lyrical")
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "lyrical")
+        (dest / "untracked.txt").write_text("untracked")
+
+        # origin/main does not exist (clone was --single-branch lyrical).
+        files = git_ops.changed_files(dest, "main")
+        assert "untracked.txt" in files  # untracked files still collected
+
+    def test_introduced_files_tolerates_missing_origin_ref(self, tmp_path, caplog):
+        """introduced_files does not raise when origin/<target> is unresolvable."""
+        remote = _make_custom_branch_repo(tmp_path, "lyrical")
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "lyrical")
+        (dest / "untracked.txt").write_text("untracked")
+
+        # origin/main does not exist (clone was --single-branch lyrical).
+        files = git_ops.introduced_files(dest, "main")
+        assert "untracked.txt" in files  # untracked files still collected
+
     def test_diff_base_with_custom_branch(self, tmp_path):
         """Test that diff_base works with a custom target_branch."""
         # Create a repo with 'develop' as the default branch

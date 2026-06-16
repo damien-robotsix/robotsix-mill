@@ -7,10 +7,13 @@ the container only needs the git binary (already in the image).
 
 from __future__ import annotations
 
+import logging
 import re
 import subprocess
 from enum import Enum
 from pathlib import Path
+
+log = logging.getLogger("robotsix_mill.vcs.git_ops")
 
 _CREDENTIAL_IN_URL = re.compile(r"://[^@/\s']+@")
 
@@ -552,7 +555,16 @@ def changed_files(repo: Path, target_branch: str) -> list[str]:
     """
     seen: list[str] = []
     seen_set: set[str] = set()
-    diff_out = _git(repo, "diff", "--name-only", f"origin/{target_branch}")
+    try:
+        diff_out = _git(repo, "diff", "--name-only", f"origin/{target_branch}")
+    except subprocess.CalledProcessError:
+        log.warning(
+            "changed_files: origin/%s ref not resolvable in %s — "
+            "treating as no tracked diff available",
+            target_branch,
+            repo,
+        )
+        diff_out = ""
     if diff_out:
         for f in diff_out.split("\n"):
             if f and f not in seen_set:
@@ -582,26 +594,35 @@ def introduced_files(repo: Path, target_branch: str) -> list[str]:
       - ``git ls-files --others --exclude-standard`` — untracked new
         files honouring .gitignore.
     """
+
+    def _collect(git_output: str) -> None:
+        for f in git_output.split("\n"):
+            if f and f not in seen_set:
+                seen_set.add(f)
+                seen.append(f)
+
     seen: list[str] = []
     seen_set: set[str] = set()
-    committed_out = _git(repo, "diff", "--name-only", f"origin/{target_branch}...HEAD")
+    try:
+        committed_out = _git(
+            repo, "diff", "--name-only", f"origin/{target_branch}...HEAD"
+        )
+    except subprocess.CalledProcessError:
+        log.warning(
+            "introduced_files: origin/%s ref not resolvable in %s — "
+            "treating as no branch-introduced diff available",
+            target_branch,
+            repo,
+        )
+        committed_out = ""
     if committed_out:
-        for f in committed_out.split("\n"):
-            if f and f not in seen_set:
-                seen_set.add(f)
-                seen.append(f)
+        _collect(committed_out)
     working_out = _git(repo, "diff", "--name-only", "HEAD")
     if working_out:
-        for f in working_out.split("\n"):
-            if f and f not in seen_set:
-                seen_set.add(f)
-                seen.append(f)
+        _collect(working_out)
     untracked_out = _git(repo, "ls-files", "--others", "--exclude-standard")
     if untracked_out:
-        for f in untracked_out.split("\n"):
-            if f and f not in seen_set:
-                seen_set.add(f)
-                seen.append(f)
+        _collect(untracked_out)
     return seen
 
 

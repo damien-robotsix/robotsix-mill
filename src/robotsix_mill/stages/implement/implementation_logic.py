@@ -10,7 +10,7 @@ from ...agents import coding
 from ...agents.coding import AgentBudgetError, AgentRunError
 from ...agents.coordinating import ValidationResult
 from ...agents.testing import smoke_paths_match
-from ...config import target_branch_for
+from ...config import ConfigError, get_repo_config, target_branch_for
 from ...core.models import Ticket
 from ...core.states import State
 from ...config.repo_settings import load_repo_smoke_command
@@ -304,7 +304,9 @@ class ImplementationLogicMixin(_ImplementStageBase):
             # Treat that as a normal proceed instead of a no-change
             # bypass; deliver will pick it up.
             if (
-                not cls._any_repo_has_changes(repo_dir, extra_roots, target)
+                not cls._any_repo_has_changes(
+                    repo_dir, extra_roots, target, settings=settings
+                )
                 and no_change_needed
                 and no_change_rationale.strip()
             ):
@@ -370,7 +372,9 @@ class ImplementationLogicMixin(_ImplementStageBase):
                     outcome=Outcome(State.DONE, f"no change needed — {short}"),
                 )
             if (
-                not cls._any_repo_has_changes(repo_dir, extra_roots, target)
+                not cls._any_repo_has_changes(
+                    repo_dir, extra_roots, target, settings=settings
+                )
                 and not resuming
             ):
                 # Silent no-change on a fresh run (agent didn't signal):
@@ -461,8 +465,14 @@ class ImplementationLogicMixin(_ImplementStageBase):
                     # already covered above; skip the duplicate entry.
                     if repo_path == repo_dir:
                         continue
+                    try:
+                        rc = get_repo_config(repo_path.name)
+                    except ConfigError:
+                        rc = None
+                    repo_target = target_branch_for(settings, rc)
                     changed = list(
-                        set(changed) | set(git_ops.introduced_files(repo_path, target))
+                        set(changed)
+                        | set(git_ops.introduced_files(repo_path, repo_target))
                     )
             missing = short_circuit_verify.detect_missing_claimed_files(
                 changed_files=changed,
