@@ -314,6 +314,62 @@ def test_agent_exception_warns_and_passes(ctx_factory, monkeypatch):
     assert "doc agent failed (non-blocking)" in out.note
 
 
+# --- agent exception with uv-sources hint -----------------------------
+
+
+def test_agent_exception_uv_sources_hint(ctx_factory, monkeypatch):
+    """When doc agent fails AND repo has [tool.uv.sources], the exception
+    handler appends a hint about uv-only git deps to both the log message
+    and the notification."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+
+    # Add [tool.uv.sources] to the repo's pyproject.toml.
+    (repo_dir / "pyproject.toml").write_text(
+        "[project]\nname = 'x'\n[tool.uv.sources]\n"
+        "x = { git = 'https://github.com/org/x' }\n",
+        encoding="utf-8",
+    )
+
+    notifications = []
+
+    def _spy_notification(ticket, dst, note, settings):
+        notifications.append((dst, note))
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.document.send_notification",
+        _spy_notification,
+    )
+
+    def _fake_doc(
+        self,
+        *,
+        settings,
+        repo_dir,
+        diff,
+        spec,
+        extra_roots=None,
+        board_id="",
+        reference_files=None,
+    ):
+        del self, settings, repo_dir, diff, spec
+        raise RuntimeError("model unavailable")
+
+    monkeypatch.setattr(DocumentStage, "_run_doc_agent", _fake_doc)
+
+    out = DocumentStage().run(t, ctx)
+    assert out.next_state is State.DELIVERABLE  # not BLOCKED
+    assert "doc agent failed (non-blocking)" in out.note
+    assert "[tool.uv.sources]" in out.note
+    assert "uv-only git deps" in out.note
+
+    # Notification also carries the hint.
+    assert len(notifications) == 1
+    assert notifications[0][0] == State.ERRORED
+    assert "[tool.uv.sources]" in notifications[0][1]
+
+
 # --- diff_base failure → BLOCKED --------------------------------------
 
 

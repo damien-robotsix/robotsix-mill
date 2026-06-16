@@ -161,20 +161,38 @@ class DocumentStage(Stage):
                 reference_files=preload_paths or None,
             )
         except Exception:
+            hint = ""
+            pp = repo_dir / "pyproject.toml"
+            try:
+                if pp.exists():
+                    import tomllib
+
+                    data = tomllib.loads(pp.read_text(encoding="utf-8"))
+                    if data.get("tool", {}).get("uv", {}).get("sources"):
+                        hint = (
+                            " (repo has [tool.uv.sources] — "
+                            "uv-only git deps may block tools)"
+                        )
+            except Exception:
+                log.debug(
+                    "could not parse pyproject.toml for uv sources hint",
+                    exc_info=True,
+                )
             log.warning(
-                "%s: doc agent failed — passing through",
+                "%s: doc agent failed — passing through%s",
                 ticket.id,
+                hint,
                 exc_info=True,
             )
             send_notification(
                 ticket,
                 State.ERRORED,
-                "doc agent failed (non-blocking)",
+                f"doc agent failed (non-blocking){hint}",
                 ctx.settings,
             )
             return Outcome(
                 State.DELIVERABLE,
-                "doc agent failed (non-blocking)",
+                f"doc agent failed (non-blocking){hint}",
             )
 
         next_state = State.DELIVERABLE

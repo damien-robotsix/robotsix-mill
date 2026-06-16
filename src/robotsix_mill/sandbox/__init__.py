@@ -99,6 +99,32 @@ def _repo_mount(repo_dir: Path, settings: Settings) -> list[str]:
     ]
 
 
+def _has_uv_sources(repo_dir: Path) -> bool:
+    """Return True when pyproject.toml declares a ``[tool.uv.sources]`` table.
+
+    Uses ``tomllib`` (the same pattern as ``prerequisite.py``) and is
+    guarded against missing/malformed files — returns ``False`` on any
+    error so the sandbox always falls back to the pip install path.
+    """
+    pp = repo_dir / "pyproject.toml"
+    try:
+        data = pp.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    # Fast path: check for the section header as a substring before
+    # paying the parse cost.  Covers the 99 % case in one string scan.
+    if "[tool.uv.sources]" not in data:
+        return False
+    import tomllib
+
+    try:
+        parsed = tomllib.loads(data)
+    except Exception:
+        return False
+    sources = parsed.get("tool", {}).get("uv", {}).get("sources")
+    return isinstance(sources, dict) and len(sources) > 0
+
+
 def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> str:
     """Prepend a read-only-safe project install to *command*, if warranted.
 
@@ -108,6 +134,14 @@ def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> s
     * the sandbox has egress (an egress proxy is configured) — without
       network ``pip`` can't reach PyPI, so installing is impossible and
       we must not turn a runnable gate into a guaranteed failure.
+
+    When the repo declares ``[tool.uv.sources]`` AND a ``uv.lock`` exists,
+    the function prefers ``uv sync --frozen --no-dev`` over ``pip install``.
+    pip has no equivalent for ``[tool.uv.sources]`` and cannot resolve
+    git-sourced dependencies declared there.  ``--frozen`` reads the
+    existing lockfile (no git resolution needed) so the sandbox's lack of
+    GitHub credentials is NOT a problem.  Falls back to pip when ``uv`` is
+    not on ``PATH`` or ``uv sync`` exits non-zero.
 
     The install is made safe for the locked-down sandbox:
 
@@ -127,6 +161,23 @@ def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> s
         return command
     if not (repo_dir / "pyproject.toml").exists():
         return command
+
+    pip = "pip install --user --quiet --disable-pip-version-check"
+
+    # When the repo declares [tool.uv.sources] AND a uv.lock exists, prefer
+    # `uv sync --frozen --no-dev` over pip.  pip has no [tool.uv.sources]
+    # equivalent and cannot resolve git-sourced dependencies declared there.
+    # `--frozen` reads the existing lockfile (no git resolution needed) so
+    # the sandbox's lack of GitHub credentials is NOT a problem.
+    if _has_uv_sources(repo_dir) and (repo_dir / "uv.lock").exists():
+        uv = "uv sync --frozen --no-dev --quiet 2>&1"
+        return (
+            f"(command -v uv >/dev/null 2>&1 && ({uv}) || "
+            f"(echo 'WARNING: uv not found, falling back to pip' >&2; "
+            f"({pip} '.[dev]' || {pip} .))) && " + command
+        )
+
+    # No [tool.uv.sources] — pip path unchanged.
     # Install the project WITH its dev/test extra so test-only deps the
     # ticket adds (e.g. hypothesis) are importable in the gate — a plain
     # `pip install .` pulls runtime deps only, so a new test dependency
@@ -134,7 +185,6 @@ def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> s
     # robotsix repos); fall back to a plain install for any repo that has
     # no `dev` extra (pip would otherwise error), so this never regresses
     # a previously-runnable gate.
-    pip = "pip install --user --quiet --disable-pip-version-check"
     return f"({pip} '.[dev]' || {pip} .) && " + command
 
 
