@@ -1561,7 +1561,7 @@ source = { git = "https://github.com/damien-robotsix/robotsix-board.git?rev=main
 [[package]]
 name = "robotsix-board-agent"
 version = "0.1.0"
-source = { git = "https://github.com/damien-robotsix/robotsix-board-agent.git?rev=main#cfcf04311fffcb59d67da85ae1792dbbd37d1f28" }
+source = { git = "https://github.com/damien-robotsix/robotsix-board-agent.git?rev=main#3b7bfc8b4fe3c0ba4a54e0bd1a23bddb5c8e3a46" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic" },
@@ -1571,7 +1571,7 @@ dependencies = [
 [[package]]
 name = "robotsix-llmio"
 version = "0.1.0"
-source = { git = "https://github.com/damien-robotsix/robotsix-llmio.git?rev=main#765489a6b2433df066cfe178e07327be99d20014" }
+source = { git = "https://github.com/damien-robotsix/robotsix-llmio.git?rev=765489a6b2433df066cfe178e07327be99d20014#765489a6b2433df066cfe178e07327be99d20014" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic-ai-slim" },
