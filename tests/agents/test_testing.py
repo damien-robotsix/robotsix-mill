@@ -14,6 +14,7 @@ import pytest
 
 from robotsix_mill.agents.testing import (
     ENV_ERROR_PREFIX,
+    _check_pyproject_toml,
     _detect_missing_binary,
     _detect_noexec_script,
     _env_error_diag,
@@ -804,3 +805,103 @@ def test_run_smoke_agent_fails_with_distill(monkeypatch, tmp_path):
     passed, msg = run_smoke_agent(settings=s, repo_dir=Path("/fake"))
     assert passed is False
     assert msg == "distilled smoke failure"
+
+
+# ---------------------------------------------------------------------------
+# _check_pyproject_toml
+# ---------------------------------------------------------------------------
+
+
+def test_check_pyproject_toml_valid(tmp_path):
+    """Valid TOML → None."""
+    toml_path = tmp_path / "pyproject.toml"
+    toml_path.write_text("[project]\nname = 'test'\n")
+    assert _check_pyproject_toml(tmp_path) is None
+
+
+def test_check_pyproject_toml_no_file(tmp_path):
+    """Missing pyproject.toml → None (non-Python repo, no-op)."""
+    assert not (tmp_path / "pyproject.toml").exists()
+    assert _check_pyproject_toml(tmp_path) is None
+
+
+def test_check_pyproject_toml_invalid(tmp_path):
+    """Invalid TOML → error string with 'invalid TOML' and the parse error."""
+    toml_path = tmp_path / "pyproject.toml"
+    toml_path.write_text("[project]\nname = \n")
+    result = _check_pyproject_toml(tmp_path)
+    assert result is not None
+    assert "invalid TOML" in result
+
+
+# ---------------------------------------------------------------------------
+# run_test_agent / run_smoke_agent with broken pyproject.toml
+# ---------------------------------------------------------------------------
+
+
+def test_run_test_agent_broken_pyproject_toml_short_circuits(monkeypatch, tmp_path):
+    """run_test_agent returns (False, ...) for broken TOML without hitting sandbox."""
+    from types import SimpleNamespace
+
+    from robotsix_mill.sandbox import SandboxError  # noqa: F401 — ensures module is loaded
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.testing.load_repo_test_command",
+        lambda _: "pytest",
+    )
+
+    sandbox_called = False
+
+    def fake_run(cmd, *, repo_dir, settings, install_project, sandbox_image):
+        nonlocal sandbox_called
+        sandbox_called = True
+        return (0, "ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.sandbox",
+        SimpleNamespace(run=fake_run, SandboxError=SandboxError),
+    )
+
+    # Create a broken pyproject.toml
+    toml_path = tmp_path / "pyproject.toml"
+    toml_path.write_text("[project]\nname = \n")
+
+    s = _make_settings_for_gate(tmp_path)
+    passed, msg = run_test_agent(settings=s, repo_dir=tmp_path)
+    assert passed is False
+    assert "invalid TOML" in msg
+    assert sandbox_called is False
+
+
+def test_run_smoke_agent_broken_pyproject_toml_short_circuits(monkeypatch, tmp_path):
+    """run_smoke_agent returns (False, ...) for broken TOML without hitting sandbox."""
+    from types import SimpleNamespace
+
+    from robotsix_mill.sandbox import SandboxError  # noqa: F401 — ensures module is loaded
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.testing.load_repo_smoke_command",
+        lambda _: "make smoke",
+    )
+
+    sandbox_called = False
+
+    def fake_run(cmd, *, repo_dir, settings, install_project, sandbox_image):
+        nonlocal sandbox_called
+        sandbox_called = True
+        return (0, "ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.sandbox",
+        SimpleNamespace(run=fake_run, SandboxError=SandboxError),
+    )
+
+    # Create a broken pyproject.toml
+    toml_path = tmp_path / "pyproject.toml"
+    toml_path.write_text("[project]\nname = \n")
+
+    s = _make_settings_for_gate(tmp_path)
+    passed, msg = run_smoke_agent(settings=s, repo_dir=tmp_path)
+    assert passed is False
+    assert "invalid TOML" in msg
+    assert sandbox_called is False
