@@ -1560,6 +1560,57 @@ def test_list_workflow_runs_maps_pipelines(tmp_path, monkeypatch):
     ]
 
 
+def test_list_workflow_runs_canceled_skipped(tmp_path, monkeypatch):
+    """Canceled/skipped pipelines map to 'cancelled'/'skipped' (not 'pending')."""
+    project_json = {"id": 42}
+    pipelines = [
+        {
+            "id": 200,
+            "ref": "feature/y",
+            "sha": "ccc111",
+            "status": "canceled",
+            "web_url": "http://gl/pipelines/200",
+            "created_at": "2026-03-05T00:00:00Z",
+        },
+        {
+            "id": 201,
+            "ref": "feature/y",
+            "sha": "ddd222",
+            "status": "skipped",
+            "web_url": "http://gl/pipelines/201",
+            "created_at": "2026-03-06T00:00:00Z",
+        },
+    ]
+    get_map = {
+        "projects/42/pipelines": _make_response(200, pipelines),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    runs = forge.list_workflow_runs()
+    assert runs == [
+        {
+            "id": 200,
+            "name": "feature/y",
+            "workflow_id": None,
+            "head_sha": "ccc111",
+            "conclusion": "cancelled",
+            "html_url": "http://gl/pipelines/200",
+            "created_at": "2026-03-05T00:00:00Z",
+        },
+        {
+            "id": 201,
+            "name": "feature/y",
+            "workflow_id": None,
+            "head_sha": "ddd222",
+            "conclusion": "skipped",
+            "html_url": "http://gl/pipelines/201",
+            "created_at": "2026-03-06T00:00:00Z",
+        },
+    ]
+
+
 def test_list_workflow_runs_empty(tmp_path, monkeypatch):
     """No pipelines → []."""
     project_json = {"id": 42}
