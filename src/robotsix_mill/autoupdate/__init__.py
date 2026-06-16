@@ -118,6 +118,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Consecutive busy-deferral cap before force-deploy (default: %(default)s).",
     )
     p.add_argument(
+        "--no-force-deploy",
+        action="store_true",
+        default=False,
+        help="Never force-deploy when busy; always defer regardless of --max-deferrals.",
+    )
+    p.add_argument(
         "--no-idle-check",
         action="store_true",
         default=False,
@@ -275,6 +281,14 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
                 deferrals += 1
                 _write_deferral_count(deferral_path, deferrals)
                 if deferrals >= args.max_deferrals:
+                    if args.no_force_deploy:
+                        _log(
+                            log_path,
+                            f"mill still busy after {args.pre_build_wait}s, "
+                            f"{deferrals} consecutive deferrals >= {args.max_deferrals} "
+                            f"— would force-deploy but --no-force-deploy is set; deferring",
+                        )
+                        return 0
                     forced = True
                     _log(
                         log_path,

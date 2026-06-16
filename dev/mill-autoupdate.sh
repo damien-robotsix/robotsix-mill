@@ -42,4 +42,5 @@ exec "$REPO/.venv/bin/robotsix-autoupdate" \
   --pre-build-wait "${PRE_BUILD_WAIT:-1200}" \
   --post-build-wait "${POST_BUILD_WAIT:-300}" \
   --poll-interval "${POLL_INTERVAL:-90}" \
-  --max-deferrals "${MAX_DEFERRALS:-4}"
+  --max-deferrals "${MAX_DEFERRALS:-4}" \
+  ${NO_FORCE_DEPLOY:+--no-force-deploy}

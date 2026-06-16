@@ -72,6 +72,7 @@ def test_parse_all_flags() -> None:
             "30",
             "--max-deferrals",
             "2",
+            "--no-force-deploy",
             "--no-idle-check",
         ]
     )
@@ -86,6 +87,7 @@ def test_parse_all_flags() -> None:
     assert ns.post_build_wait == 120
     assert ns.poll_interval == 30
     assert ns.max_deferrals == 2
+    assert ns.no_force_deploy is True
     assert ns.no_idle_check is True
 
 
@@ -629,6 +631,81 @@ def test_deferral_reset_on_success(tmp_path: Path, monkeypatch) -> None:
     rc = au.main(["--repo", str(repo), "--state-dir", str(state), "--no-idle-check"])
     assert rc == 0
     assert not deferral_file.exists()
+
+
+def test_no_force_deploy_defers_even_at_cap(tmp_path: Path, monkeypatch) -> None:
+    """When --no-force-deploy is set, hitting max_deferrals defers instead of
+    force-deploying."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / ".env").write_text("SECRET=xyz")
+    state = tmp_path / "state"
+    state.mkdir()
+    log = state / "mill-autoupdate.log"
+    deferral_file = state / ".mill-autoupdate-deferrals"
+
+    # Pre-existing deferral count at cap (3 + 1 new = 4 = max)
+    deferral_file.write_text("3\n")
+
+    deployed = state / ".mill-autoupdate-deployed-sha"
+    deployed.write_text("old1111\n")
+
+    def fake_run(cmd, **kwargs):
+        if isinstance(cmd, list) and cmd[0] == "git":
+            cmd_str = " ".join(cmd)
+            if "status" in cmd_str:
+                return _cp(0, "")
+            if "rev-parse" in cmd_str and "origin/main" in cmd_str:
+                return _cp(0, "new4444\n")
+            if "rev-parse" in cmd_str and "--short" in cmd_str:
+                return _cp(0, "new4444\n")
+            if "fetch" in cmd_str:
+                return _cp(0)
+            if "diff" in cmd_str and ".env" in cmd_str:
+                return _cp(0, "")
+            if "merge" in cmd_str:
+                return _cp(0)
+            if "log" in cmd_str:
+                return _cp(0, "")
+        if isinstance(cmd, list) and cmd[0] == "docker":
+            return _cp(0)
+        if isinstance(cmd, list) and cmd[0] == "getent":
+            return _cp(0, "docker:x:999:\n")
+        return _cp(0, "")
+
+    monkeypatch.setattr(au, "_idle_check", lambda cmd, timeout=15: False)
+    monkeypatch.setattr(au.time, "sleep", lambda s: None)
+    monkeypatch.setattr(au.subprocess, "run", fake_run)
+    _fake_flock(monkeypatch)
+    monkeypatch.setattr(au.os, "open", lambda *a, **kw: 3)
+    monkeypatch.setattr(au.os, "close", lambda fd: None)
+
+    rc = au.main(
+        [
+            "--repo",
+            str(repo),
+            "--state-dir",
+            str(state),
+            "--state-prefix",
+            "mill-autoupdate",
+            "--idle-check-cmd",
+            "false",
+            "--pre-build-wait",
+            "5",
+            "--poll-interval",
+            "1",
+            "--max-deferrals",
+            "4",
+            "--no-force-deploy",
+        ]
+    )
+    # Should defer (return 0) rather than force-deploy.
+    assert rc == 0
+    # Deploy should NOT have happened — SHA unchanged.
+    assert "old1111" in deployed.read_text()
+    assert "new4444" not in deployed.read_text()
+    # Log should mention --no-force-deploy.
+    assert "--no-force-deploy" in log.read_text()
 
 
 # ---------------------------------------------------------------------------

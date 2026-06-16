@@ -46,6 +46,13 @@ services:
         hard: 65536
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
+    # Resource limits prevent a single runaway agent from exhausting host
+    # memory/CPU and triggering an OOM kill (which would interrupt every
+    # concurrently-running periodic agent).  The mill worker is
+    # single-process; 2 CPUs and 4 GiB leave headroom for concurrent
+    # agent subprocesses (git, trivy, model CLI) spawned by asyncio tasks.
+    mem_limit: 4g
+    cpus: 2
     # No group_add: entrypoint.sh inspects /var/run/docker.sock at
     # start-up and joins the matching group automatically (any host
     # docker GID — 959, 999, 1000 — Just Works).
