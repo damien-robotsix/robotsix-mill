@@ -66,6 +66,8 @@ def run_ci_fix_agent(
     if not get_secrets().openrouter_api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
 
+    from pydantic_ai.usage import UsageLimits
+
     from .yaml_loader import load_and_run_agent
     from .fs_tools import build_fs_tools
 
@@ -135,6 +137,7 @@ def run_ci_fix_agent(
             "target": target,
             "patterns": patterns_text,
         },
+        run_kwargs={"usage_limits": UsageLimits(request_limit=settings.ci_fix_request_limit)},
     )
 
     # --- persist structured pattern entry ---
