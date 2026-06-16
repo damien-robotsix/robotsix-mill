@@ -37,6 +37,7 @@ def _build_summary(
     drafts_created: list[dict[str, Any]],
     closed_pruned: int = 0,
     clones_pruned: int = 0,
+    db_rows_purged: int = 0,
 ) -> str:
     """Render a multi-line summary for the runs panel.
 
@@ -55,6 +56,8 @@ def _build_summary(
             base += f"\nTerminal-ticket clones pruned: {clones_pruned}."
         if closed_pruned > 0:
             base += f"\nClosed workspaces pruned: {closed_pruned}."
+        if db_rows_purged > 0:
+            base += f"\nDB rows purged: {db_rows_purged}."
         return base
 
     lines: list[str] = [header]
@@ -99,5 +102,8 @@ def _build_summary(
 
     if closed_pruned > 0:
         lines.append(f"Closed workspaces pruned: {closed_pruned}.")
+
+    if db_rows_purged > 0:
+        lines.append(f"DB rows purged: {db_rows_purged}.")
 
     return "\n".join(lines)
