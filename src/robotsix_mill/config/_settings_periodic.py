@@ -299,6 +299,14 @@ class _PeriodicSettings(BaseModel):
     # the guard is short. Default 1 day.
     # Override with MILL_DATA_DIR_AUDIT_PRUNE_TERMINAL_CLONES_AGE_SECONDS.
     data_dir_audit_prune_terminal_clones_age_seconds: int = Field(default=86_400, ge=0)
+    # Default-on DB row GC: purge oldest terminal-ticket rows (and their
+    # associated events, comments, and proposed actions) when the count
+    # of terminal tickets exceeds max_archived_tickets. This is a
+    # periodic safety net — the reactive trigger on transition still
+    # fires, but this ensures stalled boards (e.g. tickets piling up in
+    # DONE, which is not an archivable state) eventually get cleaned.
+    # Override with MILL_DATA_DIR_AUDIT_PRUNE_DB_ROWS=false.
+    data_dir_audit_prune_db_rows: bool = Field(default=True)
 
     # --- completeness_check agent (feature-wiring completeness) ---
     # Model for the completeness-check agent. Defaults to the same

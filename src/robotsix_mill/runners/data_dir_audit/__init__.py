@@ -34,6 +34,7 @@ from .finders import (
 from .filing import _file_findings_as_tickets
 from .growth import _scan_growth_deltas
 from .orphans import (
+    _prune_archived_db_rows,
     _prune_closed_workspaces,
     _prune_terminal_clones,
     _scan_orphan_workspaces,
@@ -61,6 +62,9 @@ class DataDirAuditPassResult:
     # Number of repo/ + repos/ clone dirs removed from terminal-ticket
     # workspaces by the default-on terminal-clone GC step.
     clones_pruned: int = 0
+    # Number of archived ticket rows purged from mill.db files by the
+    # default-on DB row GC step (enforces max_archived_tickets).
+    db_rows_purged: int = 0
 
 
 def run_data_dir_audit_pass(
@@ -110,6 +114,16 @@ def run_data_dir_audit_pass(
     closed_pruned = 0
     if settings.data_dir_audit_prune_closed:
         closed_pruned = _prune_closed_workspaces(settings)
+
+    # Default-on DB row GC: purge oldest terminal-ticket rows (and
+    # their events/comments/actions) from mill.db when the count
+    # exceeds max_archived_tickets. This is a periodic safety net —
+    # the reactive trigger on transition still fires, but stalled
+    # boards (e.g. DONE never -> CLOSED) get cleaned here BEFORE
+    # the growth scan so reclaimed space doesn't flag growth.
+    db_rows_purged = 0
+    if settings.data_dir_audit_prune_db_rows:
+        db_rows_purged = _prune_archived_db_rows(settings)
 
     # Walk ``data_dir`` exactly once: the size dicts feed both the
     # top-N oversized check (ticket 2) and the summary header's
@@ -168,6 +182,7 @@ def run_data_dir_audit_pass(
         drafts_created,
         closed_pruned=closed_pruned,
         clones_pruned=clones_pruned,
+        db_rows_purged=db_rows_purged,
     )
 
     log.info("data-dir audit pass done: %s", summary)
@@ -182,4 +197,5 @@ def run_data_dir_audit_pass(
         growth_flags=all_growth_flags,
         closed_pruned=closed_pruned,
         clones_pruned=clones_pruned,
+        db_rows_purged=db_rows_purged,
     )

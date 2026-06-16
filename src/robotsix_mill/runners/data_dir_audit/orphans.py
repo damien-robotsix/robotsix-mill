@@ -13,11 +13,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from sqlalchemy import text
 from sqlmodel import select
 
 from ...config import Settings
 from ...core import db
-from ...core.models import Ticket, TicketEvent, _now
+from ...core.models import Comment, ProposedAction, Ticket, TicketEvent, _now
 
 from .growth import _TICKET_ID_PREFIX_RE, _BATCH_SIZE, _TERMINAL_STATES
 
@@ -395,6 +396,139 @@ def _prune_terminal_clones(settings: Settings) -> int:
             )
             continue
     return total_removed
+
+
+# ---------------------------------------------------------------------------
+# Default-on GC: purge oldest archived DB rows (ticket spec "DB-maintenance")
+# ---------------------------------------------------------------------------
+
+
+def _has_active_child(settings: Settings, board_id: str, ticket_id: str) -> bool:
+    """Return True if *ticket_id* has at least one child whose state is
+    NOT in ``_TERMINAL_STATES``.
+
+    Mirrors :meth:`_LifecycleMixin._has_active_child` from
+    ``_lifecycle.py``, but operates as a module-level function so it can
+    be called from the periodic data-dir audit pass without a service
+    instance.
+    """
+    with db.session(settings, board_id) as s:
+        stmt = (
+            select(Ticket)
+            .where(
+                Ticket.parent_id == ticket_id,
+                Ticket.state.notin_(list(_TERMINAL_STATES)),  # type: ignore[attr-defined]
+            )
+            .limit(1)
+        )
+        return s.exec(stmt).first() is not None
+
+
+def _cascade_delete_ticket(settings: Settings, board_id: str, ticket_id: str) -> None:
+    """Hard-delete *ticket_id* and its dependent rows in one transaction.
+
+    Deletes ``TicketEvent``, ``ProposedAction``, and ``Comment`` rows
+    referencing *ticket_id*, then the ``Ticket`` itself — mirrors
+    ``TicketService.delete``.
+    """
+    with db.session(settings, board_id) as s:
+        for ev in s.exec(
+            select(TicketEvent).where(TicketEvent.ticket_id == ticket_id)
+        ).all():
+            s.delete(ev)
+        for pa in s.exec(
+            select(ProposedAction).where(ProposedAction.target_ticket_id == ticket_id)
+        ).all():
+            s.delete(pa)
+        for c in s.exec(select(Comment).where(Comment.ticket_id == ticket_id)).all():
+            s.delete(c)
+        t = s.get(Ticket, ticket_id)
+        if t is not None:
+            s.delete(t)
+        s.commit()
+
+
+def _purge_board_archived_rows(
+    settings: Settings, board_id: str, max_archived: int
+) -> int:
+    """Purge oldest terminal tickets from one board's ``mill.db``.
+
+    Returns the number of tickets deleted for *board_id*.
+    """
+    # 1. Query terminal-state tickets, oldest first.
+    with db.session(settings, board_id) as s:
+        stmt = (
+            select(Ticket)
+            .where(Ticket.state.in_(_TERMINAL_STATES))  # type: ignore[attr-defined]
+            .order_by(Ticket.created_at)  # type: ignore[arg-type]
+        )
+        candidates = list(s.exec(stmt).all())
+
+    if len(candidates) <= max_archived:
+        return 0
+
+    excess = len(candidates) - max_archived
+    deleted = 0
+
+    for ticket in candidates:
+        if deleted >= excess:
+            break
+        # Skip terminal tickets that have active children.
+        if _has_active_child(settings, board_id, ticket.id):
+            continue
+
+        _cascade_delete_ticket(settings, board_id, ticket.id)
+        deleted += 1
+        log.info(
+            "data_dir_audit: purged archived ticket board=%r ticket=%s",
+            board_id,
+            ticket.id,
+        )
+
+    # 2. Reclaim disk space freed by the deletes.
+    if deleted:
+        with db.session(settings, board_id) as s:
+            s.execute(text("VACUUM"))
+            s.commit()
+        log.info(
+            "data_dir_audit: board=%r — VACUUM complete "
+            "after purging %d terminal ticket(s)",
+            board_id,
+            deleted,
+        )
+
+    return deleted
+
+
+def _prune_archived_db_rows(settings: Settings) -> int:
+    """Purge oldest terminal-ticket rows from every board's ``mill.db``.
+
+    Iterates every board on disk and delegates to
+    :func:`_purge_board_archived_rows`.  Returns the total number of
+    tickets deleted across all boards.
+
+    Per-board exceptions are logged at WARNING level and the pass
+    continues to the next board.
+    """
+    max_archived = settings.max_archived_tickets
+    if max_archived <= 0:
+        return 0
+
+    total_deleted = 0
+    for board_id in _boards_from_disk(settings):
+        try:
+            total_deleted += _purge_board_archived_rows(
+                settings, board_id, max_archived
+            )
+        except Exception:
+            log.warning(
+                "data_dir_audit: board=%r — archived DB row purge failed",
+                board_id,
+                exc_info=True,
+            )
+            continue
+
+    return total_deleted
 
 
 # ---------------------------------------------------------------------------
