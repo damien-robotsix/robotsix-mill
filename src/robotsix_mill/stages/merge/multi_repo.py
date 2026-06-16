@@ -292,6 +292,8 @@ class MultiRepoMixin(_MergeStageBase):
                     branch=branch,
                     target=target,
                     memory=_facade.load_memory(mem_path),
+                    remote_url=remote_url,
+                    token=token,
                 )
                 ok = result.status == "DONE"
                 if result.updated_memory:

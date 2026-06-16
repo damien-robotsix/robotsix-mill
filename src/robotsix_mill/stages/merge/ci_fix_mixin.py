@@ -217,6 +217,9 @@ class MultiRepoCiFixMixin(_MergeStageBase):
                     memory=_facade.load_memory(mem_path),
                     ticket_id=ticket.id,
                     board_id=rc.board_id,
+                    target=target_branch_for(s, rc),
+                    remote_url=remote_url,
+                    token=token,
                 )
                 ok = result.status == "DONE"
                 if result.updated_memory:

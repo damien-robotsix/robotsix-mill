@@ -62,9 +62,11 @@ system_prompt: |
         mill's own identity), the remote only carries the branch's own
         prior rebase push — this is safe to recover:
         - Call ``git_fetch("{target}")`` again.
-        - Rebase onto the current remote: git fetch origin {branch} (via
-          run_command, against the already-fetched tracking ref) then
-          git rebase origin/{target} if needed.
+        - Rebase onto the current remote: run ``git rebase origin/{target}``
+          if your local branch needs to be rebased.  (Do NOT run ``git fetch``
+          via ``run_command`` — it cannot reach the network inside the
+          sandbox.  ``git_push_with_lease`` already fetches the remote branch
+          internally before computing the lease.)
         - Retry ``git_push_with_lease("{branch}")`` (at most 2 retries;
           if both fail, report FAILED).
      c. If ANY commit has a DIFFERENT author/committer email (a foreign
