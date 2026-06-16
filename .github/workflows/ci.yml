@@ -72,3 +72,8 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: system
         run: uv run python scripts/check_config_sync.py
+
+      - name: Check workflow pinning
+        run: |
+          ! grep -nE 'uses:\s*\S+\.github/workflows/[^@]*@(main|master|latest|v\d+)' \
+            .github/workflows/*.yml
