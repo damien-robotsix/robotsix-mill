@@ -299,6 +299,7 @@ modules:
       - tests/stages/test_registry.py
       - tests/stages/test_implement.py
       - tests/stages/test_implement_validation.py
+      - tests/stages/test_implement_file_operations.py
       - tests/stages/test_implement_phase_coordinator.py
       - tests/stages/test_implement_package_dag.py
       - tests/stages/test_maintenance.py
