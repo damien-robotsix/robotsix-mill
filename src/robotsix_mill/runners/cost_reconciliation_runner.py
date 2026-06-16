@@ -319,8 +319,8 @@ def _run_per_key_pass(
 
 
 def _file_provider_error(
-    settings,
-    service,
+    settings: Settings,
+    service: TicketService,
     *,
     date_str: str,
     error_msg: str,
