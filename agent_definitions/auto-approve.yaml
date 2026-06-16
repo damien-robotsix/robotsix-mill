@@ -76,3 +76,7 @@ system_prompt: |
   as the existing Approve button" or "replicates the route structure of
   approve-mr"), lean toward APPROVE unless another genuine
   design-decision signal is independently present.
+
+  ## Budget discipline
+
+  - ⚠️ **Budget note:** Your `request_limit` budget caps the total requests you can make. Be concise — prefer a single well-structured response over verbose narration.

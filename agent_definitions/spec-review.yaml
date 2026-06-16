@@ -64,3 +64,7 @@ system_prompt: |
   Return the cleaned spec in `concise_spec` and a one-line summary of
   what was removed in `stripped_summary` (e.g. "Stripped 12 lines of
   exploratory narrative and 3 dead-end sections").
+
+  ## Budget discipline
+
+  - ⚠️ **Budget note:** Your `request_limit` budget caps the total requests you can make. Be concise — prefer a single well-structured response over verbose narration.
