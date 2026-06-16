@@ -10,7 +10,8 @@ category: periodic
 interval: 1d
 enabled: true
 
-model: default
+model: cheap
+max_tokens: 50000
 
 tools:
   - explore
