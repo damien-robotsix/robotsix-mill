@@ -412,6 +412,21 @@ system_prompt: |
     package is not installed in the mill's environment at gate time.
     The gate automatically skips same-repo directives, but you must
     not emit them in the first place.
+
+    **CI-fix dependency-pin carve-out.**  When the ticket is a CI-fix
+    whose sole change is replacing a floating branch ref (e.g.
+    ``@ git+...@main`` in a PEP 508 dependency spec) with a pinned
+    SHA in ``[tool.uv.sources]`` (or an equivalent pin in another
+    package manager), do NOT emit prereqs for the dependency being
+    pinned.  The symbol's unavailability is the *consequence* of the
+    broken floating ref, not a blocker for the fix — declaring it as
+    a prerequisite creates a catch-22 that self-defeatingly blocks
+    the ticket meant to resolve it.  This carve-out is narrow: it
+    applies only to the specific dependency undergoing the pin
+    change, not to all external prereqs.  Other CI-fix tickets
+    (e.g., adding a new package to resolve a missing import) should
+    still emit prereqs normally.
+
     Example::
 
         ## Prerequisites
