@@ -89,6 +89,12 @@
     "trace-review": "trace-review",
     roadmap_sync: "roadmap-sync",
     forge_parity: "forge-parity",
+    module_curator: "module-curator",
+    copy_paste: "copy-paste",
+    board_cleanup: "board-cleanup",
+    meta: "meta",
+    "cost-analyst": "cost-analyst",
+    "run-health": "run-health",
   };
 
   const STATE_ARTIFACT = {

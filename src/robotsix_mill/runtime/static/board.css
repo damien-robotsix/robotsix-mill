@@ -27,7 +27,7 @@ margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
 .cost{font-size:10px;color:#7d828c;margin-left:6px}
 .src-trace-health{background:#1a2a3b;color:#60c0fa}
 .src-health{background:#1a3b2f;color:#34d399}
-.src-test_gap{background:#2e1065;color:#c084fc}
+.src-test-gap{background:#2e1065;color:#c084fc}
 .src-agent{background:#3b1a1a;color:#f87171}
 .src-survey{background:#134e4a;color:#2dd4bf}
 .src-ci{background:#1e293b;color:#94a3b8}
@@ -38,6 +38,14 @@ margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
 .src-completeness-check{background:#1a2e05;color:#bef264}
 .src-trace-review{background:#3b1f1f;color:#fca5a5}
 .src-roadmap-sync{background:#4c1d95;color:#c4b5fd}
+.src-forge-parity{background:#2e1065;color:#a78bfa}
+.src-member-sync{background:#164e63;color:#0891b2}
+.src-module-curator{background:#4a1a00;color:#f97316}
+.src-copy-paste{background:#4a0d2e;color:#ec4899}
+.src-board-cleanup{background:#064e3b;color:#10b981}
+.src-meta{background:#3b0764;color:#a855f7}
+.src-cost-analyst{background:#1e1b4b;color:#6366f1}
+.src-run-health{background:#1e3a5f;color:#3b82f6}
 .origin-link{color:var(--c);text-decoration:underline}
 .approve-btn{font-size:11px;margin-top:5px;padding:3px 8px;background:#3b82f6;
 color:#fff;border:none;border-radius:4px;cursor:pointer}

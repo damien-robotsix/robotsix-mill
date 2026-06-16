@@ -663,6 +663,6 @@ def test_board_contains_test_gap_js_and_css():
     base = Path(robotsix_mill.runtime.board_html.__file__).parent / "static"
     css = (base / "board-mill.css").read_text()
     js = (base / "board-mill.js").read_text()
-    assert ".src-test_gap" in css
-    assert "src-test_gap" in css
+    assert ".src-test-gap" in css
+    assert "src-test-gap" in css
     assert "test_gap" in js
