@@ -81,6 +81,15 @@ def run_module_curator_agent(
     from ._repo_tools import _build_repo_tools
 
     tools = _build_repo_tools(repo_dir, settings)
+    # module_curator.yaml declares `validate_artifact` and its system prompt
+    # relies on it (the deterministic path-existence primitive used to confirm
+    # cited paths aren't stale), but _build_repo_tools does not include it. Wire
+    # it here so the prompt's call directives resolve — otherwise every run dies
+    # with "call directives to unavailable tools: validate_artifact".
+    if repo_dir is not None:
+        from .validate_artifact_tool import make_validate_artifact_tool
+
+        tools.append(make_validate_artifact_tool(repo_dir))
 
     if definition_override is not None:
         system_prompt = definition.system_prompt

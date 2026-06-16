@@ -404,8 +404,10 @@ class _PeriodicSettings(BaseModel):
     # When True, a global daily pass reads every board's run registry over a
     # window, flags failed/degraded runs deterministically, runs one LLM pass
     # to separate real failures from legitimate empties, and files
-    # high-confidence draft tickets to the mill board. Off by default.
-    run_health_periodic: bool = Field(default=False)
+    # high-confidence draft tickets to the mill board. On by default: this is
+    # the meta-checker that watches the OTHER periodic agents' health, so it
+    # should run everywhere unless a deployment explicitly opts out.
+    run_health_periodic: bool = Field(default=True)
     # Seconds between automatic run-health passes. Default 86400 (1 day).
     run_health_interval_seconds: int = Field(default=86400)
     # Lookback window (hours) over which run registries are scanned.
