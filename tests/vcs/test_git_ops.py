@@ -1605,3 +1605,198 @@ class TestRebasePreservesForeignCommits:
         assert (dest / "human_fix.txt").exists()
         assert (dest / "human_fix.txt").read_text() == "human fix for edge case\n"
         assert (dest / "ticket_work.txt").exists()
+
+
+# ===========================================================================
+# 18. push / fetch / push_with_lease error redaction (mock-based)
+# ===========================================================================
+
+
+class TestPushErrorRedaction:
+    def test_push_failure_redacts_token(self):
+        """When _git raises CalledProcessError during push(), the re-raised
+        exception has credentials redacted from cmd, output, and stderr."""
+        token = "ghs_sekret123"
+        token_url = f"https://oauth2:{token}@github.com/owner/repo.git"
+        error = subprocess.CalledProcessError(
+            128,
+            [
+                "git",
+                "-C",
+                "/tmp/repo",
+                "push",
+                "--force",
+                token_url,
+                "feature:feature",
+            ],
+            output="",
+            stderr=f"fatal: could not read from remote repository\n"
+            f"fatal: unable to access '{token_url}/'\n",
+        )
+
+        from unittest.mock import patch
+
+        with patch("robotsix_mill.vcs.git_ops._git", side_effect=error):
+            with pytest.raises(subprocess.CalledProcessError) as ei:
+                git_ops.push(
+                    Path("/tmp/repo"),
+                    "feature",
+                    "https://github.com/owner/repo.git",
+                    token,
+                )
+
+        exposed = (
+            repr(ei.value)
+            + str(ei.value.cmd)
+            + str(ei.value.stderr)
+            + str(ei.value.output)
+        )
+        assert token not in exposed
+        assert "://***@" in str(ei.value.cmd)
+        assert "://***@" in (ei.value.stderr or "")
+        # output is empty string, but verify it doesn't contain the token
+        assert token not in (ei.value.output or "")
+
+
+class TestFetchErrorRedaction:
+    def test_fetch_failure_redacts_token(self):
+        """When _git raises CalledProcessError during fetch(), the re-raised
+        exception has credentials redacted from cmd, output, and stderr."""
+        token = "ghs_sekret456"
+        token_url = f"https://oauth2:{token}@github.com/owner/repo.git"
+        error = subprocess.CalledProcessError(
+            128,
+            [
+                "git",
+                "-C",
+                "/tmp/repo",
+                "fetch",
+                token_url,
+                "+refs/heads/feature:refs/remotes/origin/feature",
+            ],
+            output="",
+            stderr=f"fatal: couldn't find remote ref feature\n"
+            f"fatal: unable to access '{token_url}/'\n",
+        )
+
+        from unittest.mock import patch
+
+        with patch("robotsix_mill.vcs.git_ops._git", side_effect=error):
+            with pytest.raises(subprocess.CalledProcessError) as ei:
+                git_ops.fetch(
+                    Path("/tmp/repo"),
+                    remote_url="https://github.com/owner/repo.git",
+                    token=token,
+                    branch="feature",
+                )
+
+        exposed = (
+            repr(ei.value)
+            + str(ei.value.cmd)
+            + str(ei.value.stderr)
+            + str(ei.value.output)
+        )
+        assert token not in exposed
+        assert "://***@" in str(ei.value.cmd)
+        assert "://***@" in (ei.value.stderr or "")
+
+
+class TestPushWithLeaseErrorRedaction:
+    def test_force_fallback_branch_redacts_token(self):
+        """When remote_branch_sha returns None (branch doesn't exist),
+        push_with_lease takes the --force fallback.  If that push fails,
+        the error is redacted."""
+        token = "ghs_sekret789"
+        token_url = f"https://oauth2:{token}@github.com/owner/repo.git"
+        error = subprocess.CalledProcessError(
+            128,
+            [
+                "git",
+                "-C",
+                "/tmp/repo",
+                "push",
+                "--force",
+                token_url,
+                "feature:feature",
+            ],
+            output="",
+            stderr=f"fatal: remote rejected\n"
+            f"fatal: unable to access '{token_url}/'\n",
+        )
+
+        from unittest.mock import patch
+
+        # _git always raises → remote_branch_sha() returns None (it catches
+        # CalledProcessError internally), so the --force branch is taken.
+        with patch("robotsix_mill.vcs.git_ops._git", side_effect=error):
+            with pytest.raises(subprocess.CalledProcessError) as ei:
+                git_ops.push_with_lease(
+                    Path("/tmp/repo"),
+                    "feature",
+                    "https://github.com/owner/repo.git",
+                    token,
+                )
+
+        exposed = (
+            repr(ei.value)
+            + str(ei.value.cmd)
+            + str(ei.value.stderr)
+            + str(ei.value.output)
+        )
+        assert token not in exposed
+        assert "://***@" in str(ei.value.cmd)
+        assert "://***@" in (ei.value.stderr or "")
+
+    def test_force_with_lease_branch_redacts_token(self):
+        """When remote_branch_sha returns a SHA (branch exists),
+        push_with_lease takes the --force-with-lease branch.  If that push
+        fails, the error is redacted."""
+        token = "ghs_sekret012"
+        token_url = f"https://oauth2:{token}@github.com/owner/repo.git"
+        error = subprocess.CalledProcessError(
+            128,
+            [
+                "git",
+                "-C",
+                "/tmp/repo",
+                "push",
+                "--force-with-lease=refs/heads/feature:abc1234",
+                token_url,
+                "feature:feature",
+            ],
+            output="",
+            stderr=f"fatal: failed to push some refs\n"
+            f"fatal: unable to access '{token_url}/'\n",
+        )
+
+        from unittest.mock import patch
+
+        # remote_branch_sha must succeed (return a SHA) so that
+        # push_with_lease enters the --force-with-lease branch.
+        # _git needs to succeed for the rev-parse call but fail for
+        # the push call.
+        def _git_side_effect(repo, *args):
+            if args and args[0] == "rev-parse":
+                return "abc1234"  # canned SHA for remote_branch_sha
+            raise error
+
+        with patch(
+            "robotsix_mill.vcs.git_ops._git", side_effect=_git_side_effect
+        ):
+            with pytest.raises(subprocess.CalledProcessError) as ei:
+                git_ops.push_with_lease(
+                    Path("/tmp/repo"),
+                    "feature",
+                    "https://github.com/owner/repo.git",
+                    token,
+                )
+
+        exposed = (
+            repr(ei.value)
+            + str(ei.value.cmd)
+            + str(ei.value.stderr)
+            + str(ei.value.output)
+        )
+        assert token not in exposed
+        assert "://***@" in str(ei.value.cmd)
+        assert "://***@" in (ei.value.stderr or "")
