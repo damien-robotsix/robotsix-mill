@@ -2232,6 +2232,37 @@ def test_growth_suppressed_for_memory_ledger(tmp_path, monkeypatch, caplog):
     db.reset_engine()
 
 
+def test_growth_suppressed_for_run_registry(tmp_path, monkeypatch, caplog):
+    """Growth in ``runs.json`` is suppressed and an INFO line is
+    logged, since the RunRegistry caps it at 50 entries."""
+    s = _make_settings(tmp_path)
+    monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
+    board_id = "test-board"
+    db.init_db(s, board_id)
+    # Seed a small runs.json so it exists in the baseline snapshot.
+    _write_bytes(
+        s.data_dir / board_id / "runs.json",
+        100,
+    )
+
+    run_data_dir_audit_pass()  # baseline
+    _write_bytes(
+        s.data_dir / board_id / "runs.json",
+        15_000_000,
+    )
+
+    with caplog.at_level(logging.INFO, logger="robotsix_mill.data_dir_audit"):
+        result = run_data_dir_audit_pass()
+
+    assert not any(f["path"] == "runs.json" for f in result.growth_flags)
+    assert any(
+        "suppressing growth flag" in rec.message
+        and "bounded run registry" in rec.message
+        for rec in caplog.records
+    )
+    db.reset_engine()
+
+
 def test_cross_class_cap_counts_across_classes(tmp_path):
     """A single ``data_dir_audit_max_drafts_per_pass`` cap counts across
     a mixed-class finding set (proving the cap is global, not per-class).
