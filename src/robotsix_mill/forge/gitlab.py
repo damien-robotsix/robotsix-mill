@@ -514,7 +514,7 @@ class GitLabForge(Forge):
     ) -> list[dict]:
         """GET /projects/:id/pipelines?ref=…&sha=…&per_page=30."""
         pid = self._resolve_project_id(project_path)
-        params: dict = {"per_page": 30, "status": "success,failed,canceled,skipped"}
+        params: dict = {"per_page": 30}
         if branch is not None:
             params["ref"] = branch
         if head_sha is not None:
@@ -526,6 +526,7 @@ class GitLabForge(Forge):
         )
         r.raise_for_status()
         raw = r.json()
+        terminal = {"success", "failed", "canceled", "skipped"}
         return [
             {
                 "id": p["id"],
@@ -538,6 +539,7 @@ class GitLabForge(Forge):
                 "created_at": p.get("created_at", ""),
             }
             for p in raw
+            if p.get("status") in terminal
         ]
 
     def _fetch_pipeline_job_logs(self, *, project_path: str, run_id: int) -> str:
