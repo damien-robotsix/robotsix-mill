@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+import subprocess
 from pathlib import Path
 
 from ...agents import dedup, freshness, obsolescence
@@ -19,6 +20,8 @@ from ...core.datetime_utils import _as_utc
 from ...core.models import SourceKind, Ticket
 from ...core.states import State
 from ..base import Outcome, StageContext
+from ...core.dedup import _extract_paths, _scope_paths
+
 from .helpers import (
     DEDUP_ALREADY_DONE_PREFIX,
     DEDUP_DUPLICATE_PREFIX,
@@ -201,7 +204,9 @@ class RefineGatesMixin:
         # consistent with every other terminal-ish ticket.
         dup_id = verdict.get("duplicate_of")
         if dup_id:
-            if RefineGatesMixin._is_valid_dedup_target(ctx, ticket, dup_id, repo_dir):
+            if RefineGatesMixin._is_valid_dedup_target(
+                ctx, ticket, dup_id, repo_dir, draft=draft
+            ):
                 return Outcome(
                     State.DONE,
                     f"{DEDUP_DUPLICATE_PREFIX}{dup_id}: {verdict.get('reason', 'no reason')}",
@@ -215,7 +220,9 @@ class RefineGatesMixin:
             )
         done_id = verdict.get("already_done")
         if done_id:
-            if RefineGatesMixin._is_valid_dedup_target(ctx, ticket, done_id, repo_dir):
+            if RefineGatesMixin._is_valid_dedup_target(
+                ctx, ticket, done_id, repo_dir, draft=draft
+            ):
                 return Outcome(
                     State.DONE,
                     f"{DEDUP_ALREADY_DONE_PREFIX}{done_id}: {verdict.get('reason', 'no reason')}",
@@ -235,6 +242,7 @@ class RefineGatesMixin:
         ticket: Ticket,
         candidate_id: str,
         repo_dir: Path | None,
+        draft: str | None = None,
     ) -> bool:
         """Return whether *candidate_id* is an acceptable dedup target
         for *ticket*.
@@ -263,9 +271,52 @@ class RefineGatesMixin:
         try:
             cand = ctx.service.get(candidate_id)
             if cand is None:
-                # Not a ticket id (e.g. a commit hash) — preserve the
-                # already-implemented-via-commit behaviour.
-                return True
+                # Not a ticket id (e.g. a commit hash) — verify
+                # the commit is an ancestor of origin/main when possible.
+                if repo_dir is None:
+                    return True
+                try:
+                    result = subprocess.run(
+                        [
+                            "git",
+                            "-C",
+                            str(repo_dir),
+                            "merge-base",
+                            "--is-ancestor",
+                            candidate_id,
+                            "origin/main",
+                        ],
+                        capture_output=True,
+                        text=True,
+                    )
+                    if result.returncode == 0:
+                        return True
+                    if result.returncode == 1:
+                        log.info(
+                            "%s: dedup target '%s' is not an ancestor of "
+                            "origin/main — rejecting as dedup target",
+                            ticket.id,
+                            candidate_id,
+                        )
+                        return False
+                    # Any other exit code — best-effort allow.
+                    log.debug(
+                        "%s: git merge-base check for '%s' exited %d — "
+                        "allowing (best-effort)",
+                        ticket.id,
+                        candidate_id,
+                        result.returncode,
+                    )
+                    return True
+                except Exception:
+                    log.debug(
+                        "%s: git merge-base check for '%s' failed — "
+                        "allowing (best-effort)",
+                        ticket.id,
+                        candidate_id,
+                        exc_info=True,
+                    )
+                    return True
             history = ctx.service.history(cand.id)
 
             # Circular guard: the candidate was itself closed as a
@@ -347,6 +398,37 @@ class RefineGatesMixin:
                 )
                 return False
 
+            # File-map overlap check: when a draft is supplied, verify
+            # that the candidate's declared scope paths overlap with
+            # paths extracted from the current draft.  Best-effort:
+            # any extraction/read failure degrades to "allow".
+            if draft is not None:
+                try:
+                    draft_paths = _extract_paths(draft)
+                    if draft_paths:
+                        try:
+                            body = ctx.service.workspace(cand).read_description()
+                        except Exception:
+                            body = ""
+                        if body:
+                            scope = _scope_paths(body)
+                            if scope and not (set(draft_paths) & scope):
+                                log.info(
+                                    "%s: dedup target %s scope paths have "
+                                    "no overlap with current draft paths — "
+                                    "rejecting as dedup target",
+                                    ticket.id,
+                                    candidate_id,
+                                )
+                                return False
+                except Exception:
+                    log.debug(
+                        "%s: file-map overlap check failed for %s — "
+                        "allowing (best-effort)",
+                        ticket.id,
+                        candidate_id,
+                        exc_info=True,
+                    )
             return True
         except Exception:
             # Best-effort: a lookup error must never raise and must not
