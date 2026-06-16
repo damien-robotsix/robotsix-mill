@@ -235,7 +235,7 @@ def _eligible_for_triage(
     Returns at most *max_dismissals* alerts (the rest are trimmed so
     the agent never dismisses more than the cap in one pass).
     """
-    eligible: list[dict] = []
+    eligible: list[dict[str, Any]] = []
     for a in alerts:
         path = a.get("path", "")
         if not path or path not in changed_paths:
@@ -280,7 +280,7 @@ class _FailingContext(NamedTuple):
     branch: str
     failing_summary: str
     failing: list[dict[str, Any]] = []
-    alerts: list[dict] = []
+    alerts: list[dict[str, Any]] = []
     changed_paths: set[str] = set()
 
 
@@ -417,7 +417,7 @@ class CIFixStage(Stage):
         ctx: StageContext,
         branch: str,
         failing: list[dict[str, Any]],
-    ) -> tuple[str, list[dict], set[str]]:
+    ) -> tuple[str, list[dict[str, Any]], set[str]]:
         """Enrich the failing-check list with job logs + code-scanning alerts.
 
         Returns ``(failing_summary, alerts, changed_paths)`` so callers
@@ -428,7 +428,7 @@ class CIFixStage(Stage):
         # Fetch job logs + code-scanning alerts for richer context (only on
         # failure, not on every PR poll — this stage runs infrequently).
         log_text = ""
-        alerts: list[dict] = []
+        alerts: list[dict[str, Any]] = []
         changed_paths: set[str] = set()
         try:
             forge = get_forge(s, repo_config=ctx.repo_config)
@@ -461,7 +461,7 @@ class CIFixStage(Stage):
         ctx: StageContext,
         failing_summary: str,
         failing: list[dict[str, Any]],
-        alerts: list[dict],
+        alerts: list[dict[str, Any]],
         changed_paths: set[str],
     ) -> Outcome | None:
         """Apply the hard per-ticket cycle ceiling.
@@ -585,7 +585,7 @@ class CIFixStage(Stage):
         ticket: Ticket,
         ctx: StageContext,
         failing: list[dict[str, Any]],
-        alerts: list[dict],
+        alerts: list[dict[str, Any]],
         changed_paths: set[str],
     ) -> Outcome | None:
         """Try the codeql_fp_triage sub-agent before blocking on CodeQL FPs.
@@ -832,7 +832,7 @@ class CIFixStage(Stage):
 
     def _partition_open_alerts(
         self, ctx: StageContext, branch: str
-    ) -> tuple[list[dict], list[dict]]:
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """Fetch open code-scanning alerts + PR changed files and partition.
 
         All forge calls are best-effort: any failure degrades to "no in-scope

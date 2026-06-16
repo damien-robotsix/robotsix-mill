@@ -8,6 +8,7 @@ mixin that ``MergeStage`` inherits from alongside ``MultiRepoMixin``.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from ...config import ConfigError, get_repo_config
 from ...core.models import Ticket
@@ -262,8 +263,8 @@ class MultiRepoCiFixMixin(_MergeStageBase):
         self,
         ticket: Ticket,
         ctx: StageContext,
-        failing: list[dict],
-        alerts: list[dict],
+        failing: list[dict[str, Any]],
+        alerts: list[dict[str, Any]],
         changed_paths: set[str],
         repo_id: str,
         repo_dir: Path,
