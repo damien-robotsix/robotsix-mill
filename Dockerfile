@@ -112,7 +112,7 @@ RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
 # sandbox image), so install it in this same layer to fetch the keyring;
 # `docker build` has full host network (the runtime egress proxy does not
 # apply at build time), so fetching the keyring here is fine.
-# hadolint ignore=DL3008,DL4006
+# hadolint ignore=DL3008
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
@@ -120,7 +120,9 @@ RUN apt-get update \
     && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
       > /etc/apt/sources.list.d/github-cli.list \
-    && apt-get update \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update \
     && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
 
