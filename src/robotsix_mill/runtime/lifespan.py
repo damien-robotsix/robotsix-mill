@@ -194,9 +194,9 @@ async def _start_board_agent(
         app.state.agent_registry = registry
 
     agent_settings = BoardAgentSettings(
-        api_base_url=settings.board_agent_api_url,
-        api_token=settings.board_agent_api_token,
-        repo_id=settings.board_agent_repo_id or repo_id,
+        board_api_url=settings.board_agent_api_url,
+        board_api_token=settings.board_agent_api_token,
+        board_repo_id=settings.board_agent_repo_id or repo_id,
         enable_write_ops=settings.board_agent_write_ops,
     )
 
