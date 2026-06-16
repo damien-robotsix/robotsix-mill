@@ -458,7 +458,9 @@ def _reconcile_child_changes(svc, epic_id: str, result) -> None:
                 )
 
 
-def _run_epic_reprocess(epic_id: str, comment_body: str, settings) -> None:
+def _run_epic_reprocess(
+    epic_id: str, comment_body: str, settings, board_id: str = ""
+) -> None:
     """Background runner for epic re-processing triggered by a comment.
 
     1. Creates a fresh ``TicketService`` (the route's ``svc`` is bound
@@ -481,12 +483,18 @@ def _run_epic_reprocess(epic_id: str, comment_body: str, settings) -> None:
 
     # Discover the epic's board via fanout, then bind the service to
     # it so subsequent writes go to the right per-repo DB.
-    discovery = TicketService(settings)
-    epic = discovery.get(epic_id)
-    if epic is None:
-        log.warning("epic %s vanished before re-processing", epic_id)
-        return
-    svc = TicketService(settings, board_id=epic.board_id)
+    # When *board_id* is known at spawn time (the route already holds
+    # the ticket object), skip the fanout step to avoid a race between
+    # the discovery read and the bound lookup.
+    if not board_id:
+        discovery = TicketService(settings)
+        found = discovery.get(epic_id)
+        if found is None:
+            log.warning("epic %s vanished before re-processing", epic_id)
+            return
+        board_id = found.board_id
+
+    svc = TicketService(settings, board_id=board_id)
     try:
         epic = svc.get(epic_id)
         if epic is None:

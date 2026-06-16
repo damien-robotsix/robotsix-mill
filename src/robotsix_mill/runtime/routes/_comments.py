@@ -54,7 +54,7 @@ def add_comment(
 
         threading.Thread(
             target=_run_epic_reprocess,
-            args=(ticket_id, body.body, settings),
+            args=(ticket_id, body.body, settings, ticket.board_id),
             daemon=True,
         ).start()
 
