@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 from ..agents.ci_fixing import CiFixResult, run_ci_fix_agent
+from ..config import target_branch_for
 from ..core.models import SourceKind, Ticket
 from ..core.states import State
 from ..forge import get_forge
@@ -242,6 +243,11 @@ class CIFixStage(Stage):
             return resolved
         repo_dir, branch, failing_summary = resolved
 
+        # Staleness guard: rebase if behind main BEFORE counting a cycle.
+        rebase_outcome = self._rebase_if_stale(ticket, ctx, repo_dir, branch)
+        if rebase_outcome is not None:
+            return rebase_outcome
+
         # Counter phase: enforce the hard per-ticket cycle ceiling.
         ceiling = self._enforce_cycle_ceiling(ticket, ctx, failing_summary)
         if ceiling is not None:
@@ -428,6 +434,65 @@ class CIFixStage(Stage):
             )
         _write_counter(cycle_counter_path, cycles + 1)
         return None
+
+    def _rebase_if_stale(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        repo_dir: str,
+        branch: str,
+    ) -> Outcome | None:
+        """Rebase the branch onto its target if it is behind.
+
+        Returns ``None`` when the branch is current (proceed to agent).
+        On a stale branch: rebase + force-push, returning
+        ``IMPLEMENT_COMPLETE`` so ``ci_poll`` re-checks CI on the
+        updated branch.  On any rebase conflict or push failure, returns
+        ``BLOCKED``.
+        """
+        s = ctx.settings
+        target = target_branch_for(s, ctx.repo_config)
+
+        if not git_ops.branch_is_behind_main(Path(repo_dir), target):
+            return None  # current — agent path
+
+        log.info(
+            "%s: branch is behind %s — rebasing before ci-fix cycle",
+            ticket.id,
+            target,
+        )
+
+        remote_url = _resolve_remote_url(s, ctx.repo_config)
+        token = github_token(s, repo_config=ctx.repo_config)
+
+        if not git_ops.try_rebase_onto(
+            Path(repo_dir), target, remote_url=remote_url, token=token
+        ):
+            return Outcome(
+                State.BLOCKED,
+                f"rebase onto {target} failed (conflict or fetch error) — "
+                "manual reconciliation required",
+            )
+
+        try:
+            git_ops.push_with_lease(Path(repo_dir), branch, remote_url, token)
+        except Exception as e:  # noqa: BLE001 — lease reject / network
+            log.exception("%s: push_with_lease after rebase failed: %s", ticket.id, e)
+            return Outcome(
+                State.BLOCKED,
+                f"rebase succeeded but force-push failed: {e}",
+            )
+
+        try:
+            ctx.service.add_history_note(
+                ticket.id,
+                f"branch rebased onto {target} before ci-fix cycle "
+                "(branch was behind main; rebase may resolve CI failures)",
+            )
+        except Exception:  # noqa: BLE001 — history note is best-effort
+            log.warning("%s: failed to record rebase history note", ticket.id)
+
+        return Outcome(State.IMPLEMENT_COMPLETE)
 
     def _run_agent_and_finalize(
         self,
