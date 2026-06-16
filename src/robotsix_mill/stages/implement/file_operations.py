@@ -6,7 +6,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from ...config import ConfigError, get_repo_config, target_branch_for
+from ...config import ConfigError, Settings, get_repo_config, target_branch_for
 from ...core.states import State
 from ...forge.auth import _resolve_remote_url, github_token
 from ...vcs import git_ops
@@ -27,7 +27,7 @@ class FileOperationsMixin(_ImplementStageBase):
         repo_dir: Path,
         extra_roots: list[Path] | None,
         target_branch: str = "main",
-        settings=None,
+        settings: Settings | None = None,
     ) -> bool:
         """Return True if any repo has uncommitted changes or is ahead of main.
 
