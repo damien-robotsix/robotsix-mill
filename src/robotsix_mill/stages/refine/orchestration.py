@@ -1001,12 +1001,14 @@ class RefineAgentMixin:
             for child_id, deps in plan_child_dependencies(
                 created_children,
                 child_board_id=lambda cid: ctx.service.get(cid).board_id,
-                create_child=lambda title, body: ctx.service.create(
-                    title=title,
-                    description=body,
-                    kind="task",
-                    parent_id=ticket.id,
-                ).id,
+                create_child=lambda title, body: (
+                    ctx.service.create(
+                        title=title,
+                        description=body,
+                        kind="task",
+                        parent_id=ticket.id,
+                    ).id
+                ),
             ).items():
                 ctx.service.set_depends_on(child_id, deps)
             # Apply the breakdown's revised epic body if any.

@@ -229,12 +229,14 @@ def generate_children(
                 for child_id, deps in plan_child_dependencies(
                     created_children,
                     child_board_id=lambda cid: epic_svc.get(cid).board_id,
-                    create_child=lambda title, body: epic_svc.create(
-                        title=title,
-                        description=body,
-                        kind="task",
-                        parent_id=ticket_id,
-                    ).id,
+                    create_child=lambda title, body: (
+                        epic_svc.create(
+                            title=title,
+                            description=body,
+                            kind="task",
+                            parent_id=ticket_id,
+                        ).id
+                    ),
                 ).items():
                     epic_svc.set_depends_on(child_id, deps)
 

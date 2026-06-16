@@ -594,12 +594,14 @@ def _run_epic_reprocess(
             created_children,
             predecessor_id=predecessor_id,
             child_board_id=lambda cid: svc.get(cid).board_id,
-            create_child=lambda title, body: svc.create(
-                title=title,
-                description=body,
-                kind="task",
-                parent_id=epic_id,
-            ).id,
+            create_child=lambda title, body: (
+                svc.create(
+                    title=title,
+                    description=body,
+                    kind="task",
+                    parent_id=epic_id,
+                ).id
+            ),
         ).items():
             svc.set_depends_on(child_id, deps)
 

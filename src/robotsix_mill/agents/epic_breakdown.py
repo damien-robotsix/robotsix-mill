@@ -15,13 +15,21 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+import yaml as _yaml
+
 from ..config import Settings
+from .prerequisite import (  # cross-repo prerequisite parsing
+    _IMPORT_RE,
+    _PREREQ_FENCE_RE,
+    _SECTION_RE,
+    _SYMBOL_RE,
+    _top_level_module,
+)
 from .prompt_blocks import section
 
 log = logging.getLogger("robotsix_mill.agents.epic_breakdown")
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
-import yaml as _yaml
 
 _SYSPROMPT_PATH = (
     Path(__file__).parent.parent.parent.parent
@@ -50,16 +58,6 @@ def _is_init_repo_child(title: str, body: str) -> bool:
 
 
 # -- cross-repo prerequisite detection -----------------------------------
-
-# Re-use the prerequisite directive regexes from the prereq gate so the
-# parsing stays in one place.
-from .prerequisite import (  # noqa: E402
-    _IMPORT_RE,
-    _PREREQ_FENCE_RE,
-    _SECTION_RE,
-    _SYMBOL_RE,
-    _top_level_module,
-)
 
 
 def _parse_prereq_packages(body: str) -> set[str]:
@@ -262,7 +260,10 @@ def _detect_cross_repo_deps(
 
     # 5. Group cross-repo deps by (consumer_repo, producer_repo) pair.
     candidates = _group_bump_candidates(
-        child_prereqs, child_repo, package_to_repo, repo_children,
+        child_prereqs,
+        child_repo,
+        package_to_repo,
+        repo_children,
     )
     if not candidates:
         return {}, []
@@ -275,8 +276,12 @@ def _detect_cross_repo_deps(
         if not producer_ids:
             continue
         bump_id, edges = _create_bump_child(
-            consumer_repo, producer_repo, consumer_ids,
-            producer_ids, packages, create_child,
+            consumer_repo,
+            producer_repo,
+            consumer_ids,
+            producer_ids,
+            packages,
+            create_child,
         )
         if bump_id is not None:
             bump_ids.append(bump_id)
@@ -310,8 +315,7 @@ def _run_cross_repo_detection(
         return cross_repo_edges
     except Exception:
         log.debug(
-            "Cross-repo dependency detection skipped "
-            "(repos config unavailable?)",
+            "Cross-repo dependency detection skipped (repos config unavailable?)",
             exc_info=True,
         )
         return {}

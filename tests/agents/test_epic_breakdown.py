@@ -258,8 +258,11 @@ class TestDetectCrossRepoDeps:
         children exist in repo-a → bump child created + wired."""
         children = [
             ("prod-0", "Add TierConfig to llmio", _make_prereq_body([])),
-            ("cons-1", "Use TierConfig in calendar-agent",
-             _make_prereq_body(["robotsix_llmio.config.tier"])),
+            (
+                "cons-1",
+                "Use TierConfig in calendar-agent",
+                _make_prereq_body(["robotsix_llmio.config.tier"]),
+            ),
         ]
         repos = _make_repos_double()
 
@@ -303,8 +306,11 @@ class TestDetectCrossRepoDeps:
         children = [
             ("prod-0", "Add TierConfig", _make_prereq_body([])),
             ("prod-1", "Add load_tier_config", _make_prereq_body([])),
-            ("cons-2", "Use TierConfig",
-             _make_prereq_body(["robotsix_llmio.config.tier"])),
+            (
+                "cons-2",
+                "Use TierConfig",
+                _make_prereq_body(["robotsix_llmio.config.tier"]),
+            ),
         ]
         repos = _make_repos_double()
 
@@ -329,10 +335,16 @@ class TestDetectCrossRepoDeps:
         same producer repo get one shared bump child."""
         children = [
             ("prod-0", "Add TierConfig", _make_prereq_body([])),
-            ("cons-1", "Use TierConfig",
-             _make_prereq_body(["robotsix_llmio.config.tier"])),
-            ("cons-2", "Use load_tier_config",
-             _make_prereq_body(["robotsix_llmio.config.loader"])),
+            (
+                "cons-1",
+                "Use TierConfig",
+                _make_prereq_body(["robotsix_llmio.config.tier"]),
+            ),
+            (
+                "cons-2",
+                "Use load_tier_config",
+                _make_prereq_body(["robotsix_llmio.config.loader"]),
+            ),
         ]
         repos = _make_repos_double()
 
@@ -364,8 +376,11 @@ class TestDetectCrossRepoDeps:
         """When a prerequisite references a different repo but that repo
         has NO producer children among siblings, no bump is created."""
         children = [
-            ("cons-0", "Use TierConfig",
-             _make_prereq_body(["robotsix_llmio.config.tier"])),
+            (
+                "cons-0",
+                "Use TierConfig",
+                _make_prereq_body(["robotsix_llmio.config.tier"]),
+            ),
         ]
         repos = _make_repos_double()
 
@@ -382,8 +397,7 @@ class TestDetectCrossRepoDeps:
         """A prerequisite referencing the child's own repo is not cross-repo."""
         children = [
             ("prod-0", "Add TierConfig", _make_prereq_body([])),
-            ("cons-1", "Use TierConfig",
-             _make_prereq_body(["robotsix_llmio.core"])),
+            ("cons-1", "Use TierConfig", _make_prereq_body(["robotsix_llmio.core"])),
         ]
         repos = _make_repos_double()
 
@@ -413,8 +427,11 @@ class TestPlanChildDependenciesCrossRepo:
         and wires edges correctly."""
         children = [
             ("prod-0", "Add TierConfig to llmio", _make_prereq_body([])),
-            ("cons-1", "Use TierConfig in calendar-agent",
-             _make_prereq_body(["robotsix_llmio.config.tier"])),
+            (
+                "cons-1",
+                "Use TierConfig in calendar-agent",
+                _make_prereq_body(["robotsix_llmio.config.tier"]),
+            ),
         ]
 
         created_children: list[tuple[str, str]] = []
@@ -469,8 +486,11 @@ class TestPlanChildDependenciesCrossRepo:
         children = [
             ("init", "Initialize communication system repository", "create repo"),
             ("prod-0", "Add TierConfig to llmio", _make_prereq_body([])),
-            ("cons-1", "Use TierConfig",
-             _make_prereq_body(["robotsix_llmio.config.tier"])),
+            (
+                "cons-1",
+                "Use TierConfig",
+                _make_prereq_body(["robotsix_llmio.config.tier"]),
+            ),
         ]
 
         import robotsix_mill.config as _config_mod
