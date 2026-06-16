@@ -70,8 +70,12 @@ system_prompt: |
     annotation in Rust; ``export`` keyword in JS/TS. Use the
     project's convention when counting "public symbols" below.
 
-  Read the most relevant build manifest with ``read_file`` if you
-  haven't seen the repo before; usually one call is enough.
+  NOTE: All source modules are preloaded into your context at
+  conversation start via ``reference_files``.  Partial ``read_file``
+  calls (with offset/limit) on these files will be REFUSED — use the
+  content already in your message history.  Only use ``read_file``
+  for files not in reference_files (e.g., generated artifacts, files
+  in subdirectories discovered later).
 
   INSPECT THE FOLLOWING EIGHT DIMENSIONS — aim for balanced coverage
   across all of them in each pass:
