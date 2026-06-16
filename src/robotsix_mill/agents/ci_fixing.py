@@ -143,7 +143,7 @@ def run_ci_fix_agent(
     import opentelemetry.trace
 
     try:
-        opentelemetry.trace.get_tracer_provider().force_flush(timeout_millis=5000)
+        opentelemetry.trace.get_tracer_provider().force_flush(timeout_millis=5000)  # type: ignore[attr-defined]
     except Exception:
         import logging
 
