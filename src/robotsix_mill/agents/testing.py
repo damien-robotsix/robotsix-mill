@@ -14,6 +14,7 @@ from __future__ import annotations
 import fnmatch
 import json
 import re
+import tomllib
 from pathlib import Path, PurePath
 
 from ..config import RepoConfig, Settings, get_secrets
@@ -128,6 +129,24 @@ def _load_file_map(repo_dir: Path) -> list[str] | None:
         return [entry["file"] for entry in raw]
     except json.JSONDecodeError, KeyError, OSError:
         return None
+
+
+def _check_pyproject_toml(repo_dir: Path) -> str | None:
+    """Return an error message if ``pyproject.toml`` is missing or invalid TOML, else ``None``.
+
+    A fast deterministic gate that catches broken TOML before the sandbox
+    is invoked — ``pip install .`` and downstream tools (ruff, pytest)
+    both fail with a cryptic parse error, and a pre-flight check returns
+    a clear diagnostic instead.
+    """
+    toml_path = repo_dir / "pyproject.toml"
+    if not toml_path.exists():
+        return None
+    try:
+        tomllib.loads(toml_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return f"pyproject.toml is invalid TOML: {exc}"
+    return None
 
 
 def _evaluate_gate_result(
@@ -247,6 +266,11 @@ def run_test_agent(
     cmd = ((load_repo_test_command(repo_dir) or "") or settings.test_command).strip()
     if not cmd:
         return True, "no test gate configured (treated as passing)"
+
+    toml_err = _check_pyproject_toml(repo_dir)
+    if toml_err is not None:
+        return False, toml_err
+
     image = repo_config.sandbox_image if repo_config else None
     try:
         # install_project: install the repo's DECLARED deps before the
@@ -345,6 +369,11 @@ def run_smoke_agent(
     cmd = ((load_repo_smoke_command(repo_dir) or "") or settings.smoke_command).strip()
     if not cmd:
         return True, "no smoke gate configured (treated as passing)"
+
+    toml_err = _check_pyproject_toml(repo_dir)
+    if toml_err is not None:
+        return False, toml_err
+
     image = repo_config.sandbox_image if repo_config else None
     try:
         rc, out = sandbox.run(
