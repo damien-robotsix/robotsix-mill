@@ -449,7 +449,11 @@ class CIFixStage(Stage):
         except Exception:  # noqa: BLE001 — best-effort enrichment
             log.warning("%s: failed to fetch job logs / alerts", ticket.id)
 
-        return _build_failing_summary(failing, log_text, alerts, changed_paths), alerts, changed_paths
+        return (
+            _build_failing_summary(failing, log_text, alerts, changed_paths),
+            alerts,
+            changed_paths,
+        )
 
     def _enforce_cycle_ceiling(
         self,
@@ -648,9 +652,7 @@ class CIFixStage(Stage):
                 board_id=ctx.repo_config.board_id if ctx.repo_config else "",
             )
         except Exception:  # noqa: BLE001 — best-effort
-            log.warning(
-                "%s: codeql_fp_triage agent crashed", ticket.id, exc_info=True
-            )
+            log.warning("%s: codeql_fp_triage agent crashed", ticket.id, exc_info=True)
             return None
 
         # --- dismiss alerts the agent greenlit ---
@@ -702,9 +704,7 @@ class CIFixStage(Stage):
             )
             ctx.service.add_history_note(ticket.id, "\n".join(note_lines))
         except Exception:  # noqa: BLE001 — best-effort
-            log.warning(
-                "%s: failed to record codeql_fp_triage note", ticket.id
-            )
+            log.warning("%s: failed to record codeql_fp_triage note", ticket.id)
 
         if dismissed_count > 0:
             log.info(

@@ -61,9 +61,7 @@ def run_codeql_fp_triage_agent(
         "You are evaluating the following CodeQL alerts for false-positive "
         "dismissal.  Each alert has already passed deterministic guardrails: "
         "it is in a file changed by this PR and has NO security severity.\n\n"
-        "```json\n"
-        + alerts_json
-        + "\n```\n\n"
+        "```json\n" + alerts_json + "\n```\n\n"
         "For each alert, read the flagged file at the flagged line, trace "
         "the symbol, and return DISMISS (only with a concrete proof-style "
         "rationale) or ABSTAIN (the default for any uncertainty)."

@@ -24,6 +24,8 @@ main
 # ===========================================================================
 
 # -- agents ------------------------------------------------------------------
+code_fix_possible
+code_fix_description
 run_agent_check_agent
 run_audit_agent
 run_bc_check_agent

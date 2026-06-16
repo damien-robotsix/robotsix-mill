@@ -106,17 +106,14 @@ def test_only_codeql_failing_true_code_scanning():
 
 
 def test_only_codeql_failing_true_multiple_codeql():
-    assert _only_codeql_failing(
-        [{"name": "CodeQL"}, {"name": "CodeQL / Analyze"}]
-    ) is True
+    assert (
+        _only_codeql_failing([{"name": "CodeQL"}, {"name": "CodeQL / Analyze"}]) is True
+    )
 
 
 def test_only_codeql_failing_false_mixed():
     assert (
-        _only_codeql_failing(
-            [{"name": "CodeQL"}, {"name": "pytest (3.11)"}]
-        )
-        is False
+        _only_codeql_failing([{"name": "CodeQL"}, {"name": "pytest (3.11)"}]) is False
     )
 
 
@@ -181,9 +178,7 @@ def test_eligible_excludes_null_number():
 
 
 def test_eligible_respects_max_dismissals():
-    alerts = [
-        _codeql_alert(i, "src/foo.py") for i in range(1, 10)
-    ]
+    alerts = [_codeql_alert(i, "src/foo.py") for i in range(1, 10)]
     changed = {"src/foo.py"}
     result = _eligible_for_triage(alerts, changed, max_dismissals=3)
     assert len(result) == 3
@@ -227,7 +222,9 @@ def test_codeql_only_dismisses_and_unblocks(tmp_path, monkeypatch):
         "check_status",
         lambda self, *, source_branch: {
             "conclusion": "failure",
-            "failing": [{"name": "CodeQL", "summary": "", "text": None, "annotations": []}],
+            "failing": [
+                {"name": "CodeQL", "summary": "", "text": None, "annotations": []}
+            ],
         },
     )
     monkeypatch.setattr(
@@ -273,9 +270,7 @@ def test_codeql_only_dismisses_and_unblocks(tmp_path, monkeypatch):
         dismissed[number] = (reason, comment)
         return True
 
-    monkeypatch.setattr(
-        github.GitHubForge, "dismiss_code_scanning_alert", fake_dismiss
-    )
+    monkeypatch.setattr(github.GitHubForge, "dismiss_code_scanning_alert", fake_dismiss)
 
     t = _fixing_ci(ctx)
     _setup_repo(ctx, t)
@@ -357,7 +352,9 @@ def test_security_severity_alert_never_dismissed(tmp_path, monkeypatch):
         "check_status",
         lambda self, *, source_branch: {
             "conclusion": "failure",
-            "failing": [{"name": "CodeQL", "summary": "", "text": None, "annotations": []}],
+            "failing": [
+                {"name": "CodeQL", "summary": "", "text": None, "annotations": []}
+            ],
         },
     )
     monkeypatch.setattr(
@@ -418,7 +415,9 @@ def test_out_of_scope_alert_not_eligible(tmp_path, monkeypatch):
         "check_status",
         lambda self, *, source_branch: {
             "conclusion": "failure",
-            "failing": [{"name": "CodeQL", "summary": "", "text": None, "annotations": []}],
+            "failing": [
+                {"name": "CodeQL", "summary": "", "text": None, "annotations": []}
+            ],
         },
     )
     monkeypatch.setattr(
@@ -477,7 +476,9 @@ def test_agent_abstains_still_blocks(tmp_path, monkeypatch):
         "check_status",
         lambda self, *, source_branch: {
             "conclusion": "failure",
-            "failing": [{"name": "CodeQL", "summary": "", "text": None, "annotations": []}],
+            "failing": [
+                {"name": "CodeQL", "summary": "", "text": None, "annotations": []}
+            ],
         },
     )
     monkeypatch.setattr(
@@ -542,7 +543,9 @@ def test_run_once_sentinel_prevents_second_triage(tmp_path, monkeypatch):
         "check_status",
         lambda self, *, source_branch: {
             "conclusion": "failure",
-            "failing": [{"name": "CodeQL", "summary": "", "text": None, "annotations": []}],
+            "failing": [
+                {"name": "CodeQL", "summary": "", "text": None, "annotations": []}
+            ],
         },
     )
     monkeypatch.setattr(
@@ -568,11 +571,7 @@ def test_run_once_sentinel_prevents_second_triage(tmp_path, monkeypatch):
     def fake_triage(**kw):
         triage_called.append(1)
         return CodeQLFpTriageResult(
-            verdicts=[
-                AlertVerdict(
-                    alert_number=1, verdict="dismiss", rationale="ok"
-                )
-            ],
+            verdicts=[AlertVerdict(alert_number=1, verdict="dismiss", rationale="ok")],
             summary="dismissed",
         )
 
@@ -620,7 +619,9 @@ def test_flag_disabled_skips_triage(tmp_path, monkeypatch):
         "check_status",
         lambda self, *, source_branch: {
             "conclusion": "failure",
-            "failing": [{"name": "CodeQL", "summary": "", "text": None, "annotations": []}],
+            "failing": [
+                {"name": "CodeQL", "summary": "", "text": None, "annotations": []}
+            ],
         },
     )
     monkeypatch.setattr(
@@ -669,17 +670,29 @@ def test_codeql_fp_triage_agent_wiring_smoke(monkeypatch):
     # Wire Secrets so get_secrets().openrouter_api_key is not None.
     from robotsix_mill.config import Secrets, _reset_secrets
     import robotsix_mill.config as _cfg
+
     _reset_secrets()
     _cfg._secrets = Secrets(openrouter_api_key="sk-test")
 
     captured = {}
 
-    def fake_load_and_run(*, settings, definition_name, tools, prompt, what, repo_dir, board_id, system_prompt_format_kwargs):
+    def fake_load_and_run(
+        *,
+        settings,
+        definition_name,
+        tools,
+        prompt,
+        what,
+        repo_dir,
+        board_id,
+        system_prompt_format_kwargs,
+    ):
         captured["definition_name"] = definition_name
         captured["what"] = what
         captured["tools"] = tools
         # Return a fake result.
         from types import SimpleNamespace
+
         return SimpleNamespace(
             output=CodeQLFpTriageResult(
                 verdicts=[AlertVerdict(alert_number=1, verdict="abstain")],

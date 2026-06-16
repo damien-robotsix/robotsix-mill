@@ -379,9 +379,7 @@ class MultiRepoCiFixMixin(_MergeStageBase):
             )
             ctx.service.add_history_note(ticket.id, "\n".join(note_lines))
         except Exception:  # noqa: BLE001
-            log.warning(
-                "%s: failed to record codeql_fp_triage note", ticket.id
-            )
+            log.warning("%s: failed to record codeql_fp_triage note", ticket.id)
 
         if dismissed_count > 0:
             log.info(
