@@ -253,6 +253,48 @@ def remote_branch_sha(repo: Path, branch: str) -> str | None:
         return None
 
 
+def branch_ancestry(repo: Path, branch: str, target: str) -> list[dict[str, str]]:
+    """Return commits on ``origin/<branch>`` not on ``origin/<target>``.
+
+    Each commit dict carries ``sha``, ``author_name``, ``author_email``,
+    ``committer_name``, ``committer_email``, and ``subject``.  The agent
+    calls this after a lease rejection to decide foreign-vs-self divergence:
+    if every commit's author/committer is the mill itself it is a prior
+    self-rebase and safe to retry; a foreign author means a human pushed
+    and the mill must NOT clobber it.
+
+    The caller must have already fetched both refs so ``origin/<branch>``
+    and ``origin/<target>`` are current.  Returns an empty list when the
+    two refs are identical or the remote branch doesn't exist.
+    """
+    try:
+        out = _git(
+            repo,
+            "log",
+            f"origin/{target}..origin/{branch}",
+            "--format=%H|%an|%ae|%cn|%ce|%s",
+        )
+    except subprocess.CalledProcessError:
+        return []
+    if not out:
+        return []
+    commits: list[dict[str, str]] = []
+    for line in out.split("\n"):
+        parts = line.split("|", 5)
+        if len(parts) >= 6:
+            commits.append(
+                {
+                    "sha": parts[0],
+                    "author_name": parts[1],
+                    "author_email": parts[2],
+                    "committer_name": parts[3],
+                    "committer_email": parts[4],
+                    "subject": parts[5],
+                }
+            )
+    return commits
+
+
 def create_branch(repo: Path, name: str) -> None:
     """Create or reset a branch (``git checkout -B``)."""
     _git(repo, "checkout", "-q", "-B", name)
@@ -411,6 +453,75 @@ def push_with_lease(
             _authed_url(remote_url, token),
             f"{branch}:{branch}",
         )
+
+
+class PostPushResult(str, Enum):
+    """Outcome of :func:`post_push_check`.
+
+    ``PASS`` — the push landed, no foreign commits clobbered, and the
+        remote branch is in a safe state.
+    ``NOT_LANDED`` — the remote HEAD does not match the local HEAD; the
+        agent's push did not actually land on the remote.
+    ``FOREIGN_DIVERGENCE`` — the remote branch carries commits ahead of
+        the target that are NOT attributable to the mill (foreign
+        authorship).  The push may have clobbered a human commit.
+    ``UNAVAILABLE`` — the remote could not be reached (fetch failed
+        transiently, etc.).  Callers should re-poll rather than block.
+    """
+
+    PASS = "pass"  # noqa: S105 — enum value, not a credential
+    NOT_LANDED = "not_landed"
+    FOREIGN_DIVERGENCE = "foreign_divergence"
+    UNAVAILABLE = "unavailable"
+
+
+_MILL_EMAILS: frozenset[str] = frozenset({"mill@robotsix.local"})
+
+
+def post_push_check(
+    repo: Path,
+    branch: str,
+    target: str,
+    remote_url: str,
+    token: str | None,
+) -> PostPushResult:
+    """Deterministic post-check after an agent-driven push.
+
+    1. Fetches the remote PR branch and refreshes ``origin/<target>``.
+    2. Verifies the remote branch HEAD == the local HEAD (the push
+       actually landed).
+    3. Verifies every commit the remote branch carries ahead of
+       ``origin/<target>`` is attributable to the mill (no foreign
+       authorship — nothing was clobbered).
+
+    Returns a :class:`PostPushResult`.  This is a pure host-side check
+    with no LLM involvement — it runs AFTER the agent reports DONE.
+    """
+    # 1. Fetch both refs so comparisons are current.
+    try:
+        fetch(repo, remote_url=remote_url, token=token, branch=branch)
+        fetch(repo, remote_url=remote_url, token=token, branch=target)
+    except subprocess.CalledProcessError:
+        return PostPushResult.UNAVAILABLE
+
+    # 2. Remote HEAD must equal local HEAD.
+    try:
+        local = head_sha(repo)
+    except subprocess.CalledProcessError:
+        return PostPushResult.UNAVAILABLE
+    remote = remote_branch_sha(repo, branch)
+    if remote is None or local != remote:
+        return PostPushResult.NOT_LANDED
+
+    # 3. Every ahead-of-target commit must be mill-authored.
+    commits = branch_ancestry(repo, branch, target)
+    for c in commits:
+        author = c.get("author_email", "")
+        committer = c.get("committer_email", "")
+        if author not in _MILL_EMAILS or committer not in _MILL_EMAILS:
+            return PostPushResult.FOREIGN_DIVERGENCE
+
+    return PostPushResult.PASS
 
 
 def branch_is_ahead_of_main(repo: Path, target_branch: str = "main") -> bool:

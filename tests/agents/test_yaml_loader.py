@@ -625,6 +625,10 @@ _VALID_TOOL_NAMES = frozenset(
         "create_repo",
         "fork_repo",
         "post_findings",
+        "git_fetch",
+        "git_remote_sha",
+        "git_push_with_lease",
+        "git_branch_ancestry",
     }
 )
 

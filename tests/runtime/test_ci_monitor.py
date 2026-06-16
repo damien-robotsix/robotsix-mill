@@ -19,6 +19,7 @@ from robotsix_mill.core.states import State
 from robotsix_mill.runtime.worker import Worker
 from robotsix_mill.stages import StageContext
 from robotsix_mill.agents.ci_fixing import CiFixResult
+from robotsix_mill.vcs.git_ops import PostPushResult
 
 
 def _ctx(tmp_path, repo_config=None, **env):
@@ -574,12 +575,13 @@ def test_existing_pr_ci_fix_path_still_works(tmp_path, monkeypatch):
     )
     push_seen = {}
 
-    def fake_push(repo, branch, remote_url, token):
+    def fake_post_check(repo, branch, target, remote_url, token):
         push_seen.update(branch=branch, token=token)
+        return PostPushResult.PASS
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
-        fake_push,
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        fake_post_check,
     )
 
     # Create a FIXING_CI ticket via helper.

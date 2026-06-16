@@ -3,11 +3,15 @@
 Reads the failing check-run summary/details from the forge, inspects
 the affected files in the ticket's workspace clone, makes the minimal
 code change to fix the failure, runs the project's local tests, and
-commits. Returns ``True`` iff the fix was applied successfully.
+commits.
 
-This agent operates *only* on the local clone — it never pushes, opens
-PRs, or interacts with the forge.  The caller (ci_fix stage) decides
-whether to force-push the result.
+The agent now DRIVES the full push flow via bridged git tools
+(``git_fetch``, ``git_remote_sha``, ``git_push_with_lease``,
+``git_branch_ancestry``) that the mill executes host-side with
+the per-repo token — the agent stays network-isolated and never
+sees credentials.  On a lease rejection the agent inspects the
+remote ancestry and auto-recovers when the remote only carries
+its own prior push (no foreign commits).
 """
 
 from __future__ import annotations
@@ -44,14 +48,17 @@ def run_ci_fix_agent(
     memory: str = "",
     ticket_id: str = "",
     board_id: str = "",
+    target: str = "main",
+    remote_url: str | None = None,
+    token: str | None = None,
 ) -> CiFixResult:
     """Run one CI-fix attempt based on *failing_summary*.
 
     Uses the LLM (pydantic-ai agent) with sandboxed file + shell tools
-    scoped to *repo_dir*.  The agent reads the failing summary, inspects
-    the relevant files, makes minimal edits, runs local tests, and
-    commits.  Returns a ``CiFixResult`` with status, summary, and
-    updated memory.
+    scoped to *repo_dir*, plus bridged git tools that execute host-side
+    with *remote_url* and *token* so the agent can drive fetch + push.
+
+    Returns a ``CiFixResult`` with status, summary, and updated memory.
 
     This is the mockable seam — tests monkeypatch it to avoid real LLM
     and Docker calls.
@@ -86,8 +93,24 @@ def run_ci_fix_agent(
     else:
         patterns_text = "(no prior patterns for this failure)"
 
-    # Build tools confined to the ticket's own clone.
+    # Build sandboxed fs tools confined to the ticket's own clone.
     tools = build_fs_tools(Path(repo_dir), settings)
+
+    # Build bridged git tools (host-side, with per-repo token) so the
+    # agent can drive fetch + push without ever seeing credentials.
+    # Always built — when remote_url is empty (e.g. tests), the tools
+    # return clear errors rather than failing silently.
+    from .bridged_git_tools import build_bridged_git_tools
+
+    tools.extend(
+        build_bridged_git_tools(
+            repo_dir=Path(repo_dir),
+            branch=branch,
+            target=target,
+            remote_url=remote_url or "",
+            token=token,
+        )
+    )
 
     user_prompt = (
         f"CI is failing on branch '{branch}' in {repo_dir}. "
@@ -109,6 +132,7 @@ def run_ci_fix_agent(
         system_prompt_format_kwargs={
             "repo_dir": repo_dir,
             "branch": branch,
+            "target": target,
             "patterns": patterns_text,
         },
     )

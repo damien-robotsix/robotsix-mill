@@ -292,6 +292,8 @@ class MultiRepoMixin(_MergeStageBase):
                     branch=branch,
                     target=target,
                     memory=_facade.load_memory(mem_path),
+                    remote_url=remote_url,
+                    token=token,
                 )
                 ok = result.status == "DONE"
                 if result.updated_memory:
@@ -323,23 +325,32 @@ class MultiRepoMixin(_MergeStageBase):
                 )
                 return Outcome(ticket.state)
             try:
-                _facade.git_ops.push_with_lease(
+                check = _facade.git_ops.post_push_check(
                     repo_dir,
                     branch=branch,
+                    target=target_branch_for(s, rc),
                     remote_url=_facade._resolve_remote_url(s, rc),
                     token=_facade.github_token(s, repo_config=rc),
+                )
+                if check is _facade.git_ops.PostPushResult.PASS:
+                    _write_counter(counter_path, 0)
+                    log.info(
+                        "%s: multi-repo rebase push verified for %s — re-poll",
+                        ticket.id,
+                        repo_id,
+                    )
+                    return Outcome(ticket.state)
+                _write_counter(counter_path, attempt)
+                return Outcome(
+                    State.BLOCKED,
+                    f"rebase for {repo_id} post-check failed: {check}",
                 )
             except Exception as e:  # noqa: BLE001
                 _write_counter(counter_path, attempt)
                 return Outcome(
                     State.BLOCKED,
-                    f"rebase for {repo_id} succeeded but force-push failed: {e}",
+                    f"rebase for {repo_id} post-check error: {e}",
                 )
-            _write_counter(counter_path, 0)
-            log.info(
-                "%s: multi-repo rebase pushed for %s — re-poll", ticket.id, repo_id
-            )
-            return Outcome(ticket.state)
 
         # Agent failed — record the attempt and re-poll.
         _write_counter(counter_path, attempt)
