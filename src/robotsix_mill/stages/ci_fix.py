@@ -246,8 +246,8 @@ def _only_codeql_failing(failing: list[dict[str, Any]]) -> bool:
 
 
 def _eligible_for_triage(
-    alerts: list[dict], changed_paths: set[str], max_dismissals: int
-) -> list[dict]:
+    alerts: list[dict[str, Any]], changed_paths: set[str], max_dismissals: int
+) -> list[dict[str, Any]]:
     """Return the subset of *alerts* eligible for FP triage.
 
     An alert is eligible when ALL of the following hold:
