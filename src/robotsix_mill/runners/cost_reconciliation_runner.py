@@ -53,7 +53,8 @@ def _fetch_provider_cost(settings, window):
     """OpenRouter-billed cost for *window* via llmio's ProviderCostSource.
 
     Returns ``(total, breakdown_text)`` or ``None`` when the management key is
-    absent or the activity API errors (skip gracefully — never crash the pass).
+    absent.  On API errors the exception propagates — the caller is responsible
+    for surfacing it (file a draft, not a silent skip).
     """
     key = get_secrets().openrouter_management_key
     if not key:
@@ -64,15 +65,7 @@ def _fetch_provider_cost(settings, window):
         return None
     from robotsix_llmio.openrouter import OpenRouterProviderCostSource
 
-    try:
-        pc = OpenRouterProviderCostSource(management_key=key).fetch_provider_cost(
-            window
-        )
-    except Exception:
-        log.warning(
-            "cost_reconciliation: OpenRouter activity fetch failed", exc_info=True
-        )
-        return None
+    pc = OpenRouterProviderCostSource(management_key=key).fetch_provider_cost(window)
     log.info(
         "cost_reconciliation: OpenRouter %s total = $%.4f (%d requests)",
         window.start.date().isoformat(),
@@ -325,6 +318,46 @@ def _run_per_key_pass(
     )
 
 
+def _file_provider_error(
+    settings,
+    service,
+    *,
+    date_str: str,
+    error_msg: str,
+    session_id: str,
+) -> CostReconciliationPassResult:
+    """File a draft ticket when the OpenRouter provider fetch fails.
+
+    Surfaces API errors as visible alerts rather than silently skipping.
+    """
+    marker = f"<!-- cost_reconciliation-gap-id: provider-error-{date_str} -->"
+    title = f"OpenRouter API error — cost reconciliation blocked on {date_str}"
+    body = (
+        "OpenRouter provider cost fetch failed.\n\n"
+        f"- **Date:** {date_str}\n"
+        f"- **Error:** {error_msg}\n"
+        "\n"
+        f"{marker}\n"
+    )
+    try:
+        ticket = service.create(
+            title=title, description=body, source=SourceKind.COST_RECONCILIATION
+        )
+        log.info("cost_reconciliation: created error draft %s — %s", ticket.id, title)
+        return CostReconciliationPassResult(
+            drafts_created=[{"id": ticket.id, "title": ticket.title}],
+            summary=f"OpenRouter API error — draft {ticket.id}",
+            session_id=session_id,
+        )
+    except Exception:
+        log.exception("cost_reconciliation: failed to create error draft")
+        return CostReconciliationPassResult(
+            drafts_created=[],
+            summary=f"OpenRouter API error for {date_str} (draft creation also failed)",
+            session_id=session_id,
+        )
+
+
 def run_cost_reconciliation_pass(
     session_id: str = "",
     repo_config: RepoConfig | None = None,
@@ -360,12 +393,22 @@ def run_cost_reconciliation_pass(
     date_str = window.start.date().isoformat()
 
     # --- OpenRouter (provider-billed, via llmio ProviderCostSource) ----
-    or_result = _fetch_provider_cost(settings, window)
+    try:
+        or_result = _fetch_provider_cost(settings, window)
+    except Exception as exc:
+        log.exception("cost_reconciliation: OpenRouter activity fetch failed")
+        return _file_provider_error(
+            settings,
+            service,
+            date_str=date_str,
+            error_msg=str(exc),
+            session_id=session_id,
+        )
     if or_result is None:
-        # Management key missing or API failed — skip gracefully.
+        # Management key missing — skip gracefully.
         return CostReconciliationPassResult(
             drafts_created=[],
-            summary=f"OpenRouter fetch skipped (key missing or API error) for {date_str}",
+            summary=f"OpenRouter fetch skipped (key missing) for {date_str}",
             updated_memory="",
             session_id=session_id,
         )

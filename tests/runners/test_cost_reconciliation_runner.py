@@ -221,6 +221,32 @@ def test_missing_management_key_skips_gracefully(tmp_path, monkeypatch):
     assert "skip" in result.summary.lower()
 
 
+def test_provider_fetch_error_files_draft(tmp_path, monkeypatch):
+    """When the OpenRouter API call raises, a draft ticket is filed."""
+    settings = _make_settings(tmp_path)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.cost_reconciliation_runner.Settings", lambda: settings
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runners.cost_reconciliation_runner._fetch_provider_cost",
+        lambda settings, window: (_ for _ in ()).throw(
+            RuntimeError("401 Unauthorized")
+        ),
+    )
+    result = run_cost_reconciliation_pass(repo_config=_test_repo_config())
+    assert len(result.drafts_created) == 1
+    draft = result.drafts_created[0]
+    assert "OpenRouter API error" in draft["title"]
+    assert "draft" in result.summary
+
+    service = TicketService(settings, board_id="test-board")
+    ticket = service.get(draft["id"])
+    assert ticket is not None and ticket.source == SourceKind.COST_RECONCILIATION
+    body = service.workspace(ticket).read_description()
+    assert "401 Unauthorized" in body
+    assert "cost_reconciliation-gap-id" in body
+
+
 def test_langfuse_error_runs_comparison(tmp_path, monkeypatch):
     """Langfuse 0.0 fallback → comparison still runs (delta > $1 → draft)."""
     settings = _make_settings(tmp_path)
