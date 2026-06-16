@@ -13,6 +13,7 @@ import logging
 import os
 import shutil
 import tempfile
+import tomllib
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
@@ -285,7 +286,18 @@ requires-python = ">=3.12"
 [tool.hatch.build.targets.wheel]
 packages = ["src/{pkg_name}"]
 """
-    (repo_dir / "pyproject.toml").write_text(pyproject, encoding="utf-8")
+    pyproject_path = repo_dir / "pyproject.toml"
+    pyproject_path.write_text(pyproject, encoding="utf-8")
+
+    # Validate the generated TOML before proceeding — a corrupted
+    # file blocks every downstream tool (ruff, pytest, uv) with
+    # cryptic parse errors.
+    try:
+        tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as exc:
+        raise ValueError(
+            f"Generated pyproject.toml is invalid TOML: {exc}"
+        ) from exc
 
     pkg_dir = repo_dir / "src" / pkg_name
     pkg_dir.mkdir(parents=True, exist_ok=True)

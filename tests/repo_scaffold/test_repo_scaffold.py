@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -19,9 +20,11 @@ from robotsix_mill.core.states import State
 from robotsix_mill.forge.base import NotConfiguredError, RepoInfo
 from robotsix_mill.repo_scaffold import (
     _append_repo_config,
+    _python_package_name,
     _sanitize_repo_id,
     _write_github_workflows,
     _write_periodic_presence_files,
+    _write_python_skeleton,
     run_repo_scaffold,
 )
 from robotsix_mill.stages.base import StageContext
@@ -468,6 +471,41 @@ class TestRunRepoScaffold:
             run_repo_scaffold(settings, forge, ctx, params)
 
         db.reset_engine()
+
+
+# ---------------------------------------------------------------------------
+# _write_python_skeleton
+# ---------------------------------------------------------------------------
+
+
+class TestWritePythonSkeleton:
+    def test_valid_toml_passes_validation(self, tmp_path):
+        """A clean scaffold writes valid TOML and proceeds without error."""
+        _write_python_skeleton(tmp_path, "my-repo")
+
+        pkg_name = _python_package_name("my-repo")
+        assert (tmp_path / "pyproject.toml").exists()
+        assert (tmp_path / "src" / pkg_name / "__init__.py").exists()
+        assert (tmp_path / "tests" / "__init__.py").exists()
+
+    def test_invalid_toml_raises_value_error(self, tmp_path, monkeypatch):
+        """If the generated TOML is invalid — e.g. a stray corruption line —
+        a ValueError is raised and no directories are created."""
+        # Intercept the write to inject a broken file after write but before
+        # validation. We patch the write to also append garbage.
+        orig_write = Path.write_text
+
+        def _corrupted_write(self, content, encoding=None):
+            orig_write(self, content + '\nPE_CHECKING:"]\n', encoding=encoding)
+
+        monkeypatch.setattr(Path, "write_text", _corrupted_write)
+
+        with pytest.raises(ValueError, match="invalid TOML"):
+            _write_python_skeleton(tmp_path, "my-repo")
+
+        # No directories were created after the failed validation
+        assert not (tmp_path / "src").exists()
+        assert not (tmp_path / "tests").exists()
 
 
 # ---------------------------------------------------------------------------
