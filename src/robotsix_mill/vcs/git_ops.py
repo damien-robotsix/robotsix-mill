@@ -75,6 +75,20 @@ def _git(repo: Path, *args: str) -> str:
     ).stdout.strip()
 
 
+def _git_redacted(repo: Path, *args: str) -> str:
+    """Like :func:`_git` but redacts credentials from any
+    :class:`CalledProcessError` before propagation."""
+    try:
+        return _git(repo, *args)
+    except subprocess.CalledProcessError as exc:
+        raise subprocess.CalledProcessError(
+            exc.returncode,
+            [redact_credentials(str(a)) for a in exc.cmd],
+            output=redact_credentials(exc.output or ""),
+            stderr=redact_credentials(exc.stderr or ""),
+        ) from None
+
+
 def clone(remote_url: str, dest: Path, branch: str, token: str | None = None) -> None:
     """Single-branch clone of ``branch`` into ``dest`` (fresh per ticket).
 
@@ -312,7 +326,7 @@ def push(repo: Path, branch: str, remote_url: str, token: str | None) -> None:
     the explicit authed URL rather than the clone's origin (the clone
     may have been made without a write token, and there is no
     remote-tracking ref to lease against on an explicit-URL push)."""
-    _git(
+    _git_redacted(
         repo,
         "push",
         "--force",
@@ -326,7 +340,7 @@ def fetch(repo: Path, *, remote_url: str, token: str | None, branch: str) -> Non
     update ``refs/remotes/origin/<branch>``.  Uses an explicit refspec
     so the remote-tracking ref is refreshed even when fetching from
     an explicit URL rather than the clone's origin remote."""
-    _git(
+    _git_redacted(
         repo,
         "fetch",
         _authed_url(remote_url, token),
@@ -438,7 +452,7 @@ def push_with_lease(
     expected_sha = remote_branch_sha(repo, branch)
     if expected_sha is None:
         # Remote branch doesn't exist yet — nothing to lease against.
-        _git(
+        _git_redacted(
             repo,
             "push",
             "--force",
@@ -446,7 +460,7 @@ def push_with_lease(
             f"{branch}:{branch}",
         )
     else:
-        _git(
+        _git_redacted(
             repo,
             "push",
             f"--force-with-lease=refs/heads/{branch}:{expected_sha}",
