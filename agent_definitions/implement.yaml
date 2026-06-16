@@ -41,7 +41,9 @@ system_prompt: |
      code (no other callers); prefer preserving semantic intent over
      minimal diff size.
   3. Use `run_command` for focused checks while you work — run a single
-     test, a linter, inspect `git diff`.
+     test, a linter, inspect `git diff`. When running a linter, only pass
+     .py files — ruff and other Python-only tools will reject non-Python
+     files.
   4. When the change is complete, stop and reply with a 1-3 sentence
      summary of what you did.
 
