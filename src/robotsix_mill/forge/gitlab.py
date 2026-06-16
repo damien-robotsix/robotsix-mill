@@ -534,7 +534,7 @@ class GitLabForge(Forge):
                 "name": p.get("ref", ""),
                 "workflow_id": None,
                 "head_sha": p.get("sha", ""),
-                "conclusion": _map_pipeline_status(p.get("status", "")),
+                "conclusion": _PIPELINE_CONCLUSION_MAP.get(p.get("status", "")),
                 "html_url": p.get("web_url", ""),
                 "created_at": p.get("created_at", ""),
             }
@@ -938,8 +938,18 @@ def _map_merge_status(merge_status: str) -> bool | None:
     return None
 
 
+# Direct mapping for _list_pipelines — preserves terminal granularity
+# (canceled, skipped, etc.) that _map_pipeline_status collapses to "pending".
+_PIPELINE_CONCLUSION_MAP: dict[str, str | None] = {
+    "success": "success",
+    "failed": "failure",
+    "canceled": "cancelled",
+    "skipped": "skipped",
+}
+
+
 def _map_pipeline_status(status: str) -> str | None:
-    """Map GitLab pipeline status to standard conclusion."""
+    """Map GitLab pipeline status to standard conclusion (for check_status)."""
     if status == "success":
         return "success"
     if status == "failed":
