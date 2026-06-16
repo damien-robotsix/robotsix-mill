@@ -995,8 +995,25 @@ class RefineAgentMixin:
             # default — matching the /generate-children route — but
             # when the batch includes a create/initialize-repo child
             # the repo-populating siblings depend on it so they cannot
-            # run before the repo exists.
-            for child_id, deps in plan_child_dependencies(created_children).items():
+            # run before the repo exists.  Cross-repo producer→consumer
+            # edges and bump-child synthesis are also applied when
+            # children target different repos.
+            for child_id, deps in plan_child_dependencies(
+                created_children,
+                child_board_id=lambda cid: (
+                    _t.board_id
+                    if (_t := ctx.service.get(cid)) is not None
+                    else ctx.service.board_id
+                ),
+                create_child=lambda title, body: (
+                    ctx.service.create(
+                        title=title,
+                        description=body,
+                        kind="task",
+                        parent_id=ticket.id,
+                    ).id
+                ),
+            ).items():
                 ctx.service.set_depends_on(child_id, deps)
             # Apply the breakdown's revised epic body if any.
             if breakdown.epic_body and breakdown.epic_body.strip():

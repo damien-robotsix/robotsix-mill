@@ -586,10 +586,24 @@ def _run_epic_reprocess(
         # Dependency wiring: a linear chain appended after the last
         # existing child — unless the batch includes a create/initialize-
         # repo child, in which case repo-populating siblings depend on it
-        # so they cannot run before the repo exists.
+        # so they cannot run before the repo exists.  Cross-repo
+        # producer→consumer edges and bump-child synthesis are also
+        # applied when children target different repos.
         predecessor_id = existing[-1].id if existing else None
         for child_id, deps in plan_child_dependencies(
-            created_children, predecessor_id=predecessor_id
+            created_children,
+            predecessor_id=predecessor_id,
+            child_board_id=lambda cid: (
+                _t.board_id if (_t := svc.get(cid)) is not None else svc.board_id
+            ),
+            create_child=lambda title, body: (
+                svc.create(
+                    title=title,
+                    description=body,
+                    kind="task",
+                    parent_id=epic_id,
+                ).id
+            ),
         ).items():
             svc.set_depends_on(child_id, deps)
 

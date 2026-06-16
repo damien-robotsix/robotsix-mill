@@ -223,8 +223,25 @@ def generate_children(
                 # Dependency wiring: linear chain (C0 ← C1 ← C2 ← …) by
                 # default, but when the batch includes a create/initialize-
                 # repo child the repo-populating siblings depend on it so
-                # they cannot run before the repo exists.
-                for child_id, deps in plan_child_dependencies(created_children).items():
+                # they cannot run before the repo exists.  Cross-repo
+                # producer→consumer edges and bump-child synthesis are
+                # also applied when children target different repos.
+                for child_id, deps in plan_child_dependencies(
+                    created_children,
+                    child_board_id=lambda cid: (
+                        _t.board_id
+                        if (_t := epic_svc.get(cid)) is not None
+                        else epic_svc.board_id
+                    ),
+                    create_child=lambda title, body: (
+                        epic_svc.create(
+                            title=title,
+                            description=body,
+                            kind="task",
+                            parent_id=ticket_id,
+                        ).id
+                    ),
+                ).items():
                     epic_svc.set_depends_on(child_id, deps)
 
                 # Apply the revised epic body to the epic immediately
