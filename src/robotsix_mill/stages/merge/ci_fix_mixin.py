@@ -8,13 +8,19 @@ mixin that ``MergeStage`` inherits from alongside ``MultiRepoMixin``.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from ...config import ConfigError, get_repo_config
 from ...core.models import Ticket
 from ...core.states import State
 from ...forge import get_forge
 from ..base import Outcome, StageContext
-from ..ci_fix import _pr_changed_paths
+from ..ci_fix import (
+    _CODQL_FP_TRIAGE_SENTINEL,
+    _eligible_for_triage,
+    _only_codeql_failing,
+    _pr_changed_paths,
+)
 from ._base import _MergeStageBase
 from ._shared import (
     _build_failing_summary,
@@ -88,27 +94,10 @@ class MultiRepoCiFixMixin(_MergeStageBase):
             # CI turned green between polls — reset and re-poll.
             _write_counter(cycle_counter_path, 0)
             return Outcome(ticket.state)
-        if conclusion == "failure":
-            cycles = _read_counter(cycle_counter_path)
-            if s.ci_fix_max_cycles > 0 and cycles >= s.ci_fix_max_cycles:
-                _write_counter(cycle_counter_path, 0)
-                log.warning(
-                    "%s: multi-repo ci-fix for %s hit hard ceiling of %d cycle(s) "
-                    "without turning CI green — escalating to BLOCKED",
-                    ticket.id,
-                    repo_id,
-                    s.ci_fix_max_cycles,
-                )
-                return Outcome(
-                    State.BLOCKED,
-                    f"ci fix for {repo_id} exhausted hard ceiling of "
-                    f"{s.ci_fix_max_cycles} cycle(s) without turning CI green "
-                    f"— manual intervention required",
-                )
-            _write_counter(cycle_counter_path, cycles + 1)
 
+        # Fetch alerts + changed_paths BEFORE the ceiling check so the
+        # CodeQL FP triage path can inspect them.
         failing = (ci or {}).get("failing", [])
-
         log_text = ""
         alerts: list[dict] = []
         changed_paths: set[str] = set()
@@ -130,6 +119,33 @@ class MultiRepoCiFixMixin(_MergeStageBase):
             log.warning(
                 "%s: failed to fetch job logs / alerts for %s", ticket.id, repo_id
             )
+
+        if conclusion == "failure":
+            cycles = _read_counter(cycle_counter_path)
+            if s.ci_fix_max_cycles > 0 and cycles >= s.ci_fix_max_cycles:
+                _write_counter(cycle_counter_path, 0)
+
+                # --- CodeQL FP triage: last resort before BLOCKED ---
+                triage_outcome = self._try_multi_codeql_fp_triage(
+                    ticket, ctx, failing, alerts, changed_paths, repo_id, repo_dir
+                )
+                if triage_outcome is not None:
+                    return triage_outcome
+
+                log.warning(
+                    "%s: multi-repo ci-fix for %s hit hard ceiling of %d cycle(s) "
+                    "without turning CI green — escalating to BLOCKED",
+                    ticket.id,
+                    repo_id,
+                    s.ci_fix_max_cycles,
+                )
+                return Outcome(
+                    State.BLOCKED,
+                    f"ci fix for {repo_id} exhausted hard ceiling of "
+                    f"{s.ci_fix_max_cycles} cycle(s) without turning CI green "
+                    f"— manual intervention required",
+                )
+            _write_counter(cycle_counter_path, cycles + 1)
 
         failing_summary = _build_failing_summary(
             failing, log_text, alerts, changed_paths
@@ -242,3 +258,137 @@ class MultiRepoCiFixMixin(_MergeStageBase):
             repo_id,
         )
         return Outcome(ticket.state)
+
+    def _try_multi_codeql_fp_triage(  # noqa: C901 — guardrail chain is inherently branchy
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        failing: list[dict[str, Any]],
+        alerts: list[dict[str, Any]],
+        changed_paths: set[str],
+        repo_id: str,
+        repo_dir: Path,
+    ) -> Outcome | None:
+        """Try the codeql_fp_triage sub-agent before blocking on CodeQL FPs.
+
+        Mirrors ``CIFixStage._try_codeql_fp_triage`` for the multi-repo path.
+        """
+        s = ctx.settings
+
+        if not s.codeql_fp_triage_enabled:
+            return None
+
+        if not _only_codeql_failing(failing):
+            return None
+
+        ws = ctx.service.workspace(ticket)
+        sentinel_path = ws.artifacts_dir / _CODQL_FP_TRIAGE_SENTINEL
+        if sentinel_path.exists():
+            log.info(
+                "%s: codeql_fp_triage already ran for this ticket — skipping",
+                ticket.id,
+            )
+            return None
+        _write_counter(sentinel_path, 1)
+
+        eligible = _eligible_for_triage(alerts, changed_paths, max_dismissals=5)
+        if not eligible:
+            log.info(
+                "%s: no CodeQL alerts eligible for FP triage in %s",
+                ticket.id,
+                repo_id,
+            )
+            return None
+
+        log.info(
+            "%s: attempting codeql_fp_triage on %d eligible alert(s) in %s",
+            ticket.id,
+            len(eligible),
+            repo_id,
+        )
+
+        import json
+
+        from ...agents.codeql_fp_triage import run_codeql_fp_triage_agent
+
+        try:
+            from ...config import get_repo_config
+
+            rc = get_repo_config(repo_id)
+            result = run_codeql_fp_triage_agent(
+                settings=s,
+                repo_dir=repo_dir,
+                alerts_json=json.dumps(eligible),
+                ticket_id=ticket.id,
+                board_id=rc.board_id,
+            )
+        except Exception:  # noqa: BLE001
+            log.warning(
+                "%s: codeql_fp_triage agent crashed for %s",
+                ticket.id,
+                repo_id,
+                exc_info=True,
+            )
+            return None
+
+        dismissals = [v for v in result.verdicts if v.verdict == "dismiss"]
+        if not dismissals:
+            log.info(
+                "%s: codeql_fp_triage abstained on all %d alert(s) in %s — blocking",
+                ticket.id,
+                len(eligible),
+                repo_id,
+            )
+            return None
+
+        forge = get_forge(s, repo_config=rc)
+        dismissed_count = 0
+        dismissal_notes: list[str] = []
+        for v in dismissals:
+            ok = forge.dismiss_code_scanning_alert(
+                number=v.alert_number,
+                reason="false positive",
+                comment=v.rationale[:4000],
+            )
+            if ok:
+                dismissed_count += 1
+                dismissal_notes.append(
+                    f"- Alert #{v.alert_number} [{repo_id}]: {v.rationale[:200]}"
+                )
+            else:
+                log.warning(
+                    "%s: failed to dismiss code-scanning alert %d in %s",
+                    ticket.id,
+                    v.alert_number,
+                    repo_id,
+                )
+
+        try:
+            note_lines = [
+                "## codeql_fp_triage: auto-dismissed CodeQL false positive(s)",
+                "",
+                f"Repo: {repo_id} — dismissed {dismissed_count} alert(s) "
+                f"out of {len(eligible)} eligible:",
+                "",
+            ]
+            note_lines.extend(dismissal_notes)
+            note_lines.append("")
+            note_lines.append(
+                "These dismissals persist by fingerprint and will also "
+                "clear the alert on `main` after merge.  A human can "
+                "re-open any alert via the GitHub security tab."
+            )
+            ctx.service.add_history_note(ticket.id, "\n".join(note_lines))
+        except Exception:  # noqa: BLE001
+            log.warning("%s: failed to record codeql_fp_triage note", ticket.id)
+
+        if dismissed_count > 0:
+            log.info(
+                "%s: codeql_fp_triage dismissed %d alert(s) in %s — re-poll",
+                ticket.id,
+                dismissed_count,
+                repo_id,
+            )
+            return Outcome(ticket.state)
+
+        return None

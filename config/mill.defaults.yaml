@@ -186,6 +186,7 @@ stages:
 
 ci:
   max_auto_retries: 3          # consecutive no-change ci-fix cycles before BLOCK (0 = disabled)
+  codeql_fp_triage_enabled: true  # auto-dismiss CodeQL FPs at ci-fix ceiling (set false to disable)
 
 # ---------------------------------------------------------------------------
 #  pipeline — merge, rebase, ci-fix, retrospect, prune, archive, memory paths

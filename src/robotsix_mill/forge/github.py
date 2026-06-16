@@ -765,9 +765,11 @@ class GitHubForge(Forge):
             loc = inst.get("location") or {}
             out.append(
                 {
+                    "number": a.get("number"),
                     "rule": rule.get("id", ""),
                     "severity": rule.get("security_severity_level")
                     or rule.get("severity", ""),
+                    "security_severity_level": rule.get("security_severity_level"),
                     "path": loc.get("path", ""),
                     "line": loc.get("start_line"),
                     "message": (inst.get("message") or {}).get("text", "")
@@ -776,6 +778,32 @@ class GitHubForge(Forge):
                 }
             )
         return out
+
+    def dismiss_code_scanning_alert(
+        self, *, number: int, reason: str, comment: str
+    ) -> bool:
+        """Dismiss a single code-scanning alert by its *number*.
+
+        *reason* must be one of ``"false positive"``, ``"won't fix"``,
+        or ``"used in tests"`` (GitHub's required enum — note the spaces,
+        not underscores).  *comment* is an optional dismissal note.
+
+        Returns ``True`` on success, ``False`` on any failure.
+        """
+        owner, repo = self._owner_repo
+        try:
+            r = self._http.patch(
+                f"/repos/{owner}/{repo}/code-scanning/alerts/{number}",
+                json={
+                    "state": "dismissed",
+                    "dismissed_reason": reason,
+                    "dismissed_comment": comment,
+                },
+            )
+            r.raise_for_status()
+            return True
+        except Exception:  # noqa: BLE001 — best-effort
+            return False
 
     def fetch_workflow_job_logs(self, *, run_id: int) -> str:
         """Return the logs of the failed jobs in workflow run *run_id*.

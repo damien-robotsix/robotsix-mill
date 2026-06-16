@@ -311,6 +311,7 @@ modules:
       - tests/stages/test_refine_gates.py
       - tests/stages/test_merge.py
       - tests/stages/test_ci_fix.py
+      - tests/stages/test_codeql_fp_triage.py
       - tests/stages/test_pause.py
       - tests/stages/test_retrospect_stage.py
       - tests/stages/test_short_circuit_verify.py
@@ -448,6 +449,7 @@ modules:
       - src/robotsix_mill/agents/dedup.py
       - src/robotsix_mill/agents/obsolescence.py
       - src/robotsix_mill/agents/ci_fixing.py
+      - src/robotsix_mill/agents/codeql_fp_triage.py
       - src/robotsix_mill/agents/rebasing.py
       - src/robotsix_mill/agents/review_revision.py
       - src/robotsix_mill/agents/surveying.py
