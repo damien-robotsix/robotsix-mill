@@ -47,7 +47,7 @@ from ._repo_helpers import _resolve_board_id
 
 log = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["Tickets"])
 
 
 def _repo_config_for_ticket(ticket: Ticket, repos: ReposRegistry) -> RepoConfig | None:

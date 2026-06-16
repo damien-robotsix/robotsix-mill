@@ -14,7 +14,7 @@ from ..deps import (
 
 log = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["Traces"])
 
 
 @router.get("/runs")

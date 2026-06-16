@@ -18,7 +18,7 @@ from ._tickets import _repo_config_for_ticket
 
 log = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["Epics"])
 
 
 @router.post("/epics", response_model=TicketRead, status_code=201)

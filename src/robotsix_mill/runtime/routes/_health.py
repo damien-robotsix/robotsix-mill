@@ -19,7 +19,7 @@ from ..deps import enrich_ticket_read, get_repos_registry, get_settings, get_wor
 
 log = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["Health"])
 
 
 @router.get("/health")
