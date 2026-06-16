@@ -140,4 +140,12 @@ def run_ci_fix_agent(
                 exc_info=True,
             )
 
+    import opentelemetry.trace
+
+    try:
+        opentelemetry.trace.get_tracer_provider().force_flush(timeout_millis=5000)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).debug("ci_fix: force_flush failed", exc_info=True)
     return output
