@@ -460,7 +460,6 @@ def _distill_failure(
                 f"<test_output rc={rc}>\n{tail}\n</test_output>{scope_note}",
                 usage_limits=limits,
             ),
-            settings=settings,
             what="test-distill",
         )
         return str(result.output).strip()

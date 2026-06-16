@@ -248,9 +248,7 @@ def run_config_sync_agent(
     from .retry import run_agent
 
     try:
-        result = run_agent(
-            agent, lambda h: h.run_sync(prompt), settings=settings, what="config-sync"
-        )
+        result = run_agent(agent, lambda h: h.run_sync(prompt), what="config-sync")
     finally:
         _safe_close(agent)
     result.output.draft_titles = result.output.draft_titles[:MAX_GAPS]

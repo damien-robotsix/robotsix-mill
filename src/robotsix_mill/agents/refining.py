@@ -338,7 +338,6 @@ def triage_refine(
         result = run_agent(
             agent,
             lambda h: h.run_sync(user_prompt, usage_limits=limits),
-            settings=settings,
             what="triage",
         )
     finally:
@@ -917,7 +916,6 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
                 message_history=message_history,
                 usage_limits=limits,
             ),
-            settings=settings,
             what="refine",
         )
 
@@ -956,7 +954,6 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
                             message_history=result.all_messages(),
                             usage_limits=limits,
                         ),
-                        settings=settings,
                         what="refine (continuation after tool_calls stop)",
                     )
                     result = continuation_result

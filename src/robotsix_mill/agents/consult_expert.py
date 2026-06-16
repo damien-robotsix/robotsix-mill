@@ -156,7 +156,6 @@ async def run_consult_expert(
 
         result = await acall_with_retry(
             lambda: agent.run(question, usage_limits=limits),
-            settings=settings,
             what=f"consult:{domain}",
         )
     except Exception as e:  # noqa: BLE001 — degrade, never break the coordinator

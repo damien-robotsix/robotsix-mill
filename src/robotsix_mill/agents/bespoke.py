@@ -120,7 +120,6 @@ def run_bespoke_agent(
         result = run_agent(
             agent,
             lambda h: h.run_sync(prompt),
-            settings=settings,
             what=f"bespoke:{definition.name}",
         )
     finally:

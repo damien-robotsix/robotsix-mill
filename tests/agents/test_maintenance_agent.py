@@ -958,7 +958,7 @@ class TestCloneDirPrecreation:
 
         seen: dict[str, bool] = {}
 
-        def fake_run_agent(agent, fn, *, settings, what):
+        def fake_run_agent(agent, fn, *, what):
             # The clone target must already exist when the agent runs.
             seen["clone_exists"] = (captured["tmpdir"] / "repo").exists()
             return SimpleNamespace(output=MaintenanceResult(success=True, note="ok"))

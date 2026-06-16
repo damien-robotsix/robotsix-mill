@@ -39,8 +39,8 @@ def _stub_run_agent_returning(new_result):
     *new_result* (always — first or subsequent invocation)."""
     calls: list[dict] = []
 
-    def stub(agent, make_run, *, settings, what, **kw):
-        calls.append({"agent": agent, "what": what, "settings": settings})
+    def stub(agent, make_run, *, what, **kw):
+        calls.append({"agent": agent, "what": what})
         return new_result
 
     return stub, calls
@@ -151,7 +151,7 @@ def test_reprompt_failure_returns_original_result(monkeypatch, caplog):
     raised) and a warning is logged."""
     initial = _FakeResult("x" * 12_000)
 
-    def boom(agent, make_run, *, settings, what, **kw):
+    def boom(agent, make_run, *, what, **kw):
         raise RuntimeError("model unavailable")
 
     _install_run_agent_stub(monkeypatch, boom)
@@ -207,7 +207,7 @@ def test_keyboard_interrupt_not_swallowed(monkeypatch):
     (``KeyboardInterrupt`` / ``SystemExit``) must propagate."""
     initial = _FakeResult("x" * 12_000)
 
-    def interrupt(agent, make_run, *, settings, what, **kw):
+    def interrupt(agent, make_run, *, what, **kw):
         raise KeyboardInterrupt
 
     _install_run_agent_stub(monkeypatch, interrupt)

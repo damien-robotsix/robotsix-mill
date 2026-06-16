@@ -2,9 +2,9 @@
 
 ``call_with_retry`` + the transient/rate-limit classifiers were extracted into
 ``robotsix-llmio`` (``core`` + the provider layers). This module preserves the
-historical mill API: the ``settings`` keyword is still accepted (the library
-now bakes the retry/backoff constants, which equal mill's former defaults), and
-the public classifier names are re-exported.
+historical mill API: the retry/backoff constants are baked in the library
+(which equal mill's former defaults), and the public classifier names are
+re-exported.
 
 The call-level retry predicate is the OpenRouter transient set (429/5xx/timeout/
 malformed-JSON/upstream-error) — deliberately NOT the DeepSeek reasoning-400,
@@ -113,16 +113,11 @@ __all__ = [
 def call_with_retry(
     fn: Callable[[], T],
     *,
-    settings: object | None = None,
     what: str = "model call",
     sleep: Callable[[float], None] = time.sleep,
     fallback_fn: Callable[[], T] | None = None,
 ) -> T:
-    """Run ``fn`` with bounded transient/rate-limit retry.
-
-    *settings* is accepted for signature compatibility but no longer drives the
-    schedule — the library bakes the (formerly mill-default) constants.
-    """
+    """Run ``fn`` with bounded transient/rate-limit retry."""
     return _lib_call_with_retry(
         fn,
         what=what,
@@ -135,7 +130,6 @@ def call_with_retry(
 async def acall_with_retry(
     fn: Callable[[], Awaitable[T]],
     *,
-    settings: object | None = None,
     what: str = "model call",
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     fallback_fn: Callable[[], Awaitable[T]] | None = None,
@@ -147,8 +141,7 @@ async def acall_with_retry(
     ``await``s an async *fn* and uses ``asyncio.sleep`` for backoff. This lets a
     nested sub-agent tool retry ``await agent.run(...)`` on the coordinator's own
     running event loop, rather than calling ``asyncio.run`` (illegal inside the
-    Claude SDK's already-running loop). *settings* is accepted for signature
-    parity with :func:`call_with_retry` and is unused (constants are baked).
+    Claude SDK's already-running loop).
     """
     attempts = max(0, _constants.TRANSIENT_RETRIES)
     using_fallback = False
@@ -195,7 +188,6 @@ def run_agent(
     agent: Any,
     make_run: Callable[[Any], T],
     *,
-    settings: object | None = None,
     what: str = "model call",
     sleep: Callable[[float], None] = time.sleep,
 ) -> T:
@@ -210,7 +202,7 @@ def run_agent(
 
     This is the single chokepoint for "retry locally, then fall back": passing
     *agent* (not a pre-bound lambda) is what lets the same run be replayed on the
-    fallback model. *settings* is accepted for call-site parity and unused."""
+    fallback model."""
     builder = getattr(agent, "fallback_builder", None)
     if builder is None:
         return _lib_call_with_retry(

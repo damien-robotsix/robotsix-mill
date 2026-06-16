@@ -61,7 +61,7 @@ def test_run_ask_to_ticket_agent_without_repo_dir(tmp_path, monkeypatch):
 
         return FakeAgent()
 
-    def fake_retry(agent, make_run, *, settings, what):
+    def fake_retry(agent, make_run, *, what):
         cap["what"] = what
         return make_run(agent)
 
@@ -113,7 +113,7 @@ def test_run_ask_to_ticket_agent_with_repo_dir(tmp_path, monkeypatch):
 
         return FakeAgent()
 
-    def fake_retry(agent, make_run, *, settings, what):
+    def fake_retry(agent, make_run, *, what):
         return make_run(agent)
 
     monkeypatch.setattr(bmod, "build_agent_from_definition", fake_build_agent)

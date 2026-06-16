@@ -475,7 +475,6 @@ def run_trace_inspector(
         result = run_agent(
             agent,
             lambda h: h.run_sync(prompt, usage_limits=limits),
-            settings=settings,
             what="trace_inspector",
         )
     except Exception as e:  # noqa: BLE001 — degrade, never break the caller

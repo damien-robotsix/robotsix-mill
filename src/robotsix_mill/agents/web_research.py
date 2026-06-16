@@ -71,7 +71,6 @@ async def run_web_research(*, settings: Settings, query: str) -> str:
 
         result = await acall_with_retry(
             lambda: agent.run(query, usage_limits=limits),
-            settings=settings,
             what="web_research",
         )
     except Exception as e:  # noqa: BLE001 — degrade, never break the caller

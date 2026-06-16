@@ -388,7 +388,7 @@ def test_run_review_agent_reprompts_once_on_unstructured_output(tmp_path, monkey
 
     calls: list[str] = []
 
-    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+    def fake_run_agent(agent, make_run, *, what, **kw):
         calls.append(what)
         if len(calls) == 1:
             return _StubAgentRunResult("x" * 12_000)
@@ -428,7 +428,7 @@ def test_run_review_agent_degrades_to_needs_discussion_after_two_failures(
 
     calls: list[str] = []
 
-    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+    def fake_run_agent(agent, make_run, *, what, **kw):
         calls.append(what)
         return _StubAgentRunResult("x" * 12_000)
 
@@ -473,7 +473,7 @@ def test_token_limit_triggers_degraded_retry(tmp_path, monkeypatch):
     big_diff = "diff --git a/x.py b/x.py\n" + ("+line\n" * 50_000)
     seen: list[dict] = []
 
-    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+    def fake_run_agent(agent, make_run, *, what, **kw):
         # Populate agent.calls with the prompt/kwargs for this attempt.
         make_run(agent)
         prompt, _limits, kwargs = agent.calls[-1]
@@ -520,7 +520,7 @@ def test_token_limit_persists_yields_needs_discussion(tmp_path, monkeypatch):
 
     calls: list[str] = []
 
-    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+    def fake_run_agent(agent, make_run, *, what, **kw):
         calls.append(what)
         raise RuntimeError(_TOKEN_LIMIT_MSG)
 
@@ -550,7 +550,7 @@ def test_non_token_exception_propagates(tmp_path, monkeypatch):
 
     calls: list[str] = []
 
-    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+    def fake_run_agent(agent, make_run, *, what, **kw):
         calls.append(what)
         raise RuntimeError("some unrelated boom")
 
@@ -578,7 +578,7 @@ def test_output_exhaustion_retries_with_higher_max_tokens(tmp_path, monkeypatch)
     diff = "diff --git a/x.py b/x.py\n" + ("+line\n" * 500)
     seen: list[dict] = []
 
-    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+    def fake_run_agent(agent, make_run, *, what, **kw):
         make_run(agent)
         prompt, _limits, kwargs = agent.calls[-1]
         seen.append({"prompt": prompt, "kwargs": kwargs})
@@ -624,7 +624,7 @@ def test_output_exhaustion_persists_yields_needs_discussion(tmp_path, monkeypatc
 
     calls: list[str] = []
 
-    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+    def fake_run_agent(agent, make_run, *, what, **kw):
         calls.append(what)
         raise RuntimeError(_OUTPUT_EXHAUSTION_MSG)
 
@@ -748,7 +748,7 @@ def test_chunked_review_synthesizes_verdicts(tmp_path, monkeypatch):
 
     seen: list[dict] = []
 
-    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+    def fake_run_agent(agent, make_run, *, what, **kw):
         make_run(agent)
         prompt, _limits, kwargs = agent.calls[-1]
         seen.append({"prompt": prompt, "kwargs": kwargs})
@@ -813,7 +813,7 @@ def test_chunked_review_single_oversized_file_falls_through(tmp_path, monkeypatc
 
     seen: list[dict] = []
 
-    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+    def fake_run_agent(agent, make_run, *, what, **kw):
         make_run(agent)
         prompt, _limits, kwargs = agent.calls[-1]
         seen.append({"prompt": prompt, "kwargs": kwargs})
@@ -856,7 +856,7 @@ def test_chunked_review_synthesis_token_limit_falls_through(tmp_path, monkeypatc
 
     seen: list[dict] = []
 
-    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+    def fake_run_agent(agent, make_run, *, what, **kw):
         make_run(agent)
         prompt, _limits, kwargs = agent.calls[-1]
         seen.append({"prompt": prompt, "kwargs": kwargs})
@@ -915,7 +915,7 @@ def test_chunked_review_request_changes_floor(tmp_path, monkeypatch):
 
     seen: list[dict] = []
 
-    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+    def fake_run_agent(agent, make_run, *, what, **kw):
         make_run(agent)
         prompt, _limits, kwargs = agent.calls[-1]
         seen.append({"prompt": prompt, "kwargs": kwargs})

@@ -405,9 +405,7 @@ def run_retrospect_agent(
     from .retry import run_agent
 
     try:
-        result = run_agent(
-            agent, lambda h: h.run_sync(prompt), settings=settings, what="retrospect"
-        )
+        result = run_agent(agent, lambda h: h.run_sync(prompt), what="retrospect")
         from .structured_output_guard import reprompt_if_unstructured
 
         result = reprompt_if_unstructured(

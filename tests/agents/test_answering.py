@@ -228,7 +228,7 @@ def test_run_answer_agent_without_repo_dir(tmp_path, monkeypatch):
 
         return FakeAgent()
 
-    def fake_retry(agent, make_run, *, settings, what):
+    def fake_retry(agent, make_run, *, what="model call"):
         return make_run(agent)
 
     monkeypatch.setattr(bmod, "build_agent_from_definition", fake_build_agent)
@@ -285,7 +285,7 @@ def test_run_answer_agent_with_repo_dir(tmp_path, monkeypatch):
 
         return FakeAgent()
 
-    def fake_retry(agent, make_run, *, settings, what):
+    def fake_retry(agent, make_run, *, what="model call"):
         return make_run(agent)
 
     monkeypatch.setattr(bmod, "build_agent_from_definition", fake_build_agent)

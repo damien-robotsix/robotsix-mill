@@ -396,7 +396,6 @@ async def run_web_knowledge(
     try:
         result = await acall_with_retry(
             lambda: agent.run(question, usage_limits=limits),
-            settings=settings,
             what="web_knowledge",
         )
         return str(result.output)

@@ -400,7 +400,6 @@ def run_coordinator(
                 message_history=final_message_history,
                 usage_limits=limits,
             ),
-            settings=settings,
             what="implement",
         )
         result = reprompt_if_unstructured(
