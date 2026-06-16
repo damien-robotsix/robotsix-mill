@@ -158,6 +158,24 @@ def _format_labelled_alerts(in_scope: list[dict], out_of_scope: list[dict]) -> s
     return "\n".join(lines)
 
 
+def _format_alert_summary_block(alerts: list[dict] | None) -> str:
+    """Render a compact CodeQL alert summary for top-of-prompt injection.
+
+    Returns a short bullet list of ``rule @ path:line`` entries so the
+    agent sees exactly which alerts to fix without having to read through
+    the full failing summary first.
+    """
+    if not alerts:
+        return ""
+    lines = [
+        "**CodeQL alerts to fix (extracted for fast reference — rule ID and location):**"
+    ]
+    for a in alerts:
+        lines.append(f"- `{a.get('rule', '?')}` @ {_alert_loc(a)}")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _build_failing_summary(
     failing: list[dict],
     log_text: str = "",
@@ -171,8 +189,13 @@ def _build_failing_summary(
     are provided they are listed too — they don't appear in the job logs.
     When *changed_paths* is provided, the alerts are partitioned against the
     PR's own diff and rendered with explicit in-scope / out-of-scope labels.
+
+    A compact alert summary is injected at the **top** of the prompt so the
+    agent can quickly identify what to fix without speculative reasoning.
     """
     parts = []
+    # Inject compact alert summary at the very top for fast reference.
+    parts.append(_format_alert_summary_block(alerts))
     for i, chk in enumerate(failing):
         parts.append(f"## Failing check #{i + 1}: {chk['name']}")
         if chk.get("summary"):

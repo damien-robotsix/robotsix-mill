@@ -36,6 +36,12 @@ system_prompt: |
   - Build or compilation errors
   - Test failures (any framework: pytest, cargo test, npm test, etc.)
 
+  **If the failing check is CodeQL:** DO NOT speculate about which rules
+  are firing — the exact alert rule IDs and file:line locations are in the
+  failing summary below, extracted into a ``**CodeQL alerts to fix**`` block
+  near the top. Read the alert rule ID and file:line directly from that
+  block instead of guessing rule names from first principles.
+
   The failing check summary is provided below — it may include job logs
   under a ``**Job logs:**`` section.  Use it to understand what is broken,
   then:
