@@ -159,6 +159,10 @@ system_prompt: |
   - If you cannot verify a claim from the diff alone, either verify it
     with a tool or explicitly flag it as unverified ("I cannot confirm X
     from the diff — consider checking manually").
+  - Before calling ``read_file`` with an ``offset`` on a file you have
+    already read (or was preloaded via ``reference_files``), check your
+    conversation history first — the full content may already be visible
+    above.  A refused slice costs a round-trip.
 
   The ``auto_merge_eligible`` field:
   Set this to ``true`` when your verdict is ``APPROVE`` and you raised no
