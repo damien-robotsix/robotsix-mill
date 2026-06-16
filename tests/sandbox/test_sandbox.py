@@ -768,6 +768,176 @@ def test_extra_packages_missing_config_noop(tmp_path, monkeypatch):
     assert a[-1] == PATH_EXPORT + "true"
 
 
+# ── _has_uv_sources ──────────────────────────────────────────────────
+
+
+def test_has_uv_sources_present(tmp_path):
+    """pyproject.toml with a non-empty [tool.uv.sources] table → True."""
+    import tomllib as _  # ensure tomllib is importable (3.11+)
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text(
+        "[project]\nname = 'x'\n[tool.uv.sources]\n"
+        "x = { git = 'https://github.com/org/x' }\n",
+        encoding="utf-8",
+    )
+    assert sandbox._has_uv_sources(repo) is True
+
+
+def test_has_uv_sources_absent(tmp_path):
+    """pyproject.toml without [tool.uv.sources] → False."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text(
+        "[project]\nname = 'x'\n[tool.uv]\ndev-dependencies = []\n",
+        encoding="utf-8",
+    )
+    assert sandbox._has_uv_sources(repo) is False
+
+
+def test_has_uv_sources_empty_table(tmp_path):
+    """[tool.uv.sources] header but no keys → False (len(sources) > 0
+    guard)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text(
+        "[project]\nname = 'x'\n[tool.uv.sources]\n[tool.uv.dev-dependencies]\n",
+        encoding="utf-8",
+    )
+    assert sandbox._has_uv_sources(repo) is False
+
+
+def test_has_uv_sources_no_pyproject(tmp_path):
+    """No pyproject.toml at all → False."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    assert sandbox._has_uv_sources(repo) is False
+
+
+def test_has_uv_sources_malformed_toml(tmp_path):
+    """Malformed TOML → False (graceful degradation)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text(
+        "[project]\nname = 'x'\n[broken =\n", encoding="utf-8"
+    )
+    assert sandbox._has_uv_sources(repo) is False
+
+
+# ── _maybe_install_prefix with [tool.uv.sources] ─────────────────────
+
+
+def test_maybe_install_prefix_uv_path(tmp_path):
+    """With [tool.uv.sources] + uv.lock → emits uv sync --frozen --no-dev."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text(
+        "[project]\nname = 'x'\n[tool.uv.sources]\n"
+        "x = { git = 'https://github.com/org/x' }\n",
+        encoding="utf-8",
+    )
+    (repo / "uv.lock").write_text("", encoding="utf-8")
+
+    s = _settings(
+        tmp_path,
+        data_dir=str(tmp_path),
+        sandbox_data_mount=str(tmp_path),
+        sandbox_proxy_url="http://sandbox-proxy:8888",
+    )
+
+    prefix = sandbox._maybe_install_prefix("pytest -q", repo, s)
+    assert "uv sync --frozen --no-dev --quiet" in prefix
+    assert "command -v uv" in prefix
+    assert "WARNING: uv not found, falling back to pip" in prefix
+    assert prefix.endswith(" && pytest -q")
+
+
+def test_maybe_install_prefix_no_uv_sources_unchanged(tmp_path):
+    """Without [tool.uv.sources] → emits pip install (unchanged behavior)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text(
+        "[project]\nname = 'x'\n", encoding="utf-8"
+    )
+
+    s = _settings(
+        tmp_path,
+        data_dir=str(tmp_path),
+        sandbox_data_mount=str(tmp_path),
+        sandbox_proxy_url="http://sandbox-proxy:8888",
+    )
+
+    prefix = sandbox._maybe_install_prefix("pytest -q", repo, s)
+    pip = "pip install --user --quiet --disable-pip-version-check"
+    assert f"({pip} '.[dev]' || {pip} .) && pytest -q" in prefix
+    assert "uv sync" not in prefix
+
+
+def test_maybe_install_prefix_uv_lock_missing(tmp_path):
+    """[tool.uv.sources] present but no uv.lock → falls back to pip."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text(
+        "[project]\nname = 'x'\n[tool.uv.sources]\n"
+        "x = { git = 'https://github.com/org/x' }\n",
+        encoding="utf-8",
+    )
+    # No uv.lock created.
+
+    s = _settings(
+        tmp_path,
+        data_dir=str(tmp_path),
+        sandbox_data_mount=str(tmp_path),
+        sandbox_proxy_url="http://sandbox-proxy:8888",
+    )
+
+    prefix = sandbox._maybe_install_prefix("pytest -q", repo, s)
+    pip = "pip install --user --quiet --disable-pip-version-check"
+    assert f"({pip} '.[dev]' || {pip} .) && pytest -q" in prefix
+    assert "uv sync" not in prefix
+
+
+def test_maybe_install_prefix_uv_sources_no_proxy_noop(tmp_path):
+    """[tool.uv.sources] present but no proxy → command unchanged
+    (same as existing no-network behavior)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text(
+        "[project]\nname = 'x'\n[tool.uv.sources]\n"
+        "x = { git = 'https://github.com/org/x' }\n",
+        encoding="utf-8",
+    )
+    (repo / "uv.lock").write_text("", encoding="utf-8")
+
+    s = _settings(
+        tmp_path,
+        data_dir=str(tmp_path),
+        sandbox_data_mount=str(tmp_path),
+        sandbox_proxy_url="",
+    )
+
+    prefix = sandbox._maybe_install_prefix("pytest -q", repo, s)
+    assert prefix == "pytest -q"
+
+
+def test_maybe_install_prefix_uv_sources_no_pyproject_noop(tmp_path):
+    """No pyproject.toml → command unchanged regardless of uv.lock."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "uv.lock").write_text("", encoding="utf-8")
+
+    s = _settings(
+        tmp_path,
+        data_dir=str(tmp_path),
+        sandbox_data_mount=str(tmp_path),
+        sandbox_proxy_url="http://sandbox-proxy:8888",
+    )
+
+    prefix = sandbox._maybe_install_prefix("pytest -q", repo, s)
+    assert prefix == "pytest -q"
+
+
 def test_extra_packages_integration_from_config_file(tmp_path, monkeypatch):
     """End-to-end: config file → parser → prefix builder → argv."""
     repo = tmp_path / "ticket"
