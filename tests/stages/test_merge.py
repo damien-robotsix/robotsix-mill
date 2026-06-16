@@ -170,14 +170,15 @@ def _ci_failing_mergeable(monkeypatch):
     )
 
 
-def test_implement_complete_ci_failing_behind_main_rebases_before_ci_fix(
+def test_implement_complete_ci_failing_behind_main_goes_to_ci_fix(
     tmp_path, monkeypatch
 ):
-    """CI failing + branch behind main → REBASING (not FIXING_CI).
+    """CI failing + branch behind main → FIXING_CI (NOT REBASING).
 
-    A repo-wide gate often fails on code that isn't the ticket's because the
-    branch was cut from an older main. Rebase onto current main first; ci_fix
-    can't fix non-ticket code."""
+    Branch-introduced failures (those green on current main) go straight to
+    ci_fix — rebasing cannot fix a branch's own lint/type failure and just
+    churns under a fast-moving main. The branch gets made current with main
+    via the single rebase-and-merge at the end of the merge stage."""
     from robotsix_mill.stages import merge as merge_mod
 
     ctx = _gh(tmp_path)
@@ -190,7 +191,7 @@ def test_implement_complete_ci_failing_behind_main_rebases_before_ci_fix(
         lambda repo, target_branch="main": True,
     )
     out = MergeStage().run(_implement_complete(ctx), ctx)
-    assert out.next_state is State.REBASING
+    assert out.next_state is State.FIXING_CI
 
 
 def test_implement_complete_ci_failing_up_to_date_goes_to_ci_fix(tmp_path, monkeypatch):
@@ -4273,6 +4274,32 @@ def test_latest_failing_workflows_picks_most_recent_run():
         # workflow 2: later run is red → failing.
         _run(2, "lint", "success", "2026-06-11T10:00:00Z"),
         _run(2, "lint", "failure", "2026-06-11T11:00:00Z"),
+    ]
+    assert _latest_failing_workflows(runs) == {"lint"}
+
+
+def test_latest_failing_workflows_ignores_in_progress_runs():
+    """In-progress runs (conclusion=None) must NOT mask a completed failure.
+
+    A newer in-progress run must not replace an older completed failure in the
+    per-workflow "latest" map — otherwise a transient main-CI-in-flight window
+    falsely hides a known failure and the pre-existing-debt check lets a PR
+    through instead of blocking it."""
+    from robotsix_mill.stages.merge import _latest_failing_workflows
+
+    runs = [
+        # Older completed failure.
+        _run(1, "lint", "failure", "2026-06-11T10:00:00Z"),
+        # Newer in-progress run — must NOT mask the failure above.
+        {
+            "id": "1-recent",
+            "name": "lint",
+            "workflow_id": 1,
+            "head_sha": "abc",
+            "conclusion": None,
+            "html_url": "https://example/run",
+            "created_at": "2026-06-11T11:00:00Z",
+        },
     ]
     assert _latest_failing_workflows(runs) == {"lint"}
 

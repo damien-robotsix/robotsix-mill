@@ -35,6 +35,7 @@ _CI_FIX_COUNTER = "ci_fix_attempts.txt"
 _CI_NO_CHANGE_COUNTER = "ci_no_change_cycles.txt"
 _CI_FIX_CYCLE_COUNTER = "ci_fix_cycles.txt"
 _CI_REFRESH_COUNTER = "ci_fix_refresh_attempts.txt"
+_CI_FAILURE_FINGERPRINT = "ci_failure_fingerprint.txt"
 _CODQL_FP_TRIAGE_SENTINEL = "codeql_fp_triage_ran.txt"
 
 # Maximum number of alerts the codeql_fp_triage agent may dismiss in a
@@ -333,8 +334,11 @@ class CIFixStage(Stage):
         if triage_outcome is not None:
             return triage_outcome
 
-        # Staleness guard: rebase if behind main BEFORE counting a cycle.
-        rebase_outcome = self._rebase_if_stale(ticket, ctx, repo_dir, branch)
+        # Staleness guard: rebase if behind main AND fingerprint changed
+        # BEFORE counting a cycle.
+        rebase_outcome = self._rebase_if_stale(
+            ticket, ctx, repo_dir, branch, failing_summary
+        )
         if rebase_outcome is not None:
             return rebase_outcome
 
@@ -561,20 +565,54 @@ class CIFixStage(Stage):
         ctx: StageContext,
         repo_dir: str,
         branch: str,
+        failing_summary: str = "",
     ) -> Outcome | None:
-        """Rebase the branch onto its target if it is behind.
+        """Rebase the branch onto its target if it is behind AND the
+        failure fingerprint has changed.
 
-        Returns ``None`` when the branch is current (proceed to agent).
-        On a stale branch: rebase + force-push, returning
+        Returns ``None`` when the branch is current or the fingerprint
+        is unchanged (proceed to agent).  On a stale branch with a
+        *new* failure fingerprint: rebase + force-push, returning
         ``IMPLEMENT_COMPLETE`` so ``ci_poll`` re-checks CI on the
         updated branch.  On any rebase conflict or push failure, returns
         ``BLOCKED``.
+
+        An unchanged fingerprint means the failure is not
+        behind-main-caused — skipping the rebase prevents re-rebasing on
+        the same failure under a fast-moving main when the rebase cannot
+        possibly fix a branch-own lint/type failure.
         """
         s = ctx.settings
         target = target_branch_for(s, ctx.repo_config)
 
         if not git_ops.branch_is_behind_main(Path(repo_dir), target):
             return None  # current — agent path
+
+        # Fingerprint gate: only rebase when the failure fingerprint has
+        # changed since the last cycle.  An unchanged fingerprint means
+        # the failure is not behind-main-caused — skip the rebase and
+        # let the ci-fix agent handle it directly.
+        repo_id = ctx.repo_config.board_id if ctx.repo_config else ""
+        current_fp = _ci_failure_fingerprint(failing_summary, repo_id)
+        fp_path = ctx.service.workspace(ticket).artifacts_dir / _CI_FAILURE_FINGERPRINT
+        try:
+            stored_fp = fp_path.read_text(encoding="utf-8").strip()
+        except FileNotFoundError:
+            stored_fp = ""
+
+        if current_fp == stored_fp:
+            log.info(
+                "%s: failure fingerprint unchanged (%s) — skipping rebase, "
+                "proceeding to ci-fix agent",
+                ticket.id,
+                current_fp,
+            )
+            return None
+
+        # Store the new fingerprint before rebasing so the next cycle can
+        # compare against it.
+        fp_path.parent.mkdir(parents=True, exist_ok=True)
+        fp_path.write_text(current_fp, encoding="utf-8")
 
         log.info(
             "%s: branch is behind %s — rebasing before ci-fix cycle",

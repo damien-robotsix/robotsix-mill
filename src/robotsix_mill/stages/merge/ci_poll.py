@@ -46,8 +46,6 @@ class CIPollMixin(_MergeStageBase):
         - PR merged while polling → DONE.
         - PR closed → BLOCKED.
         """
-        from robotsix_mill.stages import merge as _facade
-
         s = ctx.settings
         branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
 
@@ -159,38 +157,15 @@ class CIPollMixin(_MergeStageBase):
                 )
             _write_counter(auto_fix_path, auto_fix_cycles + 1)
 
-            # Rebase BEFORE ci_fix when the branch is behind main. A repo-wide
-            # gate (ruff/mypy/lint over the whole tree) often fails on code that
-            # isn't this ticket's diff — the branch was cut from an older main
-            # and main has since gained the fix. ci_fix can't repair non-ticket
-            # code, but a rebase onto current main can. Self-gating: after one
-            # rebase the branch is no longer behind, so a still-failing CI then
-            # routes to ci_fix (a genuine, ticket-owned failure). Skipped when
-            # the workspace clone is gone (None) — fall straight to ci_fix.
-            repo_dir = _facade._workspace_repo_dir(ctx, ticket)
-            if repo_dir is not None and _facade.git_ops.branch_is_behind_main(
-                Path(repo_dir), target_branch_for(s, ctx.repo_config)
-            ):
-                # --- Guardrail 2: ping-pong alternation detector ---
-                ping_pong_result = self._check_ping_pong(
-                    ticket, ctx, artifacts_dir, routing_to="rebase"
-                )
-                if ping_pong_result is not None:
-                    return ping_pong_result
+            # Route to FIXING_CI. Branch-introduced failures (those green
+            # on current main) go straight to ci_fix — rebasing cannot fix
+            # a branch's own lint/type failure and just churns under a fast
+            # main. Pre-existing main-branch debt is already blocked above.
+            # The branch gets made current with main via the single
+            # rebase-and-merge at the end of the merge stage, not on every
+            # CI cycle.
 
-                log.info(
-                    "%s: CI failing on a stale base (branch behind main) → "
-                    "REBASING before ci_fix",
-                    ticket.id,
-                )
-                return Outcome(
-                    State.REBASING,
-                    "CI failing and branch is behind main; rebasing onto current "
-                    "main before ci_fix (the failure may be pre-existing repo-wide "
-                    "debt the branch lacks the fix for)",
-                )
-
-            # Routing to FIXING_CI — check ping-pong guardrail.
+            # --- Guardrail 2: ping-pong alternation detector ---
             ping_pong_result = self._check_ping_pong(
                 ticket, ctx, artifacts_dir, routing_to="ci_fix"
             )

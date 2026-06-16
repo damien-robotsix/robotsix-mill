@@ -238,13 +238,12 @@ def test_auto_fix_cycles_reset_on_ci_green(tmp_path, monkeypatch):
 # === Guardrail 2: ping-pong alternation detector ==========================
 
 
-def test_ping_pong_detection_blocks_on_third_alternation(tmp_path, monkeypatch):
-    """After 3 alternations (rebase→ci_fix→rebase→ci_fix→rebase→ci_fix),
-    the 4th routing attempt (which would create a 4th alternation → exceeds
-    the ceiling of 3) is blocked."""
+def test_ping_pong_detection_blocks_on_alternation_ceiling(tmp_path, monkeypatch):
+    """When the ping-pong ceiling is reached via a rebase→ci_fix alternation,
+    the ticket is BLOCKED."""
     from robotsix_mill.stages import merge as merge_mod
 
-    ctx = _gh(tmp_path, ping_pong_max_alternations=3)
+    ctx = _gh(tmp_path, ping_pong_max_alternations=2)
     _ci_failing_mergeable(monkeypatch)
     monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
 
@@ -253,24 +252,24 @@ def test_ping_pong_detection_blocks_on_third_alternation(tmp_path, monkeypatch):
     ping_pong_path = artifacts / _PING_PONG_COUNT
     last_stage_path = artifacts / _LAST_AUTO_FIX_STAGE
 
-    # Pre-seed: 3 alternations already, last stage was "ci_fix".
-    _write_counter(ping_pong_path, 3)
+    # Pre-seed: ping_pong_count at 1, last stage was "rebase".
+    _write_counter(ping_pong_path, 1)
     last_stage_path.parent.mkdir(parents=True, exist_ok=True)
-    last_stage_path.write_text("ci_fix", encoding="utf-8")
+    last_stage_path.write_text("rebase", encoding="utf-8")
 
-    # Now route to REBASING (branch behind main). This should trigger the
-    # ping-pong block because the last stage was ci_fix → alternation #4.
+    # Route to FIXING_CI. last_stage="rebase", routing_to="ci_fix"
+    # → alternation → count becomes 2 → reaches ceiling 2 → BLOCKED.
     monkeypatch.setattr(
         merge_mod.git_ops,
         "branch_is_behind_main",
-        lambda repo, target_branch="main": True,
+        lambda repo, target_branch="main": False,
     )
 
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.BLOCKED
     assert "ping-pong" in out.note.lower()
-    assert "4 alternation" in out.note
-    assert "ceiling is 3" in out.note
+    assert "2 alternation" in out.note
+    assert "ceiling is 2" in out.note
     assert t.id in out.note
     # Both files reset on block.
     assert _read_counter(ping_pong_path) == 0
@@ -293,21 +292,21 @@ def test_ping_pong_counts_only_alternations_not_same_stage_repeats(
     ping_pong_path = artifacts / _PING_PONG_COUNT
     last_stage_path = artifacts / _LAST_AUTO_FIX_STAGE
 
-    # Pre-seed: last stage was "rebase", ping_pong_count = 1.
+    # Pre-seed: last stage was "ci_fix", ping_pong_count = 1.
     _write_counter(ping_pong_path, 1)
     last_stage_path.parent.mkdir(parents=True, exist_ok=True)
-    last_stage_path.write_text("rebase", encoding="utf-8")
+    last_stage_path.write_text("ci_fix", encoding="utf-8")
 
-    # Route to REBASING again (branch behind main). last stage = "rebase",
-    # routing_to = "rebase" → NOT an alternation → counter stays at 1.
+    # Route to FIXING_CI again. last_stage="ci_fix", routing_to="ci_fix"
+    # → NOT an alternation → counter stays at 1.
     monkeypatch.setattr(
         merge_mod.git_ops,
         "branch_is_behind_main",
-        lambda repo, target_branch="main": True,
+        lambda repo, target_branch="main": False,
     )
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.REBASING
+    assert out.next_state is State.FIXING_CI
     # Counter should NOT have incremented.
     assert _read_counter(ping_pong_path) == 1
 
@@ -344,34 +343,35 @@ def test_ping_pong_ci_fix_after_rebase_is_alternation(tmp_path, monkeypatch):
 
 
 def test_ping_pong_rebase_after_ci_fix_is_alternation(tmp_path, monkeypatch):
-    """Rebase after ci_fix increments the ping-pong counter."""
+    """ci_fix after rebase increments the ping-pong counter (alternation
+    from rebase→ci_fix via the FIXING_CI routing path)."""
     from robotsix_mill.stages import merge as merge_mod
 
     ctx = _gh(tmp_path, ping_pong_max_alternations=3)
     _ci_failing_mergeable(monkeypatch)
     monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
-    monkeypatch.setattr(
-        merge_mod.git_ops,
-        "branch_is_behind_main",
-        lambda repo, target_branch="main": True,
-    )
 
     t = _implement_complete(ctx)
     artifacts = ctx.service.workspace(t).artifacts_dir
     ping_pong_path = artifacts / _PING_PONG_COUNT
     last_stage_path = artifacts / _LAST_AUTO_FIX_STAGE
 
-    # Pre-seed: last stage was "ci_fix", ping_pong_count = 1.
+    # Pre-seed: last stage was "rebase", ping_pong_count = 1.
     _write_counter(ping_pong_path, 1)
     last_stage_path.parent.mkdir(parents=True, exist_ok=True)
-    last_stage_path.write_text("ci_fix", encoding="utf-8")
+    last_stage_path.write_text("rebase", encoding="utf-8")
+
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": False,
+    )
 
     out = MergeStage().run(t, ctx)
-    # Routes to REBASING (branch behind main), which IS an alternation
-    # from ci_fix → rebase.
-    assert out.next_state is State.REBASING
+    # Routes to FIXING_CI, which IS an alternation from rebase → ci_fix.
+    assert out.next_state is State.FIXING_CI
     assert _read_counter(ping_pong_path) == 2
-    assert last_stage_path.read_text(encoding="utf-8").strip() == "rebase"
+    assert last_stage_path.read_text(encoding="utf-8").strip() == "ci_fix"
 
 
 def test_ping_pong_max_alternations_zero_disables_guardrail(tmp_path, monkeypatch):
@@ -381,20 +381,21 @@ def test_ping_pong_max_alternations_zero_disables_guardrail(tmp_path, monkeypatc
     ctx = _gh(tmp_path, ping_pong_max_alternations=0)
     _ci_failing_mergeable(monkeypatch)
     monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
-    monkeypatch.setattr(
-        merge_mod.git_ops,
-        "branch_is_behind_main",
-        lambda repo, target_branch="main": True,
-    )
 
     t = _implement_complete(ctx)
     artifacts = ctx.service.workspace(t).artifacts_dir
     ping_pong_path = artifacts / _PING_PONG_COUNT
     _write_counter(ping_pong_path, 999)  # way beyond any reasonable ceiling
 
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": False,
+    )
+
     out = MergeStage().run(t, ctx)
-    # Should still dispatch to REBASING (guardrail skipped).
-    assert out.next_state is State.REBASING
+    # Should still dispatch to FIXING_CI (guardrail skipped).
+    assert out.next_state is State.FIXING_CI
 
 
 def test_ping_pong_counters_reset_on_ci_green(tmp_path, monkeypatch):
@@ -457,7 +458,7 @@ def test_ping_pong_exhausted_takes_priority_over_branch_decision(
     monkeypatch,
 ):
     """When ping-pong ceiling is reached, BLOCKED is returned instead of
-    REBASING or FIXING_CI."""
+    FIXING_CI."""
     from robotsix_mill.stages import merge as merge_mod
 
     ctx = _gh(tmp_path, auto_fix_max_cycles=6, ping_pong_max_alternations=2)
@@ -469,16 +470,17 @@ def test_ping_pong_exhausted_takes_priority_over_branch_decision(
     ping_pong_path = artifacts / _PING_PONG_COUNT
     last_stage_path = artifacts / _LAST_AUTO_FIX_STAGE
 
-    # Pre-seed: ping_pong_count at 2 (at ceiling), last stage was "ci_fix".
-    _write_counter(ping_pong_path, 2)
+    # Pre-seed: ping_pong_count at 1, last stage was "rebase".
+    _write_counter(ping_pong_path, 1)
     last_stage_path.parent.mkdir(parents=True, exist_ok=True)
-    last_stage_path.write_text("ci_fix", encoding="utf-8")
+    last_stage_path.write_text("rebase", encoding="utf-8")
 
-    # Route to REBASING (behind main) → alternation #3 → should block.
+    # Route to FIXING_CI → alternation rebase→ci_fix → count becomes 2
+    # → reaches ceiling 2 → should block.
     monkeypatch.setattr(
         merge_mod.git_ops,
         "branch_is_behind_main",
-        lambda repo, target_branch="main": True,
+        lambda repo, target_branch="main": False,
     )
 
     out = MergeStage().run(t, ctx)
@@ -559,20 +561,22 @@ def test_ping_pong_block_message_contains_ticket_id_and_ceiling(
     ctx = _gh(tmp_path, ping_pong_max_alternations=2)
     _ci_failing_mergeable(monkeypatch)
     monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
-    monkeypatch.setattr(
-        merge_mod.git_ops,
-        "branch_is_behind_main",
-        lambda repo, target_branch="main": True,
-    )
 
     t = _implement_complete(ctx)
     artifacts = ctx.service.workspace(t).artifacts_dir
     ping_pong_path = artifacts / _PING_PONG_COUNT
     last_stage_path = artifacts / _LAST_AUTO_FIX_STAGE
 
-    _write_counter(ping_pong_path, 2)
+    # Pre-seed: ping_pong_count at 1, last stage was "rebase".
+    _write_counter(ping_pong_path, 1)
     last_stage_path.parent.mkdir(parents=True, exist_ok=True)
-    last_stage_path.write_text("ci_fix", encoding="utf-8")
+    last_stage_path.write_text("rebase", encoding="utf-8")
+
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": False,
+    )
 
     out = MergeStage().run(t, ctx)
     assert t.id in out.note

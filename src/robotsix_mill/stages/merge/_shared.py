@@ -223,13 +223,19 @@ def _latest_failing_workflows(runs: list[dict[str, Any]]) -> set[str]:
     """Reduce a list of workflow-run dicts to the set of currently
     failing workflow names.
 
-    The latest completed run per ``workflow_id`` wins (compared by the
+    The latest **completed** run per ``workflow_id`` wins (compared by the
     ``created_at`` string), so a later green run supersedes an earlier
-    red one for the same workflow (and vice-versa). Returns the names
-    of those latest-per-workflow runs whose ``conclusion`` is
-    ``"failure"`` (blank names are dropped)."""
+    red one for the same workflow (and vice-versa). Runs with a ``None``
+    conclusion (in-progress) are ignored entirely — they cannot mask a
+    completed failure, preventing false "green" reads during a
+    main-CI-in-flight window.
+
+    Returns the names of those latest-per-workflow runs whose
+    ``conclusion`` is ``"failure"`` (blank names are dropped)."""
     latest: dict[Any, dict[str, Any]] = {}
     for run in runs:
+        if run.get("conclusion") is None:
+            continue  # skip in-progress runs — only completed runs count
         wid = run.get("workflow_id")
         if wid not in latest or run.get("created_at", "") > latest[wid].get(
             "created_at", ""
