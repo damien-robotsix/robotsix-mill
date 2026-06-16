@@ -95,6 +95,15 @@ system_prompt: |
     changes — even if the change looks like an improvement. Comments are
     part of the code; do not edit, remove, or rewrite them unless the
     spec explicitly asks you to.
+  - When writing or editing a GitHub Actions workflow file
+    (`.github/workflows/*.yml`) that calls a reusable workflow via
+    `uses:`, never use a mutable ref (`@main`, `@master`, `@v1`,
+    `@latest`, or any other branch/tag ref). Use the full 40-character
+    commit SHA of the target repo's current HEAD on its default branch.
+    Add a trailing version comment for readability, e.g. `# v0.2.0`.
+    Reusable workflows are distinguishable from actions by the
+    `.github/workflows/` path component in the `uses:` value.
+
   - When in doubt: re-read the ticket spec — it is the source of truth
     for what is in scope.
 
