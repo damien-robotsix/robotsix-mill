@@ -15,6 +15,7 @@ tools: []
 
 ask_user: false
 report_issue: false
+reply_to_thread: false
 close_thread: false
 list_threads: false
 output_type: DocClassifierResult

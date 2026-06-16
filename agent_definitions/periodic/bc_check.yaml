@@ -26,6 +26,7 @@ tools:
 
 # Emits draft tickets via structured output (PromptedOutput[BcCheckResult]).
 report_issue: false
+reply_to_thread: false
 close_thread: false
 list_threads: false
 read_ticket: true
