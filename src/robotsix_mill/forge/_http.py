@@ -118,6 +118,10 @@ class _ApiClient:
         """``DELETE <api_base><path>`` — returns the raw response."""
         return self._do("delete", path, **kwargs)
 
+    def patch(self, path: str, **kwargs: object) -> httpx.Response:
+        """``PATCH <api_base><path>`` — returns the raw response."""
+        return self._do("patch", path, **kwargs)
+
     # -- context manager for multi-call flows -----------------------------
 
     @contextmanager

@@ -460,6 +460,13 @@ class _StagesSettings(BaseModel):
     # is still bounded.  Set to 0 to disable.
     ci_fix_max_cycles: int = Field(default=3, ge=0)
 
+    # When True (default), ci_fix may invoke a conservative codeql_fp_triage
+    # sub-agent at the hard cycle ceiling when the ONLY remaining red check
+    # is CodeQL code-scanning.  The sub-agent evaluates alerts and may dismiss
+    # high-conviction false positives, unblocking the ticket.  Set False to
+    # disable this automatic unblock path.
+    codeql_fp_triage_enabled: bool = Field(default=True)
+
     # Cross-stage ceiling on combined REBASING + FIXING_CI dispatches without
     # CI turning green.  This counter spans both stages and is the universal
     # backstop: a ticket whose CI keeps failing enters REBASING or FIXING_CI

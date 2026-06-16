@@ -35,6 +35,14 @@ _CI_FIX_COUNTER = "ci_fix_attempts.txt"
 _CI_NO_CHANGE_COUNTER = "ci_no_change_cycles.txt"
 _CI_FIX_CYCLE_COUNTER = "ci_fix_cycles.txt"
 _CI_REFRESH_COUNTER = "ci_fix_refresh_attempts.txt"
+_CODQL_FP_TRIAGE_SENTINEL = "codeql_fp_triage_ran.txt"
+
+# Maximum number of alerts the codeql_fp_triage agent may dismiss in a
+# single pass.  Caps the blast radius of a misjudged dismissal.
+_CODQL_FP_TRIAGE_MAX_DISMISSALS = 5
+
+# Check-run names that are CodeQL-related (case-insensitive contains).
+_CODQL_CHECK_NAMES = frozenset({"codeql", "code-scanning", "code scanning"})
 
 
 def _read_counter(path) -> int:
@@ -197,6 +205,51 @@ def _build_failing_summary(
     return "\n".join(parts)
 
 
+def _only_codeql_failing(failing: list[dict[str, Any]]) -> bool:
+    """Return True when every failing check is CodeQL code-scanning.
+
+    A check is CodeQL-related when its name contains one of the known
+    CodeQL check-name substrings (case-insensitive).  Returns False
+    when *failing* is empty (no failures → nothing to triage) or when
+    any non-CodeQL check is failing alongside.
+    """
+    if not failing:
+        return False
+    for chk in failing:
+        name = (chk.get("name") or "").lower()
+        if not any(token in name for token in _CODQL_CHECK_NAMES):
+            return False
+    return True
+
+
+def _eligible_for_triage(
+    alerts: list[dict], changed_paths: set[str], max_dismissals: int
+) -> list[dict]:
+    """Return the subset of *alerts* eligible for FP triage.
+
+    An alert is eligible when ALL of the following hold:
+    1. Its file is in *changed_paths* (in-scope — this PR's own diff).
+    2. Its ``security_severity_level`` is ``None`` (NOT a security alert).
+    3. It has a ``number`` (required for the dismissal API).
+
+    Returns at most *max_dismissals* alerts (the rest are trimmed so
+    the agent never dismisses more than the cap in one pass).
+    """
+    eligible: list[dict] = []
+    for a in alerts:
+        path = a.get("path", "")
+        if not path or path not in changed_paths:
+            continue
+        if a.get("security_severity_level") is not None:
+            continue
+        if a.get("number") is None:
+            continue
+        eligible.append(a)
+        if len(eligible) >= max_dismissals:
+            break
+    return eligible
+
+
 def _ci_failure_fingerprint(failing_summary: str, repo_id: str) -> str:
     """Compute a stable hex fingerprint for a CI failure.
 
@@ -226,6 +279,9 @@ class _FailingContext(NamedTuple):
     repo_dir: str
     branch: str
     failing_summary: str
+    failing: list[dict[str, Any]] = []
+    alerts: list[dict] = []
+    changed_paths: set[str] = set()
 
 
 class CIFixStage(Stage):
@@ -241,7 +297,7 @@ class CIFixStage(Stage):
         resolved = self._resolve_clone_and_status(ticket, ctx)
         if isinstance(resolved, Outcome):
             return resolved
-        repo_dir, branch, failing_summary = resolved
+        repo_dir, branch, failing_summary, failing, alerts, changed_paths = resolved
 
         # Staleness guard: rebase if behind main BEFORE counting a cycle.
         rebase_outcome = self._rebase_if_stale(ticket, ctx, repo_dir, branch)
@@ -249,7 +305,9 @@ class CIFixStage(Stage):
             return rebase_outcome
 
         # Counter phase: enforce the hard per-ticket cycle ceiling.
-        ceiling = self._enforce_cycle_ceiling(ticket, ctx, failing_summary)
+        ceiling = self._enforce_cycle_ceiling(
+            ticket, ctx, failing_summary, failing, alerts, changed_paths
+        )
         if ceiling is not None:
             return ceiling
 
@@ -346,8 +404,12 @@ class CIFixStage(Stage):
 
         # --- CI is failing → attempt fix ---
         failing = status.get("failing", [])
-        failing_summary = self._build_failure_detail(ticket, ctx, branch, failing)
-        return _FailingContext(repo_dir, branch, failing_summary)
+        failing_summary, alerts, changed_paths = self._build_failure_detail(
+            ticket, ctx, branch, failing
+        )
+        return _FailingContext(
+            repo_dir, branch, failing_summary, failing, alerts, changed_paths
+        )
 
     def _build_failure_detail(
         self,
@@ -355,8 +417,12 @@ class CIFixStage(Stage):
         ctx: StageContext,
         branch: str,
         failing: list[dict[str, Any]],
-    ) -> str:
-        """Enrich the failing-check list with job logs + code-scanning alerts."""
+    ) -> tuple[str, list[dict], set[str]]:
+        """Enrich the failing-check list with job logs + code-scanning alerts.
+
+        Returns ``(failing_summary, alerts, changed_paths)`` so callers
+        can inspect the raw alert data (e.g. for FP triage gating).
+        """
         s = ctx.settings
 
         # Fetch job logs + code-scanning alerts for richer context (only on
@@ -383,15 +449,23 @@ class CIFixStage(Stage):
         except Exception:  # noqa: BLE001 — best-effort enrichment
             log.warning("%s: failed to fetch job logs / alerts", ticket.id)
 
-        return _build_failing_summary(failing, log_text, alerts, changed_paths)
+        return _build_failing_summary(failing, log_text, alerts, changed_paths), alerts, changed_paths
 
     def _enforce_cycle_ceiling(
-        self, ticket: Ticket, ctx: StageContext, failing_summary: str
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        failing_summary: str,
+        failing: list[dict[str, Any]],
+        alerts: list[dict],
+        changed_paths: set[str],
     ) -> Outcome | None:
         """Apply the hard per-ticket cycle ceiling.
 
         On a ceiling hit, resets the cycle counter, logs, records the
         best-effort history note and returns the BLOCKED ``Outcome``.
+        Before blocking, tries the codeql_fp_triage sub-agent when the
+        ONLY remaining red check is CodeQL code-scanning.
         Otherwise increments the cycle counter and returns ``None``.
         """
         s = ctx.settings
@@ -410,6 +484,14 @@ class CIFixStage(Stage):
         if s.ci_fix_max_cycles > 0 and cycles >= s.ci_fix_max_cycles:
             # Stop before spending another full agent run.
             _write_counter(cycle_counter_path, 0)
+
+            # --- CodeQL FP triage: last resort before BLOCKED ---
+            triage_outcome = self._try_codeql_fp_triage(
+                ticket, ctx, failing, alerts, changed_paths
+            )
+            if triage_outcome is not None:
+                return triage_outcome
+
             log.warning(
                 "%s: ci-fix hit hard ceiling of %d cycle(s) without turning "
                 "CI green — escalating to BLOCKED without running the agent",
@@ -493,6 +575,147 @@ class CIFixStage(Stage):
             log.warning("%s: failed to record rebase history note", ticket.id)
 
         return Outcome(State.IMPLEMENT_COMPLETE)
+
+    def _try_codeql_fp_triage(  # noqa: C901 — guardrail chain is inherently branchy
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        failing: list[dict[str, Any]],
+        alerts: list[dict],
+        changed_paths: set[str],
+    ) -> Outcome | None:
+        """Try the codeql_fp_triage sub-agent before blocking on CodeQL FPs.
+
+        Returns an ``Outcome(State.IMPLEMENT_COMPLETE)`` when the agent
+        dismissed at least one alert (so CI should re-poll green), or
+        ``None`` when triage is not applicable / ran but dismissed nothing
+        / is disabled — the caller then falls through to BLOCKED.
+        """
+        s = ctx.settings
+
+        # --- gate: feature flag ---
+        if not s.codeql_fp_triage_enabled:
+            return None
+
+        # --- gate: only CodeQL is failing ---
+        if not _only_codeql_failing(failing):
+            return None
+
+        # --- gate: run-once sentinel ---
+        artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
+        sentinel_path = artifacts_dir / _CODQL_FP_TRIAGE_SENTINEL
+        if sentinel_path.exists():
+            log.info(
+                "%s: codeql_fp_triage already ran for this ticket — skipping",
+                ticket.id,
+            )
+            return None
+        # Write sentinel BEFORE running the agent so a crash doesn't retry.
+        _write_counter(sentinel_path, 1)
+
+        # --- gate: filter eligible alerts ---
+        eligible = _eligible_for_triage(alerts, changed_paths, max_dismissals=5)
+        if not eligible:
+            log.info(
+                "%s: no CodeQL alerts eligible for FP triage "
+                "(all are security-severity, out-of-scope, or absent)",
+                ticket.id,
+            )
+            return None
+
+        log.info(
+            "%s: attempting codeql_fp_triage on %d eligible alert(s)",
+            ticket.id,
+            len(eligible),
+        )
+
+        # --- run the agent ---
+        import json
+        from pathlib import Path
+
+        from ..agents.codeql_fp_triage import run_codeql_fp_triage_agent
+
+        repo_dir = _workspace_repo_dir(ctx, ticket)
+        if repo_dir is None:
+            return None
+
+        try:
+            result = run_codeql_fp_triage_agent(
+                settings=s,
+                repo_dir=Path(repo_dir),
+                alerts_json=json.dumps(eligible),
+                ticket_id=ticket.id,
+                board_id=ctx.repo_config.board_id if ctx.repo_config else "",
+            )
+        except Exception:  # noqa: BLE001 — best-effort
+            log.warning(
+                "%s: codeql_fp_triage agent crashed", ticket.id, exc_info=True
+            )
+            return None
+
+        # --- dismiss alerts the agent greenlit ---
+        dismissals = [v for v in result.verdicts if v.verdict == "dismiss"]
+        if not dismissals:
+            log.info(
+                "%s: codeql_fp_triage abstained on all %d alert(s) — blocking",
+                ticket.id,
+                len(eligible),
+            )
+            return None
+
+        forge = get_forge(s, repo_config=ctx.repo_config)
+        dismissed_count = 0
+        dismissal_notes: list[str] = []
+        for v in dismissals:
+            ok = forge.dismiss_code_scanning_alert(
+                number=v.alert_number,
+                reason="false positive",
+                comment=v.rationale[:4000],  # GitHub dismiss comment limit
+            )
+            if ok:
+                dismissed_count += 1
+                dismissal_notes.append(
+                    f"- Alert #{v.alert_number}: {v.rationale[:200]}"
+                )
+            else:
+                log.warning(
+                    "%s: failed to dismiss code-scanning alert %d",
+                    ticket.id,
+                    v.alert_number,
+                )
+
+        # --- record audit trail ---
+        try:
+            note_lines = [
+                "## codeql_fp_triage: auto-dismissed CodeQL false positive(s)",
+                "",
+                f"Dismissed {dismissed_count} alert(s) out of "
+                f"{len(eligible)} eligible:",
+                "",
+            ]
+            note_lines.extend(dismissal_notes)
+            note_lines.append("")
+            note_lines.append(
+                "These dismissals persist by fingerprint and will also "
+                "clear the alert on `main` after merge.  A human can "
+                "re-open any alert via the GitHub security tab."
+            )
+            ctx.service.add_history_note(ticket.id, "\n".join(note_lines))
+        except Exception:  # noqa: BLE001 — best-effort
+            log.warning(
+                "%s: failed to record codeql_fp_triage note", ticket.id
+            )
+
+        if dismissed_count > 0:
+            log.info(
+                "%s: codeql_fp_triage dismissed %d alert(s) — "
+                "returning to IMPLEMENT_COMPLETE for re-poll",
+                ticket.id,
+                dismissed_count,
+            )
+            return Outcome(State.IMPLEMENT_COMPLETE)
+
+        return None
 
     def _run_agent_and_finalize(
         self,

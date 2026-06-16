@@ -233,9 +233,26 @@ class Forge(ABC):
         failure (it sees only "CodeQL: failure" with no detail).
 
         Each dict: ``rule`` (id), ``severity``, ``path``, ``line``,
-        ``message``, ``url``.
+        ``message``, ``url``, ``number`` (the raw alert number for
+        dismissal), ``security_severity_level`` (``null`` or
+        ``"low"/"medium"/"high"/"critical"``).
         """
         return []
+
+    def dismiss_code_scanning_alert(
+        self, *, number: int, reason: str, comment: str
+    ) -> bool:
+        """Dismiss a single code-scanning alert by its *number*.
+
+        *reason* must be one of ``"false positive"``, ``"won't fix"``,
+        or ``"used in tests"`` (GitHub's required enum — note the spaces,
+        not underscores).  *comment* is an optional dismissal note.
+
+        Returns ``True`` on success, ``False`` on any failure (not found,
+        insufficient scope, network error).  Concrete default returns
+        ``False`` — only GitHub implements this capability.
+        """
+        return False
 
     def update_branch(self, *, source_branch: str) -> dict:
         """Merge the PR's base branch into the PR branch (server-side) so its
