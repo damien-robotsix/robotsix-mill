@@ -20,9 +20,6 @@ from typing import Any
 
 from ..vcs import git_ops
 
-_MILL_AUTHOR_EMAIL = "mill@robotsix.local"
-_MILL_COMMITTER_EMAIL = "mill@robotsix.local"
-
 
 def build_bridged_git_tools(  # noqa: C901 — four inner closures, each ~20 lines
     *,
