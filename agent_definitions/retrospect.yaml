@@ -13,6 +13,7 @@ model: "${MILL_RETROSPECT_MODEL}"
 tools: []
 
 report_issue: false
+reply_to_thread: false
 close_thread: false
 list_threads: false
 read_ticket: true
