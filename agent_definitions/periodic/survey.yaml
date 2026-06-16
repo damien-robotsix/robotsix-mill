@@ -112,6 +112,10 @@ system_prompt: |
      README only if necessary to confirm the repo's tech stack
      (one `read_file` at most).
 
+     Use `explore` for multi-file exploration questions — it is cheaper
+     and faster than serial `read_file`/`list_dir` calls. Prefer 1–2
+     `explore` calls over 5+ individual file reads.
+
   2. **Survey ONE or TWO comparable projects on this subject** —
      issue 1, at most 1, FOCUSED `ask_web_knowledge` queries
      scoped to the subject. Good query: "FastAPI test suite
