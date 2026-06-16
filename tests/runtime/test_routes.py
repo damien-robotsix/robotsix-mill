@@ -1702,3 +1702,148 @@ def test_worker_status_shape(client):
     assert isinstance(d["queues"], dict)
     assert isinstance(d["pending"], list)
     assert isinstance(d["dead_tasks"], list)
+
+
+# -- Background-pass route coverage (19 previously-untested handlers) ---
+
+
+class _FakePassResult:
+    """Fake result with every attribute any pass summary builder may read."""
+
+    drafts_created: list = [{"id": "D-1"}]
+    # trace-health
+    unsessioned_count: int = 0
+    total_traces: int = 10
+    window_start: str = "2025-01-01"
+    window_end: str = "2025-01-02"
+    draft_created: bool = False
+    # langfuse-cleanup
+    project: str = "test-project"
+    traces_before: int = 100
+    traces_deleted: int = 10
+    # meta
+    extraction_drafts_created: list = []
+    alignment_drafts_created: list = []
+
+
+# (route_path, dotted_module_to_patch, attr_name_to_patch)
+BG_PASS_ROUTES = [
+    # -- 13 factory-based routes (all use _make_background_pass) ----------
+    ("/audit", "robotsix_mill.runners.audit_runner", "run_audit_pass"),
+    ("/bc-check", "robotsix_mill.runners.bc_check_runner", "run_bc_check_pass"),
+    (
+        "/completeness-check",
+        "robotsix_mill.runners.completeness_check_runner",
+        "run_completeness_check_pass",
+    ),
+    (
+        "/agent-check",
+        "robotsix_mill.runners.agent_check_runner",
+        "run_agent_check_pass",
+    ),
+    ("/health-check", "robotsix_mill.runners.health_runner", "run_health_pass"),
+    ("/test-gap", "robotsix_mill.runners.test_gap_runner", "run_test_gap_pass"),
+    (
+        "/copy-paste",
+        "robotsix_mill.runners.copy_paste_runner",
+        "run_copy_paste_pass",
+    ),
+    (
+        "/forge-parity",
+        "robotsix_mill.runners.forge_parity_runner",
+        "run_forge_parity_pass",
+    ),
+    (
+        "/config-sync",
+        "robotsix_mill.runners.config_sync_runner",
+        "run_config_sync_pass",
+    ),
+    (
+        "/member-sync",
+        "robotsix_mill.runners.member_sync_runner",
+        "run_member_sync_pass",
+    ),
+    (
+        "/cost-reconciliation",
+        "robotsix_mill.runners.cost_reconciliation_runner",
+        "run_cost_reconciliation_pass",
+    ),
+    (
+        "/trace-review",
+        "robotsix_mill.runners.trace_review_runner",
+        "run_trace_review_pass",
+    ),
+    (
+        "/roadmap-sync",
+        "robotsix_mill.runners.roadmap_sync_runner",
+        "run_roadmap_sync_pass",
+    ),
+    # -- 6 custom handlers -----------------------------------------------
+    (
+        "/trace-health",
+        "robotsix_mill.runners.trace_health_runner",
+        "run_trace_health_check",
+    ),
+    (
+        "/langfuse-cleanup",
+        "robotsix_mill.runners.langfuse_cleanup_runner",
+        "run_langfuse_cleanup_pass",
+    ),
+    (
+        "/board-cleanup",
+        "robotsix_mill.runners.periodic_runner",
+        "run_board_cleanup_pass",
+    ),
+    ("/meta", "robotsix_mill.meta.runner", "run_meta_pass"),
+    (
+        "/cost-analyst",
+        "robotsix_mill.runners.cost_analyst_runner",
+        "run_cost_analyst_pass",
+    ),
+    (
+        "/run-health",
+        "robotsix_mill.runners.run_health_runner",
+        "run_run_health_pass",
+    ),
+]
+
+
+@pytest.mark.parametrize("route, target_module, target_attr", BG_PASS_ROUTES)
+def test_bg_pass_route_success(client, monkeypatch, route, target_module, target_attr):
+    """Every background-pass route returns 202 {"status": "started"} and
+    invokes its runner in a background thread."""
+    import importlib
+
+    ran = threading.Event()
+    release = threading.Event()
+
+    def fake_runner(**kwargs):
+        ran.set()
+        release.wait(5)
+        return _FakePassResult()
+
+    mod = importlib.import_module(target_module)
+    monkeypatch.setattr(mod, target_attr, fake_runner)
+
+    r = client.post(route)
+    assert r.status_code == 202, f"{route}: expected 202, got {r.status_code}"
+    assert r.json() == {"status": "started"}
+    assert ran.wait(5), f"{route}: runner was not invoked in background"
+    release.set()
+
+
+# Routes whose handler calls _resolve_agent_run_repos *synchronously*
+# (outside the daemon thread), so an unknown repo_id → 400 to the client.
+_REPO_ID_ERROR_ROUTES = [
+    "/trace-health",
+    "/langfuse-cleanup",
+    "/board-cleanup",
+]
+
+
+@pytest.mark.parametrize("route", _REPO_ID_ERROR_ROUTES)
+def test_bg_pass_route_unknown_repo_400(client, route):
+    """Routes that resolve repo_id synchronously return 400 for unknown repos."""
+    r = client.post(f"{route}?repo_id=unknown")
+    assert r.status_code == 400, f"{route}: expected 400, got {r.status_code}"
+    assert "Unknown repo" in r.json()["detail"]
