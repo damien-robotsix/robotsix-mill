@@ -1647,7 +1647,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6" },
     { name = "robotsix-board", git = "https://github.com/damien-robotsix/robotsix-board.git?rev=main" },
     { name = "robotsix-board-agent", git = "https://github.com/damien-robotsix/robotsix-board-agent.git?rev=main" },
-    { name = "robotsix-llmio", extras = ["openrouter-deepseek", "claude-sdk"], git = "https://github.com/damien-robotsix/robotsix-llmio?rev=main" },
+    { name = "robotsix-llmio", extras = ["openrouter-deepseek", "claude-sdk"], git = "https://github.com/damien-robotsix/robotsix-llmio.git?rev=main" },
     { name = "robotsix-yaml-config", git = "https://github.com/damien-robotsix/robotsix-yaml-config.git?rev=main" },
     { name = "sqlmodel", specifier = ">=0.0.22" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
@@ -1664,7 +1664,7 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=0.21" },
     { name = "pytest-cov", specifier = ">=7" },
     { name = "pytest-xdist", specifier = ">=3" },
-    { name = "robotsix-modules", git = "https://github.com/damien-robotsix/robotsix-modules?rev=main" },
+    { name = "robotsix-modules", git = "https://github.com/damien-robotsix/robotsix-modules.git?rev=main" },
     { name = "ruff", specifier = "==0.15.15" },
     { name = "vulture", specifier = ">=2" },
 ]
@@ -1676,7 +1676,7 @@ docs = [
 [[package]]
 name = "robotsix-modules"
 version = "0.2.0"
-source = { git = "https://github.com/damien-robotsix/robotsix-modules?rev=main#d56fd5d0ae36e2226a471ef276a38faa5d611e6b" }
+source = { git = "https://github.com/damien-robotsix/robotsix-modules.git?rev=main#d56fd5d0ae36e2226a471ef276a38faa5d611e6b" }
 dependencies = [
     { name = "jsonschema" },
     { name = "pyyaml" },
