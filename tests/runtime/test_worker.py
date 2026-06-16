@@ -1866,7 +1866,7 @@ def test_max_inflight_prs_rejects_negative():
     """max_inflight_prs must reject negative values at construction time."""
     from robotsix_mill.config.repos import RepoConfig
 
-    with pytest.raises(Exception):  # pydantic ValidationError
+    with pytest.raises(ValueError):  # pydantic ValidationError
         RepoConfig(
             repo_id="r",
             board_id="b",
@@ -1908,7 +1908,7 @@ def test_max_inflight_prs_defaults_to_3():
 
 def test_count_inflight_prs_counts_only_in_flight_states(service):
     """_count_inflight_prs returns the count of tickets in _IN_FLIGHT_PR_STATES."""
-    from robotsix_mill.runtime.worker.core import _count_inflight_prs, _IN_FLIGHT_PR_STATES
+    from robotsix_mill.runtime.worker.core import _count_inflight_prs
 
     # Initially empty.
     assert _count_inflight_prs(service) == 0
@@ -1940,7 +1940,12 @@ def test_count_inflight_prs_excludes_non_in_flight_states(service):
 
     # Create tickets and move them to various non-in-flight states.
     t_hmr = service.create("human mr approval")
-    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL):
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+    ):
         service.transition(t_hmr.id, st)
 
     t_blocked = service.create("blocked ticket")
@@ -1949,6 +1954,7 @@ def test_count_inflight_prs_excludes_non_in_flight_states(service):
     # Move to BLOCKED via direct state set (the worker does this).
     from robotsix_mill.core import db as _db
     from robotsix_mill.core.models import Ticket as _Ticket
+
     with _db.session(service.settings, service.board_id) as s:
         row = s.get(_Ticket, t_blocked.id)
         row.state = State.BLOCKED
@@ -1977,6 +1983,7 @@ async def test_cap_blocks_ready_when_at_limit(ctx, service, monkeypatch):
     )
     fake_repos = ReposRegistry(repos={"test-repo": rc})
     import robotsix_mill.config as _cfg
+
     _cfg._repos_config = fake_repos
 
     # Create one in-flight PR ticket (DELIVERABLE).
@@ -1994,8 +2001,10 @@ async def test_cap_blocks_ready_when_at_limit(ctx, service, monkeypatch):
     w.enqueue(ready_ticket.id)
 
     invoked = []
+
     async def fake_process_ticket(ticket_id, p_ctx, active_map=None):
         invoked.append(ticket_id)
+
     monkeypatch.setattr(
         "robotsix_mill.runtime.worker.core.process_ticket",
         fake_process_ticket,
@@ -2007,9 +2016,7 @@ async def test_cap_blocks_ready_when_at_limit(ctx, service, monkeypatch):
     with pytest.raises(asyncio.CancelledError):
         await task
 
-    assert ready_ticket.id not in invoked, (
-        "READY ticket must NOT be dispatched at cap"
-    )
+    assert ready_ticket.id not in invoked, "READY ticket must NOT be dispatched at cap"
 
 
 async def test_cap_blocks_draft_when_at_limit(ctx, service, monkeypatch):
@@ -2029,6 +2036,7 @@ async def test_cap_blocks_draft_when_at_limit(ctx, service, monkeypatch):
     )
     fake_repos = ReposRegistry(repos={"test-repo": rc})
     import robotsix_mill.config as _cfg
+
     _cfg._repos_config = fake_repos
 
     # Create one in-flight PR ticket (DELIVERABLE).
@@ -2045,8 +2053,10 @@ async def test_cap_blocks_draft_when_at_limit(ctx, service, monkeypatch):
     w.enqueue(draft_ticket.id)
 
     invoked = []
+
     async def fake_process_ticket(ticket_id, p_ctx, active_map=None):
         invoked.append(ticket_id)
+
     monkeypatch.setattr(
         "robotsix_mill.runtime.worker.core.process_ticket",
         fake_process_ticket,
@@ -2058,9 +2068,7 @@ async def test_cap_blocks_draft_when_at_limit(ctx, service, monkeypatch):
     with pytest.raises(asyncio.CancelledError):
         await task
 
-    assert draft_ticket.id not in invoked, (
-        "DRAFT ticket must NOT be dispatched at cap"
-    )
+    assert draft_ticket.id not in invoked, "DRAFT ticket must NOT be dispatched at cap"
 
 
 async def test_cap_allows_ready_when_below_limit(ctx, service, monkeypatch):
@@ -2080,6 +2088,7 @@ async def test_cap_allows_ready_when_below_limit(ctx, service, monkeypatch):
     )
     fake_repos = ReposRegistry(repos={"test-repo": rc})
     import robotsix_mill.config as _cfg
+
     _cfg._repos_config = fake_repos
 
     # Two in-flight.
@@ -2097,8 +2106,10 @@ async def test_cap_allows_ready_when_below_limit(ctx, service, monkeypatch):
     w.enqueue(ready_ticket.id)
 
     invoked = []
+
     async def fake_process_ticket(ticket_id, ctx, active_map=None):
         invoked.append(ticket_id)
+
     monkeypatch.setattr(
         "robotsix_mill.runtime.worker.core.process_ticket",
         fake_process_ticket,
@@ -2132,6 +2143,7 @@ async def test_cap_disabled_when_zero(ctx, service, monkeypatch):
     )
     fake_repos = ReposRegistry(repos={"test-repo": rc})
     import robotsix_mill.config as _cfg
+
     _cfg._repos_config = fake_repos
 
     # Several in-flight — more than the default of 3.
@@ -2149,8 +2161,10 @@ async def test_cap_disabled_when_zero(ctx, service, monkeypatch):
     w.enqueue(ready_ticket.id)
 
     invoked = []
+
     async def fake_process_ticket(ticket_id, ctx, active_map=None):
         invoked.append(ticket_id)
+
     monkeypatch.setattr(
         "robotsix_mill.runtime.worker.core.process_ticket",
         fake_process_ticket,
@@ -2184,6 +2198,7 @@ async def test_merge_pipeline_always_processed_at_cap(ctx, service, monkeypatch)
     )
     fake_repos = ReposRegistry(repos={"test-repo": rc})
     import robotsix_mill.config as _cfg
+
     _cfg._repos_config = fake_repos
 
     # One in-flight — at cap.
@@ -2204,8 +2219,10 @@ async def test_merge_pipeline_always_processed_at_cap(ctx, service, monkeypatch)
     w.enqueue(t2.id)
 
     invoked = []
+
     async def fake_process_ticket(ticket_id, ctx, active_map=None):
         invoked.append(ticket_id)
+
     monkeypatch.setattr(
         "robotsix_mill.runtime.worker.core.process_ticket",
         fake_process_ticket,
@@ -2242,12 +2259,18 @@ async def test_cap_excludes_human_mr_approval_from_count(ctx, service, monkeypat
     )
     fake_repos = ReposRegistry(repos={"test-repo": rc})
     import robotsix_mill.config as _cfg
+
     _cfg._repos_config = fake_repos
 
     # Create one HUMAN_MR_APPROVAL ticket — excluded from in-flight count.
     parked = service.create("human approval pending")
-    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE,
-               State.WAITING_AUTO_MERGE, State.HUMAN_MR_APPROVAL):
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.WAITING_AUTO_MERGE,
+        State.HUMAN_MR_APPROVAL,
+    ):
         service.transition(parked.id, st)
     assert service.get(parked.id).state is State.HUMAN_MR_APPROVAL
     # HUMAN_MR_APPROVAL is excluded → count is 0 even with cap=1.
@@ -2261,8 +2284,10 @@ async def test_cap_excludes_human_mr_approval_from_count(ctx, service, monkeypat
     w.enqueue(ready_ticket.id)
 
     invoked = []
+
     async def fake_process_ticket(ticket_id, p_ctx, active_map=None):
         invoked.append(ticket_id)
+
     monkeypatch.setattr(
         "robotsix_mill.runtime.worker.core.process_ticket",
         fake_process_ticket,

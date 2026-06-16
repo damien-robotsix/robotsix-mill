@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import TYPE_CHECKING
 
 from ...config import RepoConfig, get_repos_config
 from ...langfuse.client import effective_cost, session_cost
 from ...stages import StageContext, get_stage
 from ...core.states import STAGE_FOR_STATE, State
 from ...notify import send_notification
+
+if TYPE_CHECKING:
+    from ...core.service import TicketService
 from .. import tracing
 from ..run_registry import RunRegistry
 
@@ -24,14 +28,16 @@ log = logging.getLogger("robotsix_mill.worker")
 # States counting toward the per-repo in-flight-PR cap.
 # A ticket in any of these states has an open PR / branch in flight.
 # See _CAP_GATED_STATES for the states gated by the cap.
-_IN_FLIGHT_PR_STATES: frozenset[State] = frozenset({
-    State.DELIVERABLE,
-    State.IMPLEMENT_COMPLETE,
-    State.WAITING_AUTO_MERGE,
-    State.REBASING,
-    State.FIXING_CI,
-    State.ADDRESSING_REVIEW,
-})
+_IN_FLIGHT_PR_STATES: frozenset[State] = frozenset(
+    {
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.WAITING_AUTO_MERGE,
+        State.REBASING,
+        State.FIXING_CI,
+        State.ADDRESSING_REVIEW,
+    }
+)
 
 # States blocked by the in-flight-PR cap — only READY (implement)
 # and DRAFT (refine) are gated.  All other states (including every
@@ -345,6 +351,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                         self._pending.discard(ticket_id)
                         self.enqueue(ticket_id)
                         await asyncio.sleep(15)
+                        queue.task_done()
                         continue
 
                 await process_ticket(ticket_id, per_ticket_ctx, active_map=self._active)
