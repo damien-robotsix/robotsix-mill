@@ -648,9 +648,7 @@ def test_early_triage_before_attempt_cap(tmp_path, monkeypatch):
 
     def fake_triage(**kw):
         return CodeQLFpTriageResult(
-            verdicts=[
-                AlertVerdict(alert_number=1, verdict="dismiss", rationale="fp")
-            ],
+            verdicts=[AlertVerdict(alert_number=1, verdict="dismiss", rationale="fp")],
             summary="dismissed",
         )
 
