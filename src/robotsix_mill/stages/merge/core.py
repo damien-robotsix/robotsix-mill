@@ -104,8 +104,9 @@ class MergeStage(
         """Append a de-duplicated step event naming the auto-merge blocking condition.
 
         Reads ``merge_reason.txt`` from the workspace; skips emission
-        if the stored reason matches *reason* exactly. Otherwise emits
-        a same-state history event, then persists the new reason.
+        if *reason* has already been seen for this ticket (tracked as
+        a set of lines in the file). Otherwise emits a same-state
+        history event, then appends the new reason to the file.
 
         Pre-v1 this used add_comment so the merge agent's reason
         appeared in the comments pane; that polluted comments with
@@ -114,7 +115,7 @@ class MergeStage(
         """
         reason_path = ctx.service.workspace(ticket).artifacts_dir / _MERGE_REASON
         stored = _read_reason(reason_path)
-        if stored == reason:
+        if reason in stored:
             return  # already emitted — de-dupe
         ctx.service.add_step_event(ticket.id, f"merge: {reason}")
         _write_reason(reason_path, reason)

@@ -97,16 +97,17 @@ def _build_failing_summary(
     return _ci_fix_summary(failing, log_text, alerts, changed_paths)
 
 
-def _read_reason(path) -> str:
+def _read_reason(path) -> set[str]:
     try:
-        return path.read_text(encoding="utf-8").strip()
+        return set(path.read_text(encoding="utf-8").splitlines())
     except FileNotFoundError:
-        return ""
+        return set()
 
 
 def _write_reason(path, reason: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(reason, encoding="utf-8")
+    with path.open("a", encoding="utf-8") as f:
+        f.write(reason + "\n")
 
 
 def _workspace_repo_dir(ctx, ticket) -> str | None:
