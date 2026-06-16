@@ -2389,3 +2389,136 @@ def test_migrate_epic_subtree_rolls_back_on_db_failure(settings, migrate_env):
     # Source DB untouched: both tickets still present.
     assert service.get(epic.id) is not None
     assert service.get(child.id) is not None
+
+
+# ---------------------------------------------------------------------------
+# DB maintenance pass
+# ---------------------------------------------------------------------------
+
+
+class TestDbMaintenancePass:
+    """Tests for periodic DB maintenance: event cap + archive purge +
+    PRAGMA optimize."""
+
+    def test_empty_db_returns_zero_summary(self, service):
+        """db_maintenance_pass on an empty DB returns all-zero summary
+        and does not error."""
+        summary = service.db_maintenance_pass()
+        assert summary == {
+            "archived_purged": 0,
+            "events_pruned": 0,
+            "tickets_pruned": 0,
+        }
+
+    def test_event_cap_prunes_excess(self, service, settings):
+        """After accumulating > max_events_per_ticket events on a
+        non-terminal ticket, only the most recent max_events_per_ticket
+        remain, and the earliest remaining event has prev_hash=None."""
+        settings.max_events_per_ticket = 5
+        t = service.create("event-cap test")
+
+        # Insert 10 same-state events via add_step_event.
+        for i in range(10):
+            service.add_step_event(t.id, f"step {i}")
+
+        # Verify 11 events before maintenance (1 created + 10 steps).
+        assert len(service.history(t.id)) == 11
+
+        summary = service.db_maintenance_pass()
+        assert summary["events_pruned"] == 6  # 11 - 5 = 6
+        assert summary["tickets_pruned"] == 1
+
+        # After pruning, 5 events remain.
+        hist = service.history(t.id)
+        assert len(hist) == 5
+
+        # The earliest remaining event must have prev_hash=None.
+        assert hist[0].prev_hash is None
+
+        # The ticket itself must still exist.
+        assert service.get(t.id) is not None
+
+    def test_max_events_zero_disables_event_cap(self, service, settings):
+        """Setting max_events_per_ticket=0 disables per-ticket event
+        capping."""
+        settings.max_events_per_ticket = 0
+        t = service.create("no-cap test")
+
+        for i in range(50):
+            service.add_step_event(t.id, f"step {i}")
+
+        summary = service.db_maintenance_pass()
+        assert summary["events_pruned"] == 0
+        assert summary["tickets_pruned"] == 0
+        assert len(service.history(t.id)) == 51  # all remain
+
+    def test_archive_purge_runs_during_maintenance_pass(self, service, settings):
+        """db_maintenance_pass calls _maybe_purge_archived, so terminal
+        tickets beyond max_archived_tickets are purged even when no
+        ticket has recently transitioned to a terminal state."""
+        settings.max_archived_tickets = 2
+
+        # Create 4 terminal tickets without triggering the per-transition
+        # purge (we'll close them while cap is high, then lower it).
+        settings.max_archived_tickets = 100
+        tickets = []
+        for i in range(4):
+            t = service.create(f"purge test {i}")
+            _close_ticket(service, t)
+            tickets.append(t)
+
+        # Now lower the cap and run maintenance.
+        settings.max_archived_tickets = 2
+        summary = service.db_maintenance_pass()
+
+        assert summary["archived_purged"] == 2
+
+        # Only 2 terminal tickets remain (the two newest).
+        assert _terminal_count(service) == 2
+        # Oldest two should be gone.
+        assert service.get(tickets[0].id) is None
+        assert service.get(tickets[1].id) is None
+        assert service.get(tickets[2].id) is not None
+        assert service.get(tickets[3].id) is not None
+
+    def test_non_terminal_not_deleted(self, service, settings):
+        """The event cap only prunes TicketEvent rows; it never deletes
+        the Ticket row itself."""
+        settings.max_events_per_ticket = 2
+        t = service.create("keep-alive test")
+
+        for i in range(10):
+            service.add_step_event(t.id, f"step {i}")
+
+        summary = service.db_maintenance_pass()
+        assert summary["events_pruned"] > 0
+        assert service.get(t.id) is not None
+        assert service.get(t.id).state == State.DRAFT
+
+    def test_pragma_optimize_runs(self, service, settings, monkeypatch):
+        """db_maintenance_pass issues PRAGMA optimize after cleanup."""
+        from sqlalchemy import text
+
+        from robotsix_mill.core import db
+
+        pragmas_seen = []
+
+        # Spy on exec to capture PRAGMA optimize.
+        _orig_exec = db.Session.exec
+
+        def _spy_exec(session_self, statement, *args, **kwargs):
+            try:
+                stmt_str = str(statement)
+                if "pragma" in stmt_str.lower():
+                    pragmas_seen.append(stmt_str)
+            except Exception:
+                pass
+            return _orig_exec(session_self, statement, *args, **kwargs)
+
+        monkeypatch.setattr(db.Session, "exec", _spy_exec)
+
+        service.db_maintenance_pass()
+
+        assert any("optimize" in s.lower() for s in pragmas_seen), (
+            f"PRAGMA optimize was not observed; saw: {pragmas_seen}"
+        )
