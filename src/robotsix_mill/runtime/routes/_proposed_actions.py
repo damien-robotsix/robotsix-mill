@@ -14,7 +14,7 @@ from ._repo_helpers import _resolve_board_id
 
 log = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["Proposed Actions"])
 
 
 @router.get("/proposed-actions", response_model=list[ProposedAction])

@@ -12,7 +12,7 @@ from ..deps import get_service, get_settings
 
 log = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["Comments"])
 
 
 @router.post(

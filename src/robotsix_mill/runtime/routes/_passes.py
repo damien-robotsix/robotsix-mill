@@ -13,7 +13,7 @@ from ..deps import get_run_registry
 
 log = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["Passes"])
 
 
 def _resolve_agent_run_repos(repo_id: str | None, request: Request) -> list:

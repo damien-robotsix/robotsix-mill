@@ -29,7 +29,7 @@ log = logging.getLogger(__name__)
 
 # Per-module router, aggregated by routes/__init__.py via
 # include_router (the post-#467 routes-split convention).
-router = APIRouter()
+router = APIRouter(tags=["Candidates"])
 
 
 class CandidateRead(BaseModel):

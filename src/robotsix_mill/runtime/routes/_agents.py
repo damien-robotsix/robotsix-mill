@@ -22,7 +22,7 @@ from ..deps import get_repos_registry
 
 log = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["Agents"])
 
 
 @router.get("/agents")

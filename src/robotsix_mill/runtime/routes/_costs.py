@@ -11,7 +11,7 @@ from ._tickets import _repo_config_for_ticket
 
 log = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["Costs"])
 
 
 def _resolve_cost_repo(repo_id: str | None, request: Request):
