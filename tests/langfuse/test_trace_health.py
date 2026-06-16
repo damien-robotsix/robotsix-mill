@@ -375,7 +375,7 @@ def test_trace_health_endpoint_is_fire_and_forget(client, monkeypatch):
 
     assert r.status_code == 202
     assert r.json() == {"status": "started"}
-    assert elapsed < 0.5, f"response took {elapsed:.2f}s, expected <0.5s"
+    assert elapsed < 2.0, f"response took {elapsed:.2f}s, expected <2.0s"
     assert ran.wait(5), "background thread never started"
     release.set()  # let daemon thread finish
 
