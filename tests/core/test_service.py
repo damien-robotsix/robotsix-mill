@@ -2498,23 +2498,23 @@ class TestDbMaintenancePass:
     def test_pragma_optimize_runs(self, service, settings, monkeypatch):
         """db_maintenance_pass issues PRAGMA optimize after cleanup."""
 
-        from robotsix_mill.core import db
+        from sqlalchemy import Connection
 
         pragmas_seen = []
 
-        # Spy on exec to capture PRAGMA optimize.
-        _orig_exec = db.Session.exec
+        # Spy on exec_driver_sql to capture PRAGMA optimize.
+        _orig_eds = Connection.exec_driver_sql
 
-        def _spy_exec(session_self, statement, *args, **kwargs):
+        def _spy_eds(conn_self, statement, *args, **kwargs):
             try:
                 stmt_str = str(statement)
                 if "pragma" in stmt_str.lower():
                     pragmas_seen.append(stmt_str)
             except Exception:
                 pass
-            return _orig_exec(session_self, statement, *args, **kwargs)
+            return _orig_eds(conn_self, statement, *args, **kwargs)
 
-        monkeypatch.setattr(db.Session, "exec", _spy_exec)
+        monkeypatch.setattr(Connection, "exec_driver_sql", _spy_eds)
 
         service.db_maintenance_pass()
 

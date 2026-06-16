@@ -1231,7 +1231,7 @@ class _LifecycleMixin(_ServiceBase):
             all_events = s.exec(
                 select(TicketEvent)
                 .where(TicketEvent.ticket_id == ticket_id)
-                .order_by(TicketEvent.id)
+                .order_by(col(TicketEvent.id))
             ).all()
 
             total = len(all_events)
@@ -1252,27 +1252,33 @@ class _LifecycleMixin(_ServiceBase):
             s.commit()
             return excess
 
-    def db_maintenance_pass(self) -> dict:
+    def db_maintenance_pass(self) -> dict[str, int]:
         """Run one DB maintenance sweep: archive purge, per-ticket event
         cap, and SQLite ``PRAGMA optimize``.
 
         Returns a summary dict with keys ``archived_purged``,
         ``events_pruned``, and ``tickets_pruned``.
         """
-        from sqlalchemy import text
-
-        result: dict = {"archived_purged": 0, "events_pruned": 0, "tickets_pruned": 0}
+        result: dict[str, int] = {
+            "archived_purged": 0,
+            "events_pruned": 0,
+            "tickets_pruned": 0,
+        }
 
         # 1. Count terminal tickets before purge, then run it.
         with db.session(self.settings, self.board_id) as s:
             before = s.exec(
-                select(Ticket).where(Ticket.state.in_(list(self._ARCHIVABLE_STATES)))
+                select(Ticket).where(
+                    col(Ticket.state).in_(list(self._ARCHIVABLE_STATES))
+                )
             ).all()
         before_count = len(before)
         self._maybe_purge_archived()
         with db.session(self.settings, self.board_id) as s:
             after = s.exec(
-                select(Ticket).where(Ticket.state.in_(list(self._ARCHIVABLE_STATES)))
+                select(Ticket).where(
+                    col(Ticket.state).in_(list(self._ARCHIVABLE_STATES))
+                )
             ).all()
         result["archived_purged"] = before_count - len(after)
 
@@ -1280,7 +1286,7 @@ class _LifecycleMixin(_ServiceBase):
         with db.session(self.settings, self.board_id) as s:
             active_ids = s.exec(
                 select(Ticket.id).where(
-                    Ticket.state.notin_(list(self._ARCHIVABLE_STATES))
+                    col(Ticket.state).notin_(list(self._ARCHIVABLE_STATES))
                 )
             ).all()
         for tid in active_ids:
@@ -1291,7 +1297,7 @@ class _LifecycleMixin(_ServiceBase):
 
         # 3. Reclaim freed pages.
         with db.session(self.settings, self.board_id) as s:
-            s.exec(text("PRAGMA optimize"))
+            s.connection().exec_driver_sql("PRAGMA optimize")
             s.commit()
 
         return result

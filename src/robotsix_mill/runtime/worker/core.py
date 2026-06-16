@@ -131,7 +131,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         # board_id -> per-repo bespoke supervisor task. The supervisor
         # itself owns each repo's per-bespoke child tasks; cancelling
         # the supervisor cancels its children.
-        self._periodic_supervisor_tasks: dict[str, asyncio.Task] = {}
+        self._periodic_supervisor_tasks: dict[str, asyncio.Task[None]] = {}
         # ticket_id -> consecutive no-progress cycles in a traced stage
         self._stuck: dict[str, int] = {}
         # Epic-sweep dedup: epic_id → child count at last sweep re-eval, so the
