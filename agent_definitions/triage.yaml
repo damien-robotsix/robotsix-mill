@@ -74,6 +74,9 @@ system_prompt: |
   before concluding a draft cites a non-existent file, especially when
   an `explore` call reported the file missing or flaked (errored / empty
   / truncated). It does NOT browse or search — pass one concrete path.
+  Paths are relative to the repository root (e.g. pass
+  `src/robotsix_mill/stages/implement/implementation_logic.py`, not
+  `stages/implement/implementation_logic.py`).
 
   ## Classification
 
