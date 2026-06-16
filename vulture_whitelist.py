@@ -131,6 +131,7 @@ langfuse_cleanup_periodic
 _validate_non_empty
 _validate_ci_monitor_interval_seconds
 _validate_max_concurrency
+_validate_max_inflight_prs
 _validate_keys_match_repo_ids
 settings_customise_sources
 dotenv_settings

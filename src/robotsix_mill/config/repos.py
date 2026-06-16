@@ -111,6 +111,11 @@ class RepoConfig(BaseModel):
     # pool, so a busy repo can't starve another. Default 1 keeps the
     # blast radius of any one ticket's bad behaviour contained.
     max_concurrency: int = 1
+    # Max number of in-flight PR tickets (DELIVERABLE through ADDRESSING_REVIEW)
+    # before the worker stops dispatching new READY/DRAFT work for this repo.
+    # Merge-pipeline tickets are always processed.  HUMAN_MR_APPROVAL, BLOCKED,
+    # and AWAITING_USER_REPLY do NOT count.  Set to 0 to disable (current behavior).
+    max_inflight_prs: int = 3
     # NOTE: per-repo ``test_command`` and ``language`` were REMOVED from
     # repos.yaml. A managed repo now owns both in its own source tree via
     # ``.robotsix-mill/config.yaml`` (``test_command`` + ``languages``); the
@@ -143,6 +148,13 @@ class RepoConfig(BaseModel):
     def _validate_max_concurrency(cls, v: int) -> int:
         if v < 1:
             raise ValueError("max_concurrency must be ≥ 1")
+        return v
+
+    @field_validator("max_inflight_prs")
+    @classmethod
+    def _validate_max_inflight_prs(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("max_inflight_prs must be ≥ 0")
         return v
 
 
@@ -255,6 +267,9 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             max_concurrency=repo_data.get("max_concurrency", 1)
             if isinstance(repo_data, dict)
             else 1,
+            max_inflight_prs=repo_data.get("max_inflight_prs", 3)
+            if isinstance(repo_data, dict)
+            else 3,
         )
 
     # Reject a cross_repo_target on any repo when the global forge kind is
