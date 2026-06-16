@@ -317,7 +317,6 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                         # Drop from _pending so requeue isn't deduped away.
                         self._pending.discard(ticket_id)
                         self.enqueue(ticket_id)
-                        queue.task_done()
                         continue
 
                 # Resolve per-ticket repo_config from the ticket's board_id.
@@ -346,7 +345,6 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                         self._pending.discard(ticket_id)
                         self.enqueue(ticket_id)
                         await asyncio.sleep(15)
-                        queue.task_done()
                         continue
 
                 await process_ticket(ticket_id, per_ticket_ctx, active_map=self._active)

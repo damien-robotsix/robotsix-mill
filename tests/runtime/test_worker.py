@@ -2021,11 +2021,61 @@ async def test_cap_blocks_ready_when_at_limit(ctx, service, monkeypatch):
     # (The full _run integration is tested separately.)
 
 
+async def test_cap_blocks_draft_when_at_limit(ctx, service, monkeypatch):
+    """With max_inflight_prs=1 and one DELIVERABLE ticket, a popped DRAFT
+    ticket must be re-enqueued rather than dispatched to refine."""
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+    from robotsix_mill.runtime.worker.core import Worker, _count_inflight_prs, _CAP_GATED_STATES
+
+    rc = RepoConfig(
+        repo_id="test-repo",
+        board_id=service.board_id,
+        langfuse_project_name="p",
+        langfuse_public_key="pk",
+        langfuse_secret_key="sk",
+        max_concurrency=1,
+        max_inflight_prs=1,
+    )
+    fake_repos = ReposRegistry(repos={"test-repo": rc})
+    import robotsix_mill.config as _cfg
+    _cfg._repos_config = fake_repos
+
+    # Create one in-flight PR ticket (DELIVERABLE).
+    inflight = service.create("in-flight pr")
+    for st in (State.READY, State.DELIVERABLE):
+        service.transition(inflight.id, st)
+    assert service.get(inflight.id).state is State.DELIVERABLE
+    assert _count_inflight_prs(service) == 1
+
+    # A DRAFT ticket — should be blocked by the cap.
+    draft_ticket = service.create("draft to refine")
+
+    w = Worker(ctx)
+
+    board_service = service
+    before = board_service.get(draft_ticket.id)
+    before_state = before.state
+    ticket_repo_config = w._repo_config_for_ticket(draft_ticket.id)
+
+    gated = before_state in _CAP_GATED_STATES  # DRAFT → True
+    cap_enabled = (
+        ticket_repo_config is not None
+        and ticket_repo_config.max_inflight_prs > 0
+    )
+    in_flight = _count_inflight_prs(board_service)
+    at_limit = in_flight >= ticket_repo_config.max_inflight_prs
+
+    assert gated is True, "DRAFT must be a gated state"
+    assert cap_enabled is True
+    assert in_flight == 1
+    assert at_limit is True, "1 in-flight with cap=1 must be at limit"
+
+
 async def test_cap_allows_ready_when_below_limit(ctx, service, monkeypatch):
     """With max_inflight_prs=3 and only 2 in-flight tickets, a READY
     ticket proceeds normally."""
     from robotsix_mill.config import RepoConfig, ReposRegistry
-    from robotsix_mill.runtime.worker.core import Worker, _count_inflight_prs, _CAP_GATED_STATES
+    from robotsix_mill.runtime.worker.core import Worker, _count_inflight_prs
 
     rc = RepoConfig(
         repo_id="test-repo",
