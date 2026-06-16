@@ -295,9 +295,7 @@ packages = ["src/{pkg_name}"]
     try:
         tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
     except tomllib.TOMLDecodeError as exc:
-        raise ValueError(
-            f"Generated pyproject.toml is invalid TOML: {exc}"
-        ) from exc
+        raise ValueError(f"Generated pyproject.toml is invalid TOML: {exc}") from exc
 
     pkg_dir = repo_dir / "src" / pkg_name
     pkg_dir.mkdir(parents=True, exist_ok=True)
