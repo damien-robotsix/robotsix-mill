@@ -36,6 +36,7 @@ _CI_NO_CHANGE_COUNTER = "ci_no_change_cycles.txt"
 _CI_FIX_CYCLE_COUNTER = "ci_fix_cycles.txt"
 _CI_REFRESH_COUNTER = "ci_fix_refresh_attempts.txt"
 _CI_FAILURE_FINGERPRINT = "ci_failure_fingerprint.txt"
+_CI_LAST_DONE_FINGERPRINT = "ci_last_done_fingerprint.txt"
 _CODQL_FP_TRIAGE_SENTINEL = "codeql_fp_triage_ran.txt"
 
 # Maximum number of alerts the codeql_fp_triage agent may dismiss in a
@@ -827,11 +828,39 @@ class CIFixStage(Stage):
                 ticket.id,
             )
 
+        # --- identical-failure short-circuit ---
+        # When the agent already reported DONE with actual commits on a
+        # previous cycle, and the SAME failure fingerprint reappears,
+        # the fix was ineffective — do NOT run the agent again.
+        repo_id = ctx.repo_config.board_id if ctx.repo_config else ""
+        current_fp = _ci_failure_fingerprint(failing_summary, repo_id)
+        fp_path = (
+            ctx.service.workspace(ticket).artifacts_dir / _CI_LAST_DONE_FINGERPRINT
+        )
+        try:
+            last_done_fp = fp_path.read_text(encoding="utf-8").strip()
+        except FileNotFoundError:
+            last_done_fp = ""
+        if last_done_fp and current_fp == last_done_fp:
+            log.warning(
+                "%s: failure fingerprint %s matches the last DONE fingerprint "
+                "— previous fix was ineffective; blocking without running the agent",
+                ticket.id,
+                current_fp,
+            )
+            return Outcome(
+                State.BLOCKED,
+                f"ci fix reported DONE on previous cycle but the same failure "
+                f"(fingerprint {current_fp}) reappeared — the fix was ineffective. "
+                f"Manual intervention required. "
+                f"Resume-blocked to retry from human_mr_approval.",
+            )
+
         result = self._invoke_agent(ticket, ctx, repo_dir, branch, failing_summary)
 
         if result is not None and result.status == "DONE":
             return self._finalize_success(
-                ticket, ctx, repo_dir, branch, counter_path, attempt
+                ticket, ctx, repo_dir, branch, counter_path, attempt, failing_summary
             )
 
         if result is not None and result.status == "OUT_OF_SCOPE":
@@ -1070,6 +1099,7 @@ class CIFixStage(Stage):
         branch: str,
         counter_path: Path,
         attempt: int,
+        failing_summary: str = "",
     ) -> Outcome:
         """On agent success: verifies the agent-driven push landed via
         deterministic post-check, then handles no-change detection and
@@ -1095,6 +1125,8 @@ class CIFixStage(Stage):
             remote = git_ops.remote_branch_sha(repo_dir, branch)
         except Exception:  # noqa: BLE001 — be safe: assume changes
             local, remote = None, "force-push"
+
+        commits_made = False
 
         if local is not None and remote == local:
             # Agent made no commits — count as a no-change cycle.
@@ -1123,6 +1155,7 @@ class CIFixStage(Stage):
         else:
             # Agent produced commits — reset the no-change counter.
             _write_counter(no_change_counter_path, 0)
+            commits_made = True
 
         # Deterministic post-check: verify the agent's push actually
         # landed and no foreign commits were clobbered.
@@ -1139,6 +1172,21 @@ class CIFixStage(Stage):
             _write_counter(counter_path, 0)
             # Genuine forward progress — allow a future staleness to refresh again.
             _write_counter(counter_path.parent / _CI_REFRESH_COUNTER, 0)
+
+            # Store the current failure fingerprint so the next cycle can
+            # short-circuit if the SAME failure reappears (ineffective fix).
+            # Only store when the agent actually produced commits — no-change
+            # cycles don't constitute a fix attempt that could be ineffective.
+            if commits_made and failing_summary:
+                repo_id = ctx.repo_config.board_id if ctx.repo_config else ""
+                fp = _ci_failure_fingerprint(failing_summary, repo_id)
+                fp_path = (
+                    ctx.service.workspace(ticket).artifacts_dir
+                    / _CI_LAST_DONE_FINGERPRINT
+                )
+                fp_path.parent.mkdir(parents=True, exist_ok=True)
+                fp_path.write_text(fp, encoding="utf-8")
+
             log.info("%s: ci fix succeeded, push verified", ticket.id)
             return Outcome(State.IMPLEMENT_COMPLETE)
 

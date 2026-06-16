@@ -444,6 +444,12 @@ class _StagesSettings(BaseModel):
     # attempts per ticket before escalating to BLOCKED.
     ci_fix_max_attempts: int = Field(default=2, ge=0)
 
+    # Per-cycle request budget for the ci-fix agent.  When the agent exhausts
+    # this budget, pydantic-ai raises UsageLimitExceeded, which the retry
+    # layer catches and triggers the fallback model (if configured).  Set to
+    # 0 to disable the limit (preserves pre-0.XX behaviour).
+    ci_fix_request_limit: int = Field(default=50, ge=0)
+
     # Maximum consecutive ci-fix cycles that produce no code changes before
     # escalating to BLOCKED.  A "no-change" cycle is one where the ci-fix
     # agent reports success but the local HEAD matches the remote (no commits

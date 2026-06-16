@@ -324,6 +324,13 @@ def test_fix_success_with_changes_resets_no_change_counter(tmp_path, monkeypatch
         "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
         lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
     )
+    # Mock post_push_check to always return PASS so the fingerprint
+    # short-circuit doesn't interfere (this test is about the no-change
+    # counter, not the fingerprint guard).
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
+    )
 
     t = _fixing_ci(ctx)
     _setup_repo(ctx, t)
@@ -355,6 +362,13 @@ def test_fix_success_with_changes_resets_no_change_counter(tmp_path, monkeypatch
     assert out2.next_state is State.IMPLEMENT_COMPLETE
     # No-change counter reset to 0.
     assert _read_counter(no_change_path) == 0
+
+    # Clear the last-done fingerprint so the next cycle's identical
+    # failure doesn't trigger the short-circuit (this test is about the
+    # no-change counter, not the fingerprint guard).
+    fp_path = ctx.service.workspace(t).artifacts_dir / "ci_last_done_fingerprint.txt"
+    if fp_path.exists():
+        fp_path.unlink()
 
     # Cycle 3: no change again → counter=1 (not blocked yet).
     monkeypatch.setattr(
@@ -478,12 +492,18 @@ def test_churn_loop_bounded_by_max_cycles(tmp_path, monkeypatch):
     t = _fixing_ci(ctx)
     _setup_repo(ctx, t)
     cycle_path = ctx.service.workspace(t).artifacts_dir / "ci_fix_cycles.txt"
+    fp_path = ctx.service.workspace(t).artifacts_dir / "ci_last_done_fingerprint.txt"
 
     # Cycles 1-3 run the agent → IMPLEMENT_COMPLETE.
     for expected in (1, 2, 3):
         out = CIFixStage().run(t, ctx)
         assert out.next_state is State.IMPLEMENT_COMPLETE
         assert _read_counter(cycle_path) == expected
+        # Clear the last-done fingerprint so the next cycle's identical
+        # failure doesn't trigger the short-circuit (this test is about the
+        # hard ceiling, not the fingerprint guard).
+        if fp_path.exists():
+            fp_path.unlink()
     assert agent_calls["n"] == 3
 
     # Cycle 4 reaches the ceiling → BLOCKED without running the agent.
@@ -596,11 +616,17 @@ def test_max_cycles_zero_disables_ceiling(tmp_path, monkeypatch):
 
     t = _fixing_ci(ctx)
     _setup_repo(ctx, t)
+    fp_path = ctx.service.workspace(t).artifacts_dir / "ci_last_done_fingerprint.txt"
 
     # Run 10 cycles — none should block on the hard ceiling.
     for _ in range(10):
         out = CIFixStage().run(t, ctx)
         assert out.next_state is State.IMPLEMENT_COMPLETE
+        # Clear the last-done fingerprint so the next cycle's identical
+        # failure doesn't trigger the short-circuit (this test is about the
+        # ceiling being disabled, not the fingerprint guard).
+        if fp_path.exists():
+            fp_path.unlink()
     assert agent_calls["n"] == 10
 
 
@@ -2319,3 +2345,209 @@ def test_rebase_proceeds_when_fingerprint_changed(tmp_path, monkeypatch):
     assert push_calls == [f"mill/{t.id}"]
     # Fingerprint was updated.
     assert fp_path.read_text(encoding="utf-8").strip() != "deadbeef00000000"
+
+
+# ---------------------------------------------------------------------------
+# Identical-failure short-circuit after DONE (Scope item 3)
+# ---------------------------------------------------------------------------
+
+
+def test_identical_failure_after_done_blocks_without_agent(tmp_path, monkeypatch):
+    """When the agent reports DONE with actual commits on cycle N, and the
+    SAME failure fingerprint reappears on cycle N+1, the stage returns
+    BLOCKED without invoking the agent. (AC3)"""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "lint", "summary": "err", "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    agent_calls = []
+
+    def fake_agent(**k):
+        agent_calls.append(1)
+        return CiFixResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        fake_agent,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
+    )
+    # Simulate real change: local != remote (agent produced commits).
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.head_sha",
+        lambda repo: "local-sha",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.remote_branch_sha",
+        lambda repo, branch: "remote-sha",
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    # Cycle 1: agent runs, reports DONE, changes made → IMPLEMENT_COMPLETE.
+    out1 = CIFixStage().run(t, ctx)
+    assert out1.next_state is State.IMPLEMENT_COMPLETE
+    assert agent_calls == [1]
+
+    # Verify the last-done fingerprint was written.
+    fp_path = ctx.service.workspace(t).artifacts_dir / "ci_last_done_fingerprint.txt"
+    assert fp_path.exists()
+    stored_fp = fp_path.read_text(encoding="utf-8").strip()
+    assert len(stored_fp) == 16  # hex fingerprint
+
+    # Cycle 2: same failure summary → short-circuit blocks without agent.
+    agent_calls.clear()
+    out2 = CIFixStage().run(t, ctx)
+    assert out2.next_state is State.BLOCKED
+    assert "fingerprint" in out2.note.lower() or "ineffective" in out2.note.lower()
+    # Agent was NOT called.
+    assert agent_calls == []
+
+
+def test_non_identical_failure_still_retries_normally(tmp_path, monkeypatch):
+    """When the failure fingerprint DIFFERS between cycles, the short-circuit
+    does NOT fire — the agent runs normally. (AC4)"""
+    ctx = _gh(tmp_path)
+    failing = {
+        "conclusion": "failure",
+        "failing": [
+            {
+                "name": "lint",
+                "summary": "first failure",
+                "text": None,
+                "annotations": [],
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: dict(failing),
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    agent_calls = []
+
+    def fake_agent(**k):
+        agent_calls.append(1)
+        return CiFixResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        fake_agent,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.head_sha",
+        lambda repo: "local-sha",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.remote_branch_sha",
+        lambda repo, branch: "remote-sha",
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    # Cycle 1: agent runs → DONE.
+    CIFixStage().run(t, ctx)
+    assert agent_calls == [1]
+
+    fp_path = ctx.service.workspace(t).artifacts_dir / "ci_last_done_fingerprint.txt"
+    assert fp_path.exists()
+
+    # Cycle 2: a DIFFERENT failure → agent runs again.
+    failing["failing"] = [
+        {
+            "name": "typecheck",
+            "summary": "different failure",
+            "text": None,
+            "annotations": [],
+        }
+    ]
+    agent_calls.clear()
+    out2 = CIFixStage().run(t, ctx)
+    assert out2.next_state is State.IMPLEMENT_COMPLETE
+    assert agent_calls == [1]  # agent was called
+
+
+def test_no_change_cycle_does_not_set_last_done_fingerprint(tmp_path, monkeypatch):
+    """A DONE cycle that produced NO commits does NOT set the last-done
+    fingerprint, so the short-circuit doesn't fire on the next cycle. (AC5)"""
+    ctx = _gh(tmp_path, ci_max_auto_retries="0")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "lint", "summary": "err", "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    agent_calls = []
+
+    def fake_agent(**k):
+        agent_calls.append(1)
+        return CiFixResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        fake_agent,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
+    )
+    # Simulate NO change: local == remote.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.head_sha",
+        lambda repo: "abc123",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.remote_branch_sha",
+        lambda repo, branch: "abc123",
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    # Cycle 1: no-change cycle → IMPLEMENT_COMPLETE.
+    CIFixStage().run(t, ctx)
+    assert agent_calls == [1]
+
+    # Verify the last-done fingerprint was NOT written (no changes made).
+    fp_path = ctx.service.workspace(t).artifacts_dir / "ci_last_done_fingerprint.txt"
+    assert not fp_path.exists()
+
+    # Cycle 2: same failure, agent runs again (no short-circuit).
+    agent_calls.clear()
+    out2 = CIFixStage().run(t, ctx)
+    assert out2.next_state is State.IMPLEMENT_COMPLETE
+    assert agent_calls == [1]  # agent was called again — no block
