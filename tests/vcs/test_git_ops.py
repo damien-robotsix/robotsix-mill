@@ -1720,8 +1720,7 @@ class TestPushWithLeaseErrorRedaction:
                 "feature:feature",
             ],
             output="",
-            stderr=f"fatal: remote rejected\n"
-            f"fatal: unable to access '{token_url}/'\n",
+            stderr=f"fatal: remote rejected\nfatal: unable to access '{token_url}/'\n",
         )
 
         from unittest.mock import patch
@@ -1780,9 +1779,7 @@ class TestPushWithLeaseErrorRedaction:
                 return "abc1234"  # canned SHA for remote_branch_sha
             raise error
 
-        with patch(
-            "robotsix_mill.vcs.git_ops._git", side_effect=_git_side_effect
-        ):
+        with patch("robotsix_mill.vcs.git_ops._git", side_effect=_git_side_effect):
             with pytest.raises(subprocess.CalledProcessError) as ei:
                 git_ops.push_with_lease(
                     Path("/tmp/repo"),
