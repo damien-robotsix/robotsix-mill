@@ -17,8 +17,12 @@ from ...forge import Forge, get_forge
 from ..base import Outcome, StageContext
 from ._base import _MergeStageBase
 from ._shared import (
+    _AUTO_FIX_CYCLES,
+    _LAST_AUTO_FIX_STAGE,
+    _PING_PONG_COUNT,
     _REBASE_COUNTER,
     _latest_failing_workflows,
+    _read_counter,
     _verify_merge_ancestor,
     _write_counter,
     log,
@@ -129,6 +133,32 @@ class CIPollMixin(_MergeStageBase):
                         f"introduced by this PR. Operator must stabilise the target "
                         f"branch's CI before this can merge.",
                     )
+
+            # --- Guardrail 1: cross-stage auto-fix cycle counter ---
+            # Count every dispatch to REBASING or FIXING_CI without CI turning
+            # green.  This is the universal backstop — it bounds the combined
+            # rebase+ci_fix loop regardless of the alternation pattern.
+            artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
+            auto_fix_path = artifacts_dir / _AUTO_FIX_CYCLES
+            auto_fix_cycles = _read_counter(auto_fix_path)
+            if s.auto_fix_max_cycles > 0 and auto_fix_cycles >= s.auto_fix_max_cycles:
+                _write_counter(auto_fix_path, 0)  # reset for resume
+                log.warning(
+                    "%s: auto-fix exhausted cross-stage ceiling of %d cycle(s) "
+                    "without CI turning green — escalating to BLOCKED",
+                    ticket.id,
+                    s.auto_fix_max_cycles,
+                )
+                return Outcome(
+                    State.BLOCKED,
+                    f"auto-fix exhausted cross-stage ceiling of "
+                    f"{s.auto_fix_max_cycles} cycle(s) without CI turning "
+                    f"green — manual intervention required (ticket "
+                    f"{ticket.id}, counter was {auto_fix_cycles}). "
+                    f"Resume-blocked to retry from human_mr_approval.",
+                )
+            _write_counter(auto_fix_path, auto_fix_cycles + 1)
+
             # Rebase BEFORE ci_fix when the branch is behind main. A repo-wide
             # gate (ruff/mypy/lint over the whole tree) often fails on code that
             # isn't this ticket's diff — the branch was cut from an older main
@@ -141,6 +171,13 @@ class CIPollMixin(_MergeStageBase):
             if repo_dir is not None and _facade.git_ops.branch_is_behind_main(
                 Path(repo_dir), target_branch_for(s, ctx.repo_config)
             ):
+                # --- Guardrail 2: ping-pong alternation detector ---
+                ping_pong_result = self._check_ping_pong(
+                    ticket, ctx, artifacts_dir, routing_to="rebase"
+                )
+                if ping_pong_result is not None:
+                    return ping_pong_result
+
                 log.info(
                     "%s: CI failing on a stale base (branch behind main) → "
                     "REBASING before ci_fix",
@@ -152,6 +189,14 @@ class CIPollMixin(_MergeStageBase):
                     "main before ci_fix (the failure may be pre-existing repo-wide "
                     "debt the branch lacks the fix for)",
                 )
+
+            # Routing to FIXING_CI — check ping-pong guardrail.
+            ping_pong_result = self._check_ping_pong(
+                ticket, ctx, artifacts_dir, routing_to="ci_fix"
+            )
+            if ping_pong_result is not None:
+                return ping_pong_result
+
             log.info("%s: CI failing → FIXING_CI", ticket.id)
             return Outcome(State.FIXING_CI)
 
@@ -161,10 +206,18 @@ class CIPollMixin(_MergeStageBase):
             # ticket), so reset the ci_fix hard cycle ceiling here — not on a
             # transient green read inside ci_fix (which a flickering CI emits
             # between failing cycles and which let a runaway loop survive).
-            _write_counter(
-                ctx.service.workspace(ticket).artifacts_dir / "ci_fix_cycles.txt",
-                0,
-            )
+            # Also reset the cross-stage auto-fix cycle counter and ping-pong
+            # detector files — CI green is the ONLY genuine forward-progress
+            # signal.
+            artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
+            _write_counter(artifacts_dir / "ci_fix_cycles.txt", 0)
+            _write_counter(artifacts_dir / _AUTO_FIX_CYCLES, 0)
+            _write_counter(artifacts_dir / _PING_PONG_COUNT, 0)
+            last_stage_path = artifacts_dir / _LAST_AUTO_FIX_STAGE
+            try:
+                last_stage_path.unlink()
+            except FileNotFoundError:
+                pass
             log.info("%s: gates passed → HUMAN_MR_APPROVAL", ticket.id)
             return Outcome(
                 State.HUMAN_MR_APPROVAL,
@@ -173,6 +226,77 @@ class CIPollMixin(_MergeStageBase):
 
         # pending or None — keep waiting.
         return Outcome(State.IMPLEMENT_COMPLETE)
+
+    def _check_ping_pong(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        artifacts_dir: Path,
+        routing_to: str,
+    ) -> Outcome | None:
+        """Guardrail 2: detect REBASING ↔ FIXING_CI alternation (ping-pong).
+
+        - When *routing_to* is ``"rebase"`` and the last stage was ``"ci_fix"``,
+          increment the ping-pong counter.
+        - When *routing_to* is ``"ci_fix"`` and the last stage was ``"rebase"``,
+          increment the ping-pong counter.
+        - If the counter reaches ``ping_pong_max_alternations``, reset both
+          counter files and return a BLOCKED ``Outcome``.
+        - Otherwise write the new last-stage marker and return ``None``
+          (proceed normally).
+
+        The ceiling guard (``> 0``) matches existing patterns: set to 0 to
+        disable the detector entirely.
+        """
+        s = ctx.settings
+        if s.ping_pong_max_alternations <= 0:
+            return None
+
+        last_stage_path = artifacts_dir / _LAST_AUTO_FIX_STAGE
+        ping_pong_path = artifacts_dir / _PING_PONG_COUNT
+
+        last_stage = ""
+        try:
+            last_stage = last_stage_path.read_text(encoding="utf-8").strip()
+        except FileNotFoundError:
+            pass
+
+        # Determine whether this routing constitutes an alternation.
+        alternation: bool = False
+        if routing_to == "rebase" and last_stage == "ci_fix":
+            alternation = True
+        elif routing_to == "ci_fix" and last_stage == "rebase":
+            alternation = True
+
+        if alternation:
+            ping_pong_count = _read_counter(ping_pong_path) + 1
+            _write_counter(ping_pong_path, ping_pong_count)
+            if ping_pong_count >= s.ping_pong_max_alternations:
+                # Reset both files so a resume gets a clean budget.
+                _write_counter(last_stage_path, 0)
+                _write_counter(ping_pong_path, 0)
+                log.warning(
+                    "%s: ping-pong alternation count %d reached ceiling %d "
+                    "— escalating to BLOCKED",
+                    ticket.id,
+                    ping_pong_count,
+                    s.ping_pong_max_alternations,
+                )
+                return Outcome(
+                    State.BLOCKED,
+                    f"rebase↔ci_fix ping-pong detected: {ping_pong_count} "
+                    f"alternation(s) with no CI green — manual intervention "
+                    f"required (ticket {ticket.id}, ceiling is "
+                    f"{s.ping_pong_max_alternations}). "
+                    f"Resume-blocked to retry from human_mr_approval.",
+                )
+
+        # Write the current stage as the new "last" stage so the next
+        # dispatch can detect the alternation.
+        _write_counter(last_stage_path, 0)  # use write_counter for mkdir side-effect
+        last_stage_path.write_text(routing_to, encoding="utf-8")
+
+        return None
 
     def _handle_human_mr_approval(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Poll PR status from HUMAN_MR_APPROVAL: merged/closed/conflicting/CI/auto-merge."""

@@ -27,6 +27,9 @@ log = logging.getLogger("robotsix_mill.stages.merge")
 _REBASE_COUNTER = "rebase_attempts.txt"
 _MERGE_REASON = "merge_reason.txt"
 _REV_REV_COUNTER = "review_revision_attempts.txt"
+_AUTO_FIX_CYCLES = "auto_fix_cycles.txt"
+_LAST_AUTO_FIX_STAGE = "last_auto_fix_stage.txt"
+_PING_PONG_COUNT = "ping_pong_count.txt"
 
 
 def _load_pr_urls(ws_artifacts_dir: Path) -> list[dict] | None:

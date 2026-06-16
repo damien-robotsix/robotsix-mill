@@ -460,6 +460,23 @@ class _StagesSettings(BaseModel):
     # is still bounded.  Set to 0 to disable.
     ci_fix_max_cycles: int = Field(default=3, ge=0)
 
+    # Cross-stage ceiling on combined REBASING + FIXING_CI dispatches without
+    # CI turning green.  This counter spans both stages and is the universal
+    # backstop: a ticket whose CI keeps failing enters REBASING or FIXING_CI
+    # at most auto_fix_max_cycles times total, after which it is escalated to
+    # BLOCKED without dispatching to either stage.  Reset only when CI is
+    # observed green (the ONLY genuine forward-progress signal).  Set to 0 to
+    # disable.  Default 6 (covers e.g. 3 rebase + 3 ci_fix cycles).
+    auto_fix_max_cycles: int = Field(default=6, ge=0)
+
+    # Ceiling on REBASING ↔ FIXING_CI alternations (ping-pong) before
+    # escalating to BLOCKED.  A single alternation is a rebase→ci_fix or
+    # ci_fix→rebase transition; the counter increments on each alternation.
+    # When ping_pong_count reaches ping_pong_max_alternations, the next
+    # alternation is blocked.  Reset when CI is observed green.  Set to 0
+    # to disable.  Default 3.
+    ping_pong_max_alternations: int = Field(default=3, ge=0)
+
     # Maximum review-revision attempts per ticket before escalating to BLOCKED.
     review_revision_max_attempts: int = Field(default=2, ge=1)
 
