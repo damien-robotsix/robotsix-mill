@@ -2497,7 +2497,6 @@ class TestDbMaintenancePass:
 
     def test_pragma_optimize_runs(self, service, settings, monkeypatch):
         """db_maintenance_pass issues PRAGMA optimize after cleanup."""
-        from sqlalchemy import text
 
         from robotsix_mill.core import db
 
