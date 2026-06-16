@@ -483,10 +483,15 @@ class PollLoopsMixin(_WorkerBase):
             if t.state.value in ("closed", "done"):
                 continue
             body_text = service.workspace(t).read_description() or ""
-            if wf_marker not in body_text:
-                continue
-            if branch_marker not in body_text:
-                continue
+            if wf_marker in body_text and branch_marker in body_text:
+                pass  # matched via body markers
+            else:
+                # Title-based fallback: when the predecessor's body has been
+                # overwritten by refinement, the workflow name and branch
+                # typically survive in the (refined) title.
+                title = t.title or ""
+                if wf_name not in title or target not in title:
+                    continue
             last_activity = self._ticket_last_activity(service, t)
             if canonical_activity is None or last_activity > canonical_activity:
                 canonical = t
