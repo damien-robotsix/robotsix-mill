@@ -17,6 +17,9 @@ tools:
   - run_command
 
 report_issue: true
+reply_to_thread: false
+list_threads: false
+close_thread: false
 output_type: RebaseResult
 retries: 2
 module: rebasing
