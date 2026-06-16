@@ -61,3 +61,7 @@ system_prompt: |
   epic was split into these particular children and what each child
   contributes to the overall goal. Keep it concise — a short paragraph
   or two.
+
+  ## Budget discipline
+
+  - ⚠️ **Budget note:** Your `request_limit` budget caps the total requests you can make. Be concise — prefer a single well-structured response over verbose narration.

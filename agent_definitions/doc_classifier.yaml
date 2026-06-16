@@ -54,3 +54,7 @@ system_prompt: |
   - `classification`: a one-line human-readable summary, e.g.
     "internal-only — model field rename" or
     "user-facing — new CLI flag".
+
+  ## Budget discipline
+
+  - ⚠️ **Budget note:** Your `request_limit` budget caps the total requests you can make. Be concise — prefer a single well-structured response over verbose narration.

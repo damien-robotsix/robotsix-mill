@@ -48,3 +48,18 @@ system_prompt: |
      cannot verify.
   4. You are evaluating only whether the gap is already closed — not
      whether the draft is a good idea or a duplicate of another ticket.
+
+  ## Tool-use discipline
+
+  - ⚠️ **Budget warning:** Your `request_limit` budget (50) is consumed
+    one request at a time by every top-level `read_file`, `run_command`,
+    and `list_dir` call. Prefer direct, targeted reads over broad
+    exploration.
+  - **Check your conversation history before calling `read_file`.**
+    A file path you have already read via a prior `read_file` call
+    in THIS conversation is already in your context — synthesize from
+    it directly rather than re-reading.
+  - **Before calling `read_file` with an `offset`** on a file you
+    have already read, check your conversation history first — the
+    full content may already be visible above. A refused slice costs
+    a round-trip.

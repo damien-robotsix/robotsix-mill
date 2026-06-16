@@ -122,3 +122,7 @@ system_prompt: |
   had to override. This step exists to catch that miss.
 
   Return structured JSON matching the ScopeTriageVerdict schema.
+
+  ## Budget discipline
+
+  - ⚠️ **Budget note:** Your `request_limit` budget caps the total requests you can make. Be concise — prefer a single well-structured response over verbose narration.
