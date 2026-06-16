@@ -936,7 +936,6 @@ src/robotsix_mill/stages/merge/_shared.py:0: error: Missing type arguments for g
 src/robotsix_mill/stages/merge/_shared.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/stages/merge/_shared.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/stages/merge/_shared.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
-src/robotsix_mill/stages/merge/_shared.py:0: error: Returning Any from function declared to return "str"  [no-any-return]
 src/robotsix_mill/stages/merge/ci_fix_mixin.py:0: error: Argument "repo_dir" to "run_ci_fix_agent" has incompatible type "str"; expected "Path"  [arg-type]
 src/robotsix_mill/stages/merge/ci_fix_mixin.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/stages/merge/ci_fix_mixin.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
