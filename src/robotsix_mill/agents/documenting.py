@@ -117,7 +117,6 @@ def run_doc_classifier(
         result = run_agent(
             agent,
             lambda h: h.run_sync(user_prompt, usage_limits=limits),
-            settings=settings,
             what="doc classifier",
         )
         return result.output
