@@ -70,6 +70,7 @@ COPY src/ ./src/
 # "not found" and the image won't build. `uv pip install --system` targets
 # the system interpreter (/usr/local), keeps uv's speed, and lands the
 # script where the COPY expects it. (Regressed twice — see PR #491.)
+# hadolint ignore=SC2086
 RUN pip install uv --no-cache-dir \
     && EXTRA_FLAGS="" \
     && IFS=',' read -ra _extras <<< "${INSTALL_EXTRAS}" \
@@ -96,7 +97,7 @@ RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
     && apt-get -y upgrade \
     && apt-get install -y --no-install-recommends \
         git=1:2.47.3-* \
-        ca-certificates=20250419 \
+        ca-certificates=20250419* \
         nodejs=20.19.2+dfsg-1+deb13u2 \
         npm=9.2.0~ds1-3 \
     && rm -rf /var/lib/apt/lists/*
