@@ -381,7 +381,7 @@ def test_run_survey_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
 def test_survey_config_defaults():
     """Survey config has correct defaults."""
     s = Settings()
-    assert s.survey_model == "deepseek/deepseek-v4-pro"
+    assert s.survey_model == "deepseek/deepseek-v4-flash"
     assert s.survey_periodic is True
     assert s.survey_interval_seconds == 86400
     assert s.survey_memory_path is None
@@ -499,7 +499,7 @@ class TestSurveyRunnerTraceBudgetWiring:
 
         settings = _make_settings(
             tmp_path,
-            survey_web_fetch_max_calls=10,
+            survey_web_fetch_max_calls=5,
             survey_web_fetch_max_total_bytes=500_000,
             survey_web_search_max_calls=5,
         )
@@ -536,7 +536,7 @@ class TestSurveyRunnerTraceBudgetWiring:
 
         # Verify both resets were called with configured values.
         assert len(fetch_reset_calls) == 1
-        assert fetch_reset_calls[0] == (10, 500_000)
+        assert fetch_reset_calls[0] == (5, 500_000)
 
         assert len(search_reset_calls) == 1
         assert search_reset_calls[0] == 5

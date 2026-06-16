@@ -10,7 +10,8 @@ category: periodic
 interval: 1d
 enabled: true
 
-model: default
+model: cheap
+max_tokens: 50000
 
 tools:
   - explore
@@ -169,7 +170,7 @@ system_prompt: |
     entry per subject attempted (proposed or rejected).
   - NEVER clone or execute any external repo; `ask_web_knowledge`
     is read-only.
-  - AT MOST 10 web page fetches and 5 web searches TOTAL across the
+  - AT MOST 5 web page fetches and 5 web searches TOTAL across the
     entire run (enforced by tool-level caps). Budget your web
     usage carefully — once the caps are exhausted, web_search and
     web_fetch will return sentinel errors and you must proceed with
