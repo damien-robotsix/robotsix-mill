@@ -396,10 +396,9 @@ class TestCloneAndBranch:
         )
         monkeypatch.setattr(
             "robotsix_mill.stages.implement.file_operations.git_ops.try_rebase_onto",
-            lambda repo_dir, target, *, remote_url=None, token=None: _track(
-                "try_rebase_onto"
-            )
-            or True,
+            lambda repo_dir, target, *, remote_url=None, token=None: (
+                _track("try_rebase_onto") or True
+            ),
         )
 
     def _mock_forge_auth(self, monkeypatch):
@@ -423,9 +422,7 @@ class TestCloneAndBranch:
             lambda path, ignore_errors=False: None,
         )
 
-        result = FileOperationsMixin._clone_and_branch(
-            ctx, ticket, ctx.settings
-        )
+        result = FileOperationsMixin._clone_and_branch(ctx, ticket, ctx.settings)
         assert isinstance(result, tuple)
         repo_dir, branch, resuming = result
         assert repo_dir.name == "repo"
@@ -453,9 +450,7 @@ class TestCloneAndBranch:
             lambda rd, branch: True,
         )
 
-        result = FileOperationsMixin._clone_and_branch(
-            ctx, ticket, ctx.settings
-        )
+        result = FileOperationsMixin._clone_and_branch(ctx, ticket, ctx.settings)
         repo_dir_out, branch, resuming = result
         assert resuming is True
         assert "checkout" in calls
@@ -486,9 +481,7 @@ class TestCloneAndBranch:
             fake_clone,
         )
 
-        result = FileOperationsMixin._clone_and_branch(
-            ctx, ticket, ctx.settings
-        )
+        result = FileOperationsMixin._clone_and_branch(ctx, ticket, ctx.settings)
         assert isinstance(result, Outcome)
         assert result.next_state == State.BLOCKED
         assert "clone failed" in (result.note or "")
@@ -520,9 +513,7 @@ class TestCloneAndBranch:
             lambda repo_dir, target, *, remote_url=None, token=None: False,
         )
 
-        result = FileOperationsMixin._clone_and_branch(
-            ctx, ticket, ctx.settings
-        )
+        result = FileOperationsMixin._clone_and_branch(ctx, ticket, ctx.settings)
         assert isinstance(result, Outcome)
         assert result.next_state == State.REBASING
         assert "rebase" in (result.note or "").lower()
@@ -565,9 +556,7 @@ class TestCloneAndBranch:
             lambda repo_dir, target, *, remote_url=None, token=None: True,
         )
 
-        result = FileOperationsMixin._clone_and_branch(
-            ctx, ticket, ctx.settings
-        )
+        result = FileOperationsMixin._clone_and_branch(ctx, ticket, ctx.settings)
         # The invariant reclone succeeded → we get a tuple.
         assert isinstance(result, tuple)
         assert "clone2" in calls
@@ -612,9 +601,7 @@ class TestCloneAndBranch:
             lambda repo_dir, target, *, remote_url=None, token=None: True,
         )
 
-        result = FileOperationsMixin._clone_and_branch(
-            ctx, ticket, ctx.settings
-        )
+        result = FileOperationsMixin._clone_and_branch(ctx, ticket, ctx.settings)
         assert isinstance(result, Outcome)
         assert result.next_state == State.BLOCKED
         assert "clone missing" in (result.note or "")
