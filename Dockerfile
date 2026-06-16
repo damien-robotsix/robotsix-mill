@@ -122,6 +122,7 @@ RUN apt-get update \
       > /etc/apt/sources.list.d/github-cli.list \
     && rm -rf /var/lib/apt/lists/*
 
+# hadolint ignore=DL3008
 RUN apt-get update \
     && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
