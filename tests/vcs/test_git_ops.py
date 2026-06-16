@@ -12,6 +12,7 @@ from robotsix_mill.config import (
     target_branch_for,
 )
 from robotsix_mill.vcs import clone_all_repos, git_ops
+from robotsix_mill.vcs.git_ops import PostPushResult
 
 
 # ---------------------------------------------------------------------------
@@ -1797,3 +1798,134 @@ class TestPushWithLeaseErrorRedaction:
         assert token not in exposed
         assert "://***@" in str(ei.value.cmd)
         assert "://***@" in (ei.value.stderr or "")
+
+
+# ===========================================================================
+# 19. post_push_check — integration (real git, file:// remote)
+# ===========================================================================
+
+
+class TestPostPushCheck:
+    """Exercise all four ``PostPushResult`` outcomes against a real git
+    repository (except ``UNAVAILABLE``, which uses a broken HTTPS URL)."""
+
+    def test_pass(self, tmp_path):
+        """Push lands, all commits mill-authored → PASS."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "dest"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        # Write and commit a file with mill author identity.
+        (dest / "mill_work.txt").write_text("mill-authored\n")
+        _git(dest, "add", ".")
+        _git(
+            dest,
+            "-c",
+            "user.email=mill@robotsix.local",
+            "-c",
+            "user.name=Mill",
+            "commit",
+            "-q",
+            "-m",
+            "mill work",
+        )
+        git_ops.push(dest, "feature", remote, token=None)
+
+        result = git_ops.post_push_check(dest, "feature", "main", remote, token=None)
+        assert result == PostPushResult.PASS
+
+    def test_not_landed(self, tmp_path):
+        """Local HEAD ≠ remote SHA → NOT_LANDED.
+
+        Push the branch first so it exists on the remote, then make a local
+        commit without pushing — the remote is behind, so the check fails."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "dest"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+
+        # First commit + push so the remote branch exists.
+        (dest / "initial.txt").write_text("initial\n")
+        _git(dest, "add", ".")
+        _git(
+            dest,
+            "-c",
+            "user.email=mill@robotsix.local",
+            "-c",
+            "user.name=Mill",
+            "commit",
+            "-q",
+            "-m",
+            "initial commit",
+        )
+        git_ops.push(dest, "feature", remote, token=None)
+
+        # Second, unpushed local commit.
+        (dest / "unpushed.txt").write_text("unpushed\n")
+        _git(dest, "add", ".")
+        _git(
+            dest,
+            "-c",
+            "user.email=mill@robotsix.local",
+            "-c",
+            "user.name=Mill",
+            "commit",
+            "-q",
+            "-m",
+            "unpushed commit",
+        )
+
+        result = git_ops.post_push_check(dest, "feature", "main", remote, token=None)
+        assert result == PostPushResult.NOT_LANDED
+
+    def test_foreign_divergence(self, tmp_path):
+        """Remote carries a non-mill-authored commit → FOREIGN_DIVERGENCE."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "dest"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+
+        # Commit with human author, then push.
+        (dest / "human_work.txt").write_text("human-authored\n")
+        _git(dest, "add", ".")
+        _git(
+            dest,
+            "-c",
+            "user.email=human@example.com",
+            "-c",
+            "user.name=Human",
+            "commit",
+            "-q",
+            "-m",
+            "human work",
+        )
+        git_ops.push(dest, "feature", remote, token=None)
+
+        result = git_ops.post_push_check(dest, "feature", "main", remote, token=None)
+        assert result == PostPushResult.FOREIGN_DIVERGENCE
+
+    def test_unavailable(self, tmp_path):
+        """Unreachable URL → fetch fails → UNAVAILABLE."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "dest"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        # Commit locally so there is a HEAD; the remote URL is unreachable.
+        (dest / "local.txt").write_text("local\n")
+        _git(dest, "add", ".")
+        _git(
+            dest,
+            "-c",
+            "user.email=mill@robotsix.local",
+            "-c",
+            "user.name=Mill",
+            "commit",
+            "-q",
+            "-m",
+            "local only",
+        )
+
+        result = git_ops.post_push_check(
+            dest, "feature", "main", "https://127.0.0.1:9/none.git", token=None
+        )
+        assert result == PostPushResult.UNAVAILABLE
