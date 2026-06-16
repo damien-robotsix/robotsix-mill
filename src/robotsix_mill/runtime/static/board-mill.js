@@ -2295,13 +2295,13 @@
     try { pas = await jget("/proposed-actions?status=pending&repo_id=" + encodeURIComponent(repo)); }
     catch (e) { pas = null; }
     var shell = '<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>' +
-      '<h3>Proposed actions</h3>';
+      '<h3>Pending actions</h3>';
     if (!Array.isArray(pas)) {
-      drawer.innerHTML = shell + '<div class="muted" style="padding:12px 0;color:#f87171">failed to load proposed actions.</div>';
+      drawer.innerHTML = shell + '<div class="muted" style="padding:12px 0;color:#f87171">failed to load pending actions.</div>';
       return;
     }
     if (!pas.length) {
-      drawer.innerHTML = shell + '<div class="muted">No pending proposed actions.</div>';
+      drawer.innerHTML = shell + '<div class="muted">No pending actions.</div>';
       return;
     }
     var html = '';

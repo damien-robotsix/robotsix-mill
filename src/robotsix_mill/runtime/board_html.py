@@ -148,7 +148,7 @@ margin-left:4px">
 <button onclick="toggleProposals()" style="font-size:11px;padding:3px 10px;
 background:#7c3aed;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">
-  📝 Proposals
+  📝 Pending
 </button>
 <button id="toggle-closed-btn" onclick="toggleClosed()" style="font-size:11px;padding:3px 10px;
 background:#6b7280;color:#fff;border:none;border-radius:4px;cursor:pointer;

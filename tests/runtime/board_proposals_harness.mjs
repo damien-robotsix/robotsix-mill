@@ -268,7 +268,7 @@ await test("toggleProposals opens panel when closed", async () => {
   // renderProposals ran: either a list GET was recorded or the panel
   // rendered its empty-state message.
   assert.ok(listRequests().length >= 1, "a /proposed-actions GET should have been issued");
-  assert.ok(dEl.innerHTML.includes("No pending proposed actions."), "empty-state should render");
+  assert.ok(dEl.innerHTML.includes("No pending actions."), "empty-state should render");
 });
 
 await test("toggleProposals closes panel when already open", async () => {
@@ -316,8 +316,8 @@ await test("renderProposals fetches proposals in all-repos / empty-repo mode", a
     const url = "/proposed-actions?status=pending&repo_id=" + encoded;
     const gets = requests.filter((r) => r.method === "GET" && r.url === url);
     assert.equal(gets.length, 1, "one GET for repo=" + JSON.stringify(repo));
-    assert.ok(dEl.innerHTML.includes("No pending proposed actions."), "empty-state renders");
-    assert.ok(dEl.innerHTML.includes("Proposed actions"), "panel title renders");
+    assert.ok(dEl.innerHTML.includes("No pending actions."), "empty-state renders");
+    assert.ok(dEl.innerHTML.includes("Pending actions"), "panel title renders");
     assert.ok(!dEl.innerHTML.includes("Select a single repo"), "no per-board hint for all-repos mode");
   }
 });
@@ -327,26 +327,26 @@ await test("renderProposals renders error on non-array / failed fetch", async ()
   reset("repo1");
   responder = () => ({ status: 200, responseText: "null" });
   await ctx.renderProposals();
-  assert.ok(dEl.innerHTML.includes("failed to load proposed actions."), "null payload → error message");
+  assert.ok(dEl.innerHTML.includes("failed to load pending actions."), "null payload → error message");
 
   // non-array object payload
   reset("repo1");
   responder = () => ({ status: 200, responseText: '{"foo":1}' });
   await ctx.renderProposals();
-  assert.ok(dEl.innerHTML.includes("failed to load proposed actions."), "object payload → error message");
+  assert.ok(dEl.innerHTML.includes("failed to load pending actions."), "object payload → error message");
 
   // non-2xx status (jget resolves null)
   reset("repo1");
   responder = () => ({ status: 500, responseText: "boom" });
   await ctx.renderProposals();
-  assert.ok(dEl.innerHTML.includes("failed to load proposed actions."), "500 → error message");
+  assert.ok(dEl.innerHTML.includes("failed to load pending actions."), "500 → error message");
 });
 
 await test("renderProposals renders empty-state for []", async () => {
   reset("repo1");
   responder = () => ({ status: 200, responseText: "[]" });
   await ctx.renderProposals();
-  assert.ok(dEl.innerHTML.includes("No pending proposed actions."), "empty array → empty-state");
+  assert.ok(dEl.innerHTML.includes("No pending actions."), "empty array → empty-state");
 });
 
 await test("renderProposals renders a populated pending item with escaping + buttons", async () => {

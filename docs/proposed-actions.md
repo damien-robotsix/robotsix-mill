@@ -58,7 +58,7 @@ underlying error). Rejecting moves it to `REJECTED` and runs nothing.
 
 ## The Proposals panel (board UI)
 
-A `📝 Proposals` button sits in the board toolbar header, next to the
+A `📝 Pending` button sits in the board toolbar header, next to the
 `💰 Cost` button. Clicking it (`toggleProposals()`) opens the right-hand
 drawer; it is mutually exclusive with the Runs and Cost panels (opening
 one closes the others).
