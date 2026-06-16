@@ -6,7 +6,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from ...config import target_branch_for
+from ...config import ConfigError, Settings, get_repo_config, target_branch_for
 from ...core.states import State
 from ...forge.auth import _resolve_remote_url, github_token
 from ...vcs import git_ops
@@ -27,11 +27,18 @@ class FileOperationsMixin(_ImplementStageBase):
         repo_dir: Path,
         extra_roots: list[Path] | None,
         target_branch: str = "main",
+        settings: Settings | None = None,
     ) -> bool:
         """Return True if any repo has uncommitted changes or is ahead of main.
 
         Used by the two exit-path guards so multi-repo tickets don't
         misroute to DONE/BLOCKED when only the primary repo was checked.
+
+        When *settings* is provided, each ``extra_roots`` repo resolves
+        its own target branch via :func:`target_branch_for` —
+        ``target_branch`` is used only for the primary repo (or as a
+        fallback when *settings* is ``None``, keeping the single-repo
+        callers working).
         """
         if git_ops.has_changes(repo_dir) or git_ops.branch_is_ahead_of_main(
             repo_dir, target_branch
@@ -41,8 +48,15 @@ class FileOperationsMixin(_ImplementStageBase):
             for repo_path in extra_roots:
                 if repo_path == repo_dir:
                     continue
+                repo_target = target_branch
+                if settings is not None:
+                    try:
+                        rc = get_repo_config(repo_path.name)
+                    except ConfigError:
+                        rc = None
+                    repo_target = target_branch_for(settings, rc)
                 if git_ops.has_changes(repo_path) or git_ops.branch_is_ahead_of_main(
-                    repo_path, target_branch
+                    repo_path, repo_target
                 ):
                     return True
         return False

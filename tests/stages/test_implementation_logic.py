@@ -477,6 +477,76 @@ class TestEvaluateTestResults:
         assert result.outcome.next_state is State.BLOCKED
         assert "edit-claim contradiction" in result.outcome.note.lower()
 
+    def test_multi_repo_introduced_files_resolves_per_repo_target(
+        self, monkeypatch, tmp_path
+    ):
+        """Each extra_roots repo gets its own target branch from
+        target_branch_for, not the primary repo's target."""
+        self._install_default_patches(monkeypatch)
+
+        # Create synthetic repo paths whose .name acts as repo_id.
+        repo_a = tmp_path / "repos" / "repo-a"
+        repo_a.mkdir(parents=True)
+        repo_b = tmp_path / "repos" / "repo-b"
+        repo_b.mkdir(parents=True)
+
+        # Track the (repo_path, target_branch) pairs passed to introduced_files.
+        calls = []
+
+        def _fake_introduced_files(repo_path, tgt):
+            calls.append((repo_path, tgt))
+            return []
+
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.implementation_logic.git_ops",
+            _simple_namespace(introduced_files=_fake_introduced_files),
+        )
+
+        # Per-repo target: repo-a → "custom", repo-b → "develop".
+        def _fake_target_branch_for(settings, rc):
+            if rc is not None and rc.working_branch:
+                return rc.working_branch
+            return "main"
+
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.implementation_logic.target_branch_for",
+            _fake_target_branch_for,
+        )
+
+        # get_repo_config returns a fake RepoConfig with working_branch set.
+        class _FakeRepoConfig:
+            def __init__(self, working_branch):
+                self.working_branch = working_branch
+
+        _configs = {
+            "repo-a": _FakeRepoConfig("custom"),
+            "repo-b": _FakeRepoConfig("develop"),
+        }
+
+        def _fake_get_repo_config(repo_id):
+            return _configs[repo_id]
+
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.implementation_logic.get_repo_config",
+            _fake_get_repo_config,
+        )
+
+        # repo_dir is not in extra_roots, so it's only called once.
+        result = self._call(
+            monkeypatch,
+            repo_dir=repo_a,
+            extra_roots=[repo_a, repo_b],
+        )
+        assert result.next_action == "proceed"
+
+        # repo_a (primary) should be called with primary target (via ctx.repo_config=None → "main")
+        # repo_b should be called with its own "develop" target.
+        repo_b_calls = [c for c in calls if c[0] == repo_b]
+        assert len(repo_b_calls) == 1, f"expected 1 call for repo_b, got {calls}"
+        assert repo_b_calls[0][1] == "develop", (
+            f"repo_b should get target 'develop', got {repo_b_calls[0][1]}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # 4. _persist_pass_artifacts
