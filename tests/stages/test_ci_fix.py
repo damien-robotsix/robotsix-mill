@@ -654,7 +654,9 @@ def test_fix_success_push_failure_blocks(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
-        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.NOT_LANDED,
+        lambda repo, branch, target, remote_url, token: (
+            git_ops.PostPushResult.NOT_LANDED
+        ),
     )
 
     t = _fixing_ci(ctx)
@@ -855,7 +857,9 @@ def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
     post_check_args = {}
 
     def fake_post_check(repo, branch, target, remote_url, token):
-        post_check_args.update(branch=branch, target=target, remote_url=remote_url, token=token)
+        post_check_args.update(
+            branch=branch, target=target, remote_url=remote_url, token=token
+        )
         return git_ops.PostPushResult.PASS
 
     monkeypatch.setattr(
@@ -1491,8 +1495,9 @@ def test_in_scope_done_still_pushes_no_fix_ticket(tmp_path, monkeypatch):
     post_check_calls = []
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
-        lambda repo, branch, target, remote_url, token: post_check_calls.append(1)
-        or git_ops.PostPushResult.PASS,
+        lambda repo, branch, target, remote_url, token: (
+            post_check_calls.append(1) or git_ops.PostPushResult.PASS
+        ),
     )
 
     t = _fixing_ci(ctx)

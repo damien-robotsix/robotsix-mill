@@ -13,7 +13,9 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-ToolCategory = Literal["fs", "shell", "exploration", "testing", "web", "reporting", "git"]
+ToolCategory = Literal[
+    "fs", "shell", "exploration", "testing", "web", "reporting", "git"
+]
 
 _CATEGORY_ORDER: dict[ToolCategory, int] = {
     "fs": 0,

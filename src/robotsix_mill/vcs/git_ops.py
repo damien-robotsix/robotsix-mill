@@ -253,9 +253,7 @@ def remote_branch_sha(repo: Path, branch: str) -> str | None:
         return None
 
 
-def branch_ancestry(
-    repo: Path, branch: str, target: str
-) -> list[dict[str, str]]:
+def branch_ancestry(repo: Path, branch: str, target: str) -> list[dict[str, str]]:
     """Return commits on ``origin/<branch>`` not on ``origin/<target>``.
 
     Each commit dict carries ``sha``, ``author_name``, ``author_email``,
