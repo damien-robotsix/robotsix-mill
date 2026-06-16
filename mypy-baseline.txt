@@ -948,8 +948,6 @@ src/robotsix_mill/stages/merge/multi_repo.py:0: error: Missing type arguments fo
 src/robotsix_mill/stages/merge/multi_repo.py:0: error: Returning Any from function declared to return "Outcome"  [no-any-return]
 src/robotsix_mill/stages/merge/multi_repo.py:0: error: Returning Any from function declared to return "Outcome"  [no-any-return]
 src/robotsix_mill/stages/merge/rebase.py:0: error: Argument "repo_dir" to "run_rebase_agent" has incompatible type "str"; expected "Path"  [arg-type]
-src/robotsix_mill/stages/merge/rebase.py:0: error: Argument 1 to "head_sha" has incompatible type "str"; expected "Path"  [arg-type]
-src/robotsix_mill/stages/merge/rebase.py:0: error: Argument 1 to "remote_branch_sha" has incompatible type "str"; expected "Path"  [arg-type]
 src/robotsix_mill/stages/merge/rebase.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/stages/merge/rebase.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/stages/merge/review_revision.py:0: error: Argument 1 to "head_sha" has incompatible type "str"; expected "Path"  [arg-type]
