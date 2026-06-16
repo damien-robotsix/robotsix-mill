@@ -69,6 +69,7 @@ modules:
       - tests/core/test_proposed_action_executor.py
       - tests/core/test_workspace.py
       - tests/core/test_workspace_screenshots.py
+      - tests/core/test_draft_target.py
     dependencies: [config]
 
   # -------------------------------------------------------------------
@@ -230,7 +231,6 @@ modules:
       - src/robotsix_mill/runners/module_curator_runner.py
       - src/robotsix_mill/runners/periodic_runner.py
       - src/robotsix_mill/runners/verify_runner.py
-      - tests/runners/test_draft_target.py
       - tests/runners/test_pass_runner.py
       - tests/runners/test_periodic_runner.py
       - tests/runners/test_cost_reconciliation_runner.py
