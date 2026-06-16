@@ -1529,6 +1529,15 @@ def test_list_workflow_runs_maps_pipelines(tmp_path, monkeypatch):
             "web_url": "http://gl/pipelines/101",
             "created_at": "2026-03-04T00:00:00Z",
         },
+        # Non-terminal pipeline — should be excluded by client-side filter.
+        {
+            "id": 999,
+            "ref": "feature/x",
+            "sha": "running-sha",
+            "status": "running",
+            "web_url": "http://gl/pipelines/999",
+            "created_at": "2026-03-05T00:00:00Z",
+        },
     ]
     get_map = {
         "projects/42/pipelines": _make_response(200, pipelines),
