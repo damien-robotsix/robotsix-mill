@@ -1000,7 +1000,11 @@ class RefineAgentMixin:
             # children target different repos.
             for child_id, deps in plan_child_dependencies(
                 created_children,
-                child_board_id=lambda cid: ctx.service.get(cid).board_id,
+                child_board_id=lambda cid: (
+                    _t.board_id
+                    if (_t := ctx.service.get(cid)) is not None
+                    else ctx.service.board_id
+                ),
                 create_child=lambda title, body: (
                     ctx.service.create(
                         title=title,

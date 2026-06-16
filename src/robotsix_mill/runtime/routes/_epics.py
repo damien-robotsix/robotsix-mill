@@ -228,7 +228,11 @@ def generate_children(
                 # also applied when children target different repos.
                 for child_id, deps in plan_child_dependencies(
                     created_children,
-                    child_board_id=lambda cid: epic_svc.get(cid).board_id,
+                    child_board_id=lambda cid: (
+                        _t.board_id
+                        if (_t := epic_svc.get(cid)) is not None
+                        else epic_svc.board_id
+                    ),
                     create_child=lambda title, body: (
                         epic_svc.create(
                             title=title,

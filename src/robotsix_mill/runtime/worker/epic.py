@@ -593,7 +593,9 @@ def _run_epic_reprocess(
         for child_id, deps in plan_child_dependencies(
             created_children,
             predecessor_id=predecessor_id,
-            child_board_id=lambda cid: svc.get(cid).board_id,
+            child_board_id=lambda cid: (
+                _t.board_id if (_t := svc.get(cid)) is not None else svc.board_id
+            ),
             create_child=lambda title, body: (
                 svc.create(
                     title=title,
