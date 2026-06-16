@@ -117,12 +117,15 @@ def run_module_curator_agent(
         "for any detected drift — including reorganization opportunities toward "
         "the per-module layout (src/<module>, docs/<module>, tests/<module>)."
     )
+    from pydantic_ai.usage import UsageLimits
+
     from .retry import run_agent
 
+    limits = UsageLimits(request_limit=settings.module_curator_request_limit)
     try:
         result = run_agent(
             agent,
-            lambda h: h.run_sync(prompt),
+            lambda h: h.run_sync(prompt, usage_limits=limits),
             what="module_curator",
         )
     finally:

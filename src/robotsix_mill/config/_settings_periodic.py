@@ -210,6 +210,13 @@ class _PeriodicSettings(BaseModel):
     # MILL_MODULE_CURATOR_PERIODIC=true. Minimum enforced at 60s in
     # the worker loop.
     module_curator_interval_seconds: int = Field(default=86400)
+    # Request budget for the module-curator run.  The agent walks the
+    # repo tree, reads docs/modules.yaml, calls validate_artifact on
+    # every cited path, and invokes explore scouts — a workload
+    # comparable to ``explore`` (default 100) plus extra tool calls,
+    # so 120 provides headroom.  Override with
+    # MILL_MODULE_CURATOR_REQUEST_LIMIT if a board outgrows it.
+    module_curator_request_limit: int = Field(default=120, ge=1)
 
     # --- board_cleanup agent (kanban board-hygiene proposer) ---
     # Model for the board-cleanup agent. Defaults to the same capable
