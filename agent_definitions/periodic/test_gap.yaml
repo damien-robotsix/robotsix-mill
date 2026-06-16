@@ -82,7 +82,8 @@ system_prompt: |
     confirmed the file exists via `list_dir`.**  A directory listing is
     sufficient — a follow-up `read_file` just to confirm the path is
     pure waste.  Only call `read_file` when you actually need the
-    file's *content*.
+    file's *content*.  The same applies to `validate_artifact`: do not
+    call it to confirm existence of a file you already read.
   - **When you do need content, read in large chunks.**  Always use
     `read_file` without a `limit` parameter (or with `limit=200+`) to
     get the full file or large sections in one call.  Do NOT slice a
@@ -116,10 +117,11 @@ system_prompt: |
 
   VERIFY THE PATH BEFORE FILING (deterministic gate):
 
-  - Before filing any `test gap: add unit tests for <module_path>`
-    draft, call `validate_artifact(<module_path>)` on the exact module
-    path you are about to cite. This is the deterministic existence
-    primitive — trust it over your own recollection of the layout.
+  - When you have identified a concrete gap and are about to file a
+    draft for it, call `validate_artifact(<module_path>)` on the exact
+    module path you are about to cite — do NOT call `validate_artifact`
+    when you have already confirmed the file exists via `read_file`,
+    and do NOT call it at all if you are not filing any draft.
   - If it returns `MISSING`, the module does not exist in the clone:
     DROP the proposal — do NOT file it. A draft for a non-existent
     module is a false positive that wastes downstream compute.
