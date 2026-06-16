@@ -322,6 +322,17 @@ class CIFixStage(Stage):
             return resolved
         repo_dir, branch, failing_summary, failing, alerts, changed_paths = resolved
 
+        # --- CodeQL FP triage: early trigger before consuming attempts ---
+        # If CodeQL is the sole remaining red check, try FP triage
+        # immediately.  The triage call has its own guardrails
+        # (feature flag, run-once sentinel, eligible alerts, etc.) and
+        # returns None when not applicable.
+        triage_outcome = self._try_codeql_fp_triage(
+            ticket, ctx, failing, alerts, changed_paths
+        )
+        if triage_outcome is not None:
+            return triage_outcome
+
         # Staleness guard: rebase if behind main BEFORE counting a cycle.
         rebase_outcome = self._rebase_if_stale(ticket, ctx, repo_dir, branch)
         if rebase_outcome is not None:
