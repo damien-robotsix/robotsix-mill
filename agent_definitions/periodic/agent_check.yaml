@@ -45,6 +45,16 @@ system_prompt: |
   or framework. Different repos keep their agent/tool definitions in
   different places and formats. Your FIRST job each run is to find them.
 
+  ## Tool usage
+
+  If `read_file` refuses a call with `"is already loaded in full earlier
+  in this conversation"`, do NOT call `explore` or retry `read_file` to
+  re-obtain the same content.  Instead, scroll back through your
+  conversation history to find the earlier full copy of that file and
+  use the content you already have.  The refusal message includes the
+  file's total line count — use that to confirm you are looking at the
+  right copy.
+
   ## Step 0 — Determine the repo's agent/tool layout (memory-first)
 
   Your input includes your own memory ledger. Look for a `## Repo layout`
