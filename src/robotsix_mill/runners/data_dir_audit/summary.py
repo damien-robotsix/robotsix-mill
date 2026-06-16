@@ -26,6 +26,32 @@ def _orphan_summary_line(
     return orphan_line
 
 
+def _has_no_issues(
+    oversized: list[dict[str, Any]],
+    all_growth_flags: list[dict[str, Any]],
+    findings: list[dict[str, Any]],
+    total_orphans: int,
+) -> bool:
+    """Return True when every check produced zero results."""
+    return (
+        not oversized and not all_growth_flags and not findings and total_orphans == 0
+    )
+
+
+def _prune_lines(
+    clones_pruned: int, closed_pruned: int, db_rows_purged: int
+) -> list[str]:
+    """Build prune/purge summary lines (empty when all counts are zero)."""
+    lines: list[str] = []
+    if clones_pruned > 0:
+        lines.append(f"Terminal-ticket clones pruned: {clones_pruned}.")
+    if closed_pruned > 0:
+        lines.append(f"Closed workspaces pruned: {closed_pruned}.")
+    if db_rows_purged > 0:
+        lines.append(f"DB rows purged: {db_rows_purged}.")
+    return lines
+
+
 def _build_summary(
     total_bytes: int,
     total_files: int,
@@ -50,14 +76,11 @@ def _build_summary(
     """
     header = f"Scanned {_human_bytes(total_bytes)} in {total_files:,} files."
 
-    if not oversized and not all_growth_flags and not findings and total_orphans == 0:
+    if _has_no_issues(oversized, all_growth_flags, findings, total_orphans):
         base = header + " No issues found."
-        if clones_pruned > 0:
-            base += f"\nTerminal-ticket clones pruned: {clones_pruned}."
-        if closed_pruned > 0:
-            base += f"\nClosed workspaces pruned: {closed_pruned}."
-        if db_rows_purged > 0:
-            base += f"\nDB rows purged: {db_rows_purged}."
+        prune = _prune_lines(clones_pruned, closed_pruned, db_rows_purged)
+        if prune:
+            base += "\n" + "\n".join(prune)
         return base
 
     lines: list[str] = [header]
@@ -97,13 +120,6 @@ def _build_summary(
         word = "draft" if n == 1 else "drafts"
         lines.append(f"Filed {n} {word}.")
 
-    if clones_pruned > 0:
-        lines.append(f"Terminal-ticket clones pruned: {clones_pruned}.")
-
-    if closed_pruned > 0:
-        lines.append(f"Closed workspaces pruned: {closed_pruned}.")
-
-    if db_rows_purged > 0:
-        lines.append(f"DB rows purged: {db_rows_purged}.")
+    lines.extend(_prune_lines(clones_pruned, closed_pruned, db_rows_purged))
 
     return "\n".join(lines)
