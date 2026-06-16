@@ -86,12 +86,7 @@ system_prompt: |
         AND ``committer_email`` equal to ``mill@robotsix.local`` (the
         mill's own identity), the remote only carries the branch's own
         prior push — safe to recover:
-        - Call ``git_fetch("{target}")`` again.
-        - If needed, rebase onto the current remote: run ``git rebase
-          origin/{target}``.  (Do NOT run ``git fetch`` via
-          ``run_command`` — it cannot reach the network inside the
-          sandbox.  ``git_push_with_lease`` already fetches the remote
-          branch internally before computing the lease.)
+        - Call ``git_fetch("{target}")`` to re-fetch the remote branch.
         - Retry ``git_push_with_lease("{branch}")`` (at most 2 retries;
           if both fail, report FAILED).
      c. If ANY commit has a DIFFERENT author/committer (a foreign human
