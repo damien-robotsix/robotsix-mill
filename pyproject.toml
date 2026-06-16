@@ -20,6 +20,11 @@ dependencies = [
     # Shared YAML config-cascade library, consumed via git like robotsix-llmio.
     # Imported by config_loader.py in the follow-on integration ticket.
     "robotsix-yaml-config @ git+https://github.com/damien-robotsix/robotsix-yaml-config.git@main",
+    # Agent-comm board agent: exposes the mill board's full ticket lifecycle
+    # over agent-comm structured ops, so other agents can drive a board
+    # programmatically (query, file, comment, transition, approve, merge,
+    # resume, migrate).
+    "robotsix-board-agent @ git+https://github.com/damien-robotsix/robotsix-board-agent.git@main",
     "pydantic-settings>=2",
     "pyyaml>=6",
     "sqlmodel>=0.0.22",
@@ -275,7 +280,10 @@ DEP003 = ["pydantic", "sqlalchemy", "openai"]
 # runtime/dev dependency: the hermetic pytest suite never imports it and
 # the import is deferred into _drive_browser(). Declaring it would bloat
 # the install and the network-isolated test sandbox can't fetch Chromium.
-DEP001 = ["playwright"]
+# robotsix_agent_comm is a deferred/optional import (try/except guarded
+# in lifespan.py); it is only needed when board_agent_enabled=True and
+# the optional robotsix-agent-comm package is installed separately.
+DEP001 = ["playwright", "robotsix_agent_comm"]
 
 [tool.mypy]
 strict = true

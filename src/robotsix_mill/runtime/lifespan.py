@@ -151,9 +151,67 @@ def create_lifespan(
         tracing.install_signal_handlers()
         worker.start()
         worker.requeue_unfinished()  # resume anything left mid-pipeline
+
+        if settings.board_agent_enabled:
+            await _start_board_agent(app, settings, repo_config.board_id)
+
         try:
             yield
         finally:
+            if settings.board_agent_enabled:
+                await _stop_board_agent(app)
             await worker.stop()
 
     return lifespan
+
+
+async def _start_board_agent(
+    app: FastAPI,
+    settings: Settings,
+    repo_id: str,
+) -> None:
+    """Start the board-agent agent-comm service.
+
+    Deferred import: only imported when ``board_agent_enabled`` is True,
+    so deployments that keep the agent off pay zero import overhead and
+    don't need the package installed.
+    """
+    try:
+        from robotsix_agent_comm import Registry
+        from robotsix_board_agent import BoardAgent, BoardAgentSettings
+    except ImportError as exc:
+        logging.getLogger(__name__).warning(
+            "board_agent_enabled=True but robotsix-board-agent is not installed: %s",
+            exc,
+        )
+        return
+
+    # Share a single process-level Registry across all agent-comm consumers
+    # (board agent, future calendar agent, etc.).
+    registry: Registry = getattr(app.state, "agent_registry", None)
+    if registry is None:
+        registry = Registry()
+        app.state.agent_registry = registry
+
+    agent_settings = BoardAgentSettings(
+        board_api_url=settings.board_agent_api_url,
+        board_api_token=settings.board_agent_api_token,
+        board_repo_id=settings.board_agent_repo_id or repo_id,
+        enable_write_ops=settings.board_agent_write_ops,
+    )
+
+    agent = BoardAgent(
+        settings=agent_settings,
+        registry=registry,
+        agent_id=f"board-{repo_id}",
+    )
+    await agent.start()
+    app.state.board_agent = agent
+
+
+async def _stop_board_agent(app: FastAPI) -> None:
+    """Stop the board agent if it was started."""
+    agent = getattr(app.state, "board_agent", None)
+    if agent is not None:
+        await agent.stop()
+        del app.state.board_agent
