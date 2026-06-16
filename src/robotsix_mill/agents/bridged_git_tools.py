@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from ..vcs import git_ops
 
@@ -29,7 +31,7 @@ def build_bridged_git_tools(  # noqa: C901 — four inner closures, each ~20 lin
     target: str,
     remote_url: str,
     token: str | None,
-) -> list:
+) -> list[Callable[..., Any]]:
     """Build the four bridged git tool closures.
 
     Each tool is a plain callable with type hints + docstring so
