@@ -16,6 +16,9 @@ branch-merged verification facade).  The ``TicketService`` and
 
 from __future__ import annotations
 
+import subprocess
+from pathlib import Path
+
 import pytest
 
 import robotsix_mill.agents.dedup as agents_dedup
@@ -329,6 +332,106 @@ def test_valid_target_merged_branch_is_true(ctx_factory, monkeypatch):
     )
 
     assert RefineStage._is_valid_dedup_target(ctx, t, cand.id, None) is True
+
+
+def test_valid_target_no_file_map_overlap_is_false(ctx_factory, monkeypatch):
+    """_is_valid_dedup_target returns False when draft paths don't overlap
+    with the candidate's declared scope paths."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    cand_body = "## Scope\n\n- `tests/foo/test_bar.py`\n\nSome other text."
+    cand = _ticket(ctx, title="Other fix", body=cand_body)
+    ctx.service.set_branch(cand.id, "feature/other")
+    ctx.service.transition(cand.id, State.DONE, note="implemented the thing")
+    cand = ctx.service.get(cand.id)
+
+    monkeypatch.setattr(
+        refine_module, "_verify_branch_merged", lambda repo_dir, ticket: True
+    )
+
+    draft = "Fix tests/core/test_langfuse_client.py to handle None response"
+
+    assert (
+        RefineStage._is_valid_dedup_target(ctx, t, cand.id, None, draft=draft) is False
+    )
+
+
+def test_valid_target_file_map_overlap_is_true(ctx_factory, monkeypatch):
+    """_is_valid_dedup_target returns True when draft paths overlap with
+    the candidate's declared scope paths."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    cand_body = "## Scope\n\n- `tests/core/test_langfuse_client.py`\n\nSome text."
+    cand = _ticket(ctx, title="Other fix", body=cand_body)
+    ctx.service.set_branch(cand.id, "feature/other")
+    ctx.service.transition(cand.id, State.DONE, note="implemented the thing")
+    cand = ctx.service.get(cand.id)
+
+    monkeypatch.setattr(
+        refine_module, "_verify_branch_merged", lambda repo_dir, ticket: True
+    )
+
+    draft = "Fix tests/core/test_langfuse_client.py to handle None response"
+
+    assert (
+        RefineStage._is_valid_dedup_target(ctx, t, cand.id, None, draft=draft) is True
+    )
+
+
+def test_valid_target_draft_none_skips_overlap_check(ctx_factory, monkeypatch):
+    """When draft is None (default), the file-map overlap check is skipped
+    and existing behaviour is preserved."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    cand_body = "## Scope\n\n- `tests/foo/test_bar.py`\n\nSome text."
+    cand = _ticket(ctx, title="Other fix", body=cand_body)
+    ctx.service.set_branch(cand.id, "feature/other")
+    ctx.service.transition(cand.id, State.DONE, note="implemented the thing")
+    cand = ctx.service.get(cand.id)
+
+    monkeypatch.setattr(
+        refine_module, "_verify_branch_merged", lambda repo_dir, ticket: True
+    )
+
+    # draft=None (default) → overlap check skipped, returns True
+    assert RefineStage._is_valid_dedup_target(ctx, t, cand.id, None) is True
+
+
+def test_valid_target_unknown_candidate_not_ancestor_is_false(ctx_factory, monkeypatch):
+    """When the candidate is a commit hash that is NOT an ancestor of
+    origin/main, _is_valid_dedup_target returns False."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+
+    class FakeResult:
+        returncode = 1
+
+    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: FakeResult())
+
+    # repo_dir is not None → ancestry check fires
+    assert (
+        RefineStage._is_valid_dedup_target(ctx, t, "a1b2c3d4e5f6", Path("/tmp"))
+        is False
+    )
+
+
+def test_valid_target_unknown_candidate_ancestry_git_error_is_true(
+    ctx_factory, monkeypatch
+):
+    """When git merge-base check raises an exception, _is_valid_dedup_target
+    returns True (best-effort — never block on git errors)."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+
+    def _boom(*a, **kw):
+        raise RuntimeError("git boom")
+
+    monkeypatch.setattr(subprocess, "run", _boom)
+
+    # repo_dir is not None → ancestry check fires and swallows error
+    assert (
+        RefineStage._is_valid_dedup_target(ctx, t, "a1b2c3d4e5f6", Path("/tmp")) is True
+    )
 
 
 # ===========================================================================
