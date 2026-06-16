@@ -277,7 +277,8 @@ def test_ping_pong_detection_blocks_on_third_alternation(tmp_path, monkeypatch):
 
 
 def test_ping_pong_counts_only_alternations_not_same_stage_repeats(
-    tmp_path, monkeypatch,
+    tmp_path,
+    monkeypatch,
 ):
     """Routing to the same stage twice in a row does NOT count as an
     alternation — only a genuine A→B→A pattern increments the counter."""
@@ -452,7 +453,8 @@ def test_auto_fix_cycles_exhausted_skips_ping_pong_check(tmp_path, monkeypatch):
 
 
 def test_ping_pong_exhausted_takes_priority_over_branch_decision(
-    tmp_path, monkeypatch,
+    tmp_path,
+    monkeypatch,
 ):
     """When ping-pong ceiling is reached, BLOCKED is returned instead of
     REBASING or FIXING_CI."""
@@ -519,7 +521,8 @@ def test_rebase_counter_reset_on_mergeable_still_works(tmp_path, monkeypatch):
 
 
 def test_auto_fix_cycles_block_message_contains_ticket_id_and_ceiling(
-    tmp_path, monkeypatch,
+    tmp_path,
+    monkeypatch,
 ):
     """The BLOCKED message from the auto-fix guardrail names the ticket ID
     and ceiling value."""
@@ -546,7 +549,8 @@ def test_auto_fix_cycles_block_message_contains_ticket_id_and_ceiling(
 
 
 def test_ping_pong_block_message_contains_ticket_id_and_ceiling(
-    tmp_path, monkeypatch,
+    tmp_path,
+    monkeypatch,
 ):
     """The BLOCKED message from the ping-pong guardrail names the ticket ID
     and alternation count."""
