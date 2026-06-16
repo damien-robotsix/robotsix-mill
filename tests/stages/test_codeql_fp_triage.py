@@ -12,8 +12,10 @@ from robotsix_mill.stages.ci_fix import (
     CIFixStage,
     _eligible_for_triage,
     _only_codeql_failing,
+    _read_counter,
     _write_counter,
 )
+from robotsix_mill.vcs import git_ops
 from robotsix_mill.agents.codeql_fp_triage import (
     AlertVerdict,
     CodeQLFpTriageResult,
@@ -600,6 +602,140 @@ def test_run_once_sentinel_prevents_second_triage(tmp_path, monkeypatch):
     out2 = CIFixStage().run(t, ctx)
     assert out2.next_state is State.BLOCKED
     assert len(triage_called) == 1  # no second call
+
+
+# ---------------------------------------------------------------------------
+#  Integration: early trigger before attempt cap
+# ---------------------------------------------------------------------------
+
+
+def test_early_triage_before_attempt_cap(tmp_path, monkeypatch):
+    """The early FP triage fires on the first CodeQL-only poll, BEFORE
+    any ci_fix attempt is consumed — so the attempt counter stays at 0."""
+    ctx = _gh(
+        tmp_path,
+        ci_fix_max_cycles="3",  # ceiling NOT reachable early
+        ci_fix_max_attempts="2",
+        codeql_fp_triage_enabled="true",
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "CodeQL", "summary": "", "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_code_scanning_alerts",
+        lambda self, *, source_branch: [
+            _codeql_alert(1, "src/foo.py", security_severity_level=None)
+        ],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [{"path": "src/foo.py"}],
+    )
+
+    def fake_triage(**kw):
+        return CodeQLFpTriageResult(
+            verdicts=[AlertVerdict(alert_number=1, verdict="dismiss", rationale="fp")],
+            summary="dismissed",
+        )
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.codeql_fp_triage.run_codeql_fp_triage_agent",
+        fake_triage,
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "dismiss_code_scanning_alert",
+        lambda self, *, number, reason, comment: True,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    # Cycle counter at 0 (not at ceiling) — only the early trigger applies.
+    cycle_path = ctx.service.workspace(t).artifacts_dir / "ci_fix_cycles.txt"
+    assert _read_counter(cycle_path) == 0
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+    # Attempt counter was never incremented — the triage intercepted first.
+    attempt_path = ctx.service.workspace(t).artifacts_dir / "ci_fix_attempts.txt"
+    assert _read_counter(attempt_path) == 0
+
+
+def test_early_triage_skipped_when_non_codeql_fails(tmp_path, monkeypatch):
+    """When a non-CodeQL check also fails, the early trigger skips and
+    the normal attempt/cycle path proceeds — the attempt counter advances."""
+    ctx = _gh(
+        tmp_path,
+        ci_fix_max_cycles="3",
+        ci_fix_max_attempts="2",
+        codeql_fp_triage_enabled="true",
+    )
+    ci_fail = {
+        "conclusion": "failure",
+        "failing": [
+            {"name": "CodeQL", "summary": "", "text": None, "annotations": []},
+            {"name": "pytest", "summary": "", "text": None, "annotations": []},
+        ],
+    }
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status", lambda self, *, source_branch: ci_fail
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status", lambda self, *, source_branch: {"sha": "abc"}
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_code_scanning_alerts",
+        lambda self, *, source_branch: [],
+    )
+
+    triage_called = []
+
+    def fake_triage(**kw):
+        triage_called.append(1)
+        return CodeQLFpTriageResult()
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.codeql_fp_triage.run_codeql_fp_triage_agent",
+        fake_triage,
+    )
+    # Agent crasher so we don't need to mock push.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.reconcile_with_remote_pr",
+        lambda repo, remote_url, branch, token: git_ops.ReconcileResult.SYNCED,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **kw: (_ for _ in ()).throw(RuntimeError("crash")),
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    # Triage should NOT have run (non-CodeQL check present).
+    assert len(triage_called) == 0
+    # The normal ci-fix path ran and failed, so attempt counter advanced.
+    attempt_path = ctx.service.workspace(t).artifacts_dir / "ci_fix_attempts.txt"
+    assert _read_counter(attempt_path) == 1
+    # Still re-polling (attempt < max_attempts=2).
+    assert out.next_state is State.IMPLEMENT_COMPLETE
 
 
 # ---------------------------------------------------------------------------

@@ -67,17 +67,8 @@ class MultiRepoCiFixMixin(_MergeStageBase):
                 State.BLOCKED, f"unknown repo_id '{repo_id}': {e} — resumable"
             )
 
-        counter_path = ws.artifacts_dir / f"ci_fix_{repo_id}.count"
-        attempt = _read_counter(counter_path) + 1
-        max_attempts = s.ci_fix_max_attempts
-        if attempt > max_attempts:
-            _write_counter(counter_path, 0)
-            return Outcome(
-                State.BLOCKED,
-                f"ci fix for {repo_id} failed after {max_attempts} attempt(s) — "
-                "manual intervention required",
-            )
-
+        # Fetch CI status BEFORE the attempt cap so FP triage can
+        # intercept a CodeQL-only failure on the first poll.
         forge = get_forge(s, repo_config=rc)
         try:
             ci = forge.check_status(source_branch=branch)
@@ -87,7 +78,6 @@ class MultiRepoCiFixMixin(_MergeStageBase):
             )
             return Outcome(ticket.state)
 
-        # --- cycle-ceiling gate (mirrors CIFixStage) ---
         conclusion = (ci or {}).get("conclusion")
         cycle_counter_path = ws.artifacts_dir / f"ci_fix_{repo_id}_cycles.txt"
         if conclusion == "success":
@@ -95,7 +85,7 @@ class MultiRepoCiFixMixin(_MergeStageBase):
             _write_counter(cycle_counter_path, 0)
             return Outcome(ticket.state)
 
-        # Fetch alerts + changed_paths BEFORE the ceiling check so the
+        # Fetch alerts + changed_paths BEFORE the attempt cap so the
         # CodeQL FP triage path can inspect them.
         failing = (ci or {}).get("failing", [])
         log_text = ""
@@ -120,6 +110,32 @@ class MultiRepoCiFixMixin(_MergeStageBase):
                 "%s: failed to fetch job logs / alerts for %s", ticket.id, repo_id
             )
 
+        # --- CodeQL FP triage: early trigger before consuming attempts ---
+        # If CodeQL is the sole remaining red check, try FP triage
+        # immediately — before counting an attempt or a cycle.  The
+        # triage call has its own guardrails (feature flag, run-once
+        # sentinel, eligible alerts, etc.) and returns None when not
+        # applicable.
+        if conclusion == "failure":
+            triage_outcome = self._try_multi_codeql_fp_triage(
+                ticket, ctx, failing, alerts, changed_paths, repo_id, repo_dir
+            )
+            if triage_outcome is not None:
+                return triage_outcome
+
+        # --- Attempt cap ---
+        counter_path = ws.artifacts_dir / f"ci_fix_{repo_id}.count"
+        attempt = _read_counter(counter_path) + 1
+        max_attempts = s.ci_fix_max_attempts
+        if attempt > max_attempts:
+            _write_counter(counter_path, 0)
+            return Outcome(
+                State.BLOCKED,
+                f"ci fix for {repo_id} failed after {max_attempts} attempt(s) — "
+                "manual intervention required",
+            )
+
+        # --- Cycle ceiling gate (mirrors CIFixStage) ---
         if conclusion == "failure":
             cycles = _read_counter(cycle_counter_path)
             if s.ci_fix_max_cycles > 0 and cycles >= s.ci_fix_max_cycles:
