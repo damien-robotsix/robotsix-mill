@@ -137,7 +137,9 @@ def run_ci_fix_agent(
             "target": target,
             "patterns": patterns_text,
         },
-        run_kwargs={"usage_limits": UsageLimits(request_limit=settings.ci_fix_request_limit)},
+        run_kwargs={
+            "usage_limits": UsageLimits(request_limit=settings.ci_fix_request_limit)
+        },
     )
 
     # --- persist structured pattern entry ---

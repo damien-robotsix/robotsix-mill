@@ -834,7 +834,9 @@ class CIFixStage(Stage):
         # the fix was ineffective — do NOT run the agent again.
         repo_id = ctx.repo_config.board_id if ctx.repo_config else ""
         current_fp = _ci_failure_fingerprint(failing_summary, repo_id)
-        fp_path = ctx.service.workspace(ticket).artifacts_dir / _CI_LAST_DONE_FINGERPRINT
+        fp_path = (
+            ctx.service.workspace(ticket).artifacts_dir / _CI_LAST_DONE_FINGERPRINT
+        )
         try:
             last_done_fp = fp_path.read_text(encoding="utf-8").strip()
         except FileNotFoundError:
