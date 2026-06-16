@@ -44,7 +44,8 @@ class _QueryMixin(_ServiceBase):
         then each registered repo's DB until we find the ticket.
         """
         if not self.board_id:
-            return self._get_anywhere(ticket_id)
+            ticket, _ = self._get_anywhere(ticket_id)
+            return ticket
         with db.session(self.settings, self.board_id) as s:
             ticket = s.get(Ticket, ticket_id)
         if ticket is not None:
@@ -54,9 +55,10 @@ class _QueryMixin(_ServiceBase):
         # the worker's & routes' default service is pinned to the
         # first repo, so any ticket in another repo's DB would 404
         # without this fallback.
-        return self._get_anywhere(ticket_id)
+        ticket, _ = self._get_anywhere(ticket_id)
+        return ticket
 
-    def _get_anywhere(self, ticket_id: str) -> Ticket | None:
+    def _get_anywhere(self, ticket_id: str) -> tuple[Ticket | None, list[str]]:
         """Search every per-repo DB for *ticket_id*. Ticket IDs are
         globally unique so the first hit is the answer.
 
@@ -74,8 +76,11 @@ class _QueryMixin(_ServiceBase):
             for rc in get_repos_config().repos.values():
                 if rc.board_id and rc.board_id not in candidates:
                     candidates.append(rc.board_id)
-        except Exception:
-            pass
+        except Exception as exc:
+            log.warning(
+                "Failed to load repos config for _get_anywhere: %s(%r)",
+                type(exc).__name__, exc,
+            )
         # Disk-scan fallback for boards not in the registry.
         try:
             for sub in self.settings.data_dir.iterdir():
@@ -89,8 +94,8 @@ class _QueryMixin(_ServiceBase):
                 ticket = s.get(Ticket, ticket_id)
                 if ticket is not None:
                     self._resolve_board_id(ticket)
-                    return ticket
-        return None
+                    return ticket, candidates
+        return None, candidates
 
     def list(
         self,
@@ -125,12 +130,15 @@ class _QueryMixin(_ServiceBase):
             with db.session(self.settings, self.board_id) as s:
                 if s.get(Ticket, ticket_id) is not None:
                     return self.board_id
-        t = self._get_anywhere(ticket_id)
+        t, candidates = self._get_anywhere(ticket_id)
         if t is not None:
             return t.board_id or self.board_id or ""
         if self.board_id:
             return self.board_id
-        raise ValueError(f"Ticket {ticket_id} not found in any configured board")
+        raise ValueError(
+            f"Ticket {ticket_id} not found in any configured board "
+            f"(searched: {candidates or '<none>'})"
+        )
 
     def _resolve_board_id(self, ticket: Ticket) -> None:
         """Assign *ticket* a ``board_id`` when it is missing (legacy rows).

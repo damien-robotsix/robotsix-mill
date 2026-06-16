@@ -97,8 +97,11 @@ class _CommentMixin(_ServiceBase):
             for rc in get_repos_config().repos.values():
                 if rc.board_id and rc.board_id not in candidates:
                     candidates.append(rc.board_id)
-        except Exception:
-            pass
+        except Exception as exc:
+            log.warning(
+                "Failed to load repos config for _board_for_comment: %s(%r)",
+                type(exc).__name__, exc,
+            )
         try:
             for sub in self.settings.data_dir.iterdir():
                 if sub.is_dir() and (sub / "mill.db").exists():
@@ -112,7 +115,10 @@ class _CommentMixin(_ServiceBase):
                     return board_id
         if self.board_id:
             return self.board_id
-        raise ValueError(f"Comment {comment_id} not found in any configured board")
+        raise ValueError(
+            f"Comment {comment_id} not found in any configured board "
+            f"(searched: {candidates or '<none>'})"
+        )
 
     def close_thread(
         self,

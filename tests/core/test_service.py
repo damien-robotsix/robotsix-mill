@@ -2054,7 +2054,9 @@ def test_board_for_raises_on_not_found_and_empty_board_id(settings):
     board, _board_for raises a clear ValueError instead of returning "".
     """
     svc = TicketService(settings)  # no board_id → board_id=""
-    with pytest.raises(ValueError, match="Ticket nonexistent-id not found"):
+    with pytest.raises(
+        ValueError, match=r"Ticket nonexistent-id not found.*\(searched:"
+    ):
         svc._board_for("nonexistent-id")
 
 
@@ -2063,7 +2065,9 @@ def test_board_for_comment_raises_on_not_found_and_empty_board_id(settings):
     self.board_id is empty, _board_for_comment raises ValueError.
     """
     svc = TicketService(settings)  # no board_id → board_id=""
-    with pytest.raises(ValueError, match="Comment 999 not found"):
+    with pytest.raises(
+        ValueError, match=r"Comment 999 not found.*\(searched:"
+    ):
         svc._board_for_comment(999, ticket_id=None)
 
 
