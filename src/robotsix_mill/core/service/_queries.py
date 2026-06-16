@@ -79,7 +79,8 @@ class _QueryMixin(_ServiceBase):
         except Exception as exc:
             log.warning(
                 "Failed to load repos config for _get_anywhere: %s(%r)",
-                type(exc).__name__, exc,
+                type(exc).__name__,
+                exc,
             )
         # Disk-scan fallback for boards not in the registry.
         try:

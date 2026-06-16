@@ -2065,9 +2065,7 @@ def test_board_for_comment_raises_on_not_found_and_empty_board_id(settings):
     self.board_id is empty, _board_for_comment raises ValueError.
     """
     svc = TicketService(settings)  # no board_id → board_id=""
-    with pytest.raises(
-        ValueError, match=r"Comment 999 not found.*\(searched:"
-    ):
+    with pytest.raises(ValueError, match=r"Comment 999 not found.*\(searched:"):
         svc._board_for_comment(999, ticket_id=None)
 
 

@@ -100,7 +100,8 @@ class _CommentMixin(_ServiceBase):
         except Exception as exc:
             log.warning(
                 "Failed to load repos config for _board_for_comment: %s(%r)",
-                type(exc).__name__, exc,
+                type(exc).__name__,
+                exc,
             )
         try:
             for sub in self.settings.data_dir.iterdir():
