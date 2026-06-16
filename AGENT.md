@@ -172,7 +172,7 @@ by exactly one module. There are currently 19 modules; the canonical
 list is `docs/modules.yaml` itself. The file is validated on every push
 by `docs/modules.schema.yaml` (JSON Schema, draft 2020-12) via a
 pre-commit hook and CI step, both running
-`check-jsonschema --schemafile docs/modules.schema.yaml docs/modules.yaml`.
+`robotsix-modules validate` (from the `robotsix-modules` dev dependency).
 
 ### `module_curator` periodic agent
 
@@ -221,17 +221,14 @@ separate ticket.
 1. Add a new entry to `docs/modules.yaml` under `modules:` with `id`,
    `description`, at least one `paths` glob, and `dependencies` (can
    be `[]`).
-2. Validate locally: `check-jsonschema --schemafile docs/modules.schema.yaml docs/modules.yaml`
-   (available via pre-commit or the `check-jsonschema` pip package).
-3. The pre-commit hook and CI will catch schema violations. The
-   `module_curator` will flag any files that still fall outside the
-   taxonomy.
+2. The pre-commit hook and CI will catch schema violations — no
+   manual validation step is needed. The `module_curator` will flag
+   any files that still fall outside the taxonomy.
 
 ### Deprecating a module
 
 Remove the module entry from `docs/modules.yaml` and reassign its
-`paths` to the module(s) that absorbed the responsibility. Run the
-schema validator to confirm the file is still valid. The curator may
+`paths` to the module(s) that absorbed the responsibility. The pre-commit hook and CI will validate the result automatically. The curator may
 file "stale paths" and "Classify" tickets as reminders — these aren't
 errors, just prompts to clean up.
 
