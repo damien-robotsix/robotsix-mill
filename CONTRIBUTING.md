@@ -264,6 +264,7 @@ check.
 | hadolint gate (in `docker-publish.yml`) | (within `docker-publish.yml` push) | `hadolint/hadolint-action@v3.3.0` with `failure-threshold: warning` |
 | [`security-audit.yml`](.github/workflows/security-audit.yml) | Push/PR to `main`, weekly cron | `pip-audit` (CVEs) + `pip-licenses` (license allowlist gate) on installed dependencies |
 | [`ci.yml`](.github/workflows/ci.yml) | Push/PR to `main` | `uv sync --frozen` (committed-lock gate — fails on a stale `uv.lock`) → deptry → module taxonomy → Ruff → mypy `--strict` (advisory) → Bandit MEDIUM+ (advisory; see `[tool.bandit]`) → pytest (70% cov) |
+| [`dependency-review.yml`](.github/workflows/dependency-review.yml) | PR to any branch | `actions/dependency-review-action@v5.0.0` with `fail-on-severity: moderate` — analyzes the *delta* of dependency manifests (e.g. `pyproject.toml`, `uv.lock`) between the PR and its base branch, blocking on new or upgraded dependencies that introduce vulnerabilities rated moderate or higher |
 | [`deps-bump.yml`](.github/workflows/deps-bump.yml) | Weekly cron + manual | `uv lock --upgrade` → opens a PR refreshing `uv.lock` (shared-lib `@main` bumps), gated by `ci.yml` on the PR — see [docs/dependencies.md](docs/dependencies.md) |
 
 **Note on the hadolint gate in `docker-publish.yml`:** hadolint runs with
@@ -298,6 +299,18 @@ above.
 the updated (smaller) `mypy-baseline.txt`. When the baseline file
 becomes empty the ratchet step can be replaced with a direct
 `uv run mypy src/ --strict` hard gate.
+
+**Note on the dependency review gate in `dependency-review.yml`:**
+`actions/dependency-review-action` runs on every PR with
+`fail-on-severity: moderate`. Unlike `pip-audit` (which scans the
+*entire* installed dependency tree), this check analyzes only the
+*delta*: it compares the PR's dependency manifests (`pyproject.toml`,
+`uv.lock`) against the base branch's manifests. PRs that add a new
+dependency with a known vulnerability, or upgrade an existing one to a
+vulnerable version, are blocked — without requiring the full
+environment to be installed. `moderate` avoids noise from `low`-severity
+alerts while catching genuinely actionable vulnerabilities. This is a
+hard **gate**, not advisory. Promotion path: none (already a gate).
 
 **Note on the license gate in `security-audit.yml`:** the `license-audit`
 job runs `pip-licenses` over the installed `.[tracing]` dependency tree
