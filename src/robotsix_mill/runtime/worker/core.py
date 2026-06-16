@@ -21,6 +21,30 @@ from .poll_loops import PollLoopsMixin
 
 log = logging.getLogger("robotsix_mill.worker")
 
+# States counting toward the per-repo in-flight-PR cap.
+# A ticket in any of these states has an open PR / branch in flight.
+# See _CAP_GATED_STATES for the states gated by the cap.
+_IN_FLIGHT_PR_STATES: frozenset[State] = frozenset({
+    State.DELIVERABLE,
+    State.IMPLEMENT_COMPLETE,
+    State.WAITING_AUTO_MERGE,
+    State.REBASING,
+    State.FIXING_CI,
+    State.ADDRESSING_REVIEW,
+})
+
+# States blocked by the in-flight-PR cap — only READY (implement)
+# and DRAFT (refine) are gated.  All other states (including every
+# member of _IN_FLIGHT_PR_STATES) are ALWAYS processed regardless
+# of the cap count.
+_CAP_GATED_STATES: frozenset[State] = frozenset({State.READY, State.DRAFT})
+
+
+def _count_inflight_prs(service: "TicketService") -> int:
+    """Return the number of tickets in :data:`_IN_FLIGHT_PR_STATES`
+    for the board bound to *service*."""
+    return sum(1 for t in service.list() if t.state in _IN_FLIGHT_PR_STATES)
+
 
 class Worker(PeriodicPassesMixin, PollLoopsMixin):
     """In-process queue + consumer task, owned by the API service."""
@@ -303,6 +327,27 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                     service=board_service,
                     repo_config=ticket_repo_config,
                 )
+
+                # --- In-flight PR cap ---
+                if (
+                    before_state in _CAP_GATED_STATES
+                    and ticket_repo_config is not None
+                    and ticket_repo_config.max_inflight_prs > 0
+                ):
+                    in_flight = _count_inflight_prs(board_service)
+                    if in_flight >= ticket_repo_config.max_inflight_prs:
+                        log.debug(
+                            "repo %s at in-flight cap (%d/%d); deferring %s",
+                            ticket_repo_config.repo_id,
+                            in_flight,
+                            ticket_repo_config.max_inflight_prs,
+                            ticket_id,
+                        )
+                        self._pending.discard(ticket_id)
+                        self.enqueue(ticket_id)
+                        await asyncio.sleep(15)
+                        queue.task_done()
+                        continue
 
                 await process_ticket(ticket_id, per_ticket_ctx, active_map=self._active)
                 after = board_service.get(ticket_id)

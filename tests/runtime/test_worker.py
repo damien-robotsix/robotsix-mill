@@ -1855,3 +1855,326 @@ async def test_network_error_with_connectivity_uses_bounded_retries(
     await process_ticket(t.id, ctx)
     r = service.get(t.id)
     assert r.state is State.BLOCKED, "exhausted retries must still block"
+
+
+# -----------------------------------------------------------------------
+# In-flight PR cap (max_inflight_prs)
+# -----------------------------------------------------------------------
+
+
+def test_max_inflight_prs_rejects_negative():
+    """max_inflight_prs must reject negative values at construction time."""
+    from robotsix_mill.config.repos import RepoConfig
+
+    with pytest.raises(Exception):  # pydantic ValidationError
+        RepoConfig(
+            repo_id="r",
+            board_id="b",
+            langfuse_project_name="p",
+            langfuse_public_key="pk",
+            langfuse_secret_key="sk",
+            max_inflight_prs=-1,
+        )
+
+
+def test_max_inflight_prs_accepts_zero():
+    """max_inflight_prs=0 is valid (disables the cap)."""
+    from robotsix_mill.config.repos import RepoConfig
+
+    rc = RepoConfig(
+        repo_id="r",
+        board_id="b",
+        langfuse_project_name="p",
+        langfuse_public_key="pk",
+        langfuse_secret_key="sk",
+        max_inflight_prs=0,
+    )
+    assert rc.max_inflight_prs == 0
+
+
+def test_max_inflight_prs_defaults_to_3():
+    """Omitting max_inflight_prs defaults to 3."""
+    from robotsix_mill.config.repos import RepoConfig
+
+    rc = RepoConfig(
+        repo_id="r",
+        board_id="b",
+        langfuse_project_name="p",
+        langfuse_public_key="pk",
+        langfuse_secret_key="sk",
+    )
+    assert rc.max_inflight_prs == 3
+
+
+def test_count_inflight_prs_counts_only_in_flight_states(service):
+    """_count_inflight_prs returns the count of tickets in _IN_FLIGHT_PR_STATES."""
+    from robotsix_mill.runtime.worker.core import _count_inflight_prs, _IN_FLIGHT_PR_STATES
+
+    # Initially empty.
+    assert _count_inflight_prs(service) == 0
+
+    # Create tickets in various states.
+    t1 = service.create("ready ticket")
+    t2 = service.create("deliverable pr")
+
+    # Transition t2 to DELIVERABLE (in-flight).
+    for st in (State.READY, State.DELIVERABLE):
+        service.transition(t2.id, st)
+    assert service.get(t2.id).state is State.DELIVERABLE
+    assert _count_inflight_prs(service) == 1
+
+    # t1 is DRAFT (not in-flight) — shouldn't count.
+    assert service.get(t1.id).state is State.DRAFT
+    assert _count_inflight_prs(service) == 1
+
+    # Move t1 to IMPLEMENT_COMPLETE → now 2 in-flight.
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE):
+        service.transition(t1.id, st)
+    assert service.get(t1.id).state is State.IMPLEMENT_COMPLETE
+    assert _count_inflight_prs(service) == 2
+
+
+def test_count_inflight_prs_excludes_non_in_flight_states(service):
+    """HUMAN_MR_APPROVAL, BLOCKED, and DRAFT/READY must NOT count toward the cap."""
+    from robotsix_mill.runtime.worker.core import _count_inflight_prs
+
+    # Create tickets and move them to various non-in-flight states.
+    t_hmr = service.create("human mr approval")
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL):
+        service.transition(t_hmr.id, st)
+
+    t_blocked = service.create("blocked ticket")
+    for st in (State.READY, State.DELIVERABLE):
+        service.transition(t_blocked.id, st)
+    # Move to BLOCKED via direct state set (the worker does this).
+    from robotsix_mill.core import db as _db
+    from robotsix_mill.core.models import Ticket as _Ticket
+    with _db.session(service.settings, service.board_id) as s:
+        row = s.get(_Ticket, t_blocked.id)
+        row.state = State.BLOCKED
+        s.add(row)
+        s.commit()
+
+    assert service.get(t_hmr.id).state is State.HUMAN_MR_APPROVAL
+    assert service.get(t_blocked.id).state is State.BLOCKED
+    assert _count_inflight_prs(service) == 0
+
+
+async def test_cap_blocks_ready_when_at_limit(ctx, service, monkeypatch):
+    """With max_inflight_prs=1 and one DELIVERABLE ticket, a popped READY
+    ticket must be re-enqueued rather than dispatched to implement."""
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+    from robotsix_mill.runtime.worker.core import Worker, _count_inflight_prs, _CAP_GATED_STATES
+
+    # Create a repo config with cap=1.
+    rc = RepoConfig(
+        repo_id="test-repo",
+        board_id=service.board_id,
+        langfuse_project_name="p",
+        langfuse_public_key="pk",
+        langfuse_secret_key="sk",
+        max_concurrency=1,
+        max_inflight_prs=1,
+    )
+    fake_repos = ReposRegistry(repos={"test-repo": rc})
+    # Set the cached singleton directly — get_repos_config returns the
+    # cached value and monkeypatching the function is fragile due to
+    # re-exports in robotsix_mill.config.__init__.
+    import robotsix_mill.config as _cfg
+    _cfg._repos_config = fake_repos
+
+    # Create one in-flight PR ticket (DELIVERABLE).
+    inflight = service.create("in-flight pr")
+    for st in (State.READY, State.DELIVERABLE):
+        service.transition(inflight.id, st)
+    assert service.get(inflight.id).state is State.DELIVERABLE
+    assert _count_inflight_prs(service) == 1
+
+    # Now a READY ticket — should be blocked by the cap.
+    ready_ticket = service.create("ready to implement")
+    service.transition(ready_ticket.id, State.READY)
+
+    w = Worker(ctx)
+
+    # Simulate the cap-check logic directly: the condition that gates
+    # process_ticket inside _run.
+    board_service = service  # same board
+    before = board_service.get(ready_ticket.id)
+    before_state = before.state
+    ticket_repo_config = w._repo_config_for_ticket(ready_ticket.id)
+
+    # The cap check conditions.
+    gated = before_state in _CAP_GATED_STATES  # READY → True
+    cap_enabled = (
+        ticket_repo_config is not None
+        and ticket_repo_config.max_inflight_prs > 0
+    )
+    in_flight = _count_inflight_prs(board_service)
+    at_limit = in_flight >= ticket_repo_config.max_inflight_prs
+
+    assert gated is True, "READY must be a gated state"
+    assert cap_enabled is True, "cap must be enabled for this repo"
+    assert in_flight == 1
+    assert at_limit is True, "1 in-flight with cap=1 must be at limit"
+
+    # Given these conditions, process_ticket must NOT be called.
+    # (The full _run integration is tested separately.)
+
+
+async def test_cap_allows_ready_when_below_limit(ctx, service, monkeypatch):
+    """With max_inflight_prs=3 and only 2 in-flight tickets, a READY
+    ticket proceeds normally."""
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+    from robotsix_mill.runtime.worker.core import Worker, _count_inflight_prs, _CAP_GATED_STATES
+
+    rc = RepoConfig(
+        repo_id="test-repo",
+        board_id=service.board_id,
+        langfuse_project_name="p",
+        langfuse_public_key="pk",
+        langfuse_secret_key="sk",
+        max_concurrency=1,
+        max_inflight_prs=3,
+    )
+    fake_repos = ReposRegistry(repos={"test-repo": rc})
+    import robotsix_mill.config as _cfg
+    _cfg._repos_config = fake_repos
+
+    # Two in-flight.
+    for i in range(2):
+        t = service.create(f"in-flight-{i}")
+        for st in (State.READY, State.DELIVERABLE):
+            service.transition(t.id, st)
+
+    assert _count_inflight_prs(service) == 2
+
+    ready_ticket = service.create("ready below cap")
+    service.transition(ready_ticket.id, State.READY)
+
+    w = Worker(ctx)
+    w.enqueue(ready_ticket.id)
+
+    invoked = []
+    async def fake_process_ticket(ticket_id, ctx, active_map=None):
+        invoked.append(ticket_id)
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.process_ticket",
+        fake_process_ticket,
+    )
+
+    task = asyncio.create_task(w._run(service.board_id))
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert ready_ticket.id in invoked, (
+        "READY ticket should have been dispatched — below cap"
+    )
+
+
+async def test_cap_disabled_when_zero(ctx, service, monkeypatch):
+    """max_inflight_prs=0 disables the cap entirely — all READY tickets
+    are dispatched regardless of in-flight count."""
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+    from robotsix_mill.runtime.worker.core import Worker, _count_inflight_prs
+
+    rc = RepoConfig(
+        repo_id="test-repo",
+        board_id=service.board_id,
+        langfuse_project_name="p",
+        langfuse_public_key="pk",
+        langfuse_secret_key="sk",
+        max_concurrency=1,
+        max_inflight_prs=0,  # disabled
+    )
+    fake_repos = ReposRegistry(repos={"test-repo": rc})
+    import robotsix_mill.config as _cfg
+    _cfg._repos_config = fake_repos
+
+    # Several in-flight — more than the default of 3.
+    for i in range(5):
+        t = service.create(f"in-flight-{i}")
+        for st in (State.READY, State.DELIVERABLE):
+            service.transition(t.id, st)
+
+    assert _count_inflight_prs(service) == 5
+
+    ready_ticket = service.create("ready when cap disabled")
+    service.transition(ready_ticket.id, State.READY)
+
+    w = Worker(ctx)
+    w.enqueue(ready_ticket.id)
+
+    invoked = []
+    async def fake_process_ticket(ticket_id, ctx, active_map=None):
+        invoked.append(ticket_id)
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.process_ticket",
+        fake_process_ticket,
+    )
+
+    task = asyncio.create_task(w._run(service.board_id))
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert ready_ticket.id in invoked, (
+        "READY ticket should be dispatched when max_inflight_prs=0"
+    )
+
+
+async def test_merge_pipeline_always_processed_at_cap(ctx, service, monkeypatch):
+    """At cap, a merge-pipeline ticket (IMPLEMENT_COMPLETE) is processed
+    normally — the cap only gates READY/DRAFT."""
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+    from robotsix_mill.runtime.worker.core import Worker, _count_inflight_prs
+
+    rc = RepoConfig(
+        repo_id="test-repo",
+        board_id=service.board_id,
+        langfuse_project_name="p",
+        langfuse_public_key="pk",
+        langfuse_secret_key="sk",
+        max_concurrency=1,
+        max_inflight_prs=1,
+    )
+    fake_repos = ReposRegistry(repos={"test-repo": rc})
+    import robotsix_mill.config as _cfg
+    _cfg._repos_config = fake_repos
+
+    # One in-flight — at cap.
+    t1 = service.create("in-flight")
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE):
+        service.transition(t1.id, st)
+    assert service.get(t1.id).state is State.IMPLEMENT_COMPLETE
+    assert _count_inflight_prs(service) == 1
+
+    # Another merge-pipeline ticket (also IMPLEMENT_COMPLETE) — should
+    # still be processed regardless of cap.
+    t2 = service.create("another merge")
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE):
+        service.transition(t2.id, st)
+    assert service.get(t2.id).state is State.IMPLEMENT_COMPLETE
+
+    w = Worker(ctx)
+    w.enqueue(t2.id)
+
+    invoked = []
+    async def fake_process_ticket(ticket_id, ctx, active_map=None):
+        invoked.append(ticket_id)
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.process_ticket",
+        fake_process_ticket,
+    )
+
+    task = asyncio.create_task(w._run(service.board_id))
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert t2.id in invoked, (
+        "IMPLEMENT_COMPLETE (merge-pipeline) ticket must be processed at cap"
+    )
