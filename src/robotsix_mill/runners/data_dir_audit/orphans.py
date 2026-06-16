@@ -417,7 +417,7 @@ def _has_active_child(settings: Settings, board_id: str, ticket_id: str) -> bool
             select(Ticket)
             .where(
                 Ticket.parent_id == ticket_id,
-                Ticket.state.notin_(list(_TERMINAL_STATES)),
+                Ticket.state.notin_(list(_TERMINAL_STATES)),  # type: ignore[attr-defined]
             )
             .limit(1)
         )
@@ -459,8 +459,8 @@ def _purge_board_archived_rows(
     with db.session(settings, board_id) as s:
         stmt = (
             select(Ticket)
-            .where(Ticket.state.in_(_TERMINAL_STATES))
-            .order_by(Ticket.created_at)
+            .where(Ticket.state.in_(_TERMINAL_STATES))  # type: ignore[attr-defined]
+            .order_by(Ticket.created_at)  # type: ignore[arg-type]
         )
         candidates = list(s.exec(stmt).all())
 
@@ -488,7 +488,7 @@ def _purge_board_archived_rows(
     # 2. Reclaim disk space freed by the deletes.
     if deleted:
         with db.session(settings, board_id) as s:
-            s.exec(text("VACUUM"))
+            s.execute(text("VACUUM"))
             s.commit()
         log.info(
             "data_dir_audit: board=%r — VACUUM complete "
