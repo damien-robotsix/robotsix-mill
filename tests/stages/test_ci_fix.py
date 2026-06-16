@@ -162,8 +162,8 @@ def test_ci_fix_memory_read_is_tail_truncated(tmp_path, monkeypatch):
         fake_agent,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
-        lambda *a, **k: None,
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
     )
 
     t = _fixing_ci(ctx)
@@ -214,8 +214,8 @@ def test_ci_fix_memory_read_passthrough_when_small(tmp_path, monkeypatch):
         fake_agent,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
-        lambda *a, **k: None,
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
     )
 
     t = _fixing_ci(ctx)
@@ -320,14 +320,9 @@ def test_fix_success_with_changes_resets_no_change_counter(tmp_path, monkeypatch
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
         lambda **k: CiFixResult(status="DONE", summary="ok"),
     )
-    push_seen = []
-
-    def fake_push(repo, branch, remote_url, token):
-        push_seen.append(branch)
-
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
-        fake_push,
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
     )
 
     t = _fixing_ci(ctx)
@@ -466,8 +461,8 @@ def test_churn_loop_bounded_by_max_cycles(tmp_path, monkeypatch):
         fake_agent,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
-        lambda *a, **k: None,
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
     )
     # Simulate a fresh churn commit every cycle: local != remote, so both
     # the attempt counter and no-change counter reset each cycle.
@@ -526,8 +521,8 @@ def test_cycle_counter_resets_on_ci_green(tmp_path, monkeypatch):
         lambda **k: CiFixResult(status="DONE", summary="ok"),
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
-        lambda *a, **k: None,
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.git_ops.head_sha",
@@ -587,8 +582,8 @@ def test_max_cycles_zero_disables_ceiling(tmp_path, monkeypatch):
         fake_agent,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
-        lambda *a, **k: None,
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.git_ops.head_sha",
@@ -1112,10 +1107,10 @@ def test_ci_fix_stage_fetches_job_logs_on_failure(tmp_path, monkeypatch):
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
         lambda **k: CiFixResult(status="DONE", summary="ok"),
     )
-    # push succeeds.
+    # push succeeds via post_push_check.
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
-        lambda *a, **k: None,
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
     )
 
     t = _fixing_ci(ctx)
@@ -2093,8 +2088,8 @@ def test_current_branch_proceeds_to_agent(tmp_path, monkeypatch):
         fake_agent,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
-        lambda *a, **k: None,
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
     )
     # Simulate real changes so no-change counter resets.
     monkeypatch.setattr(
@@ -2175,8 +2170,8 @@ def test_rebase_skipped_when_fingerprint_unchanged(tmp_path, monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
-        lambda repo, branch, remote_url, token: None,
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
     )
     agent_calls = []
     monkeypatch.setattr(
