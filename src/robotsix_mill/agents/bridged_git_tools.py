@@ -20,6 +20,7 @@ from typing import Any
 
 from ..vcs import git_ops
 
+
 def build_bridged_git_tools(  # noqa: C901 — four inner closures, each ~20 lines
     *,
     repo_dir: Path,
