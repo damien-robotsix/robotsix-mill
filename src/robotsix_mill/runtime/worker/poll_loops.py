@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
+import random
 import re
 import time
 from datetime import datetime, timezone
@@ -41,9 +43,14 @@ class PollLoopsMixin(_WorkerBase):
 
         Queries ``RunRegistry.most_recent(kind, repo_id)`` to decide:
         - No registry → full ``interval`` (preserves current behaviour).
-        - Never run (``None``) → 1.0 s.
-        - Last run overdue (elapsed >= interval) → 1.0 s.
-        - Otherwise → ``interval - elapsed`` (remaining time).
+        - Never run (``None``) → 1.0 s + jitter.
+        - Last run overdue (elapsed >= interval) → 1.0 s + jitter.
+        - Otherwise → ``interval - elapsed`` + jitter.
+
+        A deterministic per-kind jitter is added to stagger periodic agents
+        so they don't all fire simultaneously after a process restart.
+        The jitter is derived from ``hashlib.md5(kind)`` modulo a cap so
+        every agent kind gets a stable, different offset.
 
         *repo_id* scopes the lookup to one repo's own history. Per-repo loops
         (the periodic-workflow + bespoke supervisors) MUST pass it: without it
@@ -60,20 +67,34 @@ class PollLoopsMixin(_WorkerBase):
         """
         reg = registry if registry is not None else self.run_registry
         if reg is None:
-            return float(interval)
-        entry = reg.most_recent(kind, repo_id=repo_id or None)
-        if entry is None:
-            return 1.0
-        try:
-            from datetime import datetime, timezone
+            base = float(interval)
+        else:
+            entry = reg.most_recent(kind, repo_id=repo_id or None)
+            if entry is None:
+                base = 1.0
+            else:
+                try:
+                    last_ts = datetime.fromisoformat(entry["started_at"])
+                    elapsed = (datetime.now(timezone.utc) - last_ts).total_seconds()
+                except Exception:
+                    base = 1.0
+                else:
+                    if elapsed >= interval:
+                        base = 1.0
+                    else:
+                        base = interval - elapsed
 
-            last_ts = datetime.fromisoformat(entry["started_at"])
-            elapsed = (datetime.now(timezone.utc) - last_ts).total_seconds()
-        except Exception:
-            return 1.0
-        if elapsed >= interval:
-            return 1.0
-        return interval - elapsed
+        # Deterministic per-kind stagger so periodic agents don't all fire
+        # simultaneously after a restart.  Cap at min(interval//12, 1h) so the
+        # offset is meaningful (spreads agents across minutes) but never exceeds
+        # an hour.  Plus up to 60 s of random jitter so two agents that happen
+        # to hash-close don't fire in lockstep.
+        kind_hash = int(
+            hashlib.md5(kind.encode(), usedforsecurity=False).hexdigest(), 16
+        )
+        stagger_cap = max(60, min(interval // 12, 3600))  # 1 min .. 1 hour
+        stagger = (kind_hash % stagger_cap) + random.uniform(0, 60)  # noqa: S311
+        return base + stagger
 
     _PERIODIC_POLL_TICK_SECONDS = 60
 

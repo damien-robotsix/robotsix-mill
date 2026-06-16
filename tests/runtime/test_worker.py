@@ -691,7 +691,8 @@ async def test_reconcile_sweep_re_enqueues_parked_human_mr_approval(
 def test_initial_delay_fires_soon_when_overdue(ctx, tmp_path):
     """The periodic cadence brain (_initial_delay, used by the supervisor's
     per-workflow loops): a RunRegistry entry older than the interval → fire
-    almost immediately (~1s), not after a full interval."""
+    almost immediately (~1s base + per-kind stagger), not after a full
+    interval."""
     import json
     from datetime import datetime, timedelta, timezone
 
@@ -716,12 +717,16 @@ def test_initial_delay_fires_soon_when_overdue(ctx, tmp_path):
         )
     )
     w = Worker(ctx, run_registry=RunRegistry(db_path))
-    assert w._initial_delay("audit", 86400) == 1.0
+    delay = w._initial_delay("audit", 86400)
+    # Base 1.0 + deterministic stagger (hash("audit") % 3600 ≈ 289)
+    # + random jitter 0..60.  Assert a generous range.
+    assert 1.0 <= delay <= 420
 
 
 def test_initial_delay_waits_when_recent(ctx, tmp_path):
     """A recent RunRegistry entry → _initial_delay returns the remaining
-    interval (close to the full interval), so the loop does NOT re-fire now."""
+    interval (close to the full interval) plus per-kind stagger, so the
+    loop does NOT re-fire now."""
     import json
     from datetime import datetime, timezone
 
@@ -747,7 +752,8 @@ def test_initial_delay_waits_when_recent(ctx, tmp_path):
     )
     w = Worker(ctx, run_registry=RunRegistry(db_path))
     delay = w._initial_delay("audit", 86400)
-    assert 86000 < delay <= 86400  # nearly the whole interval remains
+    # ~86400 remaining + deterministic stagger + random jitter.
+    assert 86000 < delay <= 86800
 
 
 def test_initial_delay_is_per_repo_scoped(ctx, tmp_path):
@@ -783,12 +789,15 @@ def test_initial_delay_is_per_repo_scoped(ctx, tmp_path):
         )
     )
     w = Worker(ctx, run_registry=RunRegistry(db_path))
-    # mill ran audit just now, but llmio never has → llmio fires soon.
-    assert w._initial_delay("audit", 86400, repo_id="robotsix-llmio") == 1.0
-    # mill itself still sees its own recent run and waits.
-    assert w._initial_delay("audit", 86400, repo_id="robotsix-mill") > 86000
-    # legacy any-repo call (no repo_id) keeps the old behaviour.
-    assert w._initial_delay("audit", 86400) > 86000
+    # mill ran audit just now, but llmio never has → llmio fires soon (base 1.0 + stagger).
+    delay_llmio = w._initial_delay("audit", 86400, repo_id="robotsix-llmio")
+    assert 1.0 <= delay_llmio <= 420
+    # mill itself still sees its own recent run and waits (~interval + stagger).
+    delay_mill = w._initial_delay("audit", 86400, repo_id="robotsix-mill")
+    assert delay_mill > 86000
+    # legacy any-repo call (no repo_id) keeps the old behaviour (~interval + stagger).
+    delay_any = w._initial_delay("audit", 86400)
+    assert delay_any > 86000
 
 
 # --- transient-error retry at stage-runner level -----------------------

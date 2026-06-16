@@ -29,6 +29,14 @@ Run as stages on each ticket in the order: refine → approve → implement → 
 
 Opt-in agents that run independently of the ticket pipeline.
 
+> **Startup stagger:** After a process restart, periodic agents do **not**
+> all fire simultaneously — each agent kind receives a deterministic
+> per-kind offset (derived from a hash of its name) plus up to 60 s of
+> random jitter. This prevents a thundering-herd of concurrent agent runs
+> that could overwhelm model rate limits or the host. The maximum stagger
+> is capped at `min(interval / 12, 1 hour)` with a 1-minute floor, so
+> agents with short intervals still space out meaningfully.
+
 | Agent | Definition | Module | Model var | Trigger | Role |
 |---|---|---|---|---|---|
 | Audit | `agent_definitions/audit.yaml` | `agents/auditing.py` | `MILL_AUDIT_MODEL` | CLI (`audit`), API (`POST /audit`), board button, or periodic (`MILL_AUDIT_PERIODIC`) | Meta-audit: identifies gaps in repo quality/security tooling coverage; emits improvement drafts |
