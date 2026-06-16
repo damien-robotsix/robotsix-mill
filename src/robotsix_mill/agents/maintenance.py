@@ -766,7 +766,6 @@ def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResul
             result = run_agent(
                 agent,
                 lambda h: h.run_sync(user_prompt, usage_limits=limits),
-                settings=ctx.settings,
                 what="maintenance",
             )
         finally:

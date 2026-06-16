@@ -241,7 +241,6 @@ def run_doc_agent(
         result = run_agent(
             agent,
             lambda h: h.run_sync(run_user_prompt, **run_kwargs),
-            settings=settings,
             what="document",
         )
         output: DocResult = result.output

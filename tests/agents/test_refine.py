@@ -4126,7 +4126,7 @@ def test_continuation_guard_fires_on_tool_calls(monkeypatch, settings):
     mock_agent = _MockAgent()
 
     # run_agent: pass-through so the run executes directly on the handle
-    def pass_through_retry(agent, make_run, *, settings, what="model call", sleep=None):
+    def pass_through_retry(agent, make_run, *, what="model call", sleep=None):
         return make_run(agent)
 
     monkeypatch.setattr(retry_module, "run_agent", pass_through_retry)
@@ -4183,7 +4183,7 @@ def test_continuation_guard_not_triggered_on_stop(monkeypatch, settings):
     monkeypatch.setattr(
         retry_module,
         "run_agent",
-        lambda agent, make_run, *, settings, what="model call", sleep=None: make_run(
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(
             agent
         ),
     )
@@ -4226,7 +4226,7 @@ def test_continuation_guard_skipped_when_response_missing(monkeypatch, settings)
     monkeypatch.setattr(
         retry_module,
         "run_agent",
-        lambda agent, make_run, *, settings, what="model call", sleep=None: make_run(
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(
             agent
         ),
     )
@@ -4271,7 +4271,7 @@ def test_continuation_guard_skipped_when_already_valid_output(monkeypatch, setti
     monkeypatch.setattr(
         retry_module,
         "run_agent",
-        lambda agent, make_run, *, settings, what="model call", sleep=None: make_run(
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(
             agent
         ),
     )
@@ -4316,7 +4316,7 @@ def test_continuation_guard_skipped_when_low_remaining_quota(monkeypatch, settin
     monkeypatch.setattr(
         retry_module,
         "run_agent",
-        lambda agent, make_run, *, settings, what="model call", sleep=None: make_run(
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(
             agent
         ),
     )
@@ -4559,7 +4559,7 @@ def test_run_refine_agent_no_match_proceeds_to_llm(monkeypatch, settings):
     monkeypatch.setattr(
         retry_module,
         "run_agent",
-        lambda agent, make_run, *, settings, what="model call", sleep=None: make_run(
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(
             agent
         ),
     )
@@ -4603,7 +4603,7 @@ def test_run_refine_agent_passes_request_limit(monkeypatch, settings):
     monkeypatch.setattr(
         retry_module,
         "run_agent",
-        lambda agent, make_run, *, settings, what="model call", sleep=None: make_run(
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(
             agent
         ),
     )

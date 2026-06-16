@@ -366,7 +366,6 @@ def run_periodic_agent(
         result = run_agent(
             agent,
             lambda h: h.run_sync(prompt, **_run_kwargs),
-            settings=settings,
             what=definition_name,
         )
     finally:

@@ -114,7 +114,6 @@ def run_module_curator_agent(
         result = run_agent(
             agent,
             lambda h: h.run_sync(prompt),
-            settings=settings,
             what="module_curator",
         )
     finally:

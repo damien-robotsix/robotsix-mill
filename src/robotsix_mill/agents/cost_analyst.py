@@ -103,7 +103,6 @@ def run_cost_analyst_agent(
         result = run_agent(
             agent,
             lambda h: h.run_sync(prompt),
-            settings=settings,
             what="cost-analyst",
         )
     finally:

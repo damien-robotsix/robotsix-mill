@@ -75,7 +75,7 @@ def send_notification(
     try:
         # bounded retry on transient (429/5xx/timeout); still fully
         # best-effort — never raises out of here.
-        call_with_retry(_post, settings=settings, what="ntfy")
+        call_with_retry(_post, what="ntfy")
         log.debug("ntfy notification sent for %s -> %s", ticket.id, dst.value)
     except Exception:
         log.warning(

@@ -246,7 +246,6 @@ def load_and_run_agent(
         result = run_agent(
             agent,
             lambda h: h.run_sync(prompt, **(run_kwargs or {})),
-            settings=settings,
             what=what,
         )
     finally:

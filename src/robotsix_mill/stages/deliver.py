@@ -135,7 +135,6 @@ def generate_pr_description(
         result = run_agent(
             agent,
             lambda h: h.run_sync(prompt),
-            settings=settings,
             what="PR summary generation",
         )
         body = result.data.strip()

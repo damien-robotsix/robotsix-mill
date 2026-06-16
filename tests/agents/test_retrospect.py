@@ -1285,7 +1285,7 @@ def test_run_retrospect_agent_reprompts_once_on_unstructured_output(
 
     calls: list[str] = []
 
-    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+    def fake_run_agent(agent, make_run, *, what, **kw):
         calls.append(what)
         if len(calls) == 1:
             return _StubAgentRunResult("x" * 12_000)
@@ -1376,7 +1376,7 @@ def test_guard_does_not_fire_for_workflow_only_review(tmp_path, monkeypatch):
 
     calls: list[str] = []
 
-    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+    def fake_run_agent(agent, make_run, *, what, **kw):
         calls.append(what)
         return _StubAgentRunResult(
             RetrospectResult(findings="ran", conclusion="closed")
@@ -1406,7 +1406,7 @@ def test_guard_does_not_fire_when_langfuse_present(tmp_path, monkeypatch):
 
     calls: list[str] = []
 
-    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+    def fake_run_agent(agent, make_run, *, what, **kw):
         calls.append(what)
         return _StubAgentRunResult(
             RetrospectResult(findings="ran", conclusion="closed")

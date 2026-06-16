@@ -181,7 +181,6 @@ def run_dedup_check(
                 ),
                 usage_limits=limits,
             ),
-            settings=settings,
             what="dedup check",
         )
         output = result.output

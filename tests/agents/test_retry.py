@@ -171,7 +171,6 @@ def test_timeout_http_client_uses_configured_timeout(tmp_path):
 
 
 def test_transient_then_success(tmp_path):
-    s = _settings(tmp_path)
     slept, calls = [], {"n": 0}
 
     def fn():
@@ -180,7 +179,7 @@ def test_transient_then_success(tmp_path):
             raise ModelHTTPError(429, "hy3")
         return "ok"
 
-    out = call_with_retry(fn, settings=s, sleep=slept.append)
+    out = call_with_retry(fn, sleep=slept.append)
     assert out == "ok" and calls["n"] == 3
     assert len(slept) == 2  # two backoffs before the 3rd, successful call
 
@@ -198,7 +197,6 @@ def test_transient_then_success(tmp_path):
     ],
 )
 def test_non_transient_not_retried(tmp_path, exc):
-    s = _settings(tmp_path)
     calls = {"n": 0}
 
     def fn():
@@ -206,7 +204,7 @@ def test_non_transient_not_retried(tmp_path, exc):
         raise exc
 
     with pytest.raises(type(exc)):
-        call_with_retry(fn, settings=s, sleep=lambda _: None)
+        call_with_retry(fn, sleep=lambda _: None)
     assert calls["n"] == 1  # raised immediately, no retry
 
 
@@ -246,7 +244,6 @@ def test_is_rate_limited_walks_chain():
 def test_rate_limit_raises_immediately_without_fallback(tmp_path):
     """UsageLimitExceeded without a fallback_fn must re-raise
     immediately — no backoff, no retries."""
-    s = _settings(tmp_path)
     slept, calls = [], {"n": 0}
 
     def fn():
@@ -254,7 +251,7 @@ def test_rate_limit_raises_immediately_without_fallback(tmp_path):
         raise UsageLimitExceeded("cap")
 
     with pytest.raises(UsageLimitExceeded):
-        call_with_retry(fn, settings=s, sleep=slept.append)
+        call_with_retry(fn, sleep=slept.append)
     assert calls["n"] == 1  # exactly one call, no retries
     assert len(slept) == 0  # no backoff delay
 
@@ -262,7 +259,6 @@ def test_rate_limit_raises_immediately_without_fallback(tmp_path):
 def test_rate_limit_exhausts_then_raises(tmp_path):
     """Persistent UsageLimitExceeded with no fallback — must raise
     immediately without retrying (UsageLimitExceeded is never retried)."""
-    s = _settings(tmp_path, transient_retries="2")
     slept, calls = [], {"n": 0}
 
     def fn():
@@ -270,7 +266,7 @@ def test_rate_limit_exhausts_then_raises(tmp_path):
         raise UsageLimitExceeded("cap")
 
     with pytest.raises(UsageLimitExceeded):
-        call_with_retry(fn, settings=s, sleep=slept.append)
+        call_with_retry(fn, sleep=slept.append)
     assert calls["n"] == 1  # exactly one call, no retries
     assert len(slept) == 0  # no backoff
 
@@ -278,11 +274,6 @@ def test_rate_limit_exhausts_then_raises(tmp_path):
 def test_rate_limit_fallback_activates(tmp_path):
     """UsageLimitExceeded on first attempt — fallback_fn is invoked
     immediately (not after rate_limit_fallback_retries)."""
-    s = _settings(
-        tmp_path,
-        transient_retries="4",
-        rate_limit_fallback_retries="3",
-    )
     primary_calls = {"n": 0}
     fallback_calls = {"n": 0}
 
@@ -296,7 +287,6 @@ def test_rate_limit_fallback_activates(tmp_path):
 
     out = call_with_retry(
         primary,
-        settings=s,
         sleep=lambda _: None,
         fallback_fn=fallback,
     )
@@ -308,11 +298,6 @@ def test_rate_limit_fallback_activates(tmp_path):
 def test_rate_limit_fallback_exhausts_then_raises(tmp_path):
     """Fallback also fails with UsageLimitExceeded — re-raises
     immediately (no retries)."""
-    s = _settings(
-        tmp_path,
-        transient_retries="4",
-        rate_limit_fallback_retries="3",
-    )
     primary_calls = {"n": 0}
     fallback_calls = {"n": 0}
 
@@ -327,7 +312,6 @@ def test_rate_limit_fallback_exhausts_then_raises(tmp_path):
     with pytest.raises(UsageLimitExceeded):
         call_with_retry(
             primary,
-            settings=s,
             sleep=lambda _: None,
             fallback_fn=fallback,
         )
@@ -338,11 +322,6 @@ def test_rate_limit_fallback_exhausts_then_raises(tmp_path):
 def test_rate_limit_fallback_not_called_for_transient(tmp_path):
     """429 (transient) errors must NOT activate fallback — only
     UsageLimitExceeded does."""
-    s = _settings(
-        tmp_path,
-        transient_retries="2",
-        rate_limit_fallback_retries="1",
-    )
     calls = {"n": 0}
     fallback_calls = {"n": 0}
 
@@ -355,7 +334,7 @@ def test_rate_limit_fallback_not_called_for_transient(tmp_path):
         return "fallback"
 
     with pytest.raises(ModelHTTPError):
-        call_with_retry(fn, settings=s, sleep=lambda _: None, fallback_fn=fallback)
+        call_with_retry(fn, sleep=lambda _: None, fallback_fn=fallback)
     # Baked retry count (5 = 1 try + 4 retries); the key assertion is that a
     # transient NEVER activates the rate-limit fallback.
     assert calls["n"] == 5

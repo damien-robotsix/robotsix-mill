@@ -114,7 +114,6 @@ def run_board_cleanup_agent(
         result = run_agent(
             agent,
             lambda h: h.run_sync(prompt),
-            settings=settings,
             what="board_cleanup",
         )
     finally:

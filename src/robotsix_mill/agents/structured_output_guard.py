@@ -111,7 +111,6 @@ def reprompt_if_unstructured(
                 message_history=original_messages,
                 **extra_kwargs,
             ),
-            settings=settings,
             what=what,
         )
     except Exception as reprompt_exc:

@@ -211,7 +211,6 @@ def _review_attempt(
     result = run_agent(
         agent,
         lambda h: h.run_sync(run_user_prompt, **run_kwargs),
-        settings=settings,
         what="review",
     )
     schema_json = json.dumps(ReviewVerdict.model_json_schema(), indent=2)

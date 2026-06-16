@@ -275,7 +275,6 @@ async def run_explore(
         try:
             result = await acall_with_retry(
                 lambda: agent.run(prompt, usage_limits=limits),
-                settings=settings,
                 what="explore",
                 fallback_fn=fallback_fn,
             )
