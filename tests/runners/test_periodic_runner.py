@@ -532,12 +532,14 @@ def test_periodic_pass_configs_registry_has_all_eleven_entries():
     assert set(PERIODIC_PASS_CONFIGS.keys()) == expected
 
 
-def test_periodic_pass_configs_requires_repo_only_module_curator():
-    """Only the module_curator entry sets requires_repo=True; all other
-    registry entries keep the default False."""
+def test_periodic_pass_configs_requires_repo_only_module_curator_and_test_gap():
+    """Only module_curator and test_gap set requires_repo=True (both declare
+    validate_artifact; a missing clone would trigger an unavailable-tool error).
+    All other registry entries keep the default False."""
     assert PERIODIC_PASS_CONFIGS["module_curator"].requires_repo is True
+    assert PERIODIC_PASS_CONFIGS["test_gap"].requires_repo is True
     for key, cfg in PERIODIC_PASS_CONFIGS.items():
-        if key == "module_curator":
+        if key in ("module_curator", "test_gap"):
             continue
         assert cfg.requires_repo is False, f"{key}.requires_repo should be False"
 

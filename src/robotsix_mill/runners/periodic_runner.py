@@ -345,7 +345,7 @@ def run_periodic_pass(
     # data — guaranteed wasted spend. Skip the LLM invocation entirely and
     # return a no-op result. Memory is loaded inside run_agent_pass (skipped
     # here), so no on-disk memory write happens on this path.
-    if config.requires_repo and repo_dir is None:
+    if config.requires_repo and repo_dir is None and forge_remote_url:
         log.warning(
             "%s pass skipped: repo clone unavailable (repo_dir is None); "
             "not invoking LLM",
@@ -518,6 +518,7 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         workspace_subdir="test_gap_workspace",
         result_dataclass=TestGapPassResult,
         clone_token_fn=None,  # uses forge_token (raises on missing)
+        requires_repo=True,
     ),
 }
 
