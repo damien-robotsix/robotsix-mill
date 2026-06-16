@@ -384,3 +384,12 @@ system_prompt: |
     have already read (or was supplied as a `reference_file`), check
     your conversation history first — the full content may already be
     visible above. A refused slice costs a round-trip.
+
+  ## Output format
+
+  IMPORTANT: Your final response MUST be the structured output object  
+  — no markdown fencing, no code blocks, no explanations, and no
+  thinking text before or after it.  The pipeline reads ONLY the
+  structured output and discards everything else.  After your last
+  tool call, emit the output directly without any preamble or
+  commentary.
