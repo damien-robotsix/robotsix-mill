@@ -773,7 +773,6 @@ def test_extra_packages_missing_config_noop(tmp_path, monkeypatch):
 
 def test_has_uv_sources_present(tmp_path):
     """pyproject.toml with a non-empty [tool.uv.sources] table → True."""
-    import tomllib as _  # ensure tomllib is importable (3.11+)
 
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -857,9 +856,7 @@ def test_maybe_install_prefix_no_uv_sources_unchanged(tmp_path):
     """Without [tool.uv.sources] → emits pip install (unchanged behavior)."""
     repo = tmp_path / "repo"
     repo.mkdir()
-    (repo / "pyproject.toml").write_text(
-        "[project]\nname = 'x'\n", encoding="utf-8"
-    )
+    (repo / "pyproject.toml").write_text("[project]\nname = 'x'\n", encoding="utf-8")
 
     s = _settings(
         tmp_path,

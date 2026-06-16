@@ -174,7 +174,10 @@ class DocumentStage(Stage):
                             "uv-only git deps may block tools)"
                         )
             except Exception:
-                pass
+                log.debug(
+                    "could not parse pyproject.toml for uv sources hint",
+                    exc_info=True,
+                )
             log.warning(
                 "%s: doc agent failed — passing through%s",
                 ticket.id,

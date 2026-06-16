@@ -174,8 +174,7 @@ def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> s
         return (
             f"(command -v uv >/dev/null 2>&1 && ({uv}) || "
             f"(echo 'WARNING: uv not found, falling back to pip' >&2; "
-            f"({pip} '.[dev]' || {pip} .))) && "
-            + command
+            f"({pip} '.[dev]' || {pip} .))) && " + command
         )
 
     # No [tool.uv.sources] — pip path unchanged.

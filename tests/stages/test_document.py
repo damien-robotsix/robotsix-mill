@@ -333,7 +333,6 @@ def test_agent_exception_uv_sources_hint(ctx_factory, monkeypatch):
     )
 
     notifications = []
-    orig_notify = DocumentStage.__module__  # just to reference
 
     def _spy_notification(ticket, dst, note, settings):
         notifications.append((dst, note))
