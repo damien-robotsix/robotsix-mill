@@ -13,7 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-ToolCategory = Literal["fs", "shell", "exploration", "testing", "web", "reporting"]
+ToolCategory = Literal["fs", "shell", "exploration", "testing", "web", "reporting", "git"]
 
 _CATEGORY_ORDER: dict[ToolCategory, int] = {
     "fs": 0,
@@ -22,6 +22,7 @@ _CATEGORY_ORDER: dict[ToolCategory, int] = {
     "testing": 3,
     "web": 4,
     "reporting": 5,
+    "git": 6,
 }
 
 

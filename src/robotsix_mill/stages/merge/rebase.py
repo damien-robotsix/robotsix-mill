@@ -141,7 +141,11 @@ class RebaseMixin(_MergeStageBase):
         target: str,
         attempt: int,
     ) -> bool | Outcome:
-        """Fetch target branch and invoke the rebase agent.
+        """Invoke the rebase agent with bridged git tools.
+
+        The agent now drives its own fetch + rebase + push via the
+        bridged git tools.  This method only builds the context
+        (remote_url, token) and delegates to the agent.
 
         Returns True on success, False on a (retryable) rebase failure, or
         an ``Outcome`` to return directly (e.g. BLOCKED when the remote PR
@@ -195,22 +199,11 @@ class RebaseMixin(_MergeStageBase):
                         ticket.id,
                     )
 
-                # Refresh origin/<target> so the agent rebases onto
-                # current main, not the stale ref frozen at clone time.
-                # The sandbox has --network none; git fetch MUST run
-                # here, outside the container.
-                #
-                # Use the per-repo remote_url + a freshly-minted
-                # token — the global ``forge_remote_url`` and a
-                # tokenless mint would both point at the wrong repo
-                # (or carry an expired token) for any ticket whose
-                # repo isn't the mill's own.
-                _facade.git_ops.fetch(
-                    Path(repo_dir),
-                    remote_url=remote_url,
-                    token=token,
-                    branch=target,
-                )
+                # The agent now drives fetch + rebase + push via bridged
+                # git tools — pass the per-repo remote_url and token so
+                # the tool closures can execute host-side. The token is
+                # captured in the closure and NEVER exposed to the
+                # sandbox or the agent's prompt.
                 rebase_memory_path = s.memory_file_for(
                     "rebase",
                     (repo_config.board_id if repo_config else "")
@@ -224,6 +217,8 @@ class RebaseMixin(_MergeStageBase):
                     branch=branch,
                     target=target,
                     memory=memory_text,
+                    remote_url=remote_url,
+                    token=token,
                 )
                 ok = result.status == "DONE"
                 if result.updated_memory:
@@ -243,108 +238,106 @@ class RebaseMixin(_MergeStageBase):
         attempt: int,
         max_attempts: int,
     ) -> Outcome:
-        """Handle a successful rebase: SHA guard, force-push, outcome routing."""
+        """Post-check after the agent-driven rebase+push.
+
+        The agent already pushed via ``git_push_with_lease``.  This
+        method runs a deterministic host-side post-check to verify the
+        push actually landed and no foreign commits were clobbered.
+        """
         from robotsix_mill.stages import merge as _facade
 
         s = ctx.settings
-        # Only force-push when the remote doesn't already have this
-        # exact commit. GitHub reports mergeable=False transiently
-        # right after any push (while it recomputes); pushing an
-        # unchanged branch re-triggers CI + another recompute →
-        # endless REBASING↔HUMAN_MR_APPROVAL ping-pong on a healthy PR (and
-        # an ntfy every cycle). The merge stage fetched
-        # origin/<branch> before invoking the agent, so
-        # origin/<branch> is fresh.
-        try:
-            local = _facade.git_ops.head_sha(repo_dir)
-            remote = _facade.git_ops.remote_branch_sha(repo_dir, branch)
-        except Exception:  # noqa: BLE001 — be safe: fall back to push
-            local, remote = None, "force-push"
+        target = target_branch_for(s, ctx.repo_config)
 
-        if local is not None and remote == local:
-            # Nothing to push. The rebase made no change yet GitHub
-            # still flags the PR — either GitHub is still recomputing
-            # (it will clear on a later poll → merge) or the local
-            # base is stale / the conflict is genuinely unresolvable.
-            # This is NOT progress: count it (don't reset) and bound
-            # the loop. Stay REBASING — a same-state no-op the worker
-            # leaves alone (no transition, no ntfy) — until the
-            # attempt budget is spent, then BLOCKED once.
-            if attempt < max_attempts:
-                _write_counter(counter_path, attempt)
-                log.info(
-                    "%s: rebase no-op (remote already current) — "
-                    "GitHub still flags conflict; re-poll %d/%d",
-                    ticket.id,
-                    attempt,
-                    max_attempts,
-                )
-                return Outcome(State.REBASING)  # silent re-poll
-            _write_counter(counter_path, 0)
-            log.warning(
-                "%s: rebase keeps being a no-op but the PR is still "
-                "conflicting after %d attempts",
-                ticket.id,
-                max_attempts,
-            )
-            return Outcome(
-                State.BLOCKED,
-                "rebase is a no-op yet GitHub still reports the PR "
-                "conflicting — the local clone's base is likely stale "
-                "or the conflict needs manual resolution. "
-                "Resume-blocked to retry from human_mr_approval.",
-            )
+        remote_url = _facade._resolve_remote_url(s, ctx.repo_config)
+        token = _facade.github_token(s, repo_config=ctx.repo_config)
 
-        # Remote is behind / missing → genuine push needed.
-        # Push to the *per-repo* remote with a per-repo token — the global
-        # ``s.forge_remote_url`` + tokenless mint point at the mill's own
-        # repo, so for any ticket on another board the rebased commit
-        # lands on the wrong remote, the real PR branch never changes, and
-        # the loop blocks ("force-pushed Nx but still conflicting"). Mirror
-        # the fetch above, which already resolves these per-repo.
-        #
-        # Use push_with_lease so a concurrent human push to the PR branch
-        # is never silently overwritten.
-        try:
-            _facade.git_ops.push_with_lease(
-                Path(repo_dir),
-                branch=branch,
-                remote_url=_facade._resolve_remote_url(s, ctx.repo_config),
-                token=_facade.github_token(s, repo_config=ctx.repo_config),
-            )
-        except Exception as e:  # noqa: BLE001
-            log.exception("%s: force-push after rebase failed: %s", ticket.id, e)
-            _write_counter(counter_path, attempt)
-            return Outcome(
-                State.BLOCKED,
-                f"rebase succeeded but force-push failed: {e}",
-            )
-        # Pushed — but a push is NOT proof the conflict is resolved
-        # (git rebase rewrites SHAs every run, so "pushed" happens
-        # even when the rebase keeps failing to truly resolve and
-        # GitHub still reports the PR conflicting). Only an actually
-        # mergeable PR clears the counter (in the HUMAN_MR_APPROVAL path).
-        # So persist the attempt and bound the loop here too.
-        log.info("%s: rebase succeeded, branch force-pushed", ticket.id)
-        if attempt < max_attempts:
-            _write_counter(counter_path, attempt)
-            # Route by context: no PR yet → back to implement; PR exists → re-check gates.
+        check = _facade.git_ops.post_push_check(
+            Path(repo_dir),
+            branch=branch,
+            target=target,
+            remote_url=remote_url,
+            token=token,
+        )
+
+        if check is _facade.git_ops.PostPushResult.PASS:
+            # Push landed, no foreign commits — genuine success.
+            log.info("%s: rebase succeeded, push verified", ticket.id)
             try:
                 pr = get_forge(s, repo_config=ctx.repo_config).pr_status(
                     source_branch=branch
                 )
             except Exception:
                 pr = None
-            next_state = State.READY if pr is None else State.IMPLEMENT_COMPLETE
-            return Outcome(next_state)
-        _write_counter(counter_path, 0)  # reset for a future resume
-        return Outcome(
-            State.BLOCKED,
-            f"rebased and force-pushed {max_attempts}x but GitHub "
-            "still reports the PR conflicting — the local clone's "
-            "base is likely stale or the conflict is unresolvable "
-            "automatically. Resume-blocked to retry from human_mr_approval.",
+
+            if pr is None:
+                # No PR exists — route to READY so the ticket re-enters implement.
+                _write_counter(counter_path, 0)
+                return Outcome(State.READY)
+
+            mergeable = pr.get("mergeable")
+            if mergeable is True and pr.get("mergeable_state") == "clean":
+                # PR is genuinely clean — reset counter.
+                _write_counter(counter_path, 0)
+                return Outcome(State.IMPLEMENT_COMPLETE)
+            if mergeable is None:
+                # GitHub may report mergeable=None transiently after a
+                # push — re-poll rather than block.
+                log.info(
+                    "%s: post-check passed but mergeable=None (transient) — re-polling",
+                    ticket.id,
+                )
+                return Outcome(State.IMPLEMENT_COMPLETE)
+
+            # PR still not mergeable — bound retries.
+            if attempt < max_attempts:
+                _write_counter(counter_path, attempt)
+                return Outcome(State.IMPLEMENT_COMPLETE)
+            _write_counter(counter_path, 0)
+            return Outcome(
+                State.BLOCKED,
+                f"rebased and pushed {max_attempts}x but GitHub "
+                "still reports the PR conflicting — the local clone's "
+                "base is likely stale or the conflict is unresolvable "
+                "automatically. Resume-blocked to retry from human_mr_approval.",
+            )
+
+        if check is _facade.git_ops.PostPushResult.NOT_LANDED:
+            log.warning(
+                "%s: post-check failed — remote HEAD does not match local HEAD; "
+                "push did not land",
+                ticket.id,
+            )
+            _write_counter(counter_path, attempt)
+            return Outcome(
+                State.BLOCKED,
+                "rebase agent reported DONE but the push did not land "
+                "(remote HEAD != local HEAD). The agent may have hit a "
+                "lease rejection it could not recover from. "
+                "Resume-blocked to retry from human_mr_approval.",
+            )
+
+        if check is _facade.git_ops.PostPushResult.FOREIGN_DIVERGENCE:
+            log.warning(
+                "%s: post-check failed — remote branch carries foreign-authored "
+                "commits ahead of target; a human may have pushed",
+                ticket.id,
+            )
+            _write_counter(counter_path, attempt)
+            return Outcome(
+                State.BLOCKED,
+                "rebase agent reported DONE but the remote branch carries "
+                "foreign-authored commits — a human likely pushed to the PR "
+                "branch. Manual reconciliation required. "
+                "Resume-blocked to retry from human_mr_approval.",
+            )
+
+        # UNAVAILABLE — transient fetch failure, re-poll.
+        log.warning(
+            "%s: post-check unavailable (fetch failed) — re-polling",
+            ticket.id,
         )
+        return Outcome(State.IMPLEMENT_COMPLETE)
 
     def _handle_rebase_failure(
         self,

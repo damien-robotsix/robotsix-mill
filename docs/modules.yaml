@@ -338,6 +338,7 @@ modules:
     paths:
       - src/robotsix_mill/agents/__init__.py
       - src/robotsix_mill/agents/base.py
+      - src/robotsix_mill/agents/bridged_git_tools.py
       - src/robotsix_mill/agents/claude_concurrency.py
       - src/robotsix_mill/agents/yaml_loader.py
       - src/robotsix_mill/agents/expert_loader.py

@@ -848,6 +848,15 @@ class CIFixStage(Stage):
                 memory_text = load_memory(
                     ci_fix_memory_path, max_chars=s.max_memory_chars
                 )
+
+                # Pass the per-repo remote_url and token so the agent's
+                # bridged git tools can drive fetch + push host-side.
+                # The token is captured in the closure and NEVER exposed
+                # to the sandbox or the agent's prompt.
+                remote_url = _resolve_remote_url(s, ctx.repo_config)
+                token = github_token(s, repo_config=ctx.repo_config)
+                target = target_branch_for(s, ctx.repo_config)
+
                 result = run_ci_fix_agent(
                     settings=s,
                     repo_dir=repo_dir,
@@ -856,6 +865,9 @@ class CIFixStage(Stage):
                     memory=memory_text,
                     ticket_id=ticket.id,
                     board_id=ctx.repo_config.board_id if ctx.repo_config else "",
+                    target=target,
+                    remote_url=remote_url,
+                    token=token,
                 )
                 if result.updated_memory:
                     persist_memory(ci_fix_memory_path, result.updated_memory)
@@ -1021,7 +1033,9 @@ class CIFixStage(Stage):
         counter_path: Path,
         attempt: int,
     ) -> Outcome:
-        """On agent success: no-change detection, force-push, counter resets."""
+        """On agent success: verifies the agent-driven push landed via
+        deterministic post-check, then handles no-change detection and
+        counter resets."""
         s = ctx.settings
 
         # Detect no-change cycles: the agent reported success but
@@ -1033,6 +1047,10 @@ class CIFixStage(Stage):
             ctx.service.workspace(ticket).artifacts_dir / _CI_NO_CHANGE_COUNTER
         )
         no_change_cycles = _read_counter(no_change_counter_path)
+
+        remote_url = _resolve_remote_url(s, ctx.repo_config)
+        token = github_token(s, repo_config=ctx.repo_config)
+        target = target_branch_for(s, ctx.repo_config)
 
         try:
             local = git_ops.head_sha(repo_dir)
@@ -1061,32 +1079,64 @@ class CIFixStage(Stage):
                 no_change_cycles,
                 max_no_change if max_no_change > 0 else float("inf"),
             )
+            # Even when there are no changes, verify the push landed
+            # (the agent may have pushed an identical commit).
+            # Fall through to post_push_check below.
         else:
             # Agent produced commits — reset the no-change counter.
             _write_counter(no_change_counter_path, 0)
 
-        # Fix applied → force-push only the ticket branch with a lease so
-        # a concurrent human push is never silently overwritten. Use the
-        # per-repo remote + token; the global s.forge_remote_url and a
-        # tokenless mint point at the mill's own repo, so a ci-fix on
-        # another board would push to the wrong remote.
-        try:
-            git_ops.push_with_lease(
-                Path(repo_dir),
-                branch=branch,
-                remote_url=_resolve_remote_url(s, ctx.repo_config),
-                token=github_token(s, repo_config=ctx.repo_config),
+        # Deterministic post-check: verify the agent's push actually
+        # landed and no foreign commits were clobbered.
+        check = git_ops.post_push_check(
+            Path(repo_dir),
+            branch=branch,
+            target=target,
+            remote_url=remote_url,
+            token=token,
+        )
+
+        if check is git_ops.PostPushResult.PASS:
+            # Reset attempt counter on verified success.
+            _write_counter(counter_path, 0)
+            # Genuine forward progress — allow a future staleness to refresh again.
+            _write_counter(counter_path.parent / _CI_REFRESH_COUNTER, 0)
+            log.info("%s: ci fix succeeded, push verified", ticket.id)
+            return Outcome(State.IMPLEMENT_COMPLETE)
+
+        if check is git_ops.PostPushResult.NOT_LANDED:
+            log.warning(
+                "%s: ci-fix post-check failed — remote HEAD != local HEAD; "
+                "push did not land",
+                ticket.id,
             )
-        except Exception as e:  # noqa: BLE001
-            log.exception("%s: force-push after ci-fix failed: %s", ticket.id, e)
             _write_counter(counter_path, attempt)
             return Outcome(
                 State.BLOCKED,
-                f"ci fix succeeded but force-push failed: {e}",
+                "ci fix agent reported DONE but the push did not land "
+                "(remote HEAD != local HEAD). The agent may have hit a "
+                "lease rejection it could not recover from. "
+                "Resume-blocked to retry from human_mr_approval.",
             )
-        # Reset attempt counter on success.
-        _write_counter(counter_path, 0)
-        # Genuine forward progress — allow a future staleness to refresh again.
-        _write_counter(counter_path.parent / _CI_REFRESH_COUNTER, 0)
-        log.info("%s: ci fix succeeded, branch force-pushed", ticket.id)
-        return Outcome(State.IMPLEMENT_COMPLETE)  # re-check CI on next poll
+
+        if check is git_ops.PostPushResult.FOREIGN_DIVERGENCE:
+            log.warning(
+                "%s: ci-fix post-check failed — remote branch carries "
+                "foreign-authored commits; a human may have pushed",
+                ticket.id,
+            )
+            _write_counter(counter_path, attempt)
+            return Outcome(
+                State.BLOCKED,
+                "ci fix agent reported DONE but the remote branch carries "
+                "foreign-authored commits — a human likely pushed to the PR "
+                "branch. Manual reconciliation required. "
+                "Resume-blocked to retry from human_mr_approval.",
+            )
+
+        # UNAVAILABLE — transient fetch failure, re-poll.
+        log.warning(
+            "%s: ci-fix post-check unavailable (fetch failed) — re-polling",
+            ticket.id,
+        )
+        return Outcome(State.IMPLEMENT_COMPLETE)

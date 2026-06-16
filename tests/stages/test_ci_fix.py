@@ -105,14 +105,15 @@ def test_fix_success_push_success_returns_implement_complete(tmp_path, monkeypat
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
         lambda **k: CiFixResult(status="DONE", summary="ok"),
     )
-    push_seen = {}
+    post_check_calls = {}
 
-    def fake_push(repo, branch, remote_url, token):
-        push_seen.update(branch=branch, token=token)
+    def fake_post_check(repo, branch, target, remote_url, token):
+        post_check_calls.update(branch=branch, target=target, token=token)
+        return git_ops.PostPushResult.PASS
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
-        fake_push,
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        fake_post_check,
     )
 
     t = _fixing_ci(ctx)
@@ -120,7 +121,7 @@ def test_fix_success_push_success_returns_implement_complete(tmp_path, monkeypat
 
     out = CIFixStage().run(t, ctx)
     assert out.next_state is State.IMPLEMENT_COMPLETE
-    assert push_seen["branch"] == f"mill/{t.id}"
+    assert post_check_calls["branch"] == f"mill/{t.id}"
 
     # Counter reset to 0.
     counter = ctx.service.workspace(t).artifacts_dir / "ci_fix_attempts.txt"
@@ -258,14 +259,15 @@ def test_fix_success_no_change_hits_ceiling_blocks(tmp_path, monkeypatch):
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
         lambda **k: CiFixResult(status="DONE", summary="ok"),
     )
-    push_seen = []
+    post_check_calls = []
 
-    def fake_push(repo, branch, remote_url, token):
-        push_seen.append(branch)
+    def fake_post_check(repo, branch, target, remote_url, token):
+        post_check_calls.append(branch)
+        return git_ops.PostPushResult.PASS
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
-        fake_push,
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        fake_post_check,
     )
     # Simulate no-change: local HEAD == remote HEAD.
     monkeypatch.setattr(
@@ -285,7 +287,7 @@ def test_fix_success_no_change_hits_ceiling_blocks(tmp_path, monkeypatch):
     out1 = CIFixStage().run(t, ctx)
     assert out1.next_state is State.IMPLEMENT_COMPLETE
     assert _read_counter(no_change_path) == 1
-    assert len(push_seen) == 1
+    assert len(post_check_calls) == 1
 
     # Cycle 2: no change again → hits ceiling (max=2) → BLOCKED.
     out2 = CIFixStage().run(t, ctx)
@@ -396,14 +398,15 @@ def test_max_auto_retries_zero_disables_ceiling(tmp_path, monkeypatch):
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
         lambda **k: CiFixResult(status="DONE", summary="ok"),
     )
-    push_seen = []
+    post_check_calls = []
 
-    def fake_push(repo, branch, remote_url, token):
-        push_seen.append(branch)
+    def fake_post_check(repo, branch, target, remote_url, token):
+        post_check_calls.append(branch)
+        return git_ops.PostPushResult.PASS
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
-        fake_push,
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        fake_post_check,
     )
     # Simulate no-change: local HEAD == remote HEAD.
     monkeypatch.setattr(
@@ -425,7 +428,7 @@ def test_max_auto_retries_zero_disables_ceiling(tmp_path, monkeypatch):
         assert out.next_state is State.IMPLEMENT_COMPLETE
     # Counter still increments but never triggers a block.
     assert _read_counter(no_change_path) == 5
-    assert len(push_seen) == 5
+    assert len(post_check_calls) == 5
 
 
 # --- Hard cycle ceiling bounds a churn-commit loop ---
@@ -650,8 +653,8 @@ def test_fix_success_push_failure_blocks(tmp_path, monkeypatch):
         lambda **k: CiFixResult(status="DONE", summary="ok"),
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
-        lambda **k: (_ for _ in ()).throw(RuntimeError("remote rejected")),
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.NOT_LANDED,
     )
 
     t = _fixing_ci(ctx)
@@ -659,7 +662,7 @@ def test_fix_success_push_failure_blocks(tmp_path, monkeypatch):
 
     out = CIFixStage().run(t, ctx)
     assert out.next_state is State.BLOCKED
-    assert "force-push failed" in out.note
+    assert "push did not land" in out.note
 
 
 # --- Fix failure, attempts remaining → IMPLEMENT_COMPLETE ---
@@ -849,21 +852,22 @@ def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
         lambda **k: CiFixResult(status="DONE", summary="ok"),
     )
-    push_args = {}
+    post_check_args = {}
 
-    def fake_push(repo, branch, remote_url, token):
-        push_args.update(branch=branch, remote_url=remote_url, token=token)
+    def fake_post_check(repo, branch, target, remote_url, token):
+        post_check_args.update(branch=branch, target=target, remote_url=remote_url, token=token)
+        return git_ops.PostPushResult.PASS
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease", fake_push
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check", fake_post_check
     )
 
     t = _fixing_ci(ctx)
     _setup_repo(ctx, t)
 
     CIFixStage().run(t, ctx)
-    assert push_args["branch"] == f"mill/{t.id}"
-    assert push_args["branch"] != "main"
+    assert post_check_args["branch"] == f"mill/{t.id}"
+    assert post_check_args["branch"] != "main"
 
 
 # --- CI green/pending while in FIXING_CI → back to IMPLEMENT_COMPLETE ---
@@ -1476,7 +1480,7 @@ def test_out_of_scope_fix_done_auto_resumes_original(tmp_path, monkeypatch):
 
 
 def test_in_scope_done_still_pushes_no_fix_ticket(tmp_path, monkeypatch):
-    """Regression: an in-scope DONE verdict still force-pushes and returns
+    """Regression: an in-scope DONE verdict still push-checks and returns
     IMPLEMENT_COMPLETE without spawning any out-of-scope fix ticket."""
     ctx = _gh(tmp_path)
     _oos_forge(monkeypatch)
@@ -1484,10 +1488,11 @@ def test_in_scope_done_still_pushes_no_fix_ticket(tmp_path, monkeypatch):
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
         lambda **k: CiFixResult(status="DONE", summary="fixed"),
     )
-    push_calls = []
+    post_check_calls = []
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
-        lambda *a, **k: push_calls.append(1),
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: post_check_calls.append(1)
+        or git_ops.PostPushResult.PASS,
     )
 
     t = _fixing_ci(ctx)
@@ -1495,7 +1500,7 @@ def test_in_scope_done_still_pushes_no_fix_ticket(tmp_path, monkeypatch):
 
     out = CIFixStage().run(t, ctx)
     assert out.next_state is State.IMPLEMENT_COMPLETE
-    assert push_calls == [1]
+    assert post_check_calls == [1]
     assert ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY) == []
 
 

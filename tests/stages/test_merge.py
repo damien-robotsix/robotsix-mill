@@ -13,7 +13,7 @@ from robotsix_mill.forge import github
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.base import Outcome
 from robotsix_mill.stages.merge import MergeStage, _read_counter, _write_counter
-from robotsix_mill.vcs.git_ops import ReconcileResult
+from robotsix_mill.vcs.git_ops import PostPushResult, ReconcileResult
 
 
 def _ctx(tmp_path, **env):
@@ -728,10 +728,10 @@ def test_human_mr_approval_body_only_changes_requested_is_actionable(
 
 
 def test_rebasing_clean_rebase_returns_to_implement_complete(tmp_path, monkeypatch):
-    """Ticket in REBASING → rebase agent succeeds → force-push → IMPLEMENT_COMPLETE."""
+    """Ticket in REBASING → rebase agent succeeds → post-check passes → IMPLEMENT_COMPLETE."""
     ctx = _gh(tmp_path)
 
-    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
+    def fake_rebase(*, settings, repo_dir, branch, target, memory="", remote_url=None, token=None):
         return RebaseResult(status="DONE", summary="ok")
 
     monkeypatch.setattr(
@@ -743,14 +743,15 @@ def test_rebasing_clean_rebase_returns_to_implement_complete(tmp_path, monkeypat
         lambda *a, **k: None,
     )
 
-    push_calls = {}
+    post_check_calls = {}
 
-    def fake_push(repo, branch, remote_url, token):
-        push_calls.update(branch=branch, remote_url=remote_url)
+    def fake_post_check(repo, branch, target, remote_url, token):
+        post_check_calls.update(branch=branch, target=target, remote_url=remote_url)
+        return PostPushResult.PASS
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push_with_lease",
-        fake_push,
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
+        fake_post_check,
     )
 
     # Post-rebase routing checks whether a PR exists; mock so the
@@ -773,7 +774,7 @@ def test_rebasing_clean_rebase_returns_to_implement_complete(tmp_path, monkeypat
 
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.IMPLEMENT_COMPLETE
-    assert push_calls["branch"] == f"mill/{t.id}"
+    assert post_check_calls["branch"] == f"mill/{t.id}"
 
 
 def test_rebasing_push_targets_per_repo_remote(tmp_path, monkeypatch):
@@ -803,7 +804,7 @@ def test_rebasing_push_targets_per_repo_remote(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent",
-        lambda *, settings, repo_dir, branch, target, memory="": RebaseResult(
+        lambda *, settings, repo_dir, branch, target, memory="", remote_url=None, token=None: RebaseResult(
             status="DONE", summary="ok"
         ),
     )
@@ -811,12 +812,12 @@ def test_rebasing_push_targets_per_repo_remote(tmp_path, monkeypatch):
         "robotsix_mill.stages.merge.git_ops.fetch", lambda *a, **k: None
     )
 
-    push_calls = {}
+    post_check_calls = {}
 
-    def fake_push(repo, branch, remote_url, token):
-        push_calls.update(branch=branch, remote_url=remote_url)
+    def fake_post_check(repo, branch, target, remote_url, token):
+        post_check_calls.update(branch=branch, remote_url=remote_url)
 
-    monkeypatch.setattr("robotsix_mill.stages.merge.git_ops.push_with_lease", fake_push)
+    monkeypatch.setattr("robotsix_mill.stages.merge.git_ops.post_push_check", fake_post_check)
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
@@ -836,15 +837,15 @@ def test_rebasing_push_targets_per_repo_remote(tmp_path, monkeypatch):
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.IMPLEMENT_COMPLETE
     # The push must go to the per-repo remote, not the global one.
-    assert push_calls["remote_url"] == per_repo_url
+    assert post_check_calls["remote_url"] == per_repo_url
 
 
 def test_rebasing_success_no_pr_routes_to_ready(tmp_path, monkeypatch):
-    """Rebase agent succeeds, force-pushes, but no PR exists for the
+    """Rebase agent succeeds, post-check passes, but no PR exists for the
     branch → route to READY so the ticket re-enters implement."""
     ctx = _gh(tmp_path)
 
-    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
+    def fake_rebase(*, settings, repo_dir, branch, target, memory="", remote_url=None, token=None):
         return RebaseResult(status="DONE", summary="ok")
 
     monkeypatch.setattr(
@@ -856,14 +857,15 @@ def test_rebasing_success_no_pr_routes_to_ready(tmp_path, monkeypatch):
         lambda *a, **k: None,
     )
 
-    push_calls = {}
+    post_check_calls = {}
 
-    def fake_push(repo, branch, remote_url, token):
-        push_calls.update(branch=branch, remote_url=remote_url)
+    def fake_post_check(repo, branch, target, remote_url, token):
+        post_check_calls.update(branch=branch, target=target, remote_url=remote_url)
+        return PostPushResult.PASS
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push_with_lease",
-        fake_push,
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
+        fake_post_check,
     )
 
     # pr_status returns None → no PR exists → route to READY.
@@ -880,14 +882,14 @@ def test_rebasing_success_no_pr_routes_to_ready(tmp_path, monkeypatch):
 
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.READY
-    assert push_calls["branch"] == f"mill/{t.id}"
+    assert post_check_calls["branch"] == f"mill/{t.id}"
 
 
 def test_rebasing_noop_skips_force_push(tmp_path, monkeypatch):
-    """Rebase agent succeeds but the remote already has this exact
-    commit (no-op). We must NOT force-push (that re-triggers CI + a
-    mergeable recompute → endless ping-pong). Stay REBASING as a silent
-    same-state re-poll (no ntfy), bounded by the attempt counter."""
+    """Rebase agent succeeds; post_push_check is always called to verify
+    the agent-driven push actually landed. The old deterministic no-op
+    skip (local==remote → skip push) is gone — the agent pushes, the
+    stage only verifies."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent",
@@ -904,12 +906,23 @@ def test_rebasing_noop_skips_force_push(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.git_ops.remote_branch_sha",
-        lambda repo, branch: sha,  # remote already has it
+        lambda repo, branch: sha,
     )
-    pushed = []
+    post_check_calls = []
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push_with_lease",
-        lambda repo, branch, remote_url, token: pushed.append(branch),
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
+        lambda *a, **kw: post_check_calls.append(1) or PostPushResult.PASS,
+    )
+    # Need a PR status so the stage routes to IMPLEMENT_COMPLETE, not READY.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": False,
+        },
     )
 
     t = _in_rebasing(ctx)
@@ -918,14 +931,14 @@ def test_rebasing_noop_skips_force_push(tmp_path, monkeypatch):
     (repo_dir / ".git").mkdir(exist_ok=True)
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.REBASING  # silent re-poll, not pushed
-    assert pushed == []  # the no-op force-push was skipped
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert post_check_calls == [1]  # post_push_check IS called
 
 
 def test_rebasing_noop_blocks_after_max_attempts(tmp_path, monkeypatch):
-    """A no-op rebase that never resolves the conflict is bounded: once
+    """A rebase that never resolves the conflict is bounded: once
     the attempt budget is spent the ticket goes BLOCKED (once), instead
-    of ping-ponging forever."""
+    of ping-ponging forever. The post-check still passes."""
     ctx = _gh(tmp_path, rebase_max_attempts="2")
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent",
@@ -935,18 +948,20 @@ def test_rebasing_noop_blocks_after_max_attempts(tmp_path, monkeypatch):
         "robotsix_mill.stages.merge.git_ops.fetch",
         lambda *a, **k: None,
     )
-    sha = "cafebabecafebabecafebabecafebabecafebabe"
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.head_sha",
-        lambda repo: sha,
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
+        lambda *a, **kw: PostPushResult.PASS,
     )
+    # PR still reports conflicting (not mergeable) so attempts are counted
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.remote_branch_sha",
-        lambda repo, branch: sha,
-    )
-    monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push_with_lease",
-        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not push")),
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": False,
+        },
     )
 
     t = _in_rebasing(ctx)
@@ -954,9 +969,9 @@ def test_rebasing_noop_blocks_after_max_attempts(tmp_path, monkeypatch):
     repo_dir.mkdir(parents=True, exist_ok=True)
     (repo_dir / ".git").mkdir(exist_ok=True)
 
-    # attempt 1 → REBASING (re-poll), attempt 2 (== max) → BLOCKED
+    # attempt 1 → IMPLEMENT_COMPLETE (re-poll), attempt 2 (== max) → BLOCKED
     o1 = MergeStage().run(t, ctx)
-    assert o1.next_state is State.REBASING
+    assert o1.next_state is State.IMPLEMENT_COMPLETE
     o2 = MergeStage().run(ctx.service.get(t.id), ctx)
     assert o2.next_state is State.BLOCKED
 
@@ -978,7 +993,7 @@ def test_rebasing_retry_stays_rebasing(tmp_path, monkeypatch):
         },
     )
 
-    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
+    def fake_rebase(*, settings, repo_dir, branch, target, memory="", remote_url=None, token=None):
         return RebaseResult(status="FAILED", summary="nope")
 
     monkeypatch.setattr(
@@ -1009,7 +1024,7 @@ def test_rebasing_exhausted_blocks(tmp_path, monkeypatch):
     """REBASING, rebase fails, attempt == max → Outcome(BLOCKED)."""
     ctx = _gh(tmp_path, rebase_max_attempts="1")
 
-    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
+    def fake_rebase(*, settings, repo_dir, branch, target, memory="", remote_url=None, token=None):
         return RebaseResult(status="FAILED", summary="nope")
 
     monkeypatch.setattr(
@@ -1027,7 +1042,7 @@ def test_rebasing_exhausted_blocks(tmp_path, monkeypatch):
         push_called.append(1)
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push_with_lease",
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
         fake_push,
     )
 
@@ -1060,7 +1075,7 @@ def test_implement_complete_to_rebasing_and_back(tmp_path, monkeypatch):
     )
     calls = {}
 
-    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
+    def fake_rebase(*, settings, repo_dir, branch, target, memory="", remote_url=None, token=None):
         calls.update(repo_dir=repo_dir, branch=branch, target=target)
         return RebaseResult(status="DONE", summary="ok")  # success
 
@@ -1072,14 +1087,14 @@ def test_implement_complete_to_rebasing_and_back(tmp_path, monkeypatch):
         "robotsix_mill.stages.merge.git_ops.fetch",
         lambda *a, **k: None,
     )
-    push_calls = {}
+    post_check_calls = {}
 
-    def fake_push(repo, branch, remote_url, token):
-        push_calls.update(branch=branch, remote_url=remote_url)
+    def fake_post_check(repo, branch, target, remote_url, token):
+        post_check_calls.update(branch=branch, remote_url=remote_url)
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push_with_lease",
-        fake_push,
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
+        fake_post_check,
     )
 
     t = _implement_complete(ctx)
@@ -1114,7 +1129,7 @@ def test_implement_complete_to_rebasing_and_back(tmp_path, monkeypatch):
     assert calls["branch"] == f"mill/{t.id}"
     assert calls["target"] == "main"
     assert str(repo_dir) in calls["repo_dir"]
-    assert push_calls["branch"] == f"mill/{t.id}"
+    assert post_check_calls["branch"] == f"mill/{t.id}"
     assert out2.next_state is State.IMPLEMENT_COMPLETE
 
 
@@ -1134,7 +1149,7 @@ def test_rebase_failure_exhausts_attempts_then_blocks(tmp_path, monkeypatch):
 
     agent_calls = []
 
-    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
+    def fake_rebase(*, settings, repo_dir, branch, target, memory="", remote_url=None, token=None):
         agent_calls.append(1)
         return RebaseResult(status="FAILED", summary="nope")
 
@@ -1168,7 +1183,7 @@ def test_rebase_agent_crash_is_treated_as_failure(tmp_path, monkeypatch):
     """If the agent raises, treat as False — failure path (through REBASING)."""
     ctx = _gh(tmp_path, rebase_max_attempts="1")
 
-    def boom(*, settings, repo_dir, branch, target):
+    def boom(*, settings, repo_dir, branch, target, memory="", remote_url=None, token=None):
         raise RuntimeError("LLM timeout")
 
     monkeypatch.setattr(
@@ -1194,7 +1209,7 @@ def test_no_force_push_on_rebase_failure(tmp_path, monkeypatch):
     """When agent returns False, no force-push is made (through REBASING)."""
     ctx = _gh(tmp_path, rebase_max_attempts="1")
 
-    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
+    def fake_rebase(*, settings, repo_dir, branch, target, memory="", remote_url=None, token=None):
         return RebaseResult(status="FAILED", summary="nope")
 
     monkeypatch.setattr(
@@ -1212,7 +1227,7 @@ def test_no_force_push_on_rebase_failure(tmp_path, monkeypatch):
         push_called.append(1)
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push_with_lease",
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
         fake_push,
     )
 
@@ -1226,10 +1241,10 @@ def test_no_force_push_on_rebase_failure(tmp_path, monkeypatch):
 
 
 def test_push_failure_after_rebase_success_blocks(tmp_path, monkeypatch):
-    """Rebase succeeds but force-push fails → BLOCKED (through REBASING)."""
+    """Rebase succeeds but post_push_check reports NOT_LANDED → BLOCKED."""
     ctx = _gh(tmp_path)
 
-    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
+    def fake_rebase(*, settings, repo_dir, branch, target, memory="", remote_url=None, token=None):
         return RebaseResult(status="DONE", summary="ok")
 
     monkeypatch.setattr(
@@ -1241,12 +1256,9 @@ def test_push_failure_after_rebase_success_blocks(tmp_path, monkeypatch):
         lambda *a, **k: None,
     )
 
-    def boom_push(repo, branch, remote_url, token):
-        raise RuntimeError("remote rejected")
-
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push_with_lease",
-        boom_push,
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
+        lambda *a, **kw: PostPushResult.NOT_LANDED,
     )
 
     t = _in_rebasing(ctx)
@@ -1256,7 +1268,7 @@ def test_push_failure_after_rebase_success_blocks(tmp_path, monkeypatch):
 
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.BLOCKED
-    assert "force-push failed" in out.note
+    assert "push did not land" in out.note
 
 
 def test_rebase_counter_resets_only_when_pr_becomes_mergeable(tmp_path, monkeypatch):
@@ -1268,7 +1280,7 @@ def test_rebase_counter_resets_only_when_pr_becomes_mergeable(tmp_path, monkeypa
 
     call_count = [0]
 
-    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
+    def fake_rebase(*, settings, repo_dir, branch, target, memory="", remote_url=None, token=None):
         call_count[0] += 1
         # First call fails, second succeeds.
         if call_count[0] == 2:
@@ -1298,12 +1310,12 @@ def test_rebase_counter_resets_only_when_pr_becomes_mergeable(tmp_path, monkeypa
         },
     )
 
-    def fake_push(repo, branch, remote_url, token):
-        pass
+    def fake_post_check(repo, branch, target, remote_url, token):
+        return PostPushResult.PASS
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push_with_lease",
-        fake_push,
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
+        fake_post_check,
     )
 
     t = _in_rebasing(ctx)
@@ -1343,7 +1355,7 @@ def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
     """The force-push must reference only the ticket's own branch."""
     ctx = _gh(tmp_path)
 
-    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
+    def fake_rebase(*, settings, repo_dir, branch, target, memory="", remote_url=None, token=None):
         return RebaseResult(status="DONE", summary="ok")
 
     monkeypatch.setattr(
@@ -1357,12 +1369,12 @@ def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
 
     push_args = {}
 
-    def fake_push(repo, branch, remote_url, token):
+    def fake_post_check(repo, branch, target, remote_url, token):
         push_args.update(branch=branch, remote_url=remote_url, token=token)
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push_with_lease",
-        fake_push,
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
+        fake_post_check,
     )
 
     t = _in_rebasing(ctx)
@@ -1410,8 +1422,8 @@ def test_rebase_force_push_uses_minted_token_not_raw_forge_token(tmp_path, monke
     )
     seen = {}
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push_with_lease",
-        lambda repo, branch, remote_url, token: seen.update(token=token),
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: seen.update(token=token),
     )
 
     t = _in_rebasing(ctx)
@@ -1623,16 +1635,16 @@ def test_closed_pr_skips_check_status(tmp_path, monkeypatch):
 
 
 def test_fetch_called_before_rebase_agent(tmp_path, monkeypatch):
-    """git_ops.fetch is called (twice) before run_rebase_agent in
-    _handle_conflict: once by reconcile_with_remote_pr for the PR
-    branch, once for the target branch."""
+    """git_ops.fetch is called once by reconcile_with_remote_pr for the PR
+    branch before the agent runs. The target-branch fetch is now done by
+    the agent via the git_fetch bridged tool."""
     ctx = _gh(tmp_path)
     calls = []
 
     def fake_fetch(repo, *, remote_url, token, branch):
         calls.append("fetch")
 
-    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
+    def fake_rebase(*, settings, repo_dir, branch, target, memory="", remote_url=None, token=None):
         calls.append("agent")
         return RebaseResult(status="DONE", summary="ok")
 
@@ -1645,8 +1657,8 @@ def test_fetch_called_before_rebase_agent(tmp_path, monkeypatch):
         fake_rebase,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push_with_lease",
-        lambda *a, **k: None,
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
+        lambda *a, **k: PostPushResult.PASS,
     )
 
     t = _in_rebasing(ctx)
@@ -1655,13 +1667,14 @@ def test_fetch_called_before_rebase_agent(tmp_path, monkeypatch):
     (repo_dir / ".git").mkdir(exist_ok=True)
 
     MergeStage().run(t, ctx)
-    # reconcile_with_remote_pr → fetch (PR branch),
-    # then fetch (target branch), then agent.
-    assert calls == ["fetch", "fetch", "agent"]
+    # reconcile_with_remote_pr → fetch (PR branch), then agent.
+    assert calls == ["fetch", "agent"]
 
 
 def test_fetch_failure_does_not_invoke_agent(tmp_path, monkeypatch):
-    """When git_ops.fetch raises CalledProcessError, the agent is not invoked."""
+    """When reconcile fetch fails (UNAVAILABLE), the agent still runs —
+    the stage only warns. The agent itself will call git_fetch and handle
+    any fetch failures there."""
     import subprocess
 
     ctx = _gh(tmp_path)
@@ -1670,7 +1683,7 @@ def test_fetch_failure_does_not_invoke_agent(tmp_path, monkeypatch):
     def fake_fetch(repo, *, remote_url, token, branch):
         raise subprocess.CalledProcessError(1, "git fetch")
 
-    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
+    def fake_rebase(*, settings, repo_dir, branch, target, memory="", remote_url=None, token=None):
         agent_called.append(1)
         return RebaseResult(status="DONE", summary="ok")
 
@@ -1682,6 +1695,20 @@ def test_fetch_failure_does_not_invoke_agent(tmp_path, monkeypatch):
         "robotsix_mill.stages.merge.run_rebase_agent",
         fake_rebase,
     )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
+        lambda *a, **k: PostPushResult.PASS,
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": False,
+        },
+    )
 
     t = _in_rebasing(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
@@ -1689,9 +1716,9 @@ def test_fetch_failure_does_not_invoke_agent(tmp_path, monkeypatch):
     (repo_dir / ".git").mkdir(exist_ok=True)
 
     out = MergeStage().run(t, ctx)
-    assert agent_called == []
-    # With default max_attempts (3), a failed attempt stays in REBASING
-    assert out.next_state is State.REBASING
+    # Agent is still invoked — reconcile fetch failure is non-fatal.
+    assert agent_called == [1]
+    assert out.next_state is State.IMPLEMENT_COMPLETE
 
 
 # --- tracing: root span only on first attempt ---
@@ -3058,7 +3085,7 @@ def test_multi_repo_conflicting_with_clone_runs_rebase(tmp_path, monkeypatch):
     captured = {}
     from robotsix_mill.stages import merge as merge_mod
 
-    def fake_rebase(*, settings, repo_dir, branch, target, memory):
+    def fake_rebase(*, settings, repo_dir, branch, target, memory, remote_url=None, token=None):
         captured["repo_dir"] = repo_dir
         captured["branch"] = branch
         captured["target"] = target
@@ -3088,10 +3115,10 @@ def test_multi_repo_conflicting_with_clone_runs_rebase(tmp_path, monkeypatch):
     pushed = {}
     monkeypatch.setattr(
         merge_mod.git_ops,
-        "push_with_lease",
-        lambda repo_dir, *, branch, remote_url, token: pushed.update(
+        "post_push_check",
+        lambda repo, branch, target, remote_url, token: pushed.update(
             {"branch": branch, "remote": remote_url}
-        ),
+        ) or PostPushResult.PASS,
     )
 
     _write_pr_urls(
@@ -3328,10 +3355,10 @@ def test_multi_repo_failing_ci_with_clone_runs_ci_fix(tmp_path, monkeypatch):
     pushed = {}
     monkeypatch.setattr(
         merge_mod.git_ops,
-        "push_with_lease",
-        lambda repo_dir, *, branch, remote_url, token: pushed.update(
+        "post_push_check",
+        lambda repo, branch, target, remote_url, token: pushed.update(
             {"branch": branch, "remote": remote_url}
-        ),
+        ) or PostPushResult.PASS,
     )
 
     _write_pr_urls(
@@ -3413,8 +3440,8 @@ def test_multi_repo_ci_fix_cycle_ceiling_blocks(tmp_path, monkeypatch):
     monkeypatch.setattr(merge_mod.git_ops, "remote_branch_sha", lambda d, b: "oldsha")
     monkeypatch.setattr(
         merge_mod.git_ops,
-        "push_with_lease",
-        lambda *a, **k: None,
+        "post_push_check",
+        lambda *a, **k: PostPushResult.PASS,
     )
 
     _write_pr_urls(
@@ -3496,7 +3523,7 @@ def test_multi_repo_ci_fix_cycle_reset_on_green(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(merge_mod.git_ops, "head_sha", lambda d: "newsha")
     monkeypatch.setattr(merge_mod.git_ops, "remote_branch_sha", lambda d, b: "oldsha")
-    monkeypatch.setattr(merge_mod.git_ops, "push_with_lease", lambda *a, **k: None)
+    monkeypatch.setattr(merge_mod.git_ops, "post_push_check", lambda *a, **k: PostPushResult.PASS)
 
     _write_pr_urls(
         ctx,
@@ -4421,7 +4448,7 @@ def test_multi_repo_fix_ci_diverged_returns_blocked_and_skips_push(
     tmp_path, monkeypatch
 ):
     """When reconcile reports the PR branch DIVERGED, _multi_repo_fix_ci must
-    BLOCK and must NOT call push_with_lease — the lease cannot protect a case
+    BLOCK and must NOT call post_push_check — the lease cannot protect a case
     where reconcile already fetched the foreign commit into the lease ref."""
     from robotsix_mill.stages import merge as merge_mod
 
@@ -4476,9 +4503,9 @@ def test_multi_repo_fix_ci_diverged_returns_blocked_and_skips_push(
 
     def _spy_push(*a, **k):
         pushed["called"] = True
-        raise AssertionError("push_with_lease must not run on a diverged branch")
+        raise AssertionError("post_push_check must not run on a diverged branch")
 
-    monkeypatch.setattr(merge_mod.git_ops, "push_with_lease", _spy_push)
+    monkeypatch.setattr(merge_mod.git_ops, "post_push_check", _spy_push)
 
     t = _make_meta_ticket(ctx)
     branch = f"mill/{t.id}"
@@ -4496,7 +4523,7 @@ def test_multi_repo_rebase_diverged_returns_blocked_and_skips_push(
     tmp_path, monkeypatch
 ):
     """When reconcile reports the PR branch DIVERGED, _multi_repo_rebase must
-    BLOCK and must NOT call push_with_lease."""
+    BLOCK and must NOT call post_push_check."""
     from robotsix_mill.stages import merge as merge_mod
 
     ctx = _gh(tmp_path)
@@ -4525,9 +4552,9 @@ def test_multi_repo_rebase_diverged_returns_blocked_and_skips_push(
 
     def _spy_push(*a, **k):
         pushed["called"] = True
-        raise AssertionError("push_with_lease must not run on a diverged branch")
+        raise AssertionError("post_push_check must not run on a diverged branch")
 
-    monkeypatch.setattr(merge_mod.git_ops, "push_with_lease", _spy_push)
+    monkeypatch.setattr(merge_mod.git_ops, "post_push_check", _spy_push)
 
     t = _make_meta_ticket(ctx)
     branch = f"mill/{t.id}"
@@ -4545,7 +4572,7 @@ def test_run_review_revision_diverged_returns_blocked_and_skips_push(
     tmp_path, monkeypatch
 ):
     """When reconcile reports the PR branch DIVERGED, _run_review_revision must
-    BLOCK and must NOT call push_with_lease."""
+    BLOCK and must NOT call post_push_check."""
     from robotsix_mill.stages import merge as merge_mod
 
     ctx = _gh(tmp_path)
@@ -4571,9 +4598,9 @@ def test_run_review_revision_diverged_returns_blocked_and_skips_push(
 
     def _spy_push(*a, **k):
         pushed["called"] = True
-        raise AssertionError("push_with_lease must not run on a diverged branch")
+        raise AssertionError("post_push_check must not run on a diverged branch")
 
-    monkeypatch.setattr(merge_mod.git_ops, "push_with_lease", _spy_push)
+    monkeypatch.setattr(merge_mod.git_ops, "post_push_check", _spy_push)
 
     t = _implement_complete(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
@@ -4619,9 +4646,9 @@ def test_fetch_and_run_rebase_diverged_returns_blocked_outcome(tmp_path, monkeyp
 
     def _spy_push(*a, **k):
         pushed["called"] = True
-        raise AssertionError("push_with_lease must not run on a diverged branch")
+        raise AssertionError("post_push_check must not run on a diverged branch")
 
-    monkeypatch.setattr(merge_mod.git_ops, "push_with_lease", _spy_push)
+    monkeypatch.setattr(merge_mod.git_ops, "post_push_check", _spy_push)
 
     t = _in_rebasing(ctx)
     branch = f"mill/{t.id}"
