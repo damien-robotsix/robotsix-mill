@@ -123,6 +123,7 @@ run_health_memory_path
 diagnostic_periodic
 review_revision_model
 stale_branch_cleanup_periodic
+db_maintenance_periodic
 scope_triage_request_limit
 langfuse_cleanup_periodic
 _validate_non_empty
@@ -282,6 +283,7 @@ _cost_analyst_task
 _run_health_task
 _diagnostic_task
 _stale_branch_task
+_db_maintenance_task
 queue_size
 queue_join
 _run_periodic_pass_per_repo

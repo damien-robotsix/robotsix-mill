@@ -418,6 +418,18 @@ class _StagesSettings(BaseModel):
     # this cap.  Set to 0 to disable purging.
     max_proposed_actions: int = Field(default=500, ge=0)
 
+    # --- db maintenance (periodic archive purge + per-ticket event cap) ---
+    # When True (default), the worker runs a periodic sweep that (a) purges
+    # terminal tickets exceeding max_archived_tickets, (b) prunes oldest
+    # TicketEvent rows on non-terminal tickets exceeding max_events_per_ticket,
+    # and (c) runs PRAGMA optimize to reclaim freed pages.
+    db_maintenance_periodic: bool = Field(default=True)
+    db_maintenance_interval_seconds: int = Field(default=86400)
+    # Maximum TicketEvent rows to retain per non-terminal ticket.
+    # Events beyond this cap are pruned (oldest first).  Set to 0 to disable
+    # per-ticket event capping entirely (archive purge still runs).
+    max_events_per_ticket: int = Field(default=200, ge=0)
+
     # --- merge stage: auto-rebase of stale PRs ---
     # When a PR in human_mr_approval becomes conflicting (other PRs merged to
     # the target branch), the merge stage invokes the rebase agent to

@@ -127,10 +127,11 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         self._run_health_task: asyncio.Task | None = None
         self._diagnostic_task: asyncio.Task[None] | None = None
         self._stale_branch_task: asyncio.Task | None = None
+        self._db_maintenance_task: asyncio.Task | None = None
         # board_id -> per-repo bespoke supervisor task. The supervisor
         # itself owns each repo's per-bespoke child tasks; cancelling
         # the supervisor cancels its children.
-        self._periodic_supervisor_tasks: dict[str, asyncio.Task] = {}
+        self._periodic_supervisor_tasks: dict[str, asyncio.Task[None]] = {}
         # ticket_id -> consecutive no-progress cycles in a traced stage
         self._stuck: dict[str, int] = {}
         # Epic-sweep dedup: epic_id → child count at last sweep re-eval, so the
@@ -609,6 +610,19 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             log_msg="Periodic stale-branch cleanup enabled: interval %ds",
             log_args=(self.ctx.settings.stale_branch_cleanup_interval_seconds,),
         )
+        self._start_poll_loop_pass(
+            "db-maintenance",
+            self._db_maintenance_poll_loop,
+            "_db_maintenance_task",
+            log_msg=(
+                "Periodic DB maintenance enabled: interval %ds, "
+                "max_events_per_ticket=%d"
+            ),
+            log_args=(
+                self.ctx.settings.db_maintenance_interval_seconds,
+                self.ctx.settings.max_events_per_ticket,
+            ),
+        )
 
         # --- CI monitor (unique: checks repo config, not just settings) ---
         if self._ci_monitor_task is None:
@@ -686,6 +700,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             "_run_health_task",
             "_diagnostic_task",
             "_stale_branch_task",
+            "_db_maintenance_task",
         ):
             t = getattr(self, attr)
             if t is not None:

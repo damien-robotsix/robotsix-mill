@@ -716,6 +716,52 @@ class PollLoopsMixin(_WorkerBase):
 
             await asyncio.sleep(min_interval)
 
+    async def _db_maintenance_poll_loop(self) -> None:
+        """Periodic DB maintenance: archive purge + per-ticket event cap +
+        PRAGMA optimize.  Runs per-board across all registered repos.
+
+        Pure DB — no LLM, no Langfuse tracing.
+        """
+        from ...core.service import TicketService
+
+        settings = self.ctx.settings
+        interval = max(3600, settings.db_maintenance_interval_seconds)
+        initial = self._initial_delay("db-maintenance", interval)
+        await asyncio.sleep(initial)
+        while True:
+            # Collect all board IDs.
+            boards: list[str] = [self._META_BOARD]
+            if self.ctx.service.board_id not in boards:
+                boards.append(self.ctx.service.board_id)
+            try:
+                for rc in get_repos_config().repos.values():
+                    if rc.board_id and rc.board_id not in boards:
+                        boards.append(rc.board_id)
+            except Exception:
+                pass
+
+            for board_id in boards:
+                label = board_id
+                try:
+                    svc = (
+                        self.ctx.service
+                        if board_id == self.ctx.service.board_id
+                        else TicketService(settings, board_id=board_id)
+                    )
+                    summary = await asyncio.to_thread(svc.db_maintenance_pass)
+                    if any(summary.values()):
+                        log.info(
+                            "db-maintenance: %s — archived_purged=%d "
+                            "events_pruned=%d tickets_pruned=%d",
+                            label,
+                            summary["archived_purged"],
+                            summary["events_pruned"],
+                            summary["tickets_pruned"],
+                        )
+                except Exception:
+                    log.exception("db-maintenance poll failed for %s", label)
+            await asyncio.sleep(interval)
+
     def _start_poll_loop_pass(
         self,
         label: str,

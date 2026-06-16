@@ -1213,3 +1213,91 @@ class _LifecycleMixin(_ServiceBase):
             deleted += 1
 
     # _maybe_purge_stale_proposed_actions moved to _ActionMixin.
+
+    def _maybe_purge_ticket_events(self, ticket_id: str) -> int:
+        """Prune oldest TicketEvent rows for *ticket_id* when the count
+        exceeds ``max_events_per_ticket``, keeping only the most recent.
+
+        After deletion, sets ``prev_hash = None`` on the new earliest
+        remaining event so the hash chain starts cleanly at the prune
+        point.  Returns the number of rows deleted (0 when under cap
+        or when the cap is disabled).
+        """
+        max_events = self.settings.max_events_per_ticket
+        if max_events <= 0:
+            return 0
+
+        with db.session(self.settings, self.board_id) as s:
+            all_events = s.exec(
+                select(TicketEvent)
+                .where(TicketEvent.ticket_id == ticket_id)
+                .order_by(col(TicketEvent.id))
+            ).all()
+
+            total = len(all_events)
+            if total <= max_events:
+                return 0
+
+            excess = total - max_events
+            # Delete the oldest *excess* events.
+            for ev in all_events[:excess]:
+                s.delete(ev)
+
+            # Reset prev_hash on the new earliest remaining event.
+            earliest = all_events[excess] if excess < len(all_events) else None
+            if earliest is not None and earliest.prev_hash is not None:
+                earliest.prev_hash = None
+                s.add(earliest)
+
+            s.commit()
+            return excess
+
+    def db_maintenance_pass(self) -> dict[str, int]:
+        """Run one DB maintenance sweep: archive purge, per-ticket event
+        cap, and SQLite ``PRAGMA optimize``.
+
+        Returns a summary dict with keys ``archived_purged``,
+        ``events_pruned``, and ``tickets_pruned``.
+        """
+        result: dict[str, int] = {
+            "archived_purged": 0,
+            "events_pruned": 0,
+            "tickets_pruned": 0,
+        }
+
+        # 1. Count terminal tickets before purge, then run it.
+        with db.session(self.settings, self.board_id) as s:
+            before = s.exec(
+                select(Ticket).where(
+                    col(Ticket.state).in_(list(self._ARCHIVABLE_STATES))
+                )
+            ).all()
+        before_count = len(before)
+        self._maybe_purge_archived()
+        with db.session(self.settings, self.board_id) as s:
+            after = s.exec(
+                select(Ticket).where(
+                    col(Ticket.state).in_(list(self._ARCHIVABLE_STATES))
+                )
+            ).all()
+        result["archived_purged"] = before_count - len(after)
+
+        # 2. Event cap for ALL non-terminal tickets.
+        with db.session(self.settings, self.board_id) as s:
+            active_ids = s.exec(
+                select(Ticket.id).where(
+                    col(Ticket.state).notin_(list(self._ARCHIVABLE_STATES))
+                )
+            ).all()
+        for tid in active_ids:
+            pruned = self._maybe_purge_ticket_events(tid)
+            if pruned:
+                result["events_pruned"] += pruned
+                result["tickets_pruned"] += 1
+
+        # 3. Reclaim freed pages.
+        with db.session(self.settings, self.board_id) as s:
+            s.connection().exec_driver_sql("PRAGMA optimize")
+            s.commit()
+
+        return result
