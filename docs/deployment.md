@@ -67,6 +67,70 @@ tokens, so browsers fetch fresh JS/CSS instead of serving stale cached
 bundles. Without this, users would see old UI behavior until they
 hard-refresh.
 
+## Autoupdate CLI reference
+
+The `robotsix-autoupdate` CLI (invoked by `dev/mill-autoupdate.sh`) is a
+stdlib-only orchestrator that handles flock, git fetch, merge, docker
+compose build/up, and deployed-SHA recording. Exit codes: **0** (success
+or intentional skip), **1** (operational failure).
+
+### Flags
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `--repo` | `cwd` | Path to the git repository |
+| `--state-dir` | parent of `--repo` | Directory for runtime state files |
+| `--state-prefix` | `mill-autoupdate` | Prefix for state filenames |
+| `--remote` | `origin/main` | Remote ref to fetch and merge, as `<remote>/<branch>` |
+| `--service` | `mill` | Docker Compose service name to build and restart |
+| `--idle-check-cmd` | unset | Shell command for idle check; unset means skip polling |
+| `--ensure-branch` | unset | `git checkout <BRANCH>` before fetch |
+| `--pre-build-wait` | `1200` | Max seconds to poll idle before build |
+| `--post-build-wait` | `300` | Max seconds to poll idle after build, before `up` |
+| `--poll-interval` | `90` | Seconds between idle-check polls |
+| `--max-deferrals` | `4` | Consecutive busy-deferral cap before force-deploy |
+| `--no-force-deploy` | `false` | Never force-deploy when busy; always defer regardless of `--max-deferrals` |
+| `--no-idle-check` | `false` | Skip all idle polling (overrides `--idle-check-cmd` and both wait flags) |
+
+### Environment variable overrides
+
+The bash wrapper (`dev/mill-autoupdate.sh`) reads these environment
+variables and passes them as CLI flags:
+
+| Variable | Default | Maps to |
+|---|---|---|
+| `PRE_BUILD_WAIT` | `1200` | `--pre-build-wait` |
+| `POST_BUILD_WAIT` | `300` | `--post-build-wait` |
+| `POLL_INTERVAL` | `90` | `--poll-interval` |
+| `MAX_DEFERRALS` | `4` | `--max-deferrals` |
+| `NO_FORCE_DEPLOY` | unset | `--no-force-deploy` (set to any non-empty value to enable) |
+
+Set these in the crontab or environment before the script runs:
+
+```sh
+# In crontab:
+NO_FORCE_DEPLOY=1 /path/to/robotsix-mill/dev/mill-autoupdate.sh
+```
+
+## Resource limits in `docker-compose.yml`
+
+The `mill` service in `docker-compose.yml` applies two resource limits
+to prevent a single runaway agent from exhausting host resources and
+triggering an OOM kill (which would interrupt every concurrently-running
+periodic agent):
+
+- **`mem_limit: 4g`** — 4 GiB memory ceiling. The mill worker is
+  single-process; 4 GiB leaves headroom for concurrent agent
+  subprocesses (git, trivy, model CLI) spawned by asyncio tasks.
+- **`cpus: 2`** — 2 CPU cores ceiling.
+
+A `nofile` ulimit of **65536** prevents `"OSError: [Errno 24] Too many
+open files"` crashes when many workers each spawn git/trivy/agent
+subprocesses with their own pipes.
+
+These limits are baked into the production compose file. Override them
+in `docker-compose.override.yml` if your host has differing capacity.
+
 ## Enable GitHub Pages (one-time setup)
 
 The `.github/workflows/docs.yml` workflow builds the MkDocs site and

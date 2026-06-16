@@ -89,7 +89,7 @@ class PollLoopsMixin(_WorkerBase):
         # offset is meaningful (spreads agents across minutes) but never exceeds
         # an hour.  Plus up to 60 s of random jitter so two agents that happen
         # to hash-close don't fire in lockstep.
-        kind_hash = int(hashlib.md5(kind.encode()).hexdigest(), 16)  # noqa: S324
+        kind_hash = int(hashlib.md5(kind.encode(), usedforsecurity=False).hexdigest(), 16)
         stagger_cap = max(60, min(interval // 12, 3600))  # 1 min .. 1 hour
         stagger = (kind_hash % stagger_cap) + random.uniform(0, 60)  # noqa: S311
         return base + stagger
