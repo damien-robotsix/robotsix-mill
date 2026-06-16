@@ -1266,17 +1266,13 @@ class _LifecycleMixin(_ServiceBase):
         # 1. Count terminal tickets before purge, then run it.
         with db.session(self.settings, self.board_id) as s:
             before = s.exec(
-                select(Ticket).where(
-                    Ticket.state.in_(list(self._ARCHIVABLE_STATES))
-                )
+                select(Ticket).where(Ticket.state.in_(list(self._ARCHIVABLE_STATES)))
             ).all()
         before_count = len(before)
         self._maybe_purge_archived()
         with db.session(self.settings, self.board_id) as s:
             after = s.exec(
-                select(Ticket).where(
-                    Ticket.state.in_(list(self._ARCHIVABLE_STATES))
-                )
+                select(Ticket).where(Ticket.state.in_(list(self._ARCHIVABLE_STATES)))
             ).all()
         result["archived_purged"] = before_count - len(after)
 
