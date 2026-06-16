@@ -318,19 +318,25 @@ def test_agent_exception_warns_and_passes(ctx_factory, monkeypatch):
 
 
 def test_agent_exception_uv_sources_hint(ctx_factory, monkeypatch):
-    """When doc agent fails AND repo has [tool.uv.sources], the exception
-    handler appends a hint about uv-only git deps to both the log message
-    and the notification."""
+    """When doc agent fails AND repo has both [project].dependencies and
+    [tool.uv.sources] with a uv.lock, the exception handler appends a
+    combined hint mentioning Python deps, uv-only git deps, and the
+    lockfile status."""
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
 
-    # Add [tool.uv.sources] to the repo's pyproject.toml.
+    # pyproject.toml with deps, uv-sources, AND a uv.lock.
     (repo_dir / "pyproject.toml").write_text(
-        "[project]\nname = 'x'\n[tool.uv.sources]\n"
+        "[project]\n"
+        'name = "x"\n'
+        'dependencies = ["requests"]\n'
+        "\n"
+        "[tool.uv.sources]\n"
         "x = { git = 'https://github.com/org/x' }\n",
         encoding="utf-8",
     )
+    (repo_dir / "uv.lock").write_text("version = 1\n", encoding="utf-8")
 
     notifications = []
 
@@ -361,12 +367,15 @@ def test_agent_exception_uv_sources_hint(ctx_factory, monkeypatch):
     out = DocumentStage().run(t, ctx)
     assert out.next_state is State.DELIVERABLE  # not BLOCKED
     assert "doc agent failed (non-blocking)" in out.note
+    assert "project has Python dependencies" in out.note
     assert "[tool.uv.sources]" in out.note
     assert "uv-only git deps" in out.note
+    assert "uv.lock present but sync may have failed" in out.note
 
     # Notification also carries the hint.
     assert len(notifications) == 1
     assert notifications[0][0] == State.ERRORED
+    assert "project has Python dependencies" in notifications[0][1]
     assert "[tool.uv.sources]" in notifications[0][1]
 
 
@@ -611,3 +620,165 @@ def test_classifier_verdict_recorded_in_history(ctx_factory, monkeypatch):
     # Verdict captured in transition note (visible in history).
     assert "doc_classifier" in (out.note or "")
     assert "internal-only" in (out.note or "")
+
+
+# --- agent exception with deps, no uv sources -------------------------
+
+
+def test_agent_exception_deps_no_uv_sources_hint(ctx_factory, monkeypatch):
+    """Doc agent fails, repo has [project].dependencies but NO
+    [tool.uv.sources] — hint mentions pip install only."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+
+    (repo_dir / "pyproject.toml").write_text(
+        '[project]\nname = "x"\ndependencies = ["click"]\n',
+        encoding="utf-8",
+    )
+
+    def _fake_doc(
+        self,
+        *,
+        settings,
+        repo_dir,
+        diff,
+        spec,
+        extra_roots=None,
+        board_id="",
+        reference_files=None,
+    ):
+        del self, settings, repo_dir, diff, spec
+        raise RuntimeError("model unavailable")
+
+    monkeypatch.setattr(DocumentStage, "_run_doc_agent", _fake_doc)
+
+    out = DocumentStage().run(t, ctx)
+    assert out.next_state is State.DELIVERABLE
+    assert "doc agent failed (non-blocking)" in out.note
+    assert "project has Python dependencies" in out.note
+    assert "pip install may be needed" in out.note
+    assert "uv-only git deps" not in out.note
+    assert "[tool.uv.sources]" not in out.note
+
+
+# --- agent exception with uv sources, no lockfile ---------------------
+
+
+def test_agent_exception_uv_sources_no_lockfile_hint(ctx_factory, monkeypatch):
+    """Doc agent fails, repo has deps + [tool.uv.sources] but NO
+    uv.lock — hint mentions the missing lockfile."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+
+    (repo_dir / "pyproject.toml").write_text(
+        "[project]\n"
+        'name = "x"\n'
+        'dependencies = ["requests"]\n'
+        "\n"
+        "[tool.uv.sources]\n"
+        "x = { git = 'https://github.com/org/x' }\n",
+        encoding="utf-8",
+    )
+    # No uv.lock file.
+
+    def _fake_doc(
+        self,
+        *,
+        settings,
+        repo_dir,
+        diff,
+        spec,
+        extra_roots=None,
+        board_id="",
+        reference_files=None,
+    ):
+        del self, settings, repo_dir, diff, spec
+        raise RuntimeError("model unavailable")
+
+    monkeypatch.setattr(DocumentStage, "_run_doc_agent", _fake_doc)
+
+    out = DocumentStage().run(t, ctx)
+    assert out.next_state is State.DELIVERABLE
+    assert "doc agent failed (non-blocking)" in out.note
+    assert "project has Python dependencies" in out.note
+    assert "[tool.uv.sources]" in out.note
+    assert "no uv.lock — pip fallback cannot resolve git deps" in out.note
+
+
+# --- agent exception with uv sources AND lockfile ---------------------
+
+
+def test_agent_exception_uv_sources_with_lockfile_hint(ctx_factory, monkeypatch):
+    """Doc agent fails, repo has deps + [tool.uv.sources] + uv.lock —
+    hint mentions the lockfile is present but sync may have failed."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+
+    (repo_dir / "pyproject.toml").write_text(
+        "[project]\n"
+        'name = "x"\n'
+        'dependencies = ["requests"]\n'
+        "\n"
+        "[tool.uv.sources]\n"
+        "x = { git = 'https://github.com/org/x' }\n",
+        encoding="utf-8",
+    )
+    (repo_dir / "uv.lock").write_text("version = 1\n", encoding="utf-8")
+
+    def _fake_doc(
+        self,
+        *,
+        settings,
+        repo_dir,
+        diff,
+        spec,
+        extra_roots=None,
+        board_id="",
+        reference_files=None,
+    ):
+        del self, settings, repo_dir, diff, spec
+        raise RuntimeError("model unavailable")
+
+    monkeypatch.setattr(DocumentStage, "_run_doc_agent", _fake_doc)
+
+    out = DocumentStage().run(t, ctx)
+    assert out.next_state is State.DELIVERABLE
+    assert "doc agent failed (non-blocking)" in out.note
+    assert "project has Python dependencies" in out.note
+    assert "[tool.uv.sources]" in out.note
+    assert "uv.lock present but sync may have failed" in out.note
+
+
+# --- agent exception, non-Python project → no hint --------------------
+
+
+def test_agent_exception_non_python_project_no_hint(ctx_factory, monkeypatch):
+    """Doc agent fails but there is no pyproject.toml — the hint is
+    empty (just the bare message with no parenthetical)."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+
+    # No pyproject.toml at all.
+
+    def _fake_doc(
+        self,
+        *,
+        settings,
+        repo_dir,
+        diff,
+        spec,
+        extra_roots=None,
+        board_id="",
+        reference_files=None,
+    ):
+        del self, settings, repo_dir, diff, spec
+        raise RuntimeError("model unavailable")
+
+    monkeypatch.setattr(DocumentStage, "_run_doc_agent", _fake_doc)
+
+    out = DocumentStage().run(t, ctx)
+    assert out.next_state is State.DELIVERABLE
+    assert out.note == "doc agent failed (non-blocking)"
