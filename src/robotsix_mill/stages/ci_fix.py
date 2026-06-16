@@ -477,9 +477,7 @@ class CIFixStage(Stage):
         try:
             git_ops.push_with_lease(Path(repo_dir), branch, remote_url, token)
         except Exception as e:  # noqa: BLE001 — lease reject / network
-            log.exception(
-                "%s: push_with_lease after rebase failed: %s", ticket.id, e
-            )
+            log.exception("%s: push_with_lease after rebase failed: %s", ticket.id, e)
             return Outcome(
                 State.BLOCKED,
                 f"rebase succeeded but force-push failed: {e}",

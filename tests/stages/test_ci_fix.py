@@ -1916,8 +1916,9 @@ def test_stale_branch_rebases_before_cycle_ceiling(tmp_path, monkeypatch):
     rebase_calls = []
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.git_ops.try_rebase_onto",
-        lambda repo, target, *, remote_url=None, token=None: rebase_calls.append(1)
-        or True,
+        lambda repo, target, *, remote_url=None, token=None: (
+            rebase_calls.append(1) or True
+        ),
     )
     push_calls = []
     monkeypatch.setattr(
@@ -2025,8 +2026,8 @@ def test_stale_branch_rebase_ok_push_fails_blocks(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
-        lambda repo, branch, remote_url, token: (
-            (_ for _ in ()).throw(RuntimeError("lease rejected"))
+        lambda repo, branch, remote_url, token: (_ for _ in ()).throw(
+            RuntimeError("lease rejected")
         ),
     )
     agent_calls = []
