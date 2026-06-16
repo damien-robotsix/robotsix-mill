@@ -158,7 +158,7 @@ def _format_labelled_alerts(in_scope: list[dict], out_of_scope: list[dict]) -> s
     return "\n".join(lines)
 
 
-def _format_alert_summary_block(alerts: list[dict] | None) -> str:
+def _format_alert_summary_block(alerts: list[dict[str, Any]] | None) -> str:
     """Render a compact CodeQL alert summary for top-of-prompt injection.
 
     Returns a short bullet list of ``rule @ path:line`` entries so the

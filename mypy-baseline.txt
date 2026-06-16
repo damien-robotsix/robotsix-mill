@@ -603,7 +603,6 @@ src/robotsix_mill/stages/ci_fix.py:0: error: Missing type arguments for generic 
 src/robotsix_mill/stages/ci_fix.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/stages/ci_fix.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/stages/ci_fix.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
-src/robotsix_mill/stages/ci_fix.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/stages/ci_fix.py:0: error: Argument "repo_dir" to "run_ci_fix_agent" has incompatible type "str"; expected "Path"  [arg-type]
 src/robotsix_mill/stages/ci_fix.py:0: error: Argument 1 to "head_sha" has incompatible type "str"; expected "Path"  [arg-type]
 src/robotsix_mill/stages/ci_fix.py:0: error: Argument 1 to "remote_branch_sha" has incompatible type "str"; expected "Path"  [arg-type]
