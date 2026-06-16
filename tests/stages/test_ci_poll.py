@@ -1,0 +1,577 @@
+"""Tests for the CI-poll guardrails in CIPollMixin._poll_implement_complete.
+
+Covers:
+- Guardrail 1: cross-stage auto-fix cycle counter (auto_fix_cycles.txt)
+- Guardrail 2: ping-pong alternation detector (ping_pong_count.txt)
+- Counter reset on CI green
+- Ceiling-of-0 disables each guardrail
+- Diagnostic message quality
+"""
+
+from robotsix_mill.config import Settings
+from robotsix_mill.core import db
+from robotsix_mill.core.service import TicketService
+from robotsix_mill.core.states import State
+from robotsix_mill.forge import github
+from robotsix_mill.stages import StageContext
+from robotsix_mill.stages.merge import MergeStage, _read_counter, _write_counter
+from robotsix_mill.stages.merge._shared import (
+    _AUTO_FIX_CYCLES,
+    _LAST_AUTO_FIX_STAGE,
+    _PING_PONG_COUNT,
+)
+
+
+def _ctx(tmp_path, **env):
+    db.reset_engine()
+    env.setdefault("data_dir", str(tmp_path / "data"))
+    s = Settings(**env)
+    ft = env.get("FORGE_TOKEN")
+    if ft is not None:
+        from robotsix_mill.config import Secrets, _reset_secrets
+        import robotsix_mill.config as _cfg
+
+        _reset_secrets()
+        _cfg._secrets = Secrets(forge_token=ft)
+    db.init_db(s, board_id="test-board")
+    from robotsix_mill.config import RepoConfig
+
+    return StageContext(
+        settings=s,
+        service=TicketService(s, board_id="test-board"),
+        repo_config=RepoConfig(
+            repo_id="test-repo",
+            board_id="test-board",
+            langfuse_project_name="test",
+            langfuse_public_key="pk-test",
+            langfuse_secret_key="sk-test",
+        ),
+    )
+
+
+def _implement_complete(ctx):
+    """Create a ticket in IMPLEMENT_COMPLETE state (PR open, gates not verified)."""
+    t = ctx.service.create("x", "y")
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE):
+        ctx.service.transition(t.id, st)
+    ctx.service.set_branch(t.id, f"mill/{t.id}")
+    return ctx.service.get(t.id)
+
+
+def _gh(tmp_path, **extra):
+    return _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_TOKEN="t",
+        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        **extra,
+    )
+
+
+def _ci_failing_mergeable(monkeypatch, mergeable_state=None):
+    """Patch the forge so the PR is open+mergeable with failing CI.
+
+    *mergeable_state* values: ``"behind"``, ``"clean"``, ``"unstable"``,
+    etc.  Default ``None`` causes the merge stage to fall through to the
+    local ``branch_is_behind_main`` check; set to ``"clean"`` to bypass it.
+    """
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "mergeable_state": mergeable_state or "behind",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "lint", "summary": None, "text": None, "annotations": []}
+            ],
+        },
+    )
+
+
+def _ci_green_mergeable(monkeypatch):
+    """Patch the forge so the PR is open+mergeable with green CI."""
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "mergeable_state": "clean",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "success",
+            "failing": [],
+        },
+    )
+
+
+# === Guardrail 1: auto-fix cycle counter ==================================
+
+
+def test_auto_fix_cycles_exhausted_blocks(tmp_path, monkeypatch):
+    """When auto_fix_cycles reaches the ceiling, the ticket is BLOCKED
+    without dispatching to REBASING or FIXING_CI."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path, auto_fix_max_cycles=3)
+    _ci_failing_mergeable(monkeypatch)
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": False,  # routes to FIXING_CI
+    )
+
+    # Pre-seed the counter at the ceiling (3).
+    t = _implement_complete(ctx)
+    counter_path = ctx.service.workspace(t).artifacts_dir / _AUTO_FIX_CYCLES
+    _write_counter(counter_path, 3)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "auto-fix exhausted" in out.note
+    assert "3 cycle(s)" in out.note
+    assert t.id in out.note
+    # Counter is reset on block so a resume gets a clean budget.
+    assert _read_counter(counter_path) == 0
+
+
+def test_auto_fix_cycles_below_ceiling_proceeds_to_ci_fix(tmp_path, monkeypatch):
+    """When auto_fix_cycles is below the ceiling, the dispatch proceeds normally."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path, auto_fix_max_cycles=3)
+    _ci_failing_mergeable(monkeypatch)
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": False,
+    )
+
+    t = _implement_complete(ctx)
+    counter_path = ctx.service.workspace(t).artifacts_dir / _AUTO_FIX_CYCLES
+    _write_counter(counter_path, 2)  # one below ceiling
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.FIXING_CI
+    # Counter should be incremented to 3.
+    assert _read_counter(counter_path) == 3
+
+
+def test_auto_fix_cycles_exhausted_blocks_before_rebasing(tmp_path, monkeypatch):
+    """When auto_fix_cycles is exhausted, BLOCKED is returned even when
+    the branch is behind main (would normally route to REBASING)."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path, auto_fix_max_cycles=2)
+    _ci_failing_mergeable(monkeypatch)
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": True,  # would route to REBASING
+    )
+
+    t = _implement_complete(ctx)
+    counter_path = ctx.service.workspace(t).artifacts_dir / _AUTO_FIX_CYCLES
+    _write_counter(counter_path, 2)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "auto-fix exhausted" in out.note
+    assert _read_counter(counter_path) == 0
+
+
+def test_auto_fix_max_cycles_zero_disables_guardrail(tmp_path, monkeypatch):
+    """When auto_fix_max_cycles=0, the guardrail is never checked (AC4)."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path, auto_fix_max_cycles=0)
+    _ci_failing_mergeable(monkeypatch)
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": False,
+    )
+
+    t = _implement_complete(ctx)
+    counter_path = ctx.service.workspace(t).artifacts_dir / _AUTO_FIX_CYCLES
+    _write_counter(counter_path, 999)  # way beyond any reasonable ceiling
+
+    out = MergeStage().run(t, ctx)
+    # Should still dispatch to FIXING_CI (guardrail skipped).
+    assert out.next_state is State.FIXING_CI
+
+
+def test_auto_fix_cycles_reset_on_ci_green(tmp_path, monkeypatch):
+    """When CI is green, auto_fix_cycles.txt is reset to 0 (AC3)."""
+    ctx = _gh(tmp_path)
+    _ci_green_mergeable(monkeypatch)
+
+    t = _implement_complete(ctx)
+    counter_path = ctx.service.workspace(t).artifacts_dir / _AUTO_FIX_CYCLES
+    _write_counter(counter_path, 5)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert _read_counter(counter_path) == 0
+
+
+# === Guardrail 2: ping-pong alternation detector ==========================
+
+
+def test_ping_pong_detection_blocks_on_third_alternation(tmp_path, monkeypatch):
+    """After 3 alternations (rebase→ci_fix→rebase→ci_fix→rebase→ci_fix),
+    the 4th routing attempt (which would create a 4th alternation → exceeds
+    the ceiling of 3) is blocked."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path, ping_pong_max_alternations=3)
+    _ci_failing_mergeable(monkeypatch)
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+
+    t = _implement_complete(ctx)
+    artifacts = ctx.service.workspace(t).artifacts_dir
+    ping_pong_path = artifacts / _PING_PONG_COUNT
+    last_stage_path = artifacts / _LAST_AUTO_FIX_STAGE
+
+    # Pre-seed: 3 alternations already, last stage was "ci_fix".
+    _write_counter(ping_pong_path, 3)
+    last_stage_path.parent.mkdir(parents=True, exist_ok=True)
+    last_stage_path.write_text("ci_fix", encoding="utf-8")
+
+    # Now route to REBASING (branch behind main). This should trigger the
+    # ping-pong block because the last stage was ci_fix → alternation #4.
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": True,
+    )
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "ping-pong" in out.note.lower()
+    assert "4 alternation" in out.note
+    assert "ceiling is 3" in out.note
+    assert t.id in out.note
+    # Both files reset on block.
+    assert _read_counter(ping_pong_path) == 0
+
+
+def test_ping_pong_counts_only_alternations_not_same_stage_repeats(
+    tmp_path, monkeypatch,
+):
+    """Routing to the same stage twice in a row does NOT count as an
+    alternation — only a genuine A→B→A pattern increments the counter."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path, ping_pong_max_alternations=2)
+    _ci_failing_mergeable(monkeypatch)
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+
+    t = _implement_complete(ctx)
+    artifacts = ctx.service.workspace(t).artifacts_dir
+    ping_pong_path = artifacts / _PING_PONG_COUNT
+    last_stage_path = artifacts / _LAST_AUTO_FIX_STAGE
+
+    # Pre-seed: last stage was "rebase", ping_pong_count = 1.
+    _write_counter(ping_pong_path, 1)
+    last_stage_path.parent.mkdir(parents=True, exist_ok=True)
+    last_stage_path.write_text("rebase", encoding="utf-8")
+
+    # Route to REBASING again (branch behind main). last stage = "rebase",
+    # routing_to = "rebase" → NOT an alternation → counter stays at 1.
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": True,
+    )
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.REBASING
+    # Counter should NOT have incremented.
+    assert _read_counter(ping_pong_path) == 1
+
+
+def test_ping_pong_ci_fix_after_rebase_is_alternation(tmp_path, monkeypatch):
+    """ci_fix after rebase increments the ping-pong counter."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path, ping_pong_max_alternations=3)
+    _ci_failing_mergeable(monkeypatch)
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": False,
+    )
+
+    t = _implement_complete(ctx)
+    artifacts = ctx.service.workspace(t).artifacts_dir
+    ping_pong_path = artifacts / _PING_PONG_COUNT
+    last_stage_path = artifacts / _LAST_AUTO_FIX_STAGE
+
+    # Pre-seed: last stage was "rebase", ping_pong_count = 0.
+    _write_counter(ping_pong_path, 0)
+    last_stage_path.parent.mkdir(parents=True, exist_ok=True)
+    last_stage_path.write_text("rebase", encoding="utf-8")
+
+    out = MergeStage().run(t, ctx)
+    # Routes to FIXING_CI (branch is NOT behind main), which IS an
+    # alternation from rebase → ci_fix.
+    assert out.next_state is State.FIXING_CI
+    assert _read_counter(ping_pong_path) == 1
+    assert last_stage_path.read_text(encoding="utf-8").strip() == "ci_fix"
+
+
+def test_ping_pong_rebase_after_ci_fix_is_alternation(tmp_path, monkeypatch):
+    """Rebase after ci_fix increments the ping-pong counter."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path, ping_pong_max_alternations=3)
+    _ci_failing_mergeable(monkeypatch)
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": True,
+    )
+
+    t = _implement_complete(ctx)
+    artifacts = ctx.service.workspace(t).artifacts_dir
+    ping_pong_path = artifacts / _PING_PONG_COUNT
+    last_stage_path = artifacts / _LAST_AUTO_FIX_STAGE
+
+    # Pre-seed: last stage was "ci_fix", ping_pong_count = 1.
+    _write_counter(ping_pong_path, 1)
+    last_stage_path.parent.mkdir(parents=True, exist_ok=True)
+    last_stage_path.write_text("ci_fix", encoding="utf-8")
+
+    out = MergeStage().run(t, ctx)
+    # Routes to REBASING (branch behind main), which IS an alternation
+    # from ci_fix → rebase.
+    assert out.next_state is State.REBASING
+    assert _read_counter(ping_pong_path) == 2
+    assert last_stage_path.read_text(encoding="utf-8").strip() == "rebase"
+
+
+def test_ping_pong_max_alternations_zero_disables_guardrail(tmp_path, monkeypatch):
+    """When ping_pong_max_alternations=0, the guardrail is never checked (AC4)."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path, ping_pong_max_alternations=0)
+    _ci_failing_mergeable(monkeypatch)
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": True,
+    )
+
+    t = _implement_complete(ctx)
+    artifacts = ctx.service.workspace(t).artifacts_dir
+    ping_pong_path = artifacts / _PING_PONG_COUNT
+    _write_counter(ping_pong_path, 999)  # way beyond any reasonable ceiling
+
+    out = MergeStage().run(t, ctx)
+    # Should still dispatch to REBASING (guardrail skipped).
+    assert out.next_state is State.REBASING
+
+
+def test_ping_pong_counters_reset_on_ci_green(tmp_path, monkeypatch):
+    """When CI is green, ping_pong_count.txt and last_auto_fix_stage.txt are
+    both reset (AC3)."""
+    ctx = _gh(tmp_path)
+    _ci_green_mergeable(monkeypatch)
+
+    t = _implement_complete(ctx)
+    artifacts = ctx.service.workspace(t).artifacts_dir
+    ping_pong_path = artifacts / _PING_PONG_COUNT
+    last_stage_path = artifacts / _LAST_AUTO_FIX_STAGE
+
+    _write_counter(ping_pong_path, 5)
+    last_stage_path.parent.mkdir(parents=True, exist_ok=True)
+    last_stage_path.write_text("ci_fix", encoding="utf-8")
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+    # ping_pong_count reset to 0.
+    assert _read_counter(ping_pong_path) == 0
+    # last_auto_fix_stage deleted.
+    assert not last_stage_path.exists()
+
+
+# === Combined guardrail interaction ========================================
+
+
+def test_auto_fix_cycles_exhausted_skips_ping_pong_check(tmp_path, monkeypatch):
+    """When auto_fix_cycles is exhausted, BLOCKED is returned before the
+    ping-pong check — no ping-pong counter files are touched."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path, auto_fix_max_cycles=3, ping_pong_max_alternations=2)
+    _ci_failing_mergeable(monkeypatch)
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": True,
+    )
+
+    t = _implement_complete(ctx)
+    artifacts = ctx.service.workspace(t).artifacts_dir
+    auto_fix_path = artifacts / _AUTO_FIX_CYCLES
+    ping_pong_path = artifacts / _PING_PONG_COUNT
+
+    _write_counter(auto_fix_path, 3)  # exhausted
+    _write_counter(ping_pong_path, 2)  # at ceiling
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "auto-fix exhausted" in out.note
+    # ping_pong counter untouched (not incremented, not reset).
+    assert _read_counter(ping_pong_path) == 2
+
+
+def test_ping_pong_exhausted_takes_priority_over_branch_decision(
+    tmp_path, monkeypatch,
+):
+    """When ping-pong ceiling is reached, BLOCKED is returned instead of
+    REBASING or FIXING_CI."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path, auto_fix_max_cycles=6, ping_pong_max_alternations=2)
+    _ci_failing_mergeable(monkeypatch)
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+
+    t = _implement_complete(ctx)
+    artifacts = ctx.service.workspace(t).artifacts_dir
+    ping_pong_path = artifacts / _PING_PONG_COUNT
+    last_stage_path = artifacts / _LAST_AUTO_FIX_STAGE
+
+    # Pre-seed: ping_pong_count at 2 (at ceiling), last stage was "ci_fix".
+    _write_counter(ping_pong_path, 2)
+    last_stage_path.parent.mkdir(parents=True, exist_ok=True)
+    last_stage_path.write_text("ci_fix", encoding="utf-8")
+
+    # Route to REBASING (behind main) → alternation #3 → should block.
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": True,
+    )
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "ping-pong" in out.note.lower()
+
+
+# === Existing guardrails are unchanged (AC5) ===============================
+
+
+def test_existing_ci_fix_counters_still_work(tmp_path, monkeypatch):
+    """ci_fix_cycles.txt reset on CI green still works alongside new counters."""
+    ctx = _gh(tmp_path)
+    _ci_green_mergeable(monkeypatch)
+
+    t = _implement_complete(ctx)
+    ci_fix_path = ctx.service.workspace(t).artifacts_dir / "ci_fix_cycles.txt"
+    _write_counter(ci_fix_path, 7)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert _read_counter(ci_fix_path) == 0
+
+
+def test_rebase_counter_reset_on_mergeable_still_works(tmp_path, monkeypatch):
+    """rebase_attempts.txt reset on mergeable PR still works."""
+    ctx = _gh(tmp_path)
+    _ci_green_mergeable(monkeypatch)
+
+    t = _implement_complete(ctx)
+    rebase_path = ctx.service.workspace(t).artifacts_dir / "rebase_attempts.txt"
+    _write_counter(rebase_path, 3)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert _read_counter(rebase_path) == 0
+
+
+# === Diagnostic message quality (AC7) ======================================
+
+
+def test_auto_fix_cycles_block_message_contains_ticket_id_and_ceiling(
+    tmp_path, monkeypatch,
+):
+    """The BLOCKED message from the auto-fix guardrail names the ticket ID
+    and ceiling value."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path, auto_fix_max_cycles=4)
+    _ci_failing_mergeable(monkeypatch)
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": False,
+    )
+
+    t = _implement_complete(ctx)
+    counter_path = ctx.service.workspace(t).artifacts_dir / _AUTO_FIX_CYCLES
+    _write_counter(counter_path, 4)
+
+    out = MergeStage().run(t, ctx)
+    assert t.id in out.note
+    assert "4" in out.note  # ceiling mentioned
+    assert "manual intervention" in out.note.lower()
+    assert "resume-blocked" in out.note.lower() or "Resume-blocked" in out.note
+
+
+def test_ping_pong_block_message_contains_ticket_id_and_ceiling(
+    tmp_path, monkeypatch,
+):
+    """The BLOCKED message from the ping-pong guardrail names the ticket ID
+    and alternation count."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path, ping_pong_max_alternations=2)
+    _ci_failing_mergeable(monkeypatch)
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": True,
+    )
+
+    t = _implement_complete(ctx)
+    artifacts = ctx.service.workspace(t).artifacts_dir
+    ping_pong_path = artifacts / _PING_PONG_COUNT
+    last_stage_path = artifacts / _LAST_AUTO_FIX_STAGE
+
+    _write_counter(ping_pong_path, 2)
+    last_stage_path.parent.mkdir(parents=True, exist_ok=True)
+    last_stage_path.write_text("ci_fix", encoding="utf-8")
+
+    out = MergeStage().run(t, ctx)
+    assert t.id in out.note
+    assert "2" in out.note  # ceiling mentioned
+    assert "manual intervention" in out.note.lower()
+    assert "resume-blocked" in out.note.lower() or "Resume-blocked" in out.note

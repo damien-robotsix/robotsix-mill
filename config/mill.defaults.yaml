@@ -197,6 +197,8 @@ pipeline:
   rebase_max_attempts: 3                             # max rebase LLM invocations before BLOCK
   ci_fix_max_attempts: 2                             # max CI-fix LLM invocations before BLOCK
   ci_fix_max_cycles: 3                             # hard ceiling on total ci-fix cycles per ticket
+  auto_fix_max_cycles: 6                           # cross-stage ceiling on REBASING + FIXING_CI dispatches before BLOCK
+  ping_pong_max_alternations: 3                    # max rebase↔ci_fix alternations before BLOCK
   review_revision_max_attempts: 2                    # max review-revision LLM invocations before BLOCK
   retrospect_spawn_drafts: true                      # allow retrospect to file improvement drafts
   retrospect_spawn_agented_proposals: true           # allow retrospect to propose AGENT.md additions
