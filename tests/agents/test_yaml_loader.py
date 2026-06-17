@@ -629,6 +629,7 @@ _VALID_TOOL_NAMES = frozenset(
         "git_remote_sha",
         "git_push_with_lease",
         "git_branch_ancestry",
+        "wait_for_ci",
     }
 )
 

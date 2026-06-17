@@ -16,6 +16,7 @@ its own prior push (no foreign commits).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 
@@ -51,12 +52,20 @@ def run_ci_fix_agent(
     target: str = "main",
     remote_url: str | None = None,
     token: str | None = None,
+    ci_status_fn: "Callable[[], tuple[str, str]] | None" = None,
 ) -> CiFixResult:
-    """Run one CI-fix attempt based on *failing_summary*.
+    """Run the CI-fix agent, which OWNS the fix→push→verify loop.
 
     Uses the LLM (pydantic-ai agent) with sandboxed file + shell tools
     scoped to *repo_dir*, plus bridged git tools that execute host-side
     with *remote_url* and *token* so the agent can drive fetch + push.
+
+    When *ci_status_fn* is provided, the agent also gets the ``wait_for_ci``
+    tool: after pushing a fix it blocks on that tool until the latest CI run
+    finishes, then either reports DONE (green) or fixes the fresh failure and
+    re-checks — up to ``settings.ci_fix_max_iterations`` waits. This replaces
+    the old one-shot-per-cycle model. *ci_status_fn* is the host-side forge
+    probe returning ``(conclusion, failing_summary)``.
 
     Returns a ``CiFixResult`` with status, summary, and updated memory.
 
@@ -111,6 +120,25 @@ def run_ci_fix_agent(
             target=target,
             remote_url=remote_url or "",
             token=token,
+        )
+    )
+
+    # Give the agent ownership of the fix→push→verify loop: after pushing it
+    # calls wait_for_ci to block on the freshly-triggered CI run, then either
+    # reports DONE (green) or fixes the new failure and re-checks. The
+    # iteration budget lives inside the tool's call counter. The tool is
+    # always wired so the prompt's call directive resolves; when ci_status_fn
+    # is None (multi-repo merge path / tests) it returns
+    # CI_VERIFICATION_UNAVAILABLE and the caller re-checks CI externally.
+    from .ci_wait_tool import build_ci_wait_tool
+
+    tools.append(
+        build_ci_wait_tool(
+            branch=branch,
+            ci_status_fn=ci_status_fn,
+            max_iterations=settings.ci_fix_max_iterations,
+            poll_interval_s=settings.ci_fix_wait_poll_interval_s,
+            timeout_s=settings.ci_fix_wait_timeout_s,
         )
     )
 

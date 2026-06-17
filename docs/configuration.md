@@ -547,9 +547,9 @@ robotsix-llmio Claude Agent SDK transport.
 |-----------|---------|---------|-------------|
 | `pipeline.merge_poll_seconds` | `MILL_MERGE_POLL_SECONDS` | `120` | Poll interval for PR merge/CI status |
 | `pipeline.rebase_max_attempts` | `MILL_REBASE_MAX_ATTEMPTS` | `3` | Max rebase LLM invocations before BLOCK |
-| `pipeline.ci_fix_max_attempts` | `MILL_CI_FIX_MAX_ATTEMPTS` | `2` | Max CI-fix LLM invocations before BLOCK |
-| `pipeline.ci_max_auto_retries` | `MILL_CI_MAX_AUTO_RETRIES` | `3` | Max consecutive ci-fix cycles with no code changes before BLOCK |
-| `pipeline.ci_fix_max_cycles` | `MILL_CI_FIX_MAX_CYCLES` | `3` | Hard ceiling on total ci-fix cycles per ticket (counts every agent-running cycle on failing CI; reset only when CI turns green). Set to 0 to disable. |
+| `pipeline.ci_fix_max_iterations` | `MILL_CI_FIX_MAX_ITERATIONS` | `5` | Single-repo ci-fix: max `wait_for_ci` push-and-recheck iterations the agent may run before BLOCK. The agent owns its fix→push→verify loop; this is its iteration budget. Set to 0 to disable the verify loop. |
+| `pipeline.ci_fix_max_attempts` | `MILL_CI_FIX_MAX_ATTEMPTS` | `2` | Multi-repo merge ci-fix only: max CI-fix LLM invocations before BLOCK |
+| `pipeline.ci_fix_max_cycles` | `MILL_CI_FIX_MAX_CYCLES` | `3` | Multi-repo merge ci-fix only: hard ceiling on total ci-fix cycles per repo (reset only when CI turns green). Set to 0 to disable. |
 | `pipeline.review_revision_max_attempts` | `MILL_REVIEW_REVISION_MAX_ATTEMPTS` | `2` | Max review-revision LLM invocations before BLOCK |
 | `pipeline.branch_prefix` | `MILL_BRANCH_PREFIX` | `mill/` | Prefix for deliver-stage branch names |
 | `pipeline.delete_branch_on_merge` | `MILL_DELETE_BRANCH_ON_MERGE` | `true` | Delete the per-ticket head branch on the forge after merge to DONE |

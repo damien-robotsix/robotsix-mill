@@ -353,7 +353,6 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "gates.pr_summary_model": "pr_summary_model",
     "gates.obsolescence_gate_enabled": "obsolescence_gate_enabled",
     # -- ci --
-    "ci.max_auto_retries": "ci_max_auto_retries",
     "ci.codeql_fp_triage_enabled": "codeql_fp_triage_enabled",
     # -- pipeline --
     # Post-MILL_*-alias-purge these map directly to Settings field
@@ -364,6 +363,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "pipeline.branch_prefix": "branch_prefix",
     "pipeline.merge_poll_seconds": "merge_poll_seconds",
     "pipeline.rebase_max_attempts": "rebase_max_attempts",
+    "pipeline.ci_fix_max_iterations": "ci_fix_max_iterations",
     "pipeline.ci_fix_max_attempts": "ci_fix_max_attempts",
     "pipeline.ci_fix_max_cycles": "ci_fix_max_cycles",
     "pipeline.auto_fix_max_cycles": "auto_fix_max_cycles",

@@ -464,32 +464,41 @@ class _StagesSettings(BaseModel):
 
     # --- merge stage: auto-fix of failing remote CI ---
     # When a PR in human_mr_approval has failing CI checks, the merge stage
-    # transitions to fixing_ci and invokes the ci-fix agent to resolve
-    # the failures automatically.  This is the max number of ci-fix
-    # attempts per ticket before escalating to BLOCKED.
+    # transitions to fixing_ci and invokes the ci-fix agent.  The agent OWNS
+    # the fix→push→verify loop: it fixes, pushes, and calls wait_for_ci to
+    # block on the freshly-triggered CI run, iterating until CI is green or it
+    # exhausts ci_fix_max_iterations verification attempts.  There is no
+    # external FIXING_CI ⇄ IMPLEMENT_COMPLETE retry loop or per-ticket cycle
+    # counter — the iteration budget lives inside the wait_for_ci tool.
+
+    # Maximum number of times the agent may call wait_for_ci (i.e. push-and-
+    # re-check iterations) for one ticket before it must report FAILED and the
+    # stage escalates to BLOCKED.  Set to 0 only to effectively disable the
+    # agent's verify loop (it would never be allowed to wait).
+    ci_fix_max_iterations: int = Field(default=5, ge=0)
+
+    # Multi-repo merge path only (MultiRepoCiFixMixin): that path still runs
+    # the legacy one-shot-per-cycle agent with an external retry loop, so it
+    # keeps its own attempt + cycle ceilings.  The single-repo CIFixStage no
+    # longer uses these — its budget is ci_fix_max_iterations.
     ci_fix_max_attempts: int = Field(default=2, ge=0)
-
-    # Per-cycle request budget for the ci-fix agent.  When the agent exhausts
-    # this budget, pydantic-ai raises UsageLimitExceeded, which the retry
-    # layer catches and triggers the fallback model (if configured).  Set to
-    # 0 to disable the limit (preserves pre-0.XX behaviour).
-    ci_fix_request_limit: int = Field(default=50, ge=0)
-
-    # Maximum consecutive ci-fix cycles that produce no code changes before
-    # escalating to BLOCKED.  A "no-change" cycle is one where the ci-fix
-    # agent reports success but the local HEAD matches the remote (no commits
-    # were produced).  Set to 0 to disable the ceiling (preserves pre-0.32
-    # behaviour of relying solely on ci_fix_max_attempts for the outer bound).
-    ci_max_auto_retries: int = Field(default=3, ge=0)
-
-    # Hard ceiling on the TOTAL number of ci-fix cycles per ticket that run
-    # the agent on still-failing CI, regardless of the agent's self-reported
-    # status or whether commits were produced.  Unlike ci_fix_max_attempts
-    # (counts only agent-reported failures) and ci_max_auto_retries (counts
-    # only no-change cycles), this counter is reset ONLY when CI is observed
-    # green, so a loop that keeps committing useless churn while CI stays red
-    # is still bounded.  Set to 0 to disable.
     ci_fix_max_cycles: int = Field(default=3, ge=0)
+
+    # How often (seconds) wait_for_ci polls the forge for the branch's CI
+    # conclusion while a run is in progress.
+    ci_fix_wait_poll_interval_s: float = Field(default=30.0, gt=0)
+
+    # Maximum seconds a single wait_for_ci call blocks before returning a
+    # still-pending signal (the agent may then call it again).  Generous by
+    # default because a full CI run (build + tests) can take many minutes.
+    ci_fix_wait_timeout_s: float = Field(default=1500.0, gt=0)
+
+    # Per-run request budget for the ci-fix agent.  Must cover ALL the agent's
+    # fix→push→verify iterations (reads, edits, run_command, push, wait_for_ci),
+    # so it is larger than the legacy per-cycle budget.  When exhausted,
+    # pydantic-ai raises UsageLimitExceeded, which the retry layer catches and
+    # triggers the fallback model (if configured).  Set to 0 to disable.
+    ci_fix_request_limit: int = Field(default=120, ge=0)
 
     # When True (default), ci_fix may invoke a conservative codeql_fp_triage
     # sub-agent at the hard cycle ceiling when the ONLY remaining red check
