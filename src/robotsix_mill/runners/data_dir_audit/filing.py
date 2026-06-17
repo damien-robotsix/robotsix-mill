@@ -14,7 +14,6 @@ from typing import Any
 from ...config import Settings
 from ...core.models import SourceKind
 from ...core.service import TicketService
-from ..data_dir_audit.orphans import OrphanWorkspace
 
 log = logging.getLogger("robotsix_mill.data_dir_audit")
 
@@ -196,64 +195,33 @@ def _build_unbounded_finding(finding: dict[str, Any]) -> tuple[str, str, str]:
     return gap_id, title, body
 
 
-def _build_orphan_finding(orphan: OrphanWorkspace) -> tuple[str, str, str]:
-    """Return ``(gap_id, title, body)`` for an orphan-workspace finding."""
-    board_id = orphan.board_id
-    ticket_id = orphan.ticket_id
-    size = orphan.dir_size_bytes
-    gap_id = (
-        f"orphan:{_sanitize_gap_segment(board_id)}:{_sanitize_gap_segment(ticket_id)}"
-    )
-    title = (
-        f"data-dir audit: orphan workspace {board_id}/{ticket_id} "
-        f"({_human_bytes(size)})"
-    )
-    body = (
-        "_Filed by the periodic data-dir audit pass._\n\n"
-        "## Finding\n\n"
-        f"- **Board:** `{board_id}`\n"
-        f"- **Ticket id:** `{ticket_id}`\n"
-        f"- **Path:** `{orphan.path}`\n"
-        f"- **Dir size:** {_human_bytes(size)} ({size} bytes)\n\n"
-        "This workspace dir belongs to a ticket no longer in the DB; "
-        "consider removing it.\n"
-    )
-    return gap_id, title, body
-
-
 def _order_findings(
     oversized: list[dict[str, Any]],
     growth_flags: list[dict[str, Any]],
     unbounded: list[dict[str, Any]],
-    orphans_by_board: dict[str, list[OrphanWorkspace]],
 ) -> list[tuple[str, str, str]]:
     """Order findings deterministically and return ``[(gap_id, title, body)]``.
 
-    Filing priority: orphans → growth (delta_bytes desc) → oversized
+    Filing priority: growth (delta_bytes desc) → oversized
     (size_bytes desc) → unbounded (current_size desc).
     """
     ordered: list[tuple[str, str, str]] = []
 
-    # 1. Orphans: sort by board_id, then ticket_id.
-    for board_id in sorted(orphans_by_board):
-        for orphan in sorted(orphans_by_board[board_id], key=lambda o: o.ticket_id):
-            ordered.append(_build_orphan_finding(orphan))
-
-    # 2. Growth flags: delta_bytes desc, then path for ties.
+    # 1. Growth flags: delta_bytes desc, then path for ties.
     for flag in sorted(
         growth_flags,
         key=lambda f: (-int(f.get("delta_bytes", 0)), f.get("path", "")),
     ):
         ordered.append(_build_growth_finding(flag))
 
-    # 3. Oversized: size_bytes desc, then path for ties.
+    # 2. Oversized: size_bytes desc, then path for ties.
     for item in sorted(
         oversized,
         key=lambda i: (-int(i.get("size_bytes", 0)), i.get("path", "")),
     ):
         ordered.append(_build_oversized_finding(item))
 
-    # 4. Unbounded: current_size desc, then path for ties.
+    # 3. Unbounded: current_size desc, then path for ties.
     for finding in sorted(
         unbounded,
         key=lambda f: (-int(f.get("current_size", 0)), f.get("path", "")),
@@ -269,7 +237,6 @@ def _file_findings_as_tickets(
     oversized: list[dict[str, Any]],
     growth_flags: list[dict[str, Any]],
     unbounded: list[dict[str, Any]],
-    orphans_by_board: dict[str, list[OrphanWorkspace]],
     session_id: str = "",
 ) -> list[dict[str, Any]]:
     """File draft tickets for findings, dedup'd via gap-id markers.
@@ -295,11 +262,11 @@ def _file_findings_as_tickets(
         gid for gid, info in prior.items() if info["resolution"] == "in-flight"
     }
 
-    ordered = _order_findings(oversized, growth_flags, unbounded, orphans_by_board)
+    ordered = _order_findings(oversized, growth_flags, unbounded)
 
     # Single per-sweep cap spanning ALL growth classes: the cap counts
     # only drafts actually ``created`` across the unified ``_order_findings``
-    # list (orphan → growth → oversized → unbounded). There is no
+    # list (growth → oversized → unbounded). There is no
     # per-class cap; dedup-skipped in-flight findings do not consume slots.
     cap = settings.data_dir_audit_max_drafts_per_pass
     created: list[dict[str, Any]] = []

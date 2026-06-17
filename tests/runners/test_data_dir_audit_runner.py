@@ -564,8 +564,9 @@ def test_batch_query_used_for_large_set(tmp_path, monkeypatch):
 def test_pass_reports_orphans_per_board_in_summary(tmp_path, monkeypatch):
     """``run_data_dir_audit_pass`` discovers boards from disk, scans
     each, and includes orphan counts (with per-board detail) in the
-    summary string."""
-    s = _make_settings(tmp_path)
+    summary string.  Orphan GC is disabled so old ticket-ID test
+    fixtures survive into the scan."""
+    s = _make_settings(tmp_path, data_dir_audit_prune_orphans=False)
 
     # Two boards, each with one orphan workspace.
     _make_workspace_dir(s, "board-a", "20260101T000000Z-orph-aa11")
@@ -610,6 +611,115 @@ def test_pass_no_orphans_when_clean(tmp_path, monkeypatch):
     assert "No issues found." in result.summary
     assert "\n" not in result.summary  # single line short-circuit
     assert result.drafts_created == []
+    db.reset_engine()
+
+
+# ---------------------------------------------------------------------------
+# Orphan-workspace GC — prune old orphan dirs
+# ---------------------------------------------------------------------------
+
+
+def test_prune_orphan_removes_old_orphan_dir(tmp_path):
+    """An orphan workspace dir older than the age threshold is deleted."""
+    s = _make_settings(
+        tmp_path,
+        data_dir_audit_prune_orphans=True,
+        data_dir_audit_prune_orphans_age_seconds=0,
+    )
+    ws = _make_workspace_dir(s, "board-x", "20200101T000000Z-old-orphan")
+    db.init_db(s, "board-x")
+
+    from robotsix_mill.runners.data_dir_audit.orphans import _prune_orphan_workspaces
+
+    removed = _prune_orphan_workspaces(s)
+    assert removed == 1
+    assert not ws.exists()
+    db.reset_engine()
+
+
+def test_prune_orphan_keeps_recent_orphan_dir(tmp_path):
+    """An orphan workspace dir younger than the age threshold is kept."""
+    ticket_id = _now().strftime("%Y%m%dT%H%M%SZ") + "-recent-orphan"
+    s = _make_settings(
+        tmp_path,
+        data_dir_audit_prune_orphans=True,
+        data_dir_audit_prune_orphans_age_seconds=86_400,
+    )
+    ws = _make_workspace_dir(s, "board-x", ticket_id)
+    db.init_db(s, "board-x")
+
+    from robotsix_mill.runners.data_dir_audit.orphans import _prune_orphan_workspaces
+
+    removed = _prune_orphan_workspaces(s)
+    assert removed == 0
+    assert ws.exists()
+    db.reset_engine()
+
+
+def test_prune_orphan_leaves_live_ticket_workspace(tmp_path):
+    """A live ticket's workspace is never removed by the orphan GC."""
+    s = _make_settings(
+        tmp_path,
+        data_dir_audit_prune_orphans=True,
+        data_dir_audit_prune_orphans_age_seconds=0,
+    )
+    ticket_id = "20200101T000000Z-live-ticket"
+    ws = _make_workspace_dir(s, "board-x", ticket_id)
+    _insert_ticket(s, "board-x", ticket_id)
+
+    from robotsix_mill.runners.data_dir_audit.orphans import _prune_orphan_workspaces
+
+    removed = _prune_orphan_workspaces(s)
+    assert removed == 0
+    assert ws.exists()
+    db.reset_engine()
+
+
+def test_prune_orphan_knob_off_is_noop(tmp_path):
+    """With the knob disabled, no orphan dirs are touched."""
+    s = _make_settings(
+        tmp_path,
+        data_dir_audit_prune_orphans=False,
+        data_dir_audit_prune_orphans_age_seconds=0,
+    )
+    ws = _make_workspace_dir(s, "board-x", "20200101T000000Z-old-orphan")
+    db.init_db(s, "board-x")
+
+    # Go through run_data_dir_audit_pass so the knob is checked.
+    import robotsix_mill.runners.data_dir_audit as audit_mod
+
+    original = audit_mod.Settings
+    audit_mod.Settings = lambda: s
+    try:
+        result = run_data_dir_audit_pass()
+    finally:
+        audit_mod.Settings = original
+
+    assert result.orphans_pruned == 0
+    assert ws.exists()
+    db.reset_engine()
+
+
+def test_prune_orphan_summary_line(tmp_path, monkeypatch):
+    """The summary includes 'Orphan workspaces pruned: N.' when orphans
+    are GC'd."""
+    s = _make_settings(
+        tmp_path,
+        data_dir_audit_prune_orphans=True,
+        data_dir_audit_prune_orphans_age_seconds=0,
+    )
+    _make_workspace_dir(s, "board-x", "20200101T000000Z-old-orphan-1")
+    _make_workspace_dir(s, "board-x", "20200101T000000Z-old-orphan-2")
+    db.init_db(s, "board-x")
+
+    monkeypatch.setattr(
+        "robotsix_mill.runners.data_dir_audit.Settings",
+        lambda: s,
+    )
+
+    result = run_data_dir_audit_pass()
+    assert result.orphans_pruned == 2
+    assert "Orphan workspaces pruned: 2." in result.summary
     db.reset_engine()
 
 
@@ -1546,8 +1656,9 @@ class TestFilingAndDedup:
         )
 
     def test_each_finding_produces_one_draft(self, tmp_path, monkeypatch):
-        """One oversized + one unbounded + one orphan + one growth →
-        at least 4 drafts created, with at least one per issue type."""
+        """One oversized + one unbounded + one growth →
+        at least 3 drafts created, with at least one per issue type.
+        (Orphans are GC'd, not filed.)"""
         s = _make_settings(tmp_path, data_dir_audit_max_drafts_per_pass=20)
         self._seed_one_of_each_finding(s)
 
@@ -1555,7 +1666,6 @@ class TestFilingAndDedup:
 
         titles = [d["title"] for d in result.drafts_created]
         prefixes = {
-            "data-dir audit: orphan workspace",
             "growth",
             "oversized",
             "unbounded",
@@ -1570,10 +1680,8 @@ class TestFilingAndDedup:
         # growth flags from the workspaces/ dir as it accrues content).
         oversized_count = sum(1 for t in titles if t.startswith("oversized"))
         unbounded_count = sum(1 for t in titles if t.startswith("unbounded"))
-        orphan_count = sum(1 for t in titles if t.startswith("data-dir audit: orphan"))
         assert oversized_count == 1, titles
         assert unbounded_count == 1, titles
-        assert orphan_count == 1, titles
         db.reset_engine()
 
     def test_second_pass_dedups_in_flight_tickets(self, tmp_path, monkeypatch):
@@ -2344,7 +2452,6 @@ def test_cross_class_cap_counts_across_classes(tmp_path):
         oversized,
         growth_flags,
         unbounded,
-        {},
     )
 
     # Exactly the global cap, NOT cap-per-class (which would be 6).
