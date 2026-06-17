@@ -1377,6 +1377,39 @@ class TestReconcileWithRemotePr:
         result = git_ops.reconcile_with_remote_pr(dest, remote, "feature", token=None)
         assert result is git_ops.ReconcileResult.DIVERGED
 
+    def test_diverged_but_remote_commit_is_mill_own_returns_synced(self, tmp_path):
+        """Divergence where the ONLY remote-side commit a force-push would
+        discard is mill-authored (the mill's own prior force-push from an
+        earlier rebase cycle) → SYNCED, not DIVERGED. This is the fix for the
+        false 'diverged' bail that forced a manual reconcile after every mill
+        rebase."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "local.txt").write_text("rebased local work")
+        git_ops.commit_all(dest, "local rebase commit")
+
+        # The remote 'feature' carries the mill's OWN earlier push (a prior
+        # rebase cycle) — authored by the mill, not a human.
+        pusher = tmp_path / "pusher"
+        subprocess.run(
+            ["git", "clone", "-q", remote, str(pusher)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        _git(pusher, "config", "user.email", "mill@robotsix.local")
+        _git(pusher, "config", "user.name", "robotsix-mill")
+        _git(pusher, "checkout", "-b", "feature")
+        (pusher / "prior.txt").write_text("mill's prior rebase\n")
+        _git(pusher, "add", "-A")
+        _git(pusher, "commit", "-q", "-m", "mill prior push")
+        _git(pusher, "push", "origin", "feature")
+
+        result = git_ops.reconcile_with_remote_pr(dest, remote, "feature", token=None)
+        assert result is git_ops.ReconcileResult.SYNCED
+
     def test_local_ahead_of_remote_noop(self, tmp_path):
         """When local is ahead of remote (normal case after local commits,
         before push) → returns True, no change."""
