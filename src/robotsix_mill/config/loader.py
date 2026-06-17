@@ -210,6 +210,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.models.retrospect": "retrospect_model",
     "core.models.audit": "audit_model",
     "core.models.dedup": "dedup_model",
+    "core.models.obsolescence": "obsolescence_model",
     "core.models.web_research": "web_research_model",
     "core.models.review": "review_model",
     "core.models.trace_inspector": "trace_inspector_model",
@@ -259,6 +260,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.limits.dedup_max_candidates": "dedup_max_candidates",
     "core.limits.dedup_skip_on_no_overlap": "dedup_skip_on_no_overlap",
     "core.limits.dedup_candidate_body_max_chars": "dedup_candidate_body_max_chars",
+    "core.limits.obsolescence_requests": "obsolescence_request_limit",
     "core.limits.doc_classifier_requests": "doc_classifier_request_limit",
     "core.limits.doc_classifier_diff_max_chars": "doc_classifier_diff_max_chars",
     "core.limits.review_requests": "review_request_limit",
@@ -349,6 +351,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "gates.scope_triage_enabled": "scope_triage_enabled",
     "gates.pr_summary_enabled": "pr_summary_enabled",
     "gates.pr_summary_model": "pr_summary_model",
+    "gates.obsolescence_gate_enabled": "obsolescence_gate_enabled",
     # -- ci --
     "ci.max_auto_retries": "ci_max_auto_retries",
     "ci.codeql_fp_triage_enabled": "codeql_fp_triage_enabled",
