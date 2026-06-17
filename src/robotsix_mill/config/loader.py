@@ -321,6 +321,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "web.fetch_max_calls": "web_fetch_max_calls",
     "web.fetch_max_total_bytes": "web_fetch_max_total_bytes",
     "core.lint_on_edit": "lint_on_edit",
+    "core.read_file_max_chars": "read_file_max_chars",
     # -- gates --
     "gates.require_approval": "require_approval",
     "gates.auto_approve_enabled": "auto_approve_enabled",

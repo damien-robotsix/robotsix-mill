@@ -1952,3 +1952,91 @@ class TestBuildPreseedHistoryPDF:
         contents = {p.content for p in parts}
         assert "PDF content" in contents
         assert "text content\n" in contents
+
+
+# ===================================================================
+# read_file — implicit-full-read size guard
+# ===================================================================
+
+
+class TestReadFileSizeGuard:
+    """``read_file`` bounds an *implicit full* read (``offset=1,
+    limit=None``) of a file exceeding ``settings.read_file_max_chars``
+    to a head+tail slice + an elision marker. Explicit ranged reads are
+    never truncated by this guard."""
+
+    def _small_cap_settings(self, tmp_path, cap):
+        from robotsix_mill.config import Settings
+
+        return Settings(data_dir=str(tmp_path / "data"), read_file_max_chars=cap)
+
+    def test_oversized_full_read_truncated_with_marker(self, tmp_path):
+        root = tmp_path / "repo"
+        root.mkdir()
+        # 400 lines of 20 chars each = ~8000 chars, well over a 1000 cap.
+        body = "".join(f"line{i:04d}-padding\n" for i in range(400))
+        _make_file(root, "big.txt", body)
+        s = self._small_cap_settings(tmp_path, 1000)
+        tools = _build(root, s)
+
+        result = tools["read_file"](path="big.txt")
+        # Bounded by the cap (+ the short marker).
+        assert len(result) < 1000 + 500
+        # Marker states the total line count and steers to offset/limit.
+        assert "400 lines" in result
+        assert "offset/limit" in result
+        # Head and tail are both represented.
+        assert "line0000-padding" in result
+        assert "line0399-padding" in result
+        # A middle line is omitted.
+        assert "line0200-padding" not in result
+
+    def test_small_full_read_unchanged(self, tmp_path):
+        root = tmp_path / "repo"
+        root.mkdir()
+        body = "small file\ncontent here\n"
+        _make_file(root, "small.txt", body)
+        s = self._small_cap_settings(tmp_path, 1000)
+        tools = _build(root, s)
+
+        result = tools["read_file"](path="small.txt")
+        assert result == body
+        assert "truncated" not in result
+
+    def test_ranged_read_never_truncated(self, tmp_path):
+        root = tmp_path / "repo"
+        root.mkdir()
+        body = "".join(f"line{i:04d}-padding\n" for i in range(400))
+        _make_file(root, "big.txt", body)
+        s = self._small_cap_settings(tmp_path, 1000)
+        tools = _build(root, s)
+
+        # Explicit limit → verbatim, even though far over the cap.
+        with_limit = tools["read_file"](path="big.txt", offset=1, limit=400)
+        assert with_limit == body
+        assert "truncated" not in with_limit
+
+        # Explicit offset > 1 → verbatim from that offset to EOF.
+        with_offset = tools["read_file"](path="big.txt", offset=2)
+        assert with_offset == body[len("line0000-padding\n") :]
+        assert "truncated" not in with_offset
+
+    def test_default_cap_value(self, tmp_path):
+        """The default cap is 50,000 chars — high enough that ordinary
+        source modules are returned in full."""
+        from robotsix_mill.config import Settings
+
+        s = Settings(data_dir=str(tmp_path / "data"))
+        assert s.read_file_max_chars == 50_000
+
+    def test_zero_cap_disables_guard(self, tmp_path):
+        root = tmp_path / "repo"
+        root.mkdir()
+        body = "".join(f"line{i:04d}-padding\n" for i in range(400))
+        _make_file(root, "big.txt", body)
+        s = self._small_cap_settings(tmp_path, 0)
+        tools = _build(root, s)
+
+        result = tools["read_file"](path="big.txt")
+        assert result == body
+        assert "truncated" not in result

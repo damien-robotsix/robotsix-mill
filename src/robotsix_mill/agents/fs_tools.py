@@ -24,6 +24,64 @@ log = logging.getLogger(__name__)
 _PRUNED_PLACEHOLDER = "[content pruned — more recent content above]"
 
 
+def _bound_full_read(text: str, max_chars: int) -> str:
+    """Bound an *implicit full* ``read_file`` payload to *max_chars*.
+
+    When ``text`` exceeds ``max_chars`` return a head slice + a tail
+    slice (line-aligned) joined by an elision marker that states the
+    file's total line count and steers the agent to re-read the omitted
+    region with ``offset``/``limit``. Otherwise return ``text``
+    unchanged. ``max_chars <= 0`` disables the guard (returns verbatim).
+
+    This brings ``read_file`` up to the same output discipline
+    ``run_command`` already has: a single tool return can't dump a
+    290 KB lockfile into the prefix where it is re-billed on every
+    later turn. The escape hatch (an explicit ranged read) is always
+    available, so no content is ever unreachable.
+    """
+    if max_chars <= 0 or len(text) <= max_chars:
+        return text
+
+    lines = text.splitlines(keepends=True)
+    total_lines = len(lines)
+
+    # Split the budget ~2/3 head, ~1/3 tail: the top of a file (imports,
+    # signatures) is usually more orienting than the bottom.
+    head_budget = (max_chars * 2) // 3
+    tail_budget = max_chars - head_budget
+
+    head_lines: list[str] = []
+    used = 0
+    for line in lines:
+        if head_lines and used + len(line) > head_budget:
+            break
+        head_lines.append(line)
+        used += len(line)
+
+    tail_lines: list[str] = []
+    used = 0
+    for line in reversed(lines):
+        if tail_lines and used + len(line) > tail_budget:
+            break
+        tail_lines.append(line)
+        used += len(line)
+    tail_lines.reverse()
+
+    head_count = len(head_lines)
+    tail_count = len(tail_lines)
+    omitted_start = head_count + 1
+    omitted_end = total_lines - tail_count
+    marker = (
+        f"\n\n[... read_file truncated: file has {total_lines} lines "
+        f"({len(text)} chars), over the read_file_max_chars cap of "
+        f"{max_chars}. Showing the first {head_count} and last "
+        f"{tail_count} lines. To read the omitted region (lines "
+        f"{omitted_start}-{omitted_end}), call read_file again with "
+        f"offset/limit. ...]\n\n"
+    )
+    return "".join(head_lines) + marker + "".join(tail_lines)
+
+
 def build_preseed_history(
     repo_dir: Path,
     paths: list[str],
@@ -497,6 +555,14 @@ def build_fs_tools(
         # still cost per-token), a net economy over a long agentic loop.
         if ctx is not None and is_full_read:
             _prune_stale_file_content(ctx, p)
+
+        # Implicit full read: bound the payload so a large generated/
+        # lock/baseline file can't dump its entire content into the
+        # prefix (re-billed on every later tool turn). Explicit ranged
+        # reads (offset > 1 or limit set) are never truncated here —
+        # that escape hatch always retrieves any specific region.
+        if is_full_read:
+            return _bound_full_read(text, settings.read_file_max_chars)
 
         lines = text.splitlines(keepends=True)
         if _offset > len(lines) and _offset > 1:

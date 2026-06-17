@@ -74,6 +74,19 @@ class _StagesSettings(BaseModel):
     # would only be caught one expensive test cycle later.
     # Configured via ``core.lint_on_edit`` in the YAML config.
     lint_on_edit: bool = Field(default=True, alias="MILL_LINT_ON_EDIT")
+    # Character cap on an *implicit full* ``read_file`` (offset=1,
+    # limit=None) payload, applied by ``fs_tools._bound_full_read``.
+    # Over the cap the tool returns a head+tail slice plus an elision
+    # marker that steers the agent to re-read the omitted region with
+    # offset/limit; explicit ranged reads are never truncated. 50,000
+    # chars ≈ 12.5K tokens — comfortably above ordinary hand-written
+    # source modules (which are returned in full) so only large
+    # generated/lock/baseline files (uv.lock ≈ 290 KB,
+    # mypy-baseline.txt ≈ 121 KB) get trimmed before they bloat the
+    # prefix that is re-billed on every later tool turn. 0 disables the
+    # guard. Configured via ``core.read_file_max_chars`` in the YAML
+    # config.
+    read_file_max_chars: int = Field(default=50_000, ge=0)
     # Directory of skill docs (skills/<name>/SKILL.md) injected into the
     # refine + implement agents' system prompt. Relative to CWD (/app in
     # the container, repo root locally).
