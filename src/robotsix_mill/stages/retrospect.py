@@ -569,6 +569,22 @@ class RetrospectStage(Stage):
             candidates_path,
         )
 
+        # Bounded-retention sweep: prune resolved entries and cap total
+        # size so this append-only file can't grow without bound. The
+        # helper no-ops when the cap is disabled (<= 0).
+        from ..agents.candidates import prune_candidates
+
+        dropped = prune_candidates(
+            candidates_path, settings.retrospect_candidates_max_entries
+        )
+        if dropped > 0:
+            log.info(
+                "%s: pruned %d resolved AGENT.md candidate(s) from %s",
+                ticket.id,
+                dropped,
+                candidates_path,
+            )
+
     def _maybe_spawn_agented_proposal_tickets(
         self,
         res: RetrospectResult,

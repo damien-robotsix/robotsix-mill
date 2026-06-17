@@ -8,6 +8,7 @@ from robotsix_mill.agents.candidates import (
     Candidate,
     candidates_path,
     load_candidates,
+    prune_candidates,
     to_ticket_payload,
     update_status,
 )
@@ -196,3 +197,115 @@ def test_candidates_path_per_board():
         "/data/robotsix-mill/AGENT_CANDIDATES.md"
     )
     assert candidates_path(base, "") == Path("/data/AGENT_CANDIDATES.md")
+
+
+# ---------------------------------------------------------------------------
+#  prune_candidates — bounded retention
+# ---------------------------------------------------------------------------
+
+
+def _block(idx: int, status: str | None = None) -> str:
+    """Build a well-formed candidate block. ``idx`` keeps each block's
+    rule/proposed-at distinct so candidate_ids differ. When *status* is
+    given a ``**Status:**`` line is appended (a resolved block)."""
+    status_line = ""
+    if status is not None:
+        filed = f" → 20260601-mill-{idx:03d}" if status == "validated" else ""
+        status_line = f"**Status:** {status}{filed}\n\n"
+    return (
+        f"### Proposed addition to ## Section {idx}\n\n"
+        f"> **Rule:** Rule number {idx} body text.\n\n"
+        f"**Rationale:** rationale for block {idx}.\n\n"
+        f"**Proposed:** 2026-05-30 1{idx}:00 UTC (from 20260530T1{idx}0000Z-tkt-{idx:04d})\n\n"
+        f"{status_line}"
+        f"---\n"
+    )
+
+
+def test_prune_noop_when_max_entries_zero(tmp_path):
+    content = _block(1, "validated") + "\n" + _block(2)
+    p = _write(tmp_path, content)
+    assert prune_candidates(p, 0) == 0
+    assert p.read_text() == content
+
+
+def test_prune_noop_when_file_missing(tmp_path):
+    missing = tmp_path / "nope.md"
+    assert prune_candidates(missing, 10) == 0
+    assert not missing.exists()
+
+
+def test_prune_drops_oldest_resolved_keeps_pending(tmp_path):
+    # 3 resolved (oldest first) + 2 pending, cap 3.
+    content = (
+        _block(1, "validated")
+        + "\n"
+        + _block(2, "rejected")
+        + "\n"
+        + _block(3, "validated")
+        + "\n"
+        + _block(4)
+        + "\n"
+        + _block(5)
+    )
+    p = _write(tmp_path, content)
+    dropped = prune_candidates(p, 3)
+    # 2 pending always kept → only 1 resolved slot → drop 2 oldest resolved.
+    assert dropped == 2
+    out = load_candidates(p)
+    assert len(out) == 3
+    statuses = [c.status for c in out]
+    assert statuses.count("pending") == 2
+    # The single surviving resolved block is the most-recent one (block 3).
+    surviving_resolved = [c for c in out if c.status != "pending"]
+    assert len(surviving_resolved) == 1
+    assert surviving_resolved[0].section == "## Section 3"
+    # Raw content of a survivor is preserved verbatim.
+    text = p.read_text()
+    assert "Rule number 3 body text." in text
+    assert "Rule number 1 body text." not in text
+
+
+def test_prune_pending_exceeds_cap_keeps_all_pending(tmp_path, caplog):
+    import logging
+
+    # 3 pending + 2 resolved, cap 2 → all pending kept, all resolved dropped.
+    content = (
+        _block(1, "validated")
+        + "\n"
+        + _block(2)
+        + "\n"
+        + _block(3)
+        + "\n"
+        + _block(4)
+        + "\n"
+        + _block(5, "rejected")
+    )
+    p = _write(tmp_path, content)
+    with caplog.at_level(logging.WARNING):
+        dropped = prune_candidates(p, 2)
+    assert dropped == 2  # both resolved blocks dropped
+    out = load_candidates(p)
+    assert len(out) == 3
+    assert all(c.status == "pending" for c in out)
+    assert any("pending backlog" in r.message for r in caplog.records)
+
+
+def test_prune_atomic_no_tmp_left_and_valid(tmp_path):
+    content = _block(1, "validated") + "\n" + _block(2, "rejected") + "\n" + _block(3)
+    p = _write(tmp_path, content)
+    prune_candidates(p, 1)
+    # No stray temp file remains.
+    assert not (tmp_path / "AGENT_CANDIDATES.md.tmp").exists()
+    # File still round-trips.
+    out = load_candidates(p)
+    assert len(out) == 1
+    assert out[0].status == "pending"
+
+
+def test_prune_returns_zero_when_nothing_to_drop(tmp_path):
+    content = _block(1, "validated") + "\n" + _block(2)
+    p = _write(tmp_path, content)
+    before = p.read_text()
+    assert prune_candidates(p, 10) == 0
+    assert p.read_text() == before

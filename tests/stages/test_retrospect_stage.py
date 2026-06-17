@@ -1583,7 +1583,11 @@ def test_agented_proposals_append_only(ctx_factory, monkeypatch):
     candidates_path = s.data_dir / "test-board" / "AGENT_CANDIDATES.md"
     candidates_path.parent.mkdir(parents=True, exist_ok=True)
     candidates_path.write_text(
-        "### Proposed addition to ## Prior Section\n\n> **Rule:** Old rule.\n\n---\n",
+        "### Proposed addition to ## Prior Section\n\n"
+        "> **Rule:** Old rule.\n\n"
+        "**Rationale:** prior rationale.\n\n"
+        "**Proposed:** 2026-05-30 10:00 UTC (from 20260530T100000Z-prior-aaaa)\n\n"
+        "---\n",
         encoding="utf-8",
     )
 

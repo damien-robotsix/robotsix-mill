@@ -281,6 +281,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     # -- core.memory --
     "core.memory.max_memory_chars": "max_memory_chars",
     "core.memory.retrospect_log_max_chars": "retrospect_log_max_chars",
+    "core.memory.retrospect_candidates_max_entries": "retrospect_candidates_max_entries",
     "core.memory.reference_files_max_count": "reference_files_max_count",
     "core.memory.reference_files_max_total_lines": "reference_files_max_total_lines",
     "core.memory.dedup_lookback_days": "dedup_lookback_days",
