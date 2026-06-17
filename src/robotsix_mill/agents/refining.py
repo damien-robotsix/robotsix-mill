@@ -819,6 +819,26 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
 
         tools.append(make_log_query_tool(deployed_log_dir))
 
+    # Per-trace (cross-consult) web budget + error-loop guard. The
+    # per-consult web_fetch caps don't bound fetch/search fan-out across
+    # a whole refine run, so a refine loop could re-bill millions of
+    # input tokens on runaway web I/O (83 fetches / 22 searches in one
+    # observed specimen). Reset the process-global trace budgets once per
+    # run (mirroring survey_runner) and wrap the tools with the shared
+    # error counter (mirroring trace_inspector / periodic_base).
+    from ..agents.web_tools import reset_trace_web_fetch_budget
+    from ..agents.web_knowledge import reset_trace_web_search_budget
+
+    reset_trace_web_fetch_budget(
+        settings.refine_web_fetch_max_calls,
+        settings.refine_web_fetch_max_total_bytes,
+    )
+    reset_trace_web_search_budget(settings.refine_web_search_max_calls)
+
+    from .trace_inspector import _wrap_tools_with_error_limit
+
+    tools = _wrap_tools_with_error_limit(tools, max_errors=settings.refine_max_errors)
+
     overrides = _build_refine_overrides(
         definition,
         settings,
@@ -906,7 +926,10 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
         [user_prompt, *binary_contents] if binary_contents else user_prompt
     )
 
-    limits = UsageLimits(request_limit=settings.refine_request_limit)
+    limits = UsageLimits(
+        request_limit=settings.refine_request_limit,
+        tool_calls_limit=settings.refine_max_tool_calls,
+    )
 
     try:
         result = run_agent(
