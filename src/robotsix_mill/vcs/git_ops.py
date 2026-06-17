@@ -25,12 +25,18 @@ class ReconcileResult(str, Enum):
         fast-forwarded onto it, is strictly ahead of it, or the remote
         branch doesn't exist yet (first push). Safe to proceed.
     ``DIVERGED`` — the workspace and the remote PR branch have BOTH
-        advanced independently (e.g. a human pushed a commit to the PR
-        after the clone). A force-push here would silently overwrite the
-        foreign commit — ``push_with_lease`` does NOT protect this case,
-        because reconcile's own fetch already advanced the lease ref to
-        that commit, so the compare-and-swap would pass. Callers MUST
-        block instead of pushing.
+        advanced independently AND at least one commit the remote carries
+        (that a force-push would discard) is FOREIGN — i.e. authored by
+        someone other than the mill (a human pushed to the PR after the
+        clone). A force-push here would silently overwrite that foreign
+        commit — ``push_with_lease`` does NOT protect this case, because
+        reconcile's own fetch already advanced the lease ref to it, so the
+        compare-and-swap would pass. Callers MUST block instead of pushing.
+        NOTE: divergence where every discarded remote commit is
+        mill-authored (the mill's OWN prior force-push from an earlier
+        rebase cycle) returns ``SYNCED``, not ``DIVERGED`` — overwriting the
+        mill's own commit is safe, and bailing there caused needless manual
+        reconciliation after routine mill rebases.
     ``UNAVAILABLE`` — the remote couldn't be reached / inspected (fetch
         failed transiently, corrupt clone, etc.). Reconcile couldn't
         determine the relationship, but the lease ref was NOT advanced to
@@ -348,6 +354,32 @@ def fetch(repo: Path, *, remote_url: str, token: str | None, branch: str) -> Non
     )
 
 
+def _range_commit_emails(
+    repo: Path, base: str, tip: str
+) -> list[tuple[str, str]] | None:
+    """Return ``[(author_email, committer_email)]`` for commits in
+    ``base..tip`` (reachable from *tip* but not *base*).
+
+    Returns ``None`` on any git error (caller treats undetermined
+    authorship conservatively).
+    """
+    out = subprocess.run(
+        ["git", "-C", str(repo), "log", "--format=%ae|%ce", f"{base}..{tip}"],
+        capture_output=True,
+        text=True,
+    )
+    if out.returncode != 0:
+        return None
+    pairs: list[tuple[str, str]] = []
+    for line in out.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        author, _, committer = line.partition("|")
+        pairs.append((author, committer))
+    return pairs
+
+
 def reconcile_with_remote_pr(
     repo: Path, remote_url: str, branch: str, token: str | None
 ) -> ReconcileResult:
@@ -422,10 +454,27 @@ def reconcile_with_remote_pr(
         if result.returncode == 0:
             return ReconcileResult.SYNCED
 
-        # 4. Neither is ancestor → diverged. A force-push must NOT happen
-        # here: the fetch above already advanced refs/remotes/origin/<branch>
-        # to the foreign commit, so push_with_lease's compare-and-swap would
-        # pass and silently overwrite it.
+        # 4. Neither is ancestor → diverged. A force-push would discard the
+        # commits the remote carries that the local rebase does not
+        # (``local..remote``). That is only unsafe when one of those discarded
+        # commits is FOREIGN (a human pushed to the PR branch). When every
+        # discarded commit is mill-authored, the "foreign" commit is just the
+        # mill's OWN prior force-push from an earlier rebase cycle — safe to
+        # overwrite. Distinguishing the two stops the false "diverged" bail
+        # that otherwise forces a manual reconcile after every mill rebase.
+        discarded = _range_commit_emails(repo, local_sha, remote_sha)
+        if (
+            discarded is not None
+            and discarded
+            and all(
+                author in _MILL_EMAILS and committer in _MILL_EMAILS
+                for author, committer in discarded
+            )
+        ):
+            # Remote-unique commits are all the mill's own → push_with_lease
+            # (leasing against the freshly-fetched origin ref) will overwrite
+            # only mill commits. Safe to proceed.
+            return ReconcileResult.SYNCED
         return ReconcileResult.DIVERGED
     except Exception:
         # Any unexpected git failure (missing repo, corrupt clone, etc.)
