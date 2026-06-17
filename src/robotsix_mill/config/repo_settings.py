@@ -192,34 +192,6 @@ def load_extra_sandbox_packages(repo_dir: Path | None) -> list[str]:
     return []
 
 
-def load_repo_data_dir(repo_dir: Path | None) -> Path | None:
-    """Return the per-repo ``data_dir`` from
-    ``<repo_dir>/.robotsix-mill/config.yaml``, or ``None``.
-
-    Returns a ``Path`` when the file's top-level ``data_dir`` key is
-    present and is a non-empty string; otherwise returns ``None``.
-    Never raises — a missing or malformed file is treated as "not set"
-    so a managed repo can't take mill down by committing a broken file:
-
-    * ``repo_dir is None`` → ``None``.
-    * file absent → ``None`` (silent no-op).
-    * unreadable / invalid YAML → ``log.warning`` + ``None``.
-    * top-level not a mapping, or ``data_dir`` value not a string
-      → ``log.warning`` + ``None`` (clear type mismatch).
-    * key absent, or value empty/whitespace-only → ``None`` (plain
-      absence, no warning).
-    """
-    raw = _load_repo_config_dict(repo_dir)
-    if raw is None or "data_dir" not in raw:
-        return None
-    value = raw["data_dir"]
-    if not isinstance(value, str):
-        log.warning("repo settings: 'data_dir' must be a string — ignoring")
-        return None
-    stripped = value.strip()
-    return Path(stripped) if stripped else None
-
-
 def warn_if_deprecated_log_folder(repo_dir: Path | None) -> None:
     """Log a deprecation warning if a managed repo still commits the
     repo-owned ``deployed_log_folder`` key in ``.robotsix-mill/config.yaml``.

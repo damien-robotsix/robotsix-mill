@@ -21,11 +21,9 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
 from ...config import RepoConfig, Settings
-from ...config.repo_settings import load_repo_data_dir
 from ...core.service import TicketService
 
 from .finders import (
@@ -74,69 +72,6 @@ class DataDirAuditPassResult:
     orphans_pruned: int = 0
 
 
-def _find_any_clone_dir(data_dir: Path, repo_id: str) -> Path | None:
-    """Return any existing clone of *repo_id* under *data_dir*, or ``None``.
-
-    Looks for ``<data_dir>/<repo_id>/<anything>_workspace/repo/.git``
-    and returns the ``.../repo`` directory when found.  This mirrors
-    the periodic supervisor's ``_find_config_clone_dir`` logic so the
-    data-dir audit runner can read per-repo settings from
-    ``.robotsix-mill/config.yaml`` without owning its own clone.
-    """
-    base = data_dir / repo_id
-    if not base.is_dir():
-        return None
-    # Preferred: the periodic supervisor's own clone.
-    periodic = base / "periodic_workspace" / "repo"
-    if (periodic / ".git").exists():
-        return periodic
-    # Legacy name (pre-rename).
-    bespoke = base / "bespoke_workspace" / "repo"
-    if (bespoke / ".git").exists():
-        return bespoke
-    # Any other worker clone.
-    try:
-        for child in base.iterdir():
-            if (
-                child.is_dir()
-                and child.name.endswith("_workspace")
-                and (child / "repo" / ".git").exists()
-            ):
-                return child / "repo"
-    except OSError:
-        pass
-    return None
-
-
-def _resolve_audit_data_dir(
-    settings: Settings,
-    repo_config: RepoConfig | None,
-) -> tuple[Path, Settings]:
-    """Resolve the effective data directory and settings for this pass.
-
-    When *repo_config* is provided and its repo has an existing clone
-    on disk whose ``.robotsix-mill/config.yaml`` declares a ``data_dir``
-    key, that per-repo value is used as the audit target directory.
-    Otherwise falls back to the global ``settings.data_dir``.
-
-    Returns ``(audit_data_dir, audit_settings)`` where *audit_settings*
-    is a copy of *settings* with ``data_dir`` rebound when an override
-    is active, or the original *settings* otherwise.
-    """
-    audit_data_dir: Path = settings.data_dir
-    if repo_config is not None:
-        clone_dir = _find_any_clone_dir(settings.data_dir, repo_config.repo_id)
-        if clone_dir is not None:
-            per_repo = load_repo_data_dir(clone_dir)
-            if per_repo is not None:
-                audit_data_dir = per_repo
-    if audit_data_dir != settings.data_dir:
-        audit_settings = settings.model_copy(update={"data_dir": audit_data_dir})
-    else:
-        audit_settings = settings
-    return audit_data_dir, audit_settings
-
-
 def run_data_dir_audit_pass(
     session_id: str = "",
     repo_config: RepoConfig | None = None,
@@ -170,25 +105,20 @@ def run_data_dir_audit_pass(
     # tmp_path-rooted instance.
     settings = Settings()
 
-    # Resolve per-repo data_dir from .robotsix-mill/config.yaml when
-    # available.  Falls back to the global settings.data_dir when the
-    # repo has no clone on disk or declares no data_dir override.
-    audit_data_dir, audit_settings = _resolve_audit_data_dir(settings, repo_config)
-
     # Default-on GC: prune reproducible repo/ + repos/ clones inside
     # terminal-ticket workspaces BEFORE size measurement, so reclaimed
     # space never flags growth. Preserves description.md / artifacts/.
     clones_pruned = 0
-    if audit_settings.data_dir_audit_prune_terminal_clones:
-        clones_pruned = _prune_terminal_clones(audit_settings)
+    if settings.data_dir_audit_prune_terminal_clones:
+        clones_pruned = _prune_terminal_clones(settings)
 
     # Opt-in GC: prune whole workspace dirs of terminal-state
     # tickets BEFORE size measurement, so every downstream measurement
     # (oversized / growth / orphan) and therefore every filed alert
     # reflects the post-GC state. Default-off via the knob.
     closed_pruned = 0
-    if audit_settings.data_dir_audit_prune_closed:
-        closed_pruned = _prune_closed_workspaces(audit_settings)
+    if settings.data_dir_audit_prune_closed:
+        closed_pruned = _prune_closed_workspaces(settings)
 
     # Default-on DB row GC: purge oldest terminal-ticket rows (and
     # their events/comments/actions) from mill.db when the count
@@ -197,22 +127,22 @@ def run_data_dir_audit_pass(
     # boards (e.g. DONE never -> CLOSED) get cleaned here BEFORE
     # the growth scan so reclaimed space doesn't flag growth.
     db_rows_purged = 0
-    if audit_settings.data_dir_audit_prune_db_rows:
-        db_rows_purged = _prune_archived_db_rows(audit_settings)
+    if settings.data_dir_audit_prune_db_rows:
+        db_rows_purged = _prune_archived_db_rows(settings)
 
     # Default-on GC: prune orphan workspace dirs (ticket absent from
     # the board DB) BEFORE size measurement, so reclaimed space never
     # flags growth and the subsequent orphan scan sees only young
     # orphans still within the age guard.
     orphans_pruned = 0
-    if audit_settings.data_dir_audit_prune_orphans:
-        orphans_pruned = _prune_orphan_workspaces(audit_settings)
+    if settings.data_dir_audit_prune_orphans:
+        orphans_pruned = _prune_orphan_workspaces(settings)
 
     # Walk ``data_dir`` exactly once: the size dicts feed both the
     # top-N oversized check (ticket 2) and the summary header's
     # total-bytes / total-files anchor.
-    if audit_data_dir.is_dir():
-        file_sizes, dir_totals = _collect_sizes(audit_data_dir)
+    if settings.data_dir.is_dir():
+        file_sizes, dir_totals = _collect_sizes(settings.data_dir)
     else:
         file_sizes, dir_totals = {}, defaultdict(int)
     total_bytes = sum(file_sizes.values())
@@ -221,40 +151,37 @@ def run_data_dir_audit_pass(
     # Compute the set of self-healing clone-cache / periodic-pass
     # paths so they are suppressed BEFORE top-N selection (mirroring
     # the growth check's existing exemption).
-    suppressed = _self_healing_oversized_paths(file_sizes, dir_totals, audit_settings)
+    suppressed = _self_healing_oversized_paths(file_sizes, dir_totals, settings)
 
     oversized = _select_largest_from_sizes(
         file_sizes,
         dir_totals,
         10,
-        audit_settings.data_dir_audit_size_threshold_bytes,
+        settings.data_dir_audit_size_threshold_bytes,
         suppressed=suppressed,
     )
 
     # Unbounded-collection candidate detection (ticket 4 of the epic).
-    findings = check_unbounded_candidates(audit_data_dir, audit_settings)
+    findings = check_unbounded_candidates(settings.data_dir, settings)
 
     # Orphan-workspace detection (ticket 5 of the epic). Ticket filing
     # is intentionally out of scope (ticket 6 consumes these findings
     # via the memory-ledger dedup path).
-    orphans_by_board, total_orphans = _scan_orphan_workspaces(audit_settings)
+    orphans_by_board, total_orphans = _scan_orphan_workspaces(settings)
 
     # Growth-delta detection (ticket 3 of the epic).
-    all_growth_flags, _boards_with_flags = _scan_growth_deltas(audit_settings)
+    all_growth_flags, _boards_with_flags = _scan_growth_deltas(settings)
 
     # ----- Filing logic (ticket 6 of the epic) -----
     # Resolve a TicketService against the scheduling board. With no
     # repo_config or an empty board_id there is no board to file
     # against — skip filing entirely (still return the inspection
     # results so the runs panel can show what was found).
-    # NOTE: TicketService always uses the original *settings* (not
-    # *audit_settings*) because the board DB lives under the global
-    # data_dir, not the per-repo override.
     drafts_created: list[dict[str, Any]] = []
     if repo_config is not None and repo_config.board_id:
         service = TicketService(settings, board_id=repo_config.board_id)
         drafts_created = _file_findings_as_tickets(
-            audit_settings,
+            settings,
             service,
             oversized,
             all_growth_flags,
