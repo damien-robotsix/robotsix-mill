@@ -328,6 +328,23 @@ periodic:
     interval_seconds: 86400
     memory_path: null
 
+  # -- data-dir audit — scans data_dir for oversized files, growth deltas,
+  #    and prunes terminal-ticket clone directories ------------------------
+  data_dir_audit:
+    model: deepseek/deepseek-v4-flash  # read-only scanner, flash sufficient
+    enabled: true                   # enable periodic data-dir audit passes
+    interval_seconds: 86400         # seconds between passes
+    memory_path: null               # defaults to <data_dir>/data_dir_audit_memory.md
+    size_threshold_bytes: 104857600  # 100 MiB — threshold for oversized files/dirs
+    growth_delta_bytes: 10485760    # 10 MiB — growth since last pass
+    growth_delta_pct: 20            # 20% — growth percentage threshold
+    max_drafts_per_pass: 5          # max findings drafted per pass
+    prune_closed: false             # opt-in: prune terminal-ticket workspace dirs
+    prune_closed_age_seconds: 604800  # 7 days — min age for prune_closed
+    prune_terminal_clones: true     # prune repo/ clones in terminal workspaces
+    prune_terminal_clones_age_seconds: 86400  # 1 day — min age for clone pruning
+    prune_db_rows: true             # GC oldest terminal-ticket DB rows
+
   # -- config-sync — detects config ↔ .env ↔ docs drift -----------------------
   config_sync:
     model: *cheap_model           # config-sync agent model (read-only file parsing)
