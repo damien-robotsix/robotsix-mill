@@ -158,6 +158,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         self._diagnostic_task: asyncio.Task[None] | None = None
         self._stale_branch_task: asyncio.Task | None = None
         self._db_maintenance_task: asyncio.Task | None = None
+        self._credit_balance_task: asyncio.Task[None] | None = None
         # board_id -> per-repo bespoke supervisor task. The supervisor
         # itself owns each repo's per-bespoke child tasks; cancelling
         # the supervisor cancels its children.
@@ -674,6 +675,20 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             ),
         )
 
+        # --- Credit balance poll (gated on its own flag, not _periodic) ---
+        if (
+            self.ctx.settings.low_credit_poll_enabled
+            and self._credit_balance_task is None
+        ):
+            self._credit_balance_task = asyncio.create_task(
+                self._credit_balance_poll_loop()
+            )
+            log.info(
+                "Periodic credit-balance poll enabled: interval %ds, threshold $%.2f",
+                self.ctx.settings.low_credit_poll_interval_seconds,
+                self.ctx.settings.low_credit_threshold_usd,
+            )
+
         # --- CI monitor (unique: checks repo config, not just settings) ---
         if self._ci_monitor_task is None:
             repos = get_repos_config()
@@ -751,6 +766,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             "_diagnostic_task",
             "_stale_branch_task",
             "_db_maintenance_task",
+            "_credit_balance_task",
         ):
             t = getattr(self, attr)
             if t is not None:

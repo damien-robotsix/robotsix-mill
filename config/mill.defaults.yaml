@@ -98,6 +98,9 @@ core:
   llm_backend: deepseek                 # deepseek (OpenRouter) | claude (Claude SDK) backend
   claude_sdk_agents: []                 # agent names routed to the Claude SDK backend (empty = none)
   claude_sdk_vision_enabled: false      # allow image input on Claude-SDK-routed agents
+  low_credit_threshold_usd: 5.0         # OpenRouter balance below this → board warning banner
+  low_credit_poll_enabled: true         # enable proactive GET /api/v1/credits hourly poll
+  low_credit_poll_interval_seconds: 3600  # seconds between credit-balance checks
   enable_repo_creation: false           # allow the new-repo meta flow to create repositories
   repo_visibility_default: public      # "public" | "private" — default visibility for new repos
   lint_on_edit: true                    # run ruff after each agent file edit

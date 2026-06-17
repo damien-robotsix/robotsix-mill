@@ -436,6 +436,9 @@ robotsix-llmio Claude Agent SDK transport.
 | `core.limits.rate_limit_backoff_cap` | `MILL_RATE_LIMIT_BACKOFF_CAP` | `120.0` | Max seconds between rate-limit retries |
 | `core.limits.rate_limit_fallback_retries` | `MILL_RATE_LIMIT_FALLBACK_RETRIES` | `3` | Consecutive rate-limit failures before switching to fallback model |
 | `core.limits.model_request_timeout` | `MILL_MODEL_REQUEST_TIMEOUT` | `900.0` | Hard per-call timeout in seconds for every model request |
+| `core.low_credit_threshold_usd` | — | `5.0` | OpenRouter credit balance below this value triggers the board warning banner |
+| `core.low_credit_poll_enabled` | — | `true` | Enable the proactive OpenRouter credit-balance poll (hourly via `GET /api/v1/credits`) |
+| `core.low_credit_poll_interval_seconds` | — | `3600` | Seconds between proactive credit-balance checks |
 
 ### 4. Memory
 

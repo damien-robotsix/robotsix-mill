@@ -157,6 +157,7 @@ margin-left:4px">
 </button>
 </header>
 <div id="lf-status" style="display:none;background:#3a2418;border-bottom:1px solid #6b3320;color:#e8b08a;padding:6px 12px;font-size:12px"></div>
+<div id="credit-status" style="display:none;background:#3a2418;border-bottom:1px solid #6b3320;color:#e8b08a;padding:6px 12px;font-size:12px"></div>
 {BOARD_SKELETON}
 <div id="drawer"><div id="d"><div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/lib/marked.umd.js"></script>

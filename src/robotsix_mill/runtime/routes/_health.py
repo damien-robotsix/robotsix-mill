@@ -48,6 +48,30 @@ def langfuse_status() -> dict:
     return {"failures": failures, "count": len(failures)}
 
 
+@router.get("/credit-status")
+def credit_status() -> dict[str, object]:
+    """Return the current low-OpenRouter-credit warning state.
+
+    Polled by the board UI's ``fetchCreditStatus()`` every refresh
+    cycle.  ``low`` is ``true`` when the balance is below the
+    configured threshold OR a 402 insufficient-credit error was seen.
+    """
+    from ..credit_status import get_credit_status
+
+    return get_credit_status()
+
+
+@router.post(
+    "/credit-status/clear",
+    status_code=204,
+)
+def credit_status_clear() -> None:
+    """Dismiss the low-credit warning after the operator acknowledges it."""
+    from ..credit_status import clear_credit_status
+
+    clear_credit_status()
+
+
 @router.get("/worker-status")
 def worker_status(worker: "Worker" = Depends(get_worker)) -> dict[str, object]:
     """Live worker introspection for diagnosing stuck tickets.

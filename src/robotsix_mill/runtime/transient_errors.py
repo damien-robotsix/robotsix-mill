@@ -166,6 +166,122 @@ def network_available(host: str, *, cache_seconds: float = 30.0) -> bool:
     return ok
 
 
+# --- OpenRouter 402 insufficient-credit detection ---------------------------
+
+_INSUFFICIENT_CREDIT_RE = re.compile(
+    r"(insufficient_credits"
+    r"|requires more credits"
+    r"|Insufficient credits"
+    r"|insufficient.*balance"
+    r"|credit.*balance.*insufficient"
+    r"|You need to add more credits)",
+    re.IGNORECASE,
+)
+
+_SHORTFALL_RE = re.compile(
+    r"(?:can only afford\s+)(\d+)|"
+    r"(?:requested up to\s+)(\d+)\s+tokens.*?(?:can only afford\s+)(\d+)",
+    re.IGNORECASE,
+)
+
+
+def _matches_insufficient_credit(exc: BaseException) -> bool:
+    """Return True when *exc* looks like an OpenRouter 402 credit-shortfall."""
+    msg = str(exc)
+    if _INSUFFICIENT_CREDIT_RE.search(msg):
+        return True
+    # httpx.HTTPStatusError: response body may contain the message
+    if isinstance(exc, httpx.HTTPStatusError):
+        if exc.response.status_code == 402:
+            try:
+                body = exc.response.text
+            except Exception:
+                body = ""
+            if _INSUFFICIENT_CREDIT_RE.search(body):
+                return True
+            # Also check JSON error field
+            try:
+                js = exc.response.json()
+                err = str(js.get("error", {}).get("message", ""))
+                if _INSUFFICIENT_CREDIT_RE.search(err):
+                    return True
+            except Exception:  # noqa: S110 -- defensive parse, ignore
+                pass
+    # openai.PermissionDeniedError (402)
+    if openai is not None and isinstance(exc, openai.PermissionDeniedError):
+        # PermissionDeniedError doesn't expose http_status directly;
+        # detect 402 via the string message.
+        if "402" in str(exc) or "insufficient" in str(exc).lower():
+            return True
+    return False
+
+
+def _check_one_insufficient_credit(exc: BaseException) -> bool:
+    """Check a single exception node (not the chain)."""
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 402:
+        if _matches_insufficient_credit(exc):
+            return True
+    if openai is not None and isinstance(exc, openai.PermissionDeniedError):
+        return _matches_insufficient_credit(exc)
+    return _matches_insufficient_credit(exc)
+
+
+def is_insufficient_credit(exc: BaseException) -> bool:
+    """Return True when *exc* (or any node in its cause chain) is an
+    OpenRouter 402 insufficient-credit error.
+
+    Walks ``__cause__`` / ``__context__`` up to ``_MAX_CHAIN_WALK``
+    levels — same pattern as :func:`classify_stage_error`.
+    """
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    for _ in range(_MAX_CHAIN_WALK):
+        if current is None or id(current) in seen:
+            break
+        seen.add(id(current))
+        if _check_one_insufficient_credit(current):
+            return True
+        if current.__cause__ is not None and id(current.__cause__) not in seen:
+            current = current.__cause__
+        elif current.__context__ is not None and id(current.__context__) not in seen:
+            current = current.__context__
+        else:
+            break
+    return False
+
+
+def parse_credit_shortfall(exc: BaseException) -> str:
+    """Extract a human-readable shortfall message from a 402 error.
+
+    Returns ``""`` when no shortfall numbers can be parsed.
+    """
+    msg = str(exc)
+    # Try JSON body first
+    if isinstance(exc, httpx.HTTPStatusError):
+        try:
+            body = exc.response.text
+            if body:
+                msg = body
+        except Exception:  # noqa: S110 -- defensive parse, ignore
+            pass
+        try:
+            js = exc.response.json()
+            err = str(js.get("error", {}).get("message", ""))
+            if err:
+                msg = err
+        except Exception:  # noqa: S110 -- defensive parse, ignore
+            pass
+
+    m = _SHORTFALL_RE.search(msg)
+    if m is None:
+        return ""
+    if m.group(1):
+        return f"can only afford {m.group(1)} tokens"
+    if m.group(2) and m.group(3):
+        return f"requested up to {m.group(2)} tokens, can only afford {m.group(3)}"
+    return ""
+
+
 def reraise_if_transient(exc: BaseException) -> None:
     """Re-raise *exc* when it's a transient stage error, else return.
 

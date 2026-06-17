@@ -266,6 +266,9 @@ class PollLoopsMixin(_WorkerBase):
         "data_dir_audit": (
             "robotsix_mill.runners.data_dir_audit_runner:run_data_dir_audit_pass"
         ),
+        "credit_balance": (
+            "robotsix_mill.runners.credit_balance_runner:run_credit_balance_check"
+        ),
     }
 
     def _build_periodic_workflow_runner(self, wf):
@@ -786,6 +789,28 @@ class PollLoopsMixin(_WorkerBase):
                         )
                 except Exception:
                     log.exception("db-maintenance poll failed for %s", label)
+            await asyncio.sleep(interval)
+
+    async def _credit_balance_poll_loop(self) -> None:
+        """Periodic OpenRouter credit-balance poll.
+
+        Queries ``GET /api/v1/credits`` and sets/clears the board-level
+        low-credit warning.  Skips silently when no OpenRouter key is
+        configured.  Hourly cadence with deterministic stagger + jitter.
+        """
+        settings = self.ctx.settings
+        interval = max(60, settings.low_credit_poll_interval_seconds)
+        initial = self._initial_delay("credit-balance", interval)
+        await asyncio.sleep(initial)
+        while True:
+            try:
+                from ...runners.credit_balance_runner import run_credit_balance_check
+
+                await asyncio.to_thread(run_credit_balance_check, settings)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("credit-balance poll failed")
             await asyncio.sleep(interval)
 
     def _start_poll_loop_pass(

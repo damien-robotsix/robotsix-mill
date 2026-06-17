@@ -278,6 +278,10 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.limits.rate_limit_backoff_base": "rate_limit_backoff_base",
     "core.limits.rate_limit_backoff_cap": "rate_limit_backoff_cap",
     "core.limits.rate_limit_fallback_retries": "rate_limit_fallback_retries",
+    # -- core: credit-balance warning --
+    "core.low_credit_threshold_usd": "low_credit_threshold_usd",
+    "core.low_credit_poll_enabled": "low_credit_poll_enabled",
+    "core.low_credit_poll_interval_seconds": "low_credit_poll_interval_seconds",
     # -- core.memory --
     "core.memory.max_memory_chars": "max_memory_chars",
     "core.memory.retrospect_log_max_chars": "retrospect_log_max_chars",
