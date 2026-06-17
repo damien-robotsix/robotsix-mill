@@ -2,10 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from robotsix_mill.runners.credit_balance_runner import (
-    CreditBalanceResult,
     check_credit_balance,
     run_credit_balance_check,
 )

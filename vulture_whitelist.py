@@ -232,6 +232,8 @@ most_expensive_trace_endpoint
 cost_breakdown
 create_epic
 generate_children
+credit_status
+credit_status_clear
 health
 langfuse_status
 langfuse_status_clear
