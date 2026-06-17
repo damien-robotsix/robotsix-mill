@@ -92,6 +92,7 @@
     module_curator: "module-curator",
     copy_paste: "copy-paste",
     board_cleanup: "board-cleanup",
+    data_dir_audit: "data-dir-audit",
     meta: "meta",
     "cost-analyst": "cost-analyst",
     "run-health": "run-health",
