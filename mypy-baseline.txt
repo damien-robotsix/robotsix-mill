@@ -201,7 +201,6 @@ src/robotsix_mill/langfuse/client.py:0: error: Missing type arguments for generi
 src/robotsix_mill/langfuse/client.py:0: error: Call to untyped function "_num" in typed context  [no-untyped-call]
 src/robotsix_mill/langfuse/client.py:0: error: Call to untyped function "_num" in typed context  [no-untyped-call]
 src/robotsix_mill/langfuse/client.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
-src/robotsix_mill/langfuse/client.py:0: error: Returning Any from function declared to return "dict[Any, Any] | None"  [no-any-return]
 src/robotsix_mill/langfuse/client.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/langfuse/client.py:0: error: Function is missing a type annotation  [no-untyped-def]
 src/robotsix_mill/langfuse/client.py:0: error: Call to untyped function "num" in typed context  [no-untyped-call]

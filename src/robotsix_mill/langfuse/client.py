@@ -69,7 +69,7 @@ def _parse_iso(value: str) -> datetime:
     :meth:`LangfuseReadClient.parse_timestamp` (which tolerates a
     trailing ``Z``) and drops the tzinfo so the result can be compared
     against the naive bucket boundaries used by the aggregators."""
-    return LangfuseReadClient.parse_timestamp(value).replace(tzinfo=None)
+    return LangfuseReadClient.parse_timestamp(value).replace(tzinfo=None)  # type: ignore[no-any-return]
 
 
 def _langfuse_api_get(
@@ -252,7 +252,7 @@ def fetch_trace_detail(
     Returns the JSON-decoded response body, or ``None`` on failure
     (including when Langfuse is unconfigured).
     """
-    return _langfuse_api_get(
+    return _langfuse_api_get(  # type: ignore[no-any-return]
         settings, f"/api/public/traces/{trace_id}", repo_config=repo_config
     )
 

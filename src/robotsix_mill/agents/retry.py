@@ -118,7 +118,7 @@ def call_with_retry(
     fallback_fn: Callable[[], T] | None = None,
 ) -> T:
     """Run ``fn`` with bounded transient/rate-limit retry."""
-    return _lib_call_with_retry(
+    return _lib_call_with_retry(  # type: ignore[no-any-return]
         fn,
         what=what,
         sleep=sleep,
@@ -205,13 +205,13 @@ def run_agent(
     fallback model."""
     builder = getattr(agent, "fallback_builder", None)
     if builder is None:
-        return _lib_call_with_retry(
+        return _lib_call_with_retry(  # type: ignore[no-any-return]
             lambda: make_run(agent),
             what=what,
             sleep=sleep,
             is_transient_fn=is_transient,
         )
-    return _lib_call_with_retry_and_fallback(
+    return _lib_call_with_retry_and_fallback(  # type: ignore[no-any-return]
         lambda: make_run(agent),
         lambda: make_run(agent.build_fallback()),
         what=what,
