@@ -315,6 +315,18 @@ class _PeriodicSettings(BaseModel):
     # DONE, which is not an archivable state) eventually get cleaned.
     # Override with MILL_DATA_DIR_AUDIT_PRUNE_DB_ROWS=false.
     data_dir_audit_prune_db_rows: bool = Field(default=True)
+    # Default-on GC: prune orphan workspace directories (ticket absent
+    # from the board DB) older than the configured age at the start of
+    # each data-dir audit pass, before size measurement. Orphans are
+    # never filed as tickets — they are GC'd silently.
+    # Override with MILL_DATA_DIR_AUDIT_PRUNE_ORPHANS=false.
+    data_dir_audit_prune_orphans: bool = Field(default=True)
+    # Minimum age (seconds since the ticket-ID timestamp) before an
+    # orphan workspace becomes eligible for GC. Default 1 day — long
+    # enough to never race a just-created workspace whose ticket row
+    # hasn't been committed yet.
+    # Override with MILL_DATA_DIR_AUDIT_PRUNE_ORPHANS_AGE_SECONDS.
+    data_dir_audit_prune_orphans_age_seconds: int = Field(default=86_400, ge=0)
 
     # --- completeness_check agent (feature-wiring completeness) ---
     # Model for the completeness-check agent. Defaults to the same

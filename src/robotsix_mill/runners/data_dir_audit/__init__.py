@@ -37,6 +37,7 @@ from .growth import _scan_growth_deltas
 from .orphans import (
     _prune_archived_db_rows,
     _prune_closed_workspaces,
+    _prune_orphan_workspaces,
     _prune_terminal_clones,
     _scan_orphan_workspaces,
 )
@@ -66,6 +67,9 @@ class DataDirAuditPassResult:
     # Number of archived ticket rows purged from mill.db files by the
     # default-on DB row GC step (enforces max_archived_tickets).
     db_rows_purged: int = 0
+    # Number of orphan workspace directories removed by the default-on
+    # orphan GC step (age-guarded via ticket-ID timestamp).
+    orphans_pruned: int = 0
 
 
 def run_data_dir_audit_pass(
@@ -126,6 +130,14 @@ def run_data_dir_audit_pass(
     if settings.data_dir_audit_prune_db_rows:
         db_rows_purged = _prune_archived_db_rows(settings)
 
+    # Default-on GC: prune orphan workspace dirs (ticket absent from
+    # the board DB) BEFORE size measurement, so reclaimed space never
+    # flags growth and the subsequent orphan scan sees only young
+    # orphans still within the age guard.
+    orphans_pruned = 0
+    if settings.data_dir_audit_prune_orphans:
+        orphans_pruned = _prune_orphan_workspaces(settings)
+
     # Walk ``data_dir`` exactly once: the size dicts feed both the
     # top-N oversized check (ticket 2) and the summary header's
     # total-bytes / total-files anchor.
@@ -174,7 +186,6 @@ def run_data_dir_audit_pass(
             oversized,
             all_growth_flags,
             findings,
-            orphans_by_board,
             session_id=session_id,
         )
 
@@ -191,6 +202,7 @@ def run_data_dir_audit_pass(
         closed_pruned=closed_pruned,
         clones_pruned=clones_pruned,
         db_rows_purged=db_rows_purged,
+        orphans_pruned=orphans_pruned,
     )
 
     log.info("data-dir audit pass done: %s", summary)
@@ -206,4 +218,5 @@ def run_data_dir_audit_pass(
         closed_pruned=closed_pruned,
         clones_pruned=clones_pruned,
         db_rows_purged=db_rows_purged,
+        orphans_pruned=orphans_pruned,
     )

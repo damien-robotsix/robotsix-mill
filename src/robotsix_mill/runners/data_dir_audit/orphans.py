@@ -532,6 +532,81 @@ def _prune_archived_db_rows(settings: Settings) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Default-on GC: prune orphan workspace directories
+# ---------------------------------------------------------------------------
+
+
+def _prune_board_orphan_workspaces(
+    settings: Settings,
+    board_id: str,
+    now: datetime,
+    age_threshold_seconds: int,
+) -> int:
+    """Remove orphan workspace directories for one board.
+
+    Calls :func:`find_orphan_workspaces` to discover directories whose
+    ticket is absent from the DB, then age-guards each via
+    :func:`_close_time_from_ticket_id` (orphans have no DB close time).
+    Returns the number of dirs removed.
+    """
+    orphans = find_orphan_workspaces(settings, board_id)
+    if not orphans:
+        return 0
+
+    removed = 0
+    for orphan in orphans:
+        close_time = _close_time_from_ticket_id(orphan.ticket_id)
+        if close_time is None:
+            continue
+        if (now - close_time).total_seconds() < age_threshold_seconds:
+            continue
+        shutil.rmtree(orphan.path, ignore_errors=True)
+        if not orphan.path.exists():
+            removed += 1
+            log.info(
+                "data_dir_audit: pruned orphan workspace board=%r ticket=%s path=%s",
+                board_id,
+                orphan.ticket_id,
+                orphan.path,
+            )
+    if removed:
+        log.info(
+            "data_dir_audit: board=%r pruned %d orphan workspace(s)",
+            board_id,
+            removed,
+        )
+    return removed
+
+
+def _prune_orphan_workspaces(settings: Settings) -> int:
+    """Remove orphan workspace directories older than the configured age.
+
+    Iterates every board on disk, delegates to
+    :func:`_prune_board_orphan_workspaces`.  Returns the total number
+    of directories removed across all boards.
+
+    The knob ``settings.data_dir_audit_prune_orphans`` is NOT checked
+    here — the call site must guard the invocation.
+    """
+    now = _now()
+    age_threshold_seconds = settings.data_dir_audit_prune_orphans_age_seconds
+    total_removed = 0
+    for board_id in _boards_from_disk(settings):
+        try:
+            total_removed += _prune_board_orphan_workspaces(
+                settings, board_id, now, age_threshold_seconds
+            )
+        except Exception:
+            log.warning(
+                "data_dir_audit: board=%r — orphan workspace prune failed",
+                board_id,
+                exc_info=True,
+            )
+            continue
+    return total_removed
+
+
+# ---------------------------------------------------------------------------
 # Runner helper — scans orphans across all boards
 # ---------------------------------------------------------------------------
 

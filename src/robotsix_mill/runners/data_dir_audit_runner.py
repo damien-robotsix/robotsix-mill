@@ -26,7 +26,6 @@ from robotsix_mill.runners.data_dir_audit.finders import (
 from robotsix_mill.runners.data_dir_audit.filing import (
     _build_finding,
     _build_growth_finding,
-    _build_orphan_finding,
     _build_oversized_finding,
     _build_unbounded_finding,
     _file_findings_as_tickets,
@@ -46,6 +45,7 @@ from robotsix_mill.runners.data_dir_audit.growth import (
 from robotsix_mill.runners.data_dir_audit.orphans import (
     OrphanWorkspace,
     _prune_closed_workspaces,
+    _prune_orphan_workspaces,
     find_orphan_workspaces,
 )
 
@@ -59,7 +59,6 @@ __all__ = [
     "_RUNS_JSON_MAX_ENTRIES",
     "_build_finding",
     "_build_growth_finding",
-    "_build_orphan_finding",
     "_build_oversized_finding",
     "_build_unbounded_finding",
     "_compute_growth_deltas",
@@ -72,6 +71,7 @@ __all__ = [
     "_load_growth_state",
     "_path_is_self_healing",
     "_prune_closed_workspaces",
+    "_prune_orphan_workspaces",
     "_save_growth_state",
     "_scan_board_sizes",
     "_self_healing_oversized_paths",
