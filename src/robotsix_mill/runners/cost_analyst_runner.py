@@ -97,6 +97,7 @@ def _stage_tier(settings: Settings, stage: str) -> str:
 @dataclass
 class _Collected:
     stage_costs: dict[str, list[float]] = field(default_factory=dict)
+    stage_traces: dict[str, list[tuple[dict, RepoConfig]]] = field(default_factory=dict)
     all_named: list[tuple[dict, RepoConfig]] = field(default_factory=list)
     sessions: dict[str, dict] = field(default_factory=dict)
 
@@ -130,6 +131,7 @@ def _collect_traces(settings: Settings) -> _Collected:
             name = t.get("name")
             if isinstance(name, str) and name.strip():
                 out.stage_costs.setdefault(name, []).append(cost)
+                out.stage_traces.setdefault(name, []).append((t, repo))
                 out.all_named.append((t, repo))
             sid = (t.get("sessionId") or "").strip()
             if sid:
@@ -141,7 +143,145 @@ def _collect_traces(settings: Settings) -> _Collected:
     return out
 
 
-def _render_stage_table(stage_costs: dict[str, list[float]], settings: Settings) -> str:
+def _determine_model_path(obs: dict) -> str:
+    """Classify a single observation's runtime model into a cost-path bucket.
+
+    Returns:
+        ``"deepseek"`` — actual per-token billing (DeepSeek or OpenRouter).
+        ``"claude_sdk"`` — subscription-covered, indicative cost.
+        ``"unknown"`` — model field missing or unrecognised.
+    """
+    model = (obs.get("model") or "").lower()
+    if not model:
+        return "unknown"
+    if "deepseek/" in model or "openrouter/" in model:
+        return "deepseek"
+    if "claude-" in model:
+        return "claude_sdk"
+    return "unknown"
+
+
+def _classify_model_paths(
+    settings: Settings,
+    col: _Collected,
+    obs_cache: dict[str, list[dict] | None] | None = None,
+) -> dict[str, dict[str, dict[str, float]]]:
+    """For each stage, classify traces by actual runtime model path.
+
+    For stages with >100 traces, samples the 50 most expensive traces
+    and extrapolates cost/count to the full stage.  Returns::
+
+        {"implement": {"claude_sdk": {"cost": 45.0, "count": 150},
+                        "deepseek": {"cost": 55.0, "count": 50}},
+         ...}
+    """
+    if obs_cache is None:
+        obs_cache = {}
+
+    result: dict[str, dict[str, dict[str, float]]] = {}
+    SAMPLE_SIZE = 50
+    SAMPLE_THRESHOLD = 100
+
+    for stage_name, traces in col.stage_traces.items():
+        total_cost = sum(col.stage_costs.get(stage_name, []))
+        total_count = len(traces)
+        if total_count == 0:
+            continue
+
+        # Determine which traces to classify.
+        if total_count > SAMPLE_THRESHOLD:
+            sampled = _top_n_by_cost(traces, SAMPLE_SIZE)
+            sample_cost = sum(float(t[0].get("totalCost") or 0) for t in sampled)
+            sample_ratio = total_cost / sample_cost if sample_cost > 0 else 1.0
+        else:
+            sampled = traces
+            sample_ratio = 1.0
+
+        # Classify each sampled trace.
+        claude_cost, claude_count, deepseek_cost, deepseek_count = (
+            _classify_trace_sample(settings, sampled, sample_ratio, obs_cache)
+        )
+
+        # Extrapolate counts for sampled stages.
+        if total_count > SAMPLE_THRESHOLD:
+            claude_count = round(claude_count * total_count / len(sampled))
+            deepseek_count = round(deepseek_count * total_count / len(sampled))
+        else:
+            claude_count = int(claude_count)
+            deepseek_count = int(deepseek_count)
+
+        result[stage_name] = {
+            "claude_sdk": {"cost": claude_cost, "count": float(claude_count)},
+            "deepseek": {"cost": deepseek_cost, "count": float(deepseek_count)},
+        }
+
+    return result
+
+
+def _top_n_by_cost(
+    traces: list[tuple[dict, RepoConfig]], n: int
+) -> list[tuple[dict, RepoConfig]]:
+    """Return the *n* traces with the highest ``totalCost``."""
+    return sorted(
+        traces, key=lambda tr: float(tr[0].get("totalCost") or 0), reverse=True
+    )[:n]
+
+
+def _classify_trace_sample(
+    settings: Settings,
+    sampled: list[tuple[dict, RepoConfig]],
+    sample_ratio: float,
+    obs_cache: dict[str, list[dict] | None],
+) -> tuple[float, int, float, int]:
+    """Classify a list of sampled traces and return aggregated
+    (claude_cost, claude_count, deepseek_cost, deepseek_count)."""
+    claude_cost = 0.0
+    claude_count = 0
+    deepseek_cost = 0.0
+    deepseek_count = 0
+
+    for t, repo in sampled:
+        trace_id = t.get("id") or ""
+        trace_cost = float(t.get("totalCost") or 0)
+
+        # Fetch observations (use cache).
+        if trace_id not in obs_cache:
+            obs_cache[trace_id] = lf.fetch_trace_observations(
+                settings, trace_id, repo
+            )
+        obs = obs_cache.get(trace_id)
+
+        # A trace counts as deepseek if *any* observation carries a
+        # deepseek/openrouter model (fallback).  Otherwise it's
+        # claude_sdk if at least one observation carries a claude-
+        # model.  Traces with neither are bucketed as claude_sdk
+        # (the default backend).
+        path: str = "unknown"
+        if obs:
+            for o in obs:
+                p = _determine_model_path(o)
+                if p == "deepseek":
+                    path = "deepseek"
+                    break
+                if p == "claude_sdk" and path == "unknown":
+                    path = "claude_sdk"
+
+        scaled_cost = trace_cost * sample_ratio
+        if path == "deepseek":
+            deepseek_cost += scaled_cost
+            deepseek_count += 1
+        else:
+            claude_cost += scaled_cost
+            claude_count += 1
+
+    return claude_cost, claude_count, deepseek_cost, deepseek_count
+
+
+def _render_stage_table(
+    stage_costs: dict[str, list[float]],
+    stage_model_costs: dict[str, dict[str, dict[str, float]]],
+    settings: Settings,
+) -> str:
     total = sum(sum(v) for v in stage_costs.values())
     rows = []
     for name, costs in stage_costs.items():
@@ -150,13 +290,31 @@ def _render_stage_table(stage_costs: dict[str, list[float]], settings: Settings)
         rows.append((name, s, n))
     rows.sort(key=lambda r: r[1], reverse=True)
     lines = [f"Fleet total over the window: ${total:.4f} across {len(rows)} stages.\n"]
-    lines.append("stage | total $ | % | traces | avg $/trace | current tier")
-    lines.append("--- | --- | --- | --- | --- | ---")
+    lines.append(
+        "stage | total $ | % | traces | avg $/trace | "
+        "Claude SDK $ (n) | DeepSeek $ (n) | fallback % | current tier"
+    )
+    lines.append("--- | --- | --- | --- | --- | --- | --- | --- | ---")
     for name, s, n in rows[: settings.cost_analyst_top_stages + 6]:
         pct = (100 * s / total) if total else 0.0
         avg = (s / n) if n else 0.0
+
+        # Model-path split.
+        mc = stage_model_costs.get(name, {})
+        cs = mc.get("claude_sdk", {})
+        ds = mc.get("deepseek", {})
+        cs_cost = cs.get("cost", 0.0)
+        cs_count = int(cs.get("count", 0))
+        ds_cost = ds.get("cost", 0.0)
+        ds_count = int(ds.get("count", 0))
+
+        fallback_pct = (100 * ds_count / n) if n else 0.0
+        warning = " ⚠️" if fallback_pct > 10 else ""
+
         lines.append(
             f"{name} | ${s:.4f} | {pct:.1f}% | {n} | ${avg:.4f} | "
+            f"${cs_cost:.2f} ({cs_count}) | ${ds_cost:.2f} ({ds_count}) | "
+            f"{fallback_pct:.1f}%{warning} | "
             f"{_stage_tier(settings, name)}"
         )
     return "\n".join(lines)
@@ -206,9 +364,20 @@ def _models_used(obs: list[dict]) -> str:
 
 
 def _trace_specimen_block(
-    settings: Settings, label: str, trace: dict, repo: RepoConfig, extra: str = ""
+    settings: Settings,
+    label: str,
+    trace: dict,
+    repo: RepoConfig,
+    extra: str = "",
+    obs_cache: dict[str, list[dict] | None] | None = None,
 ) -> str:
-    obs = lf.fetch_trace_observations(settings, trace.get("id") or "", repo) or []
+    trace_id = trace.get("id") or ""
+    if obs_cache is not None and trace_id in obs_cache:
+        obs = obs_cache[trace_id] or []
+    else:
+        obs = lf.fetch_trace_observations(settings, trace_id, repo) or []
+        if obs_cache is not None:
+            obs_cache[trace_id] = obs
     errs = sum(1 for o in obs if lf._observation_is_error(o))
     return (
         f"### {label}\n"
@@ -237,13 +406,23 @@ def _session_specimen_block(
     )
 
 
-def _build_specimens_block(settings: Settings, col: _Collected) -> str:
+def _build_specimens_block(
+    settings: Settings,
+    col: _Collected,
+    obs_cache: dict[str, list[dict] | None] | None = None,
+) -> str:
+    if obs_cache is None:
+        obs_cache = {}
     blocks: list[str] = []
 
     # 1. Most expensive trace
     if col.all_named:
         t, repo = max(col.all_named, key=lambda tr: float(tr[0].get("totalCost") or 0))
-        blocks.append(_trace_specimen_block(settings, "Most expensive trace", t, repo))
+        blocks.append(
+            _trace_specimen_block(
+                settings, "Most expensive trace", t, repo, obs_cache=obs_cache
+            )
+        )
 
     # 2. Most expensive ticket (session)
     if col.sessions:
@@ -258,7 +437,12 @@ def _build_specimens_block(settings: Settings, col: _Collected) -> str:
     )[:40]
     best_err: tuple[dict, RepoConfig, int] | None = None
     for t, repo in candidates:
-        obs = lf.fetch_trace_observations(settings, t.get("id") or "", repo)
+        trace_id = t.get("id") or ""
+        if trace_id in obs_cache:
+            obs = obs_cache[trace_id]
+        else:
+            obs = lf.fetch_trace_observations(settings, trace_id, repo)
+            obs_cache[trace_id] = obs
         if not obs:
             continue
         n = sum(1 for o in obs if lf._observation_is_error(o))
@@ -272,6 +456,7 @@ def _build_specimens_block(settings: Settings, col: _Collected) -> str:
                 best_err[0],
                 best_err[1],
                 extra=f"  errors: {best_err[2]}",
+                obs_cache=obs_cache,
             )
         )
 
@@ -295,10 +480,21 @@ def _build_cost_digest(settings: Settings) -> str:
             "aggregate-cost-by-stage",
             "(no traces found across any registered repo in the window)",
         )
+
+    # Shared observation cache — avoids double-fetching traces across
+    # the model-path classifier and the specimen builder.
+    obs_cache: dict[str, list[dict] | None] = {}
+
+    # Model-path classification (Claude SDK subscription vs DeepSeek billing).
+    stage_model_costs = _classify_model_paths(settings, col, obs_cache)
+
     digest = section(
-        "aggregate-cost-by-stage", _render_stage_table(col.stage_costs, settings)
+        "aggregate-cost-by-stage",
+        _render_stage_table(col.stage_costs, stage_model_costs, settings),
     )
-    digest += section("significant-specimens", _build_specimens_block(settings, col))
+    digest += section(
+        "significant-specimens", _build_specimens_block(settings, col, obs_cache)
+    )
     return digest
 
 
