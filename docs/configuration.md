@@ -497,6 +497,7 @@ robotsix-llmio Claude Agent SDK transport.
 | `forge.github_api_url` | `MILL_GITHUB_API_URL` | `https://api.github.com` | GitHub API base URL (override for GitHub Enterprise) |
 | `forge.gitlab_api_url` | `MILL_GITLAB_API_URL` | `https://gitlab.com/api/v4` | GitLab API base URL (override for self-hosted GitLab) |
 | `forge.github_app_private_key_path` | `GITHUB_APP_PRIVATE_KEY_PATH` | `None` | Host path to GitHub App private-key `.pem` file |
+| `core.enable_repo_creation` | — | `false` | Allow the new-repo meta flow to create repositories via the forge API |
 
 ### 9. Sandbox
 
