@@ -407,7 +407,7 @@ robotsix-llmio Claude Agent SDK transport.
 | `core.limits.scope_triage_requests` | `MILL_SCOPE_TRIAGE_REQUEST_LIMIT` | `8` | Per-call request cap for the scope-triage agent |
 | `core.limits.scope_triage_max_files` | `MILL_SCOPE_TRIAGE_MAX_FILES` | `50` | Max out-of-scope text files before the scope-triage flood guard blocks (0 disables) |
 | `core.limits.refine_requests` | `MILL_REFINE_REQUEST_LIMIT` | `80` | Per-call request cap for the refine agent |
-| `core.limits.refine_max_tool_calls` | — | `100` | (YAML-only) Hard cap on total tool calls per refine trace (runaway-loop backstop) |
+| `core.limits.refine_max_tool_calls` | — | `120` | (YAML-only) Hard cap on total tool calls per refine trace (runaway-loop backstop) |
 | `core.limits.refine_max_errors` | — | `20` | (YAML-only) Max tool-call errors per refine trace before auto-termination |
 | `core.limits.refine_web_fetch_max_calls` | — | `5` | (YAML-only) Max real (cache-miss) `web_fetch` calls across one whole refine trace (cross-consult) |
 | `core.limits.refine_web_fetch_max_total_bytes` | — | `500000` | (YAML-only) Cumulative fetch-bytes ceiling across one refine trace; `0` disables |
