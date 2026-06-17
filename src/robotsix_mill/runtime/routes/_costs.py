@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -63,7 +64,12 @@ def _normalize_cost_params(
     return lookback_hours, max_tickets, repo_config
 
 
-def _aggregate_across_repos(repo_config, aggregator_fn, merge_fn, initial_acc):
+def _aggregate_across_repos(
+    repo_config: Any,
+    aggregator_fn: Callable[[Any], Any],
+    merge_fn: Callable[[Any, Any], Any],
+    initial_acc: Any,
+) -> Any:
     """Aggregate results across one or more repos.
 
     Calls ``aggregator_fn(rc)`` for each repo in *repo_config* (or once
@@ -112,12 +118,12 @@ def cost_trend(
         lookback_hours, max_tickets, repo_id, request
     )
 
-    def _agg(rc):
+    def _agg(rc: Any) -> Any:
         return aggregate_cost_trend(
             settings, lookback_hours, max_tickets=max_tickets, repo_config=rc
         )
 
-    def _merge(acc, buckets):
+    def _merge(acc: Any, buckets: Any) -> Any:
         for b in buckets:
             key = b["ts"]
             if key not in acc:
@@ -154,12 +160,12 @@ def cost_by_agent(
         lookback_hours, max_tickets, repo_id, request
     )
 
-    def _agg(rc):
+    def _agg(rc: Any) -> Any:
         return aggregate_cost_by_name(
             settings, lookback_hours, max_tickets=max_tickets, repo_config=rc
         )
 
-    def _merge(acc, entries):
+    def _merge(acc: Any, entries: Any) -> Any:
         for e in entries:
             name = e["name"]
             if name not in acc:
@@ -200,12 +206,12 @@ def most_expensive_ticket_endpoint(
         lookback_hours, max_tickets, repo_id, request
     )
 
-    def _agg(rc):
+    def _agg(rc: Any) -> Any:
         return most_expensive_ticket(
             settings, lookback_hours, max_tickets=max_tickets, repo_config=rc
         )
 
-    def _merge(acc, result):
+    def _merge(acc: Any, result: Any) -> Any:
         if result and (acc is None or result["total_cost"] > acc["total_cost"]):
             return result
         return acc
@@ -251,12 +257,12 @@ def most_expensive_trace_endpoint(
         lookback_hours, max_tickets, repo_id, request
     )
 
-    def _agg(rc):
+    def _agg(rc: Any) -> Any:
         return most_expensive_trace(
             settings, lookback_hours, max_tickets=max_tickets, repo_config=rc
         )
 
-    def _merge(acc, result):
+    def _merge(acc: Any, result: Any) -> Any:
         if result and (acc is None or result["total_cost"] > acc["total_cost"]):
             return result
         return acc
