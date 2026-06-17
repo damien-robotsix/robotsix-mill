@@ -1720,7 +1720,7 @@ def _derive_check_conclusion(
 
     has_pending = False
     has_failure = False
-    failing: list[dict] = []
+    failing: list[dict[str, Any]] = []
 
     for cr in check_runs:
         cat = _conclusion_for_check(cr)
