@@ -43,12 +43,15 @@ class TestCheckCreditBalance:
             assert result.error == "no OpenRouter key configured"
 
     def test_management_key_preferred(self):
-        with patch(
-            "robotsix_mill.runners.credit_balance_runner.get_secrets",
-            return_value=_secrets_with(mgmt_key="mgmt-key", api_key="api-key"),
-        ), patch(
-            "robotsix_mill.runners.credit_balance_runner.httpx.get",
-            return_value=_fake_response(total_credits=100.0, total_usage=85.0),
+        with (
+            patch(
+                "robotsix_mill.runners.credit_balance_runner.get_secrets",
+                return_value=_secrets_with(mgmt_key="mgmt-key", api_key="api-key"),
+            ),
+            patch(
+                "robotsix_mill.runners.credit_balance_runner.httpx.get",
+                return_value=_fake_response(total_credits=100.0, total_usage=85.0),
+            ),
         ):
             result = check_credit_balance()
             assert result.balance_usd == 15.0
@@ -56,12 +59,15 @@ class TestCheckCreditBalance:
             assert result.error is None
 
     def test_api_key_fallback(self):
-        with patch(
-            "robotsix_mill.runners.credit_balance_runner.get_secrets",
-            return_value=_secrets_with(api_key="api-key"),
-        ), patch(
-            "robotsix_mill.runners.credit_balance_runner.httpx.get",
-            return_value=_fake_response(total_credits=50.0, total_usage=47.0),
+        with (
+            patch(
+                "robotsix_mill.runners.credit_balance_runner.get_secrets",
+                return_value=_secrets_with(api_key="api-key"),
+            ),
+            patch(
+                "robotsix_mill.runners.credit_balance_runner.httpx.get",
+                return_value=_fake_response(total_credits=50.0, total_usage=47.0),
+            ),
         ):
             result = check_credit_balance()
             assert result.balance_usd == 3.0
@@ -69,48 +75,60 @@ class TestCheckCreditBalance:
             assert result.error is None
 
     def test_below_threshold_flags_low(self):
-        with patch(
-            "robotsix_mill.runners.credit_balance_runner.get_secrets",
-            return_value=_secrets_with(mgmt_key="k"),
-        ), patch(
-            "robotsix_mill.runners.credit_balance_runner.httpx.get",
-            return_value=_fake_response(total_credits=50.0, total_usage=48.0),
+        with (
+            patch(
+                "robotsix_mill.runners.credit_balance_runner.get_secrets",
+                return_value=_secrets_with(mgmt_key="k"),
+            ),
+            patch(
+                "robotsix_mill.runners.credit_balance_runner.httpx.get",
+                return_value=_fake_response(total_credits=50.0, total_usage=48.0),
+            ),
         ):
             result = check_credit_balance()
             assert result.balance_usd == 2.0
             assert result.low is True
 
     def test_above_threshold_healthy(self):
-        with patch(
-            "robotsix_mill.runners.credit_balance_runner.get_secrets",
-            return_value=_secrets_with(mgmt_key="k"),
-        ), patch(
-            "robotsix_mill.runners.credit_balance_runner.httpx.get",
-            return_value=_fake_response(total_credits=100.0, total_usage=20.0),
+        with (
+            patch(
+                "robotsix_mill.runners.credit_balance_runner.get_secrets",
+                return_value=_secrets_with(mgmt_key="k"),
+            ),
+            patch(
+                "robotsix_mill.runners.credit_balance_runner.httpx.get",
+                return_value=_fake_response(total_credits=100.0, total_usage=20.0),
+            ),
         ):
             result = check_credit_balance()
             assert result.balance_usd == 80.0
             assert result.low is False
 
     def test_api_error_returns_error_not_low(self):
-        with patch(
-            "robotsix_mill.runners.credit_balance_runner.get_secrets",
-            return_value=_secrets_with(mgmt_key="k"),
-        ), patch(
-            "robotsix_mill.runners.credit_balance_runner.httpx.get",
-            side_effect=Exception("boom"),
+        with (
+            patch(
+                "robotsix_mill.runners.credit_balance_runner.get_secrets",
+                return_value=_secrets_with(mgmt_key="k"),
+            ),
+            patch(
+                "robotsix_mill.runners.credit_balance_runner.httpx.get",
+                side_effect=Exception("boom"),
+            ),
         ):
             result = check_credit_balance()
             assert result.low is False
             assert "boom" in (result.error or "")
 
     def test_zero_balance_not_low_if_above_threshold(self):
-        with patch(
-            "robotsix_mill.runners.credit_balance_runner.get_secrets",
-            return_value=_secrets_with(mgmt_key="k"),
-        ), patch(
-            "robotsix_mill.runners.credit_balance_runner.httpx.get",
-            return_value=_fake_response(total_credits=10.0, total_usage=10.0),
+        with (
+            patch(
+                "robotsix_mill.runners.credit_balance_runner.get_secrets",
+                return_value=_secrets_with(mgmt_key="k"),
+            ),
+            patch(
+                "robotsix_mill.runners.credit_balance_runner.httpx.get",
+                return_value=_fake_response(total_credits=10.0, total_usage=10.0),
+            ),
         ):
             result = check_credit_balance()
             assert result.balance_usd == 0.0
@@ -135,12 +153,15 @@ class TestRunCreditBalanceCheck:
             assert result.error == "no OpenRouter key configured"
 
     def test_healthy_balance_records_ok(self):
-        with patch(
-            "robotsix_mill.runners.credit_balance_runner.get_secrets",
-            return_value=_secrets_with(mgmt_key="k"),
-        ), patch(
-            "robotsix_mill.runners.credit_balance_runner.httpx.get",
-            return_value=_fake_response(total_credits=100.0, total_usage=20.0),
+        with (
+            patch(
+                "robotsix_mill.runners.credit_balance_runner.get_secrets",
+                return_value=_secrets_with(mgmt_key="k"),
+            ),
+            patch(
+                "robotsix_mill.runners.credit_balance_runner.httpx.get",
+                return_value=_fake_response(total_credits=100.0, total_usage=20.0),
+            ),
         ):
             from robotsix_mill.runtime.credit_status import (
                 clear_credit_status,
@@ -155,12 +176,15 @@ class TestRunCreditBalanceCheck:
             assert status["balance_usd"] == 80.0
 
     def test_low_balance_records_low(self):
-        with patch(
-            "robotsix_mill.runners.credit_balance_runner.get_secrets",
-            return_value=_secrets_with(mgmt_key="k"),
-        ), patch(
-            "robotsix_mill.runners.credit_balance_runner.httpx.get",
-            return_value=_fake_response(total_credits=10.0, total_usage=9.0),
+        with (
+            patch(
+                "robotsix_mill.runners.credit_balance_runner.get_secrets",
+                return_value=_secrets_with(mgmt_key="k"),
+            ),
+            patch(
+                "robotsix_mill.runners.credit_balance_runner.httpx.get",
+                return_value=_fake_response(total_credits=10.0, total_usage=9.0),
+            ),
         ):
             from robotsix_mill.runtime.credit_status import get_credit_status
 
