@@ -19,7 +19,7 @@ import asyncio
 import logging
 import random
 import time
-from typing import Any, Awaitable, Callable, TypeVar
+from typing import Any, Awaitable, Callable, TypeVar, cast
 
 from robotsix_llmio.claude_sdk.transient import (
     is_claude_sdk_transient as _is_claude_sdk_transient,
@@ -118,12 +118,15 @@ def call_with_retry(
     fallback_fn: Callable[[], T] | None = None,
 ) -> T:
     """Run ``fn`` with bounded transient/rate-limit retry."""
-    return _lib_call_with_retry(
-        fn,
-        what=what,
-        sleep=sleep,
-        fallback_fn=fallback_fn,
-        is_transient_fn=is_transient,
+    return cast(
+        T,
+        _lib_call_with_retry(
+            fn,
+            what=what,
+            sleep=sleep,
+            fallback_fn=fallback_fn,
+            is_transient_fn=is_transient,
+        ),
     )
 
 
@@ -205,18 +208,24 @@ def run_agent(
     fallback model."""
     builder = getattr(agent, "fallback_builder", None)
     if builder is None:
-        return _lib_call_with_retry(
+        return cast(
+            T,
+            _lib_call_with_retry(
+                lambda: make_run(agent),
+                what=what,
+                sleep=sleep,
+                is_transient_fn=is_transient,
+            ),
+        )
+    return cast(
+        T,
+        _lib_call_with_retry_and_fallback(
             lambda: make_run(agent),
+            lambda: make_run(agent.build_fallback()),
             what=what,
             sleep=sleep,
-            is_transient_fn=is_transient,
-        )
-    return _lib_call_with_retry_and_fallback(
-        lambda: make_run(agent),
-        lambda: make_run(agent.build_fallback()),
-        what=what,
-        sleep=sleep,
-        is_transient_primary=is_transient,
-        is_transient_fallback=is_transient,
-        should_fallback=lambda _e: True,
+            is_transient_primary=is_transient,
+            is_transient_fallback=is_transient,
+            should_fallback=lambda _e: True,
+        ),
     )

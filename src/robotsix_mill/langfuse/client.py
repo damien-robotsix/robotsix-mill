@@ -15,6 +15,7 @@ import re
 import time
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
+from typing import cast
 
 from robotsix_llmio.core import LangfuseReadClient
 
@@ -69,7 +70,9 @@ def _parse_iso(value: str) -> datetime:
     :meth:`LangfuseReadClient.parse_timestamp` (which tolerates a
     trailing ``Z``) and drops the tzinfo so the result can be compared
     against the naive bucket boundaries used by the aggregators."""
-    return LangfuseReadClient.parse_timestamp(value).replace(tzinfo=None)
+    return cast(
+        datetime, LangfuseReadClient.parse_timestamp(value).replace(tzinfo=None)
+    )
 
 
 def _langfuse_api_get(
