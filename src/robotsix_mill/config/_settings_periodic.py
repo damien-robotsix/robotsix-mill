@@ -159,8 +159,9 @@ class _PeriodicSettings(BaseModel):
     survey_memory_path: Path | None = Field(default=None)
     # Per-survey-run web_fetch budget — a second tier of budget tracking
     # that spans the entire survey run (not reset between ask_web_knowledge
-    # consults). Defaults to 10 calls / 500 KB total bytes.
-    survey_web_fetch_max_calls: int = Field(default=10, ge=1)
+    # consults). Defaults to 5 calls / 500 KB total bytes, matching the
+    # web_search cap — both are per-run, cross-consult budgets.
+    survey_web_fetch_max_calls: int = Field(default=5, ge=1)
     survey_web_fetch_max_total_bytes: int = Field(default=500_000, ge=0)
     # Per-survey-run web_search budget — caps web_search invocations at 5
     # per survey run regardless of how many ask_web_knowledge consults.
