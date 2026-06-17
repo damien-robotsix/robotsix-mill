@@ -591,11 +591,29 @@ def _verify_branch_merged(repo_dir: Path | None, ticket: Ticket) -> bool:
     return True
 
 
+# Substrings (lowercased) in a triage note that signal a draft should NOT be
+# auto-approved — even for _AUTO_APPROVE_SOURCES.  When any pattern matches,
+# _resolve_next_state returns HUMAN_ISSUE_APPROVAL instead of READY so a human
+# can inspect the ticket.  The list is deliberately conservative: a legitimate
+# SKIP reason should never contain one of these phrases.
+_TRIAGE_REJECTION_PATTERNS: list[str] = [
+    "no change is needed",
+    "no change needed",
+    "no changes needed",
+    "assertion is factually wrong",
+    "factually wrong",
+    "factually incorrect",
+    "false positive",
+]
+
+
 def _resolve_next_state(
     ctx: StageContext,
     spec: str,
     ticket_id: str,
     source: str | None = None,
+    *,
+    triage_note: str | None = None,
 ) -> tuple[State, str | None]:
     """Return (next_state, auto_approve_note_or_None).
 
@@ -635,6 +653,14 @@ def _resolve_next_state(
     # rule in 28a6b02) joins the same family. Three rounds of
     # rubber-stamping all 21+ tickets from these sources without
     # rejection (see 09cc) made the LLM hop pure toil.
+    if triage_note:
+        triage_lower = triage_note.lower()
+        for pattern in _TRIAGE_REJECTION_PATTERNS:
+            if pattern in triage_lower:
+                return State.HUMAN_ISSUE_APPROVAL, (
+                    f"auto-approve: REJECTED — triage note contains "
+                    f"rejection signal matching '{pattern}'"
+                )
     _AUTO_APPROVE_SOURCES = {
         "test_gap",
         "audit",

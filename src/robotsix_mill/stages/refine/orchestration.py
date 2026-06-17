@@ -139,6 +139,7 @@ class RefineAgentMixin:
         base_note: str,
         *,
         source: str | None = None,
+        triage_note: str | None = None,
     ) -> Outcome:
         """Resolve the next state for *spec* and build the closing Outcome.
 
@@ -146,7 +147,9 @@ class RefineAgentMixin:
         auto-approve note when present" → ``Outcome`` pattern shared by the
         split-child, triage-skip, single-scope, and split paths.
         """
-        next_state, auto_note = _resolve_next_state(ctx, spec, ticket_id, source=source)
+        next_state, auto_note = _resolve_next_state(
+            ctx, spec, ticket_id, source=source, triage_note=triage_note
+        )
         note = base_note
         if auto_note:
             note += f" | {auto_note}"
@@ -473,6 +476,7 @@ class RefineAgentMixin:
                     ticket.id,
                     f"triage SKIP: {triage.reason}",
                     source=ticket.source,
+                    triage_note=triage.reason,
                 )
         except Exception:
             log.warning(
