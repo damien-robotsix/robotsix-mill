@@ -126,6 +126,20 @@ def _write_bytes(path: Path, size: int, *, fill: bytes = b"x") -> None:
     path.write_bytes(fill * size)
 
 
+def _make_sparse_file(path: Path, size: int) -> None:
+    """Create a sparse file at *path* with apparent *size* bytes.
+
+    Uses ``os.ftruncate`` so no actual blocks are written — safe for
+    multi-hundred-MB test fixtures in constrained environments.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(path), os.O_CREAT | os.O_WRONLY)
+    try:
+        os.ftruncate(fd, size)
+    finally:
+        os.close(fd)
+
+
 def _insert_closed_ticket(
     settings: Settings,
     board_id: str,
@@ -2560,3 +2574,244 @@ def test_build_growth_finding_without_breakdown_still_guides():
     _gap_id, _title, body = _build_growth_finding(flag)
     assert "## Growth breakdown" not in body
     assert "spec a code fix" in body
+
+
+# ---------------------------------------------------------------------------
+# Oversized self-healing suppression (clone cache / periodic pass)
+# ---------------------------------------------------------------------------
+
+
+class TestOversizedSelfHealingSuppression:
+    """Tests for ``_path_is_self_healing`` and
+    ``_self_healing_oversized_paths`` — the oversized-check equivalents
+    of the growth-check's self-healing classification."""
+
+    def test_meta_clone_cache_files_suppressed(self, tmp_path, monkeypatch, caplog):
+        """Files under ``meta/workspace/...`` are suppressed from oversized."""
+        s = _make_settings(tmp_path)
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
+        db.init_db(s, "meta")
+
+        # Create an oversized clone-cache file inside the meta board.
+        _make_sparse_file(
+            s.data_dir
+            / "meta"
+            / "workspace"
+            / "some-repo"
+            / ".git"
+            / "objects"
+            / "ab"
+            / "foo",
+            200 * 1024 * 1024,
+        )
+
+        with caplog.at_level(logging.INFO, logger="robotsix_mill.data_dir_audit"):
+            result = run_data_dir_audit_pass()
+
+        # The clone file should be suppressed.
+        clone_paths = [
+            r["path"] for r in result.oversized_items if "workspace" in r["path"]
+        ]
+        assert clone_paths == [], f"clone paths not suppressed: {clone_paths}"
+        assert any(
+            "suppressing oversized item" in rec.message
+            and "self-healing clone cache" in rec.message
+            for rec in caplog.records
+        )
+        db.reset_engine()
+
+    def test_meta_aggregate_dir_suppressed_when_mostly_self_healing(
+        self, tmp_path, monkeypatch, caplog
+    ):
+        """``meta`` and ``meta/workspace`` dirs are suppressed when >=90%
+        of their bytes are self-healing clone-cache files."""
+        s = _make_settings(tmp_path)
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
+        db.init_db(s, "meta")
+
+        # 950 MB of clone-cache + 100 MB of genuine data = 1050 MB total
+        # → 90.5% self-healing → dirs suppressed (just above 90%).
+        _make_sparse_file(
+            s.data_dir / "meta" / "workspace" / "r" / ".git" / "objects.bin",
+            950 * 1024 * 1024,
+        )
+        _make_sparse_file(
+            s.data_dir / "meta" / "genuine.log",
+            100 * 1024 * 1024,
+        )
+
+        with caplog.at_level(logging.INFO, logger="robotsix_mill.data_dir_audit"):
+            result = run_data_dir_audit_pass()
+
+        suppressed_paths = {r["path"] for r in result.oversized_items}
+        # The genuine file IS oversized and should still appear.
+        assert "meta/genuine.log" in suppressed_paths
+        # The aggregate dirs should NOT appear (suppressed).
+        assert "meta" not in suppressed_paths
+        assert "meta/workspace" not in suppressed_paths
+        db.reset_engine()
+
+    def test_meta_dir_not_suppressed_below_90pct_threshold(self, tmp_path, monkeypatch):
+        """When self-healing bytes are <90% of the dir total, the dir
+        is NOT suppressed — the genuine oversized child surfaces."""
+        s = _make_settings(tmp_path)
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
+        db.init_db(s, "meta")
+
+        # 80 MB clone-cache + 110 MB genuine = 190 MB total → 42.1% self-healing
+        # → BELOW 90% → meta dir NOT suppressed.
+        _make_sparse_file(
+            s.data_dir / "meta" / "workspace" / "r" / ".git" / "objects.bin",
+            80 * 1024 * 1024,
+        )
+        _make_sparse_file(
+            s.data_dir / "meta" / "big_genuine.log",
+            110 * 1024 * 1024,
+        )
+
+        result = run_data_dir_audit_pass()
+
+        paths = {r["path"] for r in result.oversized_items}
+        # The aggregate meta dir SHOULD appear (it has 190 MB total
+        # with only 42.1% from self-healing sources — below the 90%
+        # suppress threshold).
+        assert "meta" in paths, f"meta not in {paths}"
+        # The genuine file should also appear.
+        assert "meta/big_genuine.log" in paths
+        db.reset_engine()
+
+    def test_periodic_pass_clone_suppressed(self, tmp_path, monkeypatch, caplog):
+        """Periodic-pass clone caches (e.g. ``health_workspace/repo/...``)
+        are suppressed from oversized, regardless of board."""
+        s = _make_settings(tmp_path)
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
+        board_id = "test-board"
+        db.init_db(s, board_id)
+
+        _make_sparse_file(
+            s.data_dir
+            / board_id
+            / "health_workspace"
+            / "repo"
+            / ".git"
+            / "objects.bin",
+            250 * 1024 * 1024,
+        )
+
+        with caplog.at_level(logging.INFO, logger="robotsix_mill.data_dir_audit"):
+            result = run_data_dir_audit_pass()
+
+        clone_paths = [
+            r["path"] for r in result.oversized_items if "health_workspace" in r["path"]
+        ]
+        assert clone_paths == [], f"periodic-pass paths not suppressed: {clone_paths}"
+        assert any(
+            "suppressing oversized item" in rec.message
+            and "self-healing clone cache" in rec.message
+            for rec in caplog.records
+        )
+        db.reset_engine()
+
+    def test_genuine_oversized_file_not_suppressed(self, tmp_path, monkeypatch):
+        """A genuinely-oversized non-clone file (``mill.db``, ``big.log``,
+        ``*_memory.md``) remains reportable."""
+        s = _make_settings(tmp_path)
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
+        db.init_db(s, "test-board")
+
+        # A large mill.db is genuine — NOT a clone cache.
+        _make_sparse_file(
+            s.data_dir / "test-board" / "mill.db",
+            150 * 1024 * 1024,
+        )
+
+        result = run_data_dir_audit_pass()
+
+        paths = {r["path"] for r in result.oversized_items}
+        assert "test-board/mill.db" in paths
+        db.reset_engine()
+
+    def test_top_n_preserved_after_suppression(self, tmp_path, monkeypatch):
+        """When ≥10 self-healing items crowd out genuine oversized items,
+        the genuine items STILL appear in the top-10 result (suppression
+        happens BEFORE the ``[:top_n]`` slice)."""
+        s = _make_settings(tmp_path)
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
+        db.init_db(s, "meta")
+
+        # Create 12 clone-cache files (all > threshold) + 3 genuine files.
+        for i in range(12):
+            _make_sparse_file(
+                s.data_dir
+                / "meta"
+                / "workspace"
+                / f"repo_{i}"
+                / ".git"
+                / "objects.bin",
+                200 * 1024 * 1024,
+            )
+        for i in range(3):
+            _make_sparse_file(
+                s.data_dir / "meta" / f"genuine_{i}.log",
+                300 * 1024 * 1024,
+            )
+
+        result = run_data_dir_audit_pass()
+
+        # All clone-cache files should be suppressed.
+        clone_paths = [
+            r["path"] for r in result.oversized_items if "workspace" in r["path"]
+        ]
+        assert clone_paths == []
+
+        # All 3 genuine files should appear (well within top-10).
+        genuine = [r for r in result.oversized_items if "genuine" in r["path"]]
+        assert len(genuine) == 3
+
+        # The total returned is at most 10.
+        assert len(result.oversized_items) <= 10
+        db.reset_engine()
+
+    def test_non_board_paths_not_suppressed(self, tmp_path):
+        """Paths whose first segment is not a known board id are never
+        classified as self-healing (they stay reportable)."""
+        s = _make_settings(tmp_path)
+        # No board DBs at all.
+        _make_sparse_file(s.data_dir / "big.log", 200 * 1024 * 1024)
+
+        result = find_largest_items(s.data_dir, threshold_bytes=100 * 1024 * 1024)
+
+        assert len(result) >= 1
+        assert result[0]["path"] == "big.log"
+
+    def test_mixed_board_genuine_and_clone_cache(self, tmp_path, monkeypatch):
+        """A board with both clone-cache and genuine oversize: genuine
+        surfaces, clone-cache is suppressed."""
+        s = _make_settings(tmp_path)
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
+        board_id = "meta"
+        db.init_db(s, board_id)
+
+        # Clone cache: 200 MB
+        _make_sparse_file(
+            s.data_dir / board_id / "workspace" / "r" / ".git" / "objects.bin",
+            200 * 1024 * 1024,
+        )
+        # Genuine oversized: 150 MB
+        _make_sparse_file(
+            s.data_dir / board_id / "big.log",
+            150 * 1024 * 1024,
+        )
+
+        result = run_data_dir_audit_pass()
+
+        paths = {r["path"] for r in result.oversized_items}
+        # Clone-cache paths suppressed.
+        clone = [p for p in paths if "workspace" in p]
+        assert clone == [], f"clone paths leaked: {clone}"
+        # Genuine file present.
+        assert f"{board_id}/big.log" in paths
+        # Aggregate ``meta`` dir: 350 MB total, 200/350 ≈ 57% self-healing
+        # → below 90% → NOT suppressed (genuine child surfaces).
+        assert board_id in paths
+        db.reset_engine()

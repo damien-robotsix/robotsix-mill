@@ -29,6 +29,7 @@ from ...core.service import TicketService
 from .finders import (
     _collect_sizes,
     _select_largest_from_sizes,
+    _self_healing_oversized_paths,
     check_unbounded_candidates,
 )
 from .filing import _file_findings_as_tickets
@@ -134,11 +135,18 @@ def run_data_dir_audit_pass(
         file_sizes, dir_totals = {}, defaultdict(int)
     total_bytes = sum(file_sizes.values())
     total_files = len(file_sizes)
+
+    # Compute the set of self-healing clone-cache / periodic-pass
+    # paths so they are suppressed BEFORE top-N selection (mirroring
+    # the growth check's existing exemption).
+    suppressed = _self_healing_oversized_paths(file_sizes, dir_totals, settings)
+
     oversized = _select_largest_from_sizes(
         file_sizes,
         dir_totals,
         10,
         settings.data_dir_audit_size_threshold_bytes,
+        suppressed=suppressed,
     )
 
     # Unbounded-collection candidate detection (ticket 4 of the epic).
