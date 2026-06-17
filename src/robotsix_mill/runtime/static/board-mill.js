@@ -95,6 +95,8 @@
     meta: "meta",
     "cost-analyst": "cost-analyst",
     "run-health": "run-health",
+    ci_fix_dependency: "ci-fix-dependency",
+    implement_baseline_dependency: "implement-baseline-dependency",
   };
 
   const STATE_ARTIFACT = {
