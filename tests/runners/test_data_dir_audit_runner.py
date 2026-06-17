@@ -2932,9 +2932,7 @@ class TestOversizedSelfHealingSuppression:
         is suppressed from ``result.oversized_items`` when the GC knob
         is on (default)."""
         s = _make_settings(tmp_path)
-        monkeypatch.setattr(
-            "robotsix_mill.runners.data_dir_audit.Settings", lambda: s
-        )
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
         board_id = "test-board"
         ticket_id = "20260101T000000Z-closed-ffff"
         _make_workspace_with_clones(s, board_id, ticket_id)
@@ -2946,7 +2944,14 @@ class TestOversizedSelfHealingSuppression:
             state=State.CLOSED,
         )
         _make_sparse_file(
-            s.data_dir / board_id / "workspaces" / ticket_id / "repo" / ".git" / "objects" / "big.bin",
+            s.data_dir
+            / board_id
+            / "workspaces"
+            / ticket_id
+            / "repo"
+            / ".git"
+            / "objects"
+            / "big.bin",
             200 * 1024 * 1024,
         )
 
@@ -2965,9 +2970,7 @@ class TestOversizedSelfHealingSuppression:
         clones is suppressed; a genuine oversized file in the same
         board still surfaces."""
         s = _make_settings(tmp_path)
-        monkeypatch.setattr(
-            "robotsix_mill.runners.data_dir_audit.Settings", lambda: s
-        )
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
         board_id = "test-board"
         ticket_id = "20260101T000000Z-closed-gggg"
         _make_workspace_with_clones(s, board_id, ticket_id)
@@ -3012,12 +3015,8 @@ class TestOversizedSelfHealingSuppression:
     ):
         """With ``data_dir_audit_prune_terminal_clones=False``,
         terminal-ticket clone files ARE reported as oversized."""
-        s = _make_settings(
-            tmp_path, data_dir_audit_prune_terminal_clones=False
-        )
-        monkeypatch.setattr(
-            "robotsix_mill.runners.data_dir_audit.Settings", lambda: s
-        )
+        s = _make_settings(tmp_path, data_dir_audit_prune_terminal_clones=False)
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
         board_id = "test-board"
         ticket_id = "20260101T000000Z-closed-hhhh"
         _make_workspace_with_clones(s, board_id, ticket_id)
@@ -3045,16 +3044,16 @@ class TestOversizedSelfHealingSuppression:
         clone_paths = [
             r["path"] for r in result.oversized_items if ticket_id in r["path"]
         ]
-        assert len(clone_paths) >= 1, f"terminal clone should NOT be suppressed when GC knob is off, got: {result.oversized_items}"
+        assert len(clone_paths) >= 1, (
+            f"terminal clone should NOT be suppressed when GC knob is off, got: {result.oversized_items}"
+        )
         db.reset_engine()
 
     def test_active_ticket_clones_not_suppressed(self, tmp_path, monkeypatch):
         """Clone files inside an *active* (DRAFT) ticket workspace are
         NOT suppressed."""
         s = _make_settings(tmp_path)
-        monkeypatch.setattr(
-            "robotsix_mill.runners.data_dir_audit.Settings", lambda: s
-        )
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
         board_id = "test-board"
         ticket_id = "20260101T000000Z-draft-iiii"
         _make_workspace_with_clones(s, board_id, ticket_id)
@@ -3076,18 +3075,16 @@ class TestOversizedSelfHealingSuppression:
         clone_paths = [
             r["path"] for r in result.oversized_items if ticket_id in r["path"]
         ]
-        assert len(clone_paths) >= 1, f"active-ticket clone should NOT be suppressed, got: {result.oversized_items}"
+        assert len(clone_paths) >= 1, (
+            f"active-ticket clone should NOT be suppressed, got: {result.oversized_items}"
+        )
         db.reset_engine()
 
-    def test_terminal_clone_suppression_logged(
-        self, tmp_path, monkeypatch, caplog
-    ):
+    def test_terminal_clone_suppression_logged(self, tmp_path, monkeypatch, caplog):
         """Suppression is logged at INFO level with
         ``"terminal-ticket clone cache"`` in the message."""
         s = _make_settings(tmp_path)
-        monkeypatch.setattr(
-            "robotsix_mill.runners.data_dir_audit.Settings", lambda: s
-        )
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
         board_id = "test-board"
         ticket_id = "20260101T000000Z-closed-jjjj"
         _make_workspace_with_clones(s, board_id, ticket_id)
@@ -3117,19 +3114,17 @@ class TestOversizedSelfHealingSuppression:
             "suppressing oversized item" in rec.message
             and "terminal-ticket clone cache" in rec.message
             for rec in caplog.records
-        ), f"no terminal-clone suppression log found in: {[r.message for r in caplog.records]}"
+        ), (
+            f"no terminal-clone suppression log found in: {[r.message for r in caplog.records]}"
+        )
         db.reset_engine()
 
-    def test_mixed_terminal_clones_and_genuine_oversized(
-        self, tmp_path, monkeypatch
-    ):
+    def test_mixed_terminal_clones_and_genuine_oversized(self, tmp_path, monkeypatch):
         """A board with both terminal-clone bloat (suppressed) and a
         genuinely oversized ``mill.db`` (reported) surfaces only the
         genuine file."""
         s = _make_settings(tmp_path)
-        monkeypatch.setattr(
-            "robotsix_mill.runners.data_dir_audit.Settings", lambda: s
-        )
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
         board_id = "test-board"
         ticket_id = "20260101T000000Z-closed-kkkk"
         _make_workspace_with_clones(s, board_id, ticket_id)
