@@ -1871,6 +1871,57 @@ def test_list_code_scanning_alerts_no_pr_falls_back_to_branch_ref(
     assert out[0]["rule"] == "py/x" and out[0]["path"] == "src/a.py"
 
 
+def test_list_code_scanning_alerts_retry_on_analysis_lag(tmp_path, monkeypatch):
+    """The merge-ref query returns empty on the first call but analyses exist;
+    after bounded backoff the re-query returns the alerts (eventual-consistency
+    timing-gap coverage)."""
+    merge_alerts = [
+        _alert(7, "py/unused-import", "src/pkg/mod.py", 21),
+    ]
+    call_count = {"alerts": 0}
+
+    class MockClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            params = params or {}
+            if "code-scanning/analyses" in url:
+                return _make_response(200, [{"id": 1, "ref": "refs/pull/99/merge"}])
+            if "code-scanning/alerts" in url:
+                call_count["alerts"] += 1
+                # First call (from _fetch_alerts_for_ref) → empty
+                # Subsequent calls (from _wait_for_code_scanning_analysis) →
+                # return alerts on the second retry
+                if call_count["alerts"] >= 2:
+                    return _make_response(200, merge_alerts)
+                return _make_response(200, [])
+            if "/pulls/99" in url:
+                return _make_response(
+                    200, {"number": 99, "state": "open", "head": {"sha": "s"}}
+                )
+            if "/pulls" in url:
+                return _make_response(200, [{"number": 99}])
+            return _make_response(404, [], "")
+
+    monkeypatch.setattr(real_httpx, "Client", MockClient)
+    # Accelerate time.sleep so the test doesn't actually wait.
+    monkeypatch.setattr("time.sleep", lambda s: None)
+
+    forge = _forge(tmp_path)
+    out = forge.list_code_scanning_alerts(source_branch="mill/retry")
+    assert len(out) == 1
+    assert out[0]["rule"] == "py/unused-import"
+    assert out[0]["path"] == "src/pkg/mod.py"
+    assert call_count["alerts"] >= 2  # initial + at least one retry
+
+
 # ---------------------------------------------------------------------------
 # _delete_branch (via delete_branch)
 # ---------------------------------------------------------------------------
