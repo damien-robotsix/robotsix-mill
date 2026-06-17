@@ -16,6 +16,12 @@ from typing import Any
 from ...config import Settings
 
 from .filing import _build_finding
+from .growth import (
+    _enumerate_boards,
+    _EXPLAINED_SUPPRESS_FRACTION,
+    _is_meta_clone_cache_path,
+    _is_periodic_pass_workspace_path,
+)
 
 log = logging.getLogger("robotsix_mill.data_dir_audit")
 
@@ -72,22 +78,124 @@ def _select_largest_from_sizes(
     dir_totals: defaultdict[str, int],
     top_n: int,
     threshold_bytes: int,
+    suppressed: set[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Return the top-N items above *threshold_bytes* from pre-computed size dicts."""
+    """Return the top-N items above *threshold_bytes* from pre-computed size dicts.
+
+    When *suppressed* is given, paths in that set are dropped from
+    candidacy **before** the ``[:top_n]`` slice — this ensures
+    self-healing infrastructure never crowds out genuinely-oversized
+    items from the result.
+    """
+    drop = suppressed or set()
+
     results: list[dict[str, Any]] = [
         {"path": rel, "size_bytes": size, "is_directory": False}
         for rel, size in file_sizes.items()
-        if size >= threshold_bytes
+        if size >= threshold_bytes and rel not in drop
     ]
     results.extend(
         {"path": rel, "size_bytes": size, "is_directory": True}
         for rel, size in dir_totals.items()
-        if rel not in (".", "") and size >= threshold_bytes
+        if rel not in (".", "") and size >= threshold_bytes and rel not in drop
     )
 
     # Sort descending by size, then path for determinism
     results.sort(key=lambda r: (-r["size_bytes"], r["path"]))
     return results[:top_n]
+
+
+# ---------------------------------------------------------------------------
+# Self-healing path classification for oversized items
+# ---------------------------------------------------------------------------
+
+
+def _path_is_self_healing(
+    rel_path: str,
+    board_ids: set[str],
+) -> bool:
+    """Return ``True`` when *rel_path* (``data_dir``-relative) is a
+    self-healing clone-cache or periodic-pass path.
+
+    Strips the leading board-id segment when *rel_path* starts with a
+    known board id, then delegates to the board-relative helpers
+    ``_is_meta_clone_cache_path`` and
+    ``_is_periodic_pass_workspace_path`` from ``growth.py``.
+    Paths whose first segment is not a known board id are NOT
+    self-healing.
+    """
+    first_seg, sep, remainder = rel_path.partition("/")
+    if not sep or first_seg not in board_ids:
+        return False
+    return _is_meta_clone_cache_path(remainder) or _is_periodic_pass_workspace_path(
+        remainder
+    )
+
+
+def _self_healing_oversized_paths(
+    file_sizes: dict[str, int],
+    dir_totals: dict[str, int],
+    settings: Settings,
+) -> set[str]:
+    """Compute the set of oversized-path keys to suppress.
+
+    Keys are ``data_dir``-relative paths whose bytes are self-healing
+    clone-cache or periodic-pass infrastructure.
+
+    * A **file** is suppressed when its board-relative remainder is
+      classified self-healing by ``_is_meta_clone_cache_path`` or
+      ``_is_periodic_pass_workspace_path``.
+    * A **directory** is suppressed when ``>=90%`` of its cumulative
+      bytes come from self-healing files beneath it (reusing
+      ``_EXPLAINED_SUPPRESS_FRACTION`` from ``growth.py``).
+
+    Each suppression is INFO-logged.
+    """
+    board_ids = {b for b in _enumerate_boards(settings)}
+    if not board_ids:
+        return set()
+
+    # Classify every file
+    self_healing_files: set[str] = set()
+    for rel in file_sizes:
+        if _path_is_self_healing(rel, board_ids):
+            self_healing_files.add(rel)
+
+    suppressed: set[str] = set(self_healing_files)
+
+    # Classify directories: suppress when >= _EXPLAINED_SUPPRESS_FRACTION
+    # of cumulative bytes come from self-healing files beneath them.
+    for dir_key, total_size in dir_totals.items():
+        if dir_key in (".", "") or total_size == 0:
+            continue
+        self_healing_bytes = sum(
+            size
+            for rel, size in file_sizes.items()
+            if rel in self_healing_files and rel.startswith(dir_key + "/")
+        )
+        if self_healing_bytes / total_size >= _EXPLAINED_SUPPRESS_FRACTION:
+            suppressed.add(dir_key)
+
+    # Log each suppression
+    for key in sorted(suppressed):
+        size = file_sizes.get(key, dir_totals.get(key, 0))
+        if key in self_healing_files:
+            log.info(
+                "data_dir_audit: suppressing oversized item path=%s size=%dB "
+                "(self-healing clone cache / periodic-pass infrastructure)",
+                key,
+                size,
+            )
+        else:
+            log.info(
+                "data_dir_audit: suppressing oversized item path=%s size=%dB "
+                "(>=%.0f%% self-healing clone cache / periodic-pass children)",
+                key,
+                size,
+                _EXPLAINED_SUPPRESS_FRACTION * 100,
+            )
+
+    return suppressed
 
 
 def find_largest_items(
