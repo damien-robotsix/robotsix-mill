@@ -58,7 +58,6 @@ class TestBuildAgentRouting:
         return handle, captured
 
     def test_routes_opted_in_agent_to_claude(self):
-        from robotsix_llmio.core.provider import Tier
 
         # Fallback off so build_agent returns the bound handle directly (this
         # test asserts on its delegation, not the fallback wrapper).
@@ -71,7 +70,7 @@ class TestBuildAgentRouting:
         # The handle is wrapped by the global Claude-run concurrency bound; the
         # wrapper delegates to the underlying provider handle.
         assert handle._handle == "CLAUDE_HANDLE"
-        assert cap["tier"] == Tier.CHEAP  # flash → cheap tier
+        assert cap["model"] == "haiku"  # flash → haiku (cheap)
         assert cap["system_prompt"] == "sys"
         assert cap["name"] == "auto-approve"
 
@@ -133,16 +132,14 @@ class TestBuildAgentRouting:
         assert captured["workspace_root"] is None
 
     def test_pro_model_maps_to_default_tier(self):
-        from robotsix_llmio.core.provider import Tier
 
         s = _settings(llm_backend="claude_sdk")
         _, cap = self._build_routed(
             s, name="refine", model_name="deepseek/deepseek-v4-pro"
         )
-        assert cap["tier"] == Tier.DEFAULT  # pro → default tier
+        assert cap["model"] == "opus"  # pro → opus (default)
 
     def test_review_default_model_maps_to_default_tier(self):
-        from robotsix_llmio.core.provider import Tier
 
         # With the new config default, the review agent resolves to the full
         # tier under the Claude SDK backend (last automated merge gate).
@@ -150,22 +147,20 @@ class TestBuildAgentRouting:
         _, cap = self._build_routed(
             s, name="review", model_name=Settings().review_model
         )
-        assert cap["tier"] == Tier.DEFAULT
+        assert cap["model"] == "opus"
 
     def test_tier_alias_cheap_maps_to_cheap_tier(self):
-        from robotsix_llmio.core.provider import Tier
 
         s = _settings(llm_backend="claude_sdk")
         _, cap = self._build_routed(s, name="refine", model_name="cheap")
-        assert cap["tier"] == Tier.CHEAP  # `model: cheap` → CHEAP
+        assert cap["model"] == "haiku"  # `model: cheap` → haiku
 
     def test_tier_alias_default_and_normal_map_to_default_tier(self):
-        from robotsix_llmio.core.provider import Tier
 
         s = _settings(llm_backend="claude_sdk")
         for alias in ("default", "normal", "DEFAULT"):
             _, cap = self._build_routed(s, name="refine", model_name=alias)
-            assert cap["tier"] == Tier.DEFAULT, alias
+            assert cap["model"] == "opus", alias
 
     def test_default_backend_does_not_touch_claude_provider(self):
         """With the default DeepSeek backend, ClaudeSDKProvider is never

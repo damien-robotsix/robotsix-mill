@@ -575,13 +575,15 @@ def build_agent(  # noqa: C901
         # Lazy: claude_agent_sdk is only installed/needed when the toggle
         # is on, so the import must not run on the default DeepSeek path.
         from robotsix_llmio.claude_sdk.provider import ClaudeSDKProvider
-        from robotsix_llmio.core.provider import Tier
 
         from .claude_concurrency import bound_claude_handle
 
-        tier = Tier.CHEAP if "flash" in effective_model else Tier.DEFAULT
+        # CHEAP→haiku / DEFAULT→opus (llmio's former tier mapping); pass the
+        # resolved model directly now that build_agent takes `model`/`level`
+        # instead of the removed `tier`.
+        sdk_model = "haiku" if "flash" in effective_model else "opus"
         handle = ClaudeSDKProvider().build_agent(
-            tier=tier,
+            model=sdk_model,
             system_prompt=composed_system,
             tools=all_tools,
             output_type=output_type,
