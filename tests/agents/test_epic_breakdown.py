@@ -57,6 +57,34 @@ def test_epic_breakdown_result_model():
     assert result.child_bodies == ["Body A", "Body B"]
 
 
+def test_epic_breakdown_result_accepts_natural_keys():
+    """The PromptedOutput parse must accept the natural ``titles`` /
+    ``bodies`` keys that models (haiku AND opus, observed live) emit
+    instead of ``child_titles`` / ``child_bodies`` — otherwise the
+    children silently parse to empty and the epic spawns zero
+    children (the live 23bd regression)."""
+    result = EpicBreakdownResult.model_validate(
+        {
+            "titles": ["A", "B"],
+            "bodies": ["Body A", "Body B"],
+            "epic_body": "revised",
+        }
+    )
+    assert result.child_titles == ["A", "B"]
+    assert result.child_bodies == ["Body A", "Body B"]
+    assert result.epic_body == "revised"
+
+
+def test_epic_breakdown_result_accepts_canonical_keys():
+    """The canonical ``child_titles`` / ``child_bodies`` keys still
+    parse (alias must not break the documented schema)."""
+    result = EpicBreakdownResult.model_validate(
+        {"child_titles": ["A"], "child_bodies": ["Body A"]}
+    )
+    assert result.child_titles == ["A"]
+    assert result.child_bodies == ["Body A"]
+
+
 def test_is_init_repo_child_detection():
     """Create/initialize-repository children are recognised by title or body."""
     assert _is_init_repo_child("Create repo robotsix-agent-comm", "")

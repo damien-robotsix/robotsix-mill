@@ -13,7 +13,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 import yaml as _yaml
 
@@ -417,10 +417,28 @@ class EpicBreakdownResult(BaseModel):
     Holds parallel ``child_titles`` and ``child_bodies`` lists (one
     entry per proposed child ticket) plus an optional ``epic_body``
     carrying a revised epic description when the agent reworked it.
+
+    ``PromptedOutput`` describes the schema in the prompt but does not
+    enforce it, and models (haiku AND opus alike, observed live) reliably
+    emit the children under the natural keys ``titles`` / ``bodies``
+    rather than ``child_titles`` / ``child_bodies`` — which silently
+    parsed to empty lists, so the epic spawned zero children. The
+    ``validation_alias`` ``AliasChoices`` accept BOTH the canonical and
+    the natural keys so the parse succeeds regardless of which the model
+    emits; ``populate_by_name`` keeps construction by the field name
+    working (tests, internal callers).
     """
 
-    child_titles: list[str] = Field(default_factory=list)
-    child_bodies: list[str] = Field(default_factory=list)
+    model_config = ConfigDict(populate_by_name=True)
+
+    child_titles: list[str] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("child_titles", "titles"),
+    )
+    child_bodies: list[str] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("child_bodies", "bodies"),
+    )
     epic_body: str | None = None
 
 
