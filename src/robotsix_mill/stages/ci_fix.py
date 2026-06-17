@@ -37,6 +37,7 @@ _CI_FIX_CYCLE_COUNTER = "ci_fix_cycles.txt"
 _CI_REFRESH_COUNTER = "ci_fix_refresh_attempts.txt"
 _CI_FAILURE_FINGERPRINT = "ci_failure_fingerprint.txt"
 _CI_LAST_DONE_FINGERPRINT = "ci_last_done_fingerprint.txt"
+_CI_IDENTICAL_FAILURE_COUNT = "ci_identical_failure_count.txt"
 _CODQL_FP_TRIAGE_SENTINEL = "codeql_fp_triage_ran.txt"
 
 # Maximum number of alerts the codeql_fp_triage agent may dismiss in a
@@ -342,6 +343,18 @@ class CIFixStage(Stage):
         )
         if rebase_outcome is not None:
             return rebase_outcome
+
+        # --- Pre-existing failure detection (before consuming a cycle) ---
+        pre_existing = self._check_target_branch_ci_debt(
+            ticket, ctx, branch, failing
+        )
+        if pre_existing is not None:
+            return pre_existing
+        pre_existing = self._check_consecutive_identical_failure(
+            ticket, ctx, failing_summary
+        )
+        if pre_existing is not None:
+            return pre_existing
 
         # Counter phase: enforce the hard per-ticket cycle ceiling.
         ceiling = self._enforce_cycle_ceiling(
@@ -652,6 +665,123 @@ class CIFixStage(Stage):
             log.warning("%s: failed to record rebase history note", ticket.id)
 
         return Outcome(State.IMPLEMENT_COMPLETE)
+
+    def _check_target_branch_ci_debt(
+        self, ticket: Ticket, ctx: StageContext, branch: str, failing: list[dict[str, Any]]
+    ) -> Outcome | None:
+        """Return BLOCKED when every PR-failing workflow also fails on the
+        target branch.
+
+        Best-effort: any forge error → None (never block on uncertainty).
+        """
+        s = ctx.settings
+        if not s.ci_fix_main_debt_detection_enabled:
+            return None
+        try:
+            from .merge._shared import _latest_failing_workflows
+
+            forge = get_forge(s, repo_config=ctx.repo_config)
+            pr = forge.pr_status(source_branch=branch)
+            head_sha = (pr or {}).get("sha", "")
+            if not head_sha:
+                return None
+            target = target_branch_for(s, ctx.repo_config)
+            pr_failing = _latest_failing_workflows(
+                forge.list_workflow_runs(head_sha=head_sha)
+            )
+            if not pr_failing:
+                return None
+            main_failing = _latest_failing_workflows(
+                forge.list_workflow_runs(branch=target)
+            )
+            if main_failing and pr_failing <= main_failing:
+                debt = pr_failing & main_failing
+                names = ", ".join(sorted(debt))
+                log.warning(
+                    "%s: CI failure is pre-existing target-branch debt (%s) → BLOCKED",
+                    ticket.id, names,
+                )
+                try:
+                    ctx.service.add_history_note(
+                        ticket.id,
+                        f"ci-fix blocked: pre-existing target-branch CI debt detected — "
+                        f"workflow(s) {names} are failing on `{target}` too and were "
+                        f"not introduced by this PR.",
+                    )
+                except Exception:
+                    pass
+                return Outcome(
+                    State.BLOCKED,
+                    f"CI blocked by pre-existing target-branch debt: workflow(s) "
+                    f"{names} are failing on {target} too and were not introduced "
+                    f"by this PR. Operator must stabilise {target}'s CI before "
+                    f"this can merge.",
+                )
+            return None
+        except Exception:
+            log.warning("%s: target-branch debt check failed (best-effort)", ticket.id)
+            return None
+
+    def _check_consecutive_identical_failure(
+        self, ticket: Ticket, ctx: StageContext, failing_summary: str
+    ) -> Outcome | None:
+        """Escalate when the same CI failure fingerprint persists across cycles.
+
+        Uses _CI_FAILURE_FINGERPRINT (already maintained by _rebase_if_stale).
+        After _rebase_if_stale returns, if the fingerprint was unchanged the file
+        still holds the previous cycle's fingerprint (which equals current).
+        """
+        s = ctx.settings
+        if s.ci_fix_max_identical_failures <= 0:
+            return None
+        repo_id = ctx.repo_config.board_id if ctx.repo_config else ""
+        current_fp = _ci_failure_fingerprint(failing_summary, repo_id)
+        fp_path = ctx.service.workspace(ticket).artifacts_dir / _CI_FAILURE_FINGERPRINT
+        try:
+            stored_fp = fp_path.read_text(encoding="utf-8").strip()
+        except FileNotFoundError:
+            stored_fp = ""
+        if current_fp != stored_fp or not stored_fp:
+            # Fingerprint changed (or first cycle) — reset identical-failure counter.
+            count_path = (
+                ctx.service.workspace(ticket).artifacts_dir / _CI_IDENTICAL_FAILURE_COUNT
+            )
+            _write_counter(count_path, 0)
+            return None
+        # Fingerprint unchanged since previous cycle.
+        count_path = (
+            ctx.service.workspace(ticket).artifacts_dir / _CI_IDENTICAL_FAILURE_COUNT
+        )
+        count = _read_counter(count_path) + 1
+        _write_counter(count_path, count)
+        if count >= s.ci_fix_max_identical_failures:
+            _write_counter(count_path, 0)
+            log.warning(
+                "%s: identical failure fingerprint %s persisted for %d cycle(s) — blocking",
+                ticket.id, current_fp, count,
+            )
+            try:
+                ctx.service.add_history_note(
+                    ticket.id,
+                    f"ci-fix blocked: same CI failure fingerprint `{current_fp}` "
+                    f"persisted for {count} consecutive cycle(s) — failure is not "
+                    f"changing across ci-fix cycles. Likely pre-existing debt or "
+                    f"unfixable by the agent.",
+                )
+            except Exception:
+                pass
+            return Outcome(
+                State.BLOCKED,
+                f"CI blocked after {count} consecutive identical failure(s) "
+                f"(fingerprint {current_fp}) — failure is not changing across "
+                f"ci-fix cycles. Likely pre-existing debt or unfixable by the agent. "
+                f"Resume-blocked to retry from human_mr_approval.",
+            )
+        log.info(
+            "%s: identical failure fingerprint %s — count %d/%d",
+            ticket.id, current_fp, count, s.ci_fix_max_identical_failures,
+        )
+        return None
 
     def _try_codeql_fp_triage(  # noqa: C901 — guardrail chain is inherently branchy
         self,

@@ -200,6 +200,8 @@ stages:
 ci:
   max_auto_retries: 3          # consecutive no-change ci-fix cycles before BLOCK (0 = disabled)
   codeql_fp_triage_enabled: true  # auto-dismiss CodeQL FPs at ci-fix ceiling (set false to disable)
+  main_debt_detection_enabled: true  # detect pre-existing target-branch CI debt within ci_fix (set false to disable)
+  max_identical_failures: 2          # max consecutive identical ci-fix failure fingerprints before BLOCKED (0 = disabled)
 
 # ---------------------------------------------------------------------------
 #  pipeline — merge, rebase, ci-fix, retrospect, prune, archive, memory paths

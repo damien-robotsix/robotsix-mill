@@ -515,6 +515,19 @@ class _StagesSettings(BaseModel):
     # to disable.  Default 3.
     ping_pong_max_alternations: int = Field(default=3, ge=0)
 
+    # When True (default), ci_fix detects pre-existing target-branch CI debt
+    # before each agent invocation: if every workflow failing on the PR head
+    # is ALSO failing on the merge target branch, the failure was not
+    # introduced by this PR and the ticket is routed to BLOCKED without
+    # consuming a cycle.  Set False to disable.
+    ci_fix_main_debt_detection_enabled: bool = Field(default=True)
+
+    # Maximum consecutive ci-fix cycles with the *same* CI failure fingerprint
+    # before escalating to BLOCKED.  An unchanged fingerprint across cycles
+    # means the agent's fixes are not changing the failure — likely pre-existing
+    # debt or unfixable by the agent.  Set to 0 to disable.
+    ci_fix_max_identical_failures: int = Field(default=2, ge=0)
+
     # Maximum review-revision attempts per ticket before escalating to BLOCKED.
     review_revision_max_attempts: int = Field(default=2, ge=1)
 

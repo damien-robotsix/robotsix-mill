@@ -1106,21 +1106,26 @@ def test_ci_fix_stage_fetches_job_logs_on_failure(tmp_path, monkeypatch):
             ],
         },
     )
-    # list_workflow_runs returns one failed run.
+    # list_workflow_runs returns one failed run only for head_sha queries;
+    # branch queries (target-branch debt check) return empty (main is green).
     monkeypatch.setattr(
         github.GitHubForge,
         "list_workflow_runs",
-        lambda self, *, branch=None, head_sha=None: [
-            {
-                "id": 42,
-                "name": "CI",
-                "workflow_id": 100,
-                "head_sha": "abc123",
-                "conclusion": "failure",
-                "html_url": "http://x",
-                "created_at": "2025-01-01T00:00:00Z",
-            },
-        ],
+        lambda self, *, branch=None, head_sha=None: (
+            [
+                {
+                    "id": 42,
+                    "name": "CI",
+                    "workflow_id": 100,
+                    "head_sha": "abc123",
+                    "conclusion": "failure",
+                    "html_url": "http://x",
+                    "created_at": "2025-01-01T00:00:00Z",
+                },
+            ]
+            if head_sha is not None
+            else []
+        ),
     )
     # fetch_workflow_job_logs returns log text.
     monkeypatch.setattr(

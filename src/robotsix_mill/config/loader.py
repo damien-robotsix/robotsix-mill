@@ -355,6 +355,8 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     # -- ci --
     "ci.max_auto_retries": "ci_max_auto_retries",
     "ci.codeql_fp_triage_enabled": "codeql_fp_triage_enabled",
+    "ci.main_debt_detection_enabled": "ci_fix_main_debt_detection_enabled",
+    "ci.max_identical_failures": "ci_fix_max_identical_failures",
     # -- pipeline --
     # Post-MILL_*-alias-purge these map directly to Settings field
     # names (no env-var alias on the Field). Keeping a MILL_* value
