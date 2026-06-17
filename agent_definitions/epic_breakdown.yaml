@@ -8,7 +8,12 @@ description: >-
 
 category: pipeline
 
-model: "${MILL_AUDIT_MODEL}"
+# Decomposition emits a structured PromptedOutput whose exact field names
+# (child_titles / child_bodies) a cheap model (haiku under the Claude SDK
+# backend) fails to honor, silently yielding zero children. Use the capable
+# coordinator model (MILL_MODEL) — the call site passes settings.model, which
+# overrides this default; kept in sync for clarity.
+model: "${MILL_MODEL}"
 
 tools: []
 

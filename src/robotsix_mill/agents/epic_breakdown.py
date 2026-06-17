@@ -444,7 +444,13 @@ def run_epic_breakdown_agent(
 
     The agent is constructed via :func:`~.base.build_agent` with
     ``PromptedOutput(EpicBreakdownResult)``, ``web=False``,
-    ``report_issue=False``, and ``model_name=settings.audit_model``.
+    ``report_issue=False``, and ``model_name=settings.model`` (the
+    capable coordinator model). Decomposition emits a structured
+    ``PromptedOutput`` whose field names a cheap model (e.g. the
+    ``audit_model`` tier — haiku under the Claude SDK backend) fails to
+    honor: it returns the children under ``titles``/``bodies`` rather
+    than ``child_titles``/``child_bodies``, so the parser silently
+    yields zero children. The default model is reliable here.
 
     Execution is wrapped in :func:`~.retry.call_with_retry` for
     transient/rate-limit resilience.
@@ -463,7 +469,7 @@ def run_epic_breakdown_agent(
         settings=settings,
         definition_name="epic_breakdown",
         tools=[],
-        model_name=settings.audit_model,
+        model_name=settings.model,
         prompt=prompt,
         what="epic-breakdown",
     )
