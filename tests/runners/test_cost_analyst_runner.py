@@ -190,7 +190,9 @@ def test_agent_failure_returns_empty_result(monkeypatch):
 
 
 def test_determine_model_path_deepseek():
-    assert car._determine_model_path({"model": "deepseek/deepseek-v4-pro"}) == "deepseek"
+    assert (
+        car._determine_model_path({"model": "deepseek/deepseek-v4-pro"}) == "deepseek"
+    )
     assert (
         car._determine_model_path({"model": "openrouter/deepseek/deepseek-v4-pro"})
         == "deepseek"
@@ -214,7 +216,9 @@ def test_classify_model_paths_small_stage(monkeypatch):
     col = car._Collected()
     # 3 traces on "implement": 2 claude_sdk, 1 deepseek
     traces: list = []
-    for i, _model in enumerate(["claude-opus", "claude-opus", "deepseek/deepseek-v4-pro"]):
+    for i, _model in enumerate(
+        ["claude-opus", "claude-opus", "deepseek/deepseek-v4-pro"]
+    ):
         t = {"id": f"tr{i}", "name": "implement", "totalCost": 2.0}
         traces.append((t, _repo("mill")))
     col.stage_traces["implement"] = traces
