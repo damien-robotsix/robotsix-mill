@@ -63,6 +63,31 @@ def _normalize_cost_params(
     return lookback_hours, max_tickets, repo_config
 
 
+def _aggregate_across_repos(repo_config, aggregator_fn, merge_fn, initial_acc):
+    """Aggregate results across one or more repos.
+
+    Calls ``aggregator_fn(rc)`` for each repo in *repo_config* (or once
+    for a single config / ``None``) and folds the results into
+    *initial_acc* via ``merge_fn(acc, result)``.
+
+    Args:
+        repo_config: ``RepoConfig``, ``None``, or ``list[RepoConfig]``.
+        aggregator_fn: ``(RepoConfig | None) -> T`` — called per repo.
+        merge_fn: ``(Acc, T) -> Acc`` — folds each result into the
+            accumulator.
+        initial_acc: starting accumulator value.
+
+    Returns:
+        The final accumulator after processing all repos.
+    """
+    acc = initial_acc
+    repos = repo_config if isinstance(repo_config, list) else [repo_config]
+    for rc in repos:
+        result = aggregator_fn(rc)
+        acc = merge_fn(acc, result)
+    return acc
+
+
 @router.get("/costs/trend")
 def cost_trend(
     lookback_hours: float = 24,
@@ -86,30 +111,23 @@ def cost_trend(
     lookback_hours, max_tickets, repo_config = _normalize_cost_params(
         lookback_hours, max_tickets, repo_id, request
     )
-    if isinstance(repo_config, list):
-        # "all" — aggregate across repos
-        all_buckets: dict[str, dict] = {}
-        for rc in repo_config:
-            buckets = aggregate_cost_trend(
-                settings,
-                lookback_hours,
-                max_tickets=max_tickets,
-                repo_config=rc,
-            )
-            for b in buckets:
-                key = b["ts"]
-                if key not in all_buckets:
-                    all_buckets[key] = {"ts": key, "total_cost": 0.0, "trace_count": 0}
-                all_buckets[key]["total_cost"] += b["total_cost"]
-                all_buckets[key]["trace_count"] += b["trace_count"]
-        return {"buckets": sorted(all_buckets.values(), key=lambda x: x["ts"])}
-    buckets = aggregate_cost_trend(
-        settings,
-        lookback_hours,
-        max_tickets=max_tickets,
-        repo_config=repo_config,
-    )
-    return {"buckets": buckets}
+
+    def _agg(rc):
+        return aggregate_cost_trend(
+            settings, lookback_hours, max_tickets=max_tickets, repo_config=rc
+        )
+
+    def _merge(acc, buckets):
+        for b in buckets:
+            key = b["ts"]
+            if key not in acc:
+                acc[key] = {"ts": key, "total_cost": 0.0, "trace_count": 0}
+            acc[key]["total_cost"] += b["total_cost"]
+            acc[key]["trace_count"] += b["trace_count"]
+        return acc
+
+    all_buckets = _aggregate_across_repos(repo_config, _agg, _merge, {})
+    return {"buckets": sorted(all_buckets.values(), key=lambda x: x["ts"])}
 
 
 @router.get("/costs/by-agent")
@@ -135,31 +153,25 @@ def cost_by_agent(
     lookback_hours, max_tickets, repo_config = _normalize_cost_params(
         lookback_hours, max_tickets, repo_id, request
     )
-    if isinstance(repo_config, list):
-        # "all" — aggregate across repos
-        agg: dict[str, dict] = {}
-        for rc in repo_config:
-            entries = aggregate_cost_by_name(
-                settings,
-                lookback_hours,
-                max_tickets=max_tickets,
-                repo_config=rc,
-            )
-            for e in entries:
-                name = e["name"]
-                if name not in agg:
-                    agg[name] = {"name": name, "total_cost": 0.0, "trace_count": 0}
-                agg[name]["total_cost"] += e["total_cost"]
-                agg[name]["trace_count"] += e["trace_count"]
-        result = list(agg.values())
-        result.sort(key=lambda x: x["total_cost"], reverse=True)
-        return result
-    return aggregate_cost_by_name(
-        settings,
-        lookback_hours,
-        max_tickets=max_tickets,
-        repo_config=repo_config,
-    )
+
+    def _agg(rc):
+        return aggregate_cost_by_name(
+            settings, lookback_hours, max_tickets=max_tickets, repo_config=rc
+        )
+
+    def _merge(acc, entries):
+        for e in entries:
+            name = e["name"]
+            if name not in acc:
+                acc[name] = {"name": name, "total_cost": 0.0, "trace_count": 0}
+            acc[name]["total_cost"] += e["total_cost"]
+            acc[name]["trace_count"] += e["trace_count"]
+        return acc
+
+    agg = _aggregate_across_repos(repo_config, _agg, _merge, {})
+    result = list(agg.values())
+    result.sort(key=lambda x: x["total_cost"], reverse=True)
+    return result
 
 
 @router.get("/costs/most-expensive-ticket")
@@ -187,26 +199,18 @@ def most_expensive_ticket_endpoint(
     lookback_hours, max_tickets, repo_config = _normalize_cost_params(
         lookback_hours, max_tickets, repo_id, request
     )
-    if isinstance(repo_config, list):
-        # "all" — find the most expensive across all repos
-        best: dict | None = None
-        for rc in repo_config:
-            result = most_expensive_ticket(
-                settings,
-                lookback_hours,
-                max_tickets=max_tickets,
-                repo_config=rc,
-            )
-            if result and (best is None or result["total_cost"] > best["total_cost"]):
-                best = result
-        result = best
-    else:
-        result = most_expensive_ticket(
-            settings,
-            lookback_hours,
-            max_tickets=max_tickets,
-            repo_config=repo_config,
+
+    def _agg(rc):
+        return most_expensive_ticket(
+            settings, lookback_hours, max_tickets=max_tickets, repo_config=rc
         )
+
+    def _merge(acc, result):
+        if result and (acc is None or result["total_cost"] > acc["total_cost"]):
+            return result
+        return acc
+
+    result = _aggregate_across_repos(repo_config, _agg, _merge, None)
 
     if result is None:
         return None
@@ -246,24 +250,18 @@ def most_expensive_trace_endpoint(
     lookback_hours, max_tickets, repo_config = _normalize_cost_params(
         lookback_hours, max_tickets, repo_id, request
     )
-    if isinstance(repo_config, list):
-        best: dict | None = None
-        for rc in repo_config:
-            result = most_expensive_trace(
-                settings,
-                lookback_hours,
-                max_tickets=max_tickets,
-                repo_config=rc,
-            )
-            if result and (best is None or result["total_cost"] > best["total_cost"]):
-                best = result
-        return best
-    return most_expensive_trace(
-        settings,
-        lookback_hours,
-        max_tickets=max_tickets,
-        repo_config=repo_config,
-    )
+
+    def _agg(rc):
+        return most_expensive_trace(
+            settings, lookback_hours, max_tickets=max_tickets, repo_config=rc
+        )
+
+    def _merge(acc, result):
+        if result and (acc is None or result["total_cost"] > acc["total_cost"]):
+            return result
+        return acc
+
+    return _aggregate_across_repos(repo_config, _agg, _merge, None)
 
 
 @router.get("/tickets/{ticket_id}/cost-breakdown")

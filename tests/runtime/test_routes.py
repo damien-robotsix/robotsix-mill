@@ -357,8 +357,8 @@ def test_cost_by_agent_happy_path(client, monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client.aggregate_cost_by_name",
         lambda settings, lookback_hours, repo_config=None, max_tickets=None: [
-            {"name": "refine", "count": 5, "totalCost": 0.12},
-            {"name": "implement", "count": 3, "totalCost": 0.45},
+            {"name": "refine", "trace_count": 5, "total_cost": 0.12},
+            {"name": "implement", "trace_count": 3, "total_cost": 0.45},
         ],
     )
 
