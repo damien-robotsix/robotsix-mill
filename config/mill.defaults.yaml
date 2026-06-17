@@ -95,6 +95,7 @@ core:
   enable_repo_creation: false           # allow the new-repo meta flow to create repositories
   repo_visibility_default: public      # "public" | "private" — default visibility for new repos
   lint_on_edit: true                    # run ruff after each agent file edit
+  read_file_max_chars: 50000            # cap on implicit full read_file payload (0 disables); ranged reads never truncated
   meta_periodic: false                  # enable the cross-repo meta-agent pass
   meta_interval_seconds: 86400          # seconds between meta-agent passes
   cost_analyst_periodic: false          # enable the cross-repo cost-analyst pass
