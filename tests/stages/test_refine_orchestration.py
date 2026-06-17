@@ -723,9 +723,7 @@ def test_parent_closed_non_split_does_not_short_circuit(
 # ===========================================================================
 
 
-def test_triage_skip_rejection_gate_returns_done(
-    ctx_factory, monkeypatch, tmp_path
-):
+def test_triage_skip_rejection_gate_returns_done(ctx_factory, monkeypatch, tmp_path):
     ctx = ctx_factory()
     t = _ticket(ctx)
     calls = _spy_refine(

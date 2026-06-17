@@ -48,9 +48,12 @@ def test_triage_reason_rejects_false():
     assert refine_module._triage_reason_rejects("already a precise spec") is False
     assert refine_module._triage_reason_rejects("needs refinement") is False
     assert refine_module._triage_reason_rejects("") is False
-    assert refine_module._triage_reason_rejects(
-        "the draft can be used as-is with minor tweaks"
-    ) is False
+    assert (
+        refine_module._triage_reason_rejects(
+            "the draft can be used as-is with minor tweaks"
+        )
+        is False
+    )
 
 
 # ---------------------------------------------------------------------------
