@@ -390,4 +390,3 @@ service:
   api_host: "127.0.0.1"                     # FastAPI listen address (container: 0.0.0.0)
   api_port: 8077                            # FastAPI listen port
   api_url: http://127.0.0.1:8077            # base URL the CLI client uses
-           # base URL the CLI client uses
