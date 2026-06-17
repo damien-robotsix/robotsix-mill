@@ -4934,3 +4934,54 @@ class TestRefineTraceWebBudgetDefaults:
         # 6th search hits the trace budget cap.
         r6 = asyncio.run(web_search("query 6"))
         assert "web_search trace budget exhausted" in r6
+
+
+class TestRefineRunawayLoopGuard:
+    """The refine run caps total tool calls (``tool_calls_limit``) and
+    wraps the assembled tools with the shared error-counter, mirroring
+    test_gap / trace_inspector. Only the pathological runaway tail is
+    terminated; the normal path is unchanged."""
+
+    def test_refine_usage_limits_and_error_wrapper(self, tmp_path, monkeypatch):
+        from robotsix_mill.agents import base, retry, trace_inspector
+
+        s = Settings(data_dir=str(tmp_path))
+
+        captured: dict = {}
+
+        real_wrap = trace_inspector._wrap_tools_with_error_limit
+
+        def spy_wrap(tools, max_errors):
+            captured["max_errors"] = max_errors
+            return real_wrap(tools, max_errors)
+
+        monkeypatch.setattr(trace_inspector, "_wrap_tools_with_error_limit", spy_wrap)
+
+        class FakeResult:
+            output = RefineResult(spec_markdown="ok")
+            response = type("R", (), {"finish_reason": "stop"})()
+
+            def all_messages_json(self):
+                return b"[]"
+
+            def new_messages_json(self):
+                return b"[]"
+
+        class FakeAgent:
+            def run_sync(self, prompt, *, message_history=None, usage_limits=None):
+                captured["usage_limits"] = usage_limits
+                return FakeResult()
+
+        monkeypatch.setattr(
+            base, "build_agent_from_definition", lambda *a, **k: FakeAgent()
+        )
+        monkeypatch.setattr(base, "_safe_close", lambda *a, **k: None)
+        monkeypatch.setattr(retry, "run_agent", lambda agent, fn, what: fn(agent))
+
+        out = refining.run_refine_agent(settings=s, title="t", draft="d", repo_dir=None)
+        assert out.spec_markdown == "ok"
+
+        limits = captured["usage_limits"]
+        assert limits.tool_calls_limit == s.refine_max_tool_calls
+        assert limits.request_limit == s.refine_request_limit
+        assert captured["max_errors"] == s.refine_max_errors

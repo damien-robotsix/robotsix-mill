@@ -54,8 +54,8 @@ core:
     explore_requests: 100              # per-call cap for explore sub-agent
     explore_max_tokens: 2048              # output token cap for explore sub-agent responses
     refine_requests: 80                # per-call request cap for the refine agent
-    refine_max_tool_calls: 100         # hard cap on total tool calls per refine trace (runaway-loop backstop)
-    refine_max_errors: 20              # max tool-call errors per refine trace before auto-termination
+    refine_max_tool_calls: 120         # hard cap on total tool calls per refine trace (runaway-loop backstop)
+    refine_max_errors: 20              # max tool-call errors before aborting a refine trace
     refine_web_fetch_max_calls: 5      # per-refine-run cap on web_fetch calls (across all ask_web_knowledge consults)
     refine_web_fetch_max_total_bytes: 500000  # per-refine-run cap on fetch bytes (0 disables)
     refine_web_search_max_calls: 5     # per-refine-run cap on web_search invocations
