@@ -48,6 +48,7 @@ from .helpers import (
     OPERATOR_SENDBACK_PREFIX,
     REFINE_PROGRESS_STATES,
     UNMERGED_BRANCH_PREFIX,
+    _TRIAGE_REJECTION_PATTERNS,
     log,
     _build_candidates_block,
     _build_deployed_log_summary,
@@ -77,6 +78,7 @@ __all__ = [
     "REFINE_PROGRESS_STATES",
     "OPERATOR_SENDBACK_PREFIX",
     "log",
+    "_TRIAGE_REJECTION_PATTERNS",
     # patchable seams (re-exported so ``refine_module.<name>`` patches resolve)
     "load_memory",
     "persist_memory",

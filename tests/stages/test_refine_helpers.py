@@ -246,6 +246,53 @@ def test_resolve_next_state_triage_error_falls_back(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# _resolve_next_state — triage_note rejection gate
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("pattern", refine_module._TRIAGE_REJECTION_PATTERNS)
+def test_resolve_next_state_triage_note_rejection(pattern):
+    """Every rejection pattern triggers HUMAN_ISSUE_APPROVAL for a
+    deterministic auto-approve source when present in the triage note."""
+    state, note = refine_module._resolve_next_state(
+        _ctx(auto_approve_enabled=True),
+        "## Problem\nA genuine, real spec body",
+        "t1",
+        source="test_gap",
+        triage_note=f"SKIP: the entire gap assertion is {pattern}",
+    )
+    assert state is State.HUMAN_ISSUE_APPROVAL
+    assert "REJECTED" in (note or "")
+    assert pattern in (note or "")
+
+
+def test_resolve_next_state_triage_note_clean_passes():
+    """A triage note with no rejection signal does NOT block auto-approve."""
+    state, note = refine_module._resolve_next_state(
+        _ctx(auto_approve_enabled=True),
+        "## Problem\nA genuine, real spec body",
+        "t1",
+        source="audit",
+        triage_note="spec is already precise and implementation-ready",
+    )
+    assert state is State.READY
+    assert note is not None and "APPROVE" in note
+
+
+def test_resolve_next_state_triage_note_none_passes():
+    """triage_note=None (default) behaves identically to before."""
+    state, note = refine_module._resolve_next_state(
+        _ctx(auto_approve_enabled=True),
+        "## Problem\nA genuine, real spec body",
+        "t1",
+        source="audit",
+        triage_note=None,
+    )
+    assert state is State.READY
+    assert note is not None and "APPROVE" in note
+
+
+# ---------------------------------------------------------------------------
 # _verify_cited_fix_at_head
 # ---------------------------------------------------------------------------
 
