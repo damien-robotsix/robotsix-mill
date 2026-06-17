@@ -4848,3 +4848,89 @@ class TestRefineFullModelFloor:
         s = Settings(data_dir=str(tmp_path))
         for model in ("deepseek/deepseek-v4-flash", "cheap"):
             assert not refining._is_flash_model(refining._refine_full_model(model, s))
+
+
+class TestRefineTraceWebBudgetDefaults:
+    """The refine stage reuses the proven per-trace web budget helpers
+    (``reset_trace_web_fetch_budget`` / ``reset_trace_web_search_budget``)
+    that ``run_refine_agent`` resets at the start of each run. Mirrors the
+    survey trace-budget mechanism — once the cap is set with refine's
+    defaults, the 6th+ fetch/search is refused with the budget-exhausted
+    sentinel instead of executing."""
+
+    def test_refine_web_fetch_default_cap(self, tmp_path, monkeypatch):
+        """With refine's default cap (5), the 6th cache-miss web_fetch in
+        one trace returns the budget-exhausted sentinel without fetching."""
+        from robotsix_mill import sandbox
+        from robotsix_mill.agents.web_tools import (
+            _cache,
+            make_web_fetch,
+            reset_web_fetch_budget,
+            reset_trace_web_fetch_budget,
+        )
+
+        s = Settings(data_dir=str(tmp_path))
+        assert s.refine_web_fetch_max_calls == 5
+        assert s.refine_web_fetch_max_total_bytes == 500_000
+
+        _cache.clear()
+        reset_web_fetch_budget()
+        # Exactly what run_refine_agent does at the start of a trace.
+        reset_trace_web_fetch_budget(
+            s.refine_web_fetch_max_calls,
+            s.refine_web_fetch_max_total_bytes,
+        )
+
+        calls: list[str] = []
+
+        def fake_fetch(url, *, settings):
+            calls.append(url)
+            return 0, f"body for {url}"
+
+        monkeypatch.setattr(sandbox, "fetch", fake_fetch)
+        wf = make_web_fetch(s)
+
+        # First 5 distinct URLs succeed (consume the trace budget).
+        for i in range(5):
+            assert wf(f"https://x.test/{i}") == f"body for https://x.test/{i}"
+        assert len(calls) == 5
+
+        # Per-consult reset does NOT clear the trace counters.
+        reset_web_fetch_budget()
+
+        # 6th distinct URL is refused by the trace budget.
+        out = wf("https://x.test/6th")
+        assert "trace budget exhausted" in out.lower()
+        assert len(calls) == 5  # no new fetch
+
+    def test_refine_web_search_default_cap(self, tmp_path, monkeypatch):
+        """With refine's default cap (5), the 6th web_search in one trace
+        returns the budget-exhausted sentinel."""
+        import asyncio
+
+        from robotsix_mill.agents.web_knowledge import (
+            _make_tools,
+            reset_trace_web_search_budget,
+        )
+
+        s = Settings(data_dir=str(tmp_path))
+        assert s.refine_web_search_max_calls == 5
+
+        async def fake_run_web_research(*, settings, query):
+            return f"conclusion for: {query}"
+
+        import robotsix_mill.agents.web_research as wr_mod
+
+        monkeypatch.setattr(wr_mod, "run_web_research", fake_run_web_research)
+
+        reset_trace_web_search_budget(s.refine_web_search_max_calls)
+        tools = _make_tools(s)
+        web_search = tools[-1]  # web_search is the last tool
+
+        # First 5 searches succeed.
+        for i in range(5):
+            assert asyncio.run(web_search(f"query {i}")) == f"conclusion for: query {i}"
+
+        # 6th search hits the trace budget cap.
+        r6 = asyncio.run(web_search("query 6"))
+        assert "web_search trace budget exhausted" in r6

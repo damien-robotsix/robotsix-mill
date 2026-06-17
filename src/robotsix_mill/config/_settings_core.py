@@ -272,6 +272,15 @@ class _CoreSettings(BaseModel):
     # inspection should have near-zero errors; 20 indicates a broken
     # execution loop.
     test_gap_max_errors: int = Field(default=20, ge=0)
+    # Hard cap on total tool calls per refine trace. 100 tool calls is
+    # far beyond what any legitimate refine run requires (deep search is
+    # delegated to the explore sub-agent) — only clearly broken loops
+    # (e.g. an 83-fetch runaway) are terminated.
+    refine_max_tool_calls: int = Field(default=100, ge=1)
+    # Hard cap on tool-call errors before auto-termination. A healthy
+    # refine run should have near-zero errors; 20 indicates a broken
+    # execution loop.
+    refine_max_errors: int = Field(default=20, ge=0)
     doc_request_limit: int = Field(default=8)
     # Cheap classifier gate that runs *before* the full doc agent.
     doc_classifier_model: str = Field(default="deepseek/deepseek-v4-flash")

@@ -251,6 +251,8 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.limits.explore_requests": "explore_request_limit",
     "core.limits.explore_max_tokens": "explore_max_tokens",
     "core.limits.refine_requests": "refine_request_limit",
+    "core.limits.refine_max_tool_calls": "refine_max_tool_calls",
+    "core.limits.refine_max_errors": "refine_max_errors",
     "core.limits.maintenance_requests": "maintenance_request_limit",
     "core.limits.audit_requests": "audit_request_limit",
     "core.limits.dedup_requests": "dedup_request_limit",
@@ -320,6 +322,9 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "web.fetch_raw": "web_fetch_raw",
     "web.fetch_max_calls": "web_fetch_max_calls",
     "web.fetch_max_total_bytes": "web_fetch_max_total_bytes",
+    "core.limits.refine_web_fetch_max_calls": "refine_web_fetch_max_calls",
+    "core.limits.refine_web_fetch_max_total_bytes": "refine_web_fetch_max_total_bytes",
+    "core.limits.refine_web_search_max_calls": "refine_web_search_max_calls",
     "core.lint_on_edit": "lint_on_edit",
     "core.read_file_max_chars": "read_file_max_chars",
     # -- gates --

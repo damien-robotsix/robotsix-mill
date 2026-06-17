@@ -68,6 +68,18 @@ class _StagesSettings(BaseModel):
     # bytes per consult; ``0`` disables the byte ceiling.
     # Configured via ``web.fetch_max_total_bytes`` in the YAML config.
     web_fetch_max_total_bytes: int = Field(default=2_000_000, ge=0)
+    # Per-TRACE (cross-consult) web budget for the refine stage,
+    # mirroring the proven survey caps. The per-consult ``web_fetch_max_*``
+    # fields above bound a single ``ask_web_knowledge`` call; these bound
+    # every fetch/search across one whole refine run, so a refine loop
+    # can't re-bill millions of input tokens on runaway web I/O. Reset
+    # once at the start of each refine trace (see ``run_refine_agent``).
+    # Max real (cache-miss) fetches across one refine trace.
+    refine_web_fetch_max_calls: int = Field(default=5, ge=1)
+    # Max fetch bytes across one refine trace; ``0`` disables the ceiling.
+    refine_web_fetch_max_total_bytes: int = Field(default=500_000, ge=0)
+    # Max web_search calls across one refine trace.
+    refine_web_search_max_calls: int = Field(default=5, ge=1)
     # Pre-write Python syntax check on `write_file` / `edit_file`. When
     # True (default) a SyntaxError aborts the edit and the agent gets
     # an actionable error string instead of writing broken code that
