@@ -385,6 +385,35 @@
   }
 
   // =========================================================================
+  // Credit status
+  // =========================================================================
+  async function fetchCreditStatus() {
+    var s = await jget("/credit-status");
+    if (!s) return;
+    var banner = document.getElementById("credit-status");
+    if (!banner) return;
+    if (!s.low) {
+      banner.style.display = "none";
+      banner.innerHTML = "";
+      return;
+    }
+    var balance = s.balance_usd != null ? "$" + Number(s.balance_usd).toFixed(2) : "?";
+    var threshold = s.threshold_usd != null ? "$" + Number(s.threshold_usd).toFixed(2) : "?";
+    banner.style.display = "block";
+    banner.innerHTML =
+      '<span class="lf-badge">⚠ Low OpenRouter credit</span> ' +
+      'Balance: ' + balance + ' (threshold ' + threshold + '). ' +
+      '<a href="https://openrouter.ai/credits" target="_blank" style="color:#fbbf24;text-decoration:underline">Top up</a>' +
+      (s.last_402_at ? ' · Last 402: ' + esc(s.last_402_at) : '') +
+      ' <button onclick="dismissCreditStatus()" class="lf-dismiss">dismiss</button>';
+  }
+
+  async function dismissCreditStatus() {
+    await jpost("/credit-status/clear", {});
+    fetchCreditStatus();
+  }
+
+  // =========================================================================
   // Active labels
   // =========================================================================
   async function fetchActive() {
@@ -2483,6 +2512,7 @@
     updateAgentsMenu();
     fetchGates();
     fetchLangfuseStatus();
+    fetchCreditStatus();
     refreshCandidateBadge();
 
     // Update the board refresh URL to include the repo filter
@@ -2536,6 +2566,7 @@
     fetchRepos();
     fetchGates();
     fetchLangfuseStatus();
+    fetchCreditStatus();
     refreshCandidateBadge();
     applyAgentColors();
 
@@ -2627,6 +2658,7 @@
   window.toggleAgentsMenu = toggleAgentsMenu;
   window.closeAgentsMenu = closeAgentsMenu;
   window.dismissLfStatus = dismissLfStatus;
+  window.dismissCreditStatus = dismissCreditStatus;
   window.validateCandidate = validateCandidate;
   window.rejectCandidate = rejectCandidate;
   window.approveProposal = approveProposal;

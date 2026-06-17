@@ -126,7 +126,17 @@ class ImplementationLogicMixin(_ImplementStageBase):
             # 3106 on 2026-05-28: 4-min run, OpenRouter timeout,
             # ~hours of human attention to unstick).
             if e.cause is not None:
-                from ...runtime.transient_errors import classify_stage_error
+                from ...runtime.transient_errors import (
+                    classify_stage_error,
+                    is_insufficient_credit,
+                    parse_credit_shortfall,
+                )
+
+                if is_insufficient_credit(e.cause):
+                    from ...runtime.credit_status import record_low_credit
+
+                    detail = parse_credit_shortfall(e.cause)
+                    record_low_credit(detail=detail)
 
                 if classify_stage_error(e.cause) == "transient":
                     raise e.cause from e

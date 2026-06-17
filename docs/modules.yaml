@@ -133,6 +133,7 @@ modules:
       - src/robotsix_mill/runtime/middleware.py
       - src/robotsix_mill/runtime/tracing.py
       - src/robotsix_mill/runtime/transient_errors.py
+      - src/robotsix_mill/runtime/credit_status.py
       - src/robotsix_mill/runtime/board_html.py
       - src/robotsix_mill/runtime/board_adapter.py
       - src/robotsix_mill/runtime/broadcaster.py
@@ -154,6 +155,7 @@ modules:
       - tests/runtime/test_bespoke_supervisor.py
       - tests/runtime/test_member_sync_supervisor.py
       - tests/runtime/test_transient_errors.py
+      - tests/runtime/test_credit_status.py
       - tests/runtime/test_candidates_routes.py
       - tests/runtime/test_deps.py
       - tests/runtime/test_lifespan.py
@@ -231,6 +233,7 @@ modules:
       - src/robotsix_mill/runners/data_dir_audit/summary.py
       - src/robotsix_mill/runners/module_curator_runner.py
       - src/robotsix_mill/runners/periodic_runner.py
+      - src/robotsix_mill/runners/credit_balance_runner.py
       - src/robotsix_mill/runners/verify_runner.py
       - tests/runners/test_pass_runner.py
       - tests/runners/test_periodic_runner.py
@@ -247,6 +250,7 @@ modules:
       - tests/runners/test_langfuse_cleanup_runner.py
       - tests/runners/test_bespoke_runner.py
       - tests/runners/test_data_dir_audit_runner.py
+      - tests/runners/test_credit_balance_runner.py
       - tests/runners/test_verify_runner.py
       - tests/runners/test_copy_paste_runner.py
     dependencies: [config, core, forge, agents, langfuse, sandbox, notify]

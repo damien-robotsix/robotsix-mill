@@ -481,7 +481,17 @@ class ReviewStage(Stage):
             # DeepSeek reasoning-400) should get a fresh stage re-run via
             # the worker's stage-retry rather than a hard BLOCK needing a
             # manual resume — same fix as implement.py.
-            from ..runtime.transient_errors import reraise_if_transient
+            from ..runtime.transient_errors import (
+                is_insufficient_credit,
+                parse_credit_shortfall,
+                reraise_if_transient,
+            )
+
+            if is_insufficient_credit(e):
+                from ..runtime.credit_status import record_low_credit
+
+                detail = parse_credit_shortfall(e)
+                record_low_credit(detail=detail)
 
             reraise_if_transient(e)
             return Outcome(

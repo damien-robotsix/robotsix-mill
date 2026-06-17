@@ -185,6 +185,19 @@ class _CoreSettings(BaseModel):
     # bounding a real hang. On timeout the call raises -> transient ->
     # retry/backoff rides it out (or it BLOCKs visibly).
     model_request_timeout: float = Field(default=900.0, gt=0)
+
+    # --- OpenRouter credit-balance warning ---
+    # Board-level low-credit banner: when the OpenRouter balance drops
+    # below this threshold the board shows an amber warning with a
+    # top-up link.  Also triggered reactively by 402 insufficient-credit
+    # errors from the stage error handlers.
+    low_credit_threshold_usd: float = Field(default=5.0, ge=0.0)
+    # Background poll toggle.  Set false to disable the proactive
+    # GET /api/v1/credits poll; the reactive 402 path still fires.
+    low_credit_poll_enabled: bool = Field(default=True)
+    # Seconds between proactive credit-balance polls (default 1 hour).
+    low_credit_poll_interval_seconds: int = Field(default=3600, ge=60)
+
     transient_retries: int = Field(default=4, ge=0)
     transient_backoff_base: float = Field(default=2.0, gt=0)
     transient_backoff_cap: float = Field(default=30.0, gt=0)
