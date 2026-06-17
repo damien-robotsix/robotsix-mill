@@ -573,7 +573,8 @@ Each periodic agent shares this pattern:
 
 Periodic agents: `audit`, `board_cleanup`, `trace_health`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_monitor`, `config_sync`, `member_sync`, `bc_check`,
-`completeness_check`, `cost_reconciliation`, `diagnostic`, `forge_parity`, `module_curator`.
+`completeness_check`, `cost_reconciliation`, `diagnostic`, `forge_parity`, `module_curator`,
+`copy_paste`, `timeout_escalation`, `langfuse_cleanup`, `data_dir_audit`, `run_health`.
 
 > ¹ Most agents default to `enabled: true`. Exceptions: `diagnostic`, `stale_branch_cleanup`, `meta_periodic`, `cost_analyst_periodic`, and `run_health_periodic` default to `false`.
 >
