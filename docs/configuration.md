@@ -615,10 +615,10 @@ and as environment variables:
 
 | Env var | Default | Description |
 |---------|---------|-------------|
-| `MILL_BC_CHECK_PERIODIC` | `false` | Enable periodic backward-compatibility inspection |
+| `MILL_BC_CHECK_PERIODIC` | `true` | Enable periodic backward-compatibility inspection |
 | `MILL_BC_CHECK_INTERVAL_SECONDS` | `86400` | Seconds between bc-check passes |
 | `MILL_BC_CHECK_MODEL` | `deepseek/deepseek-v4-flash` | BC-check agent model |
-| `MILL_COMPLETENESS_CHECK_PERIODIC` | `false` | Enable periodic feature-wiring completeness inspection |
+| `MILL_COMPLETENESS_CHECK_PERIODIC` | `true` | Enable periodic feature-wiring completeness inspection |
 | `MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS` | `86400` | Seconds between completeness-check passes |
 | `MILL_COMPLETENESS_CHECK_MODEL` | `deepseek/deepseek-v4-flash` | Completeness-check agent model |
 
