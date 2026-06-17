@@ -709,7 +709,11 @@ class CIFixStage(Stage):
                         f"not introduced by this PR.",
                     )
                 except Exception:
-                    pass
+                    log.warning(
+                        "%s: failed to add history note about pre-existing "
+                        "target-branch debt",
+                        ticket.id,
+                    )
                 return Outcome(
                     State.BLOCKED,
                     f"CI blocked by pre-existing target-branch debt: workflow(s) "
@@ -769,7 +773,10 @@ class CIFixStage(Stage):
                     f"unfixable by the agent.",
                 )
             except Exception:
-                pass
+                log.warning(
+                    "%s: failed to add history note about same-fingerprint block",
+                    ticket.id,
+                )
             return Outcome(
                 State.BLOCKED,
                 f"CI blocked after {count} consecutive identical failure(s) "
