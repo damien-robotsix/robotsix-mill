@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from typing import Any
 
 from ..agents.cost_analyst import (
     MAX_PROPOSALS,
@@ -97,8 +98,10 @@ def _stage_tier(settings: Settings, stage: str) -> str:
 @dataclass
 class _Collected:
     stage_costs: dict[str, list[float]] = field(default_factory=dict)
-    stage_traces: dict[str, list[tuple[dict, RepoConfig]]] = field(default_factory=dict)
-    all_named: list[tuple[dict, RepoConfig]] = field(default_factory=list)
+    stage_traces: dict[str, list[tuple[dict[str, Any], RepoConfig]]] = field(
+        default_factory=dict
+    )
+    all_named: list[tuple[dict[str, Any], RepoConfig]] = field(default_factory=list)
     sessions: dict[str, dict] = field(default_factory=dict)
 
 
@@ -164,7 +167,7 @@ def _determine_model_path(obs: dict) -> str:
 def _classify_model_paths(
     settings: Settings,
     col: _Collected,
-    obs_cache: dict[str, list[dict] | None] | None = None,
+    obs_cache: dict[str, list[dict[str, Any]] | None] | None = None,
 ) -> dict[str, dict[str, dict[str, float]]]:
     """For each stage, classify traces by actual runtime model path.
 
@@ -219,8 +222,8 @@ def _classify_model_paths(
 
 
 def _top_n_by_cost(
-    traces: list[tuple[dict, RepoConfig]], n: int
-) -> list[tuple[dict, RepoConfig]]:
+    traces: list[tuple[dict[str, Any], RepoConfig]], n: int
+) -> list[tuple[dict[str, Any], RepoConfig]]:
     """Return the *n* traces with the highest ``totalCost``."""
     return sorted(
         traces, key=lambda tr: float(tr[0].get("totalCost") or 0), reverse=True
@@ -229,9 +232,9 @@ def _top_n_by_cost(
 
 def _classify_trace_sample(
     settings: Settings,
-    sampled: list[tuple[dict, RepoConfig]],
+    sampled: list[tuple[dict[str, Any], RepoConfig]],
     sample_ratio: float,
-    obs_cache: dict[str, list[dict] | None],
+    obs_cache: dict[str, list[dict[str, Any]] | None],
 ) -> tuple[float, int, float, int]:
     """Classify a list of sampled traces and return aggregated
     (claude_cost, claude_count, deepseek_cost, deepseek_count)."""
@@ -246,9 +249,7 @@ def _classify_trace_sample(
 
         # Fetch observations (use cache).
         if trace_id not in obs_cache:
-            obs_cache[trace_id] = lf.fetch_trace_observations(
-                settings, trace_id, repo
-            )
+            obs_cache[trace_id] = lf.fetch_trace_observations(settings, trace_id, repo)
         obs = obs_cache.get(trace_id)
 
         # A trace counts as deepseek if *any* observation carries a
@@ -320,7 +321,7 @@ def _render_stage_table(
     return "\n".join(lines)
 
 
-def _token_split(obs: list[dict]) -> str:
+def _token_split(obs: list[dict[str, Any]]) -> str:
     """Sum input vs output tokens across GENERATION observations (handles
     the common Langfuse usage key spellings)."""
     inp = out = 0
@@ -346,7 +347,7 @@ def _token_split(obs: list[dict]) -> str:
     return f"tokens: input={inp:,} output={out:,} (input is {100 * inp // total}% of total)"
 
 
-def _tool_calls(obs: list[dict]) -> str:
+def _tool_calls(obs: list[dict[str, Any]]) -> str:
     counts: dict[str, int] = {}
     for o in obs:
         if (o.get("type") or "").upper() in ("SPAN", "TOOL", "EVENT"):
@@ -358,7 +359,7 @@ def _tool_calls(obs: list[dict]) -> str:
     return "tool-calls: " + ", ".join(f"{k}×{v}" for k, v in top)
 
 
-def _models_used(obs: list[dict]) -> str:
+def _models_used(obs: list[dict[str, Any]]) -> str:
     models = sorted({(o.get("model") or "") for o in obs if o.get("model")})
     return "models: " + (", ".join(models) if models else "(none)")
 
@@ -366,10 +367,10 @@ def _models_used(obs: list[dict]) -> str:
 def _trace_specimen_block(
     settings: Settings,
     label: str,
-    trace: dict,
+    trace: dict[str, Any],
     repo: RepoConfig,
     extra: str = "",
-    obs_cache: dict[str, list[dict] | None] | None = None,
+    obs_cache: dict[str, list[dict[str, Any]] | None] | None = None,
 ) -> str:
     trace_id = trace.get("id") or ""
     if obs_cache is not None and trace_id in obs_cache:
@@ -391,7 +392,7 @@ def _trace_specimen_block(
 
 
 def _session_specimen_block(
-    settings: Settings, label: str, sid: str, info: dict, extra: str = ""
+    settings: Settings, label: str, sid: str, info: dict[str, Any], extra: str = ""
 ) -> str:
     repo: RepoConfig = info["repo"]
     steps = lf.session_traces(settings, sid, repo_config=repo) or []
@@ -409,7 +410,7 @@ def _session_specimen_block(
 def _build_specimens_block(
     settings: Settings,
     col: _Collected,
-    obs_cache: dict[str, list[dict] | None] | None = None,
+    obs_cache: dict[str, list[dict[str, Any]] | None] | None = None,
 ) -> str:
     if obs_cache is None:
         obs_cache = {}
@@ -435,7 +436,7 @@ def _build_specimens_block(
     candidates = sorted(
         col.all_named, key=lambda tr: float(tr[0].get("totalCost") or 0), reverse=True
     )[:40]
-    best_err: tuple[dict, RepoConfig, int] | None = None
+    best_err: tuple[dict[str, Any], RepoConfig, int] | None = None
     for t, repo in candidates:
         trace_id = t.get("id") or ""
         if trace_id in obs_cache:
@@ -483,7 +484,7 @@ def _build_cost_digest(settings: Settings) -> str:
 
     # Shared observation cache — avoids double-fetching traces across
     # the model-path classifier and the specimen builder.
-    obs_cache: dict[str, list[dict] | None] = {}
+    obs_cache: dict[str, list[dict[str, Any]] | None] = {}
 
     # Model-path classification (Claude SDK subscription vs DeepSeek billing).
     stage_model_costs = _classify_model_paths(settings, col, obs_cache)
@@ -519,12 +520,12 @@ def _file_drafts(
     settings: Settings,
     session_id: str,
     board_id: str,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     from ..core.dedup import normalize
 
     service = TicketService(settings, board_id=board_id)
     seen = _existing_title_keys(service)
-    created: list[dict] = []
+    created: list[dict[str, Any]] = []
     triples = list(
         zip(result.draft_titles, result.draft_bodies, result.gap_ids, strict=True)
     )
@@ -557,7 +558,7 @@ def _file_drafts(
 @dataclass
 class CostAnalystPassResult:
     updated_memory: str
-    drafts_created: list[dict]
+    drafts_created: list[dict[str, Any]]
     session_id: str
 
 
