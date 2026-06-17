@@ -2922,3 +2922,248 @@ class TestOversizedSelfHealingSuppression:
         # → below 90% → NOT suppressed (genuine child surfaces).
         assert board_id in paths
         db.reset_engine()
+
+    # ------------------------------------------------------------------
+    # Terminal-ticket clone suppression (oversized check)
+    # ------------------------------------------------------------------
+
+    def test_terminal_clone_file_suppressed(self, tmp_path, monkeypatch):
+        """A 200 MiB sparse file inside a terminal ticket's ``repo/`` dir
+        is suppressed from ``result.oversized_items`` when the GC knob
+        is on (default)."""
+        s = _make_settings(tmp_path)
+        monkeypatch.setattr(
+            "robotsix_mill.runners.data_dir_audit.Settings", lambda: s
+        )
+        board_id = "test-board"
+        ticket_id = "20260101T000000Z-closed-ffff"
+        _make_workspace_with_clones(s, board_id, ticket_id)
+        _insert_closed_ticket(
+            s,
+            board_id,
+            ticket_id,
+            closed_at=_now() - timedelta(hours=12),
+            state=State.CLOSED,
+        )
+        _make_sparse_file(
+            s.data_dir / board_id / "workspaces" / ticket_id / "repo" / ".git" / "objects" / "big.bin",
+            200 * 1024 * 1024,
+        )
+
+        result = run_data_dir_audit_pass()
+
+        clone_paths = [
+            r["path"] for r in result.oversized_items if ticket_id in r["path"]
+        ]
+        assert clone_paths == [], f"terminal clone paths not suppressed: {clone_paths}"
+        db.reset_engine()
+
+    def test_terminal_clone_aggregate_dir_suppressed(
+        self, tmp_path, monkeypatch, caplog
+    ):
+        """A ``workspaces/`` dir whose bytes are ≥90% terminal-ticket
+        clones is suppressed; a genuine oversized file in the same
+        board still surfaces."""
+        s = _make_settings(tmp_path)
+        monkeypatch.setattr(
+            "robotsix_mill.runners.data_dir_audit.Settings", lambda: s
+        )
+        board_id = "test-board"
+        ticket_id = "20260101T000000Z-closed-gggg"
+        _make_workspace_with_clones(s, board_id, ticket_id)
+        _insert_closed_ticket(
+            s,
+            board_id,
+            ticket_id,
+            closed_at=_now() - timedelta(hours=12),
+            state=State.CLOSED,
+        )
+        # 950 MB clone → 90.5% of workspaces/ total (950+100=1050)
+        _make_sparse_file(
+            s.data_dir
+            / board_id
+            / "workspaces"
+            / ticket_id
+            / "repo"
+            / ".git"
+            / "objects.bin",
+            950 * 1024 * 1024,
+        )
+        # 100 MB genuine file (not in workspaces/)
+        _make_sparse_file(
+            s.data_dir / board_id / "genuine.log",
+            100 * 1024 * 1024,
+        )
+
+        with caplog.at_level(logging.INFO, logger="robotsix_mill.data_dir_audit"):
+            result = run_data_dir_audit_pass()
+
+        suppressed = {r["path"] for r in result.oversized_items}
+        # Genuine file still appears.
+        assert f"{board_id}/genuine.log" in suppressed
+        # The workspaces/ aggregate dir should be suppressed (≥ 90%).
+        assert f"{board_id}/workspaces" not in suppressed
+        # The terminal-clone file itself suppressed.
+        assert not any(ticket_id in p for p in suppressed)
+        db.reset_engine()
+
+    def test_terminal_clone_not_suppressed_when_gc_disabled(
+        self, tmp_path, monkeypatch
+    ):
+        """With ``data_dir_audit_prune_terminal_clones=False``,
+        terminal-ticket clone files ARE reported as oversized."""
+        s = _make_settings(
+            tmp_path, data_dir_audit_prune_terminal_clones=False
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.runners.data_dir_audit.Settings", lambda: s
+        )
+        board_id = "test-board"
+        ticket_id = "20260101T000000Z-closed-hhhh"
+        _make_workspace_with_clones(s, board_id, ticket_id)
+        _insert_closed_ticket(
+            s,
+            board_id,
+            ticket_id,
+            closed_at=_now() - timedelta(hours=12),
+            state=State.CLOSED,
+        )
+        _make_sparse_file(
+            s.data_dir
+            / board_id
+            / "workspaces"
+            / ticket_id
+            / "repo"
+            / ".git"
+            / "objects"
+            / "big.bin",
+            200 * 1024 * 1024,
+        )
+
+        result = run_data_dir_audit_pass()
+
+        clone_paths = [
+            r["path"] for r in result.oversized_items if ticket_id in r["path"]
+        ]
+        assert len(clone_paths) >= 1, f"terminal clone should NOT be suppressed when GC knob is off, got: {result.oversized_items}"
+        db.reset_engine()
+
+    def test_active_ticket_clones_not_suppressed(self, tmp_path, monkeypatch):
+        """Clone files inside an *active* (DRAFT) ticket workspace are
+        NOT suppressed."""
+        s = _make_settings(tmp_path)
+        monkeypatch.setattr(
+            "robotsix_mill.runners.data_dir_audit.Settings", lambda: s
+        )
+        board_id = "test-board"
+        ticket_id = "20260101T000000Z-draft-iiii"
+        _make_workspace_with_clones(s, board_id, ticket_id)
+        _insert_ticket(s, board_id, ticket_id)  # DRAFT → active
+        _make_sparse_file(
+            s.data_dir
+            / board_id
+            / "workspaces"
+            / ticket_id
+            / "repo"
+            / ".git"
+            / "objects"
+            / "big.bin",
+            200 * 1024 * 1024,
+        )
+
+        result = run_data_dir_audit_pass()
+
+        clone_paths = [
+            r["path"] for r in result.oversized_items if ticket_id in r["path"]
+        ]
+        assert len(clone_paths) >= 1, f"active-ticket clone should NOT be suppressed, got: {result.oversized_items}"
+        db.reset_engine()
+
+    def test_terminal_clone_suppression_logged(
+        self, tmp_path, monkeypatch, caplog
+    ):
+        """Suppression is logged at INFO level with
+        ``"terminal-ticket clone cache"`` in the message."""
+        s = _make_settings(tmp_path)
+        monkeypatch.setattr(
+            "robotsix_mill.runners.data_dir_audit.Settings", lambda: s
+        )
+        board_id = "test-board"
+        ticket_id = "20260101T000000Z-closed-jjjj"
+        _make_workspace_with_clones(s, board_id, ticket_id)
+        _insert_closed_ticket(
+            s,
+            board_id,
+            ticket_id,
+            closed_at=_now() - timedelta(hours=12),
+            state=State.CLOSED,
+        )
+        _make_sparse_file(
+            s.data_dir
+            / board_id
+            / "workspaces"
+            / ticket_id
+            / "repo"
+            / ".git"
+            / "objects"
+            / "big.bin",
+            200 * 1024 * 1024,
+        )
+
+        with caplog.at_level(logging.INFO, logger="robotsix_mill.data_dir_audit"):
+            run_data_dir_audit_pass()
+
+        assert any(
+            "suppressing oversized item" in rec.message
+            and "terminal-ticket clone cache" in rec.message
+            for rec in caplog.records
+        ), f"no terminal-clone suppression log found in: {[r.message for r in caplog.records]}"
+        db.reset_engine()
+
+    def test_mixed_terminal_clones_and_genuine_oversized(
+        self, tmp_path, monkeypatch
+    ):
+        """A board with both terminal-clone bloat (suppressed) and a
+        genuinely oversized ``mill.db`` (reported) surfaces only the
+        genuine file."""
+        s = _make_settings(tmp_path)
+        monkeypatch.setattr(
+            "robotsix_mill.runners.data_dir_audit.Settings", lambda: s
+        )
+        board_id = "test-board"
+        ticket_id = "20260101T000000Z-closed-kkkk"
+        _make_workspace_with_clones(s, board_id, ticket_id)
+        _insert_closed_ticket(
+            s,
+            board_id,
+            ticket_id,
+            closed_at=_now() - timedelta(hours=12),
+            state=State.CLOSED,
+        )
+        # Terminal-clone bloat: 200 MB
+        _make_sparse_file(
+            s.data_dir
+            / board_id
+            / "workspaces"
+            / ticket_id
+            / "repo"
+            / ".git"
+            / "objects"
+            / "big.bin",
+            200 * 1024 * 1024,
+        )
+        # Genuine oversized: 150 MB
+        _make_sparse_file(
+            s.data_dir / board_id / "mill.db",
+            150 * 1024 * 1024,
+        )
+
+        result = run_data_dir_audit_pass()
+
+        paths = {r["path"] for r in result.oversized_items}
+        # Terminal-clone paths suppressed.
+        clone = [p for p in paths if ticket_id in p]
+        assert clone == [], f"terminal clone paths leaked: {clone}"
+        # Genuine oversized file present.
+        assert f"{board_id}/mill.db" in paths
+        db.reset_engine()

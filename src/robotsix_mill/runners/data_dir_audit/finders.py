@@ -21,7 +21,10 @@ from .growth import (
     _EXPLAINED_SUPPRESS_FRACTION,
     _is_meta_clone_cache_path,
     _is_periodic_pass_workspace_path,
+    _TICKET_ID_PREFIX_RE,
+    _workspace_ticket_states,
 )
+from .orphans import _CLONE_SUBDIRS
 
 log = logging.getLogger("robotsix_mill.data_dir_audit")
 
@@ -132,6 +135,84 @@ def _path_is_self_healing(
     )
 
 
+def _is_terminal_clone_cache_path(
+    remainder: str, terminal_ticket_ids: set[str]
+) -> bool:
+    """Return True when *remainder* (board-relative) lies inside a
+    terminal-ticket workspace's clone directory (repo/ or repos/)."""
+    parts = remainder.split("/")
+    if len(parts) < 3:
+        return False
+    if parts[0] != "workspaces":
+        return False
+    if not _TICKET_ID_PREFIX_RE.match(parts[1]):
+        return False
+    if parts[2] not in _CLONE_SUBDIRS:
+        return False
+    return parts[1] in terminal_ticket_ids
+
+
+def _terminal_clone_ticket_ids(
+    file_sizes: dict[str, int],
+    settings: Settings,
+    board_ids: set[str],
+) -> dict[str, set[str]]:
+    """Resolve the set of terminal-ticket IDs for each board by scanning
+    *file_sizes* for ``<board>/workspaces/<tid>/<repo|repos>/...`` paths,
+    batch-querying each board's DB, and filtering to terminal states.
+
+    Returns an empty dict when ``data_dir_audit_prune_terminal_clones``
+    is disabled.
+    """
+    if not settings.data_dir_audit_prune_terminal_clones:
+        return {}
+
+    candidates: defaultdict[str, set[str]] = defaultdict(set)
+    for rel in file_sizes:
+        parts = rel.split("/")
+        if len(parts) < 4:
+            continue
+        if parts[0] not in board_ids:
+            continue
+        if parts[1] != "workspaces":
+            continue
+        if not _TICKET_ID_PREFIX_RE.match(parts[2]):
+            continue
+        if parts[3] not in _CLONE_SUBDIRS:
+            continue
+        candidates[parts[0]].add(parts[2])
+
+    result: dict[str, set[str]] = {}
+    for board_id, ticket_ids in candidates.items():
+        states = _workspace_ticket_states(settings, board_id, ticket_ids)
+        terminal = {tid for tid, s in states.items() if s == "terminal"}
+        if terminal:
+            result[board_id] = terminal
+    return result
+
+
+def _classify_terminal_clone_files(
+    file_sizes: dict[str, int],
+    board_ids: set[str],
+    terminal_ids_by_board: dict[str, set[str]],
+) -> set[str]:
+    """Return the set of *file_sizes* keys that lie inside terminal-ticket
+    clone directories."""
+    result: set[str] = set()
+    for rel in file_sizes:
+        parts = rel.split("/")
+        if len(parts) < 4:
+            continue
+        board_id = parts[0]
+        if board_id not in board_ids:
+            continue
+        remainder = "/".join(parts[1:])
+        terminal_ids = terminal_ids_by_board.get(board_id, set())
+        if terminal_ids and _is_terminal_clone_cache_path(remainder, terminal_ids):
+            result.add(rel)
+    return result
+
+
 def _self_healing_oversized_paths(
     file_sizes: dict[str, int],
     dir_totals: dict[str, int],
@@ -161,6 +242,13 @@ def _self_healing_oversized_paths(
         if _path_is_self_healing(rel, board_ids):
             self_healing_files.add(rel)
 
+    # Classify terminal-ticket clone paths (gated on the GC knob).
+    terminal_ids_by_board = _terminal_clone_ticket_ids(file_sizes, settings, board_ids)
+    terminal_clone_files = _classify_terminal_clone_files(
+        file_sizes, board_ids, terminal_ids_by_board
+    )
+    self_healing_files |= terminal_clone_files
+
     suppressed: set[str] = set(self_healing_files)
 
     # Classify directories: suppress when >= _EXPLAINED_SUPPRESS_FRACTION
@@ -179,7 +267,14 @@ def _self_healing_oversized_paths(
     # Log each suppression
     for key in sorted(suppressed):
         size = file_sizes.get(key, dir_totals.get(key, 0))
-        if key in self_healing_files:
+        if key in terminal_clone_files:
+            log.info(
+                "data_dir_audit: suppressing oversized item path=%s size=%dB "
+                "(terminal-ticket clone cache — GC reclaims)",
+                key,
+                size,
+            )
+        elif key in self_healing_files:
             log.info(
                 "data_dir_audit: suppressing oversized item path=%s size=%dB "
                 "(self-healing clone cache / periodic-pass infrastructure)",
