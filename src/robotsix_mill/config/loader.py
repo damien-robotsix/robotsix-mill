@@ -394,6 +394,12 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.health.enabled": "health_periodic",
     "periodic.health.interval_seconds": "health_interval_seconds",
     "periodic.health.memory_path": "health_memory_path",
+    # -- periodic.run_health --
+    "periodic.run_health.enabled": "run_health_periodic",
+    "periodic.run_health.interval_seconds": "run_health_interval_seconds",
+    "periodic.run_health.window_hours": "run_health_window_hours",
+    "periodic.run_health.target_repo_id": "run_health_target_repo_id",
+    "periodic.run_health.memory_path": "run_health_memory_path",
     # -- periodic.test_gap --
     "periodic.test_gap.model": "test_gap_model",
     "periodic.test_gap.enabled": "test_gap_periodic",

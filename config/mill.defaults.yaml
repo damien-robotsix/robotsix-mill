@@ -264,6 +264,14 @@ periodic:
     interval_seconds: 86400         # seconds between passes
     memory_path: null               # defaults to <data_dir>/health_memory.md
 
+  # -- run-health agent — meta-checker that watches all other periodic agents
+  run_health:
+    enabled: true                   # enable periodic run-health passes
+    interval_seconds: 86400         # seconds between passes
+    window_hours: 168               # look-back window (hours) for run-registry scans
+    target_repo_id: robotsix-mill   # board for run-health draft tickets
+    memory_path: null               # defaults to <data_dir>/<board>/run_health_memory.md
+
   # -- test-gap agent — identifies modules with zero dedicated tests -------
   test_gap:
     model: deepseek/deepseek-v4-flash  # read-only "untested modules" finder, flash sufficient
