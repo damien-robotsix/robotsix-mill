@@ -48,6 +48,7 @@ from .helpers import (
     _rationale_claims_external_fix,
     _resolve_next_state,
     _spec_is_degenerate,
+    _triage_reason_rejects,
     _verify_cited_fix_at_head,
     log,
 )
@@ -447,6 +448,18 @@ class RefineAgentMixin:
                     f"maintenance triage (LLM): {triage.reason} — {title}",
                 )
             if triage.decision == "SKIP":
+                if _triage_reason_rejects(triage.reason):
+                    (ws.artifacts_dir / "draft-original.md").write_text(
+                        draft if draft else "(title-only ticket, no body provided)",
+                        encoding="utf-8",
+                    )
+                    short_reason = triage.reason[:400] + (
+                        "…" if len(triage.reason) > 400 else ""
+                    )
+                    return Outcome(
+                        State.DONE,
+                        f"triage SKIP — no change needed: {short_reason}",
+                    )
                 # The draft IS the spec — preserve it unchanged.
                 (ws.artifacts_dir / "draft-original.md").write_text(
                     draft if draft else "(title-only ticket, no body provided)",
