@@ -56,6 +56,7 @@ from .helpers import (
     _resolve_next_state,
     _spec_is_degenerate,
     _tail_file,
+    _triage_reason_rejects,
     _verify_branch_merged,
     _verify_cited_fix_at_head,
 )
@@ -91,4 +92,5 @@ __all__ = [
     "_verify_branch_merged",
     "_resolve_next_state",
     "_build_candidates_block",
+    "_triage_reason_rejects",
 ]

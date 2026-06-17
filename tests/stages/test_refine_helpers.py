@@ -27,6 +27,33 @@ from robotsix_mill.stages import refine as refine_module
 
 
 # ---------------------------------------------------------------------------
+# _triage_reason_rejects
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "the entire gap assertion is factually wrong — no change is needed",
+        "No change is needed because the file already exists.",
+        "This draft's assertion is factually wrong.",
+        "No change needed — the reusable workflow already exists.",
+    ],
+)
+def test_triage_reason_rejects_true(reason):
+    assert refine_module._triage_reason_rejects(reason) is True
+
+
+def test_triage_reason_rejects_false():
+    assert refine_module._triage_reason_rejects("already a precise spec") is False
+    assert refine_module._triage_reason_rejects("needs refinement") is False
+    assert refine_module._triage_reason_rejects("") is False
+    assert refine_module._triage_reason_rejects(
+        "the draft can be used as-is with minor tweaks"
+    ) is False
+
+
+# ---------------------------------------------------------------------------
 # _spec_is_degenerate
 # ---------------------------------------------------------------------------
 
