@@ -160,14 +160,25 @@ def _format_labelled_alerts(in_scope: list[dict], out_of_scope: list[dict]) -> s
     return "\n".join(lines)
 
 
-def _format_alert_summary_block(alerts: list[dict[str, Any]] | None) -> str:
+def _format_alert_summary_block(
+    alerts: list[dict[str, Any]] | None, *, codeql_failing: bool = False
+) -> str:
     """Render a compact CodeQL alert summary for top-of-prompt injection.
 
     Returns a short bullet list of ``rule @ path:line`` entries so the
     agent sees exactly which alerts to fix without having to read through
     the full failing summary first.
+
+    When *codeql_failing* is True and *alerts* is empty/None, emits an
+    explicit could-not-retrieve notice so the ci_fix worker escalates
+    rather than blocking on an un-actionable empty summary.
     """
     if not alerts:
+        if codeql_failing:
+            return (
+                "**CodeQL alerts could not be retrieved from the code-scanning API — "
+                "the CodeQL check is failing but alert details are unavailable.**\n"
+            )
         return ""
     lines = [
         "**CodeQL alerts to fix (extracted for fast reference — rule ID and location):**"
@@ -197,7 +208,8 @@ def _build_failing_summary(
     """
     parts = []
     # Inject compact alert summary at the very top for fast reference.
-    parts.append(_format_alert_summary_block(alerts))
+    codeql_failing = _only_codeql_failing(failing)
+    parts.append(_format_alert_summary_block(alerts, codeql_failing=codeql_failing))
     for i, chk in enumerate(failing):
         parts.append(f"## Failing check #{i + 1}: {chk['name']}")
         if chk.get("summary"):

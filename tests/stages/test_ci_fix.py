@@ -15,6 +15,7 @@ from robotsix_mill.stages.ci_fix import (
     _read_counter,
     _write_counter,
     _build_failing_summary,
+    _format_alert_summary_block,
     _partition_alerts_by_diff,
     _ci_failure_fingerprint,
 )
@@ -1273,6 +1274,39 @@ def test_build_failing_summary_labels_in_diff_alert():
         "are located in THIS PR's own changed files and MUST be fixed in-scope" in out
     )
     assert "IN THIS PR'S DIFF — must fix" in out
+
+
+# ---------------------------------------------------------------------------
+# _format_alert_summary_block — fail-loud on empty CodeQL
+# ---------------------------------------------------------------------------
+
+
+def test_format_alert_summary_block_empty_codeql_failing_emits_notice():
+    """When CodeQL is failing and alerts are empty, emit a could-not-retrieve
+    notice instead of a silent empty string."""
+    result = _format_alert_summary_block(None, codeql_failing=True)
+    assert "could not be retrieved" in result
+    assert "code-scanning API" in result
+
+
+def test_format_alert_summary_block_empty_no_codeql_returns_empty():
+    """When CodeQL is not the only failing check, empty alerts still return
+    an empty string (backward-compatible)."""
+    assert _format_alert_summary_block([]) == ""
+    assert _format_alert_summary_block(None) == ""
+    assert _format_alert_summary_block([], codeql_failing=False) == ""
+
+
+def test_build_failing_summary_codeql_failing_no_alerts():
+    """Full integration: when every failing check is CodeQL but alerts are
+    empty, the fail-loud notice appears in _build_failing_summary output."""
+    out = _build_failing_summary(
+        failing=[{"name": "CodeQL / Analyze (python)"}],
+        log_text="",
+        alerts=[],
+    )
+    assert "could not be retrieved" in out
+    assert "code-scanning API" in out
 
 
 def test_all_in_diff_alerts_suppress_dependency_fixer(tmp_path, monkeypatch):
