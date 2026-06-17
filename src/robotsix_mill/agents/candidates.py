@@ -208,6 +208,99 @@ def update_status(
     return updated
 
 
+def _classify_for_prune(
+    raw_blocks: list[str],
+) -> tuple[list[int], list[int], list[int]]:
+    """Bucket block indices into (pending, resolved, blank) by file order.
+
+    A purely blank fragment (the trailing piece left by the final
+    ``\\n---\\n``) is tracked separately so an unchanged file round-trips
+    byte-for-byte; non-empty hand-edited junk that fails to parse falls
+    into none of the buckets and is dropped — matching how
+    ``load_candidates`` ignores it.
+    """
+    pending_idx: list[int] = []
+    resolved_idx: list[int] = []
+    blank_idx: list[int] = []
+    for i, raw in enumerate(raw_blocks):
+        c = _parse_block(raw)
+        if c is None:
+            if not raw.strip():
+                blank_idx.append(i)
+            continue
+        if c.status == "pending":
+            pending_idx.append(i)
+        else:
+            resolved_idx.append(i)
+    return pending_idx, resolved_idx, blank_idx
+
+
+def prune_candidates(path: Path, max_entries: int) -> int:
+    """Bounded-retention sweep for ``AGENT_CANDIDATES.md``.
+
+    Drops resolved (``validated``/``rejected``) blocks oldest-first so
+    the total kept block count is ≤ *max_entries*, while ALWAYS keeping
+    every ``pending`` block (actionable entries must never be silently
+    dropped). Resolved blocks carry their provenance on the
+    ``**Status:** … → <ticket_id>`` line, so retaining the full block
+    forever is pure bloat.
+
+    No-op (returns 0) when *max_entries* ``<= 0`` (disabled) or the file
+    does not exist. Returns the number of blocks dropped.
+
+    Kept blocks preserve their exact raw text (no re-serialization from
+    the ``Candidate`` dataclass) so hand-edits/formatting survive.
+    Rewrites atomically (tmp + rename), mirroring ``update_status``;
+    only rewrites when at least one block is dropped.
+    """
+    if max_entries <= 0 or not path.is_file():
+        return 0
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as e:
+        log.warning("AGENT_CANDIDATES.md read failed: %s", e)
+        return 0
+
+    # Classify each block by file position (oldest first).
+    raw_blocks = _BLOCK_SEP.split(text)
+    pending_idx, resolved_idx, blank_idx = _classify_for_prune(raw_blocks)
+
+    if len(pending_idx) >= max_entries:
+        # Pending backlog alone meets/exceeds the cap: keep every pending
+        # block (never drop actionable entries), drop all resolved.
+        if len(pending_idx) > max_entries:
+            log.warning(
+                "AGENT_CANDIDATES.md pending backlog (%d) exceeds cap (%d) — "
+                "keeping all pending, dropping all resolved",
+                len(pending_idx),
+                max_entries,
+            )
+        kept_resolved_idx: list[int] = []
+    else:
+        keep_n = max_entries - len(pending_idx)
+        # Keep the most-recent resolved blocks (tail = newest).
+        kept_resolved_idx = resolved_idx[-keep_n:] if keep_n else []
+
+    keep = set(pending_idx) | set(kept_resolved_idx) | set(blank_idx)
+    dropped = len(raw_blocks) - len(keep)
+    if dropped == 0:
+        return 0
+
+    ordered_kept = [raw_blocks[i] for i in range(len(raw_blocks)) if i in keep]
+    new_text = "\n---\n".join(ordered_kept)
+    # Preserve a trailing newline if the original had one.
+    if text.endswith("\n") and not new_text.endswith("\n"):
+        new_text += "\n"
+    tmp = path.with_suffix(".md.tmp")
+    try:
+        tmp.write_text(new_text, encoding="utf-8")
+        tmp.replace(path)
+    except OSError as e:
+        log.warning("AGENT_CANDIDATES.md write failed: %s", e)
+        return 0
+    return dropped
+
+
 def to_ticket_payload(c: Candidate) -> tuple[str, str]:
     """Render the audited-repo ticket title + body for a validated
     candidate. Title stays short (~80 chars); body restates the rule,

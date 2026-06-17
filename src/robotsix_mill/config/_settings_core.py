@@ -300,6 +300,11 @@ class _CoreSettings(BaseModel):
     # logs fed to the agent. These are chronological, so the most-recent
     # tail is kept and older lines dropped. 0 disables capping.
     retrospect_log_max_chars: int = Field(default=12000, ge=0)
+    # Max number of entries retained in AGENT_CANDIDATES.md (the per-board
+    # append-only queue of proposed AGENT.md rule additions). Pending
+    # entries are always kept; resolved (validated/rejected) entries are
+    # pruned oldest-first to honor this cap. 0 disables pruning.
+    retrospect_candidates_max_entries: int = Field(default=100, ge=0)
     # Maximum number of files whose full content the refine stage stores
     # as reference_files.json for the implement coordinator to pre-load.
     reference_files_max_count: int = Field(default=5)

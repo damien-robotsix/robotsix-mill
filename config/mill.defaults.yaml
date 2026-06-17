@@ -85,10 +85,11 @@ core:
     rate_limit_backoff_cap: 120.0      # max seconds between rate-limit retries
     rate_limit_fallback_retries: 3     # consecutive rate-limit failures before switching model
 
-  # -- memory ledgers, reference files, and dedup lookback (6 fields) ------
+  # -- memory ledgers, reference files, and dedup lookback (7 fields) ------
   memory:
     max_memory_chars: 8000               # max chars loaded from any memory ledger per pass
     retrospect_log_max_chars: 12000      # max chars of retrospect history/comments logs (0 disables)
+    retrospect_candidates_max_entries: 100   # max entries kept in AGENT_CANDIDATES.md; pending always kept, resolved pruned oldest-first (0 disables)
     reference_files_max_count: 5         # max files whose full content refine stores
     reference_files_max_total_lines: 3000  # max total lines across selected reference files
     dedup_lookback_days: 7               # days back closed tickets are dup candidates
