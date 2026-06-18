@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from dataclasses import dataclass, field
 
 from sqlmodel import select
@@ -11,6 +9,7 @@ from sqlmodel import select
 from ..config import Settings
 from ..core import db
 from ..core.models import TicketEvent
+from ..core.service import _event_hash
 
 
 @dataclass
@@ -18,24 +17,6 @@ class VerifyResult:
     total_events: int = 0
     tickets_verified: int = 0
     breaks: list[dict] = field(default_factory=list)
-
-
-def _compute_hash(
-    ticket_id: str,
-    state: str,
-    note: str | None,
-    at: str,
-    prev_hash: str | None,
-) -> str:
-    payload = {
-        "ticket_id": ticket_id,
-        "state": state,
-        "note": note,
-        "at": at,
-        "prev_hash": prev_hash,
-    }
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    return hashlib.blake2b(canonical.encode("utf-8"), digest_size=32).hexdigest()
 
 
 def run_verify_pass(
@@ -93,7 +74,7 @@ def run_verify_pass(
                         # Pre-migration event — skip verification.
                         expected_prev = ev.hash if ev.hash else None
                         continue
-                    computed = _compute_hash(
+                    computed = _event_hash(
                         ticket_id=ev.ticket_id,
                         state=ev.state.value,
                         note=ev.note,
