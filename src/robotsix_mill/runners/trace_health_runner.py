@@ -144,7 +144,9 @@ def run_trace_health_check(repo_config: RepoConfig | None = None) -> TraceHealth
         tid = t.get("id", "?")
         tname = t.get("name", "?")
         unsessioned_examples.append(f'- {tid}  "{tname}"')
-    unsessioned_block = "\n".join(unsessioned_examples) if unsessioned_examples else "(none)"
+    unsessioned_block = (
+        "\n".join(unsessioned_examples) if unsessioned_examples else "(none)"
+    )
 
     unnamed_examples = []
     for t in name_missing[:5]:
