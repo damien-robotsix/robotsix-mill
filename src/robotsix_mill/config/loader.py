@@ -412,6 +412,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.data_dir_audit.size_threshold_bytes": "data_dir_audit_size_threshold_bytes",
     "periodic.data_dir_audit.growth_delta_bytes": "data_dir_audit_growth_delta_bytes",
     "periodic.data_dir_audit.growth_delta_pct": "data_dir_audit_growth_delta_pct",
+    "periodic.data_dir_audit.growth_delta_pct_min_bytes": "data_dir_audit_growth_delta_pct_min_bytes",
     "periodic.data_dir_audit.max_drafts_per_pass": "data_dir_audit_max_drafts_per_pass",
     "periodic.data_dir_audit.prune_closed": "data_dir_audit_prune_closed",
     "periodic.data_dir_audit.prune_closed_age_seconds": "data_dir_audit_prune_closed_age_seconds",
