@@ -2403,9 +2403,7 @@ def test_growth_suppressed_for_run_registry(tmp_path, monkeypatch, caplog):
     db.reset_engine()
 
 
-def test_growth_suppressed_for_candidates_ledger(
-    tmp_path, monkeypatch, caplog
-):
+def test_growth_suppressed_for_candidates_ledger(tmp_path, monkeypatch, caplog):
     """Growth in ``AGENT_CANDIDATES.md`` is suppressed and an INFO line
     is logged, since ``prune_candidates`` caps it at
     ``retrospect_candidates_max_entries``."""
@@ -2428,9 +2426,7 @@ def test_growth_suppressed_for_candidates_ledger(
     with caplog.at_level(logging.INFO, logger="robotsix_mill.data_dir_audit"):
         result = run_data_dir_audit_pass()
 
-    assert not any(
-        f["path"] == "AGENT_CANDIDATES.md" for f in result.growth_flags
-    )
+    assert not any(f["path"] == "AGENT_CANDIDATES.md" for f in result.growth_flags)
     assert any(
         "suppressing growth flag" in rec.message
         and "bounded candidates ledger" in rec.message
