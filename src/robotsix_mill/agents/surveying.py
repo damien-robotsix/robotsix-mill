@@ -7,6 +7,8 @@ the runner has a clear result to work with.
 
 from __future__ import annotations
 
+from typing import Any
+
 from ..config import Settings
 from .periodic_base import (
     PeriodicAgentResult,
@@ -24,7 +26,7 @@ MAX_GAPS = 1
 SurveyResult = PeriodicAgentResult
 
 
-def _survey_dynamic_kwargs(settings: Settings) -> dict:
+def _survey_dynamic_kwargs(settings: Settings) -> dict[str, Any]:
     from pydantic_ai.usage import UsageLimits
 
     return {"usage_limits": UsageLimits(request_limit=settings.survey_request_limit)}

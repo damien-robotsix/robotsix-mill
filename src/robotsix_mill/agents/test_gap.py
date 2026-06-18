@@ -10,6 +10,8 @@ the runner has a clear result to work with.
 
 from __future__ import annotations
 
+from typing import Any
+
 from ..config import Settings
 from .periodic_base import (
     PeriodicAgentResult,
@@ -25,7 +27,7 @@ MAX_GAPS = 5
 TestGapResult = PeriodicAgentResult
 
 
-def _test_gap_dynamic_kwargs(settings: Settings) -> dict:
+def _test_gap_dynamic_kwargs(settings: Settings) -> dict[str, Any]:
     from pydantic_ai.usage import UsageLimits
 
     return {
