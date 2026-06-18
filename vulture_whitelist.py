@@ -45,6 +45,7 @@ CompletenessCheckResult
 CopyPasteResult
 ForgeParityResult
 HealthResult
+StateSyncResult
 SurveyResult
 TestGapResult
 model_config
@@ -72,6 +73,7 @@ _absorb_findings_list_shape
 output_context
 run_survey_agent
 run_test_gap_agent
+run_state_sync_agent
 parameters
 web_fetch_budget
 correct_form
@@ -121,12 +123,15 @@ completeness_check_interval_seconds
 forge_parity_memory_path
 forge_parity_periodic
 forge_parity_interval_seconds
+state_sync_periodic
+state_sync_interval_seconds
 copy_paste_model
 copy_paste_memory_path
 copy_paste_periodic
 completeness_check_model
 forge_parity_model
 health_model
+state_sync_model
 survey_model
 test_gap_model
 bc_check_model
@@ -159,6 +164,7 @@ health_memory_file
 test_gap_memory_file
 survey_memory_file
 config_sync_memory_file
+state_sync_memory_file
 bc_check_memory_file
 completeness_check_memory_file
 implement_memory_file
