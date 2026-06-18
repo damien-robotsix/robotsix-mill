@@ -13,8 +13,8 @@ from robotsix_mill.forge.github import (
     GitHubForge,
     _build_headers,
     _parse_owner_repo,
-    _ANSI_RE,
 )
+from robotsix_mill.forge.github_ci import _ANSI_RE
 
 
 # ---------------------------------------------------------------------------
@@ -615,7 +615,7 @@ def test_capture_failure_window_anchors_on_first_error():
     step re-errors near the tail. A plain tail-cap would show only the mask;
     _capture_failure_window must surface the EARLY real failure."""
     from robotsix_mill.forge._log_utils import _capture_failure_window
-    from robotsix_mill.forge.github import _LOG_FAILURE_RE
+    from robotsix_mill.forge.github_ci import _LOG_FAILURE_RE
 
     real = "ERROR: failed to build proxy image: COPY filter not found\n##[error]Process completed with exit code 1\n"
     filler = "noise line padding the log\n" * 5000  # skipped-step noise
@@ -630,7 +630,7 @@ def test_capture_failure_window_anchors_on_first_error():
 def test_capture_failure_window_tailcaps_without_marker():
     """No failure marker → degrade to historical tail-cap (last N bytes)."""
     from robotsix_mill.forge._log_utils import _capture_failure_window
-    from robotsix_mill.forge.github import _LOG_FAILURE_RE
+    from robotsix_mill.forge.github_ci import _LOG_FAILURE_RE
 
     out = _capture_failure_window(
         "x" * 100_000, max_bytes=65536, failure_re=_LOG_FAILURE_RE
@@ -2431,7 +2431,7 @@ def test_conclusion_for_check_cancelled_is_pending():
     """A concurrency-cancelled (superseded) check has no verdict → pending,
     so the merge gate waits for the authoritative run instead of reporting
     a false failure that spawns ci_fix churn."""
-    from robotsix_mill.forge.github import _conclusion_for_check
+    from robotsix_mill.forge.github_ci import _conclusion_for_check
 
     assert (
         _conclusion_for_check({"status": "completed", "conclusion": "cancelled"})
@@ -2459,7 +2459,7 @@ def test_conclusion_for_check_cancelled_is_pending():
 def test_derive_conclusion_cancelled_among_passing_is_pending():
     """All real checks pass but one was cancelled → overall pending (wait),
     NOT failure."""
-    from robotsix_mill.forge.github import _derive_check_conclusion
+    from robotsix_mill.forge.github_ci import _derive_check_conclusion
 
     runs = [
         {"id": 1, "name": "tests", "status": "completed", "conclusion": "success"},
@@ -2472,7 +2472,7 @@ def test_derive_conclusion_cancelled_among_passing_is_pending():
 
 def test_derive_conclusion_real_failure_still_fails_despite_cancelled():
     """A genuine failure is reported even when another check is cancelled."""
-    from robotsix_mill.forge.github import _derive_check_conclusion
+    from robotsix_mill.forge.github_ci import _derive_check_conclusion
 
     runs = [
         {"id": 1, "name": "tests", "status": "completed", "conclusion": "failure"},
@@ -2489,7 +2489,7 @@ def test_derive_conclusion_superseded_cancelled_same_name_uses_success():
     for green PRs stuck in IMPLEMENT_COMPLETE (llmio c273/55f1/d932/fcf4):
     concurrency cancels the old run, so each name carries cancelled+success;
     feeding both made the aggregate read pending. Order-independent."""
-    from robotsix_mill.forge.github import _derive_check_conclusion
+    from robotsix_mill.forge.github_ci import _derive_check_conclusion
 
     runs = [
         {
