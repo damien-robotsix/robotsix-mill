@@ -28,6 +28,7 @@ check_map_keys_in_defaults = _checker.check_map_keys_in_defaults
 check_defaults_leaves_in_map = _checker.check_defaults_leaves_in_map
 check_map_values_resolve = _checker.check_map_values_resolve
 check_secrets_example = _checker.check_secrets_example
+check_model_fields_in_alias_map = _checker.check_model_fields_in_alias_map
 collect_drift = _checker.collect_drift
 
 
@@ -157,3 +158,70 @@ def test_valid_names_include_field_names_and_aliases() -> None:
     assert "llm_backend" in names
     # Alias-bearing field exposes both the name and the alias.
     assert "FORGE_KIND" in names
+
+
+# ---------------------------------------------------------------------------
+#  Invariant 5 — Settings field must be in alias-map values (or excepted)
+# ---------------------------------------------------------------------------
+
+
+def test_invariant5_detects_model_field_not_in_alias() -> None:
+    """A model field not in alias values and not excepted fires drift."""
+    from pydantic import BaseModel
+
+    class M(BaseModel):
+        known: str = ""
+        orphan: int = 0
+
+    alias_map = {"some.path": "known"}
+    drift = check_model_fields_in_alias_map(
+        M, alias_map, exceptions=frozenset()
+    )
+    assert len(drift) == 1
+    assert "orphan" in drift[0]
+    assert "known" not in drift[0]
+
+
+def test_invariant5_respects_exceptions() -> None:
+    """A model field in the exception set is skipped."""
+    from pydantic import BaseModel
+
+    class M(BaseModel):
+        known: str = ""
+        orphan: int = 0
+
+    alias_map = {"some.path": "known"}
+    drift = check_model_fields_in_alias_map(
+        M, alias_map, exceptions=frozenset({"orphan"})
+    )
+    assert drift == []
+
+
+def test_invariant5_matches_field_alias() -> None:
+    """A field whose alias (not name) matches an alias value passes."""
+    from pydantic import BaseModel, Field
+
+    class M(BaseModel):
+        known: str = ""
+        env_field: int = Field(default=0, alias="ENV_FIELD")
+
+    alias_map = {"some.path": "known", "other.path": "ENV_FIELD"}
+    drift = check_model_fields_in_alias_map(
+        M, alias_map, exceptions=frozenset()
+    )
+    assert drift == []
+
+
+def test_invariant5_empty_when_all_covered() -> None:
+    """No drift when every field is either in alias or excepted."""
+    from pydantic import BaseModel
+
+    class M(BaseModel):
+        a: str = ""
+        b: str = ""
+
+    alias_map = {"x.a": "a"}
+    drift = check_model_fields_in_alias_map(
+        M, alias_map, exceptions=frozenset({"b"})
+    )
+    assert drift == []
