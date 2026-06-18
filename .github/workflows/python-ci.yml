@@ -147,7 +147,9 @@ jobs:
           if uv audit --help >/dev/null 2>&1; then
             uv audit --frozen --preview
           else
-            uv export --frozen | uv run --with pip-audit pip-audit -r /dev/stdin
+            # Strip the editable project line (-e .) — pip-audit cannot
+            # install editable file:// requirements when hashes are present.
+            uv export --frozen | grep -v '^-e \.' | uv run --with pip-audit pip-audit -r /dev/stdin
           fi
 
       - name: Ruff (lint + format check)
