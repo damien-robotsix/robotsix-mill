@@ -229,6 +229,7 @@ run_module_curator_pass
 __test__
 raw_span
 run_roadmap_sync_pass
+run_state_sync_pass
 run_survey_pass
 run_test_gap_pass
 traces_scanned
