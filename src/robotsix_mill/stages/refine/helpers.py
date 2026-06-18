@@ -600,6 +600,8 @@ _TRIAGE_REJECTION_PATTERNS: list[str] = [
     "no change is needed",
     "no change needed",
     "no changes needed",
+    "no code change is needed",
+    "no code changes needed",
     "assertion is factually wrong",
     "factually wrong",
     "factually incorrect",
@@ -715,6 +717,8 @@ def _triage_reason_rejects(reason: str) -> bool:
     return (
         "no change is needed" in text
         or "no change needed" in text
+        or "no code change is needed" in text
+        or "no code changes needed" in text
         or "assertion is factually wrong" in text
     )
 
