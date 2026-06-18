@@ -357,6 +357,9 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     # -- periodic.trace_health --
     "periodic.trace_health.enabled": "trace_health_periodic",
     "periodic.trace_health.interval_seconds": "trace_health_interval_seconds",
+    # -- periodic.trace_review --
+    "periodic.trace_review.enabled": "trace_review_periodic",
+    "periodic.trace_review.interval_seconds": "trace_review_interval_seconds",
     # -- periodic.stale_branch_cleanup --
     "periodic.stale_branch_cleanup.enabled": "stale_branch_cleanup_periodic",
     "periodic.stale_branch_cleanup.interval_seconds": "stale_branch_cleanup_interval_seconds",
