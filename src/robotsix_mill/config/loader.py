@@ -466,6 +466,12 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "board_agent.broker_port": "board_agent_broker_port",
     "board_agent.broker_scheme": "board_agent_broker_scheme",
     "board_agent.broker_token": "board_agent_broker_token",
+    # -- board_manager (conversational LLM board manager) --
+    "board_manager.enabled": "board_manager_enabled",
+    "board_manager.broker_token": "board_manager_broker_token",
+    "board_manager.model": "board_manager_model",
+    "board_manager.recall_model": "board_manager_recall_model",
+    "board_manager.max_conversations": "board_manager_max_conversations",
     # -- epic dedup lookback (top-level, mirrors core.memory.dedup_lookback_days) --
     "epic_dedup_lookback_days": "epic_dedup_lookback_days",
 }

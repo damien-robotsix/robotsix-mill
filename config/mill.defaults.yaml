@@ -386,3 +386,17 @@ board_agent:
   broker_port: 443                          # broker port
   broker_scheme: https                      # broker scheme (http/https)
   broker_token: ""                          # this agent's bearer token for the broker
+
+# ---------------------------------------------------------------------------
+#  board_manager — conversational LLM board manager. A level-3 agent manages the
+#  board from natural-language instructions (with a level-1 recall pass over its
+#  capped question→answer memory). Reuses board_agent.* (board API + broker) and
+#  mill's OpenRouter key; only broker_token + the master switch are its own.
+# ---------------------------------------------------------------------------
+
+board_manager:
+  enabled: false                            # master switch for the board manager
+  broker_token: ""                          # the manager's bearer token for the broker
+  model: ""                                 # level-3 model ("" → llmio tier-3 default)
+  recall_model: ""                          # level-1 recall model ("" → tier-1 default)
+  max_conversations: 200                    # cap on retained question→answer turns
