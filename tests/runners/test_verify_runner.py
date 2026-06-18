@@ -6,41 +6,30 @@ from __future__ import annotations
 from robotsix_mill.core import db
 from robotsix_mill.core.models import TicketEvent
 from robotsix_mill.core.states import State
+from robotsix_mill.core.service import _event_hash
 from robotsix_mill.runners.verify_runner import (
     VerifyResult,
-    _compute_hash,
     run_verify_pass,
 )
 
 
 # ---------------------------------------------------------------------------
-# _compute_hash — pure function, same semantics as service._event_hash
+# _event_hash — pure function (imported from core.service)
 # ---------------------------------------------------------------------------
 
 
-def test_compute_hash_deterministic():
+def test_event_hash_deterministic():
     """Same inputs produce the same hash each time."""
-    h1 = _compute_hash("t1", "draft", "created", "2025-01-01T00:00:00+00:00", None)
-    h2 = _compute_hash("t1", "draft", "created", "2025-01-01T00:00:00+00:00", None)
+    h1 = _event_hash("t1", "draft", "created", "2025-01-01T00:00:00+00:00", None)
+    h2 = _event_hash("t1", "draft", "created", "2025-01-01T00:00:00+00:00", None)
     assert h1 == h2
 
 
-def test_compute_hash_hex_format():
+def test_event_hash_hex_format():
     """Hash is 64 lowercase hex characters."""
-    h = _compute_hash("t1", "draft", None, "2025-01-01T00:00:00+00:00", None)
+    h = _event_hash("t1", "draft", None, "2025-01-01T00:00:00+00:00", None)
     assert len(h) == 64
     assert all(c in "0123456789abcdef" for c in h)
-
-
-def test_compute_hash_matches_service():
-    """_compute_hash and service._event_hash produce identical results."""
-    from robotsix_mill.core.service import _event_hash
-
-    args = ("t-x", "draft", "note", "2025-01-01T00:00:00+00:00", "abc")
-    assert _compute_hash(*args) == _event_hash(*args)
-
-    args_none = ("t-y", "ready", None, "2025-01-02T00:00:00+00:00", None)
-    assert _compute_hash(*args_none) == _event_hash(*args_none)
 
 
 # ---------------------------------------------------------------------------
