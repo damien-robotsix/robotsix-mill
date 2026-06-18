@@ -1025,8 +1025,9 @@ def cost_breakdown(
     """Per-trace cost breakdown for a ticket, used by the drawer to
     overlay agent-step costs on history rows.
 
-    The Langfuse sessionId equals the ticket id, so a single
-    `/api/public/traces?sessionId=<ticket>` query returns every agent
+    The Langfuse sessionId is the repo-qualified ticket id
+    (``<repo> · <ticket>``, applied inside ``session_traces``), so a
+    single `/api/public/traces?sessionId=…` query returns every agent
     invocation tied to the ticket. Each entry carries
     ``{name, cost, at, trace_id}`` ordered by timestamp; the drawer's
     renderHistoryHtml matches the entries to history events by inferred

@@ -680,13 +680,24 @@ class _LifecycleMixin(_ServiceBase):
             # the dollar-cap limit restarts at zero. A forced
             # (TTL-bypassing) read keeps the snapshot fresh; an
             # unconfigured/unreachable Langfuse returns 0.0, the correct
-            # no-op baseline. ``repo_config`` is not available here, so
-            # the global ``Secrets`` fallback is used (as in
-            # ``cumulative_cost``).
+            # no-op baseline. Resolve the ticket's ``repo_config`` (by
+            # board_id) so the read qualifies the session id the same way
+            # the tracer stamped it (``<repo> · <id>``); without it the
+            # baseline would query the bare id, read $0, and fail to reset
+            # the dollar-cap on redraft.
+            from ...config import get_repos_config
             from ...langfuse.client import session_cost
 
+            repo_config = next(
+                (
+                    rc
+                    for rc in get_repos_config().repos.values()
+                    if rc.board_id == ticket.board_id
+                ),
+                None,
+            )
             ticket.pre_redraft_cost_usd = session_cost(
-                self.settings, ticket_id, force=True
+                self.settings, ticket_id, repo_config=repo_config, force=True
             )
             ticket.cost_usd = 0.0
 

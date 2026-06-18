@@ -261,7 +261,7 @@ def test_langfuse_none_workflow_only_still_succeeds(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: None,
+        lambda settings, session_id, **kw: None,
     )
     monkeypatch.setattr(
         langfuse_client,

@@ -176,7 +176,8 @@ def test_with_cost_blocking_clamped_at_zero(monkeypatch):
 def test_with_cost_cache_only_subtracts_pre_redraft_baseline(monkeypatch):
     """The cache-only (non-blocking) branch also subtracts the baseline."""
     monkeypatch.setattr(
-        "robotsix_mill.langfuse.client.session_cost_cached", lambda sid: 9.0
+        "robotsix_mill.langfuse.client.session_cost_cached",
+        lambda sid, **kw: 9.0,
     )
     ticket = _make_ticket(pre_redraft_cost_usd=2.5)
     with_cost(ticket, MagicMock(), blocking=False)

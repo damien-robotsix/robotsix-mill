@@ -120,7 +120,7 @@ def with_cost(
     if blocking:
         total = session_cost(settings, ticket.id, repo_config=repo_config)
     else:
-        total = session_cost_cached(ticket.id)
+        total = session_cost_cached(ticket.id, repo_config=repo_config)
     # Subtract the pre-redraft baseline so ``cost_usd`` reflects the
     # effective post-redraft spend (clamped at zero); the full session
     # total stays available for informational display via the baseline.

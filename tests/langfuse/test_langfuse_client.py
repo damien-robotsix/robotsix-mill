@@ -354,3 +354,70 @@ def _multi_page_mock_client(pages: dict[int, dict]):
             )
 
     return _PagingClient
+
+
+# ---------------------------------------------------------------------------
+# Repo-qualified session id (regression for the #1395 consolidation:
+# traces are stamped under "<repo> · <ticket>" but the cost/trace read
+# path queried the bare ticket id and read $0 for every ticket).
+# ---------------------------------------------------------------------------
+
+
+from types import SimpleNamespace  # noqa: E402
+
+from robotsix_mill.langfuse.client import session_cost  # noqa: E402
+
+
+def _capturing_api_get(captured: list):
+    """Fake _langfuse_api_get that records the sessionId param it was
+    queried with and returns one $0.20 trace."""
+
+    def _fn(s, path, params=None, repo_config=None):
+        captured.append((params or {}).get("sessionId"))
+        return {"data": [{"id": "t1", "totalCost": 0.20}]}
+
+    return _fn
+
+
+def test_session_total_cost_qualifies_session_id_with_repo(settings, monkeypatch):
+    """When repo_config carries a repo_id, the Langfuse query uses the
+    repo-qualified sessionId, not the bare ticket id."""
+    captured: list = []
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client._langfuse_api_get",
+        _capturing_api_get(captured),
+    )
+    rc = SimpleNamespace(repo_id="robotsix-cost-monitor")
+    cost = session_total_cost(settings, "ticket-123", repo_config=rc)
+    assert cost == 0.20
+    assert captured == ["robotsix-cost-monitor · ticket-123"]
+
+
+def test_session_total_cost_bare_when_no_repo(settings, monkeypatch):
+    """With no repo_config the bare id is used (legacy/single-repo)."""
+    captured: list = []
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client._langfuse_api_get",
+        _capturing_api_get(captured),
+    )
+    session_total_cost(settings, "ticket-123")
+    assert captured == ["ticket-123"]
+
+
+def test_cost_cache_key_consistent_between_blocking_and_cached(settings, monkeypatch):
+    """session_cost caches under the qualified key, and a subsequent
+    session_cost_cached call with the same repo_config (but the bare id)
+    reads that same entry — the bug was a key mismatch that always
+    missed the cache on the polled /tickets list."""
+    _cost_cache.clear()
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client._langfuse_api_get",
+        _capturing_api_get([]),
+    )
+    rc = SimpleNamespace(repo_id="robotsix-cost-monitor")
+    blocking = session_cost(settings, "ticket-123", repo_config=rc, force=True)
+    cached = session_cost_cached("ticket-123", repo_config=rc)
+    assert blocking == cached == 0.20
+    # The cache is keyed by the qualified id, not the bare ticket id.
+    assert "robotsix-cost-monitor · ticket-123" in _cost_cache
+    assert session_cost_cached("ticket-123") == 0.0  # bare key misses

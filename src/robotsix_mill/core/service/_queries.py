@@ -263,11 +263,10 @@ class _QueryMixin(_ServiceBase):
         """
         from ...langfuse.client import session_cost, session_cost_cached
 
-        cost_fn = (
-            (lambda sid: session_cost(settings, sid, repo_config=repo_config))
-            if blocking
-            else session_cost_cached
-        )
+        def cost_fn(sid: str) -> float:
+            if blocking:
+                return session_cost(settings, sid, repo_config=repo_config)
+            return session_cost_cached(sid, repo_config=repo_config)
 
         total = cost_fn(ticket_id)
         for descendant in self._all_descendants(ticket_id):
