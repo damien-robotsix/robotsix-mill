@@ -2779,41 +2779,38 @@ class TestDbMaintenancePass:
         settings.max_comments_per_ticket = 3
         t = service.create("orphan-reset test")
 
-        # Create a closed thread: parent + 2 replies, all closed.
+        # Create the parent FIRST (oldest unprotected).
         parent = service.add_comment(t.id, "closed thread")
-        reply1 = service.add_comment(t.id, "reply 1", parent_id=parent.id)
-        reply2 = service.add_comment(t.id, "reply 2", parent_id=parent.id)
 
-        # Close all of them so they're unprotected.
+        # Add 5 filler closed comments between the parent and its reply,
+        # so the reply is the newest comment and survives the prune while
+        # the parent (oldest unprotected) is deleted.
+        filler_ids: list[int] = []
+        for i in range(5):
+            c = service.add_comment(t.id, f"filler {i}")
+            filler_ids.append(c.id)
+
+        # Create the reply LAST (newest), pointing at the old parent.
+        reply = service.add_comment(t.id, "reply", parent_id=parent.id)
+
+        # Close all comments so they're all unprotected.
         with db.session(settings, service._board_for(t.id)) as s:
-            for cid in [parent.id, reply1.id, reply2.id]:
+            for cid in [parent.id, reply.id] + filler_ids:
                 cmt = s.get(Comment, cid)
                 cmt.closed_at = datetime.now(timezone.utc)
                 s.add(cmt)
             s.commit()
 
-        # Add 5 more closed comments (excess beyond cap of 3).
-        for i in range(5):
-            c = service.add_comment(t.id, f"extra {i}")
-            with db.session(settings, service._board_for(t.id)) as s:
-                cmt = s.get(Comment, c.id)
-                cmt.closed_at = datetime.now(timezone.utc)
-                s.add(cmt)
-                s.commit()
-
-        # 3 + 5 = 8 comments. Cap is 3, so 5 will be deleted.
-        # The parent (oldest unprotected) will be among the deleted.
+        # 7 comments total (parent + 5 fillers + reply), cap=3.
+        # 4 oldest unprotected pruned: parent + filler 0-2.
+        # Reply (id=7) survives with parent deleted → parent_id → None.
         summary = service.db_maintenance_pass()
-        assert summary["comments_pruned"] == 5
+        assert summary["comments_pruned"] == 4
 
-        # Check that reply1 and reply2 (which survived but whose parent
-        # was deleted) now have parent_id=None.
-        r1 = _get_comment(service, reply1.id)
-        r2 = _get_comment(service, reply2.id)
-        if r1 is not None:
-            assert r1.parent_id is None
-        if r2 is not None:
-            assert r2.parent_id is None
+        # The reply must survive and its parent_id must be reset to None.
+        r = _get_comment(service, reply.id)
+        assert r is not None, "reply should survive the prune"
+        assert r.parent_id is None, "orphaned reply must have parent_id reset"
 
     def test_comment_cap_empty_db(self, service, settings):
         """db_maintenance_pass on an empty DB returns zero comments_pruned."""
