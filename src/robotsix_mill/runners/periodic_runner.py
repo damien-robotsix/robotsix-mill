@@ -117,7 +117,7 @@ class PeriodicPassConfig:
     workspace_subdir: str
     """Clone workspace subdirectory, e.g. ``"audit_workspace"``."""
 
-    result_dataclass: type
+    result_dataclass: type[PeriodicPassResult]
     """The typed result dataclass (e.g. ``AuditPassResult``).
     Must have fields ``updated_memory: str``, ``drafts_created: list[dict]``,
     ``session_id: str``."""
@@ -163,7 +163,7 @@ def run_periodic_pass(
     *,
     settings,
     definition_override: Any = None,
-) -> Any:
+) -> PeriodicPassResult:
     """Execute one full periodic pass.
 
     This is the deduplicated body of the 8 ``run_*_pass()`` functions.
