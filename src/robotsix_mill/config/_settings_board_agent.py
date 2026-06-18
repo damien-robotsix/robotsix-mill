@@ -25,3 +25,14 @@ class _BoardAgentSettings(BaseModel):
     board_agent_broker_port: int = Field(default=443)
     board_agent_broker_scheme: str = Field(default="https")
     board_agent_broker_token: str = Field(default="")
+
+    # LLM board manager — conversational, natural-language board management. A
+    # level-3 agent acts on the board (with a level-1 recall pass over its capped
+    # question->answer memory). Reuses the board API + broker coords above and
+    # mill's OpenRouter key; broker_token authenticates the manager agent. Off
+    # by default.
+    board_manager_enabled: bool = Field(default=False)
+    board_manager_broker_token: str = Field(default="")
+    board_manager_model: str = Field(default="")  # level-3; "" → tier default
+    board_manager_recall_model: str = Field(default="")  # level-1; "" → default
+    board_manager_max_conversations: int = Field(default=200)

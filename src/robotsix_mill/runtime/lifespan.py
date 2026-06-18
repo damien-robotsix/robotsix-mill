@@ -155,10 +155,14 @@ def create_lifespan(
 
         if settings.board_agent_enabled:
             await _start_board_agent(app, settings, repo_config.board_id)
+        if settings.board_manager_enabled:
+            await _start_board_manager(app, settings, repo_config.board_id)
 
         try:
             yield
         finally:
+            if settings.board_manager_enabled:
+                await _stop_board_manager(app)
             if settings.board_agent_enabled:
                 await _stop_board_agent(app)
             await worker.stop()
@@ -224,3 +228,73 @@ async def _stop_board_agent(app: FastAPI) -> None:
     if agent is not None:
         await asyncio.to_thread(agent.stop)
         del app.state.board_agent
+
+
+async def _start_board_manager(
+    app: FastAPI,
+    settings: Settings,
+    repo_id: str,
+) -> None:
+    """Start the conversational LLM board manager (deferred import).
+
+    Reuses the board API + broker coordinates from the board-agent settings and
+    mill's own OpenRouter key; registers on the broker as its own agent.
+    """
+    try:
+        from robotsix_board_agent.board_manager import BoardManager
+        from robotsix_board_agent.config import BoardAgentSettings
+    except ImportError as exc:
+        logging.getLogger(__name__).warning(
+            "board_manager_enabled=True but robotsix-board-agent[prod] is not "
+            "installed: %s",
+            exc,
+        )
+        return
+
+    if not settings.board_agent_broker_host:
+        logging.getLogger(__name__).warning(
+            "board_manager_enabled=True but board_agent_broker_host is unset; "
+            "the manager needs a broker to be reachable — skipping start."
+        )
+        return
+
+    from ..config.secrets import get_secrets
+
+    openrouter_key = get_secrets().openrouter_api_key
+    if not openrouter_key:
+        logging.getLogger(__name__).warning(
+            "board_manager_enabled=True but no OpenRouter key is configured — "
+            "skipping start."
+        )
+        return
+
+    board_repo_id = settings.board_agent_repo_id or repo_id
+    agent_settings = BoardAgentSettings(
+        board_api_url=settings.board_agent_api_url,
+        board_api_token=settings.board_agent_api_token,
+        board_repo_id=board_repo_id,
+        enable_write_ops=settings.board_agent_write_ops,
+    )
+    manager = BoardManager(
+        agent_settings,
+        broker_host=settings.board_agent_broker_host,
+        broker_port=settings.board_agent_broker_port,
+        broker_scheme=settings.board_agent_broker_scheme,
+        broker_token=settings.board_manager_broker_token,
+        openrouter_key=openrouter_key,
+        memory_path=settings.data_dir / board_repo_id / "board_manager_memory.json",
+        agent_id=f"board-manager-{board_repo_id}",
+        manager_model=settings.board_manager_model or None,
+        recall_model=settings.board_manager_recall_model or None,
+        max_conversations=settings.board_manager_max_conversations,
+    )
+    await asyncio.to_thread(manager.start)
+    app.state.board_manager = manager
+
+
+async def _stop_board_manager(app: FastAPI) -> None:
+    """Stop the board manager if it was started."""
+    manager = getattr(app.state, "board_manager", None)
+    if manager is not None:
+        await asyncio.to_thread(manager.stop)
+        del app.state.board_manager
