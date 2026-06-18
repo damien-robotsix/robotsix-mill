@@ -21,7 +21,6 @@ StateSyncResult = PeriodicAgentResult
 
 run_state_sync_agent = make_agent_runner(
     definition_name="state_sync",
-    model_attr="state_sync_model",
     prompt_tail="Perform the state-sync consistency inspection and return your result.",
     max_gaps=MAX_GAPS,
     include_forge_url=True,

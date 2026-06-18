@@ -302,7 +302,7 @@ periodic:
 
   # -- state-sync — cross-surface State enum consistency validation ---------
   state_sync:
-    model: *cheap_model           # state-sync agent model (read-only file scan)
+    model: "deepseek/deepseek-v4-flash"  # state-sync agent model (read-only file scan)
     enabled: true                 # enable periodic state-sync passes
     interval_seconds: 86400       # seconds between passes (min 60 enforced in worker)
     memory_path: null             # defaults to <data_dir>/state_sync_memory.md
