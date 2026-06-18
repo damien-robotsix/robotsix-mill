@@ -52,7 +52,7 @@ def _install_mocks(monkeypatch):
     monkeypatch.setattr(
         yaml_loader_mod,
         "load_agent_definition",
-        MagicMock(return_value=type("D", (), {"model": None})()),
+        MagicMock(return_value=type("D", (), {"level": 1})()),
     )
     monkeypatch.setattr(
         retry_mod,
@@ -69,7 +69,7 @@ def test_expand_for_new_test_file(monkeypatch):
 
     base_mod = _install_mocks(monkeypatch)
 
-    def fake_build_agent(settings, definition, tools, model_name, repo_dir=None, **kw):
+    def fake_build_agent(settings, definition, tools, level, repo_dir=None, **kw):
         class FakeAgent:
             def run_sync(self, msg):
                 assert "````ticket-spec" in msg
@@ -93,7 +93,7 @@ def test_expand_for_new_test_file(monkeypatch):
     monkeypatch.setattr(base_mod, "build_agent_from_definition", fake_build_agent)
 
     result = run_scope_triage_agent(
-        settings=Settings(data_dir="/tmp", scope_triage_model="test/model"),
+        settings=Settings(data_dir="/tmp"),
         ticket_spec="Add feature X to foo.py",
         file_map=["src/foo.py"],
         out_of_scope_files=["tests/test_feature.py"],
@@ -109,7 +109,7 @@ def test_reject_for_unrelated_module(monkeypatch):
 
     base_mod = _install_mocks(monkeypatch)
 
-    def fake_build_agent(settings, definition, tools, model_name, repo_dir=None, **kw):
+    def fake_build_agent(settings, definition, tools, level, repo_dir=None, **kw):
         class FakeAgent:
             def run_sync(self, msg):
                 return type(
@@ -128,7 +128,7 @@ def test_reject_for_unrelated_module(monkeypatch):
     monkeypatch.setattr(base_mod, "build_agent_from_definition", fake_build_agent)
 
     result = run_scope_triage_agent(
-        settings=Settings(data_dir="/tmp", scope_triage_model="test/model"),
+        settings=Settings(data_dir="/tmp"),
         ticket_spec="Add feature X to foo.py",
         file_map=["src/foo.py"],
         out_of_scope_files=["src/retry_ui.py"],
@@ -143,7 +143,7 @@ def test_escalate_for_ambiguous(monkeypatch):
 
     base_mod = _install_mocks(monkeypatch)
 
-    def fake_build_agent(settings, definition, tools, model_name, repo_dir=None, **kw):
+    def fake_build_agent(settings, definition, tools, level, repo_dir=None, **kw):
         class FakeAgent:
             def run_sync(self, msg):
                 return type(
@@ -162,7 +162,7 @@ def test_escalate_for_ambiguous(monkeypatch):
     monkeypatch.setattr(base_mod, "build_agent_from_definition", fake_build_agent)
 
     result = run_scope_triage_agent(
-        settings=Settings(data_dir="/tmp", scope_triage_model="test/model"),
+        settings=Settings(data_dir="/tmp"),
         ticket_spec="Improve error handling",
         file_map=["src/errors.py"],
         out_of_scope_files=["src/logging.py"],
@@ -178,7 +178,7 @@ def test_prompt_includes_all_sections(monkeypatch):
     base_mod = _install_mocks(monkeypatch)
     captured_msg: list[str] = []
 
-    def fake_build_agent(settings, definition, tools, model_name, repo_dir=None, **kw):
+    def fake_build_agent(settings, definition, tools, level, repo_dir=None, **kw):
         class FakeAgent:
             def run_sync(self, msg):
                 captured_msg.append(msg)
@@ -198,7 +198,7 @@ def test_prompt_includes_all_sections(monkeypatch):
     monkeypatch.setattr(base_mod, "build_agent_from_definition", fake_build_agent)
 
     run_scope_triage_agent(
-        settings=Settings(data_dir="/tmp", scope_triage_model="test/model"),
+        settings=Settings(data_dir="/tmp"),
         ticket_spec="Add feature X",
         file_map=["src/foo.py"],
         out_of_scope_files=["tests/test_foo.py"],

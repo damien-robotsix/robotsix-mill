@@ -6,7 +6,7 @@ description: >-
 
 category: pipeline
 
-model: "${MILL_SCOPE_TRIAGE_MODEL}"
+level: 1
 
 tools: []
 

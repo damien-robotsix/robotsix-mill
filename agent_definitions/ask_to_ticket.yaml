@@ -8,7 +8,7 @@ description: >-
 
 category: interactive
 
-model: "${MILL_ASK_TO_TICKET_MODEL}"
+level: 2
 
 tools:
   - explore

@@ -34,15 +34,15 @@ class ImplementationLogicMixin(_ImplementStageBase):
     """Agent-driven coding passes for :class:`ImplementStage`."""
 
     @classmethod
-    def _select_agent_model(cls, ic: _ImplementContext, settings) -> str | None:
-        """Pick the cheaper ``no_change_model`` on a no-change-needed re-check."""
+    def _select_agent_level(cls, ic: _ImplementContext, settings) -> int | None:
+        """Pick the cheaper level-1 model on a no-change-needed re-check."""
         # Gating heuristic: when the previous attempt already concluded
         # ``no_change_needed`` (the summary or feedback carries that
-        # signal), the retry is a pure re-check — use the cheaper
-        # ``no_change_model`` instead of the primary model.
+        # signal), the retry is a pure re-check — use the cheaper level-1
+        # (flash) model instead of the primary level-2 model.
         prev = (ic.previous_attempt_summary or "") + (ic.feedback or "")
         if "no change needed" in prev.lower():
-            return settings.no_change_model
+            return 1
         return None
 
     @classmethod
@@ -55,7 +55,7 @@ class ImplementationLogicMixin(_ImplementStageBase):
         settings,
         ic: _ImplementContext,
         language_instructions: str,
-        agent_model: str | None,
+        agent_level: int | None,
         resume_history: list | None,
         extra_roots: list[Path] | None,
         memory_board_id: str,
@@ -83,7 +83,7 @@ class ImplementationLogicMixin(_ImplementStageBase):
                 message_history=resume_history,
                 language_instructions=language_instructions,
                 extra_roots=extra_roots,
-                model_name=agent_model,
+                level=agent_level,
                 sandbox_image=ctx.repo_config.sandbox_image
                 if ctx.repo_config
                 else None,
@@ -625,7 +625,7 @@ class ImplementationLogicMixin(_ImplementStageBase):
             ticket,
             settings,
         )
-        agent_model = cls._select_agent_model(ic, settings)
+        agent_level = cls._select_agent_level(ic, settings)
 
         agent_result = cls._invoke_implement_agent(
             ctx,
@@ -635,7 +635,7 @@ class ImplementationLogicMixin(_ImplementStageBase):
             settings,
             ic,
             language_instructions,
-            agent_model,
+            agent_level,
             resume_history,
             extra_roots,
             memory_board_id,

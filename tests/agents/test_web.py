@@ -4,7 +4,7 @@ import subprocess
 
 from robotsix_mill import sandbox
 from robotsix_mill.agents import web_research as wr
-from robotsix_mill.agents.base import compose_prompt, _model_name
+from robotsix_mill.agents.base import compose_prompt
 from robotsix_mill.agents.web_tools import (
     make_web_fetch,
     reset_web_fetch_budget,
@@ -40,21 +40,6 @@ def test_repo_ships_agent_references():
     assert "sqlalchemy-sqlite.md" in files, files
 
 
-# --- model id / prompt composition (no key, no pydantic_ai needed) ------
-
-
-def test_main_model_never_online(tmp_path):
-    # The expensive main agent must never carry ":online" — web search
-    # is delegated to the cheap sub-agent. (No "openrouter:" prefix: the
-    # provider is set explicitly for the cost-instrumented model.)
-    s = _settings(tmp_path, model="x/y")
-    assert _model_name(s) == "x/y"
-    assert ":online" not in _model_name(s)
-    # even with web search enabled (the default) the main model is plain
-    s2 = _settings(tmp_path, model="x/y", web_search="true")
-    assert _model_name(s2) == "x/y"
-
-
 # --- web research sub-agent (the cost fix) ------------------------------
 
 
@@ -66,19 +51,16 @@ def test_web_research_no_key_degrades(tmp_path):
 
 
 def test_web_research_subagent_uses_cheap_online_model(tmp_path, monkeypatch):
-    """The sub-agent (and only it) builds the cheap model WITH ":online"
-    and bounds itself by web_research_request_limit."""
+    """The sub-agent (and only it) builds the cheap level-1 (flash) model
+    WITH ":online" and bounds itself by web_research_request_limit. The
+    expensive main agent never carries ":online" — web search is delegated
+    here."""
     s = _settings(
         tmp_path,
         OPENROUTER_API_KEY="k",
-        web_research_model="cheap/mini",
         web_research_request_limit="5",
     )
     captured = {}
-
-    class FakeModel:
-        def __init__(self, name, **kw):
-            captured["model"] = name
 
     class FakeAgent:
         def __init__(self, **kw):
@@ -90,16 +72,22 @@ def test_web_research_subagent_uses_cheap_online_model(tmp_path, monkeypatch):
             return type("R", (), {"output": "ok"})()
 
     import pydantic_ai
-    import pydantic_ai.providers.openrouter as orp
-    from robotsix_mill.agents import openrouter_cost as oc
+    from robotsix_mill.agents import base as bmod
+
+    def fake_build_openrouter_model(level=1, *, online=False):
+        _, model_name = bmod._resolve_level(level)
+        if online:
+            model_name = f"{model_name}:online"
+        captured["model"] = model_name
+        return object(), object()
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(bmod, "build_openrouter_model", fake_build_openrouter_model)
 
     out = asyncio.run(wr.run_web_research(settings=s, query="q"))
     assert out == "ok"
-    assert captured["model"] == "cheap/mini:online"
+    # The cheap level-1 model carries the :online surcharge for web search.
+    assert captured["model"] == "deepseek/deepseek-v4-flash:online"
     assert captured["limit"] == 5
     assert captured["name"] == "web_research"
 
@@ -563,10 +551,6 @@ def test_run_web_knowledge_resets_budget(tmp_path, monkeypatch):
 
     monkeypatch.setattr(web_tools, "reset_web_fetch_budget", counting_reset)
 
-    class FakeModel:
-        def __init__(self, name, **kw):
-            pass
-
     class FakeAgent:
         def __init__(self, **kw):
             pass
@@ -575,12 +559,14 @@ def test_run_web_knowledge_resets_budget(tmp_path, monkeypatch):
             return type("R", (), {"output": "the answer"})()
 
     import pydantic_ai
-    import pydantic_ai.providers.openrouter as orp
-    from robotsix_mill.agents import openrouter_cost as oc
+    from robotsix_mill.agents import base as bmod
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        bmod,
+        "build_openrouter_model",
+        lambda level=1, *, online=False: (object(), object()),
+    )
 
     out = asyncio.run(run_web_knowledge(settings=s, question="anything"))
     assert out == "the answer"

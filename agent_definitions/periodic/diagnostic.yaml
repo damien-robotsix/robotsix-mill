@@ -18,7 +18,7 @@ category: periodic
 interval: 1d
 enabled: false
 
-model: default
+level: 2
 
 system_prompt: |
   Deterministic diagnostic orchestrator — no LLM. The pass is driven by

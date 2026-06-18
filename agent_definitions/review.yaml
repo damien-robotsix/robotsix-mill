@@ -7,7 +7,7 @@ description: >-
 
 category: pipeline
 
-model: "${MILL_REVIEW_MODEL}"
+level: 2
 
 tools:
   - read_file

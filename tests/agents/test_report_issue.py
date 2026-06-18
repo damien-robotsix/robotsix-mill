@@ -93,12 +93,8 @@ def test_build_agent_attaches_report_issue_by_default(
 
     monkeypatch.setattr("pydantic_ai.Agent", _FakeAgent)
     monkeypatch.setattr(
-        "pydantic_ai.providers.openrouter.OpenRouterProvider",
-        lambda *a, **k: object(),
-    )
-    monkeypatch.setattr(
-        "robotsix_mill.agents.openrouter_cost.CostInstrumentedOpenRouterModel",
-        lambda *a, **k: object(),
+        "robotsix_mill.agents.base.new_deepseek_model",
+        lambda model_name, level: (object(), object()),
     )
     secrets_set(openrouter_api_key="k")
 
@@ -158,12 +154,8 @@ def test_build_agent_without_report_issue(settings, monkeypatch, secrets_set):
 
     monkeypatch.setattr("pydantic_ai.Agent", _FakeAgent)
     monkeypatch.setattr(
-        "pydantic_ai.providers.openrouter.OpenRouterProvider",
-        lambda *a, **k: object(),
-    )
-    monkeypatch.setattr(
-        "robotsix_mill.agents.openrouter_cost.CostInstrumentedOpenRouterModel",
-        lambda *a, **k: object(),
+        "robotsix_mill.agents.base.new_deepseek_model",
+        lambda model_name, level: (object(), object()),
     )
     secrets_set(openrouter_api_key="k")
 
@@ -188,12 +180,8 @@ def test_audit_agent_omits_report_issue(settings, monkeypatch, secrets_set):
 
     monkeypatch.setattr("pydantic_ai.Agent", _FakeAgent)
     monkeypatch.setattr(
-        "pydantic_ai.providers.openrouter.OpenRouterProvider",
-        lambda *a, **k: object(),
-    )
-    monkeypatch.setattr(
-        "robotsix_mill.agents.openrouter_cost.CostInstrumentedOpenRouterModel",
-        lambda *a, **k: object(),
+        "robotsix_mill.agents.base.new_deepseek_model",
+        lambda model_name, level: (object(), object()),
     )
     # Also stub PromptedOutput so we don't need a real model
     monkeypatch.setattr(

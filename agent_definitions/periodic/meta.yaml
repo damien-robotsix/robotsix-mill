@@ -12,7 +12,7 @@ category: periodic
 interval: 1d
 enabled: true
 
-model: "${MILL_AUDIT_MODEL}"
+level: 2
 
 tools:
   - explore

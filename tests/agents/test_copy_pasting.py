@@ -32,7 +32,7 @@ from robotsix_mill.config import Settings
 
 @pytest.fixture
 def settings(tmp_path) -> Settings:
-    return Settings(data_dir=str(tmp_path), copy_paste_model="copy-paste-model-id")
+    return Settings(data_dir=str(tmp_path))
 
 
 @pytest.fixture
@@ -145,15 +145,6 @@ def test_run_copy_paste_agent_prompt_tail(settings, fake_periodic):
     assert fake_periodic["kwargs"]["prompt_tail"] == (
         "Run detect_duplication, triage the clone pairs, and return your findings."
     )
-
-
-def test_run_copy_paste_agent_uses_copy_paste_model_setting(settings, fake_periodic):
-    """The model fallback is ``settings.copy_paste_model`` — when the
-    YAML's ``model:`` is None this is the model name that wins."""
-    run_copy_paste_agent(settings=settings)
-    assert fake_periodic["kwargs"]["model_setting"] == settings.copy_paste_model
-    # And the sentinel from the fixture really did flow through.
-    assert fake_periodic["kwargs"]["model_setting"] == "copy-paste-model-id"
 
 
 # ---------------------------------------------------------------------------

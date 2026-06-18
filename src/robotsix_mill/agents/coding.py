@@ -69,7 +69,7 @@ def run_implement_agent(
     current_ticket_id: str = "",
     language_instructions: str = "",
     extra_roots: list[Path] | None = None,
-    model_name: str | None = None,
+    level: int | None = None,
     sandbox_image: str | None = None,
 ) -> tuple[str, list[str], str, bytes | None, bytes | None, bool, str]:
     """Run ONE coordinator pass for this ticket. Returns
@@ -110,7 +110,7 @@ def run_implement_agent(
             spec=spec,
             memory=memory,
             feedback=feedback,
-            model_name=model_name,
+            level=level,
             epic_context=epic_context,
             reference_files=reference_files,
             message_history=message_history,
@@ -128,9 +128,8 @@ def run_implement_agent(
         raise AgentBudgetError(str(e), []) from e
     except UnexpectedModelBehavior as e:
         log.warning(
-            "implement: output retries exhausted on primary model (%s), "
-            "falling back to deepseek/deepseek-v4-flash",
-            settings.model,
+            "implement: output retries exhausted on primary model, "
+            "falling back to level-1 (deepseek flash)",
         )
         # Capture partial progress: the pro model may have written valid
         # edits before its structured output was rejected.  Tell the flash
@@ -161,7 +160,7 @@ def run_implement_agent(
                 spec=spec,
                 memory=memory,
                 feedback=feedback,
-                model_name="deepseek/deepseek-v4-flash",
+                level=1,
                 epic_context=epic_context,
                 reference_files=reference_files,
                 message_history=message_history,

@@ -1772,7 +1772,7 @@ def test_refine_agent_does_not_inject_tech_references(monkeypatch, tmp_path):
     seen_system_prompt: list[str] = []
 
     def fake_build_agent(
-        settings, system_prompt, tools, web_knowledge, model_name, **kwargs
+        settings, system_prompt, tools, web_knowledge, level, **kwargs
     ):
         seen_system_prompt.append(system_prompt)
 
@@ -1810,7 +1810,7 @@ def test_run_command_present_when_repo_dir_given(monkeypatch, tmp_path):
     seen_tools: list = []
 
     def fake_build_agent(
-        settings, system_prompt, tools, web_knowledge, model_name, **kwargs
+        settings, system_prompt, tools, web_knowledge, level, **kwargs
     ):
         seen_tools.extend(t.__name__ for t in tools)
 
@@ -1851,7 +1851,7 @@ def test_run_command_absent_when_repo_dir_is_none(monkeypatch, tmp_path):
     seen_tools: list = []
 
     def fake_build_agent(
-        settings, system_prompt, tools, web_knowledge, model_name, **kwargs
+        settings, system_prompt, tools, web_knowledge, level, **kwargs
     ):
         seen_tools.extend(t.__name__ for t in tools)
 
@@ -2518,7 +2518,7 @@ def test_refine_agent_fallback_raw_markdown(monkeypatch, tmp_path):
     raw_md = "## Problem\nraw output\n## Scope\n- no json"
 
     def fake_build_agent(
-        settings, system_prompt, tools, web_knowledge, model_name, **kwargs
+        settings, system_prompt, tools, web_knowledge, level, **kwargs
     ):
         class FakeAgent:
             def run_sync(
@@ -2552,7 +2552,7 @@ def test_refine_agent_malformed_json_fallback(monkeypatch, tmp_path):
     raw = '{"split": false, "spec": "## Problem\nunclosed string'
 
     def fake_build_agent(
-        settings, system_prompt, tools, web_knowledge, model_name, **kwargs
+        settings, system_prompt, tools, web_knowledge, level, **kwargs
     ):
         class FakeAgent:
             def run_sync(
@@ -2585,7 +2585,7 @@ def test_split_heuristic_present_in_system_prompt(monkeypatch, tmp_path):
     seen_system_prompt: list[str] = []
 
     def fake_build_agent(
-        settings, system_prompt, tools, web_knowledge, model_name, **kwargs
+        settings, system_prompt, tools, web_knowledge, level, **kwargs
     ):
         seen_system_prompt.append(system_prompt)
 
@@ -2620,7 +2620,7 @@ def test_tool_strategy_present_in_system_prompt(monkeypatch, tmp_path):
     seen_system_prompt: list[str] = []
 
     def fake_build_agent(
-        settings, system_prompt, tools, web_knowledge, model_name, **kwargs
+        settings, system_prompt, tools, web_knowledge, level, **kwargs
     ):
         seen_system_prompt.append(system_prompt)
 
@@ -2739,7 +2739,7 @@ def test_sendback_uses_short_prompt(monkeypatch, tmp_path):
     seen_system_prompt: list[str] = []
 
     def fake_build_agent(
-        settings, system_prompt, tools, web_knowledge, model_name, **kwargs
+        settings, system_prompt, tools, web_knowledge, level, **kwargs
     ):
         seen_system_prompt.append(system_prompt)
 
@@ -2774,7 +2774,7 @@ def test_first_refinement_uses_full_prompt(monkeypatch, tmp_path):
     seen_system_prompt: list[str] = []
 
     def fake_build_agent(
-        settings, system_prompt, tools, web_knowledge, model_name, **kwargs
+        settings, system_prompt, tools, web_knowledge, level, **kwargs
     ):
         seen_system_prompt.append(system_prompt)
 
@@ -2806,7 +2806,7 @@ def test_sendback_enables_reply_and_close_thread_tools(monkeypatch, tmp_path):
     run_kwargs: list[dict] = []
 
     def fake_build_agent(
-        settings, system_prompt, tools, web_knowledge, model_name, **kwargs
+        settings, system_prompt, tools, web_knowledge, level, **kwargs
     ):
         run_kwargs.append(kwargs)
 
@@ -3106,7 +3106,7 @@ def test_refine_split_single_child_prefers_agent_title(ctx, service, monkeypatch
 
 def test_triage_refine_agent_config(monkeypatch, tmp_path):
     """triage_refine builds an agent with zero tools,
-    web_knowledge=False, and the correct triage_model."""
+    web_knowledge=False, and the triage level (1) from triage.yaml."""
     from robotsix_mill.agents import base as base_mod
     from robotsix_mill.agents.refining import triage_refine, TriageResult
 
@@ -3119,7 +3119,7 @@ def test_triage_refine_agent_config(monkeypatch, tmp_path):
         tools,
         web_knowledge,
         report_issue,
-        model_name,
+        level,
         name,
         ask_user,
         **kwargs,
@@ -3128,7 +3128,7 @@ def test_triage_refine_agent_config(monkeypatch, tmp_path):
             tools=tools,
             web_knowledge=web_knowledge,
             report_issue=report_issue,
-            model_name=model_name,
+            level=level,
             name=name,
             ask_user=ask_user,
         )
@@ -3145,14 +3145,14 @@ def test_triage_refine_agent_config(monkeypatch, tmp_path):
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
 
-    s = Settings(data_dir=str(tmp_path), triage_model="test/triage-model")
+    s = Settings(data_dir=str(tmp_path))
     result = triage_refine(settings=s, title="Test", draft="do x in foo.py")
 
     assert result.decision == "REFINE"
     assert seen_kwargs["tools"] == []
     assert seen_kwargs["web_knowledge"] is False
     assert seen_kwargs["report_issue"] is False
-    assert seen_kwargs["model_name"] == "test/triage-model"
+    assert seen_kwargs["level"] == 1  # triage.yaml level
     assert seen_kwargs["name"] == "triage"
     assert seen_kwargs["ask_user"] is False
 
@@ -3173,7 +3173,7 @@ def test_triage_refine_wires_read_file_with_repo_dir(monkeypatch, tmp_path):
         tools,
         web_knowledge,
         report_issue,
-        model_name,
+        level,
         name,
         ask_user,
         **kwargs,
@@ -3194,7 +3194,7 @@ def test_triage_refine_wires_read_file_with_repo_dir(monkeypatch, tmp_path):
 
     repo_dir = tmp_path / "repo"
     repo_dir.mkdir()
-    s = Settings(data_dir=str(tmp_path), triage_model="test/triage-model")
+    s = Settings(data_dir=str(tmp_path))
     result = triage_refine(
         settings=s, title="Test", draft="do x in foo.py", repo_dir=repo_dir
     )
@@ -4785,69 +4785,6 @@ class TestClassifyMaintenanceDraft:
     def test_empty_draft(self):
         """Empty title and draft → None."""
         assert refining._classify_maintenance_draft("", "") is None
-
-
-class TestRefineFullModelFloor:
-    """Refine must never run on a flash model — ``_refine_full_model`` and
-    ``_build_refine_overrides`` coerce any flash-tier resolved model up to
-    the full refine model.
-
-    The hermetic conftest resolves ``Settings().refine_model`` to
-    ``"test/model"`` (not the repo's ``deepseek/deepseek-v4-pro`` default),
-    so assertions compare against ``Settings(...).refine_model``."""
-
-    def _definition(self, model: str):
-        from types import SimpleNamespace
-
-        return SimpleNamespace(model=model, system_prompt="SP")
-
-    def test_unset_env_falls_back_to_refine_model(self, tmp_path):
-        """An empty ``definition.model`` (unset ``MILL_REFINE_MODEL``) →
-        ``settings.refine_model``."""
-        s = Settings(data_dir=str(tmp_path))
-        overrides = refining._build_refine_overrides(self._definition(""), s, None, "")
-        assert overrides["model_name"] == s.refine_model
-
-    def test_flash_override_coerced_to_full(self, tmp_path):
-        """A flash-tier ``definition.model`` is coerced to the full model."""
-        s = Settings(data_dir=str(tmp_path))
-        overrides = refining._build_refine_overrides(
-            self._definition("deepseek/deepseek-v4-flash"), s, None, ""
-        )
-        assert overrides["model_name"] == s.refine_model
-        assert "flash" not in overrides["model_name"]
-
-    def test_cheap_alias_is_flash_and_coerced(self, tmp_path):
-        """The ``cheap`` tier alias resolves to a flash model and is coerced."""
-        s = Settings(data_dir=str(tmp_path))
-        overrides = refining._build_refine_overrides(
-            self._definition("cheap"), s, None, ""
-        )
-        assert overrides["model_name"] == s.refine_model
-
-    def test_non_flash_override_passes_through(self, tmp_path):
-        """A non-flash ``definition.model`` override is preserved verbatim."""
-        s = Settings(data_dir=str(tmp_path))
-        overrides = refining._build_refine_overrides(
-            self._definition("anthropic/claude-main"), s, None, ""
-        )
-        assert overrides["model_name"] == "anthropic/claude-main"
-
-    def test_floor_used_when_refine_model_itself_flash(self, tmp_path):
-        """If ``settings.refine_model`` itself resolves to flash, the
-        ``_REFINE_MODEL_FLOOR`` literal is used instead."""
-        s = Settings(data_dir=str(tmp_path), refine_model="deepseek/deepseek-v4-flash")
-        assert (
-            refining._refine_full_model("deepseek/deepseek-v4-flash", s)
-            == refining._REFINE_MODEL_FLOOR
-        )
-        assert "flash" not in refining._REFINE_MODEL_FLOOR
-
-    def test_never_returns_flash(self, tmp_path):
-        """For any flash input, the result is never a flash model."""
-        s = Settings(data_dir=str(tmp_path))
-        for model in ("deepseek/deepseek-v4-flash", "cheap"):
-            assert not refining._is_flash_model(refining._refine_full_model(model, s))
 
 
 class TestRefineTraceWebBudgetDefaults:

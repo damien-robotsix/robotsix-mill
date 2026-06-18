@@ -47,7 +47,6 @@ def run_answer_agent(
         settings=settings,
         definition_name="answer",
         tools=tools,
-        model_name=settings.answer_model,
         prompt=user_prompt,
         what="answer",
     )

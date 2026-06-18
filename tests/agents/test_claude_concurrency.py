@@ -135,17 +135,13 @@ def test_config_default_and_validation():
 
 
 def test_build_agent_wraps_claude_handle_with_the_bound(monkeypatch):
-    """build_agent routes a Claude-SDK agent through the concurrency wrapper,
-    sized from settings.claude_max_concurrency."""
+    """build_agent routes a Claude-SDK agent (level 3) through the concurrency
+    wrapper, sized from settings.claude_max_concurrency."""
     from unittest.mock import MagicMock, patch
 
-    # Disable the Claude→DeepSeek fallback wrapper so build_agent returns the
-    # bound handle directly (this test asserts on that type).
-    s = _settings(
-        llm_backend="claude_sdk",
-        claude_max_concurrency=3,
-        claude_fallback_to_deepseek=False,
-    )
+    # An agent runs on the Claude SDK iff its level is 3 — there is no separate
+    # backend toggle. build_agent returns the bound handle directly.
+    s = _settings(claude_max_concurrency=3)
 
     provider = MagicMock()
     provider.build_agent.side_effect = lambda **kw: "RAW_HANDLE"
@@ -158,6 +154,7 @@ def test_build_agent_wraps_claude_handle_with_the_bound(monkeypatch):
             s,
             system_prompt="sys",
             name="refine",
+            level=3,
             report_issue=False,
             reply_to_thread=False,
             close_thread=False,
@@ -183,13 +180,13 @@ def test_live_bound_serializes_real_claude_runs():
     never overlap. We instrument the inner (real) ``run_sync`` to record peak
     concurrency of the actual work; the permit-wait happens in the wrapper
     around it, so peak must stay at 1."""
-    s = _settings(llm_backend="claude_sdk", claude_max_concurrency=1)
+    s = _settings(claude_max_concurrency=1)
 
     handle = base.build_agent(
         s,
         system_prompt="You are terse. Answer with a single word.",
         name="livecheck",
-        model_name="deepseek/deepseek-v4-flash",  # → CHEAP/haiku tier
+        level=3,  # → Claude SDK transport
         report_issue=False,
         reply_to_thread=False,
         close_thread=False,

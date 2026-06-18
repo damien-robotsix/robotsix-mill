@@ -11,7 +11,7 @@ description: >-
 
 category: pipeline
 
-model: "${MILL_REFINE_MODEL}"
+level: 3
 
 # Read-only tools for codebase exploration (conditional on repo_dir).
 # The refine stage provides a local clone; tools let the agent ground

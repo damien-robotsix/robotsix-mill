@@ -22,16 +22,6 @@ class _StagesSettings(BaseModel):
     # conclusion. This kills the per-request web-search surcharge on the
     # pricey model and keeps its context lean (conclusions, not pages).
     web_search: bool = Field(default=True)
-    # web_research is a focused single-question summariser — it reads
-    # a URL or two and returns one concise factual conclusion. Flash
-    # is plenty for that distillation, and a v4-pro context bloated
-    # by a 314KB raw web_fetch costs $0.25 per call (seen in trace
-    # d40e3c9d4fa5add80b2fe313c1d821f2 — pipeline ticket f6e2 refine).
-    # Flip the default to flash. Operators who want v4-pro back set
-    # MILL_WEB_RESEARCH_MODEL.
-    web_research_model: str = Field(
-        default="deepseek/deepseek-v4-flash",
-    )
     web_research_request_limit: int = Field(default=8, ge=1)
     # web_fetch runs in its OWN container: network ON, but NO repo/data
     # mount, non-root, read-only, fixed curl. Trade-off accepted: an
@@ -123,8 +113,6 @@ class _StagesSettings(BaseModel):
     # human approval gate and goes straight to READY.  When false
     # (default), every gated ticket waits for a human click.
     auto_approve_enabled: bool = Field(default=False)
-    # Model for the auto-approve triage call — must be fast and cheap.
-    auto_approve_model: str = Field(default="deepseek/deepseek-v4-flash")
 
     # --- dual-model review gate (implement → deliver) ---
     # When true, the implement stage transitions to code_review instead of
@@ -201,22 +189,10 @@ class _StagesSettings(BaseModel):
     # decides EXPAND (legitimate), REJECT (scope creep), or ESCALATE
     # (uncertain). Set False to restore immediate BLOCKED behaviour.
     scope_triage_enabled: bool = Field(default=True, alias="MILL_SCOPE_TRIAGE_ENABLED")
-    # Model for the review agent. Defaults to the capable coordinator model.
-    # Override to use a *different* model for a genuinely independent review
-    # perspective (the dual-model benefit).
-    review_model: str = Field(default="deepseek/deepseek-v4-pro")
-    # Model for the review-revision agent. Defaults to the capable
-    # coordinator model. Override to use a different model.
-    review_revision_model: str = Field(default="deepseek/deepseek-v4-pro")
     # When True, the deliver stage generates a structured PR body
     # (Summary / Changes / Test Plan) from the implementation diff
     # via a cheap one-shot LLM call instead of pasting the raw spec.
     pr_summary_enabled: bool = Field(default=False, alias="MILL_PR_SUMMARY_ENABLED")
-    # Model for the PR-summary generation call — must be cheap and
-    # fast (one-shot, small diff, structured output).
-    pr_summary_model: str = Field(
-        default="deepseek/deepseek-v4-flash", alias="MILL_PR_SUMMARY_MODEL"
-    )
     # When True, Forge.create_repo() is permitted to create repositories
     # via the forge API. Default False (opt-in) — the operator must
     # explicitly enable this and ensure the GitHub App installation has
@@ -308,10 +284,6 @@ class _StagesSettings(BaseModel):
     # Per-call cap for pre-refine triage agent (main call + tool calls).
     triage_request_limit: int = Field(default=8)
 
-    # Model for the documentation agent. Defaults to the capable
-    # coordinator model.
-    doc_model: str = Field(default="deepseek/deepseek-v4-flash")
-
     # --- retrospect stage (done -> reviewed) ---
     # When True, retrospect may file an improvement DRAFT. Until the
     # human-gate-after-refine exists, that draft auto-flows to done and
@@ -325,16 +297,6 @@ class _StagesSettings(BaseModel):
     # (Removed) retrospect_deep_analysis_frequency: deep-analysis mode
     # was retired — per-trace inspection is now owned by the periodical
     # pipeline (trace_health_runner + expensive-item detector).
-    # Model for the trace inspector sub-agent — a dedicated cheap model
-    # that inspects a single trace's full observation tree.
-    trace_inspector_model: str = Field(
-        default="deepseek/deepseek-v4-flash",
-    )
-    # Model used by the periodic trace-review runner — a cheap-by-design
-    # flash model so a 50-trace sweep doesn't burn the audit budget.
-    trace_review_model: str = Field(
-        default="deepseek/deepseek-v4-flash",
-    )
     # Outlier thresholds for the deterministic trace-review classifier.
     # A trace is flagged for LLM inspection when ANY hit.
     #

@@ -155,7 +155,7 @@ def test_valid_names_include_field_names_and_aliases() -> None:
 
     names = build_valid_settings_names(Settings)
     # Field name with no alias.
-    assert "llm_backend" in names
+    assert "claude_sdk_vision_enabled" in names
     # Alias-bearing field exposes both the name and the alias.
     assert "FORGE_KIND" in names
 

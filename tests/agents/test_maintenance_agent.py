@@ -430,8 +430,8 @@ class TestAgentConstruction:
         monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
         monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
         monkeypatch.setattr(
-            "robotsix_mill.agents.openrouter_cost.CostInstrumentedOpenRouterModel",
-            FakeModel,
+            "robotsix_mill.agents.base.new_deepseek_model",
+            lambda model_name, level: (FakeModel(model_name), object()),
         )
 
         # Build mocks for ticket + ctx
@@ -529,8 +529,8 @@ class TestAgentConstruction:
         monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
         monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
         monkeypatch.setattr(
-            "robotsix_mill.agents.openrouter_cost.CostInstrumentedOpenRouterModel",
-            FakeModel,
+            "robotsix_mill.agents.base.new_deepseek_model",
+            lambda model_name, level: (FakeModel(model_name), object()),
         )
 
         ticket = MagicMock()
@@ -582,8 +582,8 @@ class TestAgentConstruction:
         monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
         monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
         monkeypatch.setattr(
-            "robotsix_mill.agents.openrouter_cost.CostInstrumentedOpenRouterModel",
-            FakeModel,
+            "robotsix_mill.agents.base.new_deepseek_model",
+            lambda model_name, level: (FakeModel(model_name), object()),
         )
 
         ticket = MagicMock()
@@ -663,8 +663,8 @@ class TestAgentRunWiring:
         monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
         monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
         monkeypatch.setattr(
-            "robotsix_mill.agents.openrouter_cost.CostInstrumentedOpenRouterModel",
-            FakeModel,
+            "robotsix_mill.agents.base.new_deepseek_model",
+            lambda model_name, level: (FakeModel(model_name), object()),
         )
 
     def _ticket_ctx(self, tmp_path, s):
@@ -773,8 +773,8 @@ class TestMetaMultiRepoWorkspace:
         monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
         monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
         monkeypatch.setattr(
-            "robotsix_mill.agents.openrouter_cost.CostInstrumentedOpenRouterModel",
-            FakeModel,
+            "robotsix_mill.agents.base.new_deepseek_model",
+            lambda model_name, level: (FakeModel(model_name), object()),
         )
 
     def _capture_fs_tools(self, monkeypatch, captured):

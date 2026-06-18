@@ -81,7 +81,6 @@ def run_scope_triage_agent(
         settings=settings,
         definition_name="scope_triage",
         tools=[],
-        model_name=settings.scope_triage_model,
         prompt=user_prompt,
         what="scope triage",
     )

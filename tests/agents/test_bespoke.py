@@ -130,12 +130,12 @@ def test_happy_path_returns_result(settings, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-#  Model selection
+#  Level selection
 # ---------------------------------------------------------------------------
 
 
-def test_uses_definition_model_when_set(settings, monkeypatch):
-    """When the definition specifies a model, it is passed to build_agent."""
+def test_uses_definition_level_when_set(settings, monkeypatch):
+    """When the definition specifies a level, it is passed to build_agent."""
     captured = {}
 
     def fake_build_agent(settings, **kwargs):
@@ -154,20 +154,20 @@ def test_uses_definition_model_when_set(settings, monkeypatch):
     )
 
     definition = BespokeAgentDefinition(
-        name="custom-model",
+        name="custom-level",
         interval_seconds=3600,
         system_prompt="You are a checker.",
-        model="openai/gpt-4o",
+        level=2,
     )
 
     run_bespoke_agent(settings=settings, definition=definition)
 
-    assert captured["model_name"] == "openai/gpt-4o"
+    assert captured["level"] == 2
 
 
-def test_falls_back_to_settings_default_model(settings, monkeypatch):
-    """When the definition has an empty model string, the runner falls
-    back to settings.bespoke_default_model."""
+def test_defaults_to_level_1_when_unset(settings, monkeypatch):
+    """When the definition omits level, it defaults to 1 (cheap) and that
+    is what reaches build_agent."""
     captured = {}
 
     def fake_build_agent(settings, **kwargs):
@@ -186,14 +186,14 @@ def test_falls_back_to_settings_default_model(settings, monkeypatch):
     )
 
     definition = BespokeAgentDefinition(
-        name="default-model",
+        name="default-level",
         interval_seconds=3600,
         system_prompt="You are a checker.",
     )
 
     run_bespoke_agent(settings=settings, definition=definition)
 
-    assert captured["model_name"] == settings.bespoke_default_model
+    assert captured["level"] == 1
 
 
 # ---------------------------------------------------------------------------

@@ -25,7 +25,6 @@ BcCheckResult = PeriodicAgentResult
 
 run_bc_check_agent = make_agent_runner(
     definition_name="bc_check",
-    model_attr="bc_check_model",
     prompt_tail="Scan the repository for backward-compatibility code and return your findings.",
     max_gaps=MAX_GAPS,
 )

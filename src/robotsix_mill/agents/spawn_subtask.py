@@ -38,7 +38,7 @@ async def run_spawn_subtask(
     name: str,
     prompt: str,
     files_in_scope: list[str] | None = None,
-    model_name: str | None = None,
+    level: int | None = None,
 ) -> str:
     """Run one sub-agent pass to completion. Returns its summary.
 
@@ -55,8 +55,8 @@ async def run_spawn_subtask(
             sub-agent to touch. Injected into the prompt as a scope
             hint. The sub-agent still has full read/write fs tools —
             this is guidance, not enforcement.
-        model_name: Optional model override; defaults to
-            ``settings.model``.
+        level: Optional capability-level override; defaults to
+            level 2 (the implement tier).
 
     Returns:
         The sub-agent's final string output (its summary). On budget
@@ -114,7 +114,7 @@ async def run_spawn_subtask(
         settings,
         name=f"subtask:{name}",
         system_prompt=system_prompt,
-        model_name=model_name or settings.model,
+        level=level or 2,
         tools=[make_explore_tool(settings, repo_dir), *fs_tools],
         web_knowledge=False,
         report_issue=False,

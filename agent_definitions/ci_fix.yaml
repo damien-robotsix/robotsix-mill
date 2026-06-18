@@ -8,7 +8,7 @@ description: >-
 
 category: sandboxed
 
-model: "${MILL_MODEL}"
+level: 2
 
 tools:
   - read_file

@@ -187,24 +187,38 @@ def test_explore_tool_runs_inside_an_active_event_loop(tmp_path, monkeypatch):
     assert asyncio.run(driver()) == "OK: where is the worker?"
 
 
-def test_explore_subagent_is_read_only_and_uses_explore_model(tmp_path, monkeypatch):
+def _patch_explore_model(monkeypatch, cap):
+    """Patch the level-1 model seam (base.build_openrouter_model) so the
+    explore sub-agent builds nothing real. Captures the resolved model name."""
+    from robotsix_mill.agents import base as bmod
+
+    class FakeModel:
+        def __init__(self, name):
+            cap["model"] = name
+
+    def fake_build_openrouter_model(level=1, *, online=False):
+        # explore builds a level-1 (flash) DeepSeek model; resolve it the
+        # same way base does so the captured name reflects the real binding.
+        _, model_name = bmod._resolve_level(level)
+        if online:
+            model_name = f"{model_name}:online"
+        return FakeModel(model_name), object()
+
+    monkeypatch.setattr(bmod, "build_openrouter_model", fake_build_openrouter_model)
+
+
+def test_explore_subagent_is_read_only_and_uses_flash_model(tmp_path, monkeypatch):
     """The sub-agent gets ONLY read_file/list_dir/run_command (never
-    write_file/edit_file/delete_file) and runs on its own explore_model,
-    bounded."""
+    write_file/edit_file/delete_file) and runs on the cheap level-1 (flash)
+    model, bounded."""
     (tmp_path / "a.txt").write_text("hi")
     s = _settings(
         tmp_path,
         OPENROUTER_API_KEY="k",
-        model="coordinator/big",
-        explore_model="explore/cheap",
         explore_request_limit="7",
         explore_max_tokens="600",
     )
     cap = {}
-
-    class FakeModel:
-        def __init__(self, name, **kw):
-            cap["model"] = name
 
     class FakeAgent:
         def __init__(self, **kw):
@@ -217,16 +231,14 @@ def test_explore_subagent_is_read_only_and_uses_explore_model(tmp_path, monkeypa
             return type("R", (), {"output": "answer"})()
 
     import pydantic_ai
-    import pydantic_ai.providers.openrouter as orp
-    from robotsix_mill.agents import openrouter_cost as oc
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    _patch_explore_model(monkeypatch, cap)
 
     out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="q"))
     assert out == "answer"
-    assert cap["model"] == "explore/cheap"  # its own model, not coordinator
+    # level-1 (flash) DeepSeek model — resolved from llmio's tier defaults.
+    assert cap["model"] == "deepseek/deepseek-v4-flash"
     assert cap["tools"] == [
         "list_dir",
         "read_file",
@@ -244,12 +256,8 @@ def test_known_context_is_prepended_to_prompt(tmp_path, monkeypatch):
     """When known_context is non-empty, the prompt handed to agent.run
     contains both the known-context text and the original question."""
     (tmp_path / "a.txt").write_text("hi")
-    s = _settings(tmp_path, OPENROUTER_API_KEY="k", explore_model="explore/cheap")
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
     cap = {}
-
-    class FakeModel:
-        def __init__(self, name, **kw):
-            pass
 
     class FakeAgent:
         def __init__(self, **kw):
@@ -260,12 +268,9 @@ def test_known_context_is_prepended_to_prompt(tmp_path, monkeypatch):
             return type("R", (), {"output": "answer"})()
 
     import pydantic_ai
-    import pydantic_ai.providers.openrouter as orp
-    from robotsix_mill.agents import openrouter_cost as oc
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    _patch_explore_model(monkeypatch, cap)
 
     out = asyncio.run(
         explore.run_explore(
@@ -285,12 +290,8 @@ def test_prompt_unchanged_when_known_context_omitted(tmp_path, monkeypatch):
     """When known_context is omitted, the prompt equals the original
     question verbatim (no wrapper)."""
     (tmp_path / "a.txt").write_text("hi")
-    s = _settings(tmp_path, OPENROUTER_API_KEY="k", explore_model="explore/cheap")
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
     cap = {}
-
-    class FakeModel:
-        def __init__(self, name, **kw):
-            pass
 
     class FakeAgent:
         def __init__(self, **kw):
@@ -301,12 +302,9 @@ def test_prompt_unchanged_when_known_context_omitted(tmp_path, monkeypatch):
             return type("R", (), {"output": "answer"})()
 
     import pydantic_ai
-    import pydantic_ai.providers.openrouter as orp
-    from robotsix_mill.agents import openrouter_cost as oc
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    _patch_explore_model(monkeypatch, cap)
 
     out = asyncio.run(
         explore.run_explore(settings=s, repo_dir=tmp_path, question="where is X?")
@@ -316,11 +314,7 @@ def test_prompt_unchanged_when_known_context_omitted(tmp_path, monkeypatch):
 
 
 def _patch_fake_agent(monkeypatch, cap):
-    """Patch the explore Agent/provider/model seams to capture the prompt."""
-
-    class FakeModel:
-        def __init__(self, name, **kw):
-            pass
+    """Patch the explore Agent + model seams to capture the prompt."""
 
     class FakeAgent:
         def __init__(self, **kw):
@@ -331,19 +325,16 @@ def _patch_fake_agent(monkeypatch, cap):
             return type("R", (), {"output": "answer"})()
 
     import pydantic_ai
-    import pydantic_ai.providers.openrouter as orp
-    from robotsix_mill.agents import openrouter_cost as oc
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    _patch_explore_model(monkeypatch, cap)
 
 
 def test_pre_seeded_paths_are_prepended_to_prompt(tmp_path, monkeypatch):
     """pre_seeded_paths injects a <preloaded_files> block listing each
     path plus a do-not-re-read instruction, and keeps the question."""
     (tmp_path / "a.txt").write_text("hi")
-    s = _settings(tmp_path, OPENROUTER_API_KEY="k", explore_model="explore/cheap")
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
     cap = {}
     _patch_fake_agent(monkeypatch, cap)
 
@@ -367,7 +358,7 @@ def test_pre_seeded_paths_merge_with_known_context(tmp_path, monkeypatch):
     """When both known_context and pre_seeded_paths are supplied, both
     appear in the composed prompt (neither overwrites the other)."""
     (tmp_path / "a.txt").write_text("hi")
-    s = _settings(tmp_path, OPENROUTER_API_KEY="k", explore_model="explore/cheap")
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
     cap = {}
     _patch_fake_agent(monkeypatch, cap)
 
@@ -391,7 +382,7 @@ def test_prompt_unchanged_when_pre_seeded_paths_omitted(tmp_path, monkeypatch):
     """With neither known_context nor pre_seeded_paths, the prompt equals
     the verbatim question (no behavior change)."""
     (tmp_path / "a.txt").write_text("hi")
-    s = _settings(tmp_path, OPENROUTER_API_KEY="k", explore_model="explore/cheap")
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
     cap = {}
     _patch_fake_agent(monkeypatch, cap)
 
@@ -405,7 +396,7 @@ def test_prompt_unchanged_when_pre_seeded_paths_omitted(tmp_path, monkeypatch):
 def test_make_explore_tool_forwards_pre_seeded_paths(tmp_path, monkeypatch):
     """The make_explore_tool closure forwards pre_seeded_paths to
     run_explore."""
-    s = _settings(tmp_path, OPENROUTER_API_KEY="k", explore_model="explore/cheap")
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
     cap = {}
 
     async def fake_run_explore(**kw):
@@ -440,16 +431,11 @@ def test_explore_retries_once_with_stricter_prompt(tmp_path, monkeypatch):
     s = _settings(
         tmp_path,
         OPENROUTER_API_KEY="k",
-        explore_model="explore/cheap",
         explore_request_limit="20",
     )
 
     primary_agent_calls = []
     retry_agent_calls = []
-
-    class FakeModel:
-        def __init__(self, name, **kw):
-            pass
 
     class FakeAgent:
         def __init__(self, **kw):
@@ -473,15 +459,12 @@ def test_explore_retries_once_with_stricter_prompt(tmp_path, monkeypatch):
             return type("R", (), {"output": "retry-answer"})()
 
     import pydantic_ai
-    import pydantic_ai.providers.openrouter as orp
-    from robotsix_mill.agents import openrouter_cost as oc
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(
         pydantic_ai.exceptions, "UsageLimitExceeded", _FakeUsageLimitExceeded
     )
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    _patch_explore_model(monkeypatch, {})
 
     out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="q"))
     assert out == "retry-answer"
@@ -502,13 +485,8 @@ def test_explore_sentinel_set_on_double_failure(tmp_path, monkeypatch):
     s = _settings(
         tmp_path,
         OPENROUTER_API_KEY="k",
-        explore_model="explore/cheap",
         explore_request_limit="20",
     )
-
-    class FakeModel:
-        def __init__(self, name, **kw):
-            pass
 
     class FakeAgent:
         def __init__(self, **kw):
@@ -518,15 +496,12 @@ def test_explore_sentinel_set_on_double_failure(tmp_path, monkeypatch):
             raise _FakeUsageLimitExceeded("budget cap")
 
     import pydantic_ai
-    import pydantic_ai.providers.openrouter as orp
-    from robotsix_mill.agents import openrouter_cost as oc
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(
         pydantic_ai.exceptions, "UsageLimitExceeded", _FakeUsageLimitExceeded
     )
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    _patch_explore_model(monkeypatch, {})
 
     # Reset sentinel before test
     explore.reset_explore_budget_exhausted()

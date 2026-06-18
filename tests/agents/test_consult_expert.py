@@ -92,7 +92,7 @@ def test_missing_expert_definition_degrades_not_raises(tmp_path, monkeypatch):
                 domain="python-backend",
                 module_paths=["src/**/*.py"],
                 system_prompt="You are a Python expert.",
-                model="",
+                level=2,
                 memory=ExpertMemoryConfig(max_memory_chars=8000),
                 tools=["explore", "read_file", "list_dir"],
             ),
@@ -127,14 +127,9 @@ def test_expert_agent_read_only_tools(tmp_path, monkeypatch):
     s = _settings(
         tmp_path,
         OPENROUTER_API_KEY="k",
-        model="coordinator/big",
         consult_request_limit="5",
     )
     cap = {}
-
-    class FakeModel:
-        def __init__(self, name, **kw):
-            cap["model"] = name
 
     class FakeAgent:
         def __init__(self, **kw):
@@ -154,7 +149,7 @@ def test_expert_agent_read_only_tools(tmp_path, monkeypatch):
                 domain="python-backend",
                 module_paths=["src/**/*.py"],
                 system_prompt="You are a Python expert.",
-                model="",
+                level=2,
                 memory=ExpertMemoryConfig(max_memory_chars=8000),
                 tools=["explore", "read_file", "list_dir"],
             ),
@@ -166,20 +161,19 @@ def test_expert_agent_read_only_tools(tmp_path, monkeypatch):
         fake_load_defs,
     )
     import pydantic_ai
-    import pydantic_ai.providers.openrouter as orp
-    from robotsix_mill.agents import openrouter_cost as oc
+    from robotsix_mill.agents import base as bmod
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    # The level→model seam: build_openrouter_model returns (model, client).
+    monkeypatch.setattr(
+        bmod,
+        "build_openrouter_model",
+        lambda level=1, *, online=False: (object(), object()),
+    )
     # Prevent the fs_tools build from trying to access a real repo
     from robotsix_mill.agents import fs_tools as ft
 
     monkeypatch.setattr(ft, "build_fs_tools", lambda root, settings, **kw: [])
-    # Prevent timeout_http_client from opening a real client
-    from robotsix_mill.agents import base as bmod
-
-    monkeypatch.setattr(bmod, "timeout_http_client", lambda s: None)
 
     out = run_consult_expert(
         settings=s,
@@ -219,10 +213,6 @@ def test_expert_persists_updated_memory(tmp_path, monkeypatch):
 
     s = _settings(tmp_path, OPENROUTER_API_KEY="k")
 
-    class FakeModel:
-        def __init__(self, name, **kw):
-            pass
-
     class FakeAgent:
         def __init__(self, **kw):
             pass
@@ -242,7 +232,7 @@ def test_expert_persists_updated_memory(tmp_path, monkeypatch):
                 domain="python-backend",
                 module_paths=["src/**/*.py"],
                 system_prompt="You are a Python expert.",
-                model="",
+                level=2,
                 memory=ExpertMemoryConfig(max_memory_chars=8000),
                 tools=["explore", "read_file", "list_dir"],
             ),
@@ -252,16 +242,16 @@ def test_expert_persists_updated_memory(tmp_path, monkeypatch):
         expert_manager.ExpertManager, "load_definitions", fake_load_defs
     )
     import pydantic_ai
-    import pydantic_ai.providers.openrouter as orp
-    from robotsix_mill.agents import openrouter_cost as oc
     from robotsix_mill.agents import fs_tools as ft
     from robotsix_mill.agents import base as bmod
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        bmod,
+        "build_openrouter_model",
+        lambda level=1, *, online=False: (object(), object()),
+    )
     monkeypatch.setattr(ft, "build_fs_tools", lambda root, settings, **kw: [])
-    monkeypatch.setattr(bmod, "timeout_http_client", lambda s: None)
 
     out = run_consult_expert(
         settings=s,
@@ -291,10 +281,6 @@ def test_expert_persist_memory_receives_max_chars_kwarg(tmp_path, monkeypatch):
 
     s = _settings(tmp_path, OPENROUTER_API_KEY="k")
 
-    class FakeModel:
-        def __init__(self, name, **kw):
-            pass
-
     class FakeAgent:
         def __init__(self, **kw):
             pass
@@ -314,7 +300,7 @@ def test_expert_persist_memory_receives_max_chars_kwarg(tmp_path, monkeypatch):
                 domain="python-backend",
                 module_paths=["src/**/*.py"],
                 system_prompt="You are a Python expert.",
-                model="",
+                level=2,
                 memory=ExpertMemoryConfig(max_memory_chars=8000),
                 tools=["explore", "read_file", "list_dir"],
             ),
@@ -324,14 +310,15 @@ def test_expert_persist_memory_receives_max_chars_kwarg(tmp_path, monkeypatch):
         expert_manager.ExpertManager, "load_definitions", fake_load_defs
     )
     import pydantic_ai
-    import pydantic_ai.providers.openrouter as orp
-    from robotsix_mill.agents import openrouter_cost as oc, fs_tools as ft, base as bmod
+    from robotsix_mill.agents import fs_tools as ft, base as bmod
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        bmod,
+        "build_openrouter_model",
+        lambda level=1, *, online=False: (object(), object()),
+    )
     monkeypatch.setattr(ft, "build_fs_tools", lambda root, settings, **kw: [])
-    monkeypatch.setattr(bmod, "timeout_http_client", lambda s: None)
 
     # Capture the kwargs passed to persist_memory.
     persist_kwargs = {}
@@ -366,10 +353,6 @@ def test_expert_skips_persist_when_updated_memory_empty(tmp_path, monkeypatch):
 
     s = _settings(tmp_path, OPENROUTER_API_KEY="k")
 
-    class FakeModel:
-        def __init__(self, name, **kw):
-            pass
-
     class FakeAgent:
         def __init__(self, **kw):
             pass
@@ -388,21 +371,22 @@ def test_expert_skips_persist_when_updated_memory_empty(tmp_path, monkeypatch):
                 domain="python-backend",
                 module_paths=["src/**/*.py"],
                 system_prompt="P",
-                model="",
+                level=2,
                 memory=ExpertMemoryConfig(max_memory_chars=8000),
                 tools=["explore", "read_file", "list_dir"],
             ),
         },
     )
     import pydantic_ai
-    import pydantic_ai.providers.openrouter as orp
-    from robotsix_mill.agents import openrouter_cost as oc, fs_tools as ft, base as bmod
+    from robotsix_mill.agents import fs_tools as ft, base as bmod
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        bmod,
+        "build_openrouter_model",
+        lambda level=1, *, online=False: (object(), object()),
+    )
     monkeypatch.setattr(ft, "build_fs_tools", lambda root, settings, **kw: [])
-    monkeypatch.setattr(bmod, "timeout_http_client", lambda s: None)
 
     out = run_consult_expert(
         settings=s,

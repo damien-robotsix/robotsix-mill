@@ -1,6 +1,5 @@
 """Tests for the YAML agent-definition loader."""
 
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -12,7 +11,6 @@ from pydantic import ValidationError
 
 from robotsix_mill.agents.yaml_loader import (
     AgentDefinition,
-    _resolve_env_vars,
     load_agent_definition,
     load_periodic_agent_definition,
 )
@@ -28,30 +26,6 @@ def _write_yaml(tmp_path: Path, content: str) -> Path:
     return p
 
 
-# ── _resolve_env_vars ────────────────────────────────────────────────
-
-
-def test_resolve_env_vars_replaces_single_var(monkeypatch):
-    monkeypatch.setenv("MY_MODEL", "anthropic/claude-4")
-    assert _resolve_env_vars("${MY_MODEL}") == "anthropic/claude-4"
-
-
-def test_resolve_env_vars_replaces_multiple_vars(monkeypatch):
-    monkeypatch.setenv("A", "hello")
-    monkeypatch.setenv("B", "world")
-    assert _resolve_env_vars("${A} ${B}") == "hello world"
-
-
-def test_resolve_env_vars_no_var_returns_unchanged():
-    assert _resolve_env_vars("no vars here") == "no vars here"
-
-
-def test_resolve_env_vars_unset_returns_empty():
-    """Unresolvable ${VAR} returns '' — caller (build_agent) then
-    falls back to settings.model when model_name is falsy."""
-    assert _resolve_env_vars("${UNSET_VAR}") == ""
-
-
 # ── load_agent_definition — valid inputs ─────────────────────────────
 
 
@@ -63,7 +37,7 @@ def test_valid_all_fields(tmp_path):
 name: test-agent
 description: A test agent.
 category: pipeline
-model: test/model-v1
+level: 2
 system_prompt: You are a test agent.
 tools:
   - explore
@@ -82,7 +56,7 @@ skills:
     assert ad.name == "test-agent"
     assert ad.description == "A test agent."
     assert ad.category == "pipeline"
-    assert ad.model == "test/model-v1"
+    assert ad.level == 2
     assert ad.system_prompt == "You are a test agent."
     assert ad.tools == ["explore", "read_file"]
     assert ad.web_knowledge is True
@@ -99,13 +73,13 @@ def test_minimal_valid_yaml(tmp_path):
         tmp_path,
         """\
 name: minimal
-model: gpt-4
+level: 1
 system_prompt: Do one thing well.
 """,
     )
     ad = load_agent_definition(p)
     assert ad.name == "minimal"
-    assert ad.model == "gpt-4"
+    assert ad.level == 1
     assert ad.system_prompt == "Do one thing well."
     assert ad.description is None
     assert ad.category is None
@@ -118,34 +92,18 @@ system_prompt: Do one thing well.
     assert ad.skills == []
 
 
-def test_env_var_substitution_in_model(tmp_path, monkeypatch):
-    """${VAR} in model field is resolved from environment."""
-    monkeypatch.setenv("MILL_TEST_MODEL", "anthropic/claude-sonnet")
+def test_level_out_of_range_rejected(tmp_path):
+    """level must be 1, 2, or 3 — out-of-range values are rejected."""
     p = _write_yaml(
         tmp_path,
         """\
-name: env-agent
-model: ${MILL_TEST_MODEL}
+name: bad-level
+level: 4
 system_prompt: test
 """,
     )
-    ad = load_agent_definition(p)
-    assert ad.model == "anthropic/claude-sonnet"
-
-
-def test_non_model_fields_preserve_literal_env_var(tmp_path, monkeypatch):
-    """system_prompt containing ${SOMETHING} stays literal."""
-    monkeypatch.setenv("SOMETHING", "resolved")
-    p = _write_yaml(
-        tmp_path,
-        """\
-name: literal
-model: gpt-4
-system_prompt: "Use ${SOMETHING} as a tag."
-""",
-    )
-    ad = load_agent_definition(p)
-    assert ad.system_prompt == "Use ${SOMETHING} as a tag."
+    with pytest.raises(ValidationError):
+        load_agent_definition(p)
 
 
 def test_empty_tools_and_skills_get_defaults(tmp_path):
@@ -154,7 +112,7 @@ def test_empty_tools_and_skills_get_defaults(tmp_path):
         tmp_path,
         """\
 name: empty-lists
-model: gpt-4
+level: 1
 system_prompt: test
 tools: []
 skills: []
@@ -173,7 +131,7 @@ def test_missing_required_name(tmp_path):
     p = _write_yaml(
         tmp_path,
         """\
-model: gpt-4
+level: 1
 system_prompt: test
 """,
     )
@@ -183,19 +141,19 @@ system_prompt: test
     assert "name" in err_str.lower() or "Field required" in err_str
 
 
-def test_missing_required_model(tmp_path):
-    """Missing 'model' → ValidationError."""
+def test_missing_required_level(tmp_path):
+    """Missing 'level' → ValidationError."""
     p = _write_yaml(
         tmp_path,
         """\
-name: no-model
+name: no-level
 system_prompt: test
 """,
     )
     with pytest.raises(Exception) as exc_info:
         load_agent_definition(p)
     err_str = str(exc_info.value)
-    assert "model" in err_str.lower() or "Field required" in err_str
+    assert "level" in err_str.lower() or "Field required" in err_str
 
 
 def test_missing_required_system_prompt(tmp_path):
@@ -204,7 +162,7 @@ def test_missing_required_system_prompt(tmp_path):
         tmp_path,
         """\
 name: no-prompt
-model: gpt-4
+level: 1
 """,
     )
     with pytest.raises(Exception) as exc_info:
@@ -219,7 +177,7 @@ def test_wrong_type_web_knowledge(tmp_path):
         tmp_path,
         """\
 name: bad-web-knowledge
-model: gpt-4
+level: 1
 system_prompt: test
 web_knowledge:
   - 1
@@ -239,7 +197,7 @@ def test_wrong_type_retries(tmp_path):
         tmp_path,
         """\
 name: bad-retries
-model: gpt-4
+level: 1
 system_prompt: test
 retries: "two"
 """,
@@ -256,29 +214,12 @@ def test_malformed_yaml_syntax(tmp_path):
         tmp_path,
         """\
 name: bad-yaml
-model: gpt-4
+level: 1
 \tsystem_prompt: tab-indented  # tabs are illegal in YAML
 """,
     )
     with pytest.raises(yaml.YAMLError):
         load_agent_definition(p)
-
-
-def test_unresolvable_env_var_resolves_to_empty(tmp_path):
-    """Unset env var in model → resolved to '' (build_agent falls back to settings.model)."""
-    # Ensure the variable is not in the environment.
-    if "UNSET_MODEL_VAR" in os.environ:
-        del os.environ["UNSET_MODEL_VAR"]
-    p = _write_yaml(
-        tmp_path,
-        """\
-name: bad-env
-model: ${UNSET_MODEL_VAR}
-system_prompt: test
-""",
-    )
-    ad = load_agent_definition(p)
-    assert ad.model == ""
 
 
 def test_file_not_found():
@@ -552,7 +493,7 @@ def test_agent_definition_model_validation():
     ad = AgentDefinition.model_validate(
         {
             "name": "test",
-            "model": "gpt-4",
+            "level": 1,
             "system_prompt": "You are helpful.",
         }
     )
@@ -568,7 +509,7 @@ def test_agent_definition_extra_fields_rejected():
         AgentDefinition.model_validate(
             {
                 "name": "test",
-                "model": "gpt-4",
+                "level": 1,
                 "system_prompt": "ok",
                 "unknown_field": "nope",
             }
@@ -580,7 +521,7 @@ def test_inject_agent_md_defaults_to_true():
     ad = AgentDefinition.model_validate(
         {
             "name": "test",
-            "model": "gpt-4",
+            "level": 1,
             "system_prompt": "You are helpful.",
         }
     )
@@ -592,7 +533,7 @@ def test_inject_agent_md_can_be_false():
     ad = AgentDefinition.model_validate(
         {
             "name": "test",
-            "model": "gpt-4",
+            "level": 1,
             "system_prompt": "You are helpful.",
             "inject_agent_md": False,
         }
@@ -825,7 +766,7 @@ def test_interval_seconds_round_trips(tmp_path):
     from YAML and is exposed on the model."""
     yaml_body = (
         "name: demo\n"
-        "model: deepseek/v\n"
+        "level: 1\n"
         'system_prompt: "x"\n'
         "interval_seconds: 3600\n"
         "enabled: false\n"
@@ -841,7 +782,7 @@ def test_interval_human_readable_backfills_interval_seconds(tmp_path):
     so downstream readers (worker.py) are unchanged."""
     p = _write_yaml(
         tmp_path,
-        'name: demo\nmodel: deepseek/v\nsystem_prompt: "x"\ninterval: 1d\n',
+        'name: demo\nlevel: 1\nsystem_prompt: "x"\ninterval: 1d\n',
     )
     ad = load_agent_definition(p)
     assert ad.interval == "1d"
@@ -852,7 +793,7 @@ def test_interval_and_interval_seconds_mutually_exclusive(tmp_path):
     """Setting both ``interval`` and ``interval_seconds`` → ValidationError."""
     p = _write_yaml(
         tmp_path,
-        'name: demo\nmodel: deepseek/v\nsystem_prompt: "x"\n'
+        'name: demo\nlevel: 1\nsystem_prompt: "x"\n'
         "interval: 1d\ninterval_seconds: 86400\n",
     )
     with pytest.raises(ValidationError):  # pydantic.ValidationError
@@ -863,7 +804,7 @@ def test_interval_malformed_raises_validation_error(tmp_path):
     """A malformed ``interval`` string surfaces as a ValidationError."""
     p = _write_yaml(
         tmp_path,
-        'name: demo\nmodel: deepseek/v\nsystem_prompt: "x"\ninterval: 1x\n',
+        'name: demo\nlevel: 1\nsystem_prompt: "x"\ninterval: 1x\n',
     )
     with pytest.raises(ValidationError):  # pydantic.ValidationError
         load_agent_definition(p)
@@ -874,7 +815,7 @@ def test_interval_seconds_defaults_to_none(tmp_path):
     worker falls back to the corresponding Settings field."""
     p = _write_yaml(
         tmp_path,
-        'name: demo\nmodel: deepseek/v\nsystem_prompt: "x"\n',
+        'name: demo\nlevel: 1\nsystem_prompt: "x"\n',
     )
     ad = load_agent_definition(p)
     assert ad.interval_seconds is None
@@ -899,7 +840,7 @@ def test_load_periodic_agent_definition_repo_override_wins(tmp_path):
     agents_dir.mkdir(parents=True)
     (agents_dir / "audit.yaml").write_text(
         "name: audit\n"
-        "model: deepseek/v\n"
+        "level: 1\n"
         'system_prompt: "per-repo audit"\n'
         "interval_seconds: 43200\n"
         "enabled: true\n",
@@ -910,22 +851,11 @@ def test_load_periodic_agent_definition_repo_override_wins(tmp_path):
     assert ad.system_prompt == "per-repo audit"
 
 
-def test_env_vars_in_model_match_settings():
-    """Every ${VAR} in a YAML model field maps to a known Settings alias.
+def test_every_real_yaml_declares_a_valid_level(monkeypatch):
+    """Every agent_definitions/*.yaml declares a capability ``level`` in the
+    1..3 range (the env-var ``${MILL_*_MODEL}`` substitution path is gone)."""
+    for var in _ENV_VAR_TO_SETTINGS_ALIAS:
+        monkeypatch.setenv(var, "mock/model")
 
-    Reads the raw YAML *before* env-var resolution so that
-    ``${VAR}`` patterns are still present in the ``model`` field.
-    """
-    import re
-
-    var_re = re.compile(r"\$\{([^{}]+)\}")
-
-    for yf in _all_yaml_files():
-        raw = yaml.safe_load(yf.read_text())
-        raw_model = raw.get("model", "")
-        for match in var_re.finditer(raw_model):
-            var_name = match.group(1)
-            assert var_name in _ENV_VAR_TO_SETTINGS_ALIAS, (
-                f"{yf.name}: model references ${{{var_name}}} which "
-                f"has no matching Settings field alias"
-            )
+    for yf, ad in _all_definitions():
+        assert ad.level in (1, 2, 3), f"{yf.name}: level {ad.level} out of range"

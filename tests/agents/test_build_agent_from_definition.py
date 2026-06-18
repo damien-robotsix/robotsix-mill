@@ -1,6 +1,5 @@
 """Tests for build_agent_from_definition — bridges YAML loader ↔ agent runtime."""
 
-import os
 from pathlib import Path
 from unittest import mock
 
@@ -16,7 +15,7 @@ def _make_definition(**overrides) -> AgentDefinition:
     """Minimal valid AgentDefinition with *overrides* applied."""
     defaults: dict = dict(
         name="test-agent",
-        model="test/model",
+        level=2,
         system_prompt="You are a test agent.",
     )
     defaults.update(overrides)
@@ -48,7 +47,7 @@ def test_happy_path_passes_all_fields(monkeypatch):
     captured = _capture_build_agent_kwargs(monkeypatch)
     definition = _make_definition(
         name="refine",
-        model="anthropic/claude-opus",
+        level=3,
         system_prompt="Refine tickets.",
         web_knowledge=True,
         report_issue=True,
@@ -64,7 +63,7 @@ def test_happy_path_passes_all_fields(monkeypatch):
 
     assert kwargs["name"] == "refine"
     assert kwargs["system_prompt"] == "Refine tickets."
-    assert kwargs["model_name"] == "anthropic/claude-opus"
+    assert kwargs["level"] == 3
     assert kwargs["web_knowledge"] is True
     assert kwargs["report_issue"] is True
     assert kwargs["retries"] == 3
@@ -82,12 +81,7 @@ def test_real_refine_yaml_builds(monkeypatch):
     if not p.exists():
         pytest.skip("agent_definitions/refine.yaml not found")
 
-    os.environ.setdefault("MILL_REFINE_MODEL", "test/model")
-    try:
-        definition = load_agent_definition(p)
-    finally:
-        if "MILL_REFINE_MODEL" not in os.environ:
-            os.environ.pop("MILL_REFINE_MODEL", None)
+    definition = load_agent_definition(p)
 
     captured = _capture_build_agent_kwargs(monkeypatch)
     settings = Settings()
@@ -99,7 +93,8 @@ def test_real_refine_yaml_builds(monkeypatch):
 
     assert kwargs["name"] == "refine"
     assert kwargs["system_prompt"] == definition.system_prompt
-    assert kwargs["model_name"] == "test/model"
+    # refine runs on capability level 3 (Claude SDK opus).
+    assert kwargs["level"] == definition.level == 3
     assert kwargs["web_knowledge"] is True
     assert kwargs["report_issue"] is True
     assert kwargs["retries"] == 2
@@ -200,19 +195,19 @@ def test_override_replaces_system_prompt(monkeypatch):
     assert kwargs["system_prompt"] == "Overridden prompt."
 
 
-def test_override_replaces_model_name(monkeypatch):
-    """model_name override replaces definition.model."""
+def test_override_replaces_level(monkeypatch):
+    """level override replaces definition.level."""
     from robotsix_mill.agents.base import build_agent_from_definition
     from robotsix_mill.config import Settings
 
     captured = _capture_build_agent_kwargs(monkeypatch)
-    definition = _make_definition(model="definition/model")
+    definition = _make_definition(level=1)
     settings = Settings()
 
-    build_agent_from_definition(settings, definition, model_name="override/model")
+    build_agent_from_definition(settings, definition, level=3)
 
     kwargs = captured[0]
-    assert kwargs["model_name"] == "override/model"
+    assert kwargs["level"] == 3
 
 
 def test_override_replaces_output_type(monkeypatch):
@@ -241,7 +236,7 @@ def test_override_multiple_fields(monkeypatch):
     captured = _capture_build_agent_kwargs(monkeypatch)
     definition = _make_definition(
         name="original",
-        model="original/model",
+        level=1,
         system_prompt="Original.",
         web_knowledge=False,
         retries=1,
@@ -252,14 +247,14 @@ def test_override_multiple_fields(monkeypatch):
         settings,
         definition,
         name="overridden",
-        model_name="override/model",
+        level=3,
         system_prompt="Overridden.",
         retries=5,
     )
 
     kwargs = captured[0]
     assert kwargs["name"] == "overridden"
-    assert kwargs["model_name"] == "override/model"
+    assert kwargs["level"] == 3
     assert kwargs["system_prompt"] == "Overridden."
     assert kwargs["retries"] == 5
     # Non-overridden fields stay from definition.
@@ -274,7 +269,6 @@ def test_refine_yaml_end_to_end_tool_injection(monkeypatch):
     the agent via build_agent_from_definition, and verify that
     web_knowledge=True and report_issue=True cause the
     ask_web_knowledge and report_issue tools to be injected."""
-    import os
     from pathlib import Path
 
     from robotsix_mill.agents.yaml_loader import load_agent_definition
@@ -285,13 +279,7 @@ def test_refine_yaml_end_to_end_tool_injection(monkeypatch):
     if not p.exists():
         pytest.skip("agent_definitions/refine.yaml not found")
 
-    had_model_env = "MILL_REFINE_MODEL" in os.environ
-    os.environ.setdefault("MILL_REFINE_MODEL", "test/model")
-    try:
-        definition = load_agent_definition(p)
-    finally:
-        if not had_model_env:
-            os.environ.pop("MILL_REFINE_MODEL", None)
+    definition = load_agent_definition(p)
 
     # Provide a fake API key so build_agent can construct the model
     # (model construction is local — no network call).
@@ -306,10 +294,15 @@ def test_refine_yaml_end_to_end_tool_injection(monkeypatch):
     # which triggers a build-time error when tools=[] because other tests
     # may have registered ``parallel_explore`` in the global ToolRegistry.
     # This test validates tool *injection*, not prompt validation.
+    # Force the DeepSeek (pydantic-ai) transport so we can inspect the
+    # function toolset; refine.yaml is level 3 (Claude SDK) by default,
+    # whose handle has no _function_toolset. Tool *injection* (what this
+    # test validates) is transport-independent.
     agent = build_agent_from_definition(
         settings,
         definition,
         tools=[],
+        level=1,
         system_prompt="Refine tickets using the available tools.",
     )
 

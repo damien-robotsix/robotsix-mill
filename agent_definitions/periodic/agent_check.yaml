@@ -15,7 +15,7 @@ category: periodic
 interval: 1d
 enabled: true
 
-model: default
+level: 2
 
 tools:
   - explore

@@ -9,7 +9,7 @@ description: >-
 
 category: periodic
 
-model: "${MILL_AUDIT_MODEL}"
+level: 1
 
 tools: []
 

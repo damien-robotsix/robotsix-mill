@@ -15,7 +15,7 @@ category: periodic
 interval: 1d
 enabled: true
 
-model: cheap
+level: 1
 
 # Read-only tools for codebase exploration (conditional on repo_dir).
 tools:

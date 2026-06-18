@@ -17,8 +17,6 @@ from robotsix_mill.config import Settings
 @pytest.fixture
 def settings() -> Settings:
     return Settings(
-        llm_backend="openrouter",
-        claude_sdk_agents=[],
         claude_sdk_vision_enabled=False,
     )
 
@@ -115,88 +113,33 @@ def test_safe_close_swallows_exceptions_from_close():
 
 
 # ---------------------------------------------------------------------------
-# timeout_http_client
+# _resolve_level / level_uses_claude — the llmio tier mapping
 # ---------------------------------------------------------------------------
 
 
-def test_timeout_http_client_returns_async_client_with_timeout(monkeypatch):
-    """timeout_http_client returns an httpx.AsyncClient with the settings timeout."""
-    from robotsix_mill.agents.base import timeout_http_client
+def test_resolve_level_maps_to_transport_and_model():
+    """Each capability level resolves to its baked (transport, model) via
+    llmio's tier defaults: L1/L2 → DeepSeek-on-OpenRouter, L3 → Claude SDK."""
+    from robotsix_mill.agents.base import _resolve_level
 
-    s = Settings(model_request_timeout=45.0)
-
-    client = timeout_http_client(s)
-    try:
-        import httpx
-
-        assert isinstance(client, httpx.AsyncClient)
-        assert client.timeout.read == 45.0
-        assert client.timeout.connect == 15.0
-    finally:
-        # Clean up to avoid resource warnings.
-        import asyncio as _asyncio
-
-        try:
-            loop = _asyncio.new_event_loop()
-            loop.run_until_complete(client.aclose())
-            loop.close()
-        except Exception:
-            pass
-
-
-# ---------------------------------------------------------------------------
-# _model_name
-# ---------------------------------------------------------------------------
-
-
-def test_model_name_returns_settings_model(settings):
-    """_model_name returns the primary Settings.model value."""
-    from robotsix_mill.agents.base import _model_name
-
-    settings = Settings(model="deepseek/deepseek-v4-pro")
-    assert _model_name(settings) == "deepseek/deepseek-v4-pro"
-
-
-# ---------------------------------------------------------------------------
-# _use_claude_sdk
-# ---------------------------------------------------------------------------
-
-
-def test_use_claude_sdk_global_backend():
-    """When llm_backend is 'claude_sdk', _use_claude_sdk returns True."""
-    from robotsix_mill.agents.base import _use_claude_sdk
-
-    s = Settings(llm_backend="claude_sdk", claude_sdk_agents=[])
-    assert _use_claude_sdk(s, "test-agent") is True
-
-
-def test_use_claude_sdk_per_agent_opt_in():
-    """When the agent name is in claude_sdk_agents, return True
-    even if the global backend is openrouter."""
-    from robotsix_mill.agents.base import _use_claude_sdk
-
-    s = Settings(
-        llm_backend="openrouter", claude_sdk_agents=["my-agent", "other-agent"]
+    assert _resolve_level(1) == (
+        "openrouter[deepseek]",
+        "deepseek/deepseek-v4-flash",
     )
-    assert _use_claude_sdk(s, "my-agent") is True
-    assert _use_claude_sdk(s, "other-agent") is True
-    assert _use_claude_sdk(s, "unlisted-agent") is False
+    assert _resolve_level(2) == (
+        "openrouter[deepseek]",
+        "deepseek/deepseek-v4-pro",
+    )
+    assert _resolve_level(3) == ("claude-sdk", "opus")
 
 
-def test_use_claude_sdk_neither_global_nor_listed():
-    """When llm_backend is not claude_sdk and agent is not listed → False."""
-    from robotsix_mill.agents.base import _use_claude_sdk
+def test_level_uses_claude_only_for_level_3():
+    """level_uses_claude is True only for the Claude-SDK transport (L3)."""
+    from robotsix_mill.agents.base import level_uses_claude
 
-    s = Settings(llm_backend="openrouter", claude_sdk_agents=[])
-    assert _use_claude_sdk(s, "any-agent") is False
-
-
-def test_use_claude_sdk_name_is_none():
-    """When name is None, the per-agent list check is skipped."""
-    from robotsix_mill.agents.base import _use_claude_sdk
-
-    s = Settings(llm_backend="openrouter", claude_sdk_agents=["irrelevant"])
-    assert _use_claude_sdk(s, None) is False
+    assert level_uses_claude(3) is True
+    assert level_uses_claude(1) is False
+    assert level_uses_claude(2) is False
 
 
 # ---------------------------------------------------------------------------
@@ -278,39 +221,13 @@ def test_agent_handle_close_is_idempotent():
 
 
 # ---------------------------------------------------------------------------
-# MODEL_TIER_ALIASES
-# ---------------------------------------------------------------------------
-
-
-def test_model_tier_aliases_cheap():
-    """The 'cheap' alias maps to the flash model."""
-    from robotsix_mill.agents.base import _MODEL_TIER_ALIASES
-
-    assert _MODEL_TIER_ALIASES["cheap"] == "deepseek/deepseek-v4-flash"
-
-
-def test_model_tier_aliases_default():
-    """The 'default' alias maps to the pro model."""
-    from robotsix_mill.agents.base import _MODEL_TIER_ALIASES
-
-    assert _MODEL_TIER_ALIASES["default"] == "deepseek/deepseek-v4-pro"
-
-
-def test_model_tier_aliases_normal():
-    """The 'normal' alias maps to the pro model (same as default)."""
-    from robotsix_mill.agents.base import _MODEL_TIER_ALIASES
-
-    assert _MODEL_TIER_ALIASES["normal"] == "deepseek/deepseek-v4-pro"
-
-
-# ---------------------------------------------------------------------------
 # build_agent — DeepSeek path
 # ---------------------------------------------------------------------------
 
 
 def test_build_agent_deepseek_default_path(monkeypatch, settings):
     """build_agent constructs an AgentHandle via _build_deepseek_handle when
-    the backend is openrouter and the agent is not claude_sdk-listed."""
+    the resolved transport is DeepSeek/OpenRouter (levels 1 & 2)."""
     from robotsix_mill.agents import base as bmod
     from robotsix_mill.config import Secrets, _reset_secrets
 
@@ -334,7 +251,7 @@ def test_build_agent_deepseek_default_path(monkeypatch, settings):
     bmod.build_agent(
         settings,
         system_prompt="Test prompt.",
-        model_name="test-model/v1",
+        level=1,
         name="test-agent",
         retries=3,
         output_type=str,
@@ -343,12 +260,14 @@ def test_build_agent_deepseek_default_path(monkeypatch, settings):
 
     assert len(captured_kwargs) == 1
     kw = captured_kwargs[0]
-    assert kw["effective_model"] == "test-model/v1"
+    # level 1 resolves to the flash model via llmio's tier defaults.
+    assert kw["effective_model"] == "deepseek/deepseek-v4-flash"
+    assert kw["level"] == 1
     assert _cfg._secrets.openrouter_api_key == "sk-test"
 
 
-def test_build_agent_resolves_tier_alias(monkeypatch, settings):
-    """build_agent resolves 'cheap' alias to the concrete flash model."""
+def test_build_agent_resolves_level_1_to_flash(monkeypatch, settings):
+    """build_agent level 1 resolves to the concrete flash model."""
     from robotsix_mill.agents import base as bmod
     from robotsix_mill.config import Secrets, _reset_secrets
 
@@ -371,15 +290,15 @@ def test_build_agent_resolves_tier_alias(monkeypatch, settings):
     bmod.build_agent(
         settings,
         system_prompt="Test.",
-        model_name="cheap",
+        level=1,
         tools=[],
     )
 
     assert captured_kwargs[0]["effective_model"] == "deepseek/deepseek-v4-flash"
 
 
-def test_build_agent_resolves_default_alias(monkeypatch, settings):
-    """build_agent resolves 'default' alias to the concrete pro model."""
+def test_build_agent_resolves_level_2_to_pro(monkeypatch, settings):
+    """build_agent level 2 (the default) resolves to the concrete pro model."""
     from robotsix_mill.agents import base as bmod
     from robotsix_mill.config import Secrets, _reset_secrets
 
@@ -402,7 +321,7 @@ def test_build_agent_resolves_default_alias(monkeypatch, settings):
     bmod.build_agent(
         settings,
         system_prompt="Test.",
-        model_name="default",
+        level=2,
         tools=[],
     )
 
@@ -586,14 +505,11 @@ def test_build_agent_missing_api_key_raises(monkeypatch, settings):
 
 
 def test_build_agent_claude_sdk_path(monkeypatch):
-    """When the agent is routed to the Claude SDK, build_agent delegates to
-    robotsix-llmio's ClaudeSDKProvider."""
+    """When the resolved transport is the Claude SDK (level 3), build_agent
+    delegates to robotsix-llmio's ClaudeSDKProvider."""
     from robotsix_mill.agents import base as bmod
 
-    s = Settings(llm_backend="claude_sdk", claude_sdk_agents=[])
-
-    # Make _use_claude_sdk return True.
-    monkeypatch.setattr(bmod, "_use_claude_sdk", lambda *a, **kw: True)
+    s = Settings()
 
     # Mock compose_prompt to avoid yaml/path deps.
     monkeypatch.setattr(bmod, "compose_prompt", lambda *a, **kw: "test prompt")
@@ -620,7 +536,7 @@ def test_build_agent_claude_sdk_path(monkeypatch):
     result = bmod.build_agent(
         s,
         system_prompt="Test prompt.",
-        model_name="anthropic/claude-haiku",
+        level=3,  # level 3 resolves to the Claude SDK transport
         name="claude-agent",
         tools=[],
     )
@@ -629,56 +545,9 @@ def test_build_agent_claude_sdk_path(monkeypatch):
     assert result is fake_claude_handle
     # The provider was constructed.
     fake_claude_provider_cls.assert_called_once()
-    # build_agent was called on the provider.
+    # build_agent was called on the provider, with the level-3 model (opus).
     fake_provider.build_agent.assert_called_once()
-
-
-def test_build_agent_claude_sdk_with_fallback(monkeypatch):
-    """When claude_fallback_to_deepseek is True and an OpenRouter key exists,
-    build_agent wraps the Claude handle in a FallbackAgentHandle."""
-    from robotsix_mill.agents import base as bmod
-    from robotsix_mill.config import Secrets, _reset_secrets
-
-    _reset_secrets()
-    import robotsix_mill.config as _cfg
-
-    _cfg._secrets = Secrets(openrouter_api_key="sk-test")
-
-    s = Settings(
-        llm_backend="claude_sdk",
-        claude_sdk_agents=[],
-        claude_fallback_to_deepseek=True,
-    )
-
-    monkeypatch.setattr(bmod, "_use_claude_sdk", lambda *a, **kw: True)
-    monkeypatch.setattr(bmod, "compose_prompt", lambda *a, **kw: "test prompt")
-
-    fake_claude_handle = MagicMock()
-    fake_provider = MagicMock()
-    fake_provider.build_agent.return_value = fake_claude_handle
-
-    monkeypatch.setattr(
-        "robotsix_llmio.claude_sdk.provider.ClaudeSDKProvider",
-        MagicMock(return_value=fake_provider),
-        raising=False,
-    )
-    monkeypatch.setattr(
-        "robotsix_mill.agents.claude_concurrency.bound_claude_handle",
-        lambda handle, max_concurrency: handle,
-    )
-
-    result = bmod.build_agent(
-        s,
-        system_prompt="Test prompt.",
-        model_name="anthropic/claude-haiku",
-        name="claude-agent",
-        tools=[],
-    )
-
-    # Should be a FallbackAgentHandle, not the raw Claude handle.
-    from robotsix_mill.agents.fallback import FallbackAgentHandle
-
-    assert isinstance(result, FallbackAgentHandle)
+    assert fake_provider.build_agent.call_args.kwargs["model"] == "opus"
 
 
 # ---------------------------------------------------------------------------
@@ -688,7 +557,8 @@ def test_build_agent_claude_sdk_with_fallback(monkeypatch):
 
 def test_build_deepseek_handle_constructs_agent(monkeypatch, settings):
     """_build_deepseek_handle constructs a pydantic-ai Agent with the
-    correct parameters and returns an AgentHandle."""
+    correct parameters and returns an AgentHandle. The model + http client
+    come from llmio via new_deepseek_model."""
     from robotsix_mill.agents import base as bmod
     from robotsix_mill.config import Secrets, _reset_secrets
 
@@ -702,24 +572,17 @@ def test_build_deepseek_handle_constructs_agent(monkeypatch, settings):
     fake_agent_cls = MagicMock(return_value=fake_agent)
     monkeypatch.setattr("pydantic_ai.Agent", fake_agent_cls, raising=False)
 
-    # Mock CostInstrumentedOpenRouterModel (local import from .openrouter_cost).
+    # Mock the llmio model-construction seam → (model, http_client).
     fake_model = MagicMock()
-    fake_model_cls = MagicMock(return_value=fake_model)
-    monkeypatch.setattr(
-        "robotsix_mill.agents.openrouter_cost.CostInstrumentedOpenRouterModel",
-        fake_model_cls,
-    )
-
-    # Mock OpenRouterProvider (local import inside _build_deepseek_handle).
-    fake_provider_cls = MagicMock()
-    monkeypatch.setattr(
-        "pydantic_ai.providers.openrouter.OpenRouterProvider",
-        fake_provider_cls,
-    )
-
-    # Mock timeout_http_client (module-level function in base.py).
     fake_client = MagicMock()
-    monkeypatch.setattr(bmod, "timeout_http_client", lambda s: fake_client)
+    captured_call: dict = {}
+
+    def fake_new_deepseek(model_name, level):
+        captured_call["model_name"] = model_name
+        captured_call["level"] = level
+        return fake_model, fake_client
+
+    monkeypatch.setattr(bmod, "new_deepseek_model", fake_new_deepseek)
 
     fake_tool = MagicMock()
     fake_tool.__name__ = "fake_tool"
@@ -727,6 +590,7 @@ def test_build_deepseek_handle_constructs_agent(monkeypatch, settings):
     handle = bmod._build_deepseek_handle(
         settings,
         effective_model="deepseek/deepseek-v4-flash",
+        level=1,
         composed_system="System prompt.",
         all_tools=[fake_tool],
         output_type=str,
@@ -737,6 +601,8 @@ def test_build_deepseek_handle_constructs_agent(monkeypatch, settings):
     assert isinstance(handle, bmod.AgentHandle)
     assert handle._agent is fake_agent
     assert handle._http_client is fake_client
+    # The model was built from the resolved model name + level.
+    assert captured_call == {"model_name": "deepseek/deepseek-v4-flash", "level": 1}
 
     # Agent was constructed with the right kwargs.
     fake_agent_cls.assert_called_once()
@@ -762,18 +628,13 @@ def test_build_deepseek_handle_with_max_tokens(monkeypatch, settings):
     fake_agent_cls = MagicMock()
     monkeypatch.setattr("pydantic_ai.Agent", fake_agent_cls, raising=False)
     monkeypatch.setattr(
-        "robotsix_mill.agents.openrouter_cost.CostInstrumentedOpenRouterModel",
-        MagicMock(),
+        bmod, "new_deepseek_model", lambda model_name, level: (MagicMock(), MagicMock())
     )
-    monkeypatch.setattr(
-        "pydantic_ai.providers.openrouter.OpenRouterProvider",
-        MagicMock(),
-    )
-    monkeypatch.setattr(bmod, "timeout_http_client", lambda s: MagicMock())
 
     bmod._build_deepseek_handle(
         settings,
         effective_model="deepseek/deepseek-v4-flash",
+        level=1,
         composed_system="System prompt.",
         all_tools=[],
         output_type=str,
@@ -789,7 +650,8 @@ def test_build_deepseek_handle_with_max_tokens(monkeypatch, settings):
 
 
 def test_build_deepseek_handle_requires_api_key(monkeypatch, settings):
-    """_build_deepseek_handle raises RuntimeError when no API key is set."""
+    """_build_deepseek_handle raises RuntimeError when no API key is set —
+    new_deepseek_model guards on the key."""
     from robotsix_mill.agents import base as bmod
     from robotsix_mill.config import _reset_secrets
 
@@ -799,6 +661,7 @@ def test_build_deepseek_handle_requires_api_key(monkeypatch, settings):
         bmod._build_deepseek_handle(
             settings,
             effective_model="deepseek/deepseek-v4-flash",
+            level=1,
             composed_system="System prompt.",
             all_tools=[],
             output_type=str,
@@ -1122,11 +985,9 @@ def test_compose_prompt_unparseable_modules_yaml_no_crash(tmp_path, monkeypatch)
 # ---------------------------------------------------------------------------
 
 
-def test_build_openrouter_model_constructs_cost_instrumented_model(
-    monkeypatch, settings
-):
-    """build_openrouter_model constructs a CostInstrumentedOpenRouterModel
-    with an OpenRouter provider and returns the model + client."""
+def test_build_openrouter_model_resolves_level_to_model(monkeypatch, settings):
+    """build_openrouter_model resolves the level to a concrete model and
+    delegates to new_deepseek_model, returning its (model, client)."""
     from robotsix_mill.agents import base as bmod
     from robotsix_mill.config import Secrets, _reset_secrets
 
@@ -1135,36 +996,43 @@ def test_build_openrouter_model_constructs_cost_instrumented_model(
 
     _cfg._secrets = Secrets(openrouter_api_key="sk-test")
 
-    fake_client = MagicMock()
-    monkeypatch.setattr(bmod, "timeout_http_client", lambda s: fake_client)
-
     fake_model = MagicMock()
-    fake_model_cls = MagicMock(return_value=fake_model)
-    monkeypatch.setattr(
-        "robotsix_mill.agents.openrouter_cost.CostInstrumentedOpenRouterModel",
-        fake_model_cls,
-    )
+    fake_client = MagicMock()
+    captured: dict = {}
 
-    fake_provider = MagicMock()
-    fake_provider_cls = MagicMock(return_value=fake_provider)
-    monkeypatch.setattr(
-        "pydantic_ai.providers.openrouter.OpenRouterProvider",
-        fake_provider_cls,
-    )
+    def fake_new_deepseek(model_name, level):
+        captured["model_name"] = model_name
+        captured["level"] = level
+        return fake_model, fake_client
 
-    model, client = bmod.build_openrouter_model(settings, "test-model")
+    monkeypatch.setattr(bmod, "new_deepseek_model", fake_new_deepseek)
+
+    model, client = bmod.build_openrouter_model(1)
 
     assert model is fake_model
     assert client is fake_client
+    # Level 1 resolves to the flash model via llmio's tier defaults.
+    assert captured == {"model_name": "deepseek/deepseek-v4-flash", "level": 1}
 
-    # Model constructed with model name + provider.
-    fake_model_cls.assert_called_once_with(
-        "test-model",
-        provider=fake_provider,
-    )
 
-    # Provider constructed with the API key + the timeout client.
-    fake_provider_cls.assert_called_once_with(
-        api_key="sk-test",
-        http_client=fake_client,
-    )
+def test_build_openrouter_model_online_appends_suffix(monkeypatch, settings):
+    """When online=True, the resolved model carries the ``:online`` suffix
+    that bills the OpenRouter web-search surcharge."""
+    from robotsix_mill.agents import base as bmod
+    from robotsix_mill.config import Secrets, _reset_secrets
+
+    _reset_secrets()
+    import robotsix_mill.config as _cfg
+
+    _cfg._secrets = Secrets(openrouter_api_key="sk-test")
+
+    captured: dict = {}
+
+    def fake_new_deepseek(model_name, level):
+        captured["model_name"] = model_name
+        return MagicMock(), MagicMock()
+
+    monkeypatch.setattr(bmod, "new_deepseek_model", fake_new_deepseek)
+
+    bmod.build_openrouter_model(1, online=True)
+    assert captured["model_name"] == "deepseek/deepseek-v4-flash:online"

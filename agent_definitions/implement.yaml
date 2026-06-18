@@ -8,7 +8,7 @@ description: >-
 
 category: pipeline
 
-model: "${MILL_MODEL}"
+level: 2
 
 tools:
   - explore

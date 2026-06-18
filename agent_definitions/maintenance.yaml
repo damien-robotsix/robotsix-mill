@@ -8,7 +8,7 @@ description: >-
 
 category: pipeline
 
-model: "${MILL_REFINE_MODEL}"
+level: 2
 
 # Tools are listed for documentation; the agent module builds and
 # passes the actual tool callables at runtime.

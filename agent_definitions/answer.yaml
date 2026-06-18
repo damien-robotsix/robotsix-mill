@@ -9,7 +9,7 @@ description: >-
 
 category: interactive
 
-model: "${MILL_ANSWER_MODEL}"
+level: 2
 
 tools:
   - explore

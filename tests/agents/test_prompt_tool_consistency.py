@@ -13,10 +13,9 @@ agents (covering runtime-injected prompt sections, not just the YAML
 from __future__ import annotations
 
 import pydantic_ai
-import pydantic_ai.providers.openrouter as orp
 import pytest
 
-from robotsix_mill.agents import openrouter_cost as oc
+from robotsix_mill.agents import base as bmod
 from robotsix_mill.agents.prompt_tool_consistency import (
     call_directive_tools,
     unregistered_call_directives,
@@ -127,10 +126,11 @@ def test_build_agent_allows_disclaimer_mention(tmp_path, monkeypatch):
     from robotsix_mill.agents import base
 
     s = _settings(tmp_path)
-    # Stop right after the guard so we don't need a real backend.
+    # Stop right after the guard so we don't need a real backend. Default
+    # level (2) resolves to the DeepSeek transport, so patching the
+    # DeepSeek handle builder is enough.
     sentinel = object()
     monkeypatch.setattr(base, "_build_deepseek_handle", lambda *a, **k: sentinel)
-    monkeypatch.setattr(base, "_use_claude_sdk", lambda *a, **k: False)
 
     handle = base.build_agent(
         s,
@@ -148,10 +148,6 @@ def _capture(monkeypatch, output_obj):
     in-process, and capture the resolved system prompt, resolved tool
     names, and the user prompt(s) passed to ``run_sync``."""
     captured: dict = {}
-
-    class FakeModel:
-        def __init__(self, name, **kw):
-            pass
 
     class FakeResponse:
         finish_reason = "stop"
@@ -183,8 +179,20 @@ def _capture(monkeypatch, output_obj):
             pass
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        bmod, "new_deepseek_model", lambda model_name, level: (object(), object())
+    )
+    # Force the DeepSeek (pydantic-ai) transport for ALL levels so the
+    # FakeAgent above intercepts the build. refine is level 3 (Claude SDK)
+    # which would otherwise bypass pydantic_ai.Agent and spawn a real
+    # subprocess. Tool injection — what these tests assert — is
+    # transport-independent, so this keeps the check meaningful while
+    # staying hermetic.
+    monkeypatch.setattr(
+        bmod,
+        "_resolve_level",
+        lambda level: ("openrouter[deepseek]", "deepseek/deepseek-v4-flash"),
+    )
     return captured
 
 

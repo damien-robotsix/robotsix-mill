@@ -102,7 +102,7 @@ def run_epic_status_agent(
 
     The agent is constructed via :func:`~.base.build_agent` with
     ``PromptedOutput(EpicStatusResult)``, ``web=False``,
-    ``report_issue=False``, and ``model_name=settings.audit_model``.
+    ``report_issue=False``, and the epic_status definition's ``level: 1``.
 
     Execution is wrapped in :func:`~.retry.call_with_retry` for
     transient/rate-limit resilience.
@@ -123,7 +123,6 @@ def run_epic_status_agent(
         settings=settings,
         definition_name="epic_status",
         tools=[],
-        model_name=settings.audit_model,
         prompt=prompt,
         what="epic-status",
     )

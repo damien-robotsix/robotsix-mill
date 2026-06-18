@@ -224,13 +224,13 @@ def test_unexpected_model_behavior_fallback_success(
 
     out = _call(settings, tmp_path)
 
-    # Primary call: no model_name
+    # Primary call: no level override
     assert len(primary_calls) == 1
-    assert primary_calls[0].get("model_name") is None
+    assert primary_calls[0].get("level") is None
 
-    # Fallback call: model_name="deepseek/deepseek-v4-flash"
+    # Fallback call: level=1 (cheaper flash model)
     assert len(fallback_calls) == 1
-    assert fallback_calls[0].get("model_name") == "deepseek/deepseek-v4-flash"
+    assert fallback_calls[0].get("level") == 1
 
     # Returns normally
     assert out[0] == "fallback ok"

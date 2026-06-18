@@ -95,16 +95,12 @@ _MODEL_FIELDS_NOT_IN_ALIAS: frozenset[str] = frozenset(
         "board_agent_write_ops",
         # -- Fields with explicit MILL_ prefix alias (env-only) --
         "claude_max_concurrency",
-        "claude_fallback_to_deepseek",
         "investigation_workspace",
         # -- Fields with no YAML entry (yet) — listed here so the
         #    invariant passes at HEAD; each should eventually gain a
         #    YAML path or be explicitly documented as env-only --
         # core: models / limits / operational
         "parallel_explore_max",
-        "no_change_model",
-        "bespoke_default_model",
-        "web_knowledge_model",
         "web_knowledge_stale_days",
         "web_knowledge_request_limit",
         "subtask_request_limit",
@@ -125,7 +121,6 @@ _MODEL_FIELDS_NOT_IN_ALIAS: frozenset[str] = frozenset(
         "delete_branch_on_merge",
         "review_diff_max_chars",
         "review_output_token_budget",
-        "trace_review_model",
         "trace_review_cost_multiplier",
         "trace_review_obs_multiplier",
         "trace_review_max_repeated_tool",
@@ -157,7 +152,6 @@ _MODEL_FIELDS_NOT_IN_ALIAS: frozenset[str] = frozenset(
         "lint_on_edit",
         "scope_triage_enabled",
         "pr_summary_enabled",
-        "pr_summary_model",
         "repo_visibility_default",
         "scope_triage_max_files",
         "retrospect_spawn_agented_proposals",

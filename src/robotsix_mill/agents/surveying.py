@@ -34,7 +34,6 @@ def _survey_dynamic_kwargs(settings: Settings) -> dict[str, Any]:
 
 run_survey_agent = make_agent_runner(
     definition_name="survey",
-    model_attr="survey_model",
     prompt_tail="Survey similar open-source projects and return your proposals.",
     max_gaps=MAX_GAPS,
     include_forge_url=True,

@@ -381,7 +381,6 @@ def test_run_survey_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
 def test_survey_config_defaults():
     """Survey config has correct defaults."""
     s = Settings()
-    assert s.survey_model == "deepseek/deepseek-v4-flash"
     assert s.survey_periodic is True
     assert s.survey_interval_seconds == 86400
     assert s.survey_memory_path is None

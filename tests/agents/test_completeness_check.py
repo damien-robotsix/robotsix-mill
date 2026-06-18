@@ -323,16 +323,9 @@ def test_run_completeness_check_pass_skips_empty_title_or_body(tmp_path, monkeyp
 def test_completeness_check_config_defaults():
     """Completeness-check config has correct defaults."""
     s = Settings()
-    assert s.completeness_check_model == "deepseek/deepseek-v4-flash"
     assert s.completeness_check_periodic is True
     assert s.completeness_check_interval_seconds == 86400
     assert s.completeness_check_memory_path is None
-
-
-def test_completeness_check_config_custom_model():
-    """Completeness-check model can be overridden via env."""
-    s = Settings(completeness_check_model="anthropic/claude-sonnet-4")
-    assert s.completeness_check_model == "anthropic/claude-sonnet-4"
 
 
 def test_completeness_check_memory_file_default(tmp_path):

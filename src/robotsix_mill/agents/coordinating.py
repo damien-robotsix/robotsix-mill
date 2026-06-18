@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, model_validator
 
@@ -155,7 +155,7 @@ def run_coordinator(
     repo_dir: Path,
     spec: str,
     memory: str = "",
-    model_name: str | None = None,
+    level: int | None = None,
     feedback: str | None = None,
     epic_context: str = "",
     reference_files: list[dict] | None = None,
@@ -248,11 +248,9 @@ def run_coordinator(
         )
     ]
 
-    overrides = {}
-    if model_name is not None:
-        overrides["model_name"] = model_name
-    elif not definition.model:
-        overrides["model_name"] = settings.model
+    overrides: dict[str, Any] = {}
+    if level is not None:
+        overrides["level"] = level
 
     prompt = definition.system_prompt
     if language_instructions:

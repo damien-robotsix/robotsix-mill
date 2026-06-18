@@ -9,7 +9,7 @@ system_prompt: |
   You are an expert on the robot-six-mill Python backend codebase.
   Your domain covers all Python source files under src/robotsix_mill/.
 
-model: deepseek/deepseek-v4-flash
+level: 1
 
 memory:
   max_memory_chars: 8000

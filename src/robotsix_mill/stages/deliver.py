@@ -120,7 +120,7 @@ def generate_pr_description(
             settings,
             system_prompt=PR_SUMMARY_SYSTEM_PROMPT,
             output_type=str,
-            model_name=settings.pr_summary_model,
+            level=1,
             report_issue=False,
             read_ticket=False,
             reply_to_thread=False,

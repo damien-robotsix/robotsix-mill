@@ -23,7 +23,6 @@ HealthResult = PeriodicAgentResult
 
 run_health_agent = make_agent_runner(
     definition_name="health",
-    model_attr="health_model",
     prompt_tail="Perform the health inspection and return your result.",
     max_gaps=MAX_GAPS,
     include_forge_url=True,

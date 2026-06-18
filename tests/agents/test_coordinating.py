@@ -181,7 +181,7 @@ class TestRunCoordinator:
             reply_to_thread=True,
             close_thread=True,
             ask_user=True,
-            model_name=None,
+            level=2,
             name=None,
             retries=2,
             skills=None,
@@ -195,7 +195,7 @@ class TestRunCoordinator:
             self.captured["tools"] = tools
             self.captured["web_knowledge"] = web_knowledge
             self.captured["name"] = name
-            self.captured["model_name"] = model_name
+            self.captured["level"] = level
             self.captured["repo_dir"] = repo_dir
             self.captured["board_id"] = board_id
 
@@ -645,25 +645,26 @@ class TestRunCoordinator:
         up = mh[0].parts[0]
         assert "assertion failed in test_z" in up.content
 
-    # -- model_name ------------------------------------------------------
+    # -- level -----------------------------------------------------------
 
-    def test_explicit_model_name_forwarded(self, settings, tmp_path):
-        """Explicit ``model_name`` is passed to ``build_agent``."""
+    def test_explicit_level_forwarded(self, settings, tmp_path):
+        """Explicit ``level`` is passed to ``build_agent``."""
         self._run(
             settings,
             tmp_path,
-            model_name="anthropic/sonnet",
+            level=1,
         )
-        assert self.captured["model_name"] == "anthropic/sonnet"
+        assert self.captured["level"] == 1
 
-    def test_model_name_none_uses_settings_model(
+    def test_level_none_uses_build_agent_default(
         self,
         settings,
         tmp_path,
     ):
-        """When ``model_name`` is None, ``settings.model`` is used."""
-        self._run(settings, tmp_path, model_name=None)
-        assert self.captured["model_name"] == settings.model
+        """When ``level`` is None, run_coordinator passes no override and
+        build_agent applies its default level (2)."""
+        self._run(settings, tmp_path, level=None)
+        assert self.captured["level"] == 2
 
     # -- fixed build_agent args ------------------------------------------
 

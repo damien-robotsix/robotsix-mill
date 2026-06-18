@@ -65,7 +65,6 @@ def run_ask_to_ticket_agent(
         settings=settings,
         definition_name="ask_to_ticket",
         tools=tools,
-        model_name=settings.ask_to_ticket_model,
         prompt=user_prompt,
         what="ask_to_ticket",
         # Wrap in PromptedOutput (free-text JSON) rather than passing the

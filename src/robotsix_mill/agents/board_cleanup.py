@@ -93,7 +93,6 @@ def run_board_cleanup_agent(
         settings,
         definition,
         tools=tools,
-        model_name=definition.model or settings.board_cleanup_model,
         system_prompt=system_prompt,
     )
     verified_block = ("\n\n" + verified_proposals) if verified_proposals else ""

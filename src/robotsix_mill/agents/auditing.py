@@ -32,7 +32,6 @@ def _audit_dynamic_kwargs(settings: Settings) -> dict[str, Any]:
 
 run_audit_agent = make_agent_runner(
     definition_name="audit",
-    model_attr="audit_model",
     prompt_tail="Perform the audit and return your result.",
     max_gaps=MAX_GAPS,
     include_forge_url=True,

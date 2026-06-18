@@ -797,7 +797,6 @@ def test_codeql_fp_triage_agent_wiring_smoke(monkeypatch):
 
     s = Settings(
         data_dir="/tmp/test_triage",
-        model="test-model",
     )
     # Wire Secrets so get_secrets().openrouter_api_key is not None.
     from robotsix_mill.config import Secrets, _reset_secrets

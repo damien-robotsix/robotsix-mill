@@ -119,7 +119,7 @@ def test_create_expert_builds_agent(monkeypatch):
     definition = _make_definition(
         domain="python-backend",
         system_prompt="Expert in Python backend.",
-        model="anthropic/claude-sonnet",
+        level=3,
         skills=["board"],
         tools=["explore", "read_file", "list_dir", "run_command"],
     )
@@ -132,7 +132,7 @@ def test_create_expert_builds_agent(monkeypatch):
 
     kwargs = state["captured"][0]
     assert kwargs["system_prompt"] == "Expert in Python backend."
-    assert kwargs["model_name"] == "anthropic/claude-sonnet"
+    assert kwargs["level"] == 3
     assert kwargs["skills"] == ["board"]
     assert kwargs["name"] == "expert:python-backend"
 
@@ -479,57 +479,41 @@ def test_load_definitions_defaults_to_expert_definitions(monkeypatch):
     assert result["python-backend"].domain == "python-backend"
 
 
-# ── model fallback ───────────────────────────────────────────────────
+# ── level resolution ─────────────────────────────────────────────────
 
 
-def test_model_fallback_empty_string(monkeypatch):
-    """When definition.model is '' (default), settings.model is used."""
+def test_level_default_field(monkeypatch):
+    """When definition.level is not set, it defaults to 2 and is forwarded
+    to build_agent (no more settings.model fallback)."""
     from robotsix_mill.agents.expert_manager import ExpertManager
 
     state = _patch_build_agent(monkeypatch)
     _patch_build_fs_tools(monkeypatch)
 
-    settings = Settings(model="test/coordinator-model")
+    settings = Settings()
     mgr = ExpertManager(settings, Path("/tmp/test-repo"))
 
-    definition = _make_definition(model="")
+    # Don't pass level — rely on ExpertDefinition default (2).
+    definition = _make_definition()
     mgr.create_expert(definition)
 
-    assert state["captured"][0]["model_name"] == "test/coordinator-model"
+    assert state["captured"][0]["level"] == 2
 
 
-def test_model_explicit_overrides_settings(monkeypatch):
-    """Explicit definition.model takes precedence over settings.model."""
+def test_level_explicit(monkeypatch):
+    """An explicit definition.level is forwarded verbatim to build_agent."""
     from robotsix_mill.agents.expert_manager import ExpertManager
 
     state = _patch_build_agent(monkeypatch)
     _patch_build_fs_tools(monkeypatch)
 
-    settings = Settings(model="test/coordinator-model")
+    settings = Settings()
     mgr = ExpertManager(settings, Path("/tmp/test-repo"))
 
-    definition = _make_definition(model="anthropic/claude-opus")
+    definition = _make_definition(level=3)
     mgr.create_expert(definition)
 
-    assert state["captured"][0]["model_name"] == "anthropic/claude-opus"
-
-
-def test_model_fallback_default_field(monkeypatch):
-    """When definition.model is not set at all (uses default ''), fallback
-    to settings.model."""
-    from robotsix_mill.agents.expert_manager import ExpertManager
-
-    state = _patch_build_agent(monkeypatch)
-    _patch_build_fs_tools(monkeypatch)
-
-    settings = Settings(model="fallback/model")
-    mgr = ExpertManager(settings, Path("/tmp/test-repo"))
-
-    # Don't pass model at all — rely on ExpertDefinition default ("").
-    definition = _make_definition()  # model defaults to ""
-    mgr.create_expert(definition)
-
-    assert state["captured"][0]["model_name"] == "fallback/model"
+    assert state["captured"][0]["level"] == 3
 
 
 # ── _safe_close integration ──────────────────────────────────────────

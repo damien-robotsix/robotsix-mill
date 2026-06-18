@@ -189,8 +189,7 @@ def run_config_sync_agent(
     runs in a read-only reasoning mode (no repo access).
 
     The agent is constructed via :func:`~.base.build_agent` with
-    ``web=False`` (only reads local files), and
-    ``model_name=settings.config_sync_model``.
+    ``web=False`` (only reads local files), and ``level=1``.
 
     Execution is wrapped in :func:`~.retry.call_with_retry`, which
     handles transient network/model failures (exponential backoff:
@@ -229,7 +228,7 @@ def run_config_sync_agent(
         web_knowledge=False,
         report_issue=False,
         read_ticket=True,
-        model_name=settings.config_sync_model,
+        level=1,
         name="config-sync",
         repo_dir=repo_dir,  # confine SDK built-in edits to the workspace clone
     )

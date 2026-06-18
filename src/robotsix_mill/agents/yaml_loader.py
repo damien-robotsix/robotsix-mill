@@ -1,8 +1,9 @@
 """YAML loader for agent definitions.
 
-Parses ``agent_definitions/<name>.yaml``, resolves ``${ENV_VAR}``
-references in the ``model`` field, validates the result against the
-``AgentDefinition`` Pydantic model, and returns a structured object.
+Parses ``agent_definitions/<name>.yaml``, validates the result against the
+``AgentDefinition`` Pydantic model, and returns a structured object. Each
+definition declares a capability ``level`` (1/2/3) that ``build_agent``
+resolves to a ``(transport, model)`` via llmio's tier defaults.
 
 This module is independent of the agent runtime (``build_agent``,
 ``Settings``, ``pydantic_ai``) — it only depends on ``pydantic``
@@ -13,12 +14,10 @@ and the stdlib-only ``core.duration`` helper for the human-readable
 
 from __future__ import annotations
 
-import os
-import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..core.duration import parse_duration
 
@@ -39,7 +38,10 @@ class AgentDefinition(BaseModel):
     name: str
     description: str | None = None
     category: str | None = None
-    model: str
+    # Capability level (1/2/3) → resolved to (transport, model) by build_agent
+    # via llmio's tier defaults: L1 DeepSeek flash, L2 DeepSeek pro, L3 Claude
+    # opus. Replaces the old provider-specific ``model`` field.
+    level: int = Field(ge=1, le=3)
     system_prompt: str
     tools: list[str] = []
     # Single web/library knowledge gateway. When True the agent gets
@@ -91,26 +93,8 @@ class AgentDefinition(BaseModel):
         return self
 
 
-# Only bare ``${VAR}`` — the existing YAML does not use defaults or nesting.
-_ENV_VAR_RE = re.compile(r"\$\{([^{}]+)\}")
-
-
-def _resolve_env_vars(raw: str) -> str:
-    """Replace ``${VAR}`` placeholders in *raw* with their values from
-    ``os.environ``.  Returns ``""`` for unset variables — the caller
-    (``build_agent``) then falls back to ``settings.model`` when
-    ``model_name`` is falsy.
-    """
-
-    def _replacer(m: re.Match[str]) -> str:
-        var = m.group(1)
-        return os.environ.get(var, "")
-
-    return _ENV_VAR_RE.sub(_replacer, raw)
-
-
 def load_agent_definition(path: Path) -> AgentDefinition:
-    """Parse, validate, and env-resolve an agent YAML definition.
+    """Parse and validate an agent YAML definition.
 
     ``path`` must point to a YAML file whose top-level keys map to
     ``AgentDefinition`` fields.
@@ -123,8 +107,6 @@ def load_agent_definition(path: Path) -> AgentDefinition:
         ``yaml.YAMLError`` — the file is not valid YAML.
         ``pydantic.ValidationError`` — a required field is missing,
             a value has the wrong type, or an unknown key is present.
-        ``KeyError`` — the ``model`` field references an
-            environment variable that is not set.
     """
     import yaml
 
@@ -135,10 +117,6 @@ def load_agent_definition(path: Path) -> AgentDefinition:
         raise yaml.YAMLError(
             f"Expected a top-level mapping in {path}, got {type(data).__name__}"
         )
-
-    # Env-var resolution: only the ``model`` field.
-    if "model" in data and isinstance(data["model"], str):
-        data["model"] = _resolve_env_vars(data["model"])
 
     return AgentDefinition.model_validate(data)
 
@@ -180,7 +158,7 @@ def load_and_run_agent(
     settings: "Settings",
     definition_name: str,
     tools: list | None = None,
-    model_name: str | None = None,
+    level: int | None = None,
     prompt: str,
     what: str,
     repo_dir: Path | None = None,
@@ -204,7 +182,7 @@ def load_and_run_agent(
         definition_name: YAML file name under ``agent_definitions/``,
             e.g. ``"scope_triage"`` or ``"periodic/module_curator"``.
         tools: Tool list for the agent (default ``[]``).
-        model_name: Override model name (default ``definition.model``).
+        level: Override capability level (default ``definition.level``).
         prompt: The user prompt passed to ``h.run_sync(prompt, **run_kwargs)``.
         what: Human-readable label for retry log messages.
         repo_dir: Optional repo clone directory (passed through to
@@ -238,7 +216,7 @@ def load_and_run_agent(
         settings,
         definition,
         tools=tools or [],
-        model_name=model_name or definition.model,
+        level=level if level is not None else definition.level,
         repo_dir=repo_dir,
         **build_overrides,
     )

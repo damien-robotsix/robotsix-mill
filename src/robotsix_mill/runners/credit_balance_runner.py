@@ -4,8 +4,8 @@ Queries ``GET https://openrouter.ai/api/v1/credits``, computes
 ``remaining = total_credits - total_usage``, and sets or clears the
 board-level low-credit warning via :mod:`~robotsix_mill.runtime.credit_status`.
 
-Skips silently when no OpenRouter key is configured (the mill may be
-running ``llm_backend: claude_sdk``).  On API failure the warning state
+Skips silently when no OpenRouter key is configured (a deployment may run
+only level-3 / Claude SDK agents).  On API failure the warning state
 is left unchanged — only successful polls and the reactive 402 path
 mutate it.
 

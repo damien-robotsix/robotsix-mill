@@ -201,7 +201,7 @@ def _install_mocks(monkeypatch):
     monkeypatch.setattr(
         yaml_loader_mod,
         "load_agent_definition",
-        MagicMock(return_value=type("D", (), {"model": None})()),
+        MagicMock(return_value=type("D", (), {"level": 2})()),
     )
     monkeypatch.setattr(base_mod, "_safe_close", lambda agent: None)
     return base_mod, retry_mod
@@ -215,9 +215,9 @@ def test_run_answer_agent_without_repo_dir(tmp_path, monkeypatch):
 
     cap = {}
 
-    def fake_build_agent(settings, definition, tools, model_name, repo_dir=None, **kw):
+    def fake_build_agent(settings, definition, tools, level, repo_dir=None, **kw):
         cap["tools"] = sorted(t.__name__ for t in tools)
-        cap["model"] = model_name
+        cap["level"] = level
 
         class FakeAgent:
             def run_sync(self, prompt):
@@ -272,9 +272,9 @@ def test_run_answer_agent_with_repo_dir(tmp_path, monkeypatch):
 
     cap = {}
 
-    def fake_build_agent(settings, definition, tools, model_name, repo_dir=None, **kw):
+    def fake_build_agent(settings, definition, tools, level, repo_dir=None, **kw):
         cap["tools"] = sorted(t.__name__ for t in tools)
-        cap["model"] = model_name
+        cap["level"] = level
 
         class FakeAgent:
             def run_sync(self, prompt):

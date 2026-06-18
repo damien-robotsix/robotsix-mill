@@ -15,67 +15,24 @@ from pydantic import BaseModel, Field
 class _CoreSettings(BaseModel):
     # --- core ---
     openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
-    # Per-agent models. Each role gets its own model (env-overridable):
-    #  - `model`        : the COORDINATOR (capable). Explores via the
-    #                     cheap explore sub-agent, drafts a plan,
-    #                     delegates coding to the implement sub-agent
-    #                     with precise instructions, gets distilled test
-    #                     feedback, and loops. Keeps a short history by
-    #                     never holding raw files/logs itself.
-    #    (it reads + edits the repo itself; uses MILL_MODEL.)
-    #  - explore_model  : the scout sub-agent — returns concise
-    #                     pointers, never whole files (cheap).
-    #  - web_research_model : web lookups (cheap).
-    #  - test_model     : distills test failures into actionable
-    #                     feedback (cheap).
-    #  - refine_model   : spec authoring (capable; may web_research).
-    #  - answer_model   : investigative analyst (capable; web + repo +
-    #                     Langfuse tools).
-    #  - audit_model    : structured quality/security analysis (cheap).
-    #  - retrospect_model : extractive summarise/extract-lessons over a
-    #                     finished ticket (cheap/flash — not deep reasoning).
-    # Transient 429/5xx/timeouts on any of these are absorbed by the
-    # bounded retry+backoff (see transient_* below).
+    # Per-agent model selection is driven by each agent definition's
+    # ``level: 1|2|3`` field, resolved to a (transport, model) by
+    # ``build_agent`` via llmio's tier defaults. Transient 429/5xx/timeouts
+    # are absorbed by the bounded retry+backoff (see transient_* below).
     #
-    # --- LLM backend toggle (DeepSeek ↔ Claude SDK) ----------------------
-    # REVERSIBLE provider selection. Default "deepseek" keeps the proven
-    # OpenRouter/DeepSeek path for every agent. Set ``llm_backend:
-    # claude_sdk`` to route ALL agents through the robotsix-llmio Claude
-    # Agent SDK transport (subscription auth, no API key; tier→model
-    # opus/haiku), or list specific agent names in ``claude_sdk_agents``
-    # to route only those while everything else stays on DeepSeek.
-    # Reverting is a config flip + restart — no code change. The Claude SDK
-    # path needs Node + the ``claude`` CLI (logged in) in the container;
-    # the *_model fields below still drive DeepSeek and only pick the tier
-    # (pro→DEFAULT/opus, flash→CHEAP/haiku) when Claude SDK is selected.
-    llm_backend: str = Field(default="deepseek")
-    claude_sdk_agents: list[str] = Field(default_factory=list)
-    # Agent names that should use DeepSeek as the PRIMARY model even when
-    # ``llm_backend`` or ``claude_sdk_agents`` would otherwise route them
-    # through the Claude SDK. The Claude SDK is still built lazily as a
-    # FALLBACK (DeepSeek → Claude, the reverse of the default
-    # Claude → DeepSeek direction). Only takes effect for agents that ARE
-    # Claude-routed by the global backend or claude_sdk_agents list; on a
-    # pure-DeepSeek deployment this list is a no-op (the agents already
-    # run on DeepSeek with no Claude fallback).
-    deepseek_agents: list[str] = Field(default_factory=list)
+    # --- Capability levels (llmio tier defaults) -------------------------
+    # Per-agent model selection lives entirely in the agent definitions'
+    # ``level: 1|2|3`` field (resolved to a (transport, model) by
+    # ``build_agent`` via llmio's baked tier defaults — L1 DeepSeek flash,
+    # L2 DeepSeek pro, L3 Claude Opus). There is no global backend toggle.
+    #
     # Process-wide cap on how many Claude Agent SDK runs may execute at once.
     # Each run spawns a ``claude`` CLI subprocess; spawning many simultaneously
     # (worker startup contention) can stall a run. A global semaphore (see
     # ``agents.claude_concurrency``) bounds concurrent runs to smooth the spawn
-    # storm. Only takes effect when ``llm_backend``/``claude_sdk_agents`` routes
-    # work to the Claude SDK; the DeepSeek path is unaffected. Must be ≥ 1.
+    # storm. Applies to level-3 (Claude SDK) agents. Must be ≥ 1.
     claude_max_concurrency: int = Field(
         default=4, alias="MILL_CLAUDE_MAX_CONCURRENCY", ge=1
-    )
-    # Resilience: when a Claude-SDK agent run terminally fails (after its local
-    # retries are exhausted), fall back to the equivalent DeepSeek/OpenRouter
-    # build of the same agent. Only takes effect for Claude-routed agents AND
-    # when an OpenRouter key is configured (no key → no fallback, unchanged).
-    # The fallback uses the same tier-resolved model the agent would have run on
-    # DeepSeek. Set False to make a Claude failure surface directly.
-    claude_fallback_to_deepseek: bool = Field(
-        default=True, alias="MILL_CLAUDE_FALLBACK_TO_DEEPSEEK"
     )
     # Capability gate for inline-image (vision) input on the Claude SDK
     # transport. Default False: the installed robotsix-llmio claude_sdk
@@ -87,41 +44,10 @@ class _CoreSettings(BaseModel):
     # once the bridge gains real image-input support (which also needs a
     # robotsix-llmio pin bump) to re-enable inline vision.
     claude_sdk_vision_enabled: bool = Field(default=False)
-    model: str = Field(default="deepseek/deepseek-v4-pro")
-    explore_model: str = Field(default="deepseek/deepseek-v4-flash")
     # Max concurrent scouts a single ``parallel_explore`` fan-out runs. Each
     # scout may spin a sandbox container (~sandbox_memory each), so this
     # bounds peak resource use while letting long splittable work parallelise.
     parallel_explore_max: int = Field(default=4, ge=1)
-    test_model: str = Field(default="deepseek/deepseek-v4-pro")
-    refine_model: str = Field(default="deepseek/deepseek-v4-pro")
-    # Model for implement agent runs where the task is likely a no-change
-    # investigation (the previous pass returned ``no_change_needed=True``
-    # or the feedback indicates no edits are needed). Flash-class keeps
-    # these re-check / resume passes cheap.
-    no_change_model: str = Field(default="deepseek/deepseek-v4-flash")
-    answer_model: str = Field(default="deepseek/deepseek-v4-pro")
-    ask_to_ticket_model: str = Field(default="deepseek/deepseek-v4-pro")
-    retrospect_model: str = Field(default="deepseek/deepseek-v4-flash")
-    audit_model: str = Field(default="deepseek/deepseek-v4-flash")
-    # Default model for bespoke per-repo periodic agents loaded from
-    # ``<clone>/.robotsix-mill/agents/<name>.yaml``. Each bespoke YAML
-    # may override via its own ``model:`` field. Flash-class is the
-    # default — bespoke agents are typically narrow standing checkers,
-    # not deep reasoners.
-    bespoke_default_model: str = Field(
-        default="deepseek/deepseek-v4-flash",
-    )
-    # Model for the web_knowledge gateway sub-agent — a multi-turn
-    # flash agent that owns the per-repo Markdown knowledge base
-    # (per-library .md files + a cross-library _general.md) AND a
-    # web_search tool, and decides autonomously which to use. Every
-    # parent-agent route to the internet now goes through it, so the
-    # knowledge base accumulates instead of fragmenting and cost
-    # attribution for web hits stays in one place.
-    web_knowledge_model: str = Field(
-        default="deepseek/deepseek-v4-flash",
-    )
     # How long a cached web_knowledge .md file is considered fresh
     # (days). A consultation that hits a stale file is allowed to
     # web_search and update the file.
@@ -134,28 +60,6 @@ class _CoreSettings(BaseModel):
     web_knowledge_request_limit: int = Field(
         default=8,
     )
-    # Model for the pre-refine dedup/already-done check — a cheap call
-    # that short-circuits duplicate drafts before the expensive refiner.
-    dedup_model: str = Field(default="deepseek/deepseek-v4-flash")
-    # Model for the pre-refine obsolescence gate — a cheap call that
-    # re-evaluates whether a spawned follow-up draft's cited gap was
-    # already resolved in place by a parallel/parent ticket.
-    obsolescence_model: str = Field(default="deepseek/deepseek-v4-flash")
-    # Model for the pre-refine triage pass — a single cheap call that
-    # decides whether the draft needs refinement at all.  Must be a
-    # fast, inexpensive model; classification is the only task.
-    triage_model: str = Field(default="deepseek/deepseek-v4-flash")
-    # Model for the scope-violation triage agent — a cheap call that
-    # decides whether changed-out-of-scope files are legitimate
-    # expansions or scope creep. Must be fast and inexpensive.
-    scope_triage_model: str = Field(default="deepseek/deepseek-v4-flash")
-    # Model for the META repo-triage call (meta.triage.required_repos_for) —
-    # decides which registered repo(s) a meta-board proposal targets. This is
-    # a consequential ROUTING decision (a wrong pick delivers the work to the
-    # wrong repo, which then closes it as "not applicable"), so it runs on the
-    # CAPABLE tier, not flash. Decoupled from module_curator_model (a cheap
-    # periodic agent it previously, accidentally, shared).
-    meta_triage_model: str = Field(default="deepseek/deepseek-v4-pro")
     # Per-call request caps (bound each role's loop). Sized for slow
     # deepseek-v4-pro + complex tickets: a medium ticket (53de) used
     # ~49 implement calls, so 200 leaves generous headroom; raising it
@@ -193,7 +97,8 @@ class _CoreSettings(BaseModel):
     # tickets push higher. 900s comfortably clears that while still
     # bounding a real hang. On timeout the call raises -> transient ->
     # retry/backoff rides it out (or it BLOCKs visibly).
-    model_request_timeout: float = Field(default=900.0, gt=0)
+    # NOTE: the per-request HTTP timeout is now owned by llmio
+    # (``MODEL_REQUEST_TIMEOUT`` = 900s); the mill no longer overrides it.
 
     # --- OpenRouter credit-balance warning ---
     # Board-level low-credit banner: when the OpenRouter balance drops
@@ -228,14 +133,9 @@ class _CoreSettings(BaseModel):
     network_outage_retry_seconds: int = Field(default=120, ge=1)
     # Backoff for UsageLimitExceeded (pydantic-ai budget cap).  These
     # are longer than transient backoff because OpenRouter/provider
-    # rate-limit windows are typically ~60s.  When
-    # rate_limit_fallback_model is set, call_with_retry switches to
-    # that model after rate_limit_fallback_retries consecutive
-    # UsageLimitExceeded failures.
+    # rate-limit windows are typically ~60s.
     rate_limit_backoff_base: float = Field(default=30.0, gt=0)
     rate_limit_backoff_cap: float = Field(default=120.0, gt=0)
-    rate_limit_fallback_retries: int = Field(default=3, ge=0)
-    rate_limit_fallback_model: str = Field(default="")
     # Per-call cap for the read-only exploration sub-agent the
     # coordinator uses instead of reading the repo into its own context.
     # Per-call cap for the domain-expert consultation sub-agent the
@@ -303,8 +203,6 @@ class _CoreSettings(BaseModel):
     # tool errors.
     refine_max_errors: int = Field(default=20, ge=0)
     doc_request_limit: int = Field(default=8)
-    # Cheap classifier gate that runs *before* the full doc agent.
-    doc_classifier_model: str = Field(default="deepseek/deepseek-v4-flash")
     doc_classifier_request_limit: int = Field(default=3)
     # Caps the git diff fed to the cheap doc-classifier gate. Truncation
     # is safe here: the classifier is conservatively biased toward

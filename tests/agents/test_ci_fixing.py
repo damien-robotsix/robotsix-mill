@@ -4,7 +4,6 @@ import pydantic_ai
 import pydantic_ai.providers.openrouter as orp
 import pytest
 
-from robotsix_mill.agents import openrouter_cost as oc
 from robotsix_mill.agents.ci_fixing import CiFixResult, run_ci_fix_agent
 from robotsix_mill.agents.ci_patterns import CiPatternEntry
 from robotsix_mill.config import Settings, Secrets, _reset_secrets
@@ -44,7 +43,10 @@ def fake_ai(monkeypatch):
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        "robotsix_mill.agents.base.new_deepseek_model",
+        lambda model_name, level: (FakeModel(model_name), object()),
+    )
     return box
 
 
@@ -122,7 +124,10 @@ def test_out_of_scope_skips_pattern_persistence(tmp_path, monkeypatch):
         def __init__(self, name, **kw):
             pass
 
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        "robotsix_mill.agents.base.new_deepseek_model",
+        lambda model_name, level: (FakeModel(model_name), object()),
+    )
 
     from robotsix_mill.agents import fs_tools, ci_patterns
 
@@ -177,7 +182,10 @@ def test_uses_build_fs_tools(tmp_path, monkeypatch):
         def __init__(self, name, **kw):
             pass
 
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        "robotsix_mill.agents.base.new_deepseek_model",
+        lambda model_name, level: (FakeModel(model_name), object()),
+    )
 
     # build_fs_tools is imported from .fs_tools in the function body,
     # so monkeypatch at the source module.
@@ -218,7 +226,10 @@ def test_agent_prompt_forbids_push_and_branch_switching(tmp_path, monkeypatch):
         def __init__(self, name, **kw):
             pass
 
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        "robotsix_mill.agents.base.new_deepseek_model",
+        lambda model_name, level: (FakeModel(model_name), object()),
+    )
 
     from robotsix_mill.agents import fs_tools
 
@@ -259,7 +270,10 @@ def test_patterns_injected_into_prompt(tmp_path, monkeypatch):
         def __init__(self, name, **kw):
             pass
 
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        "robotsix_mill.agents.base.new_deepseek_model",
+        lambda model_name, level: (FakeModel(model_name), object()),
+    )
 
     from robotsix_mill.agents import fs_tools, ci_patterns
 
@@ -312,7 +326,10 @@ def test_no_patterns_shows_placeholder(tmp_path, monkeypatch):
         def __init__(self, name, **kw):
             pass
 
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        "robotsix_mill.agents.base.new_deepseek_model",
+        lambda model_name, level: (FakeModel(model_name), object()),
+    )
 
     from robotsix_mill.agents import fs_tools, ci_patterns
 
@@ -360,7 +377,10 @@ def test_pattern_saved_after_fix(tmp_path, monkeypatch):
         def __init__(self, name, **kw):
             pass
 
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        "robotsix_mill.agents.base.new_deepseek_model",
+        lambda model_name, level: (FakeModel(model_name), object()),
+    )
 
     from robotsix_mill.agents import fs_tools, ci_patterns
 
@@ -419,7 +439,10 @@ def test_no_pattern_saved_when_signature_empty(tmp_path, monkeypatch):
         def __init__(self, name, **kw):
             pass
 
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        "robotsix_mill.agents.base.new_deepseek_model",
+        lambda model_name, level: (FakeModel(model_name), object()),
+    )
 
     from robotsix_mill.agents import fs_tools, ci_patterns
 
@@ -441,53 +464,3 @@ def test_no_pattern_saved_when_signature_empty(tmp_path, monkeypatch):
         ticket_id="my-ticket",
     )
     assert len(calls) == 0
-
-
-def test_ci_fix_falls_back_to_deepseek_when_primary_fails(tmp_path, monkeypatch):
-    """Regression: ci_fix must invoke via run_agent so a Claude outage
-    (primary raises) falls back to the DeepSeek handle instead of hard-failing
-    and blocking the ticket. Before the fix ci_fix called agent.run_sync()
-    bare — FallbackAgentHandle.run_sync only calls the primary, so the
-    fallback never fired and a credit-exhausted Claude blocked every ci_fix."""
-    from robotsix_mill.agents import base as agents_base
-    from robotsix_mill.agents.fallback import FallbackAgentHandle
-
-    class _Primary:
-        def run_sync(self, *a, **k):
-            raise RuntimeError("Claude Code returned an error result: success")
-
-        def close(self):
-            pass
-
-    class _Fallback:
-        def run_sync(self, *a, **k):
-            return type(
-                "R",
-                (),
-                {"output": CiFixResult(status="DONE", summary="fixed via deepseek")},
-            )()
-
-        def close(self):
-            pass
-
-    built = {"n": 0}
-
-    def _build_fallback():
-        built["n"] += 1
-        return _Fallback()
-
-    handle = FallbackAgentHandle(_Primary(), _build_fallback)
-    monkeypatch.setattr(
-        agents_base, "build_agent_from_definition", lambda *a, **k: handle
-    )
-
-    result = run_ci_fix_agent(
-        settings=_s(tmp_path),
-        repo_dir=tmp_path,
-        branch="mill/x",
-        failing_summary="ruff format would reformat models.py",
-        ticket_id="t-fallback",
-    )
-    assert result.status == "DONE"
-    assert result.summary == "fixed via deepseek"
-    assert built["n"] == 1  # the DeepSeek fallback was actually built + used

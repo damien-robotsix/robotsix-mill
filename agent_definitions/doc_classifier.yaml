@@ -9,7 +9,7 @@ description: >-
 
 category: pipeline
 
-model: "${MILL_DOC_CLASSIFIER_MODEL}"
+level: 1
 
 tools: []
 
