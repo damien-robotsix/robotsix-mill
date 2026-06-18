@@ -41,9 +41,9 @@ def _langfuse_absent(langfuse_summary: str | None) -> bool:
 
 # Per-trace deep inspection formerly gated by `_DEEP_ANALYSIS_ADDENDUM`
 # was removed — trace / cost evaluation is now handled by the
-# periodical cost-evaluation pipeline (cost_reconciliation_runner,
-# trace_health_runner, expensive-item detector). The retrospect agent
-# only reasons about the pre-computed session summary now.
+# periodical pipeline (trace_health_runner, expensive-item detector).
+# The retrospect agent only reasons about the pre-computed session
+# summary now.
 
 
 class MemoryEdit(BaseModel):

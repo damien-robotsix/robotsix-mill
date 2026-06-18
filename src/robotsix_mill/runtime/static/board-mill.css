@@ -97,7 +97,6 @@ h1 {
 .src-env-sync        { background: #312e81; color: #a5b4fc; }
 .src-agent-check     { background: #4a1942; color: #e879f9; }
 .src-bc-check        { background: #422006; color: #fdba74; }
-.src-cost-reconciliation  { background: #064e3b; color: #6ee7b7; }
 .src-completeness-check   { background: #1a2e05; color: #bef264; }
 .src-trace-review    { background: #3b1f1f; color: #fca5a5; }
 .src-roadmap-sync    { background: #4c1d95; color: #c4b5fd; }
@@ -108,7 +107,6 @@ h1 {
 .src-board-cleanup   { background: #064e3b; color: #10b981; }
 .src-data-dir-audit  { background: #312e81; color: #a5b4fc; }
 .src-meta            { background: #3b0764; color: #a855f7; }
-.src-cost-analyst    { background: #1e1b4b; color: #6366f1; }
 .src-run-health      { background: #1e3a5f; color: #3b82f6; }
 .src-ci-fix-dependency              { background: #422006; color: #fdba74; }
 .src-implement-baseline-dependency  { background: #1e293b; color: #94a3b8; }

@@ -15,7 +15,6 @@
     robotsix-mill trace-health                 # run a trace-health check
     robotsix-mill health                        # run a health pass
     robotsix-mill board-cleanup                # run a board-cleanup pass
-    robotsix-mill cost-analyst                 # run a cost analysis pass
     robotsix-mill copy-paste                   # run a copy-paste detection pass
 
 The same API backs a future web frontend.
@@ -99,18 +98,6 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Completeness-check pass",
         "format": "memory_drafts",
     },
-    "cost-reconciliation": {
-        "module": "runners.cost_reconciliation_runner",
-        "function": "run_cost_reconciliation_pass",
-        "label": "Cost-reconciliation pass",
-        "format": "memory_drafts",
-    },
-    "cost-analyst": {
-        "module": "runners.cost_analyst_runner",
-        "function": "run_cost_analyst_pass",
-        "label": "Cost-analyst pass",
-        "format": "memory_drafts",
-    },
     "run-health": {
         "module": "runners.run_health_runner",
         "function": "run_run_health_pass",
@@ -186,27 +173,6 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                 repo_config=None,
                 max_traces=settings.langfuse_cleanup_max_traces,
             )
-        elif cmd == "cost-reconciliation":
-            from ..runtime.tracing import make_session_id
-
-            session_id = make_session_id(cmd)
-            repo_id = getattr(args, "repo_id", None)
-            if repo_id:
-                from ..config import get_repos_config
-
-                repos = get_repos_config()
-                if repo_id not in repos.repos:
-                    sorted_keys = sorted(repos.repos.keys())
-                    print(
-                        f"cost-reconciliation: unknown repo '{repo_id}'. "
-                        f"Known repos: {sorted_keys}",
-                        file=sys.stderr,
-                    )
-                    return 2
-                rc = repos.repos[repo_id]
-                result = func(session_id=session_id, repo_config=rc)
-            else:
-                result = func(session_id=session_id)
         elif cmd == "board-cleanup":
             from ..runtime.tracing import make_session_id
             from ..config import Settings, get_repos_config
@@ -479,7 +445,6 @@ def main(argv: list[str] | None = None) -> int:
     * ``audit`` — run an audit pass and emit gap drafts
     * ``trace-health`` — check Langfuse for unsessioned traces
     * ``health`` — run a health pass and emit gap drafts
-    * ``cost-analyst`` — run a cost analysis pass over recent spend and emit drafts
     * ``copy-paste`` — run a copy-paste / code-duplication detection pass
 
     Returns 0 on success, nonzero on failure.
@@ -644,32 +609,6 @@ def main(argv: list[str] | None = None) -> int:
         "completeness-check", help="run a feature-completeness inspection pass"
     )
     p_completeness_check.add_argument(
-        "--json",
-        action="store_true",
-        help="output full JSON result (default: summary)",
-    )
-
-    # --- cost-reconciliation command ---
-    p_cost_reconciliation = sub.add_parser(
-        "cost-reconciliation",
-        help="run an OpenRouter vs Langfuse cost drift detection pass",
-    )
-    p_cost_reconciliation.add_argument(
-        "--json",
-        action="store_true",
-        help="output full JSON result (default: summary)",
-    )
-    p_cost_reconciliation.add_argument(
-        "--repo-id",
-        help="scope to a specific repo (default: all)",
-    )
-
-    # --- cost-analyst command ---
-    p_cost_analyst = sub.add_parser(
-        "cost-analyst",
-        help="run a cost analysis pass over recent spend and emit drafts",
-    )
-    p_cost_analyst.add_argument(
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",

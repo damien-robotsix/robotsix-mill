@@ -9,8 +9,7 @@ running ``llm_backend: claude_sdk``).  On API failure the warning state
 is left unchanged — only successful polls and the reactive 402 path
 mutate it.
 
-Key precedence: management key first, then API key (same as
-:mod:`~robotsix_mill.runners.cost_reconciliation_runner`).
+Key precedence: management key first, then API key.
 """
 
 from __future__ import annotations

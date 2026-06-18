@@ -324,8 +324,7 @@ class _StagesSettings(BaseModel):
     )
     # (Removed) retrospect_deep_analysis_frequency: deep-analysis mode
     # was retired — per-trace inspection is now owned by the periodical
-    # cost-evaluation pipeline (cost_reconciliation_runner +
-    # trace_health_runner + expensive-item detector).
+    # pipeline (trace_health_runner + expensive-item detector).
     # Model for the trace inspector sub-agent — a dedicated cheap model
     # that inspects a single trace's full observation tree.
     trace_inspector_model: str = Field(

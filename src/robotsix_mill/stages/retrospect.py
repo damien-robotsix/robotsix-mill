@@ -754,9 +754,8 @@ class RetrospectStage(Stage):
             f"id: {ticket.id}\ntitle: {ticket.title}\nbranch: {ticket.branch}\n\n{desc}"
         )
         # Per-trace deep inspection is now handled by the periodical
-        # cost-evaluation pipeline (cost_reconciliation_runner +
-        # trace_health_runner + expensive-item detector). The retrospect
-        # only receives the pre-computed session summary.
+        # pipeline (trace_health_runner + expensive-item detector).
+        # The retrospect only receives the pre-computed session summary.
         lf = langfuse_client.fetch_session_summary(s, ticket.id)
 
         # Retrieve epic context and sibling sub-issues so the agent can

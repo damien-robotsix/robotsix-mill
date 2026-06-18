@@ -693,16 +693,6 @@ def test_gap_id_re_matches_bespoke_marker():
     assert gap_id == "abc123"
 
 
-def test_gap_id_re_matches_cost_reconciliation_marker():
-    """The _GAP_ID_RE must match cost_reconciliation markers."""
-    marker = "<!-- cost_reconciliation-gap-id: 2025-03-15 -->"
-    matches = _GAP_ID_RE.findall(marker)
-    assert len(matches) == 1
-    label, gap_id = matches[0]
-    assert label == "cost_reconciliation"
-    assert gap_id == "2025-03-15"
-
-
 # --- test-gap live-filesystem guard tests ---
 
 

@@ -607,10 +607,10 @@ Each periodic agent shares this pattern:
 
 Periodic agents: `audit`, `board_cleanup`, `trace_health`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_monitor`, `config_sync`, `member_sync`, `bc_check`,
-`completeness_check`, `cost_reconciliation`, `diagnostic`, `forge_parity`, `module_curator`,
+`completeness_check`, `diagnostic`, `forge_parity`, `module_curator`,
 `copy_paste`, `timeout_escalation`, `langfuse_cleanup`, `data_dir_audit`, `run_health`.
 
-> ¹ Most agents default to `enabled: true`. Exceptions: `diagnostic`, `stale_branch_cleanup`, `meta_periodic`, `cost_analyst_periodic`, and `run_health_periodic` default to `false`.
+> ¹ Most agents default to `enabled: true`. Exceptions: `diagnostic`, `stale_branch_cleanup`, `meta_periodic`, and `run_health_periodic` default to `false`.
 >
 > ² `trace_health`, `ci_monitor`, `member_sync`, and `diagnostic` do **not** have a
 > `memory_path` field — they write no per-agent memory ledger
@@ -674,7 +674,7 @@ via `get_secrets()`.
 | YAML key | Env var override | Description |
 |----------|-----------------|-------------|
 | `openrouter_api_key` | `OPENROUTER_API_KEY` | OpenRouter API key (required for any LLM call) |
-| `openrouter_management_key` | — | OpenRouter management API key for cost-reconciliation (`GET /api/v1/activity`). Separate from the inference key; leave blank to skip OpenRouter-side cost fetching. |
+| `openrouter_management_key` | — | OpenRouter management API key for credit balance checks (`GET /api/v1/activity`). Separate from the inference key; leave blank to skip OpenRouter-side fetching. |
 | `forge_token` | `FORGE_TOKEN` | PAT for forge authentication |
 | `github_app_id` | `GITHUB_APP_ID` | GitHub App ID (when `FORGE_AUTH=app`) |
 | `github_app_private_key` | `GITHUB_APP_PRIVATE_KEY` | GitHub App private key (inline PEM, newlines as `\n`) |

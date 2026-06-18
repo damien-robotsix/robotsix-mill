@@ -239,12 +239,6 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.diagnostic.interval_seconds": "diagnostic_interval_seconds",
     "periodic.diagnostic.target_repo_id": "diagnostic_target_repo_id",
     "periodic.diagnostic.monitored_repo_ids": "diagnostic_monitored_repo_ids",
-    # Cross-repo cost-analyst pass (aggregate cost-reduction proposals).
-    "core.cost_analyst_periodic": "cost_analyst_periodic",
-    "core.cost_analyst_interval_seconds": "cost_analyst_interval_seconds",
-    "core.cost_analyst_window_hours": "cost_analyst_window_hours",
-    "core.cost_analyst_top_stages": "cost_analyst_top_stages",
-    "core.cost_analyst_target_repo_id": "cost_analyst_target_repo_id",
     # -- core.limits --
     "core.limits.coordinator_requests": "coordinator_request_limit",
     "core.limits.test_requests": "test_request_limit",
@@ -448,10 +442,6 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.survey.web_fetch_max_calls": "survey_web_fetch_max_calls",
     "periodic.survey.web_fetch_max_total_bytes": "survey_web_fetch_max_total_bytes",
     "periodic.survey.web_search_max_calls": "survey_web_search_max_calls",
-    # -- periodic.cost_reconciliation --
-    "periodic.cost_reconciliation.enabled": "cost_reconciliation_periodic",
-    "periodic.cost_reconciliation.interval_seconds": "cost_reconciliation_interval_seconds",
-    "periodic.cost_reconciliation.memory_path": "cost_reconciliation_memory_path",
     # -- periodic.data_dir_audit --
     "periodic.data_dir_audit.model": "data_dir_audit_model",
     "periodic.data_dir_audit.enabled": "data_dir_audit_periodic",

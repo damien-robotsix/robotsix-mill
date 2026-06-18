@@ -11,12 +11,7 @@
   })();
   let sel = null;
   let runsOpen = false;
-  let costDashboardOpen = false;
-  let costLookbackHours = 24;
-  let costMaxTickets = 20;
-  let costMode = 'time';
   let refreshSeq = 0;
-  let costRenderSeq = 0;
   let activeMap = {};
   let gatesCache = {};
   let reposCache = null;
@@ -57,8 +52,6 @@
     survey: '#f59e0b',
     bc_check: '#84cc16',
     completeness_check: '#84cc16',
-    cost_reconciliation: '#6366f1',
-    cost_analyst: '#4f46e5',
     run_health: '#3b82f6',
     config_sync: '#6366f1',
     member_sync: '#0891b2',
@@ -84,7 +77,6 @@
     ci: "ci",
     agent_check: "agent-check",
     bc_check: "bc-check",
-    cost_reconciliation: "cost-reconciliation",
     completeness_check: "completeness-check",
     "trace-review": "trace-review",
     roadmap_sync: "roadmap-sync",
@@ -94,7 +86,6 @@
     board_cleanup: "board-cleanup",
     data_dir_audit: "data-dir-audit",
     meta: "meta",
-    "cost-analyst": "cost-analyst",
     "run-health": "run-health",
     ci_fix_dependency: "ci-fix-dependency",
     implement_baseline_dependency: "implement-baseline-dependency",
@@ -860,7 +851,6 @@
   async function open_(id) {
     sel = id;
     runsOpen = false;
-    costDashboardOpen = false;
     candidatesOpen = false;
     proposalsOpen = false;
 
@@ -1058,7 +1048,6 @@
   function close_() {
     sel = null;
     runsOpen = false;
-    costDashboardOpen = false;
     candidatesOpen = false;
     proposalsOpen = false;
     document.getElementById("drawer").classList.remove("open");
@@ -1710,213 +1699,6 @@
   // =========================================================================
   // Cost dashboard
   // =========================================================================
-  async function openCostDashboard() {
-    if (costDashboardOpen) { close_(); return; }
-    if (sel) { close_(); }
-    costDashboardOpen = true;
-    document.getElementById("drawer").classList.add("open");
-    await renderCostDashboard();
-  }
-
-  async function renderCostDashboard() {
-    var tok = ++costRenderSeq;
-    var selTimeOpt = function(lookback) { return lookback === costLookbackHours ? ' selected' : ''; };
-    var selTickOpt = function(n) { return n === costMaxTickets ? ' selected' : ''; };
-    var timeModeActive = costMode === 'time';
-    var repoId = getRepoId();
-    var hoursLabel = costLookbackHours === 1 ? "1 hour" : costLookbackHours + " hours";
-    var repoLabel = repoId === "all" ? "Costs across all repos (last " + hoursLabel + ")" : "Costs for " + esc(repoId) + " (last " + hoursLabel + ")";
-    document.getElementById("d").innerHTML = '<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>' +
-      '<h3>💰 Cost Dashboard <span class="muted" style="font-size:11px;font-weight:normal">— ' + repoLabel + '</span></h3>' +
-      '<div class="cost-lookback">' +
-       '<div class="cost-mode-toggle">' +
-        '<button class="cost-mode-btn' + (timeModeActive ? ' active' : '') + '" onclick="costMode=\'time\';renderCostDashboard()">⏱️ Time window</button>' +
-        '<button class="cost-mode-btn' + (!timeModeActive ? ' active' : '') + '" onclick="costMode=\'tickets\';renderCostDashboard()">🎫 Last N tickets</button>' +
-       '</div>' +
-       (timeModeActive ?
-        '<label>Last <select id="cost-lookback" onchange="costLookbackHours=parseInt(this.value);renderCostDashboard()">' +
-         '<option value="1"' + selTimeOpt(1) + '>1 hour</option>' +
-         '<option value="6"' + selTimeOpt(6) + '>6 hours</option>' +
-         '<option value="24"' + selTimeOpt(24) + '>24 hours</option>' +
-         '<option value="72"' + selTimeOpt(72) + '>3 days</option>' +
-         '<option value="168"' + selTimeOpt(168) + '>7 days</option>' +
-        '</select></label>'
-        :
-        '<label>Last <select id="cost-max-tickets" onchange="costMaxTickets=parseInt(this.value);renderCostDashboard()">' +
-         '<option value="20"' + selTickOpt(20) + '>20 tickets</option>' +
-         '<option value="100"' + selTickOpt(100) + '>100 tickets</option>' +
-         '<option value="1000"' + selTickOpt(1000) + '>1000 tickets</option>' +
-        '</select></label>') +
-      '</div>' +
-      '<canvas id="cost-sparkline" style="display:none"></canvas>' +
-      '<div id="cost-chart">loading…</div>' +
-      '<div id="cost-highlights"></div>';
-
-    var extraParam = (timeModeActive ? ('lookback_hours=' + costLookbackHours) : ('max_tickets=' + costMaxTickets)) + '&repo_id=' + (repoId === "all" ? "all" : encodeURIComponent(repoId));
-    var trendUrl = "/costs/trend?" + extraParam;
-    var baseUrl = "/costs/by-agent?" + extraParam;
-    var ticketUrl = "/costs/most-expensive-ticket?" + extraParam;
-    var traceUrl = "/costs/most-expensive-trace?" + extraParam;
-    var results = await Promise.all([
-      jget(trendUrl), jget(baseUrl), jget(ticketUrl), jget(traceUrl)
-    ]);
-    var trendData = results[0], data = results[1], topTicket = results[2], topTrace = results[3];
-    if (tok !== costRenderSeq) return;
-    if (!costDashboardOpen) return;
-
-    // Sparkline
-    var sparkCanvas = document.getElementById("cost-sparkline");
-    if (trendData && trendData.buckets && trendData.buckets.length > 0) {
-      var buckets = trendData.buckets;
-      sparkCanvas.style.display = "block";
-      var dpr = window.devicePixelRatio || 1;
-      var rect = sparkCanvas.getBoundingClientRect();
-      sparkCanvas.width = rect.width * dpr;
-      sparkCanvas.height = rect.height * dpr;
-      var ctx = sparkCanvas.getContext("2d");
-      ctx.scale(dpr, dpr);
-      var w = rect.width, h = rect.height;
-      var pad = { top: 4, right: 4, bottom: 20, left: 4 };
-      var pw = w - pad.left - pad.right;
-      var ph = h - pad.top - pad.bottom;
-      var maxCost = Math.max.apply(null, buckets.map(function(b) { return b.total_cost; }).concat([0.0001]));
-
-      ctx.fillStyle = "#1a1e27";
-      ctx.beginPath();
-      ctx.roundRect(0, 0, w, h, 7);
-      ctx.fill();
-
-      if (buckets.length === 1) {
-        var x = pad.left + pw / 2;
-        var y = pad.top + ph / 2;
-        ctx.fillStyle = "#3b82f6";
-        ctx.beginPath();
-        ctx.arc(x, y, 3, 0, Math.PI * 2);
-        ctx.fill();
-      } else {
-        var points = [];
-        buckets.forEach(function(b, i) {
-          var x = pad.left + (i / (buckets.length - 1)) * pw;
-          var y = pad.top + ph - (b.total_cost / maxCost) * ph;
-          points.push({ x: x, y: y, cost: b.total_cost, ts: b.ts });
-        });
-        ctx.fillStyle = "rgba(59,130,246,0.15)";
-        ctx.beginPath();
-        ctx.moveTo(points[0].x, pad.top + ph);
-        points.forEach(function(p) { ctx.lineTo(p.x, p.y); });
-        ctx.lineTo(points[points.length - 1].x, pad.top + ph);
-        ctx.closePath();
-        ctx.fill();
-        ctx.strokeStyle = "rgba(59,130,246,0.5)";
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        points.forEach(function(p, i) { i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y); });
-        ctx.stroke();
-        ctx.fillStyle = "#3b82f6";
-        points.forEach(function(p) {
-          ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, Math.PI * 2); ctx.fill();
-        });
-      }
-
-      var title = "";
-      buckets.forEach(function(b) { title += b.ts + ": $" + b.total_cost.toFixed(4) + " (" + b.trace_count + " traces)\n"; });
-      sparkCanvas.title = title.trim();
-    } else {
-      sparkCanvas.style.display = "block";
-      var dpr2 = window.devicePixelRatio || 1;
-      var rect2 = sparkCanvas.getBoundingClientRect();
-      sparkCanvas.width = rect2.width * dpr2;
-      sparkCanvas.height = rect2.height * dpr2;
-      var ctx2 = sparkCanvas.getContext("2d");
-      ctx2.scale(dpr2, dpr2);
-      ctx2.fillStyle = "#1a1e27";
-      ctx2.beginPath();
-      ctx2.roundRect(0, 0, rect2.width, rect2.height, 7);
-      ctx2.fill();
-      ctx2.fillStyle = "#7d828c";
-      ctx2.font = "11px ui-monospace,monospace";
-      ctx2.textAlign = "center";
-      var emptyMsg = timeModeActive ? 'No trend data available for this period.' : 'No trend data available for the last ' + costMaxTickets + ' tickets.';
-      ctx2.fillText(emptyMsg, rect2.width / 2, rect2.height / 2);
-    }
-
-    // Per-agent bar chart
-    if (!data || !data.length) {
-      var emptyMsg2 = timeModeActive ? 'No cost data available for this period.' : 'No cost data available for the last ' + costMaxTickets + ' tickets.';
-      document.getElementById("cost-chart").innerHTML = '<div class="muted">' + emptyMsg2 + '</div>';
-    } else {
-      var colors = ["#3b82f6", "#8b5cf6", "#22c55e", "#eab308", "#ef4444", "#f97316", "#06b6d4", "#ec4899", "#14b8a6", "#a855f7"];
-      var maxCost2 = Math.max.apply(null, data.map(function(d) { return d.total_cost; }).concat([0.0001]));
-      var grandTotal = data.reduce(function(s, d) { return s + d.total_cost; }, 0);
-      var totalTraceCount = data.reduce(function(s, d) { return s + d.trace_count; }, 0);
-      var avgTraceCost = totalTraceCount > 0 ? grandTotal / totalTraceCount : null;
-      var html = '<div class="cost-summary-row">' +
-       '<span class="cost-summary">' + data.length + ' agents · $' + grandTotal.toFixed(4) + ' total</span>' +
-       '<span class="cost-summary-divider">|</span>';
-      if (avgTraceCost !== null) {
-        html += '<span class="cost-avg-tile">Avg <span class="cost-avg-value">$' + avgTraceCost.toFixed(4) + '</span> / trace</span>';
-      } else {
-        html += '<span class="cost-avg-tile muted">Avg — / trace</span>';
-      }
-      html += '</div>';
-      data.forEach(function(d, i) {
-        var pct = Math.max((d.total_cost / maxCost2) * 100, 1);
-        var color = colors[i % colors.length];
-        html += '<div class="cost-bar-row">' +
-         '<div class="cost-bar-label">' +
-          '<span class="cost-bar-name">' + esc(d.name) + '</span>' +
-          '<span class="cost-bar-count">' + d.trace_count + ' traces</span>' +
-         '</div>' +
-         '<div class="cost-bar-track">' +
-          '<div class="cost-bar-fill" style="width:' + pct + '%;background:' + color + '"></div>' +
-         '</div>' +
-         '<div class="cost-bar-amount">$' + d.total_cost.toFixed(4) + '</div>' +
-        '</div>';
-      });
-      document.getElementById("cost-chart").innerHTML = html;
-    }
-
-    // Highlights
-    var highlightsHtml = '<h4 style="margin-top:16px">🔍 Highlights</h4>';
-    highlightsHtml += '<div class="cost-bar-row cost-highlight-row">' +
-     '<div class="cost-bar-label">' +
-      '<span class="cost-bar-name">Most Expensive Ticket</span>' +
-     '</div>';
-    if (topTicket) {
-      highlightsHtml +=
-       '<div class="cost-bar-track">' +
-        '<a href="#" onclick="open_(' + jsq(topTicket.ticket_id) + ');return false">' + esc(topTicket.title) + '</a>' +
-        '<span class="cost-bar-count">' + esc(topTicket.ticket_id) + '</span>' +
-       '</div>' +
-       '<div class="cost-bar-amount">$' + topTicket.cost_usd.toFixed(4) + '</div>';
-    } else {
-      highlightsHtml +=
-       '<div class="cost-bar-track"><span class="muted">No data</span></div>' +
-       '<div class="cost-bar-amount"></div>';
-    }
-    highlightsHtml += '</div>';
-
-    highlightsHtml += '<div class="cost-bar-row cost-highlight-row">' +
-     '<div class="cost-bar-label">' +
-      '<span class="cost-bar-name">Most Expensive Run</span>' +
-     '</div>';
-    if (topTrace) {
-      highlightsHtml +=
-       '<div class="cost-bar-track">' +
-        '<span style="color:#cfd3db">' + esc(topTrace.name) + '</span>' +
-        '<span class="cost-bar-count">' + esc(topTrace.id) + '</span>' +
-       '</div>' +
-       '<div class="cost-bar-amount">$' + topTrace.total_cost.toFixed(4) + '</div>';
-    } else {
-      highlightsHtml +=
-       '<div class="cost-bar-track"><span class="muted">No data</span></div>' +
-       '<div class="cost-bar-amount"></div>';
-    }
-    highlightsHtml += '</div>';
-
-    document.getElementById("cost-highlights").innerHTML = highlightsHtml;
-  }
-
   // =========================================================================
   // Agents menu
   // =========================================================================
@@ -2179,38 +1961,6 @@
     }
   }
 
-  async function runCostReconciliation() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var repoId = getRepoId();
-      var crUrl = repoId !== "all" ? "/cost-reconciliation?repo_id=" + encodeURIComponent(repoId) : "/cost-reconciliation";
-      var r = await jpost(crUrl);
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("Cost-reconciliation started — it compares OpenRouter vs Langfuse spend and files a draft ticket if drift exceeds $1.00.");
-      setTimeout(refresh, 4000);
-    } catch (e) {
-      alert("Cost-reconciliation failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Cost Recon';
-    }
-  }
-
-  async function runCostAnalyst() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var r = await jpost("/cost-analyst");
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("Cost-analyst started — it aggregates spend across all repos and files cost-reduction drafts to the mill board.");
-      setTimeout(refresh, 4000);
-    } catch (e) {
-      alert("Cost-analyst failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Cost Analyst';
-    }
-  }
-
   async function runRunHealth() {
     var btn = event.target;
     btn.disabled = true; btn.textContent = 'Running...';
@@ -2314,7 +2064,7 @@
   // =========================================================================
   async function toggleProposals() {
     if (proposalsOpen) { close_(); return; }
-    if (sel || runsOpen || costDashboardOpen || candidatesOpen) close_();
+    if (sel || runsOpen || candidatesOpen) close_();
     proposalsOpen = true;
     document.getElementById("drawer").classList.add("open");
     await renderProposals();
@@ -2404,7 +2154,7 @@
 
   async function openCandidates() {
     if (candidatesOpen) { close_(); return; }
-    if (sel || runsOpen || costDashboardOpen || proposalsOpen) close_();
+    if (sel || runsOpen || proposalsOpen) close_();
     candidatesOpen = true;
     document.getElementById("drawer").classList.add("open");
     await renderCandidatesList();
@@ -2618,7 +2368,7 @@
       else if (proposalsOpen) renderProposals();
       else if (sel) refreshDetail(sel);
       // Refresh active labels on the board every 5s when drawer is closed
-      if (!sel && !runsOpen && !costDashboardOpen && !candidatesOpen && !proposalsOpen) {
+      if (!sel && !runsOpen && !candidatesOpen && !proposalsOpen) {
         fetchActive().then(applyActiveLabels).then(applyMoveButtons);
       }
     }, 1000);
@@ -2666,7 +2416,6 @@
   window.rejectProposal = rejectProposal;
   window.toggleBody = toggleBody;
   window.toggleRuns = toggleRuns;
-  window.openCostDashboard = openCostDashboard;
   window.openCandidates = openCandidates;
   window.toggleProposals = toggleProposals;
   window.newTicket = newTicket;
@@ -2674,10 +2423,6 @@
   window.newInquiry = newInquiry;
   window.onRepoChange = onRepoChange;
   window.toggleClosed = toggleClosed;
-  window.renderCostDashboard = renderCostDashboard;
-  window.costMode = costMode;
-  window.costLookbackHours = costLookbackHours;
-  window.costMaxTickets = costMaxTickets;
   window.fetchRepos = fetchRepos;
   window.connectWebSocket = connectWebSocket;
   window.refresh = refresh;
@@ -2695,8 +2440,6 @@
   window.runBoardCleanup = runBoardCleanup;
   window.runBcCheck = runBcCheck;
   window.runCompletenessCheck = runCompletenessCheck;
-  window.runCostReconciliation = runCostReconciliation;
-  window.runCostAnalyst = runCostAnalyst;
   window.runRunHealth = runRunHealth;
   window.runConfigSync = runConfigSync;
   window.runMemberSync = runMemberSync;

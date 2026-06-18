@@ -1010,3 +1010,32 @@ def resume_blocked(
     maybe_enqueue(ticket, worker)
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
     return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
+
+
+@router.get("/tickets/{ticket_id}/cost-breakdown")
+def cost_breakdown(
+    ticket_id: str,
+    request: Request = None,
+    svc=Depends(get_service),
+    settings=Depends(get_settings),
+) -> dict:
+    """Per-trace cost breakdown for a ticket, used by the drawer to
+    overlay agent-step costs on history rows.
+
+    The Langfuse sessionId equals the ticket id, so a single
+    `/api/public/traces?sessionId=<ticket>` query returns every agent
+    invocation tied to the ticket. Each entry carries
+    ``{name, cost, at, trace_id}`` ordered by timestamp; the drawer's
+    renderHistoryHtml matches the entries to history events by inferred
+    agent name + nearest-in-time-≤ pairing.
+    """
+    ticket = svc.get(ticket_id)
+    if ticket is None:
+        raise HTTPException(404, "ticket not found")
+    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
+    from ...langfuse.client import session_traces
+
+    rows = session_traces(settings, ticket_id, repo_config=repo_config)
+    if rows is None:
+        return {"available": False, "traces": []}
+    return {"available": True, "traces": rows}

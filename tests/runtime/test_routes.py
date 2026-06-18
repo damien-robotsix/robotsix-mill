@@ -1764,11 +1764,6 @@ BG_PASS_ROUTES = [
         "run_member_sync_pass",
     ),
     (
-        "/cost-reconciliation",
-        "robotsix_mill.runners.cost_reconciliation_runner",
-        "run_cost_reconciliation_pass",
-    ),
-    (
         "/trace-review",
         "robotsix_mill.runners.trace_review_runner",
         "run_trace_review_pass",
@@ -1795,11 +1790,6 @@ BG_PASS_ROUTES = [
         "run_board_cleanup_pass",
     ),
     ("/meta", "robotsix_mill.meta.runner", "run_meta_pass"),
-    (
-        "/cost-analyst",
-        "robotsix_mill.runners.cost_analyst_runner",
-        "run_cost_analyst_pass",
-    ),
     (
         "/run-health",
         "robotsix_mill.runners.run_health_runner",

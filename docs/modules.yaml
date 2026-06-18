@@ -204,8 +204,6 @@ modules:
       - src/robotsix_mill/runners/audit_runner.py
       - src/robotsix_mill/runners/bc_check_runner.py
       - src/robotsix_mill/runners/completeness_check_runner.py
-      - src/robotsix_mill/runners/cost_reconciliation_runner.py
-      - src/robotsix_mill/runners/cost_analyst_runner.py
       - src/robotsix_mill/runners/run_health_runner.py
       - src/robotsix_mill/runners/diagnostic_runner.py
       - src/robotsix_mill/runners/diagnostic_checks.py
@@ -237,8 +235,6 @@ modules:
       - src/robotsix_mill/runners/verify_runner.py
       - tests/runners/test_pass_runner.py
       - tests/runners/test_periodic_runner.py
-      - tests/runners/test_cost_reconciliation_runner.py
-      - tests/runners/test_cost_analyst_runner.py
       - tests/runners/test_run_health_runner.py
       - tests/runners/test_diagnostic_runner.py
       - tests/runners/test_diagnostic_check_errors.py
@@ -440,7 +436,7 @@ modules:
       auditing, refining, documenting, answering, dedup, CI-fixing, rebasing,
       review-revision checking, surveying, health checking, agent-check,
       backwards-compatibility check, completeness check, scope triage,
-      epic breakdown/status, cost reconciliation, environment sync,
+      epic breakdown/status, environment sync,
       and retrospect.
     paths:
       - src/robotsix_mill/agents/_repo_tools.py
@@ -461,7 +457,6 @@ modules:
       - src/robotsix_mill/agents/review_revision.py
       - src/robotsix_mill/agents/surveying.py
       - src/robotsix_mill/agents/health.py
-      - src/robotsix_mill/agents/cost_analyst.py
       - src/robotsix_mill/agents/run_health.py
       - src/robotsix_mill/agents/agent_check.py
       - src/robotsix_mill/agents/bc_check.py
@@ -503,7 +498,6 @@ modules:
       - tests/agents/test_rebasing.py
       - tests/agents/test_survey.py
       - tests/agents/test_health.py
-      - tests/agents/test_cost_analyst.py
       - tests/agents/test_run_health.py
       - tests/agents/test_agent_check.py
       - tests/agents/test_bc_check.py

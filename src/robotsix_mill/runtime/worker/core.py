@@ -148,12 +148,10 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         self._test_gap_task: asyncio.Task | None = None
         self._survey_task: asyncio.Task | None = None
         self._config_sync_task: asyncio.Task | None = None
-        self._cost_reconciliation_task: asyncio.Task | None = None
         self._data_dir_audit_task: asyncio.Task | None = None
         self._langfuse_cleanup_task: asyncio.Task | None = None
         self._timeout_escalation_task: asyncio.Task | None = None
         self._meta_task: asyncio.Task | None = None
-        self._cost_analyst_task: asyncio.Task | None = None
         self._run_health_task: asyncio.Task | None = None
         self._diagnostic_task: asyncio.Task[None] | None = None
         self._stale_branch_task: asyncio.Task | None = None
@@ -634,13 +632,6 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             log_args=(self.ctx.settings.meta_interval_seconds,),
         )
         self._start_poll_loop_pass(
-            "cost-analyst",
-            self._cost_analyst_pass_loop,
-            "_cost_analyst_task",
-            log_msg="Periodic cost-analyst enabled: interval %ds",
-            log_args=(self.ctx.settings.cost_analyst_interval_seconds,),
-        )
-        self._start_poll_loop_pass(
             "run-health",
             self._run_health_pass_loop,
             "_run_health_task",
@@ -756,12 +747,10 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             "_test_gap_task",
             "_survey_task",
             "_config_sync_task",
-            "_cost_reconciliation_task",
             "_data_dir_audit_task",
             "_langfuse_cleanup_task",
             "_timeout_escalation_task",
             "_meta_task",
-            "_cost_analyst_task",
             "_run_health_task",
             "_diagnostic_task",
             "_stale_branch_task",

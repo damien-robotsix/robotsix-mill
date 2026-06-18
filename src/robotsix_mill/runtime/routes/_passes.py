@@ -319,18 +319,6 @@ router.post("/member-sync", status_code=202)(member_sync_pass)
 
 # -- handlers with custom summary builders -------------------------------
 
-cost_reconciliation_pass = _make_background_pass(
-    kind="cost-reconciliation",
-    runner_module="robotsix_mill.runners.cost_reconciliation_runner",
-    runner_func="run_cost_reconciliation_pass",
-    docstring="""Kick off a cost-reconciliation drift detection pass in the BACKGROUND.""",
-    summary_builder=lambda r: (
-        (getattr(r, "summary", "") or "").strip() or _default_summary(r)
-    ),
-)
-router.post("/cost-reconciliation", status_code=202)(cost_reconciliation_pass)
-
-
 trace_review_pass = _make_background_pass(
     kind="trace-review",
     runner_module="robotsix_mill.runners.trace_review_runner",
@@ -565,47 +553,6 @@ def meta_pass(
                 registry.finish_error(run_id, str(e))
 
     threading.Thread(target=_run, name="meta-pass", daemon=True).start()
-    return {"status": "started"}
-
-
-@router.post("/cost-analyst", status_code=202)
-def cost_analyst_pass(
-    request: Request = None,
-    registry=Depends(get_run_registry),
-) -> dict:
-    """Kick off a COST-ANALYST pass in the BACKGROUND and return at once.
-
-    The cost-analyst aggregates Langfuse traces across ALL registered repos,
-    builds a cost digest (aggregate cost-by-stage + four significant
-    trace/ticket specimens), and files high-confidence cost-reduction drafts
-    to the mill board. Global — it does not fan out per-repo.
-    """
-    from ...runners.cost_analyst_runner import (
-        CostAnalystPassResult,
-        run_cost_analyst_pass,
-    )
-    from ..tracing import make_session_id
-
-    def _run() -> None:
-        run_id = None
-        try:
-            run_id = registry.start("cost_analyst")
-            session_id = make_session_id("cost_analyst")
-            result: CostAnalystPassResult = run_cost_analyst_pass(session_id=session_id)
-            ids = [d["id"] for d in result.drafts_created[:3]]
-            summary = (
-                f"{len(result.drafts_created)} draft(s): {', '.join(ids)}"
-                if ids
-                else "No drafts created"
-            )
-            registry.finish_ok(run_id, summary)
-            log.info("cost-analyst pass done: %d draft(s)", len(result.drafts_created))
-        except Exception as e:  # noqa: BLE001 — background; just log
-            log.exception("cost-analyst pass failed")
-            if run_id:
-                registry.finish_error(run_id, str(e))
-
-    threading.Thread(target=_run, name="cost-analyst-pass", daemon=True).start()
     return {"status": "started"}
 
 

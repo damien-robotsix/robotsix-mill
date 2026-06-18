@@ -235,20 +235,6 @@ class _PeriodicSettings(BaseModel):
     # worker loop.
     board_cleanup_interval_seconds: int = Field(default=86400)
 
-    # --- cost-reconciliation pass (OpenRouter ↔ Langfuse cost drift) ---
-    # Path to the cost-reconciliation agent's Markdown memory ledger.
-    # Override to pin a specific path; unset (default) derives
-    # <data_dir>/cost_reconciliation_memory.md.
-    cost_reconciliation_memory_path: Path | None = Field(default=None)
-    # Opt-in periodic cost-reconciliation pass. Defaults to False (off);
-    # flip to true to schedule the pass every
-    # ``cost_reconciliation_interval_seconds``.
-    cost_reconciliation_periodic: bool = Field(default=True)
-    # Seconds between periodic cost-reconciliation passes when
-    # MILL_COST_RECONCILIATION_PERIODIC=true. Minimum enforced at 60s
-    # in the worker loop.
-    cost_reconciliation_interval_seconds: int = Field(default=86400)
-
     # --- data-dir audit agent (.data/ monotonic growth survey) ---
     # Model for the data-dir audit agent. Defaults to flash —
     # the agent does file listing + size checks, not deep reasoning.
@@ -412,21 +398,6 @@ class _PeriodicSettings(BaseModel):
     # Seconds between automatic meta-agent passes. Default 86400 (1 day).
     # Minimum enforced at 60 s in the worker loop.
     meta_interval_seconds: int = Field(default=86400)
-
-    # --- cost-analyst (global, cross-repo cost-reduction agent) ---
-    # When True, a global daily pass studies the fleet's aggregate cost-by-
-    # stage distribution + the most-significant trace/ticket specimens and
-    # files high-confidence cost-reduction drafts to the mill board. Off by
-    # default; flip to True to enable.
-    cost_analyst_periodic: bool = Field(default=False)
-    # Seconds between automatic cost-analyst passes. Default 86400 (1 day).
-    cost_analyst_interval_seconds: int = Field(default=86400)
-    # Lookback window (hours) for the cost digest and trend comparison.
-    cost_analyst_window_hours: int = Field(default=168)
-    # How many top-spend stages to deep-dive in the digest.
-    cost_analyst_top_stages: int = Field(default=6)
-    # Board the cost-analyst files its drafts to (the levers live in mill).
-    cost_analyst_target_repo_id: str = Field(default="robotsix-mill")
 
     # --- run-health (global, cross-board run-registry monitor) ---
     # When True, a global daily pass reads every board's run registry over a
