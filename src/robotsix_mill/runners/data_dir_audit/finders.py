@@ -135,6 +135,27 @@ def _path_is_self_healing(
     )
 
 
+def _is_workspace_infra_path(remainder: str) -> bool:
+    """Return True when board-relative *remainder* lies inside a ticket
+    workspace (``workspaces/<ticket-id>/...``).
+
+    A ticket's workspace (its repo/repos clone, uv venv, artifacts) is
+    transient, GC-managed infrastructure whose size is inherent to the
+    clone — it is never an *independently actionable* oversized alert,
+    regardless of the ticket's state (active, blocked, or terminal).
+    Genuinely-oversized standalone files (mill.db, stray logs) live
+    outside ``workspaces/`` and are unaffected; truly unbounded files
+    (memory ledgers, runs.json) are caught by the separate
+    unbounded-collection check wherever they live.
+    """
+    parts = remainder.split("/")
+    return (
+        len(parts) >= 2
+        and parts[0] == "workspaces"
+        and bool(_TICKET_ID_PREFIX_RE.match(parts[1]))
+    )
+
+
 def _is_terminal_clone_cache_path(
     remainder: str, terminal_ticket_ids: set[str]
 ) -> bool:
@@ -249,7 +270,28 @@ def _self_healing_oversized_paths(
     )
     self_healing_files |= terminal_clone_files
 
+    # Classify ALL ticket-workspace files as self-healing — a workspace's
+    # size is transient, GC-managed infra and is never an independently
+    # actionable oversized alert (active, blocked, or terminal alike). This
+    # subsumes the terminal-clone case above for the oversized check and
+    # stops the recurring "oversized <board>/workspaces/<ticket>" noise.
+    workspace_infra_files = _classify_workspace_infra_files(file_sizes, board_ids)
+    self_healing_files |= workspace_infra_files
+
     suppressed: set[str] = set(self_healing_files)
+
+    # Aggregate roots are never independently actionable: a board root and
+    # its ``workspaces/`` dir are rollups of transient per-ticket workspaces
+    # plus GC-managed caches. "oversized <board>" / "oversized
+    # <board>/workspaces" tickets give an operator nothing to act on — the
+    # specific large FILES beneath them still surface individually, and
+    # growth/orphan/clone GC handle the real reclamation. Suppress the
+    # rollups outright.
+    aggregate_roots: set[str] = set()
+    for board_id in board_ids:
+        aggregate_roots.add(board_id)
+        aggregate_roots.add(f"{board_id}/workspaces")
+    suppressed |= aggregate_roots
 
     # Classify directories: suppress when >= _EXPLAINED_SUPPRESS_FRACTION
     # of cumulative bytes come from self-healing files beneath them.
@@ -264,33 +306,71 @@ def _self_healing_oversized_paths(
         if self_healing_bytes / total_size >= _EXPLAINED_SUPPRESS_FRACTION:
             suppressed.add(dir_key)
 
-    # Log each suppression
+    _log_oversized_suppressions(
+        suppressed,
+        file_sizes,
+        dir_totals,
+        terminal_clone_files=terminal_clone_files,
+        aggregate_roots=aggregate_roots,
+        workspace_infra_files=workspace_infra_files,
+        self_healing_files=self_healing_files,
+    )
+    return suppressed
+
+
+def _classify_workspace_infra_files(
+    file_sizes: dict[str, int], board_ids: set[str]
+) -> set[str]:
+    """Return the *file_sizes* keys that live inside any board's ticket
+    workspace (``<board>/workspaces/<ticket-id>/...``)."""
+    result: set[str] = set()
+    for rel in file_sizes:
+        first, sep, remainder = rel.partition("/")
+        if sep and first in board_ids and _is_workspace_infra_path(remainder):
+            result.add(rel)
+    return result
+
+
+def _log_oversized_suppressions(
+    suppressed: set[str],
+    file_sizes: dict[str, int],
+    dir_totals: dict[str, int],
+    *,
+    terminal_clone_files: set[str],
+    aggregate_roots: set[str],
+    workspace_infra_files: set[str],
+    self_healing_files: set[str],
+) -> None:
+    """INFO-log each suppressed oversized-path key with its reason."""
+    reasons = (
+        (terminal_clone_files, "terminal-ticket clone cache — GC reclaims"),
+        (
+            aggregate_roots,
+            "board/workspaces aggregate root — not independently actionable",
+        ),
+        (
+            workspace_infra_files,
+            "transient ticket-workspace infrastructure — GC-managed",
+        ),
+        (
+            self_healing_files,
+            "self-healing clone cache / periodic-pass infrastructure",
+        ),
+    )
     for key in sorted(suppressed):
         size = file_sizes.get(key, dir_totals.get(key, 0))
-        if key in terminal_clone_files:
-            log.info(
-                "data_dir_audit: suppressing oversized item path=%s size=%dB "
-                "(terminal-ticket clone cache — GC reclaims)",
-                key,
-                size,
+        reason = next((msg for group, msg in reasons if key in group), None)
+        if reason is None:
+            reason = (
+                f">={_EXPLAINED_SUPPRESS_FRACTION * 100:.0f}% self-healing "
+                "clone cache / periodic-pass children"
             )
-        elif key in self_healing_files:
-            log.info(
-                "data_dir_audit: suppressing oversized item path=%s size=%dB "
-                "(self-healing clone cache / periodic-pass infrastructure)",
-                key,
-                size,
-            )
-        else:
-            log.info(
-                "data_dir_audit: suppressing oversized item path=%s size=%dB "
-                "(>=%.0f%% self-healing clone cache / periodic-pass children)",
-                key,
-                size,
-                _EXPLAINED_SUPPRESS_FRACTION * 100,
-            )
-
-    return suppressed
+        log.info(
+            "data_dir_audit: suppressing oversized item path=%s size=%dB (%s)",
+            key,
+            size,
+            reason,
+        )
 
 
 def find_largest_items(

@@ -2077,9 +2077,12 @@ def test_prune_closed_board_failure_is_skipped(tmp_path, monkeypatch, caplog):
 
 
 def test_pass_alert_only_after_gc(tmp_path, monkeypatch):
-    """A large CLOSED-ticket workspace that would push the data dir over
-    the oversized threshold produces no oversized finding once pruned,
-    but DOES when pruning is disabled."""
+    """A large CLOSED-ticket workspace produces no oversized finding —
+    whether or not GC pruning runs. With pruning ON it is physically GC'd
+    before measurement; with pruning OFF it remains on disk but is still
+    suppressed from the oversized check (a workspace's size is transient
+    infra, never an actionable oversized alert). The GC knob governs
+    reclamation, not oversized reporting."""
 
     def _build_settings(*, prune: bool) -> Settings:
         root = tmp_path / ("on" if prune else "off")
@@ -2107,12 +2110,15 @@ def test_pass_alert_only_after_gc(tmp_path, monkeypatch):
     assert result_on.oversized_items == []
     db.reset_engine()
 
-    # Pruning DISABLED → workspace remains → oversized finding produced.
+    # Pruning DISABLED → workspace remains on disk, but is STILL suppressed
+    # from the oversized check (workspace infra is never an oversized alert).
     s_off = _build_settings(prune=False)
     monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s_off)
     result_off = run_data_dir_audit_pass()
     assert result_off.closed_pruned == 0
-    assert any(item["path"].endswith("big.bin") for item in result_off.oversized_items)
+    assert not any(
+        item["path"].endswith("big.bin") for item in result_off.oversized_items
+    )
     db.reset_engine()
 
 
@@ -2758,15 +2764,16 @@ class TestOversizedSelfHealingSuppression:
         assert "meta/workspace" not in suppressed_paths
         db.reset_engine()
 
-    def test_meta_dir_not_suppressed_below_90pct_threshold(self, tmp_path, monkeypatch):
-        """When self-healing bytes are <90% of the dir total, the dir
-        is NOT suppressed — the genuine oversized child surfaces."""
+    def test_board_root_suppressed_but_genuine_child_surfaces(
+        self, tmp_path, monkeypatch
+    ):
+        """A board root is an aggregate rollup — always suppressed (never an
+        independently actionable "oversized <board>" alert) — yet the genuine
+        oversized FILE beneath it still surfaces on its own."""
         s = _make_settings(tmp_path)
         monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
         db.init_db(s, "meta")
 
-        # 80 MB clone-cache + 110 MB genuine = 190 MB total → 42.1% self-healing
-        # → BELOW 90% → meta dir NOT suppressed.
         _make_sparse_file(
             s.data_dir / "meta" / "workspace" / "r" / ".git" / "objects.bin",
             80 * 1024 * 1024,
@@ -2779,11 +2786,9 @@ class TestOversizedSelfHealingSuppression:
         result = run_data_dir_audit_pass()
 
         paths = {r["path"] for r in result.oversized_items}
-        # The aggregate meta dir SHOULD appear (it has 190 MB total
-        # with only 42.1% from self-healing sources — below the 90%
-        # suppress threshold).
-        assert "meta" in paths, f"meta not in {paths}"
-        # The genuine file should also appear.
+        # The aggregate meta board root is suppressed (rollup, not actionable).
+        assert "meta" not in paths, f"board root should be suppressed: {paths}"
+        # The genuine file still surfaces individually.
         assert "meta/big_genuine.log" in paths
         db.reset_engine()
 
@@ -2918,9 +2923,8 @@ class TestOversizedSelfHealingSuppression:
         assert clone == [], f"clone paths leaked: {clone}"
         # Genuine file present.
         assert f"{board_id}/big.log" in paths
-        # Aggregate ``meta`` dir: 350 MB total, 200/350 ≈ 57% self-healing
-        # → below 90% → NOT suppressed (genuine child surfaces).
-        assert board_id in paths
+        # The aggregate ``meta`` board root is a rollup → always suppressed.
+        assert board_id not in paths
         db.reset_engine()
 
     # ------------------------------------------------------------------
@@ -3010,11 +3014,14 @@ class TestOversizedSelfHealingSuppression:
         assert not any(ticket_id in p for p in suppressed)
         db.reset_engine()
 
-    def test_terminal_clone_not_suppressed_when_gc_disabled(
+    def test_workspace_clone_suppressed_even_when_gc_disabled(
         self, tmp_path, monkeypatch
     ):
-        """With ``data_dir_audit_prune_terminal_clones=False``,
-        terminal-ticket clone files ARE reported as oversized."""
+        """Workspace-size suppression is unconditional: even with
+        ``data_dir_audit_prune_terminal_clones=False`` (GC deletion off), a
+        ticket-workspace clone is never reported as oversized — workspace
+        size is transient infra, not an actionable alert. The GC knob governs
+        deletion, not oversized reporting."""
         s = _make_settings(tmp_path, data_dir_audit_prune_terminal_clones=False)
         monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
         board_id = "test-board"
@@ -3044,14 +3051,15 @@ class TestOversizedSelfHealingSuppression:
         clone_paths = [
             r["path"] for r in result.oversized_items if ticket_id in r["path"]
         ]
-        assert len(clone_paths) >= 1, (
-            f"terminal clone should NOT be suppressed when GC knob is off, got: {result.oversized_items}"
+        assert clone_paths == [], (
+            f"workspace clone should be suppressed even with GC off, got: {result.oversized_items}"
         )
         db.reset_engine()
 
-    def test_active_ticket_clones_not_suppressed(self, tmp_path, monkeypatch):
-        """Clone files inside an *active* (DRAFT) ticket workspace are
-        NOT suppressed."""
+    def test_active_ticket_workspace_suppressed(self, tmp_path, monkeypatch):
+        """Files inside an *active* (DRAFT) ticket workspace are suppressed
+        from the oversized check — a live ticket's workspace is legitimately
+        large and is never an actionable oversized alert."""
         s = _make_settings(tmp_path)
         monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
         board_id = "test-board"
@@ -3075,8 +3083,8 @@ class TestOversizedSelfHealingSuppression:
         clone_paths = [
             r["path"] for r in result.oversized_items if ticket_id in r["path"]
         ]
-        assert len(clone_paths) >= 1, (
-            f"active-ticket clone should NOT be suppressed, got: {result.oversized_items}"
+        assert clone_paths == [], (
+            f"active-ticket workspace should be suppressed, got: {result.oversized_items}"
         )
         db.reset_engine()
 
@@ -3162,3 +3170,29 @@ class TestOversizedSelfHealingSuppression:
         # Genuine oversized file present.
         assert f"{board_id}/mill.db" in paths
         db.reset_engine()
+
+
+def test_oversized_noise_scenario_files_nothing(tmp_path, monkeypatch):
+    """End-to-end: the real-world noise pattern — a board whose disk is
+    dominated by a large active-ticket workspace — produces ZERO oversized
+    items (no "oversized <board>", "<board>/workspaces", or per-ticket
+    workspace alerts). This is the case that generated the recurring blocked
+    "oversized" tickets."""
+    s = _make_settings(tmp_path, data_dir_audit_size_threshold_bytes=1_000_000)
+    monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
+    board_id = "robotsix-mill"
+    ticket_id = "20260101T000000Z-active-wxyz"
+    db.init_db(s, board_id)
+    _make_workspace_dir(s, board_id, ticket_id)
+    _insert_ticket(s, board_id, ticket_id)  # active (DRAFT)
+    # Big clone + venv inside the live workspace (the inherent, transient bulk).
+    _make_sparse_file(
+        s.data_dir / board_id / "workspaces" / ticket_id / "repo" / ".git" / "big.bin",
+        600 * 1024 * 1024,
+    )
+
+    result = run_data_dir_audit_pass()
+
+    paths = {r["path"] for r in result.oversized_items}
+    assert paths == set(), f"expected no oversized findings, got: {paths}"
+    db.reset_engine()
