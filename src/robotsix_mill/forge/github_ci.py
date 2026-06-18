@@ -14,7 +14,7 @@ import httpx
 from ._log_utils import _capture_failure_window
 
 # Regex for stripping ANSI escape sequences (CSI / SGR).
-_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]{0,30}[a-zA-Z]")
 
 # Maximum number of failed jobs whose logs are fetched per run.
 _MAX_FAILED_JOBS = 10
@@ -25,7 +25,7 @@ _MAX_FAILED_JOBS = 10
 # a plain tail-cap of the job log shows only the masking error. We instead
 # anchor the captured window on the EARLIEST of these markers.
 _LOG_FAILURE_RE = re.compile(
-    r"(?:##\[error\]|^[^\n]*\bFATAL\b|\bError:|exit code [1-9]|"
+    r"(?:##\[error\]|^[^\n]*?\bFATAL\b|\bError:|exit code [1-9]|"
     r"Process completed with exit code [1-9])",
     re.MULTILINE,
 )
