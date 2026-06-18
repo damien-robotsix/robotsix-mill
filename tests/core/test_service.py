@@ -1419,6 +1419,158 @@ def test_mark_done_rejects_epic_open(service):
         service.mark_done(t.id)
 
 
+# -- mark_done citation verification -----------------------------------
+
+
+def test_mark_done_empty_note_still_works(service):
+    """Empty/default note passes through cleanly — no warnings appended."""
+    t = service.create("empty note mark done")
+    comment, ticket = service.mark_done(t.id)
+    assert comment is None
+    assert ticket.state is State.DONE
+    hist = service.history(t.id)
+    assert hist[-1].note == "mark done"
+
+
+def test_mark_done_with_nonexistent_pr_appends_warning(service, tmp_path):
+    """PR #1562 not on origin/main → ⚠️ appended to comment body."""
+    t = service.create("nonexistent pr test")
+    # Simulate a workspace clone with a real git repo so git commands
+    # can run (origin/main must exist with at least one commit).
+    import subprocess as _sp
+
+    ws = service.workspace(t)
+    repo = ws.repo_dir
+    repo.mkdir(parents=True, exist_ok=True)
+    _sp.run(["git", "-C", str(repo), "init"], capture_output=True, text=True)
+    _sp.run(
+        ["git", "-C", str(repo), "config", "user.email", "test@example.com"],
+        capture_output=True,
+        text=True,
+    )
+    _sp.run(
+        ["git", "-C", str(repo), "config", "user.name", "Test"],
+        capture_output=True,
+        text=True,
+    )
+    (repo / "file.txt").write_text("hello")
+    _sp.run(["git", "-C", str(repo), "add", "."], capture_output=True, text=True)
+    _sp.run(
+        ["git", "-C", str(repo), "commit", "-m", "initial"],
+        capture_output=True,
+        text=True,
+    )
+    # Create origin/main ref pointing at the initial commit.
+    _sp.run(
+        ["git", "-C", str(repo), "branch", "origin/main"],
+        capture_output=True,
+        text=True,
+    )
+
+    comment, ticket = service.mark_done(t.id, note="Root cause fixed in PR #1562")
+    assert comment is not None
+    assert "⚠️" in comment.body
+    assert "PR #1562" in comment.body
+    assert "not found on origin/main" in comment.body
+    assert ticket.state is State.DONE
+
+
+def test_mark_done_with_existing_pr_stores_cleanly(service, tmp_path):
+    """PR #42 found in origin/main commit message → no warning."""
+    t = service.create("existing pr test")
+    import subprocess as _sp
+
+    ws = service.workspace(t)
+    repo = ws.repo_dir
+    repo.mkdir(parents=True, exist_ok=True)
+    _sp.run(["git", "-C", str(repo), "init"], capture_output=True, text=True)
+    _sp.run(
+        ["git", "-C", str(repo), "config", "user.email", "test@example.com"],
+        capture_output=True,
+        text=True,
+    )
+    _sp.run(
+        ["git", "-C", str(repo), "config", "user.name", "Test"],
+        capture_output=True,
+        text=True,
+    )
+    (repo / "file.txt").write_text("hello")
+    _sp.run(["git", "-C", str(repo), "add", "."], capture_output=True, text=True)
+    _sp.run(
+        ["git", "-C", str(repo), "commit", "-m", "Merge PR #42 into main"],
+        capture_output=True,
+        text=True,
+    )
+    _sp.run(
+        ["git", "-C", str(repo), "branch", "origin/main"],
+        capture_output=True,
+        text=True,
+    )
+
+    comment, ticket = service.mark_done(t.id, note="Fixed by PR #42")
+    assert ticket.state is State.DONE
+    if comment is not None:
+        assert "⚠️" not in comment.body
+
+
+def test_mark_done_with_unverifiable_commit_sha_warns(service, tmp_path):
+    """Bogus SHA → ⚠️ appended."""
+    t = service.create("bogus sha test")
+    import subprocess as _sp
+
+    ws = service.workspace(t)
+    repo = ws.repo_dir
+    repo.mkdir(parents=True, exist_ok=True)
+    _sp.run(["git", "-C", str(repo), "init"], capture_output=True, text=True)
+    _sp.run(
+        ["git", "-C", str(repo), "config", "user.email", "test@example.com"],
+        capture_output=True,
+        text=True,
+    )
+    _sp.run(
+        ["git", "-C", str(repo), "config", "user.name", "Test"],
+        capture_output=True,
+        text=True,
+    )
+    (repo / "file.txt").write_text("hello")
+    _sp.run(["git", "-C", str(repo), "add", "."], capture_output=True, text=True)
+    _sp.run(
+        ["git", "-C", str(repo), "commit", "-m", "initial"],
+        capture_output=True,
+        text=True,
+    )
+    _sp.run(
+        ["git", "-C", str(repo), "branch", "origin/main"],
+        capture_output=True,
+        text=True,
+    )
+
+    comment, ticket = service.mark_done(
+        t.id, note="Cherry-picked abcdef1234567890abcdef1234567890abcdef12"
+    )
+    assert comment is not None
+    assert "⚠️" in comment.body
+    assert "abcdef1234567890abcdef1234567890abcdef12" in comment.body
+    assert "not found on origin/main" in comment.body
+    assert ticket.state is State.DONE
+
+
+def test_mark_done_no_repo_clone_no_crash(service):
+    """Missing repo_dir → graceful no-op (note stored verbatim)."""
+    t = service.create("no clone test")
+    ws = service.workspace(t)
+    # Ensure no repo clone exists.
+    if ws.repo_dir.exists():
+        import shutil
+
+        shutil.rmtree(ws.repo_dir)
+
+    comment, ticket = service.mark_done(t.id, note="Fixed in PR #9999")
+    assert ticket.state is State.DONE
+    if comment is not None:
+        assert comment.body == "Fixed in PR #9999"
+
+
 # --- Epic-priority propagation ----------------------------------------
 
 

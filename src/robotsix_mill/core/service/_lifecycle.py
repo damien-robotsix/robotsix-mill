@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import logging
+import re
 import shutil
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from secrets import token_hex
@@ -50,6 +52,99 @@ _TERMINAL_STATES: set[State] = {
     State.CLOSED,
     State.ERRORED,
 }
+
+
+# --- PR/commit citation verification for mark_done -----------------------
+
+# Matches "#NNNNN" or "PR #NNNNN" — PR number references in free-text notes.
+_PR_CITATION_RE = re.compile(r"(?:PR\s+)?#(\d{1,5})", re.IGNORECASE)
+
+# Matches 7–40 hex SHA-like tokens (same pattern as refine's _COMMIT_SHA_RE).
+_COMMIT_CITATION_RE = re.compile(r"\b[0-9a-f]{7,40}\b")
+
+
+def _verify_citations(note: str, repo_dir: Path | None) -> str:
+    """Best-effort: check cited PRs / commit SHAs against *repo_dir*'s
+    ``origin/main`` and append ⚠️ warnings for any that can't be verified.
+
+    Returns *note* unchanged when *repo_dir* is ``None`` or missing,
+    when *note* is empty, or when no citations are detected.
+    """
+    if not repo_dir or not repo_dir.exists():
+        return note
+    if not note or not note.strip():
+        return note
+
+    warnings: list[str] = []
+
+    # --- PR citations: git log --grep="#N" origin/main ------------------
+    for m in _PR_CITATION_RE.finditer(note):
+        pr_num = m.group(1)
+        grep = f"#{pr_num}"
+        try:
+            result = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(repo_dir),
+                    "log",
+                    "--oneline",
+                    f"--grep={grep}",
+                    "origin/main",
+                    "-1",
+                ],
+                capture_output=True,
+                text=True,
+            )
+        except Exception:
+            # If git itself is broken, skip verification entirely.
+            return note
+        if result.returncode != 0 or not result.stdout.strip():
+            warnings.append(f"PR #{pr_num}")
+
+    # --- Commit SHA citations: git cat-file -e + merge-base ------------
+    for m in _COMMIT_CITATION_RE.finditer(note):
+        sha = m.group(0)
+        # Skip SHAs that are embedded inside PR references already handled above.
+        try:
+            type_check = subprocess.run(
+                ["git", "-C", str(repo_dir), "cat-file", "-e", sha],
+                capture_output=True,
+                text=True,
+            )
+        except Exception:
+            return note
+        if type_check.returncode != 0:
+            warnings.append(f"commit {sha}")
+            continue
+        try:
+            anc = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(repo_dir),
+                    "merge-base",
+                    "--is-ancestor",
+                    sha,
+                    "origin/main",
+                ],
+                capture_output=True,
+                text=True,
+            )
+        except Exception:
+            return note
+        if anc.returncode != 0:
+            warnings.append(f"commit {sha}")
+
+    if not warnings:
+        return note
+
+    lines: list[str] = []
+    for w in sorted(set(warnings)):
+        lines.append(
+            f"⚠️ {w} not found on origin/main at time of closure — verify manually."
+        )
+    return note.rstrip() + "\n\n" + "\n".join(lines)
 
 
 class _LifecycleMixin(_ServiceBase):
@@ -655,6 +750,11 @@ class _LifecycleMixin(_ServiceBase):
         states (DONE, CLOSED, ANSWERED, EPIC_CLOSED) and EPIC_OPEN are
         rejected.
 
+        Before persisting, cited PR numbers and commit SHAs in *note*
+        are verified against ``origin/main`` in the ticket's workspace
+        clone; unverifiable citations get a ⚠️ warning appended (soft
+        warning — the closure still proceeds).
+
         Returns ``(Comment | None, Ticket)``.  Raises ``KeyError`` if
         the ticket does not exist, ``TransitionError`` if the state is
         not eligible.
@@ -666,7 +766,11 @@ class _LifecycleMixin(_ServiceBase):
             State.EPIC_CLOSED,
             State.EPIC_OPEN,
         }
-        with db.session(self.settings, self._board_for(ticket_id)) as s:
+        try:
+            board = self._board_for(ticket_id)
+        except ValueError:
+            board = self.board_id or ""
+        with db.session(self.settings, board) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 raise KeyError(ticket_id)
@@ -675,6 +779,9 @@ class _LifecycleMixin(_ServiceBase):
                     f"{ticket_id}: cannot mark done — "
                     f"state {ticket.state} is not eligible for mark-done"
                 )
+            # Augment the note with citation warnings before persisting.
+            repo_dir = self.workspace(ticket).repo_dir
+            note = _verify_citations(note, repo_dir)
             comment = None
             if note.strip():
                 comment = Comment(ticket_id=ticket_id, body=note, author=author)
