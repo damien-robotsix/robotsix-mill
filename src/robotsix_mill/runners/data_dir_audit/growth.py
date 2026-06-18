@@ -320,6 +320,9 @@ _GROWTH_CLASS_PERIODIC = "periodic-pass clone (re-cloned every pass)"
 _GROWTH_CLASS_META_CLONE_CACHE = "meta board clone cache (transient, re-cloned)"
 _GROWTH_CLASS_MEMORY_LEDGER = "bounded memory ledger (capped by max_memory_chars)"
 _GROWTH_CLASS_RUN_REGISTRY = "bounded run registry (capped at 50 entries)"
+_GROWTH_CLASS_CANDIDATES = (
+    "bounded candidates ledger (capped by retrospect_candidates_max_entries)"
+)
 _GROWTH_CLASS_OTHER = "other"
 
 # Fraction of a directory's growth that must be attributable to
@@ -377,6 +380,8 @@ def _classify_growth_path(path: str, ticket_states: dict[str, str]) -> str:
             return _GROWTH_CLASS_RUN_REGISTRY
         if path.endswith("_memory.md"):
             return _GROWTH_CLASS_MEMORY_LEDGER
+        if path == "AGENT_CANDIDATES.md" or path.endswith("/AGENT_CANDIDATES.md"):
+            return _GROWTH_CLASS_CANDIDATES
         return _GROWTH_CLASS_OTHER
     state = ticket_states.get(tid, "orphan")
     if state == "active":

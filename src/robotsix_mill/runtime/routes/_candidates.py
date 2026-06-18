@@ -18,6 +18,7 @@ from ...agents.candidates import (
     Candidate,
     candidates_path,
     load_candidates,
+    prune_candidates,
     to_ticket_payload,
     update_status,
 )
@@ -186,6 +187,21 @@ def validate_candidate(
             status="validated",
             filed_ticket=ticket.id,
         )
+    # Best-effort prune: resolved entries may now exceed the cap.
+    try:
+        dropped = prune_candidates(path, settings.retrospect_candidates_max_entries)
+        if dropped:
+            log.info(
+                "validate_candidate: pruned %d resolved entries from %s",
+                dropped,
+                path,
+            )
+    except Exception:
+        log.warning(
+            "validate_candidate: prune_candidates failed for %s",
+            path,
+            exc_info=True,
+        )
     return _to_read(updated, rc.repo_id)
 
 
@@ -207,4 +223,19 @@ def reject_candidate(
     updated = update_status(path, candidate_id, new_status="rejected")
     if updated is None:
         raise HTTPException(404, "candidate not found")
+    # Best-effort prune: resolved entries may now exceed the cap.
+    try:
+        dropped = prune_candidates(path, settings.retrospect_candidates_max_entries)
+        if dropped:
+            log.info(
+                "reject_candidate: pruned %d resolved entries from %s",
+                dropped,
+                path,
+            )
+    except Exception:
+        log.warning(
+            "reject_candidate: prune_candidates failed for %s",
+            path,
+            exc_info=True,
+        )
     return _to_read(updated, rc.repo_id)

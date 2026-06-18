@@ -213,3 +213,52 @@ def test_only_other_candidate_remains_pending_after_validate(client, candidates_
     pending = client.get("/candidates?repo_id=test-repo").json()
     assert len(pending) == 1
     assert pending[0]["candidate_id"] != cid_a
+
+
+def test_validate_prunes_resolved_entries_over_cap(client, settings):
+    """Validating a candidate triggers ``prune_candidates`` so resolved
+    entries exceeding ``retrospect_candidates_max_entries`` are dropped
+    immediately instead of lingering until the next retrospect run."""
+    settings.retrospect_candidates_max_entries = 1
+    p = settings.data_dir / "test-board" / "AGENT_CANDIDATES.md"
+    p.parent.mkdir(parents=True, exist_ok=True)
+
+    # One already-resolved entry (older) + one pending entry.
+    resolved = (
+        "### Proposed addition to ## Old section\n\n"
+        "> **Rule:** Old rule body.\n\n"
+        "**Rationale:** old rationale.\n\n"
+        "**Proposed:** 2026-05-30 10:00 UTC "
+        "(from 20260530T100000Z-old-ticket-aaaa)\n\n"
+        "**Status:** validated → 20260601-mill-001\n\n"
+        "---\n"
+    )
+    pending = (
+        "### Proposed addition to ## Project layout\n\n"
+        "> **Rule:** New CLI subcommands live in `src/<pkg>/cli/`.\n\n"
+        "**Rationale:** observed across tickets `aaa`, `bbb`.\n\n"
+        "**Proposed:** 2026-05-30 11:00 UTC "
+        "(from 20260530T110000Z-some-ticket-aaaa)\n\n"
+        "---\n"
+    )
+    p.write_text(resolved + "\n" + pending)
+
+    # One pending entry surfaced by the list endpoint.
+    r = client.get("/candidates?repo_id=test-repo")
+    assert r.status_code == 200
+    pending_list = r.json()
+    assert len(pending_list) == 1
+    cid = pending_list[0]["candidate_id"]
+
+    # Validate the pending entry.
+    v = client.post(f"/candidates/{cid}/validate?repo_id=test-repo")
+    assert v.status_code == 200, v.text
+    assert v.json()["status"] == "validated"
+
+    # The old resolved entry should be pruned (cap=1, 0 pending →
+    # 1 resolved kept — the newly validated one).
+    from robotsix_mill.agents.candidates import load_candidates
+
+    remaining = load_candidates(p)
+    assert len(remaining) == 1
+    assert remaining[0].candidate_id == cid
