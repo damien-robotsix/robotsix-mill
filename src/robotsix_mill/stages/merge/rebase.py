@@ -95,17 +95,20 @@ class RebaseMixin(_MergeStageBase):
             target,
         )
 
-        ok = self._fetch_and_run_rebase(
+        run = self._fetch_and_run_rebase(
             ticket, s, ctx.repo_config, repo_dir, branch, target, attempt
         )
 
-        if isinstance(ok, Outcome):
-            return ok  # e.g. BLOCKED on a diverged PR branch
+        if isinstance(run, Outcome):
+            return run  # e.g. BLOCKED on a diverged PR branch
+        ok, detail = run
         if ok:
             return self._handle_rebase_success(
                 ticket, ctx, branch, repo_dir, counter_path, attempt, max_attempts
             )
-        return self._handle_rebase_failure(ticket, counter_path, attempt, max_attempts)
+        return self._handle_rebase_failure(
+            ticket, repo_dir, counter_path, attempt, max_attempts, detail
+        )
 
     def _validate_workspace_for_rebase(
         self, ctx: StageContext, ticket: Ticket
@@ -140,16 +143,20 @@ class RebaseMixin(_MergeStageBase):
         branch: str,
         target: str,
         attempt: int,
-    ) -> bool | Outcome:
+    ) -> tuple[bool, str] | Outcome:
         """Invoke the rebase agent with bridged git tools.
 
         The agent now drives its own fetch + rebase + push via the
         bridged git tools.  This method only builds the context
         (remote_url, token) and delegates to the agent.
 
-        Returns True on success, False on a (retryable) rebase failure, or
-        an ``Outcome`` to return directly (e.g. BLOCKED when the remote PR
-        branch has diverged and must not be force-pushed over)."""
+        Returns ``(ok, detail)`` — ``ok`` True on success, False on a
+        (retryable) rebase failure; ``detail`` is the agent's summary of
+        what it found / why it could not resolve (surfaced in the BLOCKED
+        note so a human sees the actual conflict, not a generic message).
+        May instead return an ``Outcome`` to return directly (e.g. BLOCKED
+        when the remote PR branch has diverged and must not be force-pushed
+        over)."""
         from robotsix_mill.stages import merge as _facade
 
         try:
@@ -221,12 +228,14 @@ class RebaseMixin(_MergeStageBase):
                     token=token,
                 )
                 ok = result.status == "DONE"
+                detail = result.summary or ""
                 if result.updated_memory:
                     _facade.persist_memory(rebase_memory_path, result.updated_memory)
         except Exception as e:  # noqa: BLE001
             log.exception("%s: rebase attempt failed: %s", ticket.id, e)
             ok = False
-        return ok
+            detail = f"rebase agent crashed: {e}"
+        return (ok, detail)
 
     def _handle_rebase_success(
         self,
@@ -342,26 +351,45 @@ class RebaseMixin(_MergeStageBase):
     def _handle_rebase_failure(
         self,
         ticket: Ticket,
+        repo_dir: str,
         counter_path: Path,
         attempt: int,
         max_attempts: int,
+        detail: str = "",
     ) -> Outcome:
-        """Handle a failed rebase: retry counting or BLOCKED when exhausted."""
+        """Handle a failed rebase: retry counting or BLOCKED when exhausted.
+
+        *detail* is the rebase agent's own summary of what it found / why it
+        could not resolve the conflict. On the final (BLOCKED) attempt this
+        is combined with a deterministic list of still-conflicted files so
+        the operator sees exactly which files need manual resolution instead
+        of a generic "manual conflict resolution required"."""
         if attempt < max_attempts:
             _write_counter(counter_path, attempt)
             log.warning(
-                "%s: rebase attempt %d/%d failed — retrying next poll",
+                "%s: rebase attempt %d/%d failed — retrying next poll%s",
                 ticket.id,
                 attempt,
                 max_attempts,
+                f": {detail}" if detail else "",
             )
             return Outcome(State.REBASING)  # no-op; retry next poll
 
         # Exhausted all attempts.
         _write_counter(counter_path, 0)  # reset for any future resume
-        return Outcome(
-            State.BLOCKED,
-            f"rebase failed after {max_attempts} attempt(s) — "
-            "manual conflict resolution required. "
-            "Resume-blocked to retry from human_mr_approval.",
+
+        from robotsix_mill.stages import merge as _facade
+
+        conflicts = _facade.git_ops.conflicted_files(Path(repo_dir))
+        note_parts = [f"rebase failed after {max_attempts} attempt(s)."]
+        if conflicts:
+            shown = ", ".join(f"`{p}`" for p in conflicts[:10])
+            more = f" (+{len(conflicts) - 10} more)" if len(conflicts) > 10 else ""
+            note_parts.append(f"Conflicting file(s): {shown}{more}.")
+        if detail:
+            note_parts.append(f"Rebase agent: {detail.strip()}")
+        note_parts.append(
+            "Manual conflict resolution required. "
+            "Resume-blocked to retry from human_mr_approval."
         )
+        return Outcome(State.BLOCKED, " ".join(note_parts))
