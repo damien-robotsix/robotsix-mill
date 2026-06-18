@@ -402,6 +402,7 @@ class TestAuditTraceHealthEndpoints:
         class _R:
             draft_created: bool = True
             unsessioned_count: int = 3
+            name_missing_count: int = 0
             total_traces: int = 10
             window_start: str = "2025-01-01T00:00:00Z"
             window_end: str = "2025-01-02T00:00:00Z"
@@ -423,7 +424,7 @@ class TestAuditTraceHealthEndpoints:
         run = runs[0]
         assert run["kind"] == "trace-health"
         assert run["status"] == "ok"
-        assert "3/10 traces unsessioned" in run["summary"]
+        assert "Unsessoned: 3, unnamed: 0 / 10" in run["summary"]
         assert "draft created" in run["summary"]
 
     def test_error_run_recorded(self, client, monkeypatch):

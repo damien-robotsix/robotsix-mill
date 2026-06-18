@@ -112,6 +112,33 @@ def _mixed_traces(sessioned, unsessioned):
     return traces
 
 
+def _mixed_traces_with_names(sessioned, unsessioned, unnamed):
+    """Return sessioned + unsessioned + unnamed traces mixed together.
+
+    Unnamed traces have a sessionId but no name (or empty name).
+    """
+    traces = []
+    for i in range(sessioned):
+        traces.append(
+            {"id": f"s-{i:03d}", "name": f"good-{i}", "sessionId": f"sess-{i:03d}"}
+        )
+    for i in range(unsessioned):
+        traces.append({"id": f"u-{i:03d}", "name": f"bad-{i}", "sessionId": None})
+    for i in range(unnamed):
+        traces.append(
+            {"id": f"n-{i:03d}", "sessionId": f"sess-n-{i:03d}"}
+        )  # no 'name' key
+    return traces
+
+
+def _name_orphan_traces(count, with_session=True):
+    """Return *count* traces that have a sessionId but no name."""
+    return [
+        {"id": f"n-{i:03d}", "sessionId": f"sess-{i:03d}" if with_session else None}
+        for i in range(count)
+    ]
+
+
 def _patch_settings(monkeypatch, settings):
     """Make run_trace_health_check use *settings* instead of its own."""
     monkeypatch.setattr(
@@ -156,14 +183,13 @@ def test_unsessioned_traces_creates_draft(tmp_path, monkeypatch):
     # Body assertions
     t = tickets[0]
     body = svc.workspace(t).read_description()
-    assert "3 / 10" in body
+    assert "Unsessoned traces: 3" in body
     assert "u-000" in body
     assert "u-001" in body
     assert "u-002" in body
     assert "bad-0" in body
     # Window timestamps present (ISO 8601)
     assert "UTC →" in body
-    assert "Unsessoned traces: 3 / 10" in body
     # Title
     assert "3/10" in t.title
     assert t.state == State.DRAFT
@@ -408,7 +434,7 @@ def test_cli_trace_health_human_output(capsys, monkeypatch):
     captured = capsys.readouterr()
     assert "Trace-health check complete" in captured.out
     assert "Draft ticket created" in captured.out
-    assert "2 / 8" in captured.out
+    assert "Unsessoned: 2, unnamed: 0 / 8" in captured.out
 
 
 def test_cli_trace_health_json_output(capsys, monkeypatch):
@@ -435,6 +461,7 @@ def test_cli_trace_health_json_output(capsys, monkeypatch):
     data = json.loads(captured.out)
     assert data["draft_created"] is False
     assert data["unsessioned_count"] == 0
+    assert data["name_missing_count"] == 0
     assert data["total_traces"] == 15
     assert "window_start" in data
     assert "window_end" in data
@@ -807,3 +834,199 @@ def test_dedup_scoped_to_board_id(tmp_path, monkeypatch, two_repo_registry):
 
     tickets_a = [t for t in svc_a.list() if t.source == "trace-health"]
     assert len(tickets_a) == 2  # 1 closed + 1 new draft
+
+
+# ---------------------------------------------------------------------------
+# 14. Name-orphan trace detection
+# ---------------------------------------------------------------------------
+
+
+def test_name_orphan_traces_creates_draft(tmp_path, monkeypatch):
+    """All traces have sessionId but some lack name → draft created with
+    name_missing_count > 0."""
+    settings = _settings(tmp_path)
+    _init_db_for_test(settings)
+    traces = _name_orphan_traces(4) + _make_traces(6, with_session=True)
+
+    _patch_list_all_traces(monkeypatch, traces)
+    _patch_settings(monkeypatch, settings)
+
+    result = run_trace_health_check(repo_config=_test_repo_config())
+
+    assert result.draft_created is True
+    assert result.unsessioned_count == 0
+    assert result.name_missing_count == 4
+    assert result.total_traces == 10
+
+    svc = TicketService(settings, board_id="test-board")
+    tickets = [t for t in svc.list() if t.source == "trace-health"]
+    assert len(tickets) == 1
+
+    t = tickets[0]
+    body = svc.workspace(t).read_description()
+
+    # Title mentions unnamed (only-unnamed case)
+    assert "4/10" in t.title
+    assert "lack name" in t.title
+    assert "unsessioned" not in t.title.lower()
+
+    # Body sections
+    assert "Unsessoned traces: 0" in body
+    assert "Unnamed traces: 4" in body
+    for i in range(4):
+        assert f"n-{i:03d}" in body
+        assert "(unnamed)" in body
+
+
+def test_mixed_orphans_creates_draft(tmp_path, monkeypatch):
+    """A mix of unsessioned, unnamed, and healthy traces → draft created,
+    title covers both, body has both sections."""
+    settings = _settings(tmp_path)
+    _init_db_for_test(settings)
+    traces = _mixed_traces_with_names(sessioned=5, unsessioned=3, unnamed=2)
+
+    _patch_list_all_traces(monkeypatch, traces)
+    _patch_settings(monkeypatch, settings)
+
+    result = run_trace_health_check(repo_config=_test_repo_config())
+
+    assert result.draft_created is True
+    assert result.unsessioned_count == 3
+    assert result.name_missing_count == 2
+    assert result.total_traces == 10
+
+    svc = TicketService(settings, board_id="test-board")
+    tickets = [t for t in svc.list() if t.source == "trace-health"]
+    assert len(tickets) == 1
+
+    t = tickets[0]
+    body = svc.workspace(t).read_description()
+
+    # Title mentions both
+    assert "3 unsessioned, 2 unnamed" in t.title
+    assert "/ 10 total" in t.title
+
+    # Body sections
+    assert "Unsessoned traces: 3" in body
+    assert "Unnamed traces: 2" in body
+    assert "u-000" in body
+    assert "u-001" in body
+    assert "u-002" in body
+    assert "n-000" in body
+    assert "(unnamed)" in body
+
+
+def test_all_named_and_sessioned_no_ticket(tmp_path, monkeypatch):
+    """Every trace has both name and sessionId → draft_created=False."""
+    settings = _settings(tmp_path)
+    _init_db_for_test(settings)
+    traces = _make_traces(5, with_session=True)
+
+    _patch_list_all_traces(monkeypatch, traces)
+    _patch_settings(monkeypatch, settings)
+
+    result = run_trace_health_check(repo_config=_test_repo_config())
+
+    assert result.draft_created is False
+    assert result.unsessioned_count == 0
+    assert result.name_missing_count == 0
+    assert result.total_traces == 5
+
+
+def test_empty_string_name_counted_as_missing(tmp_path, monkeypatch):
+    """A trace with 'name': '' is counted as name-orphan."""
+    settings = _settings(tmp_path)
+    _init_db_for_test(settings)
+    traces = [
+        {"id": "t1", "name": "", "sessionId": "s1"},
+        {"id": "t2", "name": "good", "sessionId": "s2"},
+    ]
+
+    _patch_list_all_traces(monkeypatch, traces)
+    _patch_settings(monkeypatch, settings)
+
+    result = run_trace_health_check(repo_config=_test_repo_config())
+
+    assert result.draft_created is True
+    assert result.unsessioned_count == 0
+    assert result.name_missing_count == 1
+    assert result.total_traces == 2
+
+    svc = TicketService(settings, board_id="test-board")
+    tickets = [t for t in svc.list() if t.source == "trace-health"]
+    assert len(tickets) == 1
+
+    t = tickets[0]
+    body = svc.workspace(t).read_description()
+    assert "Unnamed traces: 1" in body
+    assert "t1" in body
+    assert "(unnamed)" in body
+
+
+def test_name_orphan_examples_capped_at_five(tmp_path, monkeypatch):
+    """>5 unnamed traces → body lists exactly 5."""
+    settings = _settings(tmp_path)
+    _init_db_for_test(settings)
+    traces = _name_orphan_traces(8)
+
+    _patch_list_all_traces(monkeypatch, traces)
+    _patch_settings(monkeypatch, settings)
+
+    result = run_trace_health_check(repo_config=_test_repo_config())
+
+    assert result.draft_created is True
+    assert result.name_missing_count == 8
+
+    svc = TicketService(settings, board_id="test-board")
+    tickets = [t for t in svc.list() if t.source == "trace-health"]
+    assert len(tickets) == 1
+
+    t = tickets[0]
+    body = svc.workspace(t).read_description()
+
+    # Title uses real count
+    assert "8/8" in t.title
+
+    # Body: first 5 present, 6th+ absent
+    for i in range(5):
+        assert f"n-{i:03d}" in body
+    assert "n-005" not in body
+
+
+def test_dedup_with_name_orphans_skips(tmp_path, monkeypatch):
+    """An existing non-CLOSED trace-health ticket blocks a name-orphan alert."""
+    settings = _settings(tmp_path)
+    _init_db_for_test(settings)
+    svc = TicketService(settings, board_id="test-board")
+
+    existing = svc.create("old alert", "old body", source="trace-health")
+    assert existing.state == State.DRAFT
+
+    traces = _name_orphan_traces(3)
+    _patch_list_all_traces(monkeypatch, traces)
+    _patch_settings(monkeypatch, settings)
+
+    result = run_trace_health_check(repo_config=_test_repo_config())
+
+    assert result.draft_created is False
+    assert result.name_missing_count == 3
+
+    tickets = [t for t in svc.list() if t.source == "trace-health"]
+    assert len(tickets) == 1
+    assert tickets[0].id == existing.id
+
+
+def test_zero_traces_name_orphan_no_ticket(tmp_path, monkeypatch):
+    """Empty trace list → no draft (no regression)."""
+    settings = _settings(tmp_path)
+    _init_db_for_test(settings)
+
+    _patch_list_all_traces(monkeypatch, [])
+    _patch_settings(monkeypatch, settings)
+
+    result = run_trace_health_check(repo_config=_test_repo_config())
+
+    assert result.draft_created is False
+    assert result.unsessioned_count == 0
+    assert result.name_missing_count == 0
+    assert result.total_traces == 0

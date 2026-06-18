@@ -559,23 +559,27 @@ class PeriodicPassesMixin(_WorkerBase):
                     if result.draft_created:
                         log.info(
                             "Trace-health check (%s): draft created — "
-                            "%d/%d traces unsessioned",
+                            "%d unsessioned, %d unnamed / %d traces",
                             repo_label,
                             result.unsessioned_count,
+                            result.name_missing_count,
                             result.total_traces,
                         )
                     else:
                         log.info(
                             "Trace-health check (%s): no alert "
-                            "(%d/%d traces unsessioned)",
+                            "(%d unsessioned, %d unnamed / %d traces)",
                             repo_label,
                             result.unsessioned_count,
+                            result.name_missing_count,
                             result.total_traces,
                         )
                     if self.run_registry and run_id:
                         summary = (
-                            f"{result.unsessioned_count}/{result.total_traces} "
-                            f"traces unsessioned ({result.window_start} to "
+                            f"Unsessoned: {result.unsessioned_count}, "
+                            f"unnamed: {result.name_missing_count} / "
+                            f"{result.total_traces} "
+                            f"traces ({result.window_start} to "
                             f"{result.window_end}) — "
                             f"{'draft created' if result.draft_created else 'no alert'}"
                         )
