@@ -136,12 +136,19 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: system
         # uv audit --frozen reads the committed uv.lock natively.
-        # If the subcommand isn't available (older uv), fall back to
+        # It's a preview subcommand (needs --preview in stable builds)
+        # but --help works without --preview since uv ≥ 0.6.12, so we
+        # probe availability first.  If unavailable, fall back to
         # pip-audit via uv export --frozen.
+        # IMPORTANT: we must NOT ||-fallback on uv audit's exit code
+        # because a non-zero exit can also mean "CVEs found" — masking
+        # those via a passthrough pip-audit run would be a false-pass.
         run: |
-          uv audit --frozen || {
+          if uv audit --help >/dev/null 2>&1; then
+            uv audit --frozen --preview
+          else
             uv export --frozen | uv run --with pip-audit pip-audit -r /dev/stdin
-          }
+          fi
 
       - name: Ruff (lint + format check)
         env:
