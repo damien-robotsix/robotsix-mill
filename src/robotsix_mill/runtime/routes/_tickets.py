@@ -1015,7 +1015,10 @@ def resume_blocked(
 @router.get("/tickets/{ticket_id}/cost-breakdown")
 def cost_breakdown(
     ticket_id: str,
-    request: Request = None,
+    # FastAPI injects Request and ignores the default; the implicit-Optional
+    # form is intentional. Suppress the [assignment] error so its PEP-484
+    # notes don't trip mypy-baseline's note-block sync.
+    request: Request = None,  # type: ignore[assignment]
     svc=Depends(get_service),
     settings=Depends(get_settings),
 ) -> dict:
