@@ -449,6 +449,16 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "service.api_host": "api_host",
     "service.api_port": "api_port",
     "service.api_url": "api_url",
+    # -- board_agent (agent-comm broker responder) --
+    "board_agent.enabled": "board_agent_enabled",
+    "board_agent.api_url": "board_agent_api_url",
+    "board_agent.api_token": "board_agent_api_token",
+    "board_agent.repo_id": "board_agent_repo_id",
+    "board_agent.write_ops": "board_agent_write_ops",
+    "board_agent.broker_host": "board_agent_broker_host",
+    "board_agent.broker_port": "board_agent_broker_port",
+    "board_agent.broker_scheme": "board_agent_broker_scheme",
+    "board_agent.broker_token": "board_agent_broker_token",
 }
 
 

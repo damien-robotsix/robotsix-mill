@@ -76,14 +76,20 @@ def test_default_max_spend_sentinel():
 
 
 def test_default_board_agent_disabled():
-    """Board agent is opt-in — off by default with localhost URL and
-    writes enabled when turned on."""
+    """Board agent is opt-in — off by default, pointed at this mill's own
+    board API, with writes enabled and no broker configured."""
     s = Settings()
     assert s.board_agent_enabled is False
-    assert s.board_agent_api_url == "http://localhost:8000"
+    assert s.board_agent_api_url == "http://127.0.0.1:8077"
     assert s.board_agent_api_token == ""
     assert s.board_agent_repo_id == ""
     assert s.board_agent_write_ops is True
+    # Broker config is empty by default → the board agent stays off until a
+    # broker_host is set (see lifespan._start_board_agent).
+    assert s.board_agent_broker_host == ""
+    assert s.board_agent_broker_port == 443
+    assert s.board_agent_broker_scheme == "https"
+    assert s.board_agent_broker_token == ""
 
 
 # ---------------------------------------------------------------------------

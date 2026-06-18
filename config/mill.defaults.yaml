@@ -359,3 +359,20 @@ service:
   api_host: "127.0.0.1"                     # FastAPI listen address (container: 0.0.0.0)
   api_port: 8077                            # FastAPI listen port
   api_url: http://127.0.0.1:8077            # base URL the CLI client uses
+
+# ---------------------------------------------------------------------------
+#  board_agent — expose this mill's board over the agent-comm broker so other
+#  agents (e.g. the cost-analyst) can drive it. Off by default; set broker_host
+#  + broker_token (in mill.local.yaml) to register as a pull/mailbox responder.
+# ---------------------------------------------------------------------------
+
+board_agent:
+  enabled: false                            # master switch for the board agent
+  api_url: http://127.0.0.1:8077            # board REST API the agent calls (this mill)
+  api_token: ""                             # bearer for the board API ("" = none, e.g. loopback)
+  repo_id: ""                               # board repo id ("" → the worker's lead repo)
+  write_ops: true                           # allow write ops (create_ticket, transition, …)
+  broker_host: ""                           # agent-comm broker host (e.g. ai-broker.robotsix.net); "" → disabled
+  broker_port: 443                          # broker port
+  broker_scheme: https                      # broker scheme (http/https)
+  broker_token: ""                          # this agent's bearer token for the broker
