@@ -147,9 +147,11 @@ jobs:
           if uv audit --help >/dev/null 2>&1; then
             uv audit --frozen --preview
           else
-            # Strip the editable project line (-e .) — pip-audit cannot
-            # install editable file:// requirements when hashes are present.
-            uv export --frozen | grep -v '^-e \.' | uv run --with pip-audit pip-audit -r /dev/stdin
+            # --no-hashes avoids pip hash-verification failures on VCS (git)
+            # dependencies, which can't carry hashes. Also strip the editable
+            # project line (-e .) — pip-audit cannot install editable file://
+            # requirements.
+            uv export --frozen --no-hashes | grep -v '^-e \.' | uv run --with pip-audit pip-audit -r /dev/stdin
           fi
 
       - name: Ruff (lint + format check)
