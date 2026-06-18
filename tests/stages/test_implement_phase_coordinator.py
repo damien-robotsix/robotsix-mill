@@ -653,3 +653,129 @@ def test_finalize_extra_roots_writes_touched_repos(ctx_factory, tmp_path, monkey
         assert entry["branch"] == "mill/z"
     # Both repos with changes were committed.
     assert {c[0] for c in fake.commits} == {str(primary), str(extra)}
+
+
+# --- 5a. _finalize: towncrier fragment generation -------------------------
+
+
+def test_finalize_generates_towncrier_fragment_when_configured(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When ``pyproject.toml`` has ``[tool.towncrier]`` with
+    ``directory = "changes"``, _finalize creates
+    ``changes/<ticket_id>.misc.md`` containing the ticket title."""
+    ctx = ctx_factory()
+    t = _ticket(ctx, title="Implement foo bar baz")
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    (repo_dir / "pyproject.toml").write_text(
+        '[tool.towncrier]\ndirectory = "changes"\n',
+        encoding="utf-8",
+    )
+    fake = _FakeGitOps(changed={repo_dir})
+    monkeypatch.setattr(pc, "git_ops", fake)
+
+    ImplementStage._finalize(
+        ctx, t, repo_dir, "mill/x", "summary", ok=True, reference_files=None
+    )
+
+    fragment = repo_dir / "changes" / f"{t.id}.misc.md"
+    assert fragment.is_file()
+    assert fragment.read_text(encoding="utf-8") == "Implement foo bar baz"
+
+
+def test_finalize_skips_towncrier_when_not_configured(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When ``pyproject.toml`` exists but has no ``[tool.towncrier]``,
+    no fragment file is created."""
+    ctx = ctx_factory()
+    t = _ticket(ctx, title="Some change")
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    (repo_dir / "pyproject.toml").write_text(
+        '[project]\nname = "example"\n',
+        encoding="utf-8",
+    )
+    fake = _FakeGitOps(changed={repo_dir})
+    monkeypatch.setattr(pc, "git_ops", fake)
+
+    ImplementStage._finalize(
+        ctx, t, repo_dir, "mill/x", "summary", ok=True, reference_files=None
+    )
+
+    # Default directory would be "changes".
+    assert not (repo_dir / "changes").exists()
+    # Commit still happened — just no fragment.
+    assert len(fake.commits) == 1
+
+
+def test_finalize_skips_towncrier_when_no_pyproject(ctx_factory, tmp_path, monkeypatch):
+    """When no ``pyproject.toml`` exists, no fragment file is created
+    and no error is raised."""
+    ctx = ctx_factory()
+    t = _ticket(ctx, title="Some change")
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    # No pyproject.toml at all.
+    fake = _FakeGitOps(changed={repo_dir})
+    monkeypatch.setattr(pc, "git_ops", fake)
+
+    # Must not raise.
+    ImplementStage._finalize(
+        ctx, t, repo_dir, "mill/x", "summary", ok=True, reference_files=None
+    )
+
+    assert not (repo_dir / "changes").exists()
+    assert len(fake.commits) == 1
+
+
+def test_finalize_towncrier_respects_custom_directory(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When ``[tool.towncrier]`` sets ``directory = "news"``, the fragment
+    is created at ``news/<ticket_id>.misc.md``."""
+    ctx = ctx_factory()
+    t = _ticket(ctx, title="Custom dir test")
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    (repo_dir / "pyproject.toml").write_text(
+        '[tool.towncrier]\ndirectory = "news"\n',
+        encoding="utf-8",
+    )
+    fake = _FakeGitOps(changed={repo_dir})
+    monkeypatch.setattr(pc, "git_ops", fake)
+
+    ImplementStage._finalize(
+        ctx, t, repo_dir, "mill/x", "summary", ok=True, reference_files=None
+    )
+
+    fragment = repo_dir / "news" / f"{t.id}.misc.md"
+    assert fragment.is_file()
+    assert fragment.read_text(encoding="utf-8") == "Custom dir test"
+    # Default directory must NOT exist.
+    assert not (repo_dir / "changes").exists()
+
+
+def test_finalize_skips_towncrier_when_no_changes(ctx_factory, tmp_path, monkeypatch):
+    """When the repo has no changes (``has_changes`` is False),
+    ``commit_all`` is NOT called AND no fragment file is created."""
+    ctx = ctx_factory()
+    t = _ticket(ctx, title="No-op change")
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    (repo_dir / "pyproject.toml").write_text(
+        '[tool.towncrier]\ndirectory = "changes"\n',
+        encoding="utf-8",
+    )
+    fake = _FakeGitOps(changed=set())  # no repo has changes
+    monkeypatch.setattr(pc, "git_ops", fake)
+
+    ImplementStage._finalize(
+        ctx, t, repo_dir, "mill/x", "summary", ok=False, reference_files=None
+    )
+
+    # commit_all must NOT have been called.
+    assert fake.commits == []
+    # Fragment must NOT exist (gated on has_changes).
+    assert not (repo_dir / "changes").exists()
