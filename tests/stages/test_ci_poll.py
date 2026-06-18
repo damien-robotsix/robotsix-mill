@@ -583,3 +583,67 @@ def test_ping_pong_block_message_contains_ticket_id_and_ceiling(
     assert "2" in out.note  # ceiling mentioned
     assert "manual intervention" in out.note.lower()
     assert "resume-blocked" in out.note.lower() or "Resume-blocked" in out.note
+
+
+# === Premature-green guard (mergeable_state must be clean) ================
+
+
+def _ci_premature_green(monkeypatch, mergeable_state="blocked"):
+    """Patch the forge so check_status reports success but the PR's
+    mergeable_state is NOT clean — the premature-green race where the fast
+    checks finished green before the slow required gate started."""
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "mergeable_state": mergeable_state,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+
+
+def test_ci_truly_green_helper():
+    """_ci_truly_green requires success AND a clean (or absent) mergeable_state."""
+    from robotsix_mill.stages.merge._shared import _ci_truly_green
+
+    assert _ci_truly_green("success", {"mergeable_state": "clean"}) is True
+    # Absent (non-GitHub forge) → trust the conclusion.
+    assert _ci_truly_green("success", {}) is True
+    assert _ci_truly_green("success", {"mergeable_state": None}) is True
+    # Premature / incomplete combined states → not green.
+    assert _ci_truly_green("success", {"mergeable_state": "blocked"}) is False
+    assert _ci_truly_green("success", {"mergeable_state": "behind"}) is False
+    assert _ci_truly_green("success", {"mergeable_state": "unknown"}) is False
+    # Non-success conclusions are never green.
+    assert _ci_truly_green("failure", {"mergeable_state": "clean"}) is False
+    assert _ci_truly_green("pending", {"mergeable_state": "clean"}) is False
+    assert _ci_truly_green(None, {}) is False
+
+
+def test_premature_green_does_not_promote(tmp_path, monkeypatch):
+    """conclusion=success but mergeable_state=blocked must NOT promote to
+    HUMAN_MR_APPROVAL — it re-polls from IMPLEMENT_COMPLETE instead."""
+    ctx = _gh(tmp_path)
+    _ci_premature_green(monkeypatch, mergeable_state="blocked")
+
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+
+def test_clean_green_still_promotes(tmp_path, monkeypatch):
+    """Sanity: a genuinely clean green still promotes to HUMAN_MR_APPROVAL."""
+    ctx = _gh(tmp_path)
+    _ci_green_mergeable(monkeypatch)
+
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL

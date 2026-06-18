@@ -21,6 +21,7 @@ from ._shared import (
     _LAST_AUTO_FIX_STAGE,
     _PING_PONG_COUNT,
     _REBASE_COUNTER,
+    _ci_truly_green,
     _latest_failing_workflows,
     _read_counter,
     _verify_merge_ancestor,
@@ -175,7 +176,7 @@ class CIPollMixin(_MergeStageBase):
             log.info("%s: CI failing → FIXING_CI", ticket.id)
             return Outcome(State.FIXING_CI)
 
-        if conclusion == "success":
+        if _ci_truly_green(conclusion, pr):
             # Both gates passed! Promote to human review. This is the only
             # GENUINE "CI is fixed" signal (sustained green that advances the
             # ticket), so reset the ci_fix hard cycle ceiling here — not on a
@@ -184,6 +185,10 @@ class CIPollMixin(_MergeStageBase):
             # Also reset the cross-stage auto-fix cycle counter and ping-pong
             # detector files — CI green is the ONLY genuine forward-progress
             # signal.
+            # NOTE: _ci_truly_green requires mergeable_state == "clean" on
+            # GitHub, so a premature green (fast checks done, slow gate not
+            # yet started → mergeable_state "blocked"/"behind") falls through
+            # to the re-poll below instead of promoting.
             artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
             _write_counter(artifacts_dir / "ci_fix_cycles.txt", 0)
             _write_counter(artifacts_dir / _AUTO_FIX_CYCLES, 0)
@@ -199,7 +204,8 @@ class CIPollMixin(_MergeStageBase):
                 "CI checks green and PR is mergeable — awaiting human merge approval",
             )
 
-        # pending or None — keep waiting.
+        # pending, None, or a premature success (conclusion success but
+        # mergeable_state not yet "clean") — keep waiting.
         return Outcome(State.IMPLEMENT_COMPLETE)
 
     def _check_ping_pong(
@@ -364,7 +370,7 @@ class CIPollMixin(_MergeStageBase):
         # success, pending, or None — evaluate auto-merge eligibility.
         eligible, eligibility_reason = self._auto_merge_eligible(ticket, ctx)
 
-        if conclusion == "success":
+        if _ci_truly_green(conclusion, pr):
             if eligible:
                 # CI green + eligible → auto-merge now.
                 feature_tip_sha = pr.get("sha", "")
@@ -415,7 +421,8 @@ class CIPollMixin(_MergeStageBase):
                 self._maybe_comment(ticket, ctx, eligibility_reason)
                 return Outcome(State.HUMAN_MR_APPROVAL)
 
-        # pending or None — not yet green.
+        # pending, None, or a premature success (mergeable_state not yet
+        # "clean") — not yet safe to merge.
         if eligible:
             self._maybe_comment(ticket, ctx, "CI pending — will auto-merge when green")
             return Outcome(State.WAITING_AUTO_MERGE)
@@ -569,8 +576,13 @@ class CIPollMixin(_MergeStageBase):
             self._maybe_comment(ticket, ctx, "CI failed — falling back to gate check")
             return Outcome(State.IMPLEMENT_COMPLETE, "CI failed; gates no longer pass")
 
-        if conclusion == "success":
-            # CI is green — attempt auto-merge.
+        if _ci_truly_green(conclusion, pr):
+            # CI is green AND the forge's combined view is clean — attempt
+            # auto-merge. Gating on _ci_truly_green (not bare conclusion)
+            # prevents merging on a premature green: after a force-push the
+            # fast checks can report success before the slow required gate
+            # starts, with mergeable_state still "blocked"/"behind" — merging
+            # then would redden the target branch.
             feature_tip_sha = pr.get("sha", "")  # capture before merge
             result = get_forge(s, repo_config=ctx.repo_config).merge_pr(
                 source_branch=branch
