@@ -38,6 +38,15 @@ best_k
 failure_summary
 iterations_used
 run_copy_paste_agent
+# Result-type aliases (PeriodicAgentResult) — consumed by tests
+AuditResult
+BcCheckResult
+CompletenessCheckResult
+CopyPasteResult
+ForgeParityResult
+HealthResult
+SurveyResult
+TestGapResult
 model_config
 chunk_size
 max_chunks
@@ -112,8 +121,15 @@ completeness_check_interval_seconds
 forge_parity_memory_path
 forge_parity_periodic
 forge_parity_interval_seconds
+copy_paste_model
 copy_paste_memory_path
 copy_paste_periodic
+completeness_check_model
+forge_parity_model
+health_model
+survey_model
+test_gap_model
+bc_check_model
 copy_paste_interval_seconds
 config_sync_periodic
 config_sync_interval_seconds

@@ -10,87 +10,40 @@ the runner has a clear result to work with.
 
 from __future__ import annotations
 
+from typing import Any
+
 from ..config import Settings
-from .periodic_base import PeriodicAgentResult, load_periodic_system_prompt
+from .periodic_base import (
+    PeriodicAgentResult,
+    load_periodic_system_prompt,
+    make_agent_runner,
+)
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 SYSTEM_PROMPT: str = load_periodic_system_prompt("test_gap")
 
-
 MAX_GAPS = 5
-
 
 TestGapResult = PeriodicAgentResult
 
 
-def run_test_gap_agent(
-    *,
-    settings: Settings,
-    memory: str = "",
-    recent_proposals: str = "",
-    verified_proposals: str = "",
-    repo_dir=None,
-    definition_override=None,
-) -> TestGapResult:
-    """Run the test-gap coverage inspection pass.
-
-    Inspects the repository for modules with zero dedicated test
-    coverage and returns a structured ``TestGapResult`` with draft
-    tickets for newly-discovered gaps.
-
-    When ``repo_dir`` is provided, the agent gets filesystem tools
-    (``read_file``, ``list_dir``) and the ``explore`` scout tool so
-    it can inspect the actual codebase.  Without ``repo_dir`` the
-    agent runs in a read-only reasoning mode (no repo access).
-
-    The agent is constructed via
-    :func:`~.periodic_base.run_periodic_agent` with the role-specific
-    ``SYSTEM_PROMPT``, structured output type
-    ``PromptedOutput(TestGapResult)`` (for provider compatibility),
-    ``web=True`` (for the ``web_research`` sub-agent tool), and
-    ``model_name=settings.test_gap_model``.
-
-    Execution is wrapped in :func:`~.retry.call_with_retry`, which
-    handles transient network/model failures (exponential backoff:
-    2s base, 30s cap) and ``UsageLimitExceeded`` rate-limit errors
-    (30s base, 120s cap with provider fallback after
-    ``settings.rate_limit_fallback_retries`` consecutive failures).
-
-    Args:
-        settings: Application configuration — model names
-            (``test_gap_model``), retry parameters, forge URL, and
-            tool paths.
-        memory: The agent's memory ledger as a Markdown string.
-            Defaults to ``""`` (the agent starts a fresh ledger).
-        repo_dir: Optional path to the local repository clone.
-            When not ``None``, enables the ``explore``,
-            ``read_file``, and ``list_dir`` tools.
-
-    Returns:
-        A ``TestGapResult`` with draft titles, bodies, and gap IDs
-        clipped to ``MAX_GAPS`` (5) entries, plus the updated memory
-        ledger.
-    """
+def _test_gap_dynamic_kwargs(settings: Settings) -> dict[str, Any]:
     from pydantic_ai.usage import UsageLimits
 
-    from .periodic_base import run_periodic_agent
+    return {
+        "usage_limits": UsageLimits(
+            request_limit=settings.test_gap_request_limit,
+            tool_calls_limit=settings.test_gap_max_tool_calls,
+        ),
+        "max_errors": settings.test_gap_max_errors,
+    }
 
-    limits = UsageLimits(
-        request_limit=settings.test_gap_request_limit,
-        tool_calls_limit=settings.test_gap_max_tool_calls,
-    )
-    return run_periodic_agent(
-        settings=settings,
-        definition_name="test_gap",
-        definition_override=definition_override,
-        model_setting=settings.test_gap_model,
-        max_gaps=MAX_GAPS,
-        repo_dir=repo_dir,
-        memory=memory,
-        recent_proposals=recent_proposals,
-        verified_proposals=verified_proposals,
-        prompt_tail="Perform the test-gap inspection and return your result.",
-        include_forge_url=True,
-        usage_limits=limits,
-        max_errors=settings.test_gap_max_errors,
-    )
+
+run_test_gap_agent = make_agent_runner(
+    definition_name="test_gap",
+    model_attr="test_gap_model",
+    prompt_tail="Perform the test-gap inspection and return your result.",
+    max_gaps=MAX_GAPS,
+    include_forge_url=True,
+    dynamic_kwargs_fn=_test_gap_dynamic_kwargs,
+)

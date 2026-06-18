@@ -9,8 +9,9 @@ delegate to.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, Field
 
@@ -378,3 +379,75 @@ def run_periodic_agent(
     result.output.draft_bodies = result.output.draft_bodies[:max_gaps]
     result.output.gap_ids = result.output.gap_ids[:max_gaps]
     return result.output
+
+
+def make_agent_runner(
+    *,
+    definition_name: str,
+    model_attr: str,
+    prompt_tail: str,
+    max_gaps: int = 5,
+    include_forge_url: bool = False,
+    include_jscpd: bool = False,
+    include_workflow_caller_audit: bool = False,
+    include_run_command: bool = False,
+    dynamic_kwargs_fn: Callable[[Settings], dict[str, Any]] | None = None,
+    extra_kwargs: dict[str, Any] | None = None,
+) -> Callable[..., Any]:
+    """Create a ``run_*_agent`` function with the standard periodic-agent
+    signature.
+
+    The returned callable accepts ``(*, settings, memory, recent_proposals,
+    verified_proposals, repo_dir=None, definition_override=None)`` and
+    delegates to :func:`run_periodic_agent` with the parameters captured
+    at factory time.  ``model_attr`` is the name of the ``Settings`` field
+    that holds the per-agent model string (e.g. ``"audit_model"``).
+
+    *dynamic_kwargs_fn* is called with ``settings`` at invocation time to
+    produce extra keyword arguments for :func:`run_periodic_agent` — use
+    it for settings-dependent parameters such as ``usage_limits`` and
+    ``max_errors``.
+
+    The returned function looks up ``run_periodic_agent`` at call time
+    (module-level name lookup) so that monkeypatching
+    ``periodic_base.run_periodic_agent`` in tests is honoured.
+    """
+
+    def run_agent(
+        *,
+        settings: Settings,
+        memory: str = "",
+        recent_proposals: str = "",
+        verified_proposals: str = "",
+        repo_dir: Path | None = None,
+        definition_override: Any = None,
+    ) -> PeriodicAgentResult:
+        kwargs: dict[str, Any] = dict(extra_kwargs) if extra_kwargs else {}
+        if dynamic_kwargs_fn is not None:
+            kwargs.update(dynamic_kwargs_fn(settings))
+
+        # run_periodic_agent returns the agent's structured output (typed Any
+        # at the pydantic-ai seam); the factory contractually narrows it to
+        # PeriodicAgentResult.
+        return cast(
+            PeriodicAgentResult,
+            run_periodic_agent(
+                settings=settings,
+                definition_name=definition_name,
+                definition_override=definition_override,
+                model_setting=getattr(settings, model_attr),
+                max_gaps=max_gaps,
+                repo_dir=repo_dir,
+                memory=memory,
+                recent_proposals=recent_proposals,
+                verified_proposals=verified_proposals,
+                prompt_tail=prompt_tail,
+                include_forge_url=include_forge_url,
+                include_jscpd=include_jscpd,
+                include_workflow_caller_audit=include_workflow_caller_audit,
+                include_run_command=include_run_command,
+                **kwargs,
+            ),
+        )
+
+    return run_agent
