@@ -465,6 +465,8 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "board_agent.broker_port": "board_agent_broker_port",
     "board_agent.broker_scheme": "board_agent_broker_scheme",
     "board_agent.broker_token": "board_agent_broker_token",
+    # -- epic dedup lookback (top-level, mirrors core.memory.dedup_lookback_days) --
+    "epic_dedup_lookback_days": "epic_dedup_lookback_days",
 }
 
 

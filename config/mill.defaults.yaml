@@ -84,6 +84,9 @@ core:
   meta_periodic: false                  # enable the cross-repo meta-agent pass
   meta_interval_seconds: 86400          # seconds between meta-agent passes
 
+# -- epic dedup lookback (top-level, mirrors core.memory.dedup_lookback_days) --
+epic_dedup_lookback_days: 7             # days back closed tickets are dup candidates for epic child dedup
+
 # ---------------------------------------------------------------------------
 #  forge — delivery platform configuration
 # ---------------------------------------------------------------------------
