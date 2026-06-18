@@ -530,6 +530,10 @@ def check_unbounded_candidates(
         for path in sorted(data_dir.rglob(glob)):
             if not path.is_file() or path in matched:
                 continue
+            # The audit's own state file is self-managed and should
+            # never be flagged as an unbounded collection.
+            if path.name == "data_dir_audit_state.json":
+                continue
             matched.add(path)
 
             finding = _evaluate_path(path, data_dir, pattern, cap_bytes, cap_detail)

@@ -971,6 +971,18 @@ class TestGenericJson:
         assert len(findings) == 1
         assert findings[0]["pattern"] == "runs.json"
 
+    def test_audit_state_file_excluded(self, tmp_path):
+        """The audit's own ``data_dir_audit_state.json`` must NOT be
+        flagged as an unbounded collection, even when it exceeds the
+        generic ``*.json`` cap."""
+        settings = _make_settings(tmp_path)
+        path = tmp_path / "some_board" / "data_dir_audit_state.json"
+        _write_bytes(path, _GENERIC_JSON_CAP_BYTES + 1)
+
+        findings = check_unbounded_candidates(tmp_path, settings)
+
+        assert findings == []
+
 
 class TestNonMatchingFiles:
     def test_non_matching_file_ignored(self, tmp_path):
