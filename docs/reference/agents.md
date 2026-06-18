@@ -80,8 +80,6 @@
 
 ::: robotsix_mill.agents.expert_manager
 
-::: robotsix_mill.agents.fallback
-
 ::: robotsix_mill.agents.freshness
 
 ::: robotsix_mill.agents.health
@@ -97,8 +95,6 @@
 ::: robotsix_mill.agents.module_curator
 
 ::: robotsix_mill.agents.obsolescence
-
-::: robotsix_mill.agents.openrouter_cost
 
 ::: robotsix_mill.agents.overlays
 
