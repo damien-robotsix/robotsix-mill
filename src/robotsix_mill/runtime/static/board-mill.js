@@ -61,6 +61,7 @@
     forge_parity: '#a78bfa',
     copy_paste: '#ec4899',
     board_cleanup: '#10b981',
+    state_sync: '#0891b2',
     meta: '#a855f7',
   };
 
@@ -84,6 +85,7 @@
     module_curator: "module-curator",
     copy_paste: "copy-paste",
     board_cleanup: "board-cleanup",
+    state_sync: "state-sync",
     data_dir_audit: "data-dir-audit",
     meta: "meta",
     "run-health": "run-health",
@@ -2046,6 +2048,23 @@
     }
   }
 
+  async function runStateSync() {
+    var btn = event.target;
+    btn.disabled = true; btn.textContent = 'Running...';
+    try {
+      var repoId = getRepoId();
+      var ssUrl = repoId !== "all" ? "/state-sync?repo_id=" + encodeURIComponent(repoId) : "/state-sync";
+      var r = await jpost(ssUrl);
+      if (!r.ok) { throw new Error(await r.text()); }
+      alert("State-sync started — it inspects board state consistency. New draft tickets appear on the board when it finishes.");
+      setTimeout(refresh, 4000);
+    } catch (e) {
+      alert("State-sync failed to start: " + e);
+    } finally {
+      btn.disabled = false; btn.textContent = 'State Sync';
+    }
+  }
+
   async function runTraceReview() {
     var btn = event.target;
     btn.disabled = true; btn.textContent = 'Running...';
@@ -2474,6 +2493,7 @@
   window.runForgeParity = runForgeParity;
   window.runCopyPaste = runCopyPaste;
   window.runBoardCleanup = runBoardCleanup;
+  window.runStateSync = runStateSync;
   window.runBcCheck = runBcCheck;
   window.runCompletenessCheck = runCompletenessCheck;
   window.runRunHealth = runRunHealth;
