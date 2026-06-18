@@ -339,6 +339,24 @@ Pydantic model with a `MILL_` prefix + uppercase with underscores
 dict maps the dotted YAML path to this alias — there is no automatic
 double-underscore convention.
 
+## Config drift prevention
+
+**Rule:** Every new Pydantic settings field added to
+`_settings_periodic.py` or `settings.py` MUST have a corresponding
+entry in BOTH `config/mill.defaults.yaml` (under the appropriate
+agent/feature block) AND `_YAML_PATH_TO_ALIAS` in
+`src/robotsix_mill/config/loader.py` in the same commit. Fields
+omitted from both surfaces are invisible to `check_config_sync.py` —
+the suite only cross-references alias-map ↔ YAML leaves, not
+Settings-model ↔ surfaces.
+
+**Rationale:** PR #1546 and the still-unfiled prune_orphans gap
+(PR #1533): two instances where Pydantic fields were added to the
+model but never wired to config surfaces. The drift checker could
+not catch either because the gap was symmetric. This rule encodes
+the same convention as the `docs/modules.yaml` "add the path in
+the same commit" discipline.
+
 ---
 
 ## Full setting reference
