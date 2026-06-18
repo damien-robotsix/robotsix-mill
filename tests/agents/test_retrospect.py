@@ -45,7 +45,9 @@ def _done(ctx):
 
 
 def _no_langfuse(monkeypatch):
-    monkeypatch.setattr(langfuse_client, "fetch_session_summary", lambda s, sid: None)
+    monkeypatch.setattr(
+        langfuse_client, "fetch_session_summary", lambda s, sid, **kw: None
+    )
 
 
 def _default_result(**overrides):
