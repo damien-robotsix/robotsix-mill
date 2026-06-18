@@ -1212,6 +1212,7 @@ class _FakePassResult:
     drafts_created: list = [{"id": "D-1"}]
     # trace-health
     unsessioned_count: int = 0
+    name_missing_count: int = 0
     total_traces: int = 10
     window_start: str = "2025-01-01"
     window_end: str = "2025-01-02"

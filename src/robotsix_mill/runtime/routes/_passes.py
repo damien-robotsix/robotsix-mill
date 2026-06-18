@@ -381,22 +381,28 @@ def trace_health_check(
                 )
                 r = run_trace_health_check(repo_config=rc)
                 summary = (
-                    f"{r.unsessioned_count}/{r.total_traces} "
-                    f"traces unsessioned ({r.window_start} to "
+                    f"Unsessoned: {r.unsessioned_count}, "
+                    f"unnamed: {r.name_missing_count} / "
+                    f"{r.total_traces} "
+                    f"traces ({r.window_start} → "
                     f"{r.window_end}) — "
                     f"{'draft created' if r.draft_created else 'no alert'}"
                 )
                 registry.finish_ok(run_id, summary)
                 if r.draft_created:
                     log.info(
-                        "trace-health check: draft created — %d/%d traces unsessioned",
+                        "trace-health check: draft created — "
+                        "%d unsessioned, %d unnamed / %d traces",
                         r.unsessioned_count,
+                        r.name_missing_count,
                         r.total_traces,
                     )
                 else:
                     log.info(
-                        "trace-health check: no alert (%d/%d traces unsessioned)",
+                        "trace-health check: no alert "
+                        "(%d unsessioned, %d unnamed / %d traces)",
                         r.unsessioned_count,
+                        r.name_missing_count,
                         r.total_traces,
                     )
             except Exception as e:  # noqa: BLE001 — background; just log

@@ -243,6 +243,7 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                     {
                         "draft_created": result.draft_created,
                         "unsessioned_count": result.unsessioned_count,
+                        "name_missing_count": result.name_missing_count,
                         "total_traces": result.total_traces,
                         "window_start": result.window_start,
                         "window_end": result.window_end,
@@ -309,11 +310,12 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
         if entry["format"] == "trace_health":
             print("Trace-health check complete.")
             if result.draft_created:
-                print("Draft ticket created for unsessioned traces.")
+                print("Draft ticket created for trace orphans.")
             else:
                 print("No alert needed.")
             print(
-                f"Unsessoned: {result.unsessioned_count} / "
+                f"Unsessoned: {result.unsessioned_count}, "
+                f"unnamed: {result.name_missing_count} / "
                 f"{result.total_traces} traces "
                 f"({result.window_start} → {result.window_end})"
             )
@@ -443,7 +445,7 @@ def main(argv: list[str] | None = None) -> int:
     * ``ticket new|list|show|approve|resume-blocked`` — ticket lifecycle
       operations
     * ``audit`` — run an audit pass and emit gap drafts
-    * ``trace-health`` — check Langfuse for unsessioned traces
+    * ``trace-health`` — check Langfuse for unsessioned / unnamed traces
     * ``health`` — run a health pass and emit gap drafts
     * ``copy-paste`` — run a copy-paste / code-duplication detection pass
 
@@ -514,7 +516,7 @@ def main(argv: list[str] | None = None) -> int:
     # --- trace-health command ---
     p_trace_health = sub.add_parser(
         "trace-health",
-        help="check Langfuse for unsessioned traces and alert if found",
+        help="check Langfuse for unsessioned / unnamed traces and alert if found",
     )
     p_trace_health.add_argument(
         "--json",
