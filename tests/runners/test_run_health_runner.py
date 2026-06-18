@@ -90,7 +90,9 @@ def test_digest_flags_failures_and_excludes_healthy(tmp_path, monkeypatch):
     digest = rhr._build_run_health_digest(s)
     assert "bc_check" in digest  # error flagged
     assert "data_dir_audit" in digest  # degraded ok flagged
-    assert "audit" not in digest  # healthy ok excluded
+    # healthy 'audit' excluded — strip the 'data_dir_audit' token first so its
+    # 'audit' substring doesn't false-match.
+    assert "audit" not in digest.replace("data_dir_audit", "")
     assert "survey" not in digest  # running excluded
     assert "stale failure" not in digest  # out-of-window excluded
 

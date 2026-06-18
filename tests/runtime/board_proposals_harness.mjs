@@ -229,7 +229,7 @@ function reset(repo) {
     el._innerHTML = "";
     if (el.classList && el.classList._set) el.classList._set.clear();
   }
-  evalIn("proposalsOpen=false;runsOpen=false;costDashboardOpen=false;candidatesOpen=false;sel=null;");
+  evalIn("proposalsOpen=false;runsOpen=false;candidatesOpen=false;sel=null;");
   if (repo !== undefined) evalIn("currentRepoId=" + JSON.stringify(repo));
 }
 
@@ -282,7 +282,7 @@ await test("toggleProposals closes panel when already open", async () => {
 });
 
 await test("toggleProposals is mutually exclusive with other panels", async () => {
-  for (const flag of ["runsOpen", "costDashboardOpen", "candidatesOpen"]) {
+  for (const flag of ["runsOpen", "candidatesOpen"]) {
     reset("repo1");
     evalIn(flag + "=true;");
     responder = () => ({ status: 200, responseText: "[]" });
