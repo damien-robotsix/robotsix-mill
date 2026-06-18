@@ -1360,6 +1360,176 @@ def test_ci_failure_fingerprint_passed_to_spawn_via_dedup_labels(
     assert len(labels[0]) == len("ci_fp:") + 16  # "ci_fp:" + 16 hex chars
 
 
+# ---
+# Identical-failure gate
+# ---
+
+
+def test_identical_failure_blocks_after_max_consecutive(tmp_path, monkeypatch):
+    """When the same CI failure fingerprint repeats ci_fix_max_identical_failures
+    times, the second occurrence returns BLOCKED without invoking the agent."""
+    ctx = _gh(tmp_path, ci_fix_max_identical_failures="2")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "lint", "summary": "err", "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.branch_is_behind_main",
+        lambda repo, target_branch: True,
+    )
+
+    # Mock _rebase_if_stale to return None and NOT touch artifacts dir.
+    # This isolates the test to _check_consecutive_identical_failure.
+    def fake_rebase_if_stale(self, ticket, ctx, repo_dir, branch, failing_summary):
+        return None
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.CIFixStage._rebase_if_stale",
+        fake_rebase_if_stale,
+    )
+
+    agent_calls = []
+
+    def fake_agent(**k):
+        agent_calls.append(1)
+        return CiFixResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        fake_agent,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    # Compute the current failure fingerprint and pre-seed the fingerprint file.
+    repo_id = ctx.repo_config.board_id
+    failing = [{"name": "lint", "summary": "err", "text": None, "annotations": []}]
+    summary = _build_failing_summary(failing)
+    fp = _ci_failure_fingerprint(summary, repo_id)
+    artifacts = ctx.service.workspace(t).artifacts_dir
+    artifacts.mkdir(parents=True, exist_ok=True)
+    (artifacts / "ci_failure_fingerprint.txt").write_text(fp, encoding="utf-8")
+
+    counter_path = artifacts / "ci_identical_failure_count.txt"
+    assert not counter_path.exists()
+
+    # First run: fingerprint matches → counter increments to 1, agent runs.
+    out1 = CIFixStage().run(t, ctx)
+    assert out1.next_state is State.IMPLEMENT_COMPLETE
+    assert agent_calls == [1]
+    assert counter_path.read_text(encoding="utf-8").strip() == "1"
+
+    # Second run: same fingerprint → counter increments to 2 → BLOCKED.
+    out2 = CIFixStage().run(t, ctx)
+    assert out2.next_state is State.BLOCKED
+    assert fp in out2.note
+    # Agent was NOT called on the second run.
+    assert agent_calls == [1]
+    assert counter_path.read_text(encoding="utf-8").strip() == "2"
+
+
+def test_identical_failure_resets_on_changed_fingerprint(tmp_path, monkeypatch):
+    """When the CI failure fingerprint changes, the counter resets to 0
+    and the fingerprint file is updated to the new fingerprint."""
+    ctx = _gh(tmp_path, ci_fix_max_identical_failures="2")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "lint", "summary": "new err", "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.branch_is_behind_main",
+        lambda repo, target_branch: True,
+    )
+
+    def fake_rebase_if_stale(self, ticket, ctx, repo_dir, branch, failing_summary):
+        return None
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.CIFixStage._rebase_if_stale",
+        fake_rebase_if_stale,
+    )
+
+    agent_calls = []
+
+    def fake_agent(**k):
+        agent_calls.append(1)
+        return CiFixResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        fake_agent,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    repo_id = ctx.repo_config.board_id
+    artifacts = ctx.service.workspace(t).artifacts_dir
+    artifacts.mkdir(parents=True, exist_ok=True)
+
+    # Pre-seed the counter at 5 (simulating prior consecutive failures).
+    counter_path = artifacts / "ci_identical_failure_count.txt"
+    _write_counter(counter_path, 5)
+
+    # Pre-seed a DIFFERENT fingerprint (different check name).
+    old_summary = _build_failing_summary(
+        [{"name": "pytest", "summary": "old", "text": None, "annotations": []}]
+    )
+    old_fp = _ci_failure_fingerprint(old_summary, repo_id)
+    (artifacts / "ci_failure_fingerprint.txt").write_text(old_fp, encoding="utf-8")
+
+    # Current failure is "lint" (different from "pytest" in the stored FP).
+    failing = [{"name": "lint", "summary": "new err", "text": None, "annotations": []}]
+    current_summary = _build_failing_summary(failing)
+    current_fp = _ci_failure_fingerprint(current_summary, repo_id)
+    assert current_fp != old_fp  # fingerprints must differ for this test
+
+    # Run the stage → fingerprint changed → counter resets, agent runs.
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert agent_calls == [1]
+
+    # Counter was reset to 0.
+    assert _read_counter(counter_path) == 0
+
+    # Fingerprint file was updated to the current fingerprint.
+    stored = (artifacts / "ci_failure_fingerprint.txt").read_text(
+        encoding="utf-8"
+    ).strip()
+    assert stored == current_fp
+
+
 # ---------------------------------------------------------------------------
 # Staleness guard: rebase before cycle ceiling
 # ---------------------------------------------------------------------------

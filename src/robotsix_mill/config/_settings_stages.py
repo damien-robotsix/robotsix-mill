@@ -484,6 +484,13 @@ class _StagesSettings(BaseModel):
     ci_fix_max_attempts: int = Field(default=2, ge=0)
     ci_fix_max_cycles: int = Field(default=3, ge=0)
 
+    # Number of consecutive identical-failure cycles before escalating to
+    # BLOCKED.  When the same CI failure fingerprint repeats this many times
+    # without the ci-fix agent making progress, the stage short-circuits
+    # instead of burning the agent's iteration budget on a fix that never
+    # resolves.  Set to 0 to disable the check entirely.
+    ci_fix_max_identical_failures: int = Field(default=2, ge=0)
+
     # How often (seconds) wait_for_ci polls the forge for the branch's CI
     # conclusion while a run is in progress.
     ci_fix_wait_poll_interval_s: float = Field(default=30.0, gt=0)
