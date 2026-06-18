@@ -226,6 +226,11 @@ periodic:
     enabled: true                   # enable periodic trace-health checks
     interval_seconds: 86400         # seconds between checks (min 3600 enforced in worker)
 
+  # -- trace-review — scans Langfuse traces, flags outliers, files drafts ---
+  trace_review:
+    enabled: true                   # enable periodic trace-review passes
+    interval_seconds: 86400         # seconds between passes (min 3600 enforced in worker)
+
   # -- stale-branch-cleanup — deletes old mill branches with no open PR -----
   stale_branch_cleanup:
     enabled: false                  # enable periodic stale-branch cleanup (destructive: opt-in)
