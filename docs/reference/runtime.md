@@ -22,8 +22,6 @@
 
 ::: robotsix_mill.runtime.routes._comments
 
-::: robotsix_mill.runtime.routes._costs
-
 ::: robotsix_mill.runtime.routes._epics
 
 ::: robotsix_mill.runtime.routes._health
