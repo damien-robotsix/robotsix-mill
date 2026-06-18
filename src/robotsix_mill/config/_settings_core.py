@@ -50,6 +50,15 @@ class _CoreSettings(BaseModel):
     # (pro→DEFAULT/opus, flash→CHEAP/haiku) when Claude SDK is selected.
     llm_backend: str = Field(default="deepseek")
     claude_sdk_agents: list[str] = Field(default_factory=list)
+    # Agent names that should use DeepSeek as the PRIMARY model even when
+    # ``llm_backend`` or ``claude_sdk_agents`` would otherwise route them
+    # through the Claude SDK. The Claude SDK is still built lazily as a
+    # FALLBACK (DeepSeek → Claude, the reverse of the default
+    # Claude → DeepSeek direction). Only takes effect for agents that ARE
+    # Claude-routed by the global backend or claude_sdk_agents list; on a
+    # pure-DeepSeek deployment this list is a no-op (the agents already
+    # run on DeepSeek with no Claude fallback).
+    deepseek_agents: list[str] = Field(default_factory=list)
     # Process-wide cap on how many Claude Agent SDK runs may execute at once.
     # Each run spawns a ``claude`` CLI subprocess; spawning many simultaneously
     # (worker startup contention) can stall a run. A global semaphore (see
