@@ -38,6 +38,8 @@ from robotsix_mill.stages import refine as refine_module
         "No change is needed because the file already exists.",
         "This draft's assertion is factually wrong.",
         "No change needed — the reusable workflow already exists.",
+        "No code change is needed; the draft is based on an obsolete observation",
+        "No code changes needed — the module was already deleted.",
     ],
 )
 def test_triage_reason_rejects_true(reason):
