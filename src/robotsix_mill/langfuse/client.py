@@ -27,6 +27,23 @@ _COST_TTL_SECONDS = 60.0
 _cost_cache: dict[str, tuple[float, float]] = {}  # id -> (cost, monotonic)
 
 
+def _qualified(session_id: str, repo_config: RepoConfig | None) -> str:
+    """Repo-qualify a ticket/session id so cost + trace lookups query the
+    same Langfuse ``sessionId`` the tracer stamps (``<repo> · <id>``).
+
+    The #1395 single-project consolidation prefixed every trace's session
+    with ``<repo> · ``, but the cost/trace read path kept querying the bare
+    ticket id — so every lookup matched nothing and read ``$0``. Qualifying
+    here (idempotent, and a no-op when no repo is known) repairs that for
+    all callers and keeps the cost-cache key consistent between the
+    blocking and cache-only reads."""
+    if repo_config is None:
+        return session_id
+    from ..runtime.tracing import qualify_session
+
+    return qualify_session(session_id, repo_config)
+
+
 def _build_read_client(
     settings: Settings, repo_config: RepoConfig | None = None
 ) -> LangfuseReadClient | None:
@@ -99,6 +116,7 @@ def session_total_cost(
     """Return the total USD cost for a Langfuse session (sum of
     ``totalCost`` across all its traces), or ``None`` when Langfuse
     is unconfigured / unreachable / returns no data."""
+    session_id = _qualified(session_id, repo_config)
     data = _langfuse_api_get(
         settings,
         "/api/public/traces",
@@ -138,6 +156,7 @@ def session_traces(
     the caller can degrade rather than show ``$0`` and pretend that's
     real. The drawer uses this to overlay per-step cost on history rows.
     """
+    session_id = _qualified(session_id, repo_config)
     data = _langfuse_api_get(
         settings,
         "/api/public/traces",
@@ -192,6 +211,7 @@ def session_cost(
     much faster than for an idle ticket. Throttle the caller (not the
     cache) so Langfuse isn't hammered.
     """
+    session_id = _qualified(session_id, repo_config)
     now = time.monotonic()
     hit = _cost_cache.get(session_id)
     if not force and hit is not None and (now - hit[1]) < _COST_TTL_SECONDS:
@@ -217,15 +237,21 @@ def effective_cost(total: float, baseline: float) -> float:
     return max(0.0, total - (baseline or 0.0))
 
 
-def session_cost_cached(session_id: str) -> float:
+def session_cost_cached(
+    session_id: str, repo_config: RepoConfig | None = None
+) -> float:
     """Non-blocking cost lookup: return the cached value if any, else
     0.0. NEVER hits the network. Use this in hot paths like the board's
     /tickets list, which polls every 1s; with N tickets cold the full
     ``session_cost`` would issue N Langfuse HTTP calls and block the
     response for seconds, long enough that the next poll tick cancels
     its predecessor. Per-ticket detail GETs still use the full
-    ``session_cost`` to keep the drawer authoritative."""
-    hit = _cost_cache.get(session_id)
+    ``session_cost`` to keep the drawer authoritative.
+
+    *repo_config* must match the one passed to ``session_cost`` so the
+    cache key (the repo-qualified session id) lines up — otherwise this
+    reads a different key and always misses."""
+    hit = _cost_cache.get(_qualified(session_id, repo_config))
     if hit is None:
         return 0.0
     return hit[0]
@@ -290,6 +316,7 @@ def fetch_session_summary(
 
     Returns ``None`` if Langfuse is unconfigured / unreachable.
     """
+    session_id = _qualified(session_id, repo_config)
     data = _langfuse_api_get(
         settings,
         "/api/public/traces",
