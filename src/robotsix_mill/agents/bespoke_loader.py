@@ -46,9 +46,12 @@ class BespokeAgentDefinition(BaseModel):
         description="seconds between passes; clamped to >= 60 to keep "
         "LLM costs bounded even if an operator drops a tiny value",
     )
-    model: str = Field(
-        default="",
-        description="provider/model id; empty → settings.bespoke_default_model",
+    level: int = Field(
+        default=1,
+        ge=1,
+        le=3,
+        description="capability level 1/2/3 (default 1 = cheap); resolved to "
+        "a (transport, model) by build_agent via llmio tier defaults",
     )
     web_knowledge: bool = Field(
         default=True,

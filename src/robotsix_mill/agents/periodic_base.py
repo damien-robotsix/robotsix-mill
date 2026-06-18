@@ -160,7 +160,6 @@ def run_periodic_agent(
     *,
     settings: Settings,
     definition_name: str,
-    model_setting: str,
     max_gaps: int,
     repo_dir: Path | None,
     memory: str,
@@ -185,9 +184,6 @@ def run_periodic_agent(
     definition_name:
         Stem for the YAML path and overlay key.  Must match a file in
         ``agent_definitions/periodic/<name>.yaml``.
-    model_setting:
-        Fallback model when ``definition.model`` is ``None``.  Callers
-        pass the per-agent ``settings.<agent>_model`` field.
     max_gaps:
         Clipping constant for ``draft_titles``, ``draft_bodies``, and
         ``gap_ids`` on the final result.
@@ -321,7 +317,6 @@ def run_periodic_agent(
         settings,
         definition,
         tools=tools,
-        model_name=definition.model or model_setting,
         system_prompt=system_prompt,
     )
 
@@ -384,7 +379,6 @@ def run_periodic_agent(
 def make_agent_runner(
     *,
     definition_name: str,
-    model_attr: str,
     prompt_tail: str,
     max_gaps: int = 5,
     include_forge_url: bool = False,
@@ -400,8 +394,7 @@ def make_agent_runner(
     The returned callable accepts ``(*, settings, memory, recent_proposals,
     verified_proposals, repo_dir=None, definition_override=None)`` and
     delegates to :func:`run_periodic_agent` with the parameters captured
-    at factory time.  ``model_attr`` is the name of the ``Settings`` field
-    that holds the per-agent model string (e.g. ``"audit_model"``).
+    at factory time.  The model is resolved from the definition's ``level``.
 
     *dynamic_kwargs_fn* is called with ``settings`` at invocation time to
     produce extra keyword arguments for :func:`run_periodic_agent` — use
@@ -435,7 +428,6 @@ def make_agent_runner(
                 settings=settings,
                 definition_name=definition_name,
                 definition_override=definition_override,
-                model_setting=getattr(settings, model_attr),
                 max_gaps=max_gaps,
                 repo_dir=repo_dir,
                 memory=memory,

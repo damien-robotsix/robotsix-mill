@@ -83,13 +83,11 @@ def run_bespoke_agent(
 
     tools = _build_repo_tools(repo_dir, settings, tool_names=("read_file", "list_dir"))
 
-    model_name = definition.model or settings.bespoke_default_model
-
     agent = build_agent(
         settings,
         name=f"bespoke:{definition.name}",
         system_prompt=definition.system_prompt,
-        model_name=model_name,
+        level=definition.level,
         tools=tools,
         web_knowledge=definition.web_knowledge,
         report_issue=False,

@@ -12,7 +12,7 @@ category: periodic
 interval: 1w
 enabled: true
 
-model: default
+level: 2
 
 tools:
   - explore

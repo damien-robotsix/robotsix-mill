@@ -8,7 +8,7 @@ real-time path has been REMOVED — it leaked across concurrent tickets.
 
 import pytest
 
-from robotsix_mill.agents.openrouter_cost import (
+from robotsix_llmio.openrouter.model import (
     _inject_usage_include,
     record_openrouter_cost,
 )

@@ -323,16 +323,9 @@ def test_test_gap_pass_result_structure(tmp_path, monkeypatch):
 def test_test_gap_config_defaults():
     """Test-gap config has correct defaults."""
     s = Settings()
-    assert s.test_gap_model == "deepseek/deepseek-v4-flash"
     assert s.test_gap_periodic is True
     assert s.test_gap_interval_seconds == 86400
     assert s.test_gap_memory_path is None
-
-
-def test_test_gap_config_custom_model():
-    """Test-gap model can be overridden via env."""
-    s = Settings(test_gap_model="anthropic/claude-sonnet-4")
-    assert s.test_gap_model == "anthropic/claude-sonnet-4"
 
 
 def test_test_gap_memory_file_default(tmp_path):

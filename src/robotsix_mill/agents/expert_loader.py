@@ -1,8 +1,9 @@
 """YAML loader for expert domain definitions.
 
-Parses ``expert_definitions/<domain>.yaml``, resolves ``${ENV_VAR}``
-references in the ``model`` field, validates the result against the
-``ExpertDefinition`` Pydantic model, and returns a structured object.
+Parses ``expert_definitions/<domain>.yaml``, validates the result against
+the ``ExpertDefinition`` Pydantic model, and returns a structured object.
+Each definition declares a capability ``level`` (1/2/3) resolved by
+``build_agent`` via llmio's tier defaults.
 
 This module is independent of the agent runtime (``build_agent``,
 ``Settings``, ``pydantic_ai``) — it only depends on ``pydantic``
@@ -15,7 +16,6 @@ separate future ticket.
 
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
 from typing import Any
@@ -60,7 +60,7 @@ class ExpertDefinition(BaseModel):
     description: str | None = None
     module_paths: list[str]
     system_prompt: str
-    model: str = ""
+    level: int = 2
     memory: ExpertMemoryConfig = ExpertMemoryConfig()
     skills: list[str] = []
     tools: list[str] = ["explore", "read_file", "list_dir"]
@@ -78,26 +78,8 @@ class ExpertDefinition(BaseModel):
         return v
 
 
-# Only bare ``${VAR}`` — the existing YAML does not use defaults or nesting.
-_ENV_VAR_RE = re.compile(r"\$\{([^{}]+)\}")
-
-
-def _resolve_env_vars(raw: str) -> str:
-    """Replace ``${VAR}`` placeholders in *raw* with their values from
-    ``os.environ``.  Returns ``""`` for unset variables — the caller
-    (``ExpertManager``) then falls back to the global expert model when
-    ``model`` is falsy.
-    """
-
-    def _replacer(m: re.Match[str]) -> str:
-        var = m.group(1)
-        return os.environ.get(var, "")
-
-    return _ENV_VAR_RE.sub(_replacer, raw)
-
-
 def load_expert_definition(path: Path) -> ExpertDefinition:
-    """Parse, validate, and env-resolve an expert YAML definition.
+    """Parse and validate an expert YAML definition.
 
     ``path`` must point to a YAML file whose top-level keys map to
     ``ExpertDefinition`` fields.
@@ -120,9 +102,5 @@ def load_expert_definition(path: Path) -> ExpertDefinition:
         raise yaml.YAMLError(
             f"Expected a top-level mapping in {path}, got {type(data).__name__}"
         )
-
-    # Env-var resolution: only the ``model`` field.
-    if "model" in data and isinstance(data["model"], str):
-        data["model"] = _resolve_env_vars(data["model"])
 
     return ExpertDefinition.model_validate(data)

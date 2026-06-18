@@ -82,7 +82,6 @@ def run_obsolescence_check(
             settings=settings,
             definition_name="obsolescence",
             tools=tools,
-            model_name=settings.obsolescence_model,
             prompt=_build_prompt(
                 draft_title=draft_title,
                 draft_body=draft_body,

@@ -349,7 +349,6 @@ def run_trace_inspector(
     repo_dir: Path | None = None,
     repo_config: RepoConfig | None = None,
     memory: str = "",
-    model_name: str | None = None,
     started_at: datetime | None = None,
     classifier_flags: list[str] | None = None,
 ) -> TraceInspectResult:
@@ -436,9 +435,7 @@ def run_trace_inspector(
     error_limit = settings.trace_review_max_errors if repo_dir is not None else 0
     tools = _wrap_tools_with_error_limit(tools, max_errors=error_limit)
 
-    model, client = build_openrouter_model(
-        settings, model_name or settings.trace_inspector_model
-    )
+    model, client = build_openrouter_model(1)
     agent = Agent(
         model=model,
         system_prompt=_SYSTEM_PROMPT,

@@ -8,7 +8,7 @@ description: >-
 
 category: pipeline
 
-model: "${MILL_RETROSPECT_MODEL}"
+level: 1
 
 tools: []
 

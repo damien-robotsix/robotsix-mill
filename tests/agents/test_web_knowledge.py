@@ -279,11 +279,10 @@ class _FakeFailingAgent(_FakeAgent):
 
 
 def _patch_agent_chain(monkeypatch, agent_cls=_FakeAgent):
-    """Replace the lazy Agent / Provider / Model imports with stubs
+    """Replace the lazy Agent import + the level-1 model seam with stubs
     so ``run_web_knowledge`` builds nothing real."""
     import pydantic_ai
-    import pydantic_ai.providers.openrouter as orp
-    from robotsix_mill.agents import openrouter_cost as oc
+    from robotsix_mill.agents import base as bmod
 
     instances: list[_FakeAgent] = []
 
@@ -293,9 +292,10 @@ def _patch_agent_chain(monkeypatch, agent_cls=_FakeAgent):
         return inst
 
     monkeypatch.setattr(pydantic_ai, "Agent", make)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
     monkeypatch.setattr(
-        oc, "CostInstrumentedOpenRouterModel", lambda name, **kw: ("model", name)
+        bmod,
+        "build_openrouter_model",
+        lambda level=1, *, online=False: (object(), object()),
     )
     return instances
 

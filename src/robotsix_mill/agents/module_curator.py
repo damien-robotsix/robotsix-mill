@@ -104,7 +104,6 @@ def run_module_curator_agent(
         settings,
         definition,
         tools=tools,
-        model_name=definition.model or settings.module_curator_model,
         system_prompt=system_prompt,
     )
     verified_block = ("\n\n" + verified_proposals) if verified_proposals else ""

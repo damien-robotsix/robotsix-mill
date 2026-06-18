@@ -158,15 +158,6 @@ def test_is_transient_walks_wrapped_timeout():
     assert is_transient(APITimeoutError("deadline exceeded")) is True
 
 
-def test_timeout_http_client_uses_configured_timeout(tmp_path):
-    from robotsix_mill.agents.base import timeout_http_client
-
-    s = _settings(tmp_path, model_request_timeout="42")
-    c = timeout_http_client(s)
-    assert c.timeout.read == 42.0  # hard per-request read timeout kills hangs
-    assert c.timeout.connect == 15.0
-
-
 # --- retry behaviour (injected sleep, no real waiting) ------------------
 
 

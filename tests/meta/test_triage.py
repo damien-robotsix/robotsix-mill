@@ -125,31 +125,40 @@ def test_required_repos_empty_when_no_clonable_repos(monkeypatch):
 
 
 def test_required_repos_uses_dedicated_capable_meta_triage_model(monkeypatch):
-    """The routing decision runs on settings.meta_triage_model (the capable
-    tier), NOT the cheap module_curator_model it used to share."""
+    """The routing decision runs at the capable tier (level 3, Claude opus),
+    NOT a cheap tier. ``required_repos_for`` lets the meta_triage definition's
+    own ``level`` (3) flow through ``load_and_run_agent`` unchanged (no level
+    override), so we assert no cheap-tier override is forced here."""
     reg = _reg(("mill", "https://gh/m.git"))
     monkeypatch.setattr(meta_triage, "get_repos_config", lambda: reg)
     captured: dict = {}
 
-    def _fake_run(*, settings, definition_name, tools, model_name, prompt, what):
-        captured["model_name"] = model_name
+    def _fake_run(*, settings, definition_name, tools, prompt, what, level=None, **kw):
+        captured["definition_name"] = definition_name
+        captured["level"] = level
         return MagicMock(output=RequiredReposResult(repo_ids=["mill"], rationale="r"))
 
     monkeypatch.setattr(
         "robotsix_mill.agents.yaml_loader.load_and_run_agent", _fake_run
     )
-    settings = MagicMock()
-    settings.meta_triage_model = "deepseek/deepseek-v4-pro"
-    settings.module_curator_model = "deepseek/deepseek-v4-flash"
-    meta_triage.required_repos_for(settings=settings, spec="x")
-    assert captured["model_name"] == "deepseek/deepseek-v4-pro"
+    meta_triage.required_repos_for(settings=MagicMock(), spec="x")
+    # The meta_triage YAML carries level 3 itself; required_repos_for must not
+    # override it down to a cheaper tier.
+    assert captured["definition_name"] == "pipeline/meta_triage"
+    assert captured["level"] is None
 
 
 def test_meta_triage_model_defaults_to_capable_tier():
-    """Default must be a non-flash (capable) model so routing isn't done by
-    the weakest tier."""
-    from robotsix_mill.config import Settings
+    """The meta_triage agent definition must run at the capable tier (level 3,
+    Claude opus) so routing isn't done by the weakest tier."""
+    from pathlib import Path
 
-    model = Settings().meta_triage_model
-    assert model == "deepseek/deepseek-v4-pro"
-    assert "flash" not in model
+    from robotsix_mill.agents.yaml_loader import load_agent_definition
+
+    defn = load_agent_definition(
+        Path(__file__).parent.parent.parent
+        / "agent_definitions"
+        / "pipeline"
+        / "meta_triage.yaml"
+    )
+    assert defn.level == 3

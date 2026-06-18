@@ -7,7 +7,7 @@ description: >-
 
 category: pipeline
 
-model: "${MILL_OBSOLESCENCE_MODEL}"
+level: 1
 
 tools:
   - read_file

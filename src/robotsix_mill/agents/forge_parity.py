@@ -26,7 +26,6 @@ ForgeParityResult = PeriodicAgentResult
 
 run_forge_parity_agent = make_agent_runner(
     definition_name="forge_parity",
-    model_attr="forge_parity_model",
     prompt_tail=(
         "Read forge/base.py to enumerate the Forge ABC methods, then "
         "compare forge/github.py and forge/gitlab.py for coverage and "

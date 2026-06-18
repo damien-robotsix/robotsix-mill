@@ -68,13 +68,13 @@ def test_build_outputs_omits_default_equal_includes_differing() -> None:
 
 
 def test_build_outputs_mill_prefixed_alias_resolution() -> None:
-    # ``MILL_EXPLORE_MODEL`` -> strip ``MILL_`` -> ``explore_model``
-    # alias -> dotted path ``core.models.explore``.
-    defaults = {"core": {"models": {"explore": "deepseek/old"}}}
+    # ``MILL_MAX_FIX_ITERATIONS`` -> strip ``MILL_`` -> ``max_fix_iterations``
+    # alias -> dotted path ``core.limits.max_fix_iterations``.
+    defaults = {"core": {"limits": {"max_fix_iterations": 8}}}
     production, _secrets, _unmapped = _mc.build_outputs(
-        {"MILL_EXPLORE_MODEL": "deepseek/new"}, defaults
+        {"MILL_MAX_FIX_ITERATIONS": "12"}, defaults
     )
-    assert production == {"core": {"models": {"explore": "deepseek/new"}}}
+    assert production == {"core": {"limits": {"max_fix_iterations": 12}}}
 
 
 def test_build_outputs_unmapped_var_is_reported_not_fatal() -> None:

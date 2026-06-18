@@ -14,14 +14,16 @@ unit-testable without a key or pydantic_ai.
 from __future__ import annotations
 
 import asyncio
-import weakref
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..config import Settings, get_secrets
 from .prompt_tool_consistency import unregistered_call_directives
 from .report_issue import make_report_issue_tool
 from .tool_registry import ToolRegistry
+
+if TYPE_CHECKING:
+    from robotsix_llmio.config.tier import TierConfig
 
 # Defensive char cap on the inlined ``## Module Map`` block so the static
 # prompt can't grow unbounded as ``docs/modules.yaml`` grows. A hardcoded
@@ -71,40 +73,63 @@ def _safe_close(agent: Any) -> None:
             pass
 
 
-def timeout_http_client(settings: Settings):
-    """A fresh httpx.AsyncClient with a hard per-request timeout, so a
-    hung/glacial provider connection raises instead of blocking the
-    worker forever. Pass to OpenRouterProvider(http_client=...)."""
-    import httpx
+def _default_tier_config() -> "TierConfig":
+    """The default llmio three-level tier config from baked defaults.
 
-    client = httpx.AsyncClient(
-        timeout=httpx.Timeout(settings.model_request_timeout, connect=15.0)
+    L1 → DeepSeek flash, L2 → DeepSeek pro, L3 → Claude SDK opus. This is the
+    single source of the per-level ``(transport, model)`` binding ("use
+    defaults")."""
+    from robotsix_llmio.config.tier import (
+        LEVEL1_DEFAULT,
+        LEVEL2_DEFAULT,
+        LEVEL3_DEFAULT,
+        TierConfig,
     )
-    weakref.finalize(client, _close_async_client, client)
-    return client
 
-
-def build_openrouter_model(settings: Settings, model_name: str):
-    """Construct a cost-instrumented OpenRouter model + its http client.
-
-    Wraps the ``timeout_http_client → CostInstrumentedOpenRouterModel(
-    OpenRouterProvider(api_key=..., http_client=...))`` chain shared by
-    the agents that build a model directly (web_research, web_knowledge,
-    trace_inspector, consult_expert). Caller owns closing the client
-    (pair with :func:`_aclose_async_client`)."""
-    from pydantic_ai.providers.openrouter import OpenRouterProvider
-
-    from .openrouter_cost import CostInstrumentedOpenRouterModel
-
-    client = timeout_http_client(settings)
-    model = CostInstrumentedOpenRouterModel(
-        model_name,
-        provider=OpenRouterProvider(
-            api_key=get_secrets().openrouter_api_key,
-            http_client=client,
-        ),
+    return TierConfig(
+        level1=LEVEL1_DEFAULT, level2=LEVEL2_DEFAULT, level3=LEVEL3_DEFAULT
     )
-    return model, client
+
+
+def _resolve_level(level: int) -> tuple[str, str]:
+    """Resolve a capability *level* (1/2/3) to its ``(transport, model)`` via
+    llmio's baked tier defaults."""
+    tlc = _default_tier_config().for_level(level)
+    return tlc.transport, tlc.model
+
+
+def level_uses_claude(level: int) -> bool:
+    """Whether *level* routes to the Claude SDK transport (L3 by default)."""
+    return _resolve_level(level)[0] == "claude-sdk"
+
+
+def new_deepseek_model(model_name: str, level: int):
+    """Build a DeepSeek-on-OpenRouter ``(model, http_client)`` via llmio.
+
+    llmio's ``OpenRouterDeepseekProvider`` bakes in cost recording, the DeepSeek
+    provider pin, and the per-level reasoning policy (level 1 → reasoning off,
+    else xhigh). The caller owns closing the returned client (pair with
+    :func:`_aclose_async_client`). Single construction + test seam that replaced
+    the old cost-instrumented model shim."""
+    if not get_secrets().openrouter_api_key:
+        raise RuntimeError("OPENROUTER_API_KEY is not set")
+    from robotsix_llmio.openrouter_deepseek.provider import OpenRouterDeepseekProvider
+
+    provider = OpenRouterDeepseekProvider(api_key=get_secrets().openrouter_api_key)
+    return provider.new_model(model=model_name, level=level)
+
+
+def build_openrouter_model(level: int = 1, *, online: bool = False):
+    """``(model, http_client)`` for a DeepSeek (L1/L2) agent built directly
+    (web_research, web_knowledge, trace_inspector, consult_expert).
+
+    Resolves the concrete model from *level* via llmio's tier defaults and
+    appends ``:online`` when *online* (web search). Caller owns closing the
+    client (pair with :func:`_aclose_async_client`)."""
+    _, model_name = _resolve_level(level)
+    if online:
+        model_name = f"{model_name}:online"
+    return new_deepseek_model(model_name, level)
 
 
 class AgentHandle:
@@ -179,7 +204,7 @@ def build_agent_from_definition(
     kwargs: dict[str, Any] = dict(
         name=definition.name,
         system_prompt=definition.system_prompt,
-        model_name=definition.model,
+        level=definition.level,
         web_knowledge=definition.web_knowledge,
         report_issue=definition.report_issue,
         read_ticket=definition.read_ticket,
@@ -216,39 +241,6 @@ def build_agent_from_definition(
             kwargs["system_prompt"] += conventions_block
 
     return build_agent(settings, **kwargs)
-
-
-# llmio-convention tier aliases for the YAML `model` field. Letting a
-# definition say `model: cheap` / `model: default` keeps it provider-agnostic:
-# the alias maps to a concrete model on the DeepSeek backend, and the Claude
-# backend reads the tier from the resolved "flash"/"pro" substring (see
-# build_agent). The concrete strings mirror mill's Settings defaults — kept
-# here (not imported from llmio internals) to avoid the mill↔llmio skew class.
-_MODEL_TIER_ALIASES: dict[str, str] = {
-    "cheap": "deepseek/deepseek-v4-flash",  # llmio CHEAP / fast tier
-    "default": "deepseek/deepseek-v4-pro",  # llmio DEFAULT / capable tier
-    "normal": "deepseek/deepseek-v4-pro",  # alias of default
-}
-
-
-def _model_name(settings: Settings) -> str:
-    # No "openrouter:" prefix — the provider is set explicitly so we can
-    # use the cost-instrumented model subclass. The main agent NEVER
-    # gets ":online": web search lives only in the cheap web_research
-    # sub-agent, so the pricey model isn't surcharged on every request.
-    return settings.model
-
-
-def _use_claude_sdk(settings: Settings, name: str | None) -> bool:
-    """Whether *name* should be built on the Claude SDK transport.
-
-    REVERSIBLE toggle: True when this agent is explicitly opted in via
-    ``settings.claude_sdk_agents`` OR the global ``settings.llm_backend``
-    is ``"claude_sdk"``. Default config → always False (DeepSeek path).
-    """
-    if name and name in set(settings.claude_sdk_agents or []):
-        return True
-    return settings.llm_backend == "claude_sdk"
 
 
 def claude_sdk_supports_inline_image(settings: Settings) -> bool:
@@ -384,6 +376,7 @@ def _build_deepseek_handle(
     settings: Settings,
     *,
     effective_model: str,
+    level: int,
     composed_system: str,
     all_tools: list[Any],
     output_type: Any,
@@ -393,28 +386,13 @@ def _build_deepseek_handle(
 ) -> AgentHandle:
     """Build the DeepSeek/OpenRouter ``AgentHandle`` for an agent.
 
-    Factored out of :func:`build_agent` so it backs both the default path AND
-    the Claude→DeepSeek fallback (which needs to build the same agent on the
-    OpenRouter backend on demand). ``CostInstrumentedOpenRouterModel`` is a thin
-    shim over robotsix-llmio's ``OpenRouterDeepseekModel``; construction stays
-    here so the model-patch test seam keeps working."""
-    if not get_secrets().openrouter_api_key:
-        raise RuntimeError("OPENROUTER_API_KEY is not set")
-
+    The model (cost recording + DeepSeek pin + per-level reasoning policy) comes
+    from llmio via :func:`new_deepseek_model`; this function only assembles the
+    pydantic-ai ``Agent`` so per-agent ``max_tokens``/tools/name are preserved."""
     from pydantic_ai import Agent
-    from pydantic_ai.providers.openrouter import OpenRouterProvider
     from pydantic_ai.settings import ModelSettings
 
-    from .openrouter_cost import CostInstrumentedOpenRouterModel
-
-    http_client = timeout_http_client(settings)
-    model = CostInstrumentedOpenRouterModel(
-        effective_model,
-        provider=OpenRouterProvider(
-            api_key=get_secrets().openrouter_api_key,
-            http_client=http_client,
-        ),
-    )
+    model, http_client = new_deepseek_model(effective_model, level)
     agent_kwargs: dict[str, Any] = dict(
         model=model,
         system_prompt=composed_system,
@@ -428,40 +406,6 @@ def _build_deepseek_handle(
         agent_kwargs["name"] = name
     agent = Agent(**agent_kwargs)
     return AgentHandle(agent, http_client)
-
-
-def _build_claude_sdk_handle(
-    settings: Settings,
-    *,
-    effective_model: str,
-    composed_system: str,
-    all_tools: list[Any],
-    output_type: Any,
-    name: str | None,
-    retries: int,
-    repo_dir: Path | None = None,
-) -> Any:
-    """Build a Claude-SDK agent handle (haiku/opus based on tier).
-
-    Factored out of :func:`build_agent` so it backs both the standard
-    Claude-primary path AND the DeepSeek→Claude fallback (when an agent
-    is listed in ``settings.deepseek_agents``).
-    """
-    from robotsix_llmio.claude_sdk.provider import ClaudeSDKProvider
-
-    from .claude_concurrency import bound_claude_handle
-
-    sdk_model = "haiku" if "flash" in effective_model else "opus"
-    handle = ClaudeSDKProvider().build_agent(
-        model=sdk_model,
-        system_prompt=composed_system,
-        tools=all_tools,
-        output_type=output_type,
-        name=name,
-        retries=retries,
-        workspace_root=repo_dir,
-    )
-    return bound_claude_handle(handle, settings.claude_max_concurrency)
 
 
 def build_agent(  # noqa: C901
@@ -479,7 +423,7 @@ def build_agent(  # noqa: C901
     close_thread: bool = True,
     list_threads: bool = True,
     ask_user: bool = True,
-    model_name: str | None = None,
+    level: int = 2,
     name: str | None = None,
     retries: int = 2,
     max_tokens: int | None = None,
@@ -488,9 +432,11 @@ def build_agent(  # noqa: C901
     board_id: str = "",
     repo_dir: "Path | None" = None,
 ):
-    """Construct a pydantic-ai Agent on an OpenRouter model. Each agent
-    role passes its own ``model_name`` (see Settings per-agent models);
-    falls back to the coordinator ``model``. Raises if no key.
+    """Construct a pydantic-ai Agent for a capability ``level`` (1/2/3).
+
+    The level resolves to ``(transport, model)`` via llmio's baked tier
+    defaults: L1 → DeepSeek flash, L2 → DeepSeek pro, L3 → Claude SDK opus.
+    The transport is what selects the backend — there is no separate toggle.
 
     Set ``report_issue=False`` for agents that already emit draft
     tickets through their structured output (audit, retrospect).
@@ -588,98 +534,41 @@ def build_agent(  # noqa: C901
             f"Prompt contains call directives to unavailable tools: "
             f"{', '.join(sorted(unreg))}"
         )
-    effective_model = model_name or _model_name(settings)
-    # llmio Tier convention: agent definitions may set `model: cheap` /
-    # `model: default` (or `normal`) instead of a provider-specific model id,
-    # so they stay backend-agnostic. Resolve the alias once here (before the
-    # backend branch): the DeepSeek path then uses the concrete model string,
-    # and the Claude path infers the tier from the resolved "flash"/"pro"
-    # substring. Non-alias values (real model ids, ${VAR}-resolved) pass
-    # through unchanged.
-    effective_model = _MODEL_TIER_ALIASES.get(
-        effective_model.strip().lower(), effective_model
-    )
+    # llmio levels are the single source of transport+model: resolve the
+    # capability `level` (1/2/3) to its baked `(transport, model)` binding.
+    transport, effective_model = _resolve_level(level)
 
-    # --- Backend selection (REVERSIBLE; default DeepSeek) ----------------
-    # When this agent is routed to the Claude SDK (global llm_backend or a
-    # per-agent claude_sdk_agents entry), build via robotsix-llmio's
-    # ClaudeSDKProvider (subscription auth, tier→opus/haiku). Mill's tools
-    # bridge through the SDK's @tool/MCP mechanism. Everything below the
-    # branch is the unchanged DeepSeek/OpenRouter path.
-    use_claude = _use_claude_sdk(settings, name)
+    # --- Transport selection (level-driven) ------------------------------
+    # L3 resolves to the Claude SDK transport; L1/L2 to DeepSeek/OpenRouter.
+    # There is no separate backend toggle — the level *is* the choice.
+    if transport == "claude-sdk":
+        # Lazy: claude_agent_sdk is only imported when a Claude-transport
+        # agent is actually built.
+        from robotsix_llmio.claude_sdk.provider import ClaudeSDKProvider
 
-    # deepseek_agents invert the default Claude→DeepSeek fallback direction:
-    # DeepSeek primary, Claude fallback. Only takes effect when the agent
-    # WOULD be Claude-routed (global llm_backend or claude_sdk_agents).
-    if use_claude and name and name in set(settings.deepseek_agents or []):
-        if not get_secrets().openrouter_api_key:
-            raise RuntimeError("OPENROUTER_API_KEY is not set")
-        from .fallback import FallbackAgentHandle
+        from .claude_concurrency import bound_claude_handle
 
-        deepseek_primary = _build_deepseek_handle(
-            settings,
-            effective_model=effective_model,
-            composed_system=composed_system,
-            all_tools=all_tools,
+        handle = ClaudeSDKProvider().build_agent(
+            model=effective_model,
+            system_prompt=composed_system,
+            tools=all_tools,
             output_type=output_type,
             name=name,
             retries=retries,
-            max_tokens=max_tokens,
+            # Confine the SDK's built-in Write/Edit tools to the ticket's
+            # workspace clone. repo_dir is None for board-less agents → no
+            # confinement, unchanged behavior.
+            workspace_root=repo_dir,
         )
-        return FallbackAgentHandle(
-            deepseek_primary,
-            lambda: _build_claude_sdk_handle(
-                settings,
-                effective_model=effective_model,
-                composed_system=composed_system,
-                all_tools=all_tools,
-                output_type=output_type,
-                name=name,
-                retries=retries,
-                repo_dir=repo_dir,
-            ),
-        )
+        # Bound concurrent CLI-subprocess spawns process-wide so a worker
+        # fanning out many runs at startup can't stall on spawn contention.
+        return bound_claude_handle(handle, settings.claude_max_concurrency)
 
-    if use_claude:
-        primary = _build_claude_sdk_handle(
-            settings,
-            effective_model=effective_model,
-            composed_system=composed_system,
-            all_tools=all_tools,
-            output_type=output_type,
-            name=name,
-            retries=retries,
-            repo_dir=repo_dir,
-        )
-
-        # Resilience: if the Claude run terminally fails (after its local
-        # retries), fall back to the equivalent DeepSeek build of THIS agent —
-        # same prompt/tools/output, same tier-resolved model (effective_model).
-        # Lazily built (only on an actual fallback) and only when an OpenRouter
-        # key exists, so the no-key Claude-only setup is unaffected. run_agent()
-        # drives the retry-then-fallback; see agents/fallback.py.
-        if settings.claude_fallback_to_deepseek and get_secrets().openrouter_api_key:
-            from .fallback import FallbackAgentHandle
-
-            return FallbackAgentHandle(
-                primary,
-                lambda: _build_deepseek_handle(
-                    settings,
-                    effective_model=effective_model,
-                    composed_system=composed_system,
-                    all_tools=all_tools,
-                    output_type=output_type,
-                    name=name,
-                    retries=retries,
-                    max_tokens=max_tokens,
-                ),
-            )
-        return primary
-
-    # --- DeepSeek / OpenRouter (default) ---------------------------------
+    # --- DeepSeek / OpenRouter (L1/L2) -----------------------------------
     return _build_deepseek_handle(
         settings,
         effective_model=effective_model,
+        level=level,
         composed_system=composed_system,
         all_tools=all_tools,
         output_type=output_type,

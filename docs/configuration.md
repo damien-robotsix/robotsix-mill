@@ -74,22 +74,14 @@ python scripts/migrate-config --dry-run
 
 ## Common tasks
 
-### Run with a custom model
+### Change which model an agent uses
 
-Create `config/mill.local.yaml`:
-
-```yaml
-core:
-  models:
-    coordinator: anthropic/claude-sonnet-4
-```
-
-Or set an environment variable (overrides YAML):
-
-```sh
-export MILL_MODEL=anthropic/claude-sonnet-4
-make dev
-```
+Models are not configured per-agent in YAML. Each agent definition
+(`agent_definitions/<name>.yaml`) declares a capability `level: 1|2|3`,
+which resolves to a `(transport, model)` via robotsix-llmio's tier
+defaults (see [§1 Capability levels](#1-capability-levels-model-selection)).
+To change an agent's model, change its `level` in the definition; to change
+what a level maps to, change the defaults in robotsix-llmio.
 
 ### Use a different database URL / data directory
 
@@ -119,8 +111,6 @@ Point the `MILL_CONFIG_FILE` env var at your production overlay:
 ```yaml
 # config/mill.production.yaml
 core:
-  models:
-    coordinator: anthropic/claude-sonnet-4
   limits:
     max_concurrency: 2
     max_spend_usd_per_ticket: 5.0
@@ -367,52 +357,26 @@ Every setting below shows:
 - **Default** — the committed default value
 - **Description** — what it controls
 
-### 1. Core models
+### 1. Capability levels (model selection)
+
+Per-agent model selection is declared in each **agent definition's**
+`level: 1|2|3` field. `build_agent` resolves a level to a
+`(transport, model)` pair via robotsix-llmio's baked tier defaults — there
+is no per-agent model config in YAML and no global backend toggle. The
+level *is* the backend choice.
+
+| Level | Transport | Model | Intent |
+|-------|-----------|-------|--------|
+| 1 | `openrouter[deepseek]` | `deepseek/deepseek-v4-flash` | cheap, repetitive (triage, audit, dedup, periodic scanners, …) |
+| 2 | `openrouter[deepseek]` | `deepseek/deepseek-v4-pro` | intermediate — implement, ci_fix, review, test, … |
+| 3 | `claude-sdk` | `opus` | high-level planning — refine, meta_triage, epic_breakdown |
+
+Level-3 agents run on the Claude Agent SDK (subscription auth; needs Node +
+the `claude` CLI in the container). These knobs govern that path:
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `core.models.coordinator` | `MILL_MODEL` | `deepseek/deepseek-v4-pro` | Coordinator model — reads/edits the repo, delegates to sub-agents |
-| `core.models.explore` | `MILL_EXPLORE_MODEL` | `deepseek/deepseek-v4-flash` | Scout sub-agent — returns concise pointers, never whole files |
-| `core.models.test` | `MILL_TEST_MODEL` | `deepseek/deepseek-v4-pro` | Test sub-agent — distills suite failures into diagnosis |
-| `core.models.refine` | `MILL_REFINE_MODEL` | `deepseek/deepseek-v4-pro` | Refine agent — authors engineering specs from drafts |
-| `core.models.answer` | `MILL_ANSWER_MODEL` | `deepseek/deepseek-v4-pro` | Answer agent — investigative Q&A via repo + web + traces |
-| `core.models.ask_to_ticket` | `MILL_ASK_TO_TICKET_MODEL` | `deepseek/deepseek-v4-pro` | Ask-to-ticket agent — drafts task tickets from answered inquiries' Q&A |
-| `core.models.retrospect` | `MILL_RETROSPECT_MODEL` | `deepseek/deepseek-v4-flash` | Retrospect agent — audits finished tickets; proposes improvements |
-| `core.models.audit` | `MILL_AUDIT_MODEL` | `deepseek/deepseek-v4-flash` | Audit agent — meta-audit for quality/security coverage gaps |
-| `core.models.dedup` | `MILL_DEDUP_MODEL` | `deepseek/deepseek-v4-flash` | Dedup agent — pre-refine duplicate/already-done check |
-| `core.models.obsolescence` | `MILL_OBSOLESCENCE_MODEL` | `deepseek/deepseek-v4-flash` | Obsolescence agent — pre-refine gap re-validation check |
-| `core.models.web_research` | `MILL_WEB_RESEARCH_MODEL` | `deepseek/deepseek-v4-flash` | Web-research sub-agent — web lookups, conclusion only |
-| `core.models.review` | `MILL_REVIEW_MODEL` | `deepseek/deepseek-v4-pro` | Review agent — blind dual-model diff audit (opt-in) |
-| `core.models.review_revision` | `MILL_REVIEW_REVISION_MODEL` | `deepseek/deepseek-v4-pro` | Review-revision agent — autonomously implements changes requested by human reviewers (opt-in) |
-| `core.models.trace_inspector` | `MILL_TRACE_INSPECTOR_MODEL` | `deepseek/deepseek-v4-flash` | Trace-inspector sub-agent — inspects full Langfuse observation tree |
-| `core.models.test_gap` | `MILL_TEST_GAP_MODEL` | `deepseek/deepseek-v4-flash` | Test-gap agent — identifies modules with zero dedicated tests |
-| `core.models.agent_check` | `MILL_AGENT_CHECK_MODEL` | `deepseek/deepseek-v4-flash` | Agent-check agent — audits agent definitions for coherence |
-| `core.models.health` | `MILL_HEALTH_MODEL` | `deepseek/deepseek-v4-flash` | Health agent — codebase-health across 6 dimensions |
-| `core.models.survey` | `MILL_SURVEY_MODEL` | `deepseek/deepseek-v4-flash` | Survey agent — discovers OSS projects; proposes improvements |
-| `core.models.rate_limit_fallback` | `MILL_RATE_LIMIT_FALLBACK_MODEL` | `""` (disabled) | Fallback model when rate-limit retries exhausted |
-| `core.models.doc` | `MILL_DOC_MODEL` | `deepseek/deepseek-v4-flash` | Documentation agent |
-| `core.models.doc_classifier` | `MILL_DOC_CLASSIFIER_MODEL` | `deepseek/deepseek-v4-flash` | Doc-diff classifier gate — cheap pre-check before full doc agent |
-| `core.models.triage` | `MILL_TRIAGE_MODEL` | `deepseek/deepseek-v4-flash` | Pre-refine triage — fast/cheap classification |
-| `core.models.auto_approve` | `MILL_AUTO_APPROVE_MODEL` | `deepseek/deepseek-v4-flash` | Model for the auto-approve triage call (must be fast and cheap) |
-| `core.models.scope_triage` | `MILL_SCOPE_TRIAGE_MODEL` | `deepseek/deepseek-v4-flash` | Scope-triage model — classifies out-of-scope changes as EXPAND/REJECT/ESCALATE |
-
-### 1.1 LLM backend (Claude SDK)
-
-REVERSIBLE provider selection. Default `deepseek` keeps every agent on
-the OpenRouter/DeepSeek path; setting `llm_backend: claude_sdk` (or
-listing names in `claude_sdk_agents`) routes those agents through the
-robotsix-llmio Claude Agent SDK transport. Agents listed in
-`deepseek_agents` use DeepSeek as primary even when they would otherwise
-be Claude-routed, with Claude serving as a fallback only (reversing the
-default Claude→DeepSeek fallback direction).
-
-| YAML path | Env var | Default | Description |
-|-----------|---------|---------|-------------|
-| `core.llm_backend` | — | `deepseek` | Global backend toggle. `claude_sdk` routes ALL agents through the Claude Agent SDK |
-| `core.claude_sdk_agents` | — | `[]` | Per-agent opt-in: only these agent names use the Claude SDK while the rest stay on DeepSeek |
-| `core.deepseek_agents` | — | `[completeness_check]` | Agents that use DeepSeek as primary even when Claude-routed; Claude serves as fallback only (inverts the default Claude→DeepSeek direction). Only takes effect for agents that ARE Claude-routed by global backend or `claude_sdk_agents` |
 | — (env-var only) | `MILL_CLAUDE_MAX_CONCURRENCY` | `4` | Process-wide cap on concurrent Claude SDK runs (each spawns a `claude` CLI subprocess) |
-| — (env-var only) | `MILL_CLAUDE_FALLBACK_TO_DEEPSEEK` | `true` | On a terminal Claude run failure, fall back to the equivalent DeepSeek build (needs an OpenRouter key) |
 | `core.claude_sdk_vision_enabled` | — | `false` | Allow inline image (screenshot/vision) input on the Claude SDK path. **Default off**: the installed llmio bridge cannot consume `BinaryContent` image parts — it stringifies them into a useless repr that hangs the `claude` CLI until the 1200s per-call cap fires. While off, the refine/review screenshot paths degrade to a text note. Flip to `true` (a one-line change) once the bridge gains real image-input support |
 
 ### 2. Request limits
@@ -456,8 +420,6 @@ default Claude→DeepSeek fallback direction).
 | `core.limits.stage_retry_max_delay` | `MILL_STAGE_RETRY_MAX_DELAY` | `60.0` | Max seconds between stage-level retries |
 | `core.limits.rate_limit_backoff_base` | `MILL_RATE_LIMIT_BACKOFF_BASE` | `30.0` | Base seconds for rate-limit backoff (longer window) |
 | `core.limits.rate_limit_backoff_cap` | `MILL_RATE_LIMIT_BACKOFF_CAP` | `120.0` | Max seconds between rate-limit retries |
-| `core.limits.rate_limit_fallback_retries` | `MILL_RATE_LIMIT_FALLBACK_RETRIES` | `3` | Consecutive rate-limit failures before switching to fallback model |
-| `core.limits.model_request_timeout` | `MILL_MODEL_REQUEST_TIMEOUT` | `900.0` | Hard per-call timeout in seconds for every model request |
 | `core.low_credit_threshold_usd` | — | `5.0` | OpenRouter credit balance below this value triggers the board warning banner |
 | `core.low_credit_poll_enabled` | — | `true` | Enable the proactive OpenRouter credit-balance poll (hourly via `GET /api/v1/credits`) |
 | `core.low_credit_poll_interval_seconds` | — | `3600` | Seconds between proactive credit-balance checks |
@@ -501,9 +463,7 @@ default Claude→DeepSeek fallback direction).
 |-----------|---------|---------|-------------|
 | `gates.require_approval` | `MILL_REQUIRE_APPROVAL` | `true` | Pause after refine for human approval (`awaiting_approval` state) |
 | `gates.auto_approve_enabled` | `MILL_AUTO_APPROVE_ENABLED` | `false` | Enable conservative auto-approve triage |
-| `gates.auto_approve_model` | `MILL_AUTO_APPROVE_MODEL` | `deepseek/deepseek-v4-flash` | Model for auto-approve triage (fast + cheap) |
 | `gates.review_enabled` | `MILL_REVIEW_ENABLED` | `false` | Enable dual-model code review stage before deliver |
-| `gates.review_model` | `MILL_REVIEW_MODEL` | `deepseek/deepseek-v4-pro` | Review agent model |
 | `gates.review_max_rounds` | `MILL_REVIEW_MAX_ROUNDS` | `3` | Max CODE_REVIEW round-trips before escalate |
 | `gates.refine_triage_enabled` | `MILL_REFINE_TRIAGE_ENABLED` | `true` | Cheap triage before full refine (skip if precise) |
 | `gates.maintenance_triage_enabled` | `MILL_MAINTENANCE_TRIAGE_ENABLED` | `true` | Cheap triage before a full maintenance pass |
@@ -515,9 +475,7 @@ default Claude→DeepSeek fallback direction).
 | `gates.auto_merge_enabled` | `MILL_AUTO_MERGE_ENABLED` | `false` | Auto-merge PR when CI passes |
 | `gates.auto_merge_main_debt_detection_enabled` | `MILL_AUTO_MERGE_MAIN_DEBT_DETECTION_ENABLED` | `true` | When enabled, the single-repo auto-merge decision detects pre-existing main-branch CI debt: if every workflow failing on the PR head is ALSO failing on the merge target, the failure was not introduced by this PR and the ticket is routed to BLOCKED instead of cycling rebase/ci-fix retries. Safe-by-default — only fires when main is demonstrably red on the same workflow(s); the flag exists so an operator can disable it if needed. |
 | `gates.review_feedback_enabled` | `MILL_REVIEW_FEEDBACK_ENABLED` | `false` | Enable autonomous review-revision agent (opt-in — implements changes requested by human reviewers) |
-| `gates.review_revision_model` | `MILL_REVIEW_REVISION_MODEL` | `deepseek/deepseek-v4-pro` | Review-revision agent model |
 | `gates.pr_summary_enabled` | `MILL_PR_SUMMARY_ENABLED` | `false` | Generate structured PR body from diff via cheap LLM (opt-in) |
-| `gates.pr_summary_model` | `MILL_PR_SUMMARY_MODEL` | `deepseek/deepseek-v4-flash` | Model for PR-summary generation (cheap, one-shot) |
 | `gates.comments_after_body` | `MILL_COMMENTS_AFTER_BODY` | `false` | Render description.md before comments in ticket detail drawer |
 ### 8. Forge
 
@@ -552,7 +510,6 @@ default Claude→DeepSeek fallback direction).
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `web.search_enabled` | `MILL_WEB_SEARCH` | `true` | Enable web-search capability (delegated to sub-agent) |
-| `web.research_model` | `MILL_WEB_RESEARCH_MODEL` | `deepseek/deepseek-v4-flash` | Web-research sub-agent model (also reachable via `core.models.web_research`) |
 | `web.research_request_limit` | `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `8` | Per-call request cap for web research (also reachable via `core.limits.web_research_requests`) |
 | `web.fetch_image` | `MILL_FETCH_IMAGE` | `curlimages/curl:8.17.0` | Docker image for isolated `web_fetch` container |
 | `web.fetch_max_bytes` | `MILL_WEB_FETCH_MAX_BYTES` | `2000000` | Max bytes fetched per URL |
@@ -633,9 +590,6 @@ Additional fields:
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `periodic.bc_check.model` | `MILL_BC_CHECK_MODEL` | `deepseek/deepseek-v4-flash` | BC-check agent model — backward-compatibility scanner |
-| `periodic.completeness_check.model` | `MILL_COMPLETENESS_CHECK_MODEL` | `deepseek/deepseek-v4-flash` | Completeness-check agent model — feature-wiring completeness scanner |
-| `periodic.board_cleanup.model` | `MILL_BOARD_CLEANUP_MODEL` | `deepseek/deepseek-v4-flash` | Board-cleanup agent model (read-only board hygiene proposer, flash sufficient) |
 | `periodic.board_cleanup.enabled` | `MILL_BOARD_CLEANUP_PERIODIC` | `true` | Enable periodic board-cleanup passes |
 | `periodic.board_cleanup.interval_seconds` | `MILL_BOARD_CLEANUP_INTERVAL_SECONDS` | `86400` | Seconds between board-cleanup passes |
 | `periodic.board_cleanup.memory_path` | `MILL_BOARD_CLEANUP_MEMORY_PATH` | `None` | Override path for board-cleanup memory; defaults to `<data_dir>/<repo_id>/board_cleanup_memory.md` |

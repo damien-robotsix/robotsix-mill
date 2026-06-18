@@ -32,7 +32,7 @@ from robotsix_mill.config import Settings
 
 @pytest.fixture
 def settings(tmp_path) -> Settings:
-    return Settings(data_dir=str(tmp_path), forge_parity_model="forge-parity-model-id")
+    return Settings(data_dir=str(tmp_path))
 
 
 @pytest.fixture
@@ -154,17 +154,6 @@ def test_run_forge_parity_agent_prompt_tail(settings, fake_periodic):
         "similarity for methods overridden by both adapters. File at "
         "most 3 draft tickets for confirmed drift."
     )
-
-
-def test_run_forge_parity_agent_uses_forge_parity_model_setting(
-    settings, fake_periodic
-):
-    """The model fallback is ``settings.forge_parity_model`` — when the
-    YAML's ``model:`` is None this is the model name that wins."""
-    run_forge_parity_agent(settings=settings)
-    assert fake_periodic["kwargs"]["model_setting"] == settings.forge_parity_model
-    # And the sentinel from the fixture really did flow through.
-    assert fake_periodic["kwargs"]["model_setting"] == "forge-parity-model-id"
 
 
 # ---------------------------------------------------------------------------

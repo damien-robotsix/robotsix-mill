@@ -37,7 +37,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
 from ..core.duration import parse_duration
 from .overlays import apply_overlay
-from .yaml_loader import AgentDefinition, _resolve_env_vars, load_agent_definition
+from .yaml_loader import AgentDefinition, load_agent_definition
 
 log = logging.getLogger("robotsix_mill.periodic_loader")
 
@@ -127,7 +127,7 @@ class PeriodicWorkflowFile(BaseModel):
     # Everything below mirrors AgentDefinition (all optional here).
     description: str | None = None
     category: str | None = None
-    model: str | None = None
+    level: int | None = None
     tools: list[str] | None = None
     web_knowledge: bool | None = None
     report_issue: bool | None = None
@@ -235,8 +235,6 @@ def _merge_over_builtin(
     for key, value in provided.items():
         if key in _NON_MERGE_FIELDS:
             continue
-        if key == "model" and isinstance(value, str):
-            value = _resolve_env_vars(value)
         data[key] = value
     # Resolve the prompt: replace > overlay > inherit.
     if pwf.system_prompt is not None:
@@ -259,11 +257,9 @@ def _bespoke_definition(pwf: PeriodicWorkflowFile) -> AgentDefinition:
     # backfilled ``interval_seconds``. Drop it so it doesn't collide with
     # interval_seconds and trip AgentDefinition's mutual-exclusion check.
     data.pop("interval", None)
-    model = data.get("model") or ""
-    if isinstance(model, str):
-        model = _resolve_env_vars(model)
-    # model may be "" → build_agent falls back to settings.bespoke_default_model.
-    data["model"] = model
+    # A new bespoke periodic agent defaults to level 1 (cheap) unless it
+    # declares a level explicitly.
+    data.setdefault("level", 1)
     return AgentDefinition.model_validate(data)
 
 

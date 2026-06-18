@@ -54,10 +54,7 @@ async def run_web_research(*, settings: Settings, query: str) -> str:
     from .base import _aclose_async_client, build_openrouter_model
     from .web_tools import make_web_fetch
 
-    online = ":online" if settings.web_search else ""
-    model, client = build_openrouter_model(
-        settings, f"{settings.web_research_model}{online}"
-    )
+    model, client = build_openrouter_model(1, online=settings.web_search)
     agent = Agent(
         model=model,
         system_prompt=_SYSTEM_PROMPT,

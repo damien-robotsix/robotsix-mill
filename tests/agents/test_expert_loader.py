@@ -1,6 +1,5 @@
 """Tests for the YAML expert-definition loader."""
 
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -13,7 +12,6 @@ from pydantic import ValidationError
 from robotsix_mill.agents.expert_loader import (
     ExpertDefinition,
     ExpertMemoryConfig,
-    _resolve_env_vars,
     load_expert_definition,
 )
 
@@ -26,30 +24,6 @@ def _write_yaml(tmp_path: Path, content: str) -> Path:
     p = tmp_path / "test_expert.yaml"
     p.write_text(content, encoding="utf-8")
     return p
-
-
-# ── _resolve_env_vars ────────────────────────────────────────────────
-
-
-def test_resolve_env_vars_replaces_single_var(monkeypatch):
-    monkeypatch.setenv("MY_EXPERT_MODEL", "anthropic/claude-4")
-    assert _resolve_env_vars("${MY_EXPERT_MODEL}") == "anthropic/claude-4"
-
-
-def test_resolve_env_vars_replaces_multiple_vars(monkeypatch):
-    monkeypatch.setenv("A", "hello")
-    monkeypatch.setenv("B", "world")
-    assert _resolve_env_vars("${A} ${B}") == "hello world"
-
-
-def test_resolve_env_vars_no_var_returns_unchanged():
-    assert _resolve_env_vars("no vars here") == "no vars here"
-
-
-def test_resolve_env_vars_unset_returns_empty():
-    """Unresolvable ${VAR} returns '' — caller (ExpertManager) then
-    falls back to the global expert model when model is falsy."""
-    assert _resolve_env_vars("${UNSET_VAR}") == ""
 
 
 # ── ExpertMemoryConfig ───────────────────────────────────────────────
@@ -102,7 +76,7 @@ def test_expert_definition_model_validation():
     assert ed.description is None
     assert ed.module_paths == ["src/**/*.py"]
     assert ed.system_prompt == "You are a test expert."
-    assert ed.model == ""
+    assert ed.level == 2
     assert isinstance(ed.memory, ExpertMemoryConfig)
     assert ed.memory.max_memory_chars == 8000
     assert ed.skills == []
@@ -149,7 +123,7 @@ module_paths:
   - "src/**/*.py"
   - "tests/**/*.py"
 system_prompt: You are a test expert for the codebase.
-model: test/model-v1
+level: 3
 memory:
   max_memory_chars: 4000
   chunk_size: 1000
@@ -176,7 +150,7 @@ extras:
     assert ed.description == "A test expert domain."
     assert ed.module_paths == ["src/**/*.py", "tests/**/*.py"]
     assert ed.system_prompt == "You are a test expert for the codebase."
-    assert ed.model == "test/model-v1"
+    assert ed.level == 3
     assert isinstance(ed.memory, ExpertMemoryConfig)
     assert ed.memory.max_memory_chars == 4000
     assert ed.memory.chunk_size == 1000
@@ -207,7 +181,7 @@ system_prompt: Do one thing well in the docs domain.
     assert ed.module_paths == ["docs/**/*.md"]
     assert ed.system_prompt == "Do one thing well in the docs domain."
     assert ed.description is None
-    assert ed.model == ""
+    assert ed.level == 2
     assert isinstance(ed.memory, ExpertMemoryConfig)
     assert ed.memory.max_memory_chars == 8000
     assert ed.skills == []
@@ -255,56 +229,35 @@ memory:
     assert ed.memory.extras == {}  # default
 
 
-def test_env_var_substitution_in_model(tmp_path, monkeypatch):
-    """(e) ${VAR} in model field is resolved from environment."""
-    monkeypatch.setenv("MY_EXPERT_MODEL", "anthropic/claude-4")
+def test_level_defaults_to_2(tmp_path):
+    """When level is omitted, ExpertDefinition defaults to level 2."""
     p = _write_yaml(
         tmp_path,
         """\
-domain: env-expert
+domain: default-level
 module_paths:
   - "src/**/*.py"
 system_prompt: test
-model: ${MY_EXPERT_MODEL}
 """,
     )
     ed = load_expert_definition(p)
-    assert ed.model == "anthropic/claude-4"
+    assert ed.level == 2
 
 
-def test_non_model_fields_preserve_literal_env_var(tmp_path, monkeypatch):
-    """system_prompt containing ${SOMETHING} stays literal."""
-    monkeypatch.setenv("SOMETHING", "resolved")
+def test_level_explicit_value(tmp_path):
+    """An explicit level is parsed from the YAML."""
     p = _write_yaml(
         tmp_path,
         """\
-domain: literal-expert
-module_paths:
-  - "src/**/*.py"
-system_prompt: "Use ${SOMETHING} as a tag."
-model: gpt-4
-""",
-    )
-    ed = load_expert_definition(p)
-    assert ed.system_prompt == "Use ${SOMETHING} as a tag."
-
-
-def test_unresolvable_env_var_resolves_to_empty(tmp_path):
-    """Unset env var in model → resolved to ''."""
-    if "UNSET_MODEL_VAR" in os.environ:
-        del os.environ["UNSET_MODEL_VAR"]
-    p = _write_yaml(
-        tmp_path,
-        """\
-domain: bad-env-expert
+domain: leveled-expert
 module_paths:
   - "src/**/*.py"
 system_prompt: test
-model: ${UNSET_MODEL_VAR}
+level: 1
 """,
     )
     ed = load_expert_definition(p)
-    assert ed.model == ""
+    assert ed.level == 1
 
 
 # ── load_expert_definition — error cases ─────────────────────────────

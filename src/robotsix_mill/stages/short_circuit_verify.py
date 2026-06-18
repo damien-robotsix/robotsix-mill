@@ -39,7 +39,7 @@ _EDIT_TOOL_NAMES = frozenset(
         "write_file",
         "edit_file",
         "delete_file",
-        # Claude Agent SDK built-in editors (llm_backend=claude_sdk)
+        # Claude Agent SDK built-in editors (level-3 / Claude SDK agents)
         "Write",
         "Edit",
         "MultiEdit",

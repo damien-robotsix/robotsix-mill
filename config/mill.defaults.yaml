@@ -17,35 +17,10 @@
 
 core:
 
-  # -- per-agent model selection (20 fields) --------------------------------
-  # Each agent role gets its own model.  All capable roles default to the
-  # same model via the &default_model anchor; cheap/classification roles
-  # override to smaller models.
-  models:
-    coordinator: &default_model deepseek/deepseek-v4-pro  # reads + edits the repo
-    explore: deepseek/deepseek-v4-flash                   # scout sub-agent — pointers only
-    test: *default_model                                  # distills test failures
-    refine: *default_model                                # authors engineering specs from drafts
-    answer: *default_model                                # investigative Q&A via repo + web + traces
-    ask_to_ticket: *default_model                         # drafts a task ticket from an answered inquiry's Q&A + operator comment
-    retrospect: deepseek/deepseek-v4-flash                # audits finished tickets; extractive summarise/extract-lessons — flash sufficient (cost: was 12.3% of spend on pro tier)
-    audit: deepseek/deepseek-v4-flash                     # periodic quality/security scan; flash is enough — read-only proposer, no code-writing risk
-    dedup: deepseek/deepseek-v4-flash                     # pre-refine duplicate/already-done check — flash is plenty for text comparison
-    obsolescence: deepseek/deepseek-v4-flash          # pre-refine obsolescence gate — re-validates spawned-draft gaps
-    web_research: deepseek/deepseek-v4-flash              # web lookups — conclusion only
-    review: deepseek/deepseek-v4-pro                      # blind diff audit — full tier as the last automated merge gate; a weak reviewer lets defects escape into costly ci_fix loops
-    trace_inspector: deepseek/deepseek-v4-flash           # inspects Langfuse observation tree — flash is plenty for summarisation
-    test_gap: deepseek/deepseek-v4-flash                  # periodic "untested modules" finder — read-only, flash sufficient
-    agent_check: deepseek/deepseek-v4-flash               # periodic agent-yaml audit — read-only structural check
-    health: deepseek/deepseek-v4-flash                    # periodic codebase-health 6-dim scan — read-only summariser
-    survey: deepseek/deepseek-v4-flash                    # discovers OSS projects; proposes improvements — flash is plenty (cf $15.32 trace 1bfa36ab)
-    doc: deepseek/deepseek-v4-flash                       # documentation agent — flash (docs don't gate merges; review runs after)
-    triage: &cheap_model deepseek/deepseek-v4-flash       # pre-refine triage — fast/cheap classification
-    auto_approve: *cheap_model                            # auto-approve triage — flash is plenty for spec-shape classification
-    scope_triage: *cheap_model                            # scope-violation triage — fast and cheap
-    meta_triage: *default_model                           # META repo-routing (required_repos_for) — CAPABLE tier; a wrong pick mis-delivers the ticket to the wrong repo
-    doc_classifier: *cheap_model                          # doc-diff classifier gate (fast + cheap)
-    rate_limit_fallback: ""                               # empty = disabled; switch when rate-limit exhausted
+  # Per-agent model selection is declared in each agent definition's
+  # ``level: 1|2|3`` field (resolved to a (transport, model) by build_agent
+  # via llmio tier defaults: L1 DeepSeek flash, L2 DeepSeek pro, L3 Claude
+  # Opus). There is no per-agent model config and no backend toggle.
 
   # -- request caps, concurrency, retry, and timeouts (17 fields) -----------
   limits:
@@ -79,13 +54,11 @@ core:
     max_spend_usd_per_ticket: 20.0     # dollar cap per ticket — universal runaway-loop backstop (0.0 = disabled)
     stage_timeout_seconds: 2400        # per-stage wall-clock timeout before BLOCK (0 = disabled)
     stage_timeout_overrides: {}        # per-stage timeout overrides as JSON dict, e.g. {"merge": 300}
-    model_request_timeout: 900.0       # hard per-call timeout in seconds
     transient_retries: 4               # max retries for transient network/model failures
     transient_backoff_base: 2.0        # base seconds for exponential backoff (jittered)
     transient_backoff_cap: 30.0        # max seconds between transient retries
     rate_limit_backoff_base: 30.0      # base seconds for rate-limit backoff (longer window)
     rate_limit_backoff_cap: 120.0      # max seconds between rate-limit retries
-    rate_limit_fallback_retries: 3     # consecutive rate-limit failures before switching model
 
   # -- memory ledgers, reference files, and dedup lookback (7 fields) ------
   memory:
@@ -97,9 +70,6 @@ core:
     dedup_lookback_days: 7               # days back closed tickets are dup candidates
 
   # -- direct core.* engine toggles (defaults mirror the Settings fields) ---
-  llm_backend: deepseek                 # deepseek (OpenRouter) | claude (Claude SDK) backend
-  claude_sdk_agents: []                 # agent names routed to the Claude SDK backend (empty = none)
-  deepseek_agents: [completeness_check]  # agents that use DeepSeek as primary even when Claude-routed; Claude serves as fallback only
   claude_sdk_vision_enabled: false      # allow image input on Claude-SDK-routed agents
   low_credit_threshold_usd: 5.0         # OpenRouter balance below this → board warning banner
   low_credit_poll_enabled: true         # enable proactive GET /api/v1/credits hourly poll
@@ -148,7 +118,6 @@ sandbox:
 
 web:
   search_enabled: true                        # enable web-search capability
-  research_model: deepseek/deepseek-v4-flash   # web-research sub-agent model
   research_request_limit: 8                   # per-call request cap for web research
   fetch_image: curlimages/curl:8.17.0         # Docker image for isolated web_fetch container
   fetch_max_bytes: 2000000                    # max bytes fetched per URL (network-level cap)
@@ -165,16 +134,12 @@ web:
 gates:
   require_approval: true                   # pause after refine for human approval
   auto_approve_enabled: false              # conservative auto-approve triage
-  auto_approve_model: deepseek/deepseek-v4-flash  # model for auto-approve triage (flash is plenty for spec-shape classification)
   review_enabled: false                    # enable dual-model code review before deliver
-  review_model: deepseek/deepseek-v4-pro   # review agent model — full tier as the last automated merge gate; must match core.models.review above
   review_max_rounds: 3                     # max CODE_REVIEW round-trips before escalate
   auto_merge_enabled: false                # auto-merge green PR via forge API (opt-in)
   comments_after_body: false               # board drawer renders description.md after comments with a Hide toggle (opt-in)
   review_feedback_enabled: false           # enable autonomous review-revision (opt-in — implements changes requested by human reviewers)
-  review_revision_model: *default_model    # review-revision agent model
   pr_summary_enabled: false               # generate structured PR body from diff via cheap LLM (opt-in)
-  pr_summary_model: deepseek/deepseek-v4-flash  # model for PR summary (cheap, one-shot) — DeepSeek so the provider pin (DeepSeek-only) covers every model
   refine_triage_enabled: true              # cheap triage before full refine (skip if precise)
   maintenance_triage_enabled: true         # cheap triage before a full maintenance pass
   spec_review_enabled: false               # post-refinement spec narrative stripping
@@ -243,7 +208,6 @@ periodic:
 
   # -- audit agent — meta-audit for quality/security coverage gaps ---------
   audit:
-    model: deepseek/deepseek-v4-flash  # read-only proposer, flash sufficient
     enabled: true                   # enable periodic audit passes
     interval_seconds: 86400         # seconds between passes (86400 = 1 day)
     memory_path: null               # defaults to <data_dir>/audit_memory.md
@@ -262,7 +226,6 @@ periodic:
 
   # -- health agent — codebase-health across 6 dimensions ------------------
   health:
-    model: deepseek/deepseek-v4-flash  # read-only 6-dim summariser, flash sufficient
     enabled: true                   # enable periodic health passes
     interval_seconds: 86400         # seconds between passes
     memory_path: null               # defaults to <data_dir>/health_memory.md
@@ -277,7 +240,6 @@ periodic:
 
   # -- test-gap agent — identifies modules with zero dedicated tests -------
   test_gap:
-    model: deepseek/deepseek-v4-flash  # read-only "untested modules" finder, flash sufficient
     enabled: true                   # enable periodic test-gap passes
     interval_seconds: 86400         # seconds between passes
     memory_path: null               # defaults to <data_dir>/test_gap_memory.md
@@ -286,35 +248,30 @@ periodic:
 
   # -- agent-check — audits agent definitions for coherence ----------------
   agent_check:
-    model: deepseek/deepseek-v4-flash  # read-only yaml audit, flash sufficient
     enabled: true                   # enable periodic agent-check passes
     interval_seconds: 86400         # seconds between checks (min 60 enforced in worker)
     memory_path: null               # defaults to <data_dir>/agent_check_memory.md
 
   # -- bc-check — detects backward-compat shims/dead code ripe for removal -
   bc_check:
-    model: deepseek/deepseek-v4-flash  # bc-check agent — flash is enough for shim-detection scans
     enabled: true                   # enable periodic bc-check passes
     interval_seconds: 86400         # seconds between checks (min 60 enforced in worker)
     memory_path: null               # defaults to <data_dir>/bc_check_memory.md
 
   # -- completeness-check — detects half-wired features --------------
   completeness_check:
-    model: deepseek/deepseek-v4-flash  # completeness-check — read-only finder, flash sufficient
     enabled: true                   # enable periodic completeness-check passes
     interval_seconds: 86400         # seconds between checks (min 60 enforced in worker)
     memory_path: null               # defaults to <data_dir>/completeness_check_memory.md
 
   # -- copy-paste agent — deterministic clone detection and triage --------
   copy_paste:
-    model: *default_model           # copy-paste agent model
     enabled: true                   # enable periodic copy-paste passes
     interval_seconds: 604800        # seconds between passes (604800 = 1 week)
     memory_path: null               # defaults to <data_dir>/copy_paste_memory.md
 
   # -- forge-parity agent — forge adapter drift detection -----------------
   forge_parity:
-    model: *default_model           # forge-parity agent model
     enabled: true                   # enable periodic forge-parity passes
     interval_seconds: 604800        # seconds between passes (604800 = 1 week)
     memory_path: null               # defaults to <data_dir>/forge_parity_memory.md
@@ -322,7 +279,6 @@ periodic:
   # -- data-dir audit — scans data_dir for oversized files, growth deltas,
   #    and prunes terminal-ticket clone directories ------------------------
   data_dir_audit:
-    model: deepseek/deepseek-v4-flash  # read-only scanner, flash sufficient
     enabled: true                   # enable periodic data-dir audit passes
     interval_seconds: 86400         # seconds between passes
     memory_path: null               # defaults to <data_dir>/data_dir_audit_memory.md
@@ -340,7 +296,6 @@ periodic:
 
   # -- config-sync — detects config ↔ .env ↔ docs drift -----------------------
   config_sync:
-    model: *cheap_model           # config-sync agent model (read-only file parsing)
     enabled: true                 # enable periodic config-sync passes
     interval_seconds: 86400       # seconds between passes (min 60 enforced in worker)
     memory_path: null             # defaults to <data_dir>/config_sync_memory.md
@@ -352,7 +307,6 @@ periodic:
 
   # -- survey agent — discovers OSS projects; proposes improvements --------
   survey:
-    model: *cheap_model           # survey agent model
     enabled: true                   # enable periodic survey passes (on by default)
     interval_seconds: 86400         # seconds between passes (min 60 enforced in worker)
     memory_path: null               # defaults to <data_dir>/survey_memory.md
@@ -362,14 +316,12 @@ periodic:
 
   # -- module_curator agent — detects drift in the module taxonomy ---------
   module_curator:
-    model: deepseek/deepseek-v4-flash  # module-curator — taxonomy proposer, flash sufficient
     enabled: true                   # enable periodic module-curator passes
     interval_seconds: 86400         # seconds between passes (min 60 enforced in worker)
     memory_path: null               # defaults to <data_dir>/module_curator_memory.md
 
   # -- board_cleanup agent — reviews the board, proposes hygiene actions ----
   board_cleanup:
-    model: deepseek/deepseek-v4-flash  # board-cleanup — hygiene proposer, flash sufficient
     enabled: true                   # enable periodic board-cleanup passes
     interval_seconds: 86400         # seconds between passes (min 60 enforced in worker)
     memory_path: null               # defaults to <data_dir>/board_cleanup_memory.md

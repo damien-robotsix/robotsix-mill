@@ -119,12 +119,8 @@ def test_build_agent_injects_ask_user_by_default(settings, monkeypatch, secrets_
 
     monkeypatch.setattr("pydantic_ai.Agent", _FakeAgent)
     monkeypatch.setattr(
-        "pydantic_ai.providers.openrouter.OpenRouterProvider",
-        lambda *a, **k: object(),
-    )
-    monkeypatch.setattr(
-        "robotsix_mill.agents.openrouter_cost.CostInstrumentedOpenRouterModel",
-        lambda *a, **k: object(),
+        "robotsix_mill.agents.base.new_deepseek_model",
+        lambda model_name, level: (object(), object()),
     )
     secrets_set(openrouter_api_key="k")
 
@@ -145,12 +141,8 @@ def test_build_agent_omits_ask_user_when_false(settings, monkeypatch, secrets_se
 
     monkeypatch.setattr("pydantic_ai.Agent", _FakeAgent)
     monkeypatch.setattr(
-        "pydantic_ai.providers.openrouter.OpenRouterProvider",
-        lambda *a, **k: object(),
-    )
-    monkeypatch.setattr(
-        "robotsix_mill.agents.openrouter_cost.CostInstrumentedOpenRouterModel",
-        lambda *a, **k: object(),
+        "robotsix_mill.agents.base.new_deepseek_model",
+        lambda model_name, level: (object(), object()),
     )
     secrets_set(openrouter_api_key="k")
 

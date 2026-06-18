@@ -41,7 +41,6 @@ def _test_gap_dynamic_kwargs(settings: Settings) -> dict[str, Any]:
 
 run_test_gap_agent = make_agent_runner(
     definition_name="test_gap",
-    model_attr="test_gap_model",
     prompt_tail="Perform the test-gap inspection and return your result.",
     max_gaps=MAX_GAPS,
     include_forge_url=True,

@@ -10,6 +10,7 @@ Returns a structured ``DocResult`` with ``user_facing`` and ``summary``.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -96,7 +97,6 @@ def run_doc_classifier(
         settings,
         definition,
         tools=[],
-        model_name=definition.model or settings.doc_classifier_model,
     )
     try:
         from .prompt_blocks import section
@@ -130,7 +130,7 @@ def run_doc_agent(
     repo_dir,
     diff: str,
     spec: str,
-    model_name: str | None = None,
+    level: int | None = None,
     extra_roots: list[Path] | None = None,
     board_id: str = "",
     reference_files: list[str] | None = None,
@@ -176,11 +176,9 @@ def run_doc_agent(
     )
 
     fs = build_fs_tools(repo_dir, settings, extra_roots=extra_roots)
-    overrides = {}
-    if model_name is not None:
-        overrides["model_name"] = model_name
-    elif not definition.model:
-        overrides["model_name"] = settings.doc_model
+    overrides: dict[str, Any] = {}
+    if level is not None:
+        overrides["level"] = level
 
     # Inject the memory block into the agent's system prompt — the
     # YAML's static prompt + a dynamic ``memory`` fenced block at the

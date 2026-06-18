@@ -7,7 +7,6 @@ import pydantic_ai
 import pydantic_ai.providers.openrouter as orp
 import pytest
 
-from robotsix_mill.agents import openrouter_cost as oc
 from robotsix_mill.agents.rebasing import RebaseResult, run_rebase_agent
 from robotsix_mill.config import Settings, Secrets, _reset_secrets
 
@@ -57,7 +56,10 @@ def fake_ai(monkeypatch):
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        "robotsix_mill.agents.base.new_deepseek_model",
+        lambda model_name, level: (FakeModel(model_name), object()),
+    )
     return box
 
 
@@ -221,52 +223,3 @@ def test_system_prompt_contains_key_instructions(tmp_path, monkeypatch):
     assert "git rebase --continue" in prompt
     assert "DONE" in prompt
     assert "FAILED" in prompt
-
-
-def test_rebase_falls_back_to_deepseek_when_primary_fails(tmp_path, monkeypatch):
-    """Regression: rebase must invoke via run_agent so a Claude outage
-    (primary raises) falls back to the DeepSeek handle instead of hard-failing
-    and blocking the ticket. Before the fix rebase called agent.run_sync()
-    bare, so FallbackAgentHandle never fell back and a credit-exhausted Claude
-    blocked every rebase with 'rebase failed after 3 attempts'."""
-    from robotsix_mill.agents import base as agents_base
-    from robotsix_mill.agents.fallback import FallbackAgentHandle
-
-    class _Primary:
-        def run_sync(self, *a, **k):
-            raise RuntimeError("Claude Code returned an error result: success")
-
-        def close(self):
-            pass
-
-    class _Fallback:
-        def run_sync(self, *a, **k):
-            return type(
-                "R",
-                (),
-                {"output": RebaseResult(status="DONE", summary="rebased via deepseek")},
-            )()
-
-        def close(self):
-            pass
-
-    built = {"n": 0}
-
-    def _build_fallback():
-        built["n"] += 1
-        return _Fallback()
-
-    handle = FallbackAgentHandle(_Primary(), _build_fallback)
-    monkeypatch.setattr(
-        agents_base, "build_agent_from_definition", lambda *a, **k: handle
-    )
-
-    result = run_rebase_agent(
-        settings=_s(tmp_path),
-        repo_dir=tmp_path,
-        branch="mill/x",
-        target="main",
-    )
-    assert result.status == "DONE"
-    assert result.summary == "rebased via deepseek"
-    assert built["n"] == 1  # the DeepSeek fallback was actually built + used

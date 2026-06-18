@@ -225,13 +225,17 @@ def test_screenshot_not_attached_when_vision_gate_off(tmp_path, monkeypatch):
     agent = _FakeAgent()
     _patch_agent_definition(monkeypatch, agent)
 
-    s = _settings(tmp_path, OPENROUTER_API_KEY="k", llm_backend="claude_sdk")
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
     png = _write_png(tmp_path)
 
     result = run_review_agent(
         settings=s,
         diff="diff --git a/x b/x",
         spec="Fix x",
+        # level=3 routes to Claude (vision-capable transport), proving it is
+        # the vision *gate* (default False) — not the level — that blocks the
+        # attach.
+        level=3,
         screenshot_path=png,
     )
     assert isinstance(result, ReviewVerdict)
@@ -258,7 +262,6 @@ def test_screenshot_attached_when_vision_gate_on(tmp_path, monkeypatch):
     s = _settings(
         tmp_path,
         OPENROUTER_API_KEY="k",
-        llm_backend="claude_sdk",
         claude_sdk_vision_enabled=True,
     )
     png = _write_png(tmp_path)
@@ -267,6 +270,7 @@ def test_screenshot_attached_when_vision_gate_on(tmp_path, monkeypatch):
         settings=s,
         diff="diff --git a/x b/x",
         spec="Fix x",
+        level=3,  # Claude (vision-capable) transport
         screenshot_path=png,
     )
     assert isinstance(result, ReviewVerdict)
@@ -322,7 +326,6 @@ def test_missing_screenshot_falls_back_to_text(tmp_path, monkeypatch):
     s = _settings(
         tmp_path,
         OPENROUTER_API_KEY="k",
-        llm_backend="claude_sdk",
         claude_sdk_vision_enabled=True,
     )
 
@@ -330,6 +333,7 @@ def test_missing_screenshot_falls_back_to_text(tmp_path, monkeypatch):
         settings=s,
         diff="diff --git a/x b/x",
         spec="Fix x",
+        level=3,  # Claude (vision-capable) transport
         screenshot_path=Path(tmp_path) / "does-not-exist.png",
     )
     assert isinstance(result, ReviewVerdict)

@@ -42,11 +42,12 @@ def test_name_only_inherits_builtin(tmp_path):
 
 
 def test_field_override_merges(tmp_path):
-    p = _write(tmp_path, "audit", "name: audit\nmodel: default\nretries: 7\n")
+    p = _write(tmp_path, "audit", "name: audit\nlevel: 1\nretries: 7\n")
     r = pl.resolve_periodic_workflow(p)
-    # Tier-alias resolution happens in build_agent, not here — the loader
-    # stores the literal verbatim. The override fields merge over the builtin.
-    assert r.definition.model == "default"
+    # Level resolution to (transport, model) happens in build_agent, not here —
+    # the loader stores the literal level. The override fields merge over the
+    # builtin.
+    assert r.definition.level == 1
     assert r.definition.retries == 7
     # untouched fields inherit from the builtin
     assert r.definition.name == "audit"
@@ -148,18 +149,20 @@ def test_bespoke_builds_definition(tmp_path):
     p = _write(
         tmp_path,
         "my-thing",
-        "name: my-thing\nsystem_prompt: do the thing\nmodel: cheap\n",
+        "name: my-thing\nsystem_prompt: do the thing\nlevel: 2\n",
     )
     r = pl.resolve_periodic_workflow(p)
     assert r is not None and r.kind == "bespoke"
     assert r.definition.system_prompt == "do the thing"
-    assert r.definition.model == "cheap"
+    assert r.definition.level == 2
 
 
-def test_bespoke_empty_model_ok(tmp_path):
+def test_bespoke_empty_level_defaults_to_one(tmp_path):
     p = _write(tmp_path, "my-thing", "name: my-thing\nsystem_prompt: x\n")
     r = pl.resolve_periodic_workflow(p)
-    assert r.definition.model == ""  # build_agent falls back to bespoke default
+    # A brand-new bespoke periodic agent with no level declared defaults to
+    # level 1 (cheap tier).
+    assert r.definition.level == 1
 
 
 # --- global_only ignored ----------------------------------------------------

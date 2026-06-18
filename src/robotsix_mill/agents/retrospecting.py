@@ -349,7 +349,6 @@ def run_retrospect_agent(
         settings,
         definition,
         tools=tools,
-        model_name=definition.model or settings.retrospect_model,
     )
 
     # Register a pre-parse repair hook so the agent's output can be

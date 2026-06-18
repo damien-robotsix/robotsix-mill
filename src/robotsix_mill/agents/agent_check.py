@@ -69,7 +69,6 @@ def run_agent_check_agent(
         settings=settings,
         definition_name="agent_check",
         definition_override=definition_override,
-        model_setting=settings.agent_check_model,
         max_gaps=MAX_GAPS,
         repo_dir=repo_dir,
         memory=memory,

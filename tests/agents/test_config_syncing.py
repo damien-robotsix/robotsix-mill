@@ -98,7 +98,7 @@ def test_run_config_sync_agent_web_false(monkeypatch):
     assert len(build_calls) == 1
     assert build_calls[0]["web_knowledge"] is False
     assert build_calls[0]["name"] == "config-sync"
-    assert build_calls[0]["model_name"] == s.config_sync_model
+    assert build_calls[0]["level"] == 1
 
 
 def test_run_config_sync_agent_max_gaps_clipping(monkeypatch):
@@ -190,18 +190,9 @@ def test_config_sync_config_defaults():
     from robotsix_mill.config import Settings
 
     s = Settings()
-    assert s.config_sync_model == "deepseek/deepseek-v4-flash"
     assert s.config_sync_periodic is True
     assert s.config_sync_interval_seconds == 86400
     assert s.config_sync_memory_path is None
-
-
-def test_config_sync_config_custom_model():
-    """Config-sync model can be overridden via env."""
-    from robotsix_mill.config import Settings
-
-    s = Settings(config_sync_model="anthropic/claude-sonnet-4")
-    assert s.config_sync_model == "anthropic/claude-sonnet-4"
 
 
 def test_config_sync_memory_file_default(tmp_path):

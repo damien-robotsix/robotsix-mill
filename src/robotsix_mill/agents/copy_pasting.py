@@ -26,7 +26,6 @@ CopyPasteResult = PeriodicAgentResult
 
 run_copy_paste_agent = make_agent_runner(
     definition_name="copy_paste",
-    model_attr="copy_paste_model",
     prompt_tail="Run detect_duplication, triage the clone pairs, and return your findings.",
     max_gaps=MAX_GAPS,
     include_jscpd=True,

@@ -1,6 +1,6 @@
 """Unit tests for ImplementationLogicMixin classmethods.
 
-Exercises ``_select_agent_model``, ``_invoke_implement_agent``,
+Exercises ``_select_agent_level``, ``_invoke_implement_agent``,
 ``_evaluate_test_results``, and ``_persist_pass_artifacts`` in
 isolation with all heavy collaborators mocked.
 """
@@ -51,51 +51,51 @@ def _simple_namespace(**kw):
 _Stage = ImplementStage
 
 # ---------------------------------------------------------------------------
-# 1. _select_agent_model — pure logic, no sibling calls.
+# 1. _select_agent_level — pure logic, no sibling calls.
 # ---------------------------------------------------------------------------
 
 
-class TestSelectAgentModel:
+class TestSelectAgentLevel:
     def test_no_change_in_summary(self):
         ic = _ic(previous_attempt_summary="no change needed after inspection")
-        settings = _simple_namespace(no_change_model="cheap/model")
-        result = _Stage._select_agent_model(ic, settings)
-        assert result == "cheap/model"
+        settings = _simple_namespace()
+        result = _Stage._select_agent_level(ic, settings)
+        assert result == 1
 
     def test_no_change_in_feedback(self):
         ic = _ic(feedback="NO CHANGE NEEDED — already satisfied")
-        settings = _simple_namespace(no_change_model="cheap/model")
-        result = _Stage._select_agent_model(ic, settings)
-        assert result == "cheap/model"
+        settings = _simple_namespace()
+        result = _Stage._select_agent_level(ic, settings)
+        assert result == 1
 
     def test_no_change_in_both_fields(self):
         ic = _ic(
             previous_attempt_summary="summary text",
             feedback="feedback with No Change Needed here",
         )
-        settings = _simple_namespace(no_change_model="cheap/model")
-        result = _Stage._select_agent_model(ic, settings)
-        assert result == "cheap/model"
+        settings = _simple_namespace()
+        result = _Stage._select_agent_level(ic, settings)
+        assert result == 1
 
     def test_no_phrase_returns_none(self):
         ic = _ic(
             previous_attempt_summary="everything looks fine",
             feedback="tests pass",
         )
-        settings = _simple_namespace(no_change_model="cheap/model")
-        result = _Stage._select_agent_model(ic, settings)
+        settings = _simple_namespace()
+        result = _Stage._select_agent_level(ic, settings)
         assert result is None
 
     def test_none_fields_returns_none(self):
         ic = _ic(previous_attempt_summary=None, feedback=None)
-        settings = _simple_namespace(no_change_model="cheap/model")
-        result = _Stage._select_agent_model(ic, settings)
+        settings = _simple_namespace()
+        result = _Stage._select_agent_level(ic, settings)
         assert result is None
 
     def test_empty_strings_returns_none(self):
         ic = _ic(previous_attempt_summary="", feedback="")
-        settings = _simple_namespace(no_change_model="cheap/model")
-        result = _Stage._select_agent_model(ic, settings)
+        settings = _simple_namespace()
+        result = _Stage._select_agent_level(ic, settings)
         assert result is None
 
 
@@ -134,7 +134,7 @@ class TestInvokeImplementAgent:
             settings=_simple_namespace(),
             ic=_ic(),
             language_instructions="",
-            agent_model=None,
+            agent_level=None,
             resume_history=None,
             extra_roots=None,
             memory_board_id="mb",
@@ -164,7 +164,7 @@ class TestInvokeImplementAgent:
             settings=_simple_namespace(),
             ic=_ic(),
             language_instructions="",
-            agent_model=None,
+            agent_level=None,
             resume_history=None,
             extra_roots=None,
             memory_board_id="mb",
@@ -200,7 +200,7 @@ class TestInvokeImplementAgent:
             settings=_simple_namespace(),
             ic=_ic(),
             language_instructions="",
-            agent_model=None,
+            agent_level=None,
             resume_history=None,
             extra_roots=None,
             memory_board_id="mb",
@@ -235,7 +235,7 @@ class TestInvokeImplementAgent:
                 settings=_simple_namespace(),
                 ic=_ic(),
                 language_instructions="",
-                agent_model=None,
+                agent_level=None,
                 resume_history=None,
                 extra_roots=None,
                 memory_board_id="mb",
@@ -257,7 +257,7 @@ class TestInvokeImplementAgent:
             settings=_simple_namespace(),
             ic=_ic(),
             language_instructions="",
-            agent_model=None,
+            agent_level=None,
             resume_history=None,
             extra_roots=None,
             memory_board_id="mb",

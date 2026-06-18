@@ -327,7 +327,6 @@ def triage_refine(
         definition,
         tools=tools,
         system_prompt=system_prompt,
-        model_name=definition.model or settings.triage_model,
     )
 
     user_prompt = section("title", title) + "\n" + section("draft", draft)
@@ -388,7 +387,6 @@ def triage_auto_approve(
         settings=settings,
         definition_name="auto-approve",
         tools=[],
-        model_name=settings.auto_approve_model,
         prompt=user_prompt,
         what="auto-approve triage",
     )
@@ -418,7 +416,6 @@ def review_spec_for_conciseness(
         settings=settings,
         definition_name="spec-review",
         tools=[],
-        model_name=settings.triage_model,
         prompt=user_prompt,
         what="spec review",
     )
@@ -627,46 +624,6 @@ def _coerce_refine_output(output: object) -> "RefineResult":
     return RefineResult(spec_markdown=str(output).strip() or None)
 
 
-# Refine must never run on a flash model: the flash tier exhausts its
-# output-retry budget on the structured RefineResult and the stage fails.
-# ``_refine_full_model`` is the single choke point that coerces any
-# flash-tier resolved model up to the full refine model. This floor is the
-# pro-tier model used when even ``settings.refine_model`` resolves to flash.
-_REFINE_MODEL_FLOOR = "deepseek/deepseek-v4-pro"
-
-
-def _is_flash_model(model_name: str) -> bool:
-    """True when *model_name* resolves to the flash (cheap) tier.
-
-    Mirrors ``base.py``'s tier heuristic: resolve tier aliases (``cheap`` →
-    flash model), then test for ``flash`` in the resolved name."""
-    from .base import _MODEL_TIER_ALIASES
-
-    resolved = _MODEL_TIER_ALIASES.get(model_name.strip().lower(), model_name)
-    return "flash" in resolved
-
-
-def _refine_full_model(model_name: str, settings: Settings) -> str:
-    """Coerce a flash-tier *model_name* up to the full refine model.
-
-    Non-flash models pass through unchanged (so a legitimate non-flash
-    ``MILL_REFINE_MODEL`` override keeps working). A flash-tier model is
-    replaced by ``settings.refine_model`` — or the ``_REFINE_MODEL_FLOOR``
-    literal if that itself resolves to flash — with a ``log.warning``."""
-    if not _is_flash_model(model_name):
-        return model_name
-    replacement = settings.refine_model
-    if _is_flash_model(replacement):
-        replacement = _REFINE_MODEL_FLOOR
-    log.warning(
-        "refine: resolved model %r is flash-tier; coercing to %r to keep "
-        "refine off the flash model",
-        model_name,
-        replacement,
-    )
-    return replacement
-
-
 def _build_refine_overrides(
     definition,
     settings: Settings,
@@ -676,17 +633,14 @@ def _build_refine_overrides(
 ) -> dict:
     """Assemble the ``build_agent_from_definition`` overrides for refine:
     the reviewer-sendback prompt + thread flags when handling feedback, the
-    refine model when the definition doesn't pin one, the per-language
-    ``## Language conventions`` block, and the ``## Deployed system logs``
-    block (when configured)."""
+    per-language ``## Language conventions`` block, and the ``## Deployed
+    system logs`` block (when configured). The model comes from the
+    definition's ``level`` (refine is level 3 → Claude Opus)."""
     overrides: dict = {}
     if reviewer_comments:
         overrides["system_prompt"] = REVIEWER_SENDBACK_PROMPT
         overrides["reply_to_thread"] = True
         overrides["close_thread"] = True
-    overrides["model_name"] = _refine_full_model(
-        definition.model or settings.refine_model, settings
-    )
     if language_instructions:
         base_prompt = overrides.get("system_prompt", definition.system_prompt)
         overrides["system_prompt"] = (
@@ -778,7 +732,7 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
     from .base import (
         build_agent_from_definition,
         _safe_close,
-        _use_claude_sdk,
+        level_uses_claude,
         claude_sdk_supports_inline_image,
     )
     from .retry import run_agent
@@ -888,7 +842,7 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
     # the agent knows they're there.
     _vision = (
         bool(screenshot_paths)
-        and _use_claude_sdk(settings, "refine")
+        and level_uses_claude(3)  # refine is level 3 → Claude SDK
         and claude_sdk_supports_inline_image(settings)
     )
     binary_contents: list = []

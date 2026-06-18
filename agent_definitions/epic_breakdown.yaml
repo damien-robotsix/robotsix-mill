@@ -13,7 +13,7 @@ category: pipeline
 # backend) fails to honor, silently yielding zero children. Use the capable
 # coordinator model (MILL_MODEL) — the call site passes settings.model, which
 # overrides this default; kept in sync for clarity.
-model: "${MILL_MODEL}"
+level: 3
 
 tools: []
 

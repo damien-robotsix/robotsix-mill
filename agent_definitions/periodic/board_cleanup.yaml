@@ -14,7 +14,7 @@ category: periodic
 interval: 1d
 enabled: true
 
-model: cheap
+level: 1
 
 tools:
   - read_ticket

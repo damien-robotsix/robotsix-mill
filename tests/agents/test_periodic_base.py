@@ -26,8 +26,6 @@ from robotsix_mill.config import Settings
 def settings() -> Settings:
     return Settings(
         forge_remote_url="https://git.example.com/test/repo",
-        audit_model="test-model",
-        agent_check_model="test-model",
     )
 
 
@@ -148,7 +146,6 @@ def test_basic_pipeline(settings, monkeypatch, tmp_path):
     result = run_periodic_agent(
         settings=settings,
         definition_name="audit",
-        model_setting=settings.audit_model,
         max_gaps=3,
         repo_dir=tmp_path,
         memory="some memory",
@@ -162,9 +159,11 @@ def test_basic_pipeline(settings, monkeypatch, tmp_path):
     assert len(result.draft_bodies) == 3
     assert len(result.gap_ids) == 3
 
-    # Agent built with correct model fallback
-    _, build_kwargs = mocks["build_agent_from_definition"].call_args
-    assert build_kwargs["model_name"] == settings.audit_model
+    # Agent built from the loaded definition (model is now resolved from the
+    # definition's level inside build_agent, not passed as model_name here).
+    build_args, build_kwargs = mocks["build_agent_from_definition"].call_args
+    assert build_args[1] is mocks["load_agent_definition"].return_value
+    assert "model_name" not in build_kwargs
 
     # Tools built
     mocks["build_fs_tools"].assert_called_once()
@@ -187,7 +186,6 @@ def test_verification_gate_injected_unconditionally(settings, monkeypatch, tmp_p
     run_periodic_agent(
         settings=settings,
         definition_name="module_curator",
-        model_setting="fallback",
         max_gaps=5,
         repo_dir=tmp_path,
         memory="mem",
@@ -212,7 +210,6 @@ def test_validate_artifact_tool_wired_for_clone_scoped_run(
     run_periodic_agent(
         settings=settings,
         definition_name="test_gap",
-        model_setting="fallback",
         max_gaps=5,
         repo_dir=tmp_path,
         memory="mem",
@@ -237,7 +234,6 @@ def test_no_repo_dir_no_tools(settings, monkeypatch):
     run_periodic_agent(
         settings=settings,
         definition_name="test",
-        model_setting="fallback",
         max_gaps=5,
         repo_dir=None,
         memory="mem",
@@ -266,7 +262,6 @@ def test_include_forge_url_injects_section(settings, monkeypatch, tmp_path):
     run_periodic_agent(
         settings=settings,
         definition_name="test",
-        model_setting="fallback",
         max_gaps=5,
         repo_dir=tmp_path,
         memory="mem",
@@ -287,7 +282,6 @@ def test_no_forge_url_when_false(settings, monkeypatch, tmp_path):
     run_periodic_agent(
         settings=settings,
         definition_name="test",
-        model_setting="fallback",
         max_gaps=5,
         repo_dir=tmp_path,
         memory="mem",
@@ -311,7 +305,6 @@ def test_include_jscpd_adds_tool(settings, monkeypatch, tmp_path):
     run_periodic_agent(
         settings=settings,
         definition_name="test",
-        model_setting="fallback",
         max_gaps=5,
         repo_dir=tmp_path,
         memory="mem",
@@ -333,7 +326,6 @@ def test_no_jscpd_when_false(settings, monkeypatch, tmp_path):
     run_periodic_agent(
         settings=settings,
         definition_name="test",
-        model_setting="fallback",
         max_gaps=5,
         repo_dir=tmp_path,
         memory="mem",
@@ -364,7 +356,6 @@ def test_include_run_command_adds_to_fs_filter(settings, monkeypatch, tmp_path):
     run_periodic_agent(
         settings=settings,
         definition_name="test",
-        model_setting="fallback",
         max_gaps=5,
         repo_dir=tmp_path,
         memory="mem",
@@ -392,7 +383,6 @@ def test_no_run_command_when_false(settings, monkeypatch, tmp_path):
     run_periodic_agent(
         settings=settings,
         definition_name="test",
-        model_setting="fallback",
         max_gaps=5,
         repo_dir=tmp_path,
         memory="mem",
@@ -418,7 +408,6 @@ def test_usage_limits_forwarded(settings, monkeypatch, tmp_path):
     run_periodic_agent(
         settings=settings,
         definition_name="test",
-        model_setting="fallback",
         max_gaps=5,
         repo_dir=tmp_path,
         memory="mem",
@@ -439,7 +428,6 @@ def test_no_usage_limits_when_none(settings, monkeypatch, tmp_path):
     run_periodic_agent(
         settings=settings,
         definition_name="test",
-        model_setting="fallback",
         max_gaps=5,
         repo_dir=tmp_path,
         memory="mem",
@@ -464,7 +452,6 @@ def test_extra_roots_forwarded(settings, monkeypatch, tmp_path):
     run_periodic_agent(
         settings=settings,
         definition_name="test",
-        model_setting="fallback",
         max_gaps=5,
         repo_dir=tmp_path,
         memory="mem",
@@ -484,7 +471,6 @@ def test_extra_roots_none_when_not_provided(settings, monkeypatch, tmp_path):
     run_periodic_agent(
         settings=settings,
         definition_name="test",
-        model_setting="fallback",
         max_gaps=5,
         repo_dir=tmp_path,
         memory="mem",
@@ -508,7 +494,6 @@ def test_overlay_key_matches_definition_name(settings, monkeypatch, tmp_path):
     run_periodic_agent(
         settings=settings,
         definition_name="bc_check",
-        model_setting="fallback",
         max_gaps=5,
         repo_dir=tmp_path,
         memory="mem",
@@ -517,52 +502,6 @@ def test_overlay_key_matches_definition_name(settings, monkeypatch, tmp_path):
     )
 
     mocks["load_overlay"].assert_called_once_with(tmp_path, "bc_check")
-
-
-# ---------------------------------------------------------------------------
-# model_setting fallback
-# ---------------------------------------------------------------------------
-
-
-def test_model_setting_used_when_definition_model_none(settings, monkeypatch, tmp_path):
-    """When definition.model is None, model_setting is used."""
-    mocks = _setup_patches(monkeypatch)
-
-    run_periodic_agent(
-        settings=settings,
-        definition_name="test",
-        model_setting="custom_fallback_model",
-        max_gaps=5,
-        repo_dir=tmp_path,
-        memory="mem",
-        recent_proposals="props",
-        prompt_tail="Tail.",
-    )
-
-    _, build_kwargs = mocks["build_agent_from_definition"].call_args
-    assert build_kwargs["model_name"] == "custom_fallback_model"
-
-
-def test_definition_model_overrides_model_setting(settings, monkeypatch, tmp_path):
-    """When definition.model is set, it takes precedence over model_setting."""
-    mocks = _setup_patches(monkeypatch)
-    defn = _default_definition()
-    defn.model = "yaml-model"
-    mocks["load_agent_definition"].return_value = defn
-
-    run_periodic_agent(
-        settings=settings,
-        definition_name="test",
-        model_setting="fallback_model",
-        max_gaps=5,
-        repo_dir=tmp_path,
-        memory="mem",
-        recent_proposals="props",
-        prompt_tail="Tail.",
-    )
-
-    _, build_kwargs = mocks["build_agent_from_definition"].call_args
-    assert build_kwargs["model_name"] == "yaml-model"
 
 
 # ---------------------------------------------------------------------------
@@ -575,17 +514,16 @@ def test_definition_override_bypasses_builtin_load_and_overlay(
 ):
     """When the supervisor passes a resolved override, run_periodic_agent must
     use it verbatim — NOT load the built-in yaml, NOT apply the legacy .md
-    overlay — and build the agent with the override's prompt + model."""
+    overlay — and build the agent from the override (its prompt + level)."""
     mocks = _setup_patches(monkeypatch)
 
     override = _default_definition()
     override.system_prompt = "MERGED REPO PROMPT"
-    override.model = "repo-model"
+    override.level = 2
 
     run_periodic_agent(
         settings=settings,
         definition_name="audit",
-        model_setting=settings.audit_model,
         max_gaps=5,
         repo_dir=tmp_path,
         memory="",
@@ -597,10 +535,11 @@ def test_definition_override_bypasses_builtin_load_and_overlay(
     # built-in yaml NOT loaded; legacy overlay NOT consulted
     mocks["load_agent_definition"].assert_not_called()
     mocks["load_overlay"].assert_not_called()
-    # agent built from the override, with its prompt + model
-    _, kwargs = mocks["build_agent_from_definition"].call_args
+    # agent built from the override, with its prompt; the override definition
+    # itself is forwarded so build_agent resolves the model from its level.
+    args, kwargs = mocks["build_agent_from_definition"].call_args
     assert kwargs["system_prompt"] == "MERGED REPO PROMPT"
-    assert kwargs["model_name"] == "repo-model"
+    assert args[1] is override
 
 
 # ---------------------------------------------------------------------------
@@ -673,7 +612,6 @@ def test_count_active_proposals_warning_injected(settings, monkeypatch, tmp_path
     run_periodic_agent(
         settings=settings,
         definition_name="audit",
-        model_setting="fallback",
         max_gaps=5,
         repo_dir=tmp_path,
         memory="mem",
@@ -705,7 +643,6 @@ def test_count_active_proposals_no_warning_when_none_active(
     run_periodic_agent(
         settings=settings,
         definition_name="audit",
-        model_setting="fallback",
         max_gaps=5,
         repo_dir=tmp_path,
         memory="mem",
@@ -728,7 +665,6 @@ def test_count_active_proposals_no_warning_empty_proposals(
     run_periodic_agent(
         settings=settings,
         definition_name="audit",
-        model_setting="fallback",
         max_gaps=5,
         repo_dir=tmp_path,
         memory="mem",

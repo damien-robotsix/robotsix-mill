@@ -107,7 +107,7 @@ class ExpertManager:
         The ``report_issue`` tool is always injected by ``build_agent``
         (default ``report_issue=True``).
 
-        Model fallback: ``definition.model or self._settings.model``.
+        Model: resolved from ``definition.level`` (default level 2).
 
         ``output_type`` — when non-None, forwarded to ``build_agent`` so
         the expert returns structured output (e.g. ``PromptedOutput
@@ -123,8 +123,6 @@ class ExpertManager:
 
         if definition.domain in self._cache:
             return self._cache[definition.domain]
-
-        model_name = definition.model or self._settings.model
 
         # Build and filter fs tools.
         from .fs_tools import build_fs_tools
@@ -145,7 +143,7 @@ class ExpertManager:
         build_kwargs: dict[str, Any] = dict(
             system_prompt=system_prompt,
             tools=tools,
-            model_name=model_name,
+            level=definition.level,
             skills=definition.skills,
             name=f"expert:{definition.domain}",
         )

@@ -210,12 +210,10 @@ async def run_explore(
 
     # lazy: keep core import-light / the suite hermetic
     from pydantic_ai import Agent
-    from pydantic_ai.providers.openrouter import OpenRouterProvider
     from pydantic_ai.settings import ModelSettings
     from pydantic_ai.usage import UsageLimits
 
     from .fs_tools import build_fs_tools
-    from .openrouter_cost import CostInstrumentedOpenRouterModel
 
     # read-only subset of the fs tools (no write_file / edit_file / delete_file)
     all_fs = build_fs_tools(repo_dir, settings, extra_roots=extra_roots)
@@ -223,16 +221,11 @@ async def run_explore(
         t for t in all_fs if t.__name__ in ("read_file", "list_dir", "run_command")
     ]
 
-    from .base import _aclose_async_client, timeout_http_client
+    from .base import _aclose_async_client, build_openrouter_model
 
-    main_client = timeout_http_client(settings)
-    model = CostInstrumentedOpenRouterModel(  # dedicated cheap explore model
-        settings.explore_model,
-        provider=OpenRouterProvider(
-            api_key=get_secrets().openrouter_api_key,
-            http_client=main_client,
-        ),
-    )
+    # Dedicated cheap (level-1) explore model — cost + DeepSeek pin +
+    # reasoning-off policy come from llmio.
+    model, main_client = build_openrouter_model(1)
     agent = Agent(
         model=model,
         system_prompt=_SYSTEM_PROMPT,
@@ -243,40 +236,15 @@ async def run_explore(
     )
     limits = UsageLimits(request_limit=settings.explore_request_limit)
 
-    fallback_client = None
     try:
         from pydantic_ai.exceptions import UsageLimitExceeded
 
         from .retry import acall_with_retry
 
-        # Build fallback agent if a fallback model is configured
-        fallback_fn = None
-        if settings.rate_limit_fallback_model:
-            fallback_client = timeout_http_client(settings)
-            fallback_model = CostInstrumentedOpenRouterModel(
-                settings.rate_limit_fallback_model,
-                provider=OpenRouterProvider(
-                    api_key=get_secrets().openrouter_api_key,
-                    http_client=fallback_client,
-                ),
-            )
-            fallback_agent = Agent(
-                model=fallback_model,
-                system_prompt=_SYSTEM_PROMPT,
-                output_type=str,
-                tools=ro_tools,
-                name="explore-fallback",
-                model_settings=ModelSettings(max_tokens=settings.explore_max_tokens),
-            )
-            fallback_fn = lambda: fallback_agent.run(  # noqa: E731
-                prompt, usage_limits=limits
-            )
-
         try:
             result = await acall_with_retry(
                 lambda: agent.run(prompt, usage_limits=limits),
                 what="explore",
-                fallback_fn=fallback_fn,
             )
         except UsageLimitExceeded:
             # Budget exhausted — retry ONCE with a stricter prompt and no tools
@@ -325,8 +293,6 @@ async def run_explore(
         return f"explore failed: {e}"
     finally:
         await _aclose_async_client(main_client)
-        if fallback_client is not None:
-            await _aclose_async_client(fallback_client)
 
 
 def make_explore_tool(

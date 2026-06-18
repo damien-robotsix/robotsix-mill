@@ -3,11 +3,10 @@ itself, with a concise `explore` scout and a distilling `run_tests`
 sub-agent (no implement sub-agent, no deep layer)."""
 
 import pydantic_ai
-import pydantic_ai.providers.openrouter as orp
 import pytest
 
 from robotsix_mill.agents import coordinating, testing
-from robotsix_mill.agents import openrouter_cost as oc
+from robotsix_mill.agents import base as bmod
 from robotsix_mill.agents.coordinating import ImplementResult, ValidationResult
 from robotsix_mill.config import Settings
 
@@ -42,8 +41,11 @@ def fake_ai(monkeypatch):
             return type("R", (), {"output": ImplementResult(summary="did it")})()
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        bmod,
+        "new_deepseek_model",
+        lambda model_name, level: (FakeModel(model_name), object()),
+    )
     return cap
 
 
@@ -55,14 +57,14 @@ def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
     loop and runs the suite itself."""
     s = _settings(
         tmp_path,
-        model="main/cap",
         coordinator_request_limit="9",
     )
     out = coordinating.run_coordinator(
         settings=s, repo_dir=tmp_path, spec="build a thing"
     )
     assert out.summary == "did it"
-    assert fake_ai["model"] == "main/cap"
+    # implement.yaml declares level 2 → DeepSeek pro via llmio tier defaults.
+    assert fake_ai["model"] == "deepseek/deepseek-v4-pro"
     assert fake_ai["limit"] == 9
     assert fake_ai["tools"] == [
         "ask_user",
@@ -406,7 +408,6 @@ def test_test_agent_fail_distills_via_cheap_model(tmp_path, monkeypatch):
     s = _settings(
         tmp_path,
         test_command="pytest",
-        test_model="test/cheap",
     )
     monkeypatch.setattr(
         sandbox,
@@ -432,13 +433,17 @@ def test_test_agent_fail_distills_via_cheap_model(tmp_path, monkeypatch):
             return type("R", (), {"output": "fix the assertion in foo.py"})()
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        bmod,
+        "new_deepseek_model",
+        lambda model_name, level: (FakeModel(model_name), object()),
+    )
 
     passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
     assert passed is False
     assert fb == "fix the assertion in foo.py"  # distilled, not raw log
-    assert cap["model"] == "test/cheap" and cap["got_output"]
+    # tester.yaml declares level 2 → DeepSeek pro via llmio tier defaults.
+    assert cap["model"] == "deepseek/deepseek-v4-pro" and cap["got_output"]
     assert cap["name"] == "run_tests"
 
     # AC4: run_tests agent has read-only diagnostic tools
@@ -566,8 +571,11 @@ def test_test_agent_rc126_unrelated_path_still_distills(tmp_path, monkeypatch):
             return type("R", (), {"output": "distilled: bad perms"})()
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        bmod,
+        "new_deepseek_model",
+        lambda model_name, level: (FakeModel(model_name), object()),
+    )
 
     passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
     assert passed is False
@@ -598,8 +606,11 @@ def test_test_agent_normal_failure_still_distills(tmp_path, monkeypatch):
             return type("R", (), {"output": "distilled: assertion failed"})()
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        bmod,
+        "new_deepseek_model",
+        lambda model_name, level: (FakeModel(model_name), object()),
+    )
 
     passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
     assert passed is False
@@ -625,8 +636,11 @@ def test_build_agent_forwards_name(tmp_path, monkeypatch):
             return type("R", (), {"output": "ok"})()
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        bmod,
+        "new_deepseek_model",
+        lambda model_name, level: (FakeModel(model_name), object()),
+    )
 
     s = _settings(tmp_path)
     base_mod.build_agent(
@@ -678,8 +692,11 @@ def test_build_agent_does_not_inject_tool_prose_into_prompt(tmp_path, monkeypatc
             return type("R", (), {"output": "ok"})()
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        bmod,
+        "new_deepseek_model",
+        lambda model_name, level: (FakeModel(model_name), object()),
+    )
 
     agent = build_agent(
         s,
@@ -714,8 +731,11 @@ def test_build_agent_without_name_is_compatible(tmp_path, monkeypatch):
             return type("R", (), {"output": "ok"})()
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        bmod,
+        "new_deepseek_model",
+        lambda model_name, level: (FakeModel(model_name), object()),
+    )
 
     s = _settings(tmp_path)
     base_mod.build_agent(
@@ -757,8 +777,11 @@ def test_audit_agent_tool_set(tmp_path, monkeypatch):
             )()
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        bmod,
+        "new_deepseek_model",
+        lambda model_name, level: (FakeModel(model_name), object()),
+    )
 
     s = _settings(tmp_path)
     auditing.run_audit_agent(settings=s, repo_dir=tmp_path, memory="")
@@ -828,7 +851,7 @@ def test_test_agent_distill_injects_file_map_scope(tmp_path, monkeypatch):
     the in-scope file paths (soft hint)."""
     from robotsix_mill import sandbox
 
-    s = _settings(tmp_path, test_command="pytest", test_model="test/cheap")
+    s = _settings(tmp_path, test_command="pytest")
 
     # Write file_map.json at repo_dir.parent / "artifacts" / "file_map.json"
     artifacts_dir = tmp_path.parent / "artifacts"
@@ -868,8 +891,11 @@ def test_test_agent_distill_injects_file_map_scope(tmp_path, monkeypatch):
             return type("R", (), {"output": "fix the assertion"})()
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        bmod,
+        "new_deepseek_model",
+        lambda model_name, level: (FakeModel(model_name), object()),
+    )
 
     try:
         passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
@@ -901,7 +927,7 @@ def test_test_agent_distill_no_file_map_unaffected(tmp_path, monkeypatch):
     if fp.exists():
         fp.unlink()
 
-    s = _settings(tmp_path, test_command="pytest", test_model="test/cheap")
+    s = _settings(tmp_path, test_command="pytest")
 
     monkeypatch.setattr(
         sandbox,
@@ -926,8 +952,11 @@ def test_test_agent_distill_no_file_map_unaffected(tmp_path, monkeypatch):
             return type("R", (), {"output": "fix the assertion"})()
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        bmod,
+        "new_deepseek_model",
+        lambda model_name, level: (FakeModel(model_name), object()),
+    )
 
     passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
     assert passed is False
@@ -942,7 +971,7 @@ def test_test_agent_distill_explicit_file_map_override(tmp_path, monkeypatch):
     list appears in the scope block regardless of artifacts/file_map.json."""
     from robotsix_mill import sandbox
 
-    s = _settings(tmp_path, test_command="pytest", test_model="test/cheap")
+    s = _settings(tmp_path, test_command="pytest")
 
     # Write a DIFFERENT file_map.json (should be ignored when explicit passed)
     artifacts_dir = tmp_path.parent / "artifacts"
@@ -977,8 +1006,11 @@ def test_test_agent_distill_explicit_file_map_override(tmp_path, monkeypatch):
             return type("R", (), {"output": "fix the assertion"})()
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        bmod,
+        "new_deepseek_model",
+        lambda model_name, level: (FakeModel(model_name), object()),
+    )
 
     try:
         explicit_map = ["only/this/file.py"]

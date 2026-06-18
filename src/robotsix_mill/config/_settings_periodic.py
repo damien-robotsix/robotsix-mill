@@ -82,7 +82,6 @@ class _PeriodicSettings(BaseModel):
     # --- test-gap agent (dedicated test-coverage oversight) ---
     # Model for the test-gap agent. Defaults to the same capable model
     # as audit/health. Override with MILL_TEST_GAP_MODEL.
-    test_gap_model: str = Field(default="deepseek/deepseek-v4-flash")
     # When True, the worker runs periodic test-gap passes at the
     # configured interval. Default False (opt-in).
     test_gap_periodic: bool = Field(default=True)
@@ -98,7 +97,6 @@ class _PeriodicSettings(BaseModel):
     # Model for the agent-check meta-agent. Defaults to the same cheap
     # model as other read-only periodic agents. Override with
     # MILL_AGENT_CHECK_MODEL.
-    agent_check_model: str = Field(default="deepseek/deepseek-v4-flash")
     # Path to the agent-check agent's Markdown memory ledger. Override
     # to pin a specific path; unset (default) derives
     # <data_dir>/agent_check_memory.md.
@@ -115,7 +113,6 @@ class _PeriodicSettings(BaseModel):
     # --- health agent (codebase-health inspection) ---
     # Model for the health agent. Defaults to the same capable model as
     # audit. Override with MILL_HEALTH_MODEL.
-    health_model: str = Field(default="deepseek/deepseek-v4-flash")
     # When True, the worker runs periodic health passes at the
     # configured interval. Default False (opt-in).
     health_periodic: bool = Field(default=True)
@@ -136,7 +133,6 @@ class _PeriodicSettings(BaseModel):
     # to flash drops that to ~$1.50–$2 worst-case; the operator can
     # override via `core.models.survey` in YAML if a specific repo
     # needs deeper reasoning.
-    survey_model: str = Field(default="deepseek/deepseek-v4-flash")
     # Cap the survey main agent's tool-call request budget. The
     # ancient $15.32 trace had 22 chat calls and 25 web_fetch
     # calls — well past diminishing returns; this is what motivated
@@ -180,7 +176,6 @@ class _PeriodicSettings(BaseModel):
     # Model for the bc-check agent. Defaults to the same capable model
     # as other read-only periodic agents. Override with
     # MILL_BC_CHECK_MODEL.
-    bc_check_model: str = Field(default="deepseek/deepseek-v4-flash")
     # Path to the bc-check agent's Markdown memory ledger. Override to
     # pin a specific path; unset (default) derives
     # <data_dir>/bc_check_memory.md.
@@ -198,7 +193,6 @@ class _PeriodicSettings(BaseModel):
     # Model for the module-curator agent. Defaults to the same capable
     # model as other read-only periodic agents. Override with
     # MILL_MODULE_CURATOR_MODEL.
-    module_curator_model: str = Field(default="deepseek/deepseek-v4-flash")
     # Path to the module-curator agent's Markdown memory ledger.
     # Override to pin a specific path; unset (default) derives
     # <data_dir>/module_curator_memory.md.
@@ -222,7 +216,6 @@ class _PeriodicSettings(BaseModel):
     # --- board_cleanup agent (kanban board-hygiene proposer) ---
     # Model for the board-cleanup agent. Defaults to the same capable
     # model as other read-only periodic agents.
-    board_cleanup_model: str = Field(default="deepseek/deepseek-v4-flash")
     # Path to the board-cleanup agent's Markdown memory ledger.
     # Override to pin a specific path; unset (default) derives
     # <data_dir>/<repo_id>/board_cleanup_memory.md.
@@ -239,7 +232,6 @@ class _PeriodicSettings(BaseModel):
     # Model for the data-dir audit agent. Defaults to flash —
     # the agent does file listing + size checks, not deep reasoning.
     # Override with MILL_DATA_DIR_AUDIT_MODEL.
-    data_dir_audit_model: str = Field(default="deepseek/deepseek-v4-flash")
     # Path to the data-dir audit agent's Markdown memory ledger.
     # Override to pin a specific path; unset (default) derives
     # <data_dir>/data_dir_audit_memory.md.
@@ -318,7 +310,6 @@ class _PeriodicSettings(BaseModel):
     # Model for the completeness-check agent. Defaults to the same
     # capable model as other read-only periodic agents. Override with
     # MILL_COMPLETENESS_CHECK_MODEL.
-    completeness_check_model: str = Field(default="deepseek/deepseek-v4-flash")
     # Path to the completeness-check agent's Markdown memory ledger.
     # Override to pin a specific path; unset (default) derives
     # <data_dir>/completeness_check_memory.md.
@@ -336,7 +327,6 @@ class _PeriodicSettings(BaseModel):
     # --- forge-parity agent (forge adapter drift detection) ---
     # Model for the forge-parity agent. Defaults to the same capable model
     # as audit/health. Override with MILL_FORGE_PARITY_MODEL.
-    forge_parity_model: str = Field(default="deepseek/deepseek-v4-flash")
     # Path to the forge-parity agent's Markdown memory ledger. Override to
     # pin a specific path; unset (default) derives
     # <data_dir>/forge_parity_memory.md.
@@ -352,7 +342,6 @@ class _PeriodicSettings(BaseModel):
     # --- copy-paste agent (deterministic clone detection and triage) ---
     # Model for the copy-paste agent. Defaults to the same capable model
     # as audit/health. Override with MILL_COPY_PASTE_MODEL.
-    copy_paste_model: str = Field(default="deepseek/deepseek-v4-pro")
     # Path to the copy-paste agent's Markdown memory ledger. Override to
     # pin a specific path; unset (default) derives
     # <data_dir>/copy_paste_memory.md.
@@ -368,7 +357,6 @@ class _PeriodicSettings(BaseModel):
     # --- config-sync agent (config ↔ .env ↔ docs drift detection) ---
     # Model for the config-sync agent. Defaults to a cheap model (read-only
     # file parsing — no web research or code generation).
-    config_sync_model: str = Field(default="deepseek/deepseek-v4-flash")
     # Path to the config-sync agent's Markdown memory ledger. Override to pin
     # a specific path; unset (default) derives <data_dir>/config_sync_memory.md.
     config_sync_memory_path: Path | None = Field(default=None)

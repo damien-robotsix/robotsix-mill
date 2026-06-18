@@ -141,8 +141,7 @@ async def run_consult_expert(
 
         ro_tools.append(make_explore_tool(settings, repo_dir))
 
-    model_name = definition.model or settings.model
-    model, client = build_openrouter_model(settings, model_name)
+    model, client = build_openrouter_model(definition.level)
     agent = Agent(
         model=model,
         system_prompt=system_prompt,

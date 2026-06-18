@@ -200,35 +200,7 @@ def load_repos_yaml(file_path: str | None = None) -> dict:
 # ``Settings(extra="ignore")`` silently drops kwargs keyed by the
 # Python field name — it only recognises alias names.
 _YAML_PATH_TO_ALIAS: dict[str, str] = {
-    # -- core.models --
-    "core.models.coordinator": "model",
-    "core.models.explore": "explore_model",
-    "core.models.test": "test_model",
-    "core.models.refine": "refine_model",
-    "core.models.answer": "answer_model",
-    "core.models.ask_to_ticket": "ask_to_ticket_model",
-    "core.models.retrospect": "retrospect_model",
-    "core.models.audit": "audit_model",
-    "core.models.dedup": "dedup_model",
-    "core.models.obsolescence": "obsolescence_model",
-    "core.models.web_research": "web_research_model",
-    "core.models.review": "review_model",
-    "core.models.trace_inspector": "trace_inspector_model",
-    "core.models.test_gap": "test_gap_model",
-    "core.models.agent_check": "agent_check_model",
-    "core.models.health": "health_model",
-    "core.models.survey": "survey_model",
-    "core.models.doc": "doc_model",
-    "core.models.doc_classifier": "doc_classifier_model",
-    "core.models.triage": "triage_model",
-    "core.models.auto_approve": "auto_approve_model",
-    "core.models.scope_triage": "scope_triage_model",
-    "core.models.meta_triage": "meta_triage_model",
-    "core.models.rate_limit_fallback": "rate_limit_fallback_model",
-    # -- core: LLM backend toggle (DeepSeek ↔ Claude SDK) --
-    "core.llm_backend": "llm_backend",
-    "core.claude_sdk_agents": "claude_sdk_agents",
-    "core.deepseek_agents": "deepseek_agents",
+    # -- core: Claude SDK vision gate (level-3 agents) --
     "core.claude_sdk_vision_enabled": "claude_sdk_vision_enabled",
     "core.enable_repo_creation": "enable_repo_creation",
     "core.repo_visibility_default": "repo_visibility_default",
@@ -268,13 +240,11 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.limits.max_spend_usd_per_ticket": "max_spend_usd_per_ticket",
     "core.limits.stage_timeout_seconds": "stage_timeout_seconds",
     "core.limits.stage_timeout_overrides": "stage_timeout_overrides",
-    "core.limits.model_request_timeout": "model_request_timeout",
     "core.limits.transient_retries": "transient_retries",
     "core.limits.transient_backoff_base": "transient_backoff_base",
     "core.limits.transient_backoff_cap": "transient_backoff_cap",
     "core.limits.rate_limit_backoff_base": "rate_limit_backoff_base",
     "core.limits.rate_limit_backoff_cap": "rate_limit_backoff_cap",
-    "core.limits.rate_limit_fallback_retries": "rate_limit_fallback_retries",
     # -- core: credit-balance warning --
     "core.low_credit_threshold_usd": "low_credit_threshold_usd",
     "core.low_credit_poll_enabled": "low_credit_poll_enabled",
@@ -311,7 +281,6 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "sandbox.proxy_url": "sandbox_proxy_url",
     # -- web --
     "web.search_enabled": "web_search",
-    "web.research_model": "web_research_model",
     "web.research_request_limit": "web_research_request_limit",
     "web.fetch_image": "fetch_image",
     "web.fetch_max_bytes": "web_fetch_max_bytes",
@@ -332,12 +301,9 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     # -- gates --
     "gates.require_approval": "require_approval",
     "gates.auto_approve_enabled": "auto_approve_enabled",
-    "gates.auto_approve_model": "auto_approve_model",
     "gates.review_enabled": "review_enabled",
-    "gates.review_model": "review_model",
     "gates.review_max_rounds": "review_max_rounds",
     "gates.review_feedback_enabled": "review_feedback_enabled",
-    "gates.review_revision_model": "review_revision_model",
     "gates.auto_merge_enabled": "auto_merge_enabled",
     "gates.comments_after_body": "comments_after_body",
     "gates.refine_triage_enabled": "refine_triage_enabled",
@@ -345,7 +311,6 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "gates.spec_review_enabled": "spec_review_enabled",
     "gates.scope_triage_enabled": "scope_triage_enabled",
     "gates.pr_summary_enabled": "pr_summary_enabled",
-    "gates.pr_summary_model": "pr_summary_model",
     "gates.obsolescence_gate_enabled": "obsolescence_gate_enabled",
     # -- ci --
     "ci.codeql_fp_triage_enabled": "codeql_fp_triage_enabled",
@@ -380,7 +345,6 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "pipeline.ci_patterns_path": "ci_patterns_path",
     "pipeline.review_revision_memory_path": "review_revision_memory_path",
     # -- periodic.audit --
-    "periodic.audit.model": "audit_model",
     "periodic.audit.enabled": "audit_periodic",
     "periodic.audit.interval_seconds": "audit_interval_seconds",
     "periodic.audit.memory_path": "audit_memory_path",
@@ -393,7 +357,6 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.stale_branch_cleanup.max_age_days": "stale_branch_max_age_days",
     "periodic.stale_branch_cleanup.prefix_only": "stale_branch_cleanup_prefix_only",
     # -- periodic.health --
-    "periodic.health.model": "health_model",
     "periodic.health.enabled": "health_periodic",
     "periodic.health.interval_seconds": "health_interval_seconds",
     "periodic.health.memory_path": "health_memory_path",
@@ -404,39 +367,32 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.run_health.target_repo_id": "run_health_target_repo_id",
     "periodic.run_health.memory_path": "run_health_memory_path",
     # -- periodic.test_gap --
-    "periodic.test_gap.model": "test_gap_model",
     "periodic.test_gap.enabled": "test_gap_periodic",
     "periodic.test_gap.interval_seconds": "test_gap_interval_seconds",
     "periodic.test_gap.memory_path": "test_gap_memory_path",
     "periodic.test_gap.max_tool_calls": "test_gap_max_tool_calls",
     "periodic.test_gap.max_errors": "test_gap_max_errors",
     # -- periodic.agent_check --
-    "periodic.agent_check.model": "agent_check_model",
     "periodic.agent_check.enabled": "agent_check_periodic",
     "periodic.agent_check.interval_seconds": "agent_check_interval_seconds",
     "periodic.agent_check.memory_path": "agent_check_memory_path",
     # -- periodic.bc_check --
-    "periodic.bc_check.model": "bc_check_model",
     "periodic.bc_check.enabled": "bc_check_periodic",
     "periodic.bc_check.interval_seconds": "bc_check_interval_seconds",
     "periodic.bc_check.memory_path": "bc_check_memory_path",
     # -- periodic.completeness_check --
-    "periodic.completeness_check.model": "completeness_check_model",
     "periodic.completeness_check.enabled": "completeness_check_periodic",
     "periodic.completeness_check.interval_seconds": "completeness_check_interval_seconds",
     "periodic.completeness_check.memory_path": "completeness_check_memory_path",
     # -- periodic.copy_paste --
-    "periodic.copy_paste.model": "copy_paste_model",
     "periodic.copy_paste.enabled": "copy_paste_periodic",
     "periodic.copy_paste.interval_seconds": "copy_paste_interval_seconds",
     "periodic.copy_paste.memory_path": "copy_paste_memory_path",
     # -- periodic.forge_parity --
-    "periodic.forge_parity.model": "forge_parity_model",
     "periodic.forge_parity.enabled": "forge_parity_periodic",
     "periodic.forge_parity.interval_seconds": "forge_parity_interval_seconds",
     "periodic.forge_parity.memory_path": "forge_parity_memory_path",
     # -- periodic.survey --
-    "periodic.survey.model": "survey_model",
     "periodic.survey.enabled": "survey_periodic",
     "periodic.survey.interval_seconds": "survey_interval_seconds",
     "periodic.survey.memory_path": "survey_memory_path",
@@ -444,7 +400,6 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.survey.web_fetch_max_total_bytes": "survey_web_fetch_max_total_bytes",
     "periodic.survey.web_search_max_calls": "survey_web_search_max_calls",
     # -- periodic.data_dir_audit --
-    "periodic.data_dir_audit.model": "data_dir_audit_model",
     "periodic.data_dir_audit.enabled": "data_dir_audit_periodic",
     "periodic.data_dir_audit.interval_seconds": "data_dir_audit_interval_seconds",
     "periodic.data_dir_audit.memory_path": "data_dir_audit_memory_path",
@@ -460,7 +415,6 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.data_dir_audit.prune_orphans": "data_dir_audit_prune_orphans",
     "periodic.data_dir_audit.prune_orphans_age_seconds": "data_dir_audit_prune_orphans_age_seconds",
     # -- periodic.config_sync --
-    "periodic.config_sync.model": "config_sync_model",
     "periodic.config_sync.enabled": "config_sync_periodic",
     "periodic.config_sync.interval_seconds": "config_sync_interval_seconds",
     "periodic.config_sync.memory_path": "config_sync_memory_path",
@@ -478,12 +432,10 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.langfuse_cleanup.interval_seconds": "langfuse_cleanup_interval_seconds",
     "periodic.langfuse_cleanup.max_traces": "langfuse_cleanup_max_traces",
     # -- periodic.module_curator --
-    "periodic.module_curator.model": "module_curator_model",
     "periodic.module_curator.enabled": "module_curator_periodic",
     "periodic.module_curator.interval_seconds": "module_curator_interval_seconds",
     "periodic.module_curator.memory_path": "module_curator_memory_path",
     # -- periodic.board_cleanup --
-    "periodic.board_cleanup.model": "board_cleanup_model",
     "periodic.board_cleanup.enabled": "board_cleanup_periodic",
     "periodic.board_cleanup.interval_seconds": "board_cleanup_interval_seconds",
     "periodic.board_cleanup.memory_path": "board_cleanup_memory_path",
@@ -503,9 +455,7 @@ def flatten_yaml_config(yaml_config: dict) -> dict[str, object]:
     names → values.  Only values that have a mapping are included —
     unknown paths are silently ignored.
 
-    When the same env-var alias is reachable through multiple YAML paths
-    (e.g. ``core.models.web_research`` and ``web.research_model`` both
-    map to ``MILL_WEB_RESEARCH_MODEL``), the value from the *last* path
-    traversed wins (dict insertion order).
+    When the same env-var alias is reachable through multiple YAML paths,
+    the value from the *last* path traversed wins (dict insertion order).
     """
     return flatten_config(yaml_config, alias_map=_YAML_PATH_TO_ALIAS)

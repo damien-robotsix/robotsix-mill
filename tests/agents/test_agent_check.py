@@ -117,11 +117,11 @@ def test_agent_check_handles_filed_tickets_like_audit_not_memory():
 
 
 def test_agent_check_uses_normal_not_cheap_model():
-    """Per operator: agent_check runs on the normal (default) tier."""
+    """Per operator: agent_check runs on the normal (default) tier — level 2."""
     from robotsix_mill.agents.yaml_loader import load_agent_definition
 
     d = load_agent_definition(Path("agent_definitions/periodic/agent_check.yaml"))
-    assert d.model == "default"
+    assert d.level == 2
 
 
 def test_agent_check_result_model():
@@ -358,18 +358,6 @@ def test_run_agent_check_pass_skips_empty_title_or_body(tmp_path, monkeypatch):
 
 
 # --- Config tests ---
-
-
-def test_agent_check_config_defaults():
-    """Agent-check config has correct defaults."""
-    s = Settings()
-    assert s.agent_check_model == "deepseek/deepseek-v4-flash"
-
-
-def test_agent_check_config_custom_model():
-    """Agent-check model can be overridden via env."""
-    s = Settings(agent_check_model="anthropic/claude-sonnet-4")
-    assert s.agent_check_model == "anthropic/claude-sonnet-4"
 
 
 def test_agent_check_memory_file_default(tmp_path):

@@ -29,7 +29,7 @@ def _install_mocks(monkeypatch):
     monkeypatch.setattr(
         yaml_loader_mod,
         "load_agent_definition",
-        MagicMock(return_value=type("D", (), {"model": None})()),
+        MagicMock(return_value=type("D", (), {"level": 2})()),
     )
     monkeypatch.setattr(base_mod, "_safe_close", lambda agent: None)
     return base_mod, retry_mod
@@ -44,10 +44,10 @@ def test_run_ask_to_ticket_agent_without_repo_dir(tmp_path, monkeypatch):
     cap = {}
 
     def fake_build_agent(
-        settings, definition, tools, model_name, output_type, repo_dir=None, **kw
+        settings, definition, tools, level, output_type, repo_dir=None, **kw
     ):
         cap["tools"] = sorted(t.__name__ for t in tools)
-        cap["model"] = model_name
+        cap["level"] = level
         cap["output_type"] = output_type
 
         class FakeAgent:
@@ -80,7 +80,7 @@ def test_run_ask_to_ticket_agent_without_repo_dir(tmp_path, monkeypatch):
 
     assert isinstance(cap["output_type"], PromptedOutput)
     assert cap["output_type"].outputs is AskToTicketResult
-    assert cap["model"] == s.ask_to_ticket_model
+    assert cap["level"] == 2
     assert cap["what"] == "ask_to_ticket"
     # No repo tools when repo_dir is None.
     assert cap["tools"] == []
@@ -100,7 +100,7 @@ def test_run_ask_to_ticket_agent_with_repo_dir(tmp_path, monkeypatch):
     cap = {}
 
     def fake_build_agent(
-        settings, definition, tools, model_name, output_type, repo_dir=None, **kw
+        settings, definition, tools, level, output_type, repo_dir=None, **kw
     ):
         cap["tools"] = sorted(t.__name__ for t in tools)
 

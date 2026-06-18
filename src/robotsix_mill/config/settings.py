@@ -297,19 +297,6 @@ class Settings(
             raise ValueError("trace_review_interval_seconds must be ≥ 3600")
         return v
 
-    # -- dedup_model cheapness check -----------------------------------
-
-    @field_validator("dedup_model")
-    @classmethod
-    def _validate_dedup_model_is_cheap(cls, v: str) -> str:
-        if v.strip() and "flash" not in v.casefold():
-            log.warning(
-                "dedup_model=%r does not look like a cheap flash-class model "
-                "— dedup is designed as a cheap pre-refine call",
-                v,
-            )
-        return v
-
     # -- cross-field checks --------------------------------------------
 
     @model_validator(mode="after")
@@ -337,18 +324,6 @@ class Settings(
                 raise ValueError(
                     f"forge_kind={self.forge_kind} requires forge_remote_url to be set"
                 )
-
-        # rate_limit_fallback_model non-empty → retries ≥ 1
-        if self.rate_limit_fallback_model and self.rate_limit_fallback_retries < 1:
-            raise ValueError(
-                "rate_limit_fallback_retries must be ≥ 1 when rate_limit_fallback_model is set"
-            )
-
-        # review_enabled → review_model must be non-empty
-        if self.review_enabled and not self.review_model:
-            raise ValueError(
-                "review_model must be non-empty when review_enabled is True"
-            )
 
         return self
 

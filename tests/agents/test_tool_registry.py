@@ -1,12 +1,11 @@
 """Tests for ToolRegistry — the system-wide capability catalog."""
 
 import pydantic_ai
-import pydantic_ai.providers.openrouter as orp
 import pytest
 
 from robotsix_mill.agents.tool_registry import ToolInfo, ToolRegistry
 from robotsix_mill.agents.coordinating import ImplementResult
-from robotsix_mill.agents import openrouter_cost as oc
+from robotsix_mill.agents import base as bmod
 from robotsix_mill.config import Settings, Secrets, _reset_secrets
 
 
@@ -124,10 +123,6 @@ def test_all_tools_registered(tmp_path, monkeypatch):
 
     cap = {}
 
-    class FakeModel:
-        def __init__(self, name, **kw):
-            pass
-
     class FakeAgent:
         def __init__(self, **kw):
             cap["tools"] = sorted(t.__name__ for t in (kw.get("tools") or []))
@@ -136,8 +131,9 @@ def test_all_tools_registered(tmp_path, monkeypatch):
             return type("R", (), {"output": ImplementResult(summary="ok")})()
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(
+        bmod, "new_deepseek_model", lambda model_name, level: (object(), object())
+    )
 
     from robotsix_mill.agents.explore import make_explore_tool
     from robotsix_mill.agents.fs_tools import build_fs_tools

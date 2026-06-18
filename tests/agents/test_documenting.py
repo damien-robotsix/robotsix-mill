@@ -774,10 +774,11 @@ class TestRunDocAgent:
         assert prompt is not None
         assert "message_history" not in kwargs
 
-    # -- model_name override -------------------------------------------
+    # -- level override -------------------------------------------------
 
-    def test_explicit_model_name_overrides(self, settings, repo_dir, monkeypatch):
-        """When model_name is passed explicitly, it appears in overrides."""
+    def test_explicit_level_overrides(self, settings, repo_dir, monkeypatch):
+        """When an explicit level is passed, it appears in overrides and is
+        forwarded to build_agent_from_definition."""
         captured_overrides: dict = {}
         fake_agent = _FakeAgent(DocResult(user_facing=False, summary="no changes"))
 
@@ -788,10 +789,7 @@ class TestRunDocAgent:
         _patch_build_agent_from_definition(monkeypatch, fake_build)
         monkeypatch.setattr(
             "robotsix_mill.agents.yaml_loader.load_agent_definition",
-            lambda path: _make_definition(
-                system_prompt="Doc system prompt.",
-                model="anthropic/claude-sonnet",  # would be used if not overridden
-            ),
+            lambda path: _make_definition(system_prompt="Doc system prompt."),
         )
         monkeypatch.setattr(
             "robotsix_mill.agents.fs_tools.build_fs_tools",
@@ -814,16 +812,16 @@ class TestRunDocAgent:
             diff=self.DIFF,
             spec=self.SPEC,
             board_id="test-board",
-            model_name="openai/gpt-4o",
+            level=3,
         )
 
-        assert captured_overrides.get("model_name") == "openai/gpt-4o"
+        assert captured_overrides.get("level") == 3
 
-    def test_model_name_fallback_to_settings_doc_model(
+    def test_level_defaults_to_definition_when_none(
         self, settings, repo_dir, monkeypatch
     ):
-        """When model_name is None and definition.model is None/falsy,
-        settings.doc_model is used."""
+        """When level is None, no level override is injected — the document
+        definition's own level (1) flows through unchanged."""
         captured_overrides: dict = {}
         fake_agent = _FakeAgent(DocResult(user_facing=False, summary="no changes"))
 
@@ -834,10 +832,7 @@ class TestRunDocAgent:
         _patch_build_agent_from_definition(monkeypatch, fake_build)
         monkeypatch.setattr(
             "robotsix_mill.agents.yaml_loader.load_agent_definition",
-            lambda path: _make_definition(
-                system_prompt="Doc system prompt.",
-                model=None,  # falsy → fallback triggers
-            ),
+            lambda path: _make_definition(system_prompt="Doc system prompt."),
         )
         monkeypatch.setattr(
             "robotsix_mill.agents.fs_tools.build_fs_tools",
@@ -860,10 +855,10 @@ class TestRunDocAgent:
             diff=self.DIFF,
             spec=self.SPEC,
             board_id="test-board",
-            # model_name not passed → None
+            # level not passed → None
         )
 
-        assert captured_overrides.get("model_name") == settings.doc_model
+        assert "level" not in captured_overrides
 
     def test_definition_model_used_when_no_explicit_override(
         self, settings, repo_dir, monkeypatch

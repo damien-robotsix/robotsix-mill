@@ -154,10 +154,9 @@ def _review_attempt(
     repo_dir: Path | None,
     screenshot_path: Path | None,
     agent: Any,
-    agent_definition_name: str,
+    level: int,
     settings: Settings,
     limits: Any,
-    _use_claude_sdk: Any,
     claude_sdk_supports_inline_image: Any,
 ) -> object:
     """Build the prompt and run one review pass, returning the
@@ -166,6 +165,7 @@ def _review_attempt(
     from .prompt_blocks import section
     from .structured_output_guard import reprompt_if_unstructured
     from .retry import run_agent
+    from .base import level_uses_claude
 
     user_prompt = ""
     if note:
@@ -204,7 +204,7 @@ def _review_attempt(
     # degrades silently to the text-only path — never crash review.
     if (
         screenshot_path is not None
-        and _use_claude_sdk(settings, agent_definition_name)
+        and level_uses_claude(level)
         and claude_sdk_supports_inline_image(settings)
     ):
         run_user_prompt = _maybe_attach_screenshot(run_user_prompt, screenshot_path)
@@ -257,7 +257,7 @@ def run_review_agent(
     settings: Settings,
     diff: str,
     spec: str,
-    model_name: str | None = None,
+    level: int | None = None,
     prior_context: str | None = None,
     repo_dir: Path | None = None,
     reference_files: list[str] | None = None,
@@ -267,8 +267,8 @@ def run_review_agent(
     """Run a blind review of *diff* against *spec*.
 
     The agent receives ONLY the diff and spec — no implementation
-    context, no memory, no history. Uses *model_name* if given,
-    otherwise falls back to ``settings.review_model``.
+    context, no memory, no history. Uses *level* if given,
+    otherwise the level declared in ``review.yaml``.
 
     When *prior_context* is provided (prior review comments and the
     implement agent's rebuttal from the last round), it is injected
@@ -313,7 +313,6 @@ def run_review_agent(
     from .base import (
         build_agent_from_definition,
         _safe_close,
-        _use_claude_sdk,
         claude_sdk_supports_inline_image,
     )
 
@@ -332,11 +331,9 @@ def run_review_agent(
         readonly_names = {"read_file", "list_dir"}
         tools = [t for t in all_fs_tools if t.__name__ in readonly_names]
 
-    overrides = {}
-    if model_name is not None:
-        overrides["model_name"] = model_name
-    elif not definition.model:
-        overrides["model_name"] = settings.review_model
+    overrides: dict[str, Any] = {}
+    if level is not None:
+        overrides["level"] = level
 
     agent = build_agent_from_definition(
         settings,
@@ -358,10 +355,9 @@ def run_review_agent(
             repo_dir=repo_dir,
             screenshot_path=screenshot_path,
             agent=agent,
-            agent_definition_name=definition.name,
+            level=level if level is not None else definition.level,
             settings=settings,
             limits=limits,
-            _use_claude_sdk=_use_claude_sdk,
             claude_sdk_supports_inline_image=claude_sdk_supports_inline_image,
         )
 

@@ -55,7 +55,6 @@ def test_default_empty_and_none():
     s = Settings()
     assert s.forge_kind == "none"
     assert s.openrouter_api_key is None
-    assert s.rate_limit_fallback_model == ""
     assert s.forge_remote_url is None
     # Branch cleanup after merge is on by default.
     assert s.delete_branch_on_merge is True
@@ -87,13 +86,6 @@ def test_default_board_agent_disabled():
     assert s.board_agent_write_ops is True
 
 
-def test_default_review_model_is_pro():
-    """The review agent — the last automated merge gate — defaults to the
-    full DeepSeek tier (regression guard against drift back to flash)."""
-    s = Settings()
-    assert s.review_model == "deepseek/deepseek-v4-pro"
-
-
 # ---------------------------------------------------------------------------
 # 2. Env-var alias resolution — exhaustive parametrized test
 # ---------------------------------------------------------------------------
@@ -109,49 +101,20 @@ def test_default_review_model_is_pro():
 # For str|None / Path|None fields we use a distinctive non-None string.
 
 ALIAS_CASES: list[tuple[str, str, str, object]] = [
-    # --- core / model ---
+    # --- core / api key ---
     ("openrouter_api_key", "OPENROUTER_API_KEY", "sk-test", "sk-test"),
-    ("model", "MILL_MODEL", "test/model", "test/model"),
-    ("explore_model", "MILL_EXPLORE_MODEL", "test/explore", "test/explore"),
-    ("test_model", "MILL_TEST_MODEL", "test/tester", "test/tester"),
-    ("refine_model", "MILL_REFINE_MODEL", "test/refine", "test/refine"),
-    ("answer_model", "MILL_ANSWER_MODEL", "test/answer", "test/answer"),
-    (
-        "ask_to_ticket_model",
-        "MILL_ASK_TO_TICKET_MODEL",
-        "test/a2t",
-        "test/a2t",
-    ),
-    ("retrospect_model", "MILL_RETROSPECT_MODEL", "test/retro", "test/retro"),
-    ("audit_model", "MILL_AUDIT_MODEL", "test/audit", "test/audit"),
-    ("dedup_model", "MILL_DEDUP_MODEL", "test/dedup", "test/dedup"),
-    (
-        "obsolescence_model",
-        "MILL_OBSOLESCENCE_MODEL",
-        "test/obsolescence",
-        "test/obsolescence",
-    ),
-    ("triage_model", "MILL_TRIAGE_MODEL", "test/triage", "test/triage"),
     # --- request limits ---
     ("coordinator_request_limit", "MILL_COORDINATOR_REQUEST_LIMIT", "42", 42),
     ("refine_request_limit", "MILL_REFINE_REQUEST_LIMIT", "42", 42),
     ("test_request_limit", "MILL_TEST_REQUEST_LIMIT", "15", 15),
     ("maintenance_request_limit", "MILL_MAINTENANCE_REQUEST_LIMIT", "33", 33),
     ("max_fix_iterations", "MILL_MAX_FIX_ITERATIONS", "6", 6),
-    ("model_request_timeout", "MILL_MODEL_REQUEST_TIMEOUT", "123.5", 123.5),
     # --- retry / backoff ---
     ("transient_retries", "MILL_TRANSIENT_RETRIES", "7", 7),
     ("transient_backoff_base", "MILL_TRANSIENT_BACKOFF_BASE", "5.0", 5.0),
     ("transient_backoff_cap", "MILL_TRANSIENT_BACKOFF_CAP", "60.0", 60.0),
     ("rate_limit_backoff_base", "MILL_RATE_LIMIT_BACKOFF_BASE", "10.0", 10.0),
     ("rate_limit_backoff_cap", "MILL_RATE_LIMIT_BACKOFF_CAP", "300.0", 300.0),
-    ("rate_limit_fallback_retries", "MILL_RATE_LIMIT_FALLBACK_RETRIES", "5", 5),
-    (
-        "rate_limit_fallback_model",
-        "MILL_RATE_LIMIT_FALLBACK_MODEL",
-        "fb/model",
-        "fb/model",
-    ),
     ("explore_request_limit", "MILL_EXPLORE_REQUEST_LIMIT", "99", 99),
     ("dedup_request_limit", "MILL_DEDUP_REQUEST_LIMIT", "3", 3),
     (
@@ -241,7 +204,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("sandbox_data_mount", "MILL_SANDBOX_DATA_MOUNT", "/host/data", "/host/data"),
     # --- web ---
     ("web_search", "MILL_WEB_SEARCH", "0", False),
-    ("web_research_model", "MILL_WEB_RESEARCH_MODEL", "web/model", "web/model"),
     ("web_research_request_limit", "MILL_WEB_RESEARCH_REQUEST_LIMIT", "4", 4),
     (
         "fetch_image",
@@ -255,15 +217,12 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     # --- approval ---
     ("require_approval", "MILL_REQUIRE_APPROVAL", "false", False),
     ("auto_approve_enabled", "MILL_AUTO_APPROVE_ENABLED", "1", True),
-    ("auto_approve_model", "MILL_AUTO_APPROVE_MODEL", "aa/model", "aa/model"),
     # --- review ---
     ("review_enabled", "MILL_REVIEW_ENABLED", "true", True),
     ("auto_merge_enabled", "MILL_AUTO_MERGE_ENABLED", "1", True),
     ("refine_triage_enabled", "MILL_REFINE_TRIAGE_ENABLED", "0", False),
     ("spec_review_enabled", "MILL_SPEC_REVIEW_ENABLED", "true", True),
-    ("review_model", "MILL_REVIEW_MODEL", "review/model", "review/model"),
     ("review_max_rounds", "MILL_REVIEW_MAX_ROUNDS", "1", 1),
-    ("doc_model", "MILL_DOC_MODEL", "doc/model", "doc/model"),
     # --- retrospect ---
     ("retrospect_spawn_drafts", "MILL_RETROSPECT_SPAWN_DRAFTS", "0", False),
     (
@@ -272,7 +231,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "1",
         True,
     ),
-    ("trace_inspector_model", "MILL_TRACE_INSPECTOR_MODEL", "ti/model", "ti/model"),
     (
         "trace_inspector_memory_path",
         "MILL_TRACE_INSPECTOR_MEMORY_PATH",
@@ -336,7 +294,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         False,
     ),
     # --- test gap ---
-    ("test_gap_model", "MILL_TEST_GAP_MODEL", "tg/model", "tg/model"),
     ("test_gap_periodic", "MILL_TEST_GAP_PERIODIC", "1", True),
     ("test_gap_interval_seconds", "MILL_TEST_GAP_INTERVAL_SECONDS", "1800", 1800),
     (
@@ -346,7 +303,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         Path("/mem/tg.md"),
     ),
     # --- agent check ---
-    ("agent_check_model", "MILL_AGENT_CHECK_MODEL", "ac/model", "ac/model"),
     (
         "agent_check_memory_path",
         "MILL_AGENT_CHECK_MEMORY_PATH",
@@ -356,7 +312,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("agent_check_periodic", "MILL_AGENT_CHECK_PERIODIC", "1", True),
     ("agent_check_interval_seconds", "MILL_AGENT_CHECK_INTERVAL_SECONDS", "7200", 7200),
     # --- health ---
-    ("health_model", "MILL_HEALTH_MODEL", "h/model", "h/model"),
     ("health_periodic", "MILL_HEALTH_PERIODIC", "true", True),
     ("health_interval_seconds", "MILL_HEALTH_INTERVAL_SECONDS", "43200", 43200),
     (
@@ -366,7 +321,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         Path("/mem/health.md"),
     ),
     # --- survey ---
-    ("survey_model", "MILL_SURVEY_MODEL", "s/model", "s/model"),
     (
         "survey_memory_path",
         "MILL_SURVEY_MEMORY_PATH",
@@ -456,10 +410,10 @@ class TestTypeCoercion:
         assert isinstance(s.max_fix_iterations, int)
 
     def test_float_coercion(self, monkeypatch):
-        monkeypatch.setenv("MILL_MODEL_REQUEST_TIMEOUT", "2.5")
+        monkeypatch.setenv("MILL_TRANSIENT_BACKOFF_BASE", "2.5")
         s = Settings()
-        assert s.model_request_timeout == 2.5
-        assert isinstance(s.model_request_timeout, float)
+        assert s.transient_backoff_base == 2.5
+        assert isinstance(s.transient_backoff_base, float)
 
     @pytest.mark.parametrize(
         "env_val,expected",
@@ -685,8 +639,8 @@ class TestYamlLoading:
         config = load_yaml_config()
         assert isinstance(config, dict)
         assert "core" in config
-        assert "models" in config["core"]
-        assert config["core"]["models"]["coordinator"] == "deepseek/deepseek-v4-pro"
+        assert "limits" in config["core"]
+        assert config["core"]["limits"]["max_fix_iterations"] == 8
         assert "service" in config
         assert config["service"]["data_dir"] == ".data"
 
@@ -715,7 +669,7 @@ class TestYamlLoading:
         config = load_yaml_config()
         assert config["core"]["limits"]["max_fix_iterations"] == 99
         # Other values unchanged from defaults
-        assert config["core"]["models"]["coordinator"] == "deepseek/deepseek-v4-pro"
+        assert config["core"]["limits"]["max_stuck_cycles"] == 3
 
     def test_load_yaml_config_missing_defaults_raises(self, monkeypatch):
         """``load_yaml_config()`` raises ``ConfigError`` when
@@ -1653,11 +1607,6 @@ class TestValidationValid:
 class TestValidationInvalid:
     """Invalid Settings constructions that must raise ``ValidationError``."""
 
-    def test_model_request_timeout_zero_raises(self):
-        """``model_request_timeout=0`` raises ValidationError."""
-        with pytest.raises(ValidationError, match="Input should be greater than 0"):
-            Settings(model_request_timeout=0)
-
     def test_api_url_invalid_format_raises(self):
         """``api_url`` not starting with http(s) raises ValidationError."""
         with pytest.raises(ValidationError, match="String should match pattern"):
@@ -1699,22 +1648,6 @@ class TestValidationInvalid:
         ):
             Settings(FORGE_KIND="auto")
 
-    def test_fallback_model_without_retries_raises(self):
-        """``rate_limit_fallback_model`` set but retries=0 raises."""
-        with pytest.raises(
-            ValidationError,
-            match="rate_limit_fallback_retries must be ≥ 1",
-        ):
-            Settings(
-                rate_limit_fallback_model="gpt-4o",
-                rate_limit_fallback_retries=0,
-            )
-
-    def test_review_enabled_without_review_model_raises(self):
-        """``review_enabled=True`` with empty ``review_model`` raises."""
-        with pytest.raises(ValidationError, match="review_model must be non-empty"):
-            Settings(review_enabled="true", review_model="")
-
     def test_explore_request_limit_zero_raises(self):
         """``explore_request_limit=0`` raises ValidationError."""
         with pytest.raises(
@@ -1733,48 +1666,6 @@ class TestValidationInvalid:
 # ---------------------------------------------------------------------------
 # 12. Integration: load_settings / load_secrets factories
 # ---------------------------------------------------------------------------
-
-
-class TestDedupModelValidator:
-    """Validator warns when dedup_model does not look like a cheap
-    flash-class model, but never rejects."""
-
-    def test_non_flash_model_logs_warning(self, caplog):
-        """A non-flash dedup_model emits a WARNING log."""
-        import logging
-
-        with caplog.at_level(logging.WARNING):
-            s = Settings(dedup_model="opus")
-        assert (
-            "dedup_model='opus' does not look like a cheap flash-class model"
-            in caplog.text
-        )
-        # The value is preserved — never rejected
-        assert s.dedup_model == "opus"
-
-    def test_flash_model_no_warning(self, caplog):
-        """A flash-class dedup_model emits no warning."""
-        import logging
-
-        with caplog.at_level(logging.WARNING):
-            Settings(dedup_model="deepseek/deepseek-v4-flash")
-        assert "does not look like a cheap flash-class model" not in caplog.text
-
-    def test_empty_string_no_warning(self, caplog):
-        """An empty dedup_model (means 'use default' downstream) emits no warning."""
-        import logging
-
-        with caplog.at_level(logging.WARNING):
-            Settings(dedup_model="")
-        assert "does not look like a cheap flash-class model" not in caplog.text
-
-    def test_whitespace_only_no_warning(self, caplog):
-        """A whitespace-only dedup_model emits no warning."""
-        import logging
-
-        with caplog.at_level(logging.WARNING):
-            Settings(dedup_model="   ")
-        assert "does not look like a cheap flash-class model" not in caplog.text
 
 
 class TestFactories:
@@ -1875,15 +1766,14 @@ class TestFlattenYamlConfig:
 
         yaml_config = {
             "core": {
-                "limits": {"max_fix_iterations": 8},
-                "models": {"coordinator": "test/model"},
+                "limits": {"max_fix_iterations": 8, "max_stuck_cycles": 5},
             },
-            "service": {"data_dir": "/tmp/data"},
+            "gates": {"review_enabled": True},
         }
         result = flatten_yaml_config(yaml_config)
         assert result["max_fix_iterations"] == 8
-        assert result["model"] == "test/model"
-        assert result["data_dir"] == "/tmp/data"
+        assert result["max_stuck_cycles"] == 5
+        assert result["review_enabled"] is True
 
     def test_flatten_doc_classifier_diff_max_chars(self):
         """``core.limits.doc_classifier_diff_max_chars`` flattens to the
@@ -1934,14 +1824,14 @@ class TestFlattenYamlConfig:
         from robotsix_mill.config.loader import flatten_yaml_config
 
         yaml_config = {
-            "core": {"models": {"web_research": "model-a"}},
-            "web": {"research_model": "model-b"},
+            "core": {"limits": {"web_research_requests": 1}},
+            "web": {"research_request_limit": 2},
         }
         result = flatten_yaml_config(yaml_config)
-        # Both core.models.web_research and web.research_model
-        # map to web_research_model; web.research_model is
+        # Both core.limits.web_research_requests and web.research_request_limit
+        # map to web_research_request_limit; web.research_request_limit is
         # traversed second because 'web' > 'core' alphabetically
-        assert result["web_research_model"] == "model-b"
+        assert result["web_research_request_limit"] == 2
 
 
 class TestPeriodicPresenceModel:
