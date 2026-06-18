@@ -206,7 +206,7 @@ def test_happy_path_normal_retrospect_closed_with_findings(ctx_factory, monkeypa
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "session summary text",
+        lambda settings, session_id, **kw: "session summary text",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -307,7 +307,7 @@ def test_agent_raises_blocked_resumable(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -361,7 +361,7 @@ def test_agent_raises_non_transient_closes_with_failure_artifact(
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -421,7 +421,7 @@ def test_spawn_drafts_disabled_no_draft_created(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -479,7 +479,7 @@ def test_spawn_draft_enabled_creates_draft_with_parent(ctx_factory, monkeypatch)
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -540,7 +540,7 @@ def test_noop_draft_title_skips_spawn(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -594,7 +594,7 @@ def test_follow_up_ticket_created(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -662,7 +662,7 @@ def test_follow_up_dedup_closed_allowed(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -719,7 +719,7 @@ def test_follow_up_dedup_draft_blocked(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -776,7 +776,7 @@ def test_updated_memory_written_to_file(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -813,7 +813,7 @@ def _memory_seams(monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -1198,7 +1198,7 @@ def test_memory_count_drift_non_blocking(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -1243,7 +1243,7 @@ def test_prune_clone_on_close_true_prunes(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -1291,7 +1291,7 @@ def test_prune_clone_on_close_false_no_prune(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -1440,7 +1440,7 @@ def test_agented_proposals_written_to_candidates_file(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -1493,7 +1493,7 @@ def test_agented_proposals_none_no_file_created(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -1539,7 +1539,7 @@ def test_agented_proposals_empty_list_no_file_created(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -1607,7 +1607,7 @@ def test_agented_proposals_append_only(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -1666,7 +1666,7 @@ def test_agented_proposals_gated_by_setting(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -1712,7 +1712,7 @@ def _agented_seams(monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -2083,7 +2083,7 @@ def test_draft_target_mill_routes_to_mill_board(tmp_path, fake_sandbox, monkeypa
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -2159,7 +2159,7 @@ def test_draft_target_mill_falls_back_when_unset(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -2219,7 +2219,7 @@ def test_follow_up_target_mill_routes_to_mill_board(
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -2346,7 +2346,7 @@ def test_multi_repo_retrospect_blocks_when_any_pr_not_merged(ctx_factory, monkey
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -2430,7 +2430,7 @@ def test_multi_repo_retrospect_closes_when_all_prs_merged(ctx_factory, monkeypat
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -2508,7 +2508,7 @@ def test_single_repo_retrospect_unchanged_when_no_pr_urls_json(
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -2599,7 +2599,7 @@ def test_inputs_capped_keep_recent_content(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
@@ -2670,7 +2670,7 @@ def test_retrospect_log_cap_zero_disables(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "fetch_session_summary",
-        lambda settings, session_id: "summary",
+        lambda settings, session_id, **kw: "summary",
     )
     monkeypatch.setattr(
         langfuse_client,
