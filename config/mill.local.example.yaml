@@ -59,6 +59,9 @@ sandbox:
 #   # Route specific agents to the Claude SDK transport (subscription auth,
 #   # opus/haiku) by name — everything else stays on DeepSeek:
 #   claude_sdk_agents: [auto-approve]
+#   # Agents that use DeepSeek as primary even when Claude-routed (Claude
+#   # becomes fallback only — reverses the default Claude→DeepSeek direction):
+#   deepseek_agents: [completeness_check]
 #   # ...or route EVERY agent to Claude SDK:
 #   llm_backend: claude_sdk        # default: deepseek
 #   # (Claude SDK needs Node + the `claude` CLI in the image and a mounted

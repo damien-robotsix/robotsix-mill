@@ -401,12 +401,16 @@ Every setting below shows:
 REVERSIBLE provider selection. Default `deepseek` keeps every agent on
 the OpenRouter/DeepSeek path; setting `llm_backend: claude_sdk` (or
 listing names in `claude_sdk_agents`) routes those agents through the
-robotsix-llmio Claude Agent SDK transport.
+robotsix-llmio Claude Agent SDK transport. Agents listed in
+`deepseek_agents` use DeepSeek as primary even when they would otherwise
+be Claude-routed, with Claude serving as a fallback only (reversing the
+default Claude→DeepSeek fallback direction).
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `core.llm_backend` | — | `deepseek` | Global backend toggle. `claude_sdk` routes ALL agents through the Claude Agent SDK |
 | `core.claude_sdk_agents` | — | `[]` | Per-agent opt-in: only these agent names use the Claude SDK while the rest stay on DeepSeek |
+| `core.deepseek_agents` | — | `[completeness_check]` | Agents that use DeepSeek as primary even when Claude-routed; Claude serves as fallback only (inverts the default Claude→DeepSeek direction). Only takes effect for agents that ARE Claude-routed by global backend or `claude_sdk_agents` |
 | — (env-var only) | `MILL_CLAUDE_MAX_CONCURRENCY` | `4` | Process-wide cap on concurrent Claude SDK runs (each spawns a `claude` CLI subprocess) |
 | — (env-var only) | `MILL_CLAUDE_FALLBACK_TO_DEEPSEEK` | `true` | On a terminal Claude run failure, fall back to the equivalent DeepSeek build (needs an OpenRouter key) |
 | `core.claude_sdk_vision_enabled` | — | `false` | Allow inline image (screenshot/vision) input on the Claude SDK path. **Default off**: the installed llmio bridge cannot consume `BinaryContent` image parts — it stringifies them into a useless repr that hangs the `claude` CLI until the 1200s per-call cap fires. While off, the refine/review screenshot paths degrade to a text note. Flip to `true` (a one-line change) once the bridge gains real image-input support |

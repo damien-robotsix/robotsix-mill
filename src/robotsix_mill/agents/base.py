@@ -429,6 +429,40 @@ def _build_deepseek_handle(
     return AgentHandle(agent, http_client)
 
 
+def _build_claude_sdk_handle(
+    settings: Settings,
+    *,
+    effective_model: str,
+    composed_system: str,
+    all_tools: list,
+    output_type: Any,
+    name: str | None,
+    retries: int,
+    repo_dir: "Path | None" = None,
+) -> Any:
+    """Build a Claude-SDK agent handle (haiku/opus based on tier).
+
+    Factored out of :func:`build_agent` so it backs both the standard
+    Claude-primary path AND the DeepSeek→Claude fallback (when an agent
+    is listed in ``settings.deepseek_agents``).
+    """
+    from robotsix_llmio.claude_sdk.provider import ClaudeSDKProvider
+
+    from .claude_concurrency import bound_claude_handle
+
+    sdk_model = "haiku" if "flash" in effective_model else "opus"
+    handle = ClaudeSDKProvider().build_agent(
+        model=sdk_model,
+        system_prompt=composed_system,
+        tools=all_tools,
+        output_type=output_type,
+        name=name,
+        retries=retries,
+        workspace_root=repo_dir,
+    )
+    return bound_claude_handle(handle, settings.claude_max_concurrency)
+
+
 def build_agent(  # noqa: C901
     settings: Settings,
     *,
@@ -571,35 +605,51 @@ def build_agent(  # noqa: C901
     # ClaudeSDKProvider (subscription auth, tier→opus/haiku). Mill's tools
     # bridge through the SDK's @tool/MCP mechanism. Everything below the
     # branch is the unchanged DeepSeek/OpenRouter path.
-    if _use_claude_sdk(settings, name):
-        # Lazy: claude_agent_sdk is only installed/needed when the toggle
-        # is on, so the import must not run on the default DeepSeek path.
-        from robotsix_llmio.claude_sdk.provider import ClaudeSDKProvider
+    use_claude = _use_claude_sdk(settings, name)
 
-        from .claude_concurrency import bound_claude_handle
+    # deepseek_agents invert the default Claude→DeepSeek fallback direction:
+    # DeepSeek primary, Claude fallback. Only takes effect when the agent
+    # WOULD be Claude-routed (global llm_backend or claude_sdk_agents).
+    if use_claude and name and name in set(settings.deepseek_agents or []):
+        if not get_secrets().openrouter_api_key:
+            raise RuntimeError("OPENROUTER_API_KEY is not set")
+        from .fallback import FallbackAgentHandle
 
-        # CHEAP→haiku / DEFAULT→opus (llmio's former tier mapping); pass the
-        # resolved model directly now that build_agent takes `model`/`level`
-        # instead of the removed `tier`.
-        sdk_model = "haiku" if "flash" in effective_model else "opus"
-        handle = ClaudeSDKProvider().build_agent(
-            model=sdk_model,
-            system_prompt=composed_system,
-            tools=all_tools,
+        deepseek_primary = _build_deepseek_handle(
+            settings,
+            effective_model=effective_model,
+            composed_system=composed_system,
+            all_tools=all_tools,
             output_type=output_type,
             name=name,
             retries=retries,
-            # Confine the SDK's built-in Write/Edit tools to the ticket's
-            # workspace clone. Without this, an agent on a mill-board ticket
-            # edited the container's own /app source (which shadows the
-            # workspace) instead of its checkout, producing no valid diff.
-            # repo_dir is None for board-less agents (e.g. meta refine before
-            # a workspace exists) → no confinement, unchanged behavior.
-            workspace_root=repo_dir,
+            max_tokens=max_tokens,
         )
-        # Bound concurrent CLI-subprocess spawns process-wide so a worker
-        # fanning out many runs at startup can't stall on spawn contention.
-        primary = bound_claude_handle(handle, settings.claude_max_concurrency)
+        return FallbackAgentHandle(
+            deepseek_primary,
+            lambda: _build_claude_sdk_handle(
+                settings,
+                effective_model=effective_model,
+                composed_system=composed_system,
+                all_tools=all_tools,
+                output_type=output_type,
+                name=name,
+                retries=retries,
+                repo_dir=repo_dir,
+            ),
+        )
+
+    if use_claude:
+        primary = _build_claude_sdk_handle(
+            settings,
+            effective_model=effective_model,
+            composed_system=composed_system,
+            all_tools=all_tools,
+            output_type=output_type,
+            name=name,
+            retries=retries,
+            repo_dir=repo_dir,
+        )
 
         # Resilience: if the Claude run terminally fails (after its local
         # retries), fall back to the equivalent DeepSeek build of THIS agent —

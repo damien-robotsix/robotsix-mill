@@ -99,6 +99,7 @@ core:
   # -- direct core.* engine toggles (defaults mirror the Settings fields) ---
   llm_backend: deepseek                 # deepseek (OpenRouter) | claude (Claude SDK) backend
   claude_sdk_agents: []                 # agent names routed to the Claude SDK backend (empty = none)
+  deepseek_agents: [completeness_check]  # agents that use DeepSeek as primary even when Claude-routed; Claude serves as fallback only
   claude_sdk_vision_enabled: false      # allow image input on Claude-SDK-routed agents
   low_credit_threshold_usd: 5.0         # OpenRouter balance below this → board warning banner
   low_credit_poll_enabled: true         # enable proactive GET /api/v1/credits hourly poll
