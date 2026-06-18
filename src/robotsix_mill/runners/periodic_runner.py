@@ -27,13 +27,17 @@ log = logging.getLogger("robotsix_mill.periodic_runner")
 
 
 # ---------------------------------------------------------------------------
-# Result dataclasses
+# Shared result dataclass (replaced 12 structurally-identical copies)
 # ---------------------------------------------------------------------------
 
 
 @dataclass
-class AuditPassResult:
-    """Result of running an audit pass."""
+class PeriodicPassResult:
+    """Result of running a periodic pass.
+
+    Replaces the 12 formerly-identical ``*PassResult`` dataclasses.
+    Each historical name is retained as a backward-compat alias below.
+    """
 
     updated_memory: str
     drafts_created: list[dict]
@@ -41,117 +45,22 @@ class AuditPassResult:
     proposed_actions: list[dict] = field(default_factory=list)
 
 
-@dataclass
-class AgentCheckPassResult:
-    """Result of running an agent-check pass."""
+# Backward-compat aliases — tests and stubs import these by name.
+AuditPassResult = PeriodicPassResult
+AgentCheckPassResult = PeriodicPassResult
+BcCheckPassResult = PeriodicPassResult
+SurveyPassResult = PeriodicPassResult
+CompletenessCheckPassResult = PeriodicPassResult
+CopyPastePassResult = PeriodicPassResult
+ForgeParityPassResult = PeriodicPassResult
+ConfigSyncPassResult = PeriodicPassResult
+HealthPassResult = PeriodicPassResult
+ModuleCuratorPassResult = PeriodicPassResult
+TestGapPassResult = PeriodicPassResult
+BoardCleanupPassResult = PeriodicPassResult
 
-    updated_memory: str
-    drafts_created: list[dict]
-    session_id: str = ""
-    proposed_actions: list[dict] = field(default_factory=list)
-
-
-@dataclass
-class BcCheckPassResult:
-    """Result of running a bc-check pass."""
-
-    updated_memory: str
-    drafts_created: list[dict]
-    session_id: str = ""
-    proposed_actions: list[dict] = field(default_factory=list)
-
-
-@dataclass
-class SurveyPassResult:
-    """Result of running a survey pass."""
-
-    updated_memory: str
-    drafts_created: list[dict]
-    session_id: str = ""
-    proposed_actions: list[dict] = field(default_factory=list)
-
-
-@dataclass
-class CompletenessCheckPassResult:
-    """Result of running a completeness-check pass."""
-
-    updated_memory: str
-    drafts_created: list[dict]
-    session_id: str = ""
-    proposed_actions: list[dict] = field(default_factory=list)
-
-
-@dataclass
-class CopyPastePassResult:
-    """Result of running a copy-paste pass."""
-
-    updated_memory: str
-    drafts_created: list[dict]
-    session_id: str = ""
-    proposed_actions: list[dict] = field(default_factory=list)
-
-
-@dataclass
-class ForgeParityPassResult:
-    """Result of running a forge-parity pass."""
-
-    updated_memory: str
-    drafts_created: list[dict]
-    session_id: str = ""
-    proposed_actions: list[dict] = field(default_factory=list)
-
-
-@dataclass
-class ConfigSyncPassResult:
-    """Result of running a config-sync pass."""
-
-    updated_memory: str
-    drafts_created: list[dict]
-    session_id: str = ""
-    proposed_actions: list[dict] = field(default_factory=list)
-
-
-@dataclass
-class HealthPassResult:
-    """Result of running a health pass."""
-
-    updated_memory: str
-    drafts_created: list[dict]
-    session_id: str = ""
-    proposed_actions: list[dict] = field(default_factory=list)
-
-
-@dataclass
-class ModuleCuratorPassResult:
-    """Result of running a module-curator pass."""
-
-    updated_memory: str
-    drafts_created: list[dict]
-    session_id: str = ""
-    proposed_actions: list[dict] = field(default_factory=list)
-
-
-@dataclass
-class TestGapPassResult:
-    """Result of running a test-gap pass."""
-
-    updated_memory: str
-    drafts_created: list[dict]
-    session_id: str = ""
-    proposed_actions: list[dict] = field(default_factory=list)
-
-
-TestGapPassResult.__test__ = False
-
-
-@dataclass
-class BoardCleanupPassResult:
-    """Result of running a board-cleanup pass."""
-
-    updated_memory: str
-    drafts_created: list[dict]
-    session_id: str = ""
-    proposed_actions: list[dict] = field(default_factory=list)
+# Prevent pytest from collecting ``TestGapPassResult`` as a test class.
+TestGapPassResult.__test__ = False  # type: ignore[attr-defined]
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +117,7 @@ class PeriodicPassConfig:
     workspace_subdir: str
     """Clone workspace subdirectory, e.g. ``"audit_workspace"``."""
 
-    result_dataclass: type
+    result_dataclass: type[PeriodicPassResult]
     """The typed result dataclass (e.g. ``AuditPassResult``).
     Must have fields ``updated_memory: str``, ``drafts_created: list[dict]``,
     ``session_id: str``."""
@@ -254,7 +163,7 @@ def run_periodic_pass(
     *,
     settings,
     definition_override: Any = None,
-) -> Any:
+) -> PeriodicPassResult:
     """Execute one full periodic pass.
 
     This is the deduplicated body of the 8 ``run_*_pass()`` functions.
@@ -413,7 +322,7 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         agent_fn_name="run_audit_agent",
         memory_filename="audit_memory.md",
         workspace_subdir="audit_workspace",
-        result_dataclass=AuditPassResult,
+        result_dataclass=PeriodicPassResult,
         clone_token_fn=_clone_token,
     ),
     "agent_check": PeriodicPassConfig(
@@ -423,7 +332,7 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         agent_fn_name="run_agent_check_agent",
         memory_filename="agent_check_memory.md",
         workspace_subdir="agent_check_workspace",
-        result_dataclass=AgentCheckPassResult,
+        result_dataclass=PeriodicPassResult,
         clone_token_fn=_clone_token,
         extra_kwargs_fn=lambda settings: {"memory_dir": settings.data_dir},
     ),
@@ -434,7 +343,7 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         agent_fn_name="run_bc_check_agent",
         memory_filename="bc_check_memory.md",
         workspace_subdir="bc_check_workspace",
-        result_dataclass=BcCheckPassResult,
+        result_dataclass=PeriodicPassResult,
         clone_token_fn=_clone_token,
     ),
     "survey": PeriodicPassConfig(
@@ -444,7 +353,7 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         agent_fn_name="run_survey_agent",
         memory_filename="survey_memory.md",
         workspace_subdir="survey_workspace",
-        result_dataclass=SurveyPassResult,
+        result_dataclass=PeriodicPassResult,
         clone_token_fn=_clone_token,
     ),
     "completeness_check": PeriodicPassConfig(
@@ -454,7 +363,7 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         agent_fn_name="run_completeness_check_agent",
         memory_filename="completeness_check_memory.md",
         workspace_subdir="completeness_check_workspace",
-        result_dataclass=CompletenessCheckPassResult,
+        result_dataclass=PeriodicPassResult,
         clone_token_fn=None,  # uses forge_token (raises on missing)
         max_drafts_fn=lambda _settings: _completeness_max_gaps(),
     ),
@@ -465,7 +374,7 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         agent_fn_name="run_copy_paste_agent",
         memory_filename="copy_paste_memory.md",
         workspace_subdir="copy_paste_workspace",
-        result_dataclass=CopyPastePassResult,
+        result_dataclass=PeriodicPassResult,
         clone_token_fn=_clone_token,
     ),
     "forge_parity": PeriodicPassConfig(
@@ -475,7 +384,7 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         agent_fn_name="run_forge_parity_agent",
         memory_filename="forge_parity_memory.md",
         workspace_subdir="forge_parity_workspace",
-        result_dataclass=ForgeParityPassResult,
+        result_dataclass=PeriodicPassResult,
         clone_token_fn=_clone_token,
     ),
     "config_sync": PeriodicPassConfig(
@@ -485,7 +394,7 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         agent_fn_name="run_config_sync_agent",
         memory_filename="config_sync_memory.md",
         workspace_subdir="config_sync_workspace",
-        result_dataclass=ConfigSyncPassResult,
+        result_dataclass=PeriodicPassResult,
         clone_token_fn=None,  # uses forge_token (raises on missing)
     ),
     "health": PeriodicPassConfig(
@@ -495,7 +404,7 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         agent_fn_name="run_health_agent",
         memory_filename="health_memory.md",
         workspace_subdir="health_workspace",
-        result_dataclass=HealthPassResult,
+        result_dataclass=PeriodicPassResult,
         clone_token_fn=None,  # uses forge_token (raises on missing)
     ),
     "module_curator": PeriodicPassConfig(
@@ -505,7 +414,7 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         agent_fn_name="run_module_curator_agent",
         memory_filename="module_curator_memory.md",
         workspace_subdir="module_curator_workspace",
-        result_dataclass=ModuleCuratorPassResult,
+        result_dataclass=PeriodicPassResult,
         clone_token_fn=_clone_token,
         requires_repo=True,
     ),
@@ -516,7 +425,7 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         agent_fn_name="run_test_gap_agent",
         memory_filename="test_gap_memory.md",
         workspace_subdir="test_gap_workspace",
-        result_dataclass=TestGapPassResult,
+        result_dataclass=PeriodicPassResult,
         clone_token_fn=None,  # uses forge_token (raises on missing)
         requires_repo=True,
     ),
@@ -557,7 +466,7 @@ def run_board_cleanup_pass(
     *,
     settings,
     definition_override: Any = None,
-) -> BoardCleanupPassResult:
+) -> PeriodicPassResult:
     """Execute one board-cleanup pass.
 
     Fetches a snapshot of recent board tickets (across all sources),
@@ -576,7 +485,7 @@ def run_board_cleanup_pass(
             agent fn (ignored when ``None``).
 
     Returns:
-        A ``BoardCleanupPassResult``.
+        A ``PeriodicPassResult``.
     """
     if repo_config is None:
         raise ValueError(
@@ -608,7 +517,7 @@ def run_board_cleanup_pass(
     # which normally persists memory, is skipped); preserve existing contents.
     if not board:
         log.info("board_cleanup pass skipped: board is empty (session %s)", session_id)
-        return BoardCleanupPassResult(
+        return PeriodicPassResult(
             updated_memory=(memory_file.read_text() if memory_file.exists() else ""),
             drafts_created=[],
             session_id=session_id,
@@ -635,7 +544,7 @@ def run_board_cleanup_pass(
         repo_dir=None,
     )
 
-    return BoardCleanupPassResult(
+    return PeriodicPassResult(
         updated_memory=result.updated_memory,
         drafts_created=result.drafts_created,
         session_id=session_id,
