@@ -200,6 +200,13 @@ class Settings(
         return self.data_dir / "config_sync_memory.md"
 
     @property
+    def state_sync_memory_file(self) -> Path:
+        """Resolved path to the state-sync agent's Markdown memory ledger."""
+        if self.state_sync_memory_path is not None:
+            return self.state_sync_memory_path
+        return self.data_dir / "state_sync_memory.md"
+
+    @property
     def bc_check_memory_file(self) -> Path:
         """Resolved path to the agent-maintained bc-check memory ledger."""
         if self.bc_check_memory_path is not None:

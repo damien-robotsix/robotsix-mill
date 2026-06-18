@@ -429,6 +429,17 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         clone_token_fn=None,  # uses forge_token (raises on missing)
         requires_repo=True,
     ),
+    "state_sync": PeriodicPassConfig(
+        label="state_sync",
+        source_kind=SourceKind.STATE_SYNC,
+        agent_module_attr="state_syncing",
+        agent_fn_name="run_state_sync_agent",
+        memory_filename="state_sync_memory.md",
+        workspace_subdir="state_sync_workspace",
+        result_dataclass=PeriodicPassResult,
+        clone_token_fn=None,  # uses forge_token (raises on missing)
+        requires_repo=True,
+    ),
 }
 
 
