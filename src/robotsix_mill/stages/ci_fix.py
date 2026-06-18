@@ -348,13 +348,19 @@ class CIFixStage(Stage):
         if triage_outcome is not None:
             return triage_outcome
 
-        # Staleness guard: a branch behind its base may be failing purely on
-        # inherited debt — rebase + re-poll before spending an agent run.
-        rebase_outcome = self._rebase_if_stale(
-            ticket, ctx, repo_dir, branch, failing_summary
-        )
-        if rebase_outcome is not None:
-            return rebase_outcome
+        # NOTE: there is intentionally no proactive rebase here. The merge
+        # poll already routes branch-introduced failures straight to ci_fix
+        # (pre-existing main-branch debt is blocked there, conflicts go to
+        # REBASING), so by the time we reach this stage the PR is mergeable
+        # and the failure is the branch's own. A local rebase + force-push
+        # here cannot fix a branch-own lint/type/vulture failure — it only
+        # burns a cycle (and used to pre-seed the identical-failure
+        # fingerprint, biasing the backstop toward an early BLOCK before the
+        # agent ever ran). The agent OWNS the fix: it has bridged git tools
+        # and the target branch, so it can rebase itself when (and only when)
+        # it determines the failure is base-caused. Genuine "behind main"
+        # staleness is still handled by the server-side update-branch backstop
+        # in the OUT_OF_SCOPE path below.
 
         # Identical-failure gate: when the same CI failure fingerprint repeats
         # ci_fix_max_identical_failures times in a row, escalate to BLOCKED.
@@ -504,99 +510,6 @@ class CIFixStage(Stage):
             changed_paths,
         )
 
-    def _rebase_if_stale(
-        self,
-        ticket: Ticket,
-        ctx: StageContext,
-        repo_dir: str,
-        branch: str,
-        failing_summary: str = "",
-    ) -> Outcome | None:
-        """Rebase the branch onto its target if it is behind AND the
-        failure fingerprint has changed.
-
-        Returns ``None`` when the branch is current or the fingerprint
-        is unchanged (proceed to agent).  On a stale branch with a
-        *new* failure fingerprint: rebase + force-push, returning
-        ``IMPLEMENT_COMPLETE`` so ``ci_poll`` re-checks CI on the
-        updated branch.  On any rebase conflict or push failure, returns
-        ``BLOCKED``.
-
-        An unchanged fingerprint means the failure is not
-        behind-main-caused — skipping the rebase prevents re-rebasing on
-        the same failure under a fast-moving main when the rebase cannot
-        possibly fix a branch-own lint/type failure.
-        """
-        s = ctx.settings
-        target = target_branch_for(s, ctx.repo_config)
-
-        if not git_ops.branch_is_behind_main(Path(repo_dir), target):
-            return None  # current — agent path
-
-        # Fingerprint gate: only rebase when the failure fingerprint has
-        # changed since the last cycle.  An unchanged fingerprint means
-        # the failure is not behind-main-caused — skip the rebase and
-        # let the ci-fix agent handle it directly.
-        repo_id = ctx.repo_config.board_id if ctx.repo_config else ""
-        current_fp = _ci_failure_fingerprint(failing_summary, repo_id)
-        fp_path = ctx.service.workspace(ticket).artifacts_dir / _CI_FAILURE_FINGERPRINT
-        try:
-            stored_fp = fp_path.read_text(encoding="utf-8").strip()
-        except FileNotFoundError:
-            stored_fp = ""
-
-        if current_fp == stored_fp:
-            log.info(
-                "%s: failure fingerprint unchanged (%s) — skipping rebase, "
-                "proceeding to ci-fix agent",
-                ticket.id,
-                current_fp,
-            )
-            return None
-
-        # Store the new fingerprint before rebasing so the next cycle can
-        # compare against it.
-        fp_path.parent.mkdir(parents=True, exist_ok=True)
-        fp_path.write_text(current_fp, encoding="utf-8")
-
-        log.info(
-            "%s: branch is behind %s — rebasing before ci-fix cycle",
-            ticket.id,
-            target,
-        )
-
-        remote_url = _resolve_remote_url(s, ctx.repo_config)
-        token = github_token(s, repo_config=ctx.repo_config)
-
-        if not git_ops.try_rebase_onto(
-            Path(repo_dir), target, remote_url=remote_url, token=token
-        ):
-            return Outcome(
-                State.BLOCKED,
-                f"rebase onto {target} failed (conflict or fetch error) — "
-                "manual reconciliation required",
-            )
-
-        try:
-            git_ops.push_with_lease(Path(repo_dir), branch, remote_url, token)
-        except Exception as e:  # noqa: BLE001 — lease reject / network
-            log.exception("%s: push_with_lease after rebase failed: %s", ticket.id, e)
-            return Outcome(
-                State.BLOCKED,
-                f"rebase succeeded but force-push failed: {e}",
-            )
-
-        try:
-            ctx.service.add_history_note(
-                ticket.id,
-                f"branch rebased onto {target} before ci-fix cycle "
-                "(branch was behind main; rebase may resolve CI failures)",
-            )
-        except Exception:  # noqa: BLE001 — history note is best-effort
-            log.warning("%s: failed to record rebase history note", ticket.id)
-
-        return Outcome(State.IMPLEMENT_COMPLETE)
-
     def _check_consecutive_identical_failure(
         self,
         ticket: Ticket,
@@ -608,10 +521,12 @@ class CIFixStage(Stage):
         row without the agent making progress, or ``None`` when the stage
         should proceed to the agent phase.
 
-        The fingerprint is read/written from the artifacts dir (shared with
-        ``_rebase_if_stale``).  A separate counter file tracks how many times
-        the *current* fingerprint has been seen consecutively; it is reset to
-        zero whenever the fingerprint changes (or on first run).
+        The fingerprint is read/written from the artifacts dir.  A separate
+        counter file tracks how many times the *current* fingerprint has been
+        seen consecutively; it is reset to zero whenever the fingerprint
+        changes (or on first run). The counter now reflects only genuine
+        agent attempts on the same failure — nothing pre-seeds it before the
+        agent runs.
 
         Short-circuits to ``None`` when ``ci_fix_max_identical_failures == 0``
         (disabled).
