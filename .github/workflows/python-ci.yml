@@ -48,6 +48,11 @@ on:
         required: false
         type: boolean
         default: true
+      run-audit:
+        description: Whether to run the dependency CVE audit step (uv audit or pip-audit).
+        required: false
+        type: boolean
+        default: true
       run-bandit:
         description: Whether to run the bandit security SAST step.
         required: false
@@ -125,6 +130,29 @@ jobs:
         # fails with "Failed to spawn: deptry" for any repo that doesn't
         # ship deptry itself.
         run: uv run --with deptry deptry .
+
+      - name: Dependency audit (CVE scan)
+        if: ${{ inputs.run-audit }}
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+        # uv audit --frozen reads the committed uv.lock natively.
+        # It's a preview subcommand (needs --preview in stable builds)
+        # but --help works without --preview since uv ≥ 0.6.12, so we
+        # probe availability first.  If unavailable, fall back to
+        # pip-audit via uv export --frozen.
+        # IMPORTANT: we must NOT ||-fallback on uv audit's exit code
+        # because a non-zero exit can also mean "CVEs found" — masking
+        # those via a passthrough pip-audit run would be a false-pass.
+        run: |
+          if uv audit --help >/dev/null 2>&1; then
+            uv audit --frozen --preview
+          else
+            # --no-hashes avoids pip hash-verification failures on VCS (git)
+            # dependencies, which can't carry hashes. Also strip the editable
+            # project line (-e .) — pip-audit cannot install editable file://
+            # requirements.
+            uv export --frozen --no-hashes | grep -v '^-e \.' | uv run --with pip-audit pip-audit -r /dev/stdin
+          fi
 
       - name: Ruff (lint + format check)
         env:
