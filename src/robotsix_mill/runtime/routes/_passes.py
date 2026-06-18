@@ -317,6 +317,19 @@ member_sync_pass = _make_background_pass(
 router.post("/member-sync", status_code=202)(member_sync_pass)
 
 
+state_sync_pass = _make_background_pass(
+    kind="state-sync",
+    runner_module="robotsix_mill.runners.state_sync_runner",
+    runner_func="run_state_sync_pass",
+    docstring="""Kick off a state-sync pass in the BACKGROUND and return at once.
+
+    The state-sync agent inspects the board's state consistency, checking for
+    stale state values, typos, and missing transitions. New draft tickets
+    appear on the board when it finishes.""",
+)
+router.post("/state-sync", status_code=202)(state_sync_pass)
+
+
 # -- handlers with custom summary builders -------------------------------
 
 trace_review_pass = _make_background_pass(

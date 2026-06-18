@@ -108,6 +108,7 @@ BOARD_HTML = """<!doctype html><html><head><meta charset="utf-8">
     <button onclick="runForgeParity()" data-agent="forge_parity">Forge Parity</button>
     <button onclick="runCopyPaste()" data-agent="copy_paste">Copy Paste</button>
     <button onclick="runBoardCleanup()" data-agent="board_cleanup">Board Cleanup</button>
+    <button onclick="runStateSync()" data-agent="state_sync">State Sync</button>
     <button onclick="runMeta()" data-agent="meta" class="meta-only">Meta</button>
   </div>
 </div>
