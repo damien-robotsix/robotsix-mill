@@ -294,7 +294,7 @@ periodic:
     size_threshold_bytes: 104857600  # 100 MiB — threshold for oversized files/dirs
     growth_delta_bytes: 10485760    # 10 MiB — growth since last pass
     growth_delta_pct: 20            # 20% — growth percentage threshold
-    growth_delta_pct_min_bytes: 1048576  # 1 MiB — min absolute size for a pct-only growth flag
+    growth_delta_min_bytes_before_pct: 1048576  # 1 MiB — skip percentage check if absolute delta is below this
     max_drafts_per_pass: 5          # max findings drafted per pass
     prune_closed: false             # opt-in: prune terminal-ticket workspace dirs
     prune_closed_age_seconds: 604800  # 7 days — min age for prune_closed
