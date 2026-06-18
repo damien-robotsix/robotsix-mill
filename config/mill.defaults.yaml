@@ -198,8 +198,7 @@ stages:
 # ---------------------------------------------------------------------------
 
 ci:
-  max_auto_retries: 3          # consecutive no-change ci-fix cycles before BLOCK (0 = disabled)
-  codeql_fp_triage_enabled: true  # auto-dismiss CodeQL FPs at ci-fix ceiling (set false to disable)
+  codeql_fp_triage_enabled: true  # auto-dismiss CodeQL FPs when CodeQL is the sole red check (set false to disable)
 
 # ---------------------------------------------------------------------------
 #  pipeline — merge, rebase, ci-fix, retrospect, prune, archive, memory paths
@@ -209,8 +208,9 @@ pipeline:
   branch_prefix: mill/                               # prefix for deliver-stage branch names
   merge_poll_seconds: 120                            # poll interval for PR merge/CI status
   rebase_max_attempts: 3                             # max rebase LLM invocations before BLOCK
-  ci_fix_max_attempts: 2                             # max CI-fix LLM invocations before BLOCK
-  ci_fix_max_cycles: 3                             # hard ceiling on total ci-fix cycles per ticket
+  ci_fix_max_iterations: 5                           # single-repo ci-fix: max wait_for_ci push-and-recheck iterations before BLOCK
+  ci_fix_max_attempts: 2                             # multi-repo merge ci-fix only: max CI-fix LLM invocations before BLOCK
+  ci_fix_max_cycles: 3                             # multi-repo merge ci-fix only: hard ceiling on total ci-fix cycles per repo
   auto_fix_max_cycles: 6                           # cross-stage ceiling on REBASING + FIXING_CI dispatches before BLOCK
   ping_pong_max_alternations: 3                    # max rebase↔ci_fix alternations before BLOCK
   review_revision_max_attempts: 2                    # max review-revision LLM invocations before BLOCK

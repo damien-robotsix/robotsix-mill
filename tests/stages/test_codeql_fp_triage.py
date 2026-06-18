@@ -678,12 +678,11 @@ def test_early_triage_before_attempt_cap(tmp_path, monkeypatch):
 
 
 def test_early_triage_skipped_when_non_codeql_fails(tmp_path, monkeypatch):
-    """When a non-CodeQL check also fails, the early trigger skips and
-    the normal attempt/cycle path proceeds — the attempt counter advances."""
+    """When a non-CodeQL check also fails, the early trigger skips and the
+    ci-fix agent runs. With the agent now owning the loop, a crash → BLOCKED
+    in one shot (no per-poll attempt retry)."""
     ctx = _gh(
         tmp_path,
-        ci_fix_max_cycles="3",
-        ci_fix_max_attempts="2",
         codeql_fp_triage_enabled="true",
     )
     ci_fail = {
@@ -731,11 +730,8 @@ def test_early_triage_skipped_when_non_codeql_fails(tmp_path, monkeypatch):
     out = CIFixStage().run(t, ctx)
     # Triage should NOT have run (non-CodeQL check present).
     assert len(triage_called) == 0
-    # The normal ci-fix path ran and failed, so attempt counter advanced.
-    attempt_path = ctx.service.workspace(t).artifacts_dir / "ci_fix_attempts.txt"
-    assert _read_counter(attempt_path) == 1
-    # Still re-polling (attempt < max_attempts=2).
-    assert out.next_state is State.IMPLEMENT_COMPLETE
+    # The ci-fix agent ran and crashed → the stage blocks (no retry loop).
+    assert out.next_state is State.BLOCKED
 
 
 # ---------------------------------------------------------------------------

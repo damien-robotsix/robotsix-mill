@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -31,12 +32,11 @@ from .base import Outcome, Stage, StageContext
 
 log = logging.getLogger("robotsix_mill.stages.ci_fix")
 
-_CI_FIX_COUNTER = "ci_fix_attempts.txt"
-_CI_NO_CHANGE_COUNTER = "ci_no_change_cycles.txt"
-_CI_FIX_CYCLE_COUNTER = "ci_fix_cycles.txt"
+# Refresh counter (rebase / forge update-branch) and the failure fingerprint
+# that gates re-rebasing remain — the retry/cycle/no-change/last-done counters
+# were removed when the agent took ownership of the fix→verify loop.
 _CI_REFRESH_COUNTER = "ci_fix_refresh_attempts.txt"
 _CI_FAILURE_FINGERPRINT = "ci_failure_fingerprint.txt"
-_CI_LAST_DONE_FINGERPRINT = "ci_last_done_fingerprint.txt"
 _CODQL_FP_TRIAGE_SENTINEL = "codeql_fp_triage_ran.txt"
 
 # Maximum number of alerts the codeql_fp_triage agent may dismiss in a
@@ -347,36 +347,25 @@ class CIFixStage(Stage):
         if triage_outcome is not None:
             return triage_outcome
 
-        # Staleness guard: rebase if behind main AND fingerprint changed
-        # BEFORE counting a cycle.
+        # Staleness guard: a branch behind its base may be failing purely on
+        # inherited debt — rebase + re-poll before spending an agent run.
         rebase_outcome = self._rebase_if_stale(
             ticket, ctx, repo_dir, branch, failing_summary
         )
         if rebase_outcome is not None:
             return rebase_outcome
 
-        # Counter phase: enforce the hard per-ticket cycle ceiling.
-        ceiling = self._enforce_cycle_ceiling(
-            ticket, ctx, failing_summary, failing, alerts, changed_paths
-        )
-        if ceiling is not None:
-            return ceiling
-
-        s = ctx.settings
-        counter_path = ctx.service.workspace(ticket).artifacts_dir / _CI_FIX_COUNTER
-        attempt = _read_counter(counter_path) + 1
-        max_attempts = s.ci_fix_max_attempts
-
+        # Agent phase: the ci-fix agent now OWNS the fix→push→verify loop —
+        # it fixes, pushes, and calls wait_for_ci to re-check, iterating up to
+        # ci_fix_max_iterations before giving up. There is no external
+        # FIXING_CI ⇄ IMPLEMENT_COMPLETE retry loop and no per-ticket cycle
+        # counter: the iteration budget lives inside the wait_for_ci tool.
         log.info(
-            "%s: CI failing — ci-fix attempt %d/%d",
+            "%s: CI failing — running ci-fix agent (owns fix/verify loop)",
             ticket.id,
-            attempt,
-            max_attempts,
         )
-
-        # Agent phase: run the ci-fix agent and route the result.
         return self._run_agent_and_finalize(
-            ticket, ctx, repo_dir, branch, failing_summary, attempt, max_attempts
+            ticket, ctx, repo_dir, branch, failing_summary
         )
 
     def _resolve_clone_and_status(
@@ -505,72 +494,6 @@ class CIFixStage(Stage):
             alerts,
             changed_paths,
         )
-
-    def _enforce_cycle_ceiling(
-        self,
-        ticket: Ticket,
-        ctx: StageContext,
-        failing_summary: str,
-        failing: list[dict[str, Any]],
-        alerts: list[dict[str, Any]],
-        changed_paths: set[str],
-    ) -> Outcome | None:
-        """Apply the hard per-ticket cycle ceiling.
-
-        On a ceiling hit, resets the cycle counter, logs, records the
-        best-effort history note and returns the BLOCKED ``Outcome``.
-        Before blocking, tries the codeql_fp_triage sub-agent when the
-        ONLY remaining red check is CodeQL code-scanning.
-        Otherwise increments the cycle counter and returns ``None``.
-        """
-        s = ctx.settings
-
-        # Hard per-ticket cycle ceiling: count every cycle that actually runs
-        # the agent on still-failing CI, regardless of self-reported status or
-        # whether commits were produced.  Reset only when CI is observed green
-        # (the conclusion == "success" branch above).  This bounds a runaway
-        # loop that keeps committing useless churn while remote CI stays red —
-        # a loop that resets both the attempt and no-change counters every
-        # cycle and would otherwise never escalate.
-        cycle_counter_path = (
-            ctx.service.workspace(ticket).artifacts_dir / _CI_FIX_CYCLE_COUNTER
-        )
-        cycles = _read_counter(cycle_counter_path)
-        if s.ci_fix_max_cycles > 0 and cycles >= s.ci_fix_max_cycles:
-            # Stop before spending another full agent run.
-            _write_counter(cycle_counter_path, 0)
-
-            # --- CodeQL FP triage: last resort before BLOCKED ---
-            triage_outcome = self._try_codeql_fp_triage(
-                ticket, ctx, failing, alerts, changed_paths
-            )
-            if triage_outcome is not None:
-                return triage_outcome
-
-            log.warning(
-                "%s: ci-fix hit hard ceiling of %d cycle(s) without turning "
-                "CI green — escalating to BLOCKED without running the agent",
-                ticket.id,
-                s.ci_fix_max_cycles,
-            )
-            # Persist WHAT failed to the ticket history so a human doesn't have
-            # to dig into GitHub/Langfuse to learn why ci-fix gave up.
-            try:
-                ctx.service.add_history_note(
-                    ticket.id,
-                    "ci-fix gave up — last CI failure:\n\n"
-                    + (failing_summary or "(no failure detail captured)")[:3000],
-                )
-            except Exception:  # noqa: BLE001 — history note is best-effort
-                log.warning("%s: failed to record ci-fix failure note", ticket.id)
-            return Outcome(
-                State.BLOCKED,
-                f"ci fix exhausted hard ceiling of {s.ci_fix_max_cycles} "
-                f"cycle(s) without turning CI green — manual intervention "
-                f"required. Resume-blocked to retry from human_mr_approval.",
-            )
-        _write_counter(cycle_counter_path, cycles + 1)
-        return None
 
     def _rebase_if_stale(
         self,
@@ -809,12 +732,15 @@ class CIFixStage(Stage):
         repo_dir: str,
         branch: str,
         failing_summary: str,
-        attempt: int,
-        max_attempts: int,
     ) -> Outcome:
-        """Run the ci-fix agent and route success / retry / exhausted cases."""
+        """Reconcile, run the agent (which owns the loop), and route its verdict.
+
+        The agent fixes, pushes, and verifies on real CI via wait_for_ci,
+        iterating internally until CI is green (DONE) or its budget is spent
+        (FAILED). There is no external retry loop here — DONE → re-poll,
+        FAILED/crash → BLOCKED, OUT_OF_SCOPE → dependency fix.
+        """
         s = ctx.settings
-        counter_path = ctx.service.workspace(ticket).artifacts_dir / _CI_FIX_COUNTER
 
         # Reconcile with remote PR branch before running the agent so it
         # works from the latest remote state (includes any foreign commits).
@@ -840,63 +766,23 @@ class CIFixStage(Stage):
                 ticket.id,
             )
 
-        # --- identical-failure short-circuit ---
-        # When the agent already reported DONE with actual commits on a
-        # previous cycle, and the SAME failure fingerprint reappears,
-        # the fix was ineffective — do NOT run the agent again.
-        repo_id = ctx.repo_config.board_id if ctx.repo_config else ""
-        current_fp = _ci_failure_fingerprint(failing_summary, repo_id)
-        fp_path = (
-            ctx.service.workspace(ticket).artifacts_dir / _CI_LAST_DONE_FINGERPRINT
-        )
-        try:
-            last_done_fp = fp_path.read_text(encoding="utf-8").strip()
-        except FileNotFoundError:
-            last_done_fp = ""
-        if last_done_fp and current_fp == last_done_fp:
-            log.warning(
-                "%s: failure fingerprint %s matches the last DONE fingerprint "
-                "— previous fix was ineffective; blocking without running the agent",
-                ticket.id,
-                current_fp,
-            )
-            return Outcome(
-                State.BLOCKED,
-                f"ci fix reported DONE on previous cycle but the same failure "
-                f"(fingerprint {current_fp}) reappeared — the fix was ineffective. "
-                f"Manual intervention required. "
-                f"Resume-blocked to retry from human_mr_approval.",
-            )
-
         result = self._invoke_agent(ticket, ctx, repo_dir, branch, failing_summary)
 
         if result is not None and result.status == "DONE":
-            return self._finalize_success(
-                ticket, ctx, repo_dir, branch, counter_path, attempt, failing_summary
-            )
+            return self._finalize_success(ticket, ctx, repo_dir, branch)
 
         if result is not None and result.status == "OUT_OF_SCOPE":
             return self._handle_out_of_scope(
                 ticket, ctx, branch, result, failing_summary
             )
 
-        # Agent failed (result is None on crash, or status == "FAILED").
-        if attempt < max_attempts:
-            _write_counter(counter_path, attempt)
-            log.warning(
-                "%s: ci-fix attempt %d/%d failed — retrying next poll",
-                ticket.id,
-                attempt,
-                max_attempts,
-            )
-            return Outcome(State.IMPLEMENT_COMPLETE)  # no-op; retry next poll
-
-        # Exhausted all attempts.
-        _write_counter(counter_path, 0)  # reset for any future resume
+        # FAILED, or None on crash — the agent could not turn CI green within
+        # its iteration budget (or hit an unrecoverable error). Block so a
+        # human can intervene; resume re-enters from human_mr_approval.
         return Outcome(
             State.BLOCKED,
-            f"ci fix failed after {max_attempts} attempt(s) — "
-            "manual intervention required. "
+            "ci fix agent could not turn CI green within its iteration budget "
+            "— manual intervention required. "
             "Resume-blocked to retry from human_mr_approval.",
         )
 
@@ -947,6 +833,7 @@ class CIFixStage(Stage):
                     target=target,
                     remote_url=remote_url,
                     token=token,
+                    ci_status_fn=self._make_ci_status_fn(ticket, ctx, branch),
                 )
                 if result.updated_memory:
                     persist_memory(ci_fix_memory_path, result.updated_memory)
@@ -954,6 +841,48 @@ class CIFixStage(Stage):
             log.exception("%s: ci-fix agent crashed: %s", ticket.id, e)
             return None
         return result
+
+    def _make_ci_status_fn(
+        self, ticket: Ticket, ctx: StageContext, branch: str
+    ) -> "Callable[[], tuple[str, str]]":
+        """Build the host-side forge probe the agent's wait_for_ci tool calls.
+
+        Returns a closure that fetches the branch's CI conclusion and returns
+        ``(conclusion, failing_summary)`` where conclusion is one of
+        ``success`` / ``failure`` / ``pending`` / ``gone``. On a fresh failure
+        it builds the enriched failing summary (job logs + code-scanning
+        alerts) so the agent gets actionable detail for its next iteration.
+        Transient forge errors map to ``pending`` so the agent keeps waiting
+        rather than giving up on a blip.
+        """
+        s = ctx.settings
+
+        def status_fn() -> tuple[str, str]:
+            try:
+                status = get_forge(s, repo_config=ctx.repo_config).check_status(
+                    source_branch=branch
+                )
+            except Exception:  # noqa: BLE001 — transient; keep waiting
+                log.warning(
+                    "%s: check_status failed during CI wait — treating as pending",
+                    ticket.id,
+                )
+                return ("pending", "")
+            if status is None:
+                return ("gone", "")
+            conclusion = status.get("conclusion")
+            if conclusion == "success":
+                return ("success", "")
+            if conclusion == "failure":
+                failing = status.get("failing", [])
+                summary, _alerts, _changed = self._build_failure_detail(
+                    ticket, ctx, branch, failing
+                )
+                return ("failure", summary)
+            # pending / None / unknown — not terminal yet.
+            return ("pending", "")
+
+        return status_fn
 
     def _partition_open_alerts(
         self, ctx: StageContext, branch: str
@@ -1003,10 +932,9 @@ class CIFixStage(Stage):
 
         if in_scope_alerts:
             # OUT_OF_SCOPE is wrong for these alerts — suppress the spawn and
-            # re-run the ci-fix agent (now driven by the in-scope-labelled
-            # failing_summary). Do NOT reset the cycle counters: the hard
-            # ceiling in _enforce_cycle_ceiling bounds an agent that keeps
-            # refusing, so the loop stays safe.
+            # re-poll so the ci-fix agent re-runs against the in-scope-labelled
+            # failing_summary. The agent's own wait_for_ci iteration budget
+            # bounds an agent that keeps refusing, so the loop stays safe.
             try:
                 ctx.service.add_history_note(
                     ticket.id,
@@ -1091,15 +1019,9 @@ class CIFixStage(Stage):
             dedup_labels=[f"ci_fp:{fingerprint}"],
         )
 
-        # Reset the per-ticket ci_fix counters so a later re-entry (after
+        # Reset the per-ticket refresh counter so a later re-entry (after
         # auto-unblock + a fresh pipeline pass) starts clean.
-        for counter in (
-            _CI_FIX_COUNTER,
-            _CI_NO_CHANGE_COUNTER,
-            _CI_FIX_CYCLE_COUNTER,
-            _CI_REFRESH_COUNTER,
-        ):
-            _write_counter(artifacts_dir / counter, 0)
+        _write_counter(artifacts_dir / _CI_REFRESH_COUNTER, 0)
 
         return outcome
 
@@ -1109,65 +1031,20 @@ class CIFixStage(Stage):
         ctx: StageContext,
         repo_dir: str,
         branch: str,
-        counter_path: Path,
-        attempt: int,
-        failing_summary: str = "",
     ) -> Outcome:
-        """On agent success: verifies the agent-driven push landed via
-        deterministic post-check, then handles no-change detection and
-        counter resets."""
+        """On agent DONE: deterministically verify the agent's push landed
+        and clobbered no foreign commits, then return to IMPLEMENT_COMPLETE so
+        the merge stage re-verifies CI and promotes to HUMAN_MR_APPROVAL.
+
+        The agent already confirmed CI green via wait_for_ci, so this is a
+        cheap safety net (foreign-push / lost-push detection), not a retry
+        loop. On a clean landing the refresh counter is reset so a later,
+        independent staleness can rebase once more.
+        """
         s = ctx.settings
-
-        # Detect no-change cycles: the agent reported success but
-        # produced no commits (local HEAD matches remote).  Track
-        # consecutive no-change cycles in a separate counter so a
-        # flake-storm on a diff that cannot plausibly cause test
-        # failures doesn't retry unboundedly.
-        no_change_counter_path = (
-            ctx.service.workspace(ticket).artifacts_dir / _CI_NO_CHANGE_COUNTER
-        )
-        no_change_cycles = _read_counter(no_change_counter_path)
-
         remote_url = _resolve_remote_url(s, ctx.repo_config)
         token = github_token(s, repo_config=ctx.repo_config)
         target = target_branch_for(s, ctx.repo_config)
-
-        try:
-            local = git_ops.head_sha(repo_dir)
-            remote = git_ops.remote_branch_sha(repo_dir, branch)
-        except Exception:  # noqa: BLE001 — be safe: assume changes
-            local, remote = None, "force-push"
-
-        commits_made = False
-
-        if local is not None and remote == local:
-            # Agent made no commits — count as a no-change cycle.
-            no_change_cycles += 1
-            max_no_change = s.ci_max_auto_retries
-            if max_no_change > 0 and no_change_cycles >= max_no_change:
-                _write_counter(counter_path, 0)
-                _write_counter(no_change_counter_path, 0)
-                return Outcome(
-                    State.BLOCKED,
-                    f"ci fix succeeded but made no code changes "
-                    f"{no_change_cycles} consecutive time(s) — "
-                    f"CI failures are likely infrastructure flakes. "
-                    f"Resume-blocked to retry from human_mr_approval.",
-                )
-            _write_counter(no_change_counter_path, no_change_cycles)
-            log.info(
-                "%s: ci fix succeeded but no code changes — no-change cycle %d/%s",
-                ticket.id,
-                no_change_cycles,
-                max_no_change if max_no_change > 0 else float("inf"),
-            )
-            # Even when there are no changes, verify the push landed
-            # (the agent may have pushed an identical commit).
-            # Fall through to post_push_check below.
-        else:
-            # Agent produced commits — reset the no-change counter.
-            _write_counter(no_change_counter_path, 0)
-            commits_made = True
 
         # Deterministic post-check: verify the agent's push actually
         # landed and no foreign commits were clobbered.
@@ -1180,26 +1057,11 @@ class CIFixStage(Stage):
         )
 
         if check is git_ops.PostPushResult.PASS:
-            # Reset attempt counter on verified success.
-            _write_counter(counter_path, 0)
             # Genuine forward progress — allow a future staleness to refresh again.
-            _write_counter(counter_path.parent / _CI_REFRESH_COUNTER, 0)
-
-            # Store the current failure fingerprint so the next cycle can
-            # short-circuit if the SAME failure reappears (ineffective fix).
-            # Only store when the agent actually produced commits — no-change
-            # cycles don't constitute a fix attempt that could be ineffective.
-            if commits_made and failing_summary:
-                repo_id = ctx.repo_config.board_id if ctx.repo_config else ""
-                fp = _ci_failure_fingerprint(failing_summary, repo_id)
-                fp_path = (
-                    ctx.service.workspace(ticket).artifacts_dir
-                    / _CI_LAST_DONE_FINGERPRINT
-                )
-                fp_path.parent.mkdir(parents=True, exist_ok=True)
-                fp_path.write_text(fp, encoding="utf-8")
-
-            log.info("%s: ci fix succeeded, push verified", ticket.id)
+            _write_counter(
+                ctx.service.workspace(ticket).artifacts_dir / _CI_REFRESH_COUNTER, 0
+            )
+            log.info("%s: ci fix reported DONE, push verified", ticket.id)
             return Outcome(State.IMPLEMENT_COMPLETE)
 
         if check is git_ops.PostPushResult.NOT_LANDED:
@@ -1208,7 +1070,6 @@ class CIFixStage(Stage):
                 "push did not land",
                 ticket.id,
             )
-            _write_counter(counter_path, attempt)
             return Outcome(
                 State.BLOCKED,
                 "ci fix agent reported DONE but the push did not land "
@@ -1223,7 +1084,6 @@ class CIFixStage(Stage):
                 "foreign-authored commits; a human may have pushed",
                 ticket.id,
             )
-            _write_counter(counter_path, attempt)
             return Outcome(
                 State.BLOCKED,
                 "ci fix agent reported DONE but the remote branch carries "

@@ -20,6 +20,7 @@ tools:
   - git_remote_sha
   - git_push_with_lease
   - git_branch_ancestry
+  - wait_for_ci
 
 report_issue: true
 output_type: CiFixResult
@@ -46,16 +47,20 @@ system_prompt: |
   near the top. Read the alert rule ID and file:line directly from that
   block instead of guessing rule names from first principles.
 
-  The failing check summary is provided below — it may include job logs
-  under a ``**Job logs:**`` section.  Use it to understand what is broken,
-  then:
+  You OWN the full fix→push→verify loop. You stay in charge until CI is
+  actually green or you exhaust your CI-verification budget — you do NOT hand
+  back after a single push and hope. The loop:
+
+  The failing check summary for the CURRENT failure is provided below — it may
+  include job logs under a ``**Job logs:**`` section.  Use it to understand
+  what is broken, then:
 
   1. Use read_file to inspect ALL failing files identified in the summary.
   2. Use write_file / edit_file to make the MINIMAL code change for EACH
      failure.  Apply ALL fixes before running any verify command — do NOT
      commit or push between individual fixes.
   3. After ALL fixes are applied, run the project's test/verify command
-     ONCE to confirm the combined fix passes:
+     ONCE to confirm the combined fix passes locally:
      - Infer the right command from the project structure (e.g. pytest,
        ``npm test``, ``make test``, ``cargo test``, ``ruff check``,
        ``mypy``, ``docker build .``, ``pre-commit run``, etc.).
@@ -65,10 +70,32 @@ system_prompt: |
        example, ``ruff check`` only checks .py/.pyi/.ipynb files — don't
        run it on .toml or .yaml changes. If you're unsure whether a tool
        covers a file type, skip it and rely on the project's test suite.
-  4. If the verify command passes, commit ALL fixes together:
+     - The CI ``ci / tests`` job runs BOTH ``ruff check`` AND
+       ``ruff format --check`` — if you changed .py files, run BOTH
+       ``ruff check`` and ``ruff format`` locally before committing so a
+       formatting-only diff doesn't bounce CI back to you.
+  4. Commit ALL fixes together:
      ``git add -A && git commit -q -m "ci: auto-fix <brief description>"``
-  5. Push ONCE: ``git_push_with_lease("{branch}")``
-  6. Report DONE with a brief summary listing each fix applied.
+  5. Push ONCE via the push flow below (``git_push_with_lease``).
+  6. **Verify on real CI:** call ``wait_for_ci("{branch}")``. This BLOCKS
+     until the CI run your push triggered finishes, then returns a verdict:
+     - ``CI_PASSED`` → your fix worked. Report DONE with a brief summary of
+       every fix applied across all iterations.
+     - ``CI_FAILING (attempt N/M): <new summary>`` → CI is still red. The new
+       failing summary follows the marker. Treat it as the CURRENT failure
+       and go back to step 1 (it may be a DIFFERENT failure than before, or
+       the same one if your fix was incomplete — read it fresh). Do NOT report
+       DONE while CI is red.
+     - ``CI_STILL_PENDING`` → the run did not finish in the wait window. Call
+       ``wait_for_ci("{branch}")`` again to keep waiting. Only report FAILED
+       if it stays pending across several waits (CI looks stuck).
+     - ``CI_ITERATION_CAP_REACHED`` → you have spent your entire verification
+       budget without turning CI green. STOP. Report FAILED with a summary of
+       what is still broken and what you tried.
+     - ``CI_GONE`` → the PR/branch vanished. Report FAILED.
+
+  Only report DONE after ``wait_for_ci`` returns ``CI_PASSED``. A green local
+  verify command is NOT sufficient — CI is the source of truth.
 
   IMPORTANT RULES:
   - NEVER change unrelated code — only the minimum needed to fix the CI
@@ -79,11 +106,11 @@ system_prompt: |
     are guardrailed to the ticket's own branch and target.
   - NEVER run destructive git commands (reset --hard, rebase, etc.).
 
-  ## Push flow (after fixing CI)
+  ## Push flow (each iteration, after you commit a fix)
 
   After you commit your fix:
   1. Call ``git_push_with_lease("{branch}")`` to push the fix.
-  2. If ``PUSH_OK`` → report DONE.
+  2. If ``PUSH_OK`` → proceed to ``wait_for_ci("{branch}")`` (step 6 above).
   3. If ``LEASE_REJECTED``:
      a. Call ``git_remote_sha("{branch}")`` and ``git_branch_ancestry("{branch}", "{target}")`` to inspect the remote.
      b. If EVERY commit in the ancestry output has BOTH ``author_email``
@@ -199,11 +226,14 @@ system_prompt: |
 
   ## Tool-use discipline
 
-  - ⚠️ **Budget warning:** Your request budget (50 by default, enforced
-    by the runtime — ``ci_fix_request_limit``) is consumed one request
-    at a time by every top-level ``read_file``, ``run_command``, and
-    ``list_dir`` call. Prefer direct, targeted reads over broad
-    exploration.
+  - ⚠️ **Budget warning:** Your request budget (enforced by the runtime —
+    ``ci_fix_request_limit``) is consumed one request at a time by every
+    top-level ``read_file``, ``run_command``, ``list_dir``, and
+    ``wait_for_ci`` call, and it must cover ALL your fix→push→verify
+    iterations. Prefer direct, targeted reads over broad exploration so you
+    do not run out mid-loop. Separately, you may call ``wait_for_ci`` at most
+    a fixed number of times (``ci_fix_max_iterations``) — spend those
+    verification attempts on real fixes, not speculative pushes.
   - **Check your conversation history before calling `read_file`.**
     A file path you have already read via a prior `read_file` call
     in THIS conversation is already in your context — synthesize from
