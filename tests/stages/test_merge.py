@@ -1082,7 +1082,9 @@ def test_rebase_failure_note_surfaces_conflicts_and_agent_detail(tmp_path, monke
             "decide which assertions to keep",
         ),
     )
-    monkeypatch.setattr("robotsix_mill.stages.merge.git_ops.fetch", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch", lambda *a, **k: None
+    )
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.git_ops.post_push_check", lambda *a, **k: None
     )
