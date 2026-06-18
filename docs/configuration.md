@@ -502,6 +502,7 @@ robotsix-llmio Claude Agent SDK transport.
 | `gates.review_model` | `MILL_REVIEW_MODEL` | `deepseek/deepseek-v4-pro` | Review agent model |
 | `gates.review_max_rounds` | `MILL_REVIEW_MAX_ROUNDS` | `3` | Max CODE_REVIEW round-trips before escalate |
 | `gates.refine_triage_enabled` | `MILL_REFINE_TRIAGE_ENABLED` | `true` | Cheap triage before full refine (skip if precise) |
+| `gates.maintenance_triage_enabled` | — | `true` | Cheap triage before a full maintenance pass |
 | `gates.freshness_gate_enabled` | `MILL_FRESHNESS_GATE_ENABLED` | `false` | Pre-refine freshness check: verify cited evidence paths exist on HEAD |
 | `gates.obsolescence_gate_enabled` | `MILL_OBSOLESCENCE_GATE_ENABLED` | `false` | Pre-refine obsolescence check: re-validate spawned-draft gaps (opt-in) |
 | `gates.spec_review_enabled` | `MILL_SPEC_REVIEW_ENABLED` | `false` | Post-refinement spec narrative stripping |
@@ -511,6 +512,8 @@ robotsix-llmio Claude Agent SDK transport.
 | `gates.auto_merge_main_debt_detection_enabled` | `MILL_AUTO_MERGE_MAIN_DEBT_DETECTION_ENABLED` | `true` | When enabled, the single-repo auto-merge decision detects pre-existing main-branch CI debt: if every workflow failing on the PR head is ALSO failing on the merge target, the failure was not introduced by this PR and the ticket is routed to BLOCKED instead of cycling rebase/ci-fix retries. Safe-by-default — only fires when main is demonstrably red on the same workflow(s); the flag exists so an operator can disable it if needed. |
 | `gates.review_feedback_enabled` | `MILL_REVIEW_FEEDBACK_ENABLED` | `false` | Enable autonomous review-revision agent (opt-in — implements changes requested by human reviewers) |
 | `gates.review_revision_model` | `MILL_REVIEW_REVISION_MODEL` | `deepseek/deepseek-v4-pro` | Review-revision agent model |
+| `gates.pr_summary_enabled` | `MILL_PR_SUMMARY_ENABLED` | `false` | Generate structured PR body from diff via cheap LLM (opt-in) |
+| `gates.pr_summary_model` | `MILL_PR_SUMMARY_MODEL` | `deepseek/deepseek-v4-flash` | Model for PR-summary generation (cheap, one-shot) |
 | `gates.comments_after_body` | `MILL_COMMENTS_AFTER_BODY` | `false` | Render description.md before comments in ticket detail drawer |
 ### 8. Forge
 
