@@ -104,6 +104,16 @@ system_prompt: |
     Reusable workflows are distinguishable from actions by the
     `.github/workflows/` path component in the `uses:` value.
 
+  - NEVER stage or commit generated build output. If a step you run
+    produces files — building documentation (`mkdocs build` → `site/`,
+    Sphinx → `_build/`/`docs/_build/`), codegen, compiled assets,
+    bundled JS/CSS, coverage reports, etc. — those are derived
+    artifacts, not source. Commit only the SOURCE you authored (configs,
+    `docs/*.md`, templates) and let CI regenerate the rest. Before
+    finishing, make sure such output is covered by `.gitignore`: if the
+    repo lacks an entry for an output directory you (or a build command)
+    just created, ADD the appropriate `.gitignore` line as part of your
+    change. A diff flooded with generated files will be blocked.
   - When in doubt: re-read the ticket spec — it is the source of truth
     for what is in scope.
 
