@@ -37,6 +37,7 @@ log = logging.getLogger("robotsix_mill.stages.ci_fix")
 # were removed when the agent took ownership of the fix→verify loop.
 _CI_REFRESH_COUNTER = "ci_fix_refresh_attempts.txt"
 _CI_FAILURE_FINGERPRINT = "ci_failure_fingerprint.txt"
+_CI_IDENTICAL_FAILURE_COUNT = "ci_identical_failure_count.txt"
 _CODQL_FP_TRIAGE_SENTINEL = "codeql_fp_triage_ran.txt"
 
 # Maximum number of alerts the codeql_fp_triage agent may dismiss in a
@@ -355,6 +356,14 @@ class CIFixStage(Stage):
         if rebase_outcome is not None:
             return rebase_outcome
 
+        # Identical-failure gate: when the same CI failure fingerprint repeats
+        # ci_fix_max_identical_failures times in a row, escalate to BLOCKED.
+        identical_outcome = self._check_consecutive_identical_failure(
+            ticket, ctx, failing_summary
+        )
+        if identical_outcome is not None:
+            return identical_outcome
+
         # Agent phase: the ci-fix agent now OWNS the fix→push→verify loop —
         # it fixes, pushes, and calls wait_for_ci to re-check, iterating up to
         # ci_fix_max_iterations before giving up. There is no external
@@ -587,6 +596,62 @@ class CIFixStage(Stage):
             log.warning("%s: failed to record rebase history note", ticket.id)
 
         return Outcome(State.IMPLEMENT_COMPLETE)
+
+    def _check_consecutive_identical_failure(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        failing_summary: str,
+    ) -> Outcome | None:
+        """Return ``Outcome(State.BLOCKED, ...)`` when the same CI failure
+        fingerprint has repeated ``ci_fix_max_identical_failures`` times in a
+        row without the agent making progress, or ``None`` when the stage
+        should proceed to the agent phase.
+
+        The fingerprint is read/written from the artifacts dir (shared with
+        ``_rebase_if_stale``).  A separate counter file tracks how many times
+        the *current* fingerprint has been seen consecutively; it is reset to
+        zero whenever the fingerprint changes (or on first run).
+
+        Short-circuits to ``None`` when ``ci_fix_max_identical_failures == 0``
+        (disabled).
+        """
+        s = ctx.settings
+
+        # Disabled short-circuit.
+        if s.ci_fix_max_identical_failures == 0:
+            return None
+
+        repo_id = ctx.repo_config.board_id if ctx.repo_config else ""
+        current_fp = _ci_failure_fingerprint(failing_summary, repo_id)
+        artifacts = ctx.service.workspace(ticket).artifacts_dir
+        fp_path = artifacts / _CI_FAILURE_FINGERPRINT
+        counter_path = artifacts / _CI_IDENTICAL_FAILURE_COUNT
+
+        try:
+            stored_fp = fp_path.read_text(encoding="utf-8").strip()
+        except FileNotFoundError:
+            stored_fp = ""
+
+        if current_fp == stored_fp and stored_fp:
+            # Same failure as last cycle — increment the consecutive counter.
+            count = _read_counter(counter_path) + 1
+            _write_counter(counter_path, count)
+            if count >= s.ci_fix_max_identical_failures:
+                return Outcome(
+                    State.BLOCKED,
+                    f"Same CI failure fingerprint ({current_fp}) repeated "
+                    f"{count} consecutive times without progress — "
+                    "escalating to BLOCKED. Resume to retry.",
+                )
+            return None
+
+        # Fingerprint changed (or first run) — reset the counter and store
+        # the new fingerprint for the next cycle's comparison.
+        _write_counter(counter_path, 0)
+        fp_path.parent.mkdir(parents=True, exist_ok=True)
+        fp_path.write_text(current_fp, encoding="utf-8")
+        return None
 
     def _try_codeql_fp_triage(  # noqa: C901 — guardrail chain is inherently branchy
         self,
