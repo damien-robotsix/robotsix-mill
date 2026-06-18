@@ -48,6 +48,11 @@ on:
         required: false
         type: boolean
         default: true
+      run-audit:
+        description: Whether to run the dependency CVE audit step (uv audit or pip-audit).
+        required: false
+        type: boolean
+        default: true
       run-bandit:
         description: Whether to run the bandit security SAST step.
         required: false
@@ -125,6 +130,18 @@ jobs:
         # fails with "Failed to spawn: deptry" for any repo that doesn't
         # ship deptry itself.
         run: uv run --with deptry deptry .
+
+      - name: Dependency audit (CVE scan)
+        if: ${{ inputs.run-audit }}
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+        # uv audit --frozen reads the committed uv.lock natively.
+        # If the subcommand isn't available (older uv), fall back to
+        # pip-audit via uv export --frozen.
+        run: |
+          uv audit --frozen || {
+            uv export --frozen | uv run --with pip-audit pip-audit -r /dev/stdin
+          }
 
       - name: Ruff (lint + format check)
         env:
