@@ -136,7 +136,6 @@ _MODEL_FIELDS_NOT_IN_ALIAS: frozenset[str] = frozenset(
         # periodic: toggles / limits
         "bespoke_periodic",
         "bespoke_discovery_interval_seconds",
-
         "survey_request_limit",
         "module_curator_request_limit",
         # Belt-and-suspenders: fields that DO have YAML entries today
