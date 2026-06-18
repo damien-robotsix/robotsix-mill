@@ -344,6 +344,8 @@ periodic:
     prune_terminal_clones: true     # prune repo/ clones in terminal workspaces
     prune_terminal_clones_age_seconds: 86400  # 1 day — min age for clone pruning
     prune_db_rows: true             # GC oldest terminal-ticket DB rows
+    prune_orphans: true             # opt-in: prune orphan workspace dirs
+    prune_orphans_age_seconds: 86400  # 1 day — min age for orphan pruning
 
   # -- config-sync — detects config ↔ .env ↔ docs drift -----------------------
   config_sync:
