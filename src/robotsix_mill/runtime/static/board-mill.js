@@ -166,6 +166,42 @@
     return null;
   }
 
+  // Extract the stage name from a Langfuse trace breadcrumb note, which
+  // the worker writes as "🔍 [Trace: <stage>](url)". These notes reuse
+  // the ticket's current state, so without this they'd show as a
+  // repeated state chip (e.g. "ready, ready, ready" for 3 implement
+  // passes) instead of naming the stage that actually ran.
+  function parseTraceStage(note) {
+    if (!note) return null;
+    var m = note.match(/\[Trace:\s*([^\]]+)\]/);
+    return m ? m[1].trim() : null;
+  }
+
+  // Resolve the chip label/class/artifact for one history event. Prefers
+  // the *stage that ran* over the raw destination state: the first event
+  // is "created"; side-band notes (trace breadcrumbs, scope-triage, etc.)
+  // show the stage name; real transitions show "stage → state" when the
+  // producing stage is known, else the bare state.
+  function eventChip(e, prev, idx) {
+    var artFor = function(step) {
+      return (step && step.art) ? step.art : (STATE_ARTIFACT[e.state] || "");
+    };
+    if (idx === 0) {
+      return { label: "created", cls: "s-" + e.state, art: artFor(null) };
+    }
+    var isStep = prev && prev.state === e.state;
+    var step = matchStep(e.note);
+    var traceStage = parseTraceStage(e.note);
+    if (isStep) {
+      var stepLabel = step ? step.label : (traceStage || e.state);
+      return { label: stepLabel, cls: "ev-step", art: artFor(step) };
+    }
+    // Real transition: name the producing stage if we can derive one.
+    var stage = (step && step.label) || traceStage || STATE_TRACE[e.state] || null;
+    var label = stage ? (stage + " → " + e.state) : e.state;
+    return { label: label, cls: "s-" + e.state, art: artFor(step) };
+  }
+
   function eventAgentName(event, isStep, step) {
     return isStep ? (step ? step.label : null) : STATE_TRACE[event.state];
   }
@@ -622,10 +658,10 @@
       var i = item.__idx;
       var prev = events[i - 1];
       var isStep = prev && prev.state === e.state;
-      var step = isStep ? matchStep(e.note) : null;
-      var chipLabel = step ? step.label : e.state;
-      var chipClass = step ? "ev-step" : "s-" + e.state;
-      var art = (step && step.art) ? step.art : (STATE_ARTIFACT[e.state] || "");
+      var chip = eventChip(e, prev, i);
+      var chipLabel = chip.label;
+      var chipClass = chip.cls;
+      var art = chip.art;
       var hasDetail = !!(e.note || art);
       var trace = costByIndex[i];
       var cost = trace ? '<span class="ev-cost" title="Langfuse trace ' + esc(trace.trace_id) + '">$' + trace.cost.toFixed(4) + '</span>' : "";
