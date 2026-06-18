@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import weakref
+from pathlib import Path
 from typing import Any
 
 from ..config import Settings, get_secrets
@@ -131,8 +132,8 @@ def build_agent_from_definition(
     settings: Settings,
     definition: "AgentDefinition",
     *,
-    tools: list | None = None,
-    repo_dir: "Path | None" = None,
+    tools: list[Any] | None = None,
+    repo_dir: Path | None = None,
     current_ticket_id: str = "",
     **overrides,
 ) -> AgentHandle:
@@ -384,7 +385,7 @@ def _build_deepseek_handle(
     *,
     effective_model: str,
     composed_system: str,
-    all_tools: list,
+    all_tools: list[Any],
     output_type: Any,
     name: str | None,
     retries: int,
@@ -434,11 +435,11 @@ def _build_claude_sdk_handle(
     *,
     effective_model: str,
     composed_system: str,
-    all_tools: list,
+    all_tools: list[Any],
     output_type: Any,
     name: str | None,
     retries: int,
-    repo_dir: "Path | None" = None,
+    repo_dir: Path | None = None,
 ) -> Any:
     """Build a Claude-SDK agent handle (haiku/opus based on tier).
 
@@ -468,7 +469,7 @@ def build_agent(  # noqa: C901
     *,
     system_prompt: str,
     output_type: Any = str,
-    tools: list | None = None,
+    tools: list[Any] | None = None,
     web_knowledge: bool = False,
     report_issue: bool = True,
     read_ticket: bool = False,
