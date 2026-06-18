@@ -1524,9 +1524,9 @@ def test_identical_failure_resets_on_changed_fingerprint(tmp_path, monkeypatch):
     assert _read_counter(counter_path) == 0
 
     # Fingerprint file was updated to the current fingerprint.
-    stored = (artifacts / "ci_failure_fingerprint.txt").read_text(
-        encoding="utf-8"
-    ).strip()
+    stored = (
+        (artifacts / "ci_failure_fingerprint.txt").read_text(encoding="utf-8").strip()
+    )
     assert stored == current_fp
 
 
