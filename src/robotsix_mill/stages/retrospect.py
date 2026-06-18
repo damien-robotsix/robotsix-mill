@@ -779,7 +779,7 @@ class RetrospectStage(Stage):
         # Read current memory through the shared helper — returns "" on
         # missing/unreadable files and tail-truncates to max_memory_chars
         # (keeps the most-recent entries), matching every other stage.
-        from ..runners.pass_runner import load_memory
+        from ..runners.pass_runner import load_memory, persist_memory
 
         memory_file = s.memory_file_for("retrospect", ctx.memory_board_id(ticket))
         memory_text = load_memory(memory_file, max_chars=s.max_memory_chars)
@@ -889,13 +889,7 @@ class RetrospectStage(Stage):
             log.warning("%s: %s", ticket.id, w)
 
         if persisted:
-            try:
-                memory_file.parent.mkdir(parents=True, exist_ok=True)
-                memory_file.write_text(persisted, encoding="utf-8")
-            except OSError:
-                log.warning(
-                    "%s: could not write memory file %s", ticket.id, memory_file
-                )
+            persist_memory(memory_file, persisted, max_chars=s.max_memory_chars)
 
         spawned = self._maybe_spawn_draft(res, ticket, s, ctx)
         follow_up = self._maybe_spawn_follow_up(res, ticket, s, ctx)
