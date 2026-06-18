@@ -871,6 +871,26 @@ def _terminal_count(service):
     )
 
 
+def _comment_count(service, ticket_id: str) -> int:
+    """Return the number of Comment rows for *ticket_id*."""
+    from sqlmodel import select
+
+    from robotsix_mill.core import db
+    from robotsix_mill.core.models import Comment
+
+    with db.session(service.settings, service._board_for(ticket_id)) as s:
+        return len(s.exec(select(Comment).where(Comment.ticket_id == ticket_id)).all())
+
+
+def _get_comment(service, comment_id: int):
+    """Return the Comment row with *comment_id* or None."""
+    from robotsix_mill.core import db
+    from robotsix_mill.core.models import Comment
+
+    with db.session(service.settings, service.board_id) as s:
+        return s.get(Comment, comment_id)
+
+
 class TestArchivedPurge:
     """Tests for insertion-driven purge of terminal (archived) tickets."""
 
@@ -2561,6 +2581,7 @@ class TestDbMaintenancePass:
         assert summary == {
             "archived_purged": 0,
             "events_pruned": 0,
+            "comments_pruned": 0,
             "tickets_pruned": 0,
         }
 
@@ -2648,6 +2669,177 @@ class TestDbMaintenancePass:
         assert summary["events_pruned"] > 0
         assert service.get(t.id) is not None
         assert service.get(t.id).state == State.DRAFT
+
+    # --- comment cap tests ---
+
+    def test_comment_cap_prunes_excess(self, service, settings):
+        """After accumulating > max_comments_per_ticket comments on a
+        non-terminal ticket, only the most recent max_comments_per_ticket
+        remain (when all are unprotected)."""
+        settings.max_comments_per_ticket = 5
+        t = service.create("comment-cap test")
+
+        # Add 10 comments (all closed so they're unprotected).
+        for i in range(10):
+            c = service.add_comment(t.id, f"comment {i}")
+            # Close it via close_thread so it's unprotected.
+            service.close_thread(c.id, ticket_id=t.id)
+
+        # Verify 10 comments before maintenance.
+        assert _comment_count(service, t.id) == 10
+
+        summary = service.db_maintenance_pass()
+        assert summary["comments_pruned"] == 5  # 10 - 5 = 5
+
+        # After pruning, 5 comments remain.
+        remaining = _comment_count(service, t.id)
+        assert remaining == 5
+
+        # The ticket itself must still exist.
+        assert service.get(t.id) is not None
+
+    def test_max_comments_zero_disables_comment_cap(self, service, settings):
+        """Setting max_comments_per_ticket=0 disables per-ticket comment
+        capping."""
+        settings.max_comments_per_ticket = 0
+        t = service.create("no-cap test")
+
+        for i in range(50):
+            c = service.add_comment(t.id, f"comment {i}")
+            service.close_thread(c.id, ticket_id=t.id)
+
+        summary = service.db_maintenance_pass()
+        assert summary["comments_pruned"] == 0
+        assert _comment_count(service, t.id) == 50  # all remain
+
+    def test_comment_cap_under_limit_noop(self, service, settings):
+        """When a ticket has fewer comments than the cap, nothing is pruned."""
+        settings.max_comments_per_ticket = 20
+        t = service.create("under-cap test")
+
+        c = service.add_comment(t.id, "only comment")
+        service.close_thread(c.id, ticket_id=t.id)
+
+        summary = service.db_maintenance_pass()
+        assert summary["comments_pruned"] == 0
+        assert _comment_count(service, t.id) == 1
+
+    def test_comment_cap_protects_open_thread(self, service, settings):
+        """An open top-level thread (closed_at IS NULL) and its replies
+        are never pruned, even when the ticket exceeds the cap."""
+        from datetime import datetime, timezone
+
+        from robotsix_mill.core import db
+        from robotsix_mill.core.models import Comment
+
+        settings.max_comments_per_ticket = 3
+        t = service.create("open-thread test")
+
+        # Create an open [ASK_USER] thread.
+        ask = service.add_comment(t.id, "[ASK_USER] a question?", author="agent")
+        # Add a reply to it.
+        service.add_comment(t.id, "reply to ask", author="user", parent_id=ask.id)
+
+        # Pile on many closed comments (oldest first).
+        for i in range(10):
+            c = service.add_comment(t.id, f"old closed {i}")
+            # Close it so it's unprotected.
+            with db.session(settings, service._board_for(t.id)) as s:
+                cmt = s.get(Comment, c.id)
+                cmt.closed_at = datetime.now(timezone.utc)
+                s.add(cmt)
+                s.commit()
+
+        # Before maintenance: 1 ask + 1 reply + 10 closed = 12 comments.
+        assert _comment_count(service, t.id) == 12
+
+        summary = service.db_maintenance_pass()
+        # Cap is 3, we have 12 total. The ask + reply (2 protected) +
+        # up to 1 unprotected = effective cap is 3. So we delete oldest
+        # closed until total <= cap or no more unprotected.
+        # We can only delete 9 of 10 closed (need to leave 1 to reach cap
+        # of 3 with the 2 protected). So 9 deleted.
+        assert summary["comments_pruned"] == 9
+
+        remaining = _comment_count(service, t.id)
+        assert remaining == 3  # ask + reply + 1 most-recent closed
+
+        # The open ask thread and its reply must survive.
+        assert _get_comment(service, ask.id) is not None
+        assert _get_comment(service, ask.id).closed_at is None  # still open
+
+    def test_comment_cap_resets_orphaned_parent_id(self, service, settings):
+        """When a parent comment is deleted, surviving replies have their
+        parent_id reset to None."""
+        from datetime import datetime, timezone
+
+        from robotsix_mill.core import db
+        from robotsix_mill.core.models import Comment
+
+        settings.max_comments_per_ticket = 3
+        t = service.create("orphan-reset test")
+
+        # Create a closed thread: parent + 2 replies, all closed.
+        parent = service.add_comment(t.id, "closed thread")
+        reply1 = service.add_comment(t.id, "reply 1", parent_id=parent.id)
+        reply2 = service.add_comment(t.id, "reply 2", parent_id=parent.id)
+
+        # Close all of them so they're unprotected.
+        with db.session(settings, service._board_for(t.id)) as s:
+            for cid in [parent.id, reply1.id, reply2.id]:
+                cmt = s.get(Comment, cid)
+                cmt.closed_at = datetime.now(timezone.utc)
+                s.add(cmt)
+            s.commit()
+
+        # Add 5 more closed comments (excess beyond cap of 3).
+        for i in range(5):
+            c = service.add_comment(t.id, f"extra {i}")
+            with db.session(settings, service._board_for(t.id)) as s:
+                cmt = s.get(Comment, c.id)
+                cmt.closed_at = datetime.now(timezone.utc)
+                s.add(cmt)
+                s.commit()
+
+        # 3 + 5 = 8 comments. Cap is 3, so 5 will be deleted.
+        # The parent (oldest unprotected) will be among the deleted.
+        summary = service.db_maintenance_pass()
+        assert summary["comments_pruned"] == 5
+
+        # Check that reply1 and reply2 (which survived but whose parent
+        # was deleted) now have parent_id=None.
+        r1 = _get_comment(service, reply1.id)
+        r2 = _get_comment(service, reply2.id)
+        if r1 is not None:
+            assert r1.parent_id is None
+        if r2 is not None:
+            assert r2.parent_id is None
+
+    def test_comment_cap_empty_db(self, service, settings):
+        """db_maintenance_pass on an empty DB returns zero comments_pruned."""
+        summary = service.db_maintenance_pass()
+        assert summary["comments_pruned"] == 0
+
+    def test_comment_cap_terminal_ticket_not_capped(self, service, settings):
+        """Comments on terminal (archived) tickets are NOT capped by
+        db_maintenance_pass — they are reclaimed by the archive purge."""
+        settings.max_comments_per_ticket = 2
+        t = service.create("terminal test")
+
+        # Add 10 comments.
+        for i in range(10):
+            service.add_comment(t.id, f"comment {i}")
+
+        # Close the ticket to a terminal state.
+        _close_ticket(service, t)
+
+        # Run maintenance. The ticket is terminal, so the comment cap
+        # loop only looks at non-terminal tickets. Comments should survive.
+        summary = service.db_maintenance_pass()
+        assert summary["comments_pruned"] == 0
+        # All 10 comments remain (they'll be cascade-deleted when the
+        # archive purge fires).
+        assert _comment_count(service, t.id) == 10
 
     def test_pragma_optimize_runs(self, service, settings, monkeypatch):
         """db_maintenance_pass issues PRAGMA optimize after cleanup."""

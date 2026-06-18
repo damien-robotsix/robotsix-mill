@@ -55,6 +55,11 @@ from robotsix_mill.runners.data_dir_audit_runner import (
     find_orphan_workspaces,
     run_data_dir_audit_pass,
 )
+from robotsix_mill.runners.data_dir_audit.growth import (
+    _GROWTH_CLASS_DB,
+    _GROWTH_CLASS_OTHER,
+    _classify_growth_path,
+)
 from robotsix_mill.runners.pass_runner import _GAP_ID_RE
 
 
@@ -1518,6 +1523,27 @@ class TestDeltaCompute:
         # bytes path fires regardless of floor (pct may also fire since
         # 15 MB > 1 MiB floor, producing "both" — either is fine).
         assert flags[0]["threshold_exceeded"] in ("bytes", "both")
+
+
+# ---------------------------------------------------------------------------
+# Unit: _classify_growth_path — mill.db classification
+# ---------------------------------------------------------------------------
+
+
+def test_classify_mill_db_bounded():
+    """_classify_growth_path returns _GROWTH_CLASS_DB for mill.db."""
+    cls = _classify_growth_path("mill.db", {})
+    assert cls == _GROWTH_CLASS_DB
+    # The _self_healing predicate maps non-OTHER → True.
+    assert cls != _GROWTH_CLASS_OTHER
+
+
+def test_classify_mill_db_with_tickets_irrelevant():
+    """mill.db is classified by path alone — ticket_states don't
+    affect it (the tid is None path wins)."""
+    # Even with a populated ticket_states dict, mill.db is recognized.
+    cls = _classify_growth_path("mill.db", {"some-ticket": "active"})
+    assert cls == _GROWTH_CLASS_DB
 
 
 # ---------------------------------------------------------------------------

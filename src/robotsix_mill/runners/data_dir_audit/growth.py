@@ -331,6 +331,7 @@ _GROWTH_CLASS_RUN_REGISTRY = "bounded run registry (capped at 50 entries)"
 _GROWTH_CLASS_CANDIDATES = (
     "bounded candidates ledger (capped by retrospect_candidates_max_entries)"
 )
+_GROWTH_CLASS_DB = "bounded board database (per-ticket/archive retention caps)"
 _GROWTH_CLASS_OTHER = "other"
 
 # Fraction of a directory's growth that must be attributable to
@@ -386,6 +387,8 @@ def _classify_growth_path(path: str, ticket_states: dict[str, str]) -> str:
     if tid is None:
         if path == "runs.json":
             return _GROWTH_CLASS_RUN_REGISTRY
+        if path == "mill.db":
+            return _GROWTH_CLASS_DB
         if path.endswith("_memory.md"):
             return _GROWTH_CLASS_MEMORY_LEDGER
         if path == "AGENT_CANDIDATES.md" or path.endswith("/AGENT_CANDIDATES.md"):

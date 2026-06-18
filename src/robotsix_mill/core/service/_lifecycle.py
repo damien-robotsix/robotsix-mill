@@ -1370,16 +1370,105 @@ class _LifecycleMixin(_ServiceBase):
             s.commit()
             return excess
 
+    def _maybe_purge_ticket_comments(self, ticket_id: str) -> int:
+        """Prune oldest unprotected Comment rows for *ticket_id* when the
+        count exceeds ``max_comments_per_ticket``, keeping only the most
+        recent.
+
+        OPEN threads (top-level comments with ``closed_at IS NULL``) and
+        their replies are **protected** — never deleted — so
+        ``[ASK_USER]`` auto-resume and active discussions are preserved
+        even when the ticket exceeds the cap.
+
+        After deletions, any surviving reply whose ``parent_id``
+        references a deleted comment has its ``parent_id`` reset to
+        ``None``, mirroring the ``prev_hash`` reset in
+        ``_maybe_purge_ticket_events``.
+
+        Returns the number of rows deleted (0 when under cap, when the
+        cap is disabled, or when there are no unprotected comments).
+        """
+        max_comments = self.settings.max_comments_per_ticket
+        if max_comments <= 0:
+            return 0
+
+        with db.session(self.settings, self.board_id) as s:
+            all_comments = s.exec(
+                select(Comment)
+                .where(Comment.ticket_id == ticket_id)
+                .order_by(col(Comment.id))
+            ).all()
+
+            total = len(all_comments)
+            if total <= max_comments:
+                return 0
+
+            # --- protected set: open threads and their replies ---
+            # An "open thread" is a top-level comment (parent_id IS NULL)
+            # whose closed_at IS NULL.  Every reply (parent_id IS NOT NULL)
+            # whose top-level ancestor is open is also protected.
+            open_root_ids: set[int] = set()
+            for c in all_comments:
+                if c.parent_id is None and c.closed_at is None:
+                    open_root_ids.add(c.id)
+
+            protected_ids: set[int] = set()
+            for c in all_comments:
+                if c.id in open_root_ids:
+                    protected_ids.add(c.id)
+                    continue
+                if c.parent_id is not None:
+                    # Walk up to find the root ancestor.
+                    ancestor_pid = c.parent_id
+                    # Guard against cycles (should never exist).
+                    seen: set[int] = {c.id}
+                    while ancestor_pid is not None and ancestor_pid not in seen:
+                        if ancestor_pid in open_root_ids:
+                            protected_ids.add(c.id)
+                            break
+                        seen.add(ancestor_pid)
+                        # Find the parent comment in the loaded list.
+                        parent = next(
+                            (x for x in all_comments if x.id == ancestor_pid), None
+                        )
+                        if parent is None:
+                            break
+                        ancestor_pid = parent.parent_id
+
+            # --- delete oldest unprotected excess ---
+            unprotected = [c for c in all_comments if c.id not in protected_ids]
+            excess = total - max_comments
+            deleted_ids: set[int] = set()
+            deleted = 0
+            for c in unprotected:
+                if deleted >= excess:
+                    break
+                s.delete(c)
+                deleted_ids.add(c.id)
+                deleted += 1
+
+            # --- reset parent_id on surviving replies that referenced
+            # a now-deleted comment ---
+            if deleted_ids:
+                for c in all_comments:
+                    if c.id not in deleted_ids and c.parent_id in deleted_ids:
+                        c.parent_id = None
+                        s.add(c)
+
+            s.commit()
+            return deleted
+
     def db_maintenance_pass(self) -> dict[str, int]:
         """Run one DB maintenance sweep: archive purge, per-ticket event
         cap, and SQLite ``PRAGMA optimize``.
 
         Returns a summary dict with keys ``archived_purged``,
-        ``events_pruned``, and ``tickets_pruned``.
+        ``events_pruned``, ``comments_pruned``, and ``tickets_pruned``.
         """
         result: dict[str, int] = {
             "archived_purged": 0,
             "events_pruned": 0,
+            "comments_pruned": 0,
             "tickets_pruned": 0,
         }
 
@@ -1412,6 +1501,9 @@ class _LifecycleMixin(_ServiceBase):
             if pruned:
                 result["events_pruned"] += pruned
                 result["tickets_pruned"] += 1
+            pruned_c = self._maybe_purge_ticket_comments(tid)
+            if pruned_c:
+                result["comments_pruned"] += pruned_c
 
         # 3. Reclaim freed pages.
         with db.session(self.settings, self.board_id) as s:

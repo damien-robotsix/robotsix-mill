@@ -189,6 +189,7 @@ pipeline:
   retrospect_spawn_agented_proposals: true           # allow retrospect to propose AGENT.md additions
   prune_clone_on_close: true                         # delete workspace repo/ clone on ticket close
   max_archived_tickets: 100                          # max terminal-state tickets retained (0 = no purge)
+  max_comments_per_ticket: 500                       # max Comment rows per non-terminal ticket (0 = no cap)
   trace_review_target_repo_id: ""                    # route all trace-review drafts to this board (empty = source-repo routing)
   ci_patterns_path: null                             # override path to the CI failure-patterns file (null = derive from data_dir)
 
