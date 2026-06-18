@@ -90,6 +90,10 @@ _MODEL_FIELDS_NOT_IN_ALIAS: frozenset[str] = frozenset(
         # -- Board-agent settings — managed per-repo, not global config --
         "board_agent_api_token",
         "board_agent_api_url",
+        "board_agent_broker_host",
+        "board_agent_broker_port",
+        "board_agent_broker_scheme",
+        "board_agent_broker_token",
         "board_agent_enabled",
         "board_agent_repo_id",
         "board_agent_write_ops",

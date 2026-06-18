@@ -7,6 +7,7 @@ suitable for ``FastAPI(lifespan=...)``.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -177,21 +178,22 @@ async def _start_board_agent(
     don't need the package installed.
     """
     try:
-        from robotsix_agent_comm import Registry
-        from robotsix_board_agent import BoardAgent, BoardAgentSettings
+        from robotsix_board_agent.brokered import BrokeredBoardResponder
+        from robotsix_board_agent.config import BoardAgentSettings
     except ImportError as exc:
         logging.getLogger(__name__).warning(
-            "board_agent_enabled=True but robotsix-board-agent is not installed: %s",
+            "board_agent_enabled=True but robotsix-board-agent[prod] is not "
+            "installed: %s",
             exc,
         )
         return
 
-    # Share a single process-level Registry across all agent-comm consumers
-    # (board agent, future calendar agent, etc.).
-    registry: Registry = getattr(app.state, "agent_registry", None)
-    if registry is None:
-        registry = Registry()
-        app.state.agent_registry = registry
+    if not settings.board_agent_broker_host:
+        logging.getLogger(__name__).warning(
+            "board_agent_enabled=True but board_agent_broker_host is unset; "
+            "the board agent needs a broker to be reachable — skipping start."
+        )
+        return
 
     agent_settings = BoardAgentSettings(
         board_api_url=settings.board_agent_api_url,
@@ -200,12 +202,19 @@ async def _start_board_agent(
         enable_write_ops=settings.board_agent_write_ops,
     )
 
-    agent = BoardAgent(
-        settings=agent_settings,
-        registry=registry,
-        agent_id=f"board-{repo_id}",
+    # Register with the central broker in pull/mailbox mode: outbound-only, so
+    # the agent is reachable from off-host clients even behind NAT.
+    agent = BrokeredBoardResponder(
+        agent_settings,
+        broker_host=settings.board_agent_broker_host,
+        broker_port=settings.board_agent_broker_port,
+        broker_scheme=settings.board_agent_broker_scheme,
+        broker_token=settings.board_agent_broker_token,
+        agent_id=f"board-{agent_settings.board_repo_id}",
     )
-    await agent.start()
+    # start()/stop() are synchronous (the responder owns its own event loop);
+    # run the blocking broker registration off the event loop.
+    await asyncio.to_thread(agent.start)
     app.state.board_agent = agent
 
 
@@ -213,5 +222,5 @@ async def _stop_board_agent(app: FastAPI) -> None:
     """Stop the board agent if it was started."""
     agent = getattr(app.state, "board_agent", None)
     if agent is not None:
-        await agent.stop()
+        await asyncio.to_thread(agent.stop)
         del app.state.board_agent
