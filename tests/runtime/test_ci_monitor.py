@@ -70,13 +70,14 @@ def _ctx(tmp_path, repo_config=None, **env):
     )
 
 
-def _make_fake_forge(monkeypatch, runs=None, logs=""):
+def _make_fake_forge(monkeypatch, runs=None, logs="", raise_on_logs=False):
     class FakeForge:
         """Controllable fake forge for CI monitor tests."""
 
-        def __init__(self, runs=None, logs=""):
+        def __init__(self, runs=None, logs="", raise_on_logs=False):
             self.runs = runs or []
             self.logs = logs
+            self.raise_on_logs = raise_on_logs
             self.logs_call_count = 0
 
         def list_workflow_runs(self, *, branch=None, head_sha=None):
@@ -84,9 +85,11 @@ def _make_fake_forge(monkeypatch, runs=None, logs=""):
 
         def fetch_workflow_job_logs(self, *, run_id):
             self.logs_call_count += 1
+            if self.raise_on_logs:
+                raise ConnectionError("simulated ConnectError")
             return self.logs
 
-    forge = FakeForge(runs=runs, logs=logs)
+    forge = FakeForge(runs=runs, logs=logs, raise_on_logs=raise_on_logs)
 
     def _fake_get_forge(settings, repo_config=None):
         return forge
@@ -839,3 +842,92 @@ def test_comment_refreshes_window_across_recurrences(tmp_path, monkeypatch):
     comments = ctx.service.list_comments(canonical.id)
     assert any("50" in c.body and "shaA" in c.body for c in comments)
     assert any("51" in c.body and "shaB" in c.body for c in comments)
+
+
+def _run_ci_poll_cycle(worker, ctx, monkeypatch):
+    """Drive a single ``_poll_one_repo_ci`` call deterministically."""
+    import asyncio
+    import re
+
+    settings = ctx.settings
+    rc = ctx.repo_config
+    target = target_branch_for(settings, rc)
+    ansi_re = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+
+    async def _noop_sleep(_s):
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", _noop_sleep)
+
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(
+            worker._poll_one_repo_ci(rc, target, time.time(), 30 * 86400, ansi_re)
+        )
+    finally:
+        loop.close()
+
+
+def test_log_fetch_error_defers_then_files_with_error_note(tmp_path, monkeypatch):
+    """A fetch that errors every attempt defers across poll cycles instead of
+    filing an empty draft, then files with the error surfaced once the
+    deferral budget is exhausted."""
+    from robotsix_mill.runtime.worker import poll_loops
+
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    forge = _make_fake_forge(
+        monkeypatch,
+        runs=[
+            {
+                "id": 7,
+                "name": "Docs",
+                "workflow_id": 300,
+                "head_sha": "deadbeef",
+                "conclusion": "failure",
+                "html_url": "http://run/7",
+                "created_at": "2025-01-01T00:00:00Z",
+            },
+        ],
+        raise_on_logs=True,
+    )
+
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    if state_path.exists():
+        state_path.unlink()
+
+    worker = Worker(ctx)
+    worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
+
+    # Cycles 1..MAX defer: no ticket, deferral bookkeeping persisted.
+    for cycle in range(1, poll_loops._CI_LOG_FETCH_MAX_DEFERRALS + 1):
+        _run_ci_poll_cycle(worker, ctx, monkeypatch)
+        assert [t for t in ctx.service.list() if t.source == "ci"] == []
+        state = json.loads(state_path.read_text("utf-8"))
+        assert state["deferred"]["300:deadbeef"]["n"] == cycle
+        assert "300:deadbeef" not in state.get("seen", {})
+
+    # Each cycle retried the fetch _CI_LOG_FETCH_ATTEMPTS times.
+    assert (
+        forge.logs_call_count
+        == poll_loops._CI_LOG_FETCH_ATTEMPTS * poll_loops._CI_LOG_FETCH_MAX_DEFERRALS
+    )
+
+    # Next cycle exhausts the budget → files the draft with the error note.
+    _run_ci_poll_cycle(worker, ctx, monkeypatch)
+    ci_tickets = [t for t in ctx.service.list() if t.source == "ci"]
+    assert len(ci_tickets) == 1
+    body = ctx.service.workspace(ci_tickets[0]).read_description() or ""
+    assert "Could not fetch the run logs" in body
+    assert "ConnectError" in body or "ConnectionError" in body
+    assert "http://run/7" in body
+
+    # Marked seen and deferral record cleared.
+    state = json.loads(state_path.read_text("utf-8"))
+    assert "300:deadbeef" in state["seen"]
+    assert "300:deadbeef" not in state.get("deferred", {})
