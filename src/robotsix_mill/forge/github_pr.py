@@ -635,6 +635,13 @@ class GitHubForgePRMixin:
 
         from .auth import invalidate_github_token  # lazy: avoid import cycle
 
+        # Defensive init: the loop sets these on every non-exception path, but
+        # CodeQL's py/uninitialized-local-variable can't prove it through the
+        # retry/continue/break flow — initialise so the analysis is clean
+        # without changing behaviour (a double-401 still raises before use).
+        reviews_raw: list[dict] = []
+        comments_raw: list[dict] = []
+        files: list[dict] = []
         for retry in range(2):
             with self._http.client() as (c, api, headers):  # type: ignore[attr-defined]
                 # 1. Fetch reviews (includes state field that list_pr_reviews drops).

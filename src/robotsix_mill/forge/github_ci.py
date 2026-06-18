@@ -405,6 +405,11 @@ class GitHubForgeCIMixin:
         s = self.settings  # type: ignore[attr-defined]
 
         # 1. List jobs for the run (with 401 retry).
+        # Defensive init: the loop sets `jobs` on every non-exception path,
+        # but CodeQL's py/uninitialized-local-variable can't prove it through
+        # the retry/continue/break flow — initialise so the analysis is clean
+        # without changing behaviour (a double-401 still raises before use).
+        jobs: list[dict] = []
         for retry in range(2):
             with self._http.client() as (c, api, headers):  # type: ignore[attr-defined]
                 jobs_resp = c.get(
