@@ -1068,6 +1068,43 @@ def test_rebasing_exhausted_blocks(tmp_path, monkeypatch):
     assert push_called == []  # never force-pushed on failure
 
 
+def test_rebase_failure_note_surfaces_conflicts_and_agent_detail(tmp_path, monkeypatch):
+    """The BLOCKED note names the conflicting file(s) and the rebase agent's
+    own explanation instead of a generic 'manual conflict resolution
+    required' (better operator feedback)."""
+    ctx = _gh(tmp_path, rebase_max_attempts="1")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        lambda **k: RebaseResult(
+            status="FAILED",
+            summary="both sides rewrote tests/test_reconcile.py; a human must "
+            "decide which assertions to keep",
+        ),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch", lambda *a, **k: None
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.post_push_check", lambda *a, **k: None
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.conflicted_files",
+        lambda repo: ["tests/test_reconcile.py"],
+    )
+
+    t = _in_rebasing(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "tests/test_reconcile.py" in out.note
+    assert "both sides rewrote" in out.note
+    assert "rebase failed after 1 attempt" in out.note
+
+
 # --- Full cycle: IMPLEMENT_COMPLETE → REBASING → IMPLEMENT_COMPLETE ---
 
 

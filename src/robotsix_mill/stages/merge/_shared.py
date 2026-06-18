@@ -32,6 +32,30 @@ _LAST_AUTO_FIX_STAGE = "last_auto_fix_stage.txt"
 _PING_PONG_COUNT = "ping_pong_count.txt"
 
 
+def _ci_truly_green(conclusion: str | None, pr: dict[str, Any]) -> bool:
+    """Return True only when CI is genuinely, completely green.
+
+    The merge gate must not promote/auto-merge on a *premature* green: after
+    a force-push, the fast checks (e.g. CodeQL) can report success and the
+    forge's aggregated ``check_status`` conclusion flips to ``"success"``
+    before the slow required gate (``ci / tests``) has even started. Merging
+    then reddens the target branch (observed: fbf8/PR#1423).
+
+    GitHub's ``mergeable_state`` is the authoritative combined view:
+    ``"clean"`` means mergeable AND every required check passed. While checks
+    are still settling it is ``"blocked"``/``"behind"``/``"unknown"`` — never
+    ``"clean"``. So we require ``conclusion == "success"`` AND a clean
+    ``mergeable_state``.
+
+    Other forges (GitLab) omit ``mergeable_state`` (``None``); there we fall
+    back to trusting the CI conclusion alone (no regression for them).
+    """
+    if conclusion != "success":
+        return False
+    mergeable_state = pr.get("mergeable_state")
+    return mergeable_state is None or mergeable_state == "clean"
+
+
 def _load_pr_urls(ws_artifacts_dir: Path) -> list[dict] | None:
     """Read ``pr_urls.json``.
 

@@ -826,6 +826,21 @@ def added_files(repo: Path, target_branch: str) -> list[str]:
     return added
 
 
+def conflicted_files(repo: Path) -> list[str]:
+    """Return the paths with unresolved merge conflicts (git status ``U``).
+
+    Uses ``git diff --name-only --diff-filter=U``, which lists unmerged
+    paths during an in-progress merge/rebase. Returns ``[]`` when there
+    are none (clean tree, or the rebase was already aborted). Best-effort:
+    any git error degrades to ``[]`` so failure reporting never crashes.
+    """
+    try:
+        out = _git(repo, "diff", "--name-only", "--diff-filter=U")
+    except Exception:  # noqa: BLE001 — diagnostics must not fail the caller
+        return []
+    return [line for line in out.split("\n") if line] if out else []
+
+
 def restore_paths(repo: Path, target_branch: str, paths: list[str]) -> None:
     """Drop *paths* from the branch's effective diff vs ``origin/<target>``.
 

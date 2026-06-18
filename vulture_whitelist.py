@@ -237,6 +237,12 @@ traces_flagged
 run_trace_review_pass
 run_verify_pass
 
+# -- vcs ---------------------------------------------------------------------
+# Tested git utility with no current production caller: ci_fix's proactive
+# rebase (its only caller) was removed so branch-own CI failures go straight
+# to the fix agent (c14c). Kept as a reusable, unit-tested helper.
+branch_is_behind_main
+
 # -- runtime -----------------------------------------------------------------
 BoardAdapter
 move_endpoint

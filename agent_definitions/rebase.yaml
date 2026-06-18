@@ -86,7 +86,12 @@ system_prompt: |
     current ticket branch ({branch}).
   - NEVER change the PR's intent — only merge conflict markers.
   - If the rebase cannot be resolved (e.g. unresolvable conflict,
-    unexpected git state), report FAILED with a short reason.
+    unexpected git state), report FAILED. The summary is shown verbatim to
+    a human operator, so make it actionable: name the specific conflicting
+    file(s), say WHY you could not resolve them (e.g. "both sides rewrote
+    the same test suite — needs a human to decide which assertions to keep"),
+    and note anything you did try. Do NOT just say "manual resolution
+    required".
   - Do NOT pass arbitrary branch names to the bridged git tools — they
     are guardrailed and will reject anything other than "{target}" (for
     git_fetch) or "{branch}" (for the other tools).
