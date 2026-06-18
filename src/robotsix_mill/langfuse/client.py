@@ -12,8 +12,6 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime
-from typing import cast
 
 from robotsix_llmio.core import LangfuseReadClient
 
@@ -58,18 +56,6 @@ def _build_read_client(
         public_key=public_key or "",
         secret_key=secret_key or "",
         base_url=base_url,
-    )
-
-
-def _parse_iso(value: str) -> datetime:
-    """Naive-UTC parse of a Langfuse ISO-8601 timestamp.
-
-    Delegates to the shared kernel's
-    :meth:`LangfuseReadClient.parse_timestamp` (which tolerates a
-    trailing ``Z``) and drops the tzinfo so the result can be compared
-    against the naive bucket boundaries used by the aggregators."""
-    return cast(
-        datetime, LangfuseReadClient.parse_timestamp(value).replace(tzinfo=None)
     )
 
 
