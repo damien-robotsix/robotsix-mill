@@ -22,6 +22,19 @@ from ._base import _WorkerBase
 
 log = logging.getLogger("robotsix_mill.worker")
 
+# CI monitor log-fetch resilience. A transient fetch failure (e.g. a
+# ConnectError) must not produce an empty draft: an empty failure draft
+# strips the error text triage relies on, which has misrouted real code
+# bugs to the read-only maintenance agent. Instead we retry within the
+# poll, then DEFER to the next poll cycle (without marking the commit
+# seen) so a later poll can capture the real logs. Only after the failure
+# has survived ``_CI_LOG_FETCH_MAX_DEFERRALS`` poll cycles do we file the
+# draft anyway — with the fetch error surfaced in the body so it is still
+# actionable rather than silently empty.
+_CI_LOG_FETCH_ATTEMPTS = 3
+_CI_LOG_FETCH_BACKOFF_SECONDS = 2.0
+_CI_LOG_FETCH_MAX_DEFERRALS = 3
+
 
 class PollLoopsMixin(_WorkerBase):
     def _registry_for(self, repo_config) -> "RunRegistry | None":
@@ -549,6 +562,9 @@ class PollLoopsMixin(_WorkerBase):
             except json.JSONDecodeError, OSError:
                 state = {"seen": {}}
         seen = state.setdefault("seen", {})
+        # Per-key deferral bookkeeping for runs whose logs could not be
+        # fetched yet: ``{key: {"n": <cycles deferred>, "ts": <epoch>}}``.
+        deferred = state.setdefault("deferred", {})
 
         # 2. Prune entries older than TTL.
         stale = [
@@ -558,6 +574,15 @@ class PollLoopsMixin(_WorkerBase):
         ]
         for key in stale:
             del seen[key]
+        # Drop deferral records that resolved (now seen) or aged out.
+        for key in [
+            k
+            for k, v in deferred.items()
+            if k in seen
+            or not isinstance(v, dict)
+            or (now - v.get("ts", now)) > ttl_seconds
+        ]:
+            del deferred[key]
 
         # 3. List completed workflow runs on the target branch.
         forge = get_forge(settings, repo_config=rc)
@@ -637,15 +662,60 @@ class PollLoopsMixin(_WorkerBase):
                 target,
             )
 
-            # Fetch job logs.
+            # Fetch job logs, retrying within this poll to ride out a
+            # momentary blip before giving up for this cycle.
             logs = ""
-            try:
-                logs = forge.fetch_workflow_job_logs(run_id=run_id_val)
-            except Exception:
+            fetch_error = ""
+            for attempt in range(1, _CI_LOG_FETCH_ATTEMPTS + 1):
+                try:
+                    logs = forge.fetch_workflow_job_logs(run_id=run_id_val)
+                    fetch_error = ""
+                    break
+                except Exception as exc:  # noqa: BLE001 — captured for the draft
+                    fetch_error = f"{type(exc).__name__}: {exc}"
+                    log.warning(
+                        "CI monitor: failed to fetch logs for run %s "
+                        "(attempt %d/%d): %s",
+                        run_id_val,
+                        attempt,
+                        _CI_LOG_FETCH_ATTEMPTS,
+                        fetch_error,
+                    )
+                    if attempt < _CI_LOG_FETCH_ATTEMPTS:
+                        await asyncio.sleep(_CI_LOG_FETCH_BACKOFF_SECONDS * attempt)
+
+            # Logs could not be FETCHED (the call errored on every
+            # attempt): defer to a later poll rather than filing an empty
+            # draft, unless we have already deferred this commit too many
+            # times — then file with the error surfaced. A successful fetch
+            # that simply returned no text is not an error and files now.
+            if not logs and fetch_error:
+                record = deferred.get(key)
+                count = record.get("n", 0) if isinstance(record, dict) else 0
+                count += 1
+                if count <= _CI_LOG_FETCH_MAX_DEFERRALS:
+                    deferred[key] = {"n": count, "ts": now}
+                    log.warning(
+                        "CI monitor (%s): log fetch failed for %s (run %s) — "
+                        "deferring to next poll (%d/%d): %s",
+                        repo_label,
+                        wf_name,
+                        run_id_val,
+                        count,
+                        _CI_LOG_FETCH_MAX_DEFERRALS,
+                        fetch_error or "no logs returned",
+                    )
+                    # Do NOT mark seen: the next poll retries this commit.
+                    continue
                 log.warning(
-                    "CI monitor: failed to fetch logs for run %s",
+                    "CI monitor (%s): log fetch still failing for %s (run %s) "
+                    "after %d deferrals — filing draft without logs",
+                    repo_label,
+                    wf_name,
                     run_id_val,
+                    _CI_LOG_FETCH_MAX_DEFERRALS,
                 )
+                deferred.pop(key, None)
 
             # Build draft body.
             body_parts = [
@@ -663,6 +733,17 @@ class PollLoopsMixin(_WorkerBase):
                 body_parts.append("```")
                 body_parts.append(stripped)
                 body_parts.append("```")
+            elif fetch_error:
+                body_parts.append(
+                    "⚠️ **Could not fetch the run logs** after "
+                    f"{_CI_LOG_FETCH_ATTEMPTS} attempts across "
+                    f"{_CI_LOG_FETCH_MAX_DEFERRALS} poll cycles "
+                    f"(last error: `{fetch_error or 'no logs returned'}`). "
+                    "This is a genuine workflow **failure** on the target "
+                    "branch — open the run link above for the error detail. "
+                    "Do NOT treat the missing logs as a connectivity/"
+                    "operational problem."
+                )
 
             body = "\n".join(body_parts)
 
@@ -680,8 +761,9 @@ class PollLoopsMixin(_WorkerBase):
                 )
                 continue
 
-            # Mark as seen.
+            # Mark as seen and clear any deferral bookkeeping.
             seen[key] = now
+            deferred.pop(key, None)
 
         # 5. Persist state.
         state_path.write_text(json.dumps(state), "utf-8")
