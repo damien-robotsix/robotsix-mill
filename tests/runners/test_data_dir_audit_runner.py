@@ -1439,7 +1439,7 @@ class TestDeltaCompute:
             _s(
                 data_dir_audit_growth_delta_bytes=100,
                 data_dir_audit_growth_delta_pct=20,
-                data_dir_audit_growth_delta_pct_min_bytes=0,
+                data_dir_audit_growth_delta_min_bytes_before_pct=0,
             ),
         )
         assert len(flags) == 1
@@ -1461,15 +1461,15 @@ class TestDeltaCompute:
             _s(
                 data_dir_audit_growth_delta_bytes=100,
                 data_dir_audit_growth_delta_pct=20,
-                data_dir_audit_growth_delta_pct_min_bytes=0,
+                data_dir_audit_growth_delta_min_bytes_before_pct=0,
             ),
         )
         assert len(flags) == 1
         assert flags[0]["path"] == "d/"
         assert flags[0]["threshold_exceeded"] == "both"
 
-    def test_pct_met_but_below_floor_no_flag(self):
-        """pct threshold met but current_size_bytes below the floor → no flag."""
+    def test_pct_met_but_below_min_delta_no_flag(self):
+        """pct threshold met but delta_bytes below min_abs → no flag."""
         prior = {"f": {"size_bytes": 100, "mtime": 1}}
         current = {"f": {"size_bytes": 200, "mtime": 2}}
         flags = _compute_growth_deltas(
@@ -1478,29 +1478,31 @@ class TestDeltaCompute:
             _s(
                 data_dir_audit_growth_delta_bytes=10_000_000,
                 data_dir_audit_growth_delta_pct=20,
-                data_dir_audit_growth_delta_pct_min_bytes=1_048_576,
+                data_dir_audit_growth_delta_min_bytes_before_pct=1_048_576,
             ),
         )
         assert flags == []
 
-    def test_pct_met_and_at_floor_flagged(self):
-        """pct threshold met and current_size_bytes at/above floor → flagged."""
-        prior = {"f": {"size_bytes": 500_000, "mtime": 1}}
-        current = {"f": {"size_bytes": 1_048_576, "mtime": 2}}
+    def test_pct_met_and_delta_above_min_flagged(self):
+        """pct threshold met and delta_bytes >= min_abs → flagged."""
+        prior = {"f": {"size_bytes": 100, "mtime": 1}}
+        current = {"f": {"size_bytes": 1_200_000, "mtime": 2}}
         flags = _compute_growth_deltas(
             prior,
             current,
             _s(
                 data_dir_audit_growth_delta_bytes=10_000_000,
                 data_dir_audit_growth_delta_pct=20,
-                data_dir_audit_growth_delta_pct_min_bytes=1_048_576,
+                data_dir_audit_growth_delta_min_bytes_before_pct=1_048_576,
             ),
         )
         assert len(flags) == 1
         assert flags[0]["threshold_exceeded"] == "pct"
 
-    def test_bytes_path_unaffected_by_floor(self):
-        """A sub-floor file whose delta_bytes >= threshold still flags via bytes."""
+    def test_bytes_path_unaffected_by_min_delta(self):
+        """A sub-threshold-delta file whose absolute delta still meets
+        the bytes threshold flags via the bytes path regardless of the
+        min-delta guard."""
         prior = {"f": {"size_bytes": 100, "mtime": 1}}
         current = {"f": {"size_bytes": 15_000_000, "mtime": 2}}
         flags = _compute_growth_deltas(
@@ -1509,7 +1511,7 @@ class TestDeltaCompute:
             _s(
                 data_dir_audit_growth_delta_bytes=10_000_000,
                 data_dir_audit_growth_delta_pct=9999,
-                data_dir_audit_growth_delta_pct_min_bytes=1_048_576,
+                data_dir_audit_growth_delta_min_bytes_before_pct=1_048_576,
             ),
         )
         assert len(flags) == 1
