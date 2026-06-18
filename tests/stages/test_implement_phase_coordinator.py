@@ -669,7 +669,7 @@ def test_finalize_generates_towncrier_fragment_when_configured(
     repo_dir = tmp_path / "repo"
     repo_dir.mkdir()
     (repo_dir / "pyproject.toml").write_text(
-        "[tool.towncrier]\ndirectory = \"changes\"\n",
+        '[tool.towncrier]\ndirectory = "changes"\n',
         encoding="utf-8",
     )
     fake = _FakeGitOps(changed={repo_dir})
@@ -694,7 +694,7 @@ def test_finalize_skips_towncrier_when_not_configured(
     repo_dir = tmp_path / "repo"
     repo_dir.mkdir()
     (repo_dir / "pyproject.toml").write_text(
-        "[project]\nname = \"example\"\n",
+        '[project]\nname = "example"\n',
         encoding="utf-8",
     )
     fake = _FakeGitOps(changed={repo_dir})
@@ -710,9 +710,7 @@ def test_finalize_skips_towncrier_when_not_configured(
     assert len(fake.commits) == 1
 
 
-def test_finalize_skips_towncrier_when_no_pyproject(
-    ctx_factory, tmp_path, monkeypatch
-):
+def test_finalize_skips_towncrier_when_no_pyproject(ctx_factory, tmp_path, monkeypatch):
     """When no ``pyproject.toml`` exists, no fragment file is created
     and no error is raised."""
     ctx = ctx_factory()
@@ -742,7 +740,7 @@ def test_finalize_towncrier_respects_custom_directory(
     repo_dir = tmp_path / "repo"
     repo_dir.mkdir()
     (repo_dir / "pyproject.toml").write_text(
-        "[tool.towncrier]\ndirectory = \"news\"\n",
+        '[tool.towncrier]\ndirectory = "news"\n',
         encoding="utf-8",
     )
     fake = _FakeGitOps(changed={repo_dir})
@@ -759,9 +757,7 @@ def test_finalize_towncrier_respects_custom_directory(
     assert not (repo_dir / "changes").exists()
 
 
-def test_finalize_skips_towncrier_when_no_changes(
-    ctx_factory, tmp_path, monkeypatch
-):
+def test_finalize_skips_towncrier_when_no_changes(ctx_factory, tmp_path, monkeypatch):
     """When the repo has no changes (``has_changes`` is False),
     ``commit_all`` is NOT called AND no fragment file is created."""
     ctx = ctx_factory()
@@ -769,7 +765,7 @@ def test_finalize_skips_towncrier_when_no_changes(
     repo_dir = tmp_path / "repo"
     repo_dir.mkdir()
     (repo_dir / "pyproject.toml").write_text(
-        "[tool.towncrier]\ndirectory = \"changes\"\n",
+        '[tool.towncrier]\ndirectory = "changes"\n',
         encoding="utf-8",
     )
     fake = _FakeGitOps(changed=set())  # no repo has changes
