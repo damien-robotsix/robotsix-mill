@@ -87,16 +87,8 @@ _MODEL_FIELDS_NOT_IN_ALIAS: frozenset[str] = frozenset(
         "langfuse_project_id",
         "ntfy_url",
         "ntfy_token",
-        # -- Board-agent settings — managed per-repo, not global config --
-        "board_agent_api_token",
-        "board_agent_api_url",
-        "board_agent_broker_host",
-        "board_agent_broker_port",
-        "board_agent_broker_scheme",
-        "board_agent_broker_token",
-        "board_agent_enabled",
-        "board_agent_repo_id",
-        "board_agent_write_ops",
+        # (board_agent_* fields are routed through the YAML cascade via the
+        #  board_agent.* entries in _YAML_PATH_TO_ALIAS — no exemption needed.)
         # -- Fields with explicit MILL_ prefix alias (env-only) --
         "claude_max_concurrency",
         "investigation_workspace",
