@@ -117,12 +117,6 @@ def test_gap_id_re_matches_trace_dash_review():
     assert matches == [("trace-review", "pq")]
 
 
-def test_gap_id_re_matches_cost_reconciliation():
-    marker = "<!-- cost_reconciliation-gap-id: 2025-03-15 -->"
-    matches = _GAP_ID_RE.findall(marker)
-    assert matches == [("cost_reconciliation", "2025-03-15")]
-
-
 def test_gap_id_re_matches_all_legacy_labels():
     """All 11 labels the old alternation captured must still match."""
     for label in (

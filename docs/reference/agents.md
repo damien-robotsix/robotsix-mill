@@ -72,8 +72,6 @@
 
 ::: robotsix_mill.agents.copy_pasting
 
-::: robotsix_mill.agents.cost_analyst
-
 ::: robotsix_mill.agents.epic_breakdown
 
 ::: robotsix_mill.agents.epic_status

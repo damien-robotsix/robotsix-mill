@@ -1,5 +1,11 @@
 # Cost controls & resilience
 
+> **Fleet-level cost monitoring** (dashboard, reconciliation, cost-analyst)
+> has moved to **[robotsix-cost-monitor](https://github.com/robotsix/robotsix-cost-monitor)** —
+> a standalone multi-Langfuse dashboard with OpenRouter↔Langfuse reconciliation
+> and LLM cost analysis. This document covers only the remaining per-ticket
+> cost cap backstop.
+
 ## Per-ticket cost (`cost_usd`)
 
 Each ticket card on the board shows a cumulative LLM spend (e.g.
@@ -77,170 +83,6 @@ Worked example — a ticket redrafted twice:
 The informational/historical **total** (the raw Langfuse session total)
 is `$8.00`, while the dollar cap only ever sees the `$3.00` effective
 cost for the current attempt.
-
-## Cost dashboard
-
-The board's **Cost Dashboard** (💰 button in the drawer header) shows
-aggregate spend across all tickets for a configurable lookback window
-(1 hour – 7 days). It calls three Langfuse-backed endpoints in
-parallel:
-
-| Endpoint | What it returns |
-|---|---|
-| `GET /costs/trend?lookback_hours=N&repo_id=X` | Time-bucketed cost for the sparkline chart |
-| `GET /costs/by-agent?lookback_hours=N&repo_id=X` | Per-agent-name cost bars (total cost + trace count) |
-| `GET /costs/most-expensive-ticket?lookback_hours=N&repo_id=X` | The single ticket with the highest LLM spend in the window |
-| `GET /costs/most-expensive-trace?lookback_hours=N&repo_id=X` | The single most expensive individual agent run (trace) in the window |
-
-All four endpoints accept **two mutually exclusive filter modes**:
-
-| Parameter | Mode | Clamping | Description |
-|---|---|---|---|
-| `lookback_hours` (default `24`) | Time-window | `[1, 168]` | All traces in the last *N* hours |
-| `max_tickets` (optional) | Last-N-tickets | `[1, 1000]` | All traces belonging to the last *N* distinct ticket sessions |
-
-When both parameters are present, `max_tickets` takes precedence and
-the time window is ignored (with a debug-level log noting the override).
-The frontend never sends both — a **mode toggle** in the cost dashboard
-switches between time-window (with options 1h/6h/24h/3d/7d) and
-ticket-count mode (with options 20/100/1000).  On first load the
-dashboard defaults to time-window, 24 hours.
-
-When tracing is disabled or no data exists, the most-expensive
-endpoints return `null` and the dashboard shows a muted "No data"
-placeholder that adapts its wording to the active mode — the per-agent
-bar chart continues to render independently.
-
-The optional `repo_id` query parameter scopes the query to a single
-repo's Langfuse project.  Use `repo_id=all` to aggregate across every
-registered repo.  When omitted in single-repo mode the sole repo is
-used; in multi-repo mode the parameter is required.
-
-### Langfuse functions
-
-Four aggregation functions in `langfuse/client.py` back the cost
-endpoints, each accepting both `lookback_hours` and an optional
-`max_tickets`:
-
-- **`aggregate_cost_trend(settings, lookback_hours=24, max_tickets=None)`** —
-  returns time-bucketed cost.  In time-window mode buckets span the
-  lookback period (hourly if ≤ 24 h, daily otherwise).  In ticket-count
-  mode buckets span the time range covered by the collected traces,
-  with the same hourly/daily rule applied to that span.
-
-- **`aggregate_cost_by_name(settings, lookback_hours=24, max_tickets=None)`** —
-  aggregates `totalCost` and trace count by agent/stage name.
-
-- **`most_expensive_ticket(settings, lookback_hours=24, max_tickets=None)`** —
-  groups traces by `sessionId`, sums `totalCost` per session, returns
-  the session with the highest total cost (or `None` when tracing is
-  disabled / the API errors).  The route then looks up the matching
-  ticket by `session_id`.
-
-- **`most_expensive_trace(settings, lookback_hours=24, max_tickets=None)`** —
-  scans traces for the single highest `totalCost`, skipping
-  unnamed/in-flight traces (same `_named` filter as
-  `list_recent_traces`).  Returns the trace dict directly.
-
-All four functions share a common helper, `_fetch_traces_for_tickets`,
-which paginates Langfuse traces by `timestamp.desc` (no `fromTimestamp`),
-tracks distinct `sessionId` values, and stops after collecting traces
-from the requested number of distinct sessions.
-
-**Safety caps:** In time-window mode `most_expensive_ticket` and
-`most_expensive_trace` cap at 500 traces (`EXAMINE_CAP`).  In
-ticket-count mode all four functions cap at 100 pages × 100 traces
-(10 000 traces).  All functions catch exceptions and return gracefully
-(`None` or `[]`) rather than crashing the dashboard.
-
-## Cost reconciliation
-
-The cost-reconciliation pass detects drift between OpenRouter usage
-accounting and Langfuse span-derived cost totals — a silent cost leak
-that can otherwise go unnoticed for days.
-
-### How it works
-
-The pass can be triggered in two ways:
-
-- **Periodic** — Once per day (opt-in via `MILL_COST_RECONCILIATION_PERIODIC=true`),
-  the worker calls `run_cost_reconciliation_pass()`.
-- **On-demand** — `POST /cost-reconciliation` returns `202 Accepted`
-  immediately and runs the pass in a background daemon thread. The run
-  appears in the board's "Runs" drawer (via `RunRegistry`).
-
-The pass proceeds as follows:
-
-1. **Fetch OpenRouter total** — `GET /api/v1/activity?date=<yesterday>`
-   using `openrouter_management_key` from secrets. Sums `usage` +
-   `byok_usage_inference` across all model entries.
-2. **Fetch Langfuse total** — paginates `/api/public/traces` for the
-   same UTC day window, sums `totalCost` across all traces (capped at
-   2000 for safety).
-3. **Compare** — if `|delta| ≤ $1.00`, logs clean and returns (no
-   agent call, no ticket).
-4. **Investigate** — if delta > $1.00, invokes the cost-reconciliation
-   agent (a single LLM call with zero tools) and creates a DRAFT ticket
-   with the analysis.
-
-### Usage
-
-**CLI:**
-```sh
-robotsix-mill cost-reconciliation              # summary output
-robotsix-mill cost-reconciliation --json       # full JSON result
-```
-
-**API:**
-```sh
-curl -X POST http://localhost:8077/cost-reconciliation
-```
-
-### Sources of divergence
-
-The agent considers these possible causes:
-
-- **Non-OpenRouter models** routed through OpenRouter that don't support
-  usage accounting (cost missing from spans → Langfuse under-reports).
-- **Streaming-only providers** where OpenRouter can't compute cost until
-  the stream completes (timing skew).
-- **OTel export gaps** — if the OTLP exporter is down or a span is
-  dropped, Langfuse never sees the cost.
-- **BYOK models** where OpenRouter charges a routing fee but the
-  inference cost hits the user's own provider key.
-- **Ingestion lag** — Langfuse is near-real-time but OpenRouter's
-  activity endpoint reflects completed UTC days.
-
-### Configuration
-
-| YAML path | Env var | Default | Description |
-|-----------|---------|---------|-------------|
-| `periodic.cost_reconciliation.enabled` | `MILL_COST_RECONCILIATION_PERIODIC` | `false` | Enable daily cost-reconciliation passes |
-| `periodic.cost_reconciliation.interval_seconds` | `MILL_COST_RECONCILIATION_INTERVAL_SECONDS` | `86400` | Seconds between passes (min 60) |
-| `periodic.cost_reconciliation.model` | `MILL_COST_RECONCILIATION_MODEL` | `deepseek/deepseek-v4-pro` | Model for the analysis agent |
-| `periodic.cost_reconciliation.memory_path` | `MILL_COST_RECONCILIATION_MEMORY_PATH` | `None` | Override path for memory ledger (defaults to `<data_dir>/cost_reconciliation_memory.md`) |
-
-The `openrouter_management_key` secret is **optional** — if absent, the
-pass skips OpenRouter-side fetching and logs a warning.
-
-### Draft tickets
-
-When a discrepancy is found, the ticket is created with
-`source=cost_reconciliation` (amber badge on the board). The body
-includes the agent's analysis and conclusion, plus the raw OpenRouter
-and Langfuse breakdowns. Each ticket includes a date-based gap-id
-marker (`<!-- cost_reconciliation-gap-id: YYYY-MM-DD -->`) for
-deduplication — the same day is never reported twice.
-
-### Limitations
-
-- **Daily only** — each pass looks at exactly one UTC day (yesterday).
-  No multi-day trending or real-time alerting.
-- **No auto-fix** — the agent only explains the discrepancy; it never
-  modifies config, API keys, or tracing.
-- **No per-model reconciliation** — comparison is at daily-total level.
-  Per-model drill-down lives in the agent's analysis, not in the
-  comparison logic.
 
 ## Cost controls
 

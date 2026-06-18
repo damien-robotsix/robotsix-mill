@@ -99,8 +99,6 @@ BOARD_HTML = """<!doctype html><html><head><meta charset="utf-8">
     <button onclick="runSurvey()" data-agent="survey">Survey</button>
     <button onclick="runBcCheck()" data-agent="bc_check">BC Check</button>
     <button onclick="runCompletenessCheck()" data-agent="completeness_check">Completeness</button>
-    <button onclick="runCostReconciliation()" data-agent="cost_reconciliation">Cost Recon</button>
-    <button onclick="runCostAnalyst()" data-agent="cost_analyst">Cost Analyst</button>
     <button onclick="runRunHealth()" data-agent="run_health">Run Health</button>
     <button onclick="runConfigSync()" data-agent="config_sync">Config Sync</button>
     <button onclick="runMemberSync()" data-agent="member_sync">Member Sync</button>
@@ -139,11 +137,6 @@ margin-left:4px">
 background:#6b7280;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">
   Runs
-</button>
-<button onclick="openCostDashboard()" style="font-size:11px;padding:3px 10px;
-background:#0d9488;color:#fff;border:none;border-radius:4px;cursor:pointer;
-margin-left:4px">
-  💰 Cost
 </button>
 <button onclick="toggleProposals()" style="font-size:11px;padding:3px 10px;
 background:#7c3aed;color:#fff;border:none;border-radius:4px;cursor:pointer;

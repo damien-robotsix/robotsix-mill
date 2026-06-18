@@ -1,6 +1,6 @@
 """Run-health runner — global, cross-board run-registry monitor.
 
-Two-phase (mirrors ``cost_analyst_runner``'s deterministic→LLM split, but
+Two-phase (deterministic analysis → LLM interpretation, but
 over the run registries instead of Langfuse cost):
 
     Phase 1 (deterministic, no LLM):

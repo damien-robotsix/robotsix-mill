@@ -64,7 +64,7 @@ system_prompt: |
     succeeded was skipped because a key is missing or the API errored, a
     config could not be parsed, an exception was swallowed). These deserve a
     draft.
-  - **LEGITIMATE empty / no-op** — e.g. `cost_analyst` correctly filing zero
+  - **LEGITIMATE empty / no-op** — e.g. a diagnostic correctly filing zero
     drafts because nothing cleared its bar, or any agent whose summary itself
     explains a benign 0-draft outcome. Cross-reference the agent's own
     summary justification AND your memory ledger of known-benign signatures.

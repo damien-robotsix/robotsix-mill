@@ -86,13 +86,11 @@ _BUILTIN_KINDS: dict[str, str] = {
     "trace_review": "schedule_only",
     "config_sync": "schedule_only",
     "member_sync": "schedule_only",
-    "cost_reconciliation": "schedule_only",
     "data_dir_audit": "schedule_only",
     # Non-LLM maintenance loops.
     "langfuse_cleanup": "maintenance",
     # Recognized but NOT per-repo-presence managed (cross-repo / always-on).
     "meta": "global_only",
-    "cost_analyst": "global_only",
     "run_health": "global_only",
     "timeout_escalation": "global_only",
     "trace_health": "global_only",

@@ -514,53 +514,6 @@ class PeriodicPassesMixin(_WorkerBase):
                     )
             await asyncio.sleep(interval)
 
-    async def _cost_analyst_pass_loop(self) -> None:
-        """Global cost-analyst loop — fires once per interval (not per-repo).
-
-        Studies the fleet's aggregate cost-by-stage distribution + the four
-        significant trace/ticket specimens and files high-confidence
-        cost-reduction drafts to the mill board.
-        """
-        from robotsix_mill.runners.cost_analyst_runner import (
-            CostAnalystPassResult,
-            run_cost_analyst_pass,
-        )
-
-        interval = max(60, self.ctx.settings.cost_analyst_interval_seconds)
-        initial = self._initial_delay("cost-analyst", interval)
-        await asyncio.sleep(initial)
-        while True:
-            run_id = None
-            session_id = tracing.make_session_id("cost_analyst")
-            try:
-                log.info("Starting periodic cost-analyst pass")
-                if self.run_registry:
-                    run_id = self.run_registry.start("cost_analyst")
-                with tracing.start_ticket_root_span(
-                    session_id, "cost_analyst", repo_config=None
-                ):
-                    result: CostAnalystPassResult = await self._tracked_to_thread(
-                        run_cost_analyst_pass,
-                        session_id=session_id,
-                    )
-                log.info(
-                    "Cost-analyst pass completed, created %d draft(s)",
-                    len(result.drafts_created),
-                )
-                if self.run_registry and run_id:
-                    ids = [d["id"] for d in result.drafts_created[:3]]
-                    summary = (
-                        f"{len(result.drafts_created)} draft(s): {', '.join(ids)}"
-                        if ids
-                        else "No drafts created"
-                    )
-                    self.run_registry.finish_ok(run_id, summary)
-            except Exception as e:  # noqa: BLE001 — never let the poll die
-                log.exception("Cost-analyst pass failed")
-                if self.run_registry and run_id:
-                    self.run_registry.finish_error(run_id, str(e))
-            await asyncio.sleep(interval)
-
     async def _trace_health_poll_loop(self) -> None:
         """Periodic trace-health check loop. Only runs when
         ``MILL_TRACE_HEALTH_PERIODIC=true``.

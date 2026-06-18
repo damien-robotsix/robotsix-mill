@@ -34,8 +34,8 @@ log = logging.getLogger("robotsix_mill.pass_runner")
 
 # Matches <!-- {label}-gap-id: foo_bar --> style markers in ticket descriptions.
 # Label is a non-whitespace run with the optional `bespoke:<name>` shape that
-# bespoke agents emit, plus `trace-health` / `trace-review` /
-# `cost_reconciliation` and any future SourceKind that writes a marker. The
+# bespoke agents emit, plus `trace-health` / `trace-review` and any future
+# SourceKind that writes a marker. The
 # label-vs-source_kind comparison below filters the matches to the caller's
 # scope; matching here is intentionally permissive to avoid silent drift as
 # new SourceKinds are added (was a hardcoded alternation of 11 labels that

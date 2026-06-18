@@ -1002,7 +1002,7 @@ def test_agent_check_endpoint_is_fire_and_forget(client, monkeypatch):
 def test_run_health_endpoint_is_fire_and_forget(client, monkeypatch):
     """POST /run-health returns 202 immediately and runs the run-health
     pass in the background — same fire-and-forget contract as /audit,
-    /health-check, /cost-analyst. It is a global pass (no repo_id)."""
+    /health-check. It is a global pass (no repo_id)."""
     import threading
 
     from robotsix_mill.runners import run_health_runner
@@ -1083,18 +1083,6 @@ def test_board_html_includes_board_cleanup_button(client):
     js = client.get("/static/mill/board-mill.js").text
     assert "runBoardCleanup" in js
     assert '"/board-cleanup"' in js
-
-
-def test_board_html_includes_cost_analyst_button(client):
-    """The board exposes a 'Cost Analyst' button wired to
-    runCostAnalyst() in the JS. Without it the user can't trigger the
-    cost-analyst pass from the board, and only the CLI is discoverable."""
-    body = client.get("/").text
-    assert "Cost Analyst" in body
-    assert "runCostAnalyst()" in body
-    js = client.get("/static/mill/board-mill.js").text
-    assert "runCostAnalyst" in js
-    assert '"/cost-analyst"' in js
 
 
 def test_setup_logging_surfaces_app_logs_idempotently(capsys):

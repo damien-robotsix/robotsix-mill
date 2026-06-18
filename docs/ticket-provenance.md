@@ -17,7 +17,6 @@ remains free-form so unknown future sources are accepted without changes.
 | `"agent"` | `SourceKind.AGENT` | Agent-check or other meta-agents when emitting tickets | grey **agent** |
 | `"ci"` | `SourceKind.CI` | (planned) Future CI monitor feature | grey |
 | `"trace-health"` | — | Trace-health check when unsessioned traces detected | cyan **trace-health** |
-| `"cost_reconciliation"` | `SourceKind.COST_RECONCILIATION` | Cost-reconciliation runner when OpenRouter/Langfuse cost delta > $1 | amber **cost-reconciliation** |
 | (any other) | — | Any future agent or emitter | grey |
 
 The board renders a small coloured badge on every card. Fallback: if

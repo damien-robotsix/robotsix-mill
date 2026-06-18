@@ -34,7 +34,6 @@ margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
 .src-env-sync{background:#312e81;color:#a5b4fc}
 .src-agent-check{background:#4a1942;color:#e879f9}
 .src-bc-check{background:#422006;color:#fdba74}
-.src-cost-reconciliation{background:#064e3b;color:#6ee7b7}
 .src-completeness-check{background:#1a2e05;color:#bef264}
 .src-trace-review{background:#3b1f1f;color:#fca5a5}
 .src-roadmap-sync{background:#4c1d95;color:#c4b5fd}
@@ -45,7 +44,6 @@ margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
 .src-board-cleanup{background:#064e3b;color:#10b981}
 .src-data-dir-audit{background:#312e81;color:#a5b4fc}
 .src-meta{background:#3b0764;color:#a855f7}
-.src-cost-analyst{background:#1e1b4b;color:#6366f1}
 .src-run-health{background:#1e3a5f;color:#3b82f6}
 .src-ci-fix-dependency{background:#422006;color:#fdba74}
 .src-implement-baseline-dependency{background:#1e293b;color:#94a3b8}
@@ -177,29 +175,6 @@ text-transform:uppercase;letter-spacing:.04em}
 .ask-user-cta strong{color:#f59e0b}
 .ask-user-threads{margin-bottom:16px}
 .ask-user-threads .thread{border-color:#4a3a1a;background:#1e1a10}
-/* cost dashboard */
-.cost-lookback{margin-bottom:12px;display:flex;align-items:center;gap:8px}
-.cost-lookback label{font-size:11px;color:#aab0bd}
-.cost-lookback select{font-size:11px;background:#1d212c;border:1px solid #2c313d;color:#cfd3db;border-radius:4px;padding:3px 6px}
-.cost-mode-toggle{display:flex;gap:0;border-radius:4px;overflow:hidden;border:1px solid #2c313d}
-.cost-mode-btn{font-size:11px;padding:3px 10px;background:#1d212c;color:#7d828c;border:none;cursor:pointer;font-family:ui-monospace,monospace}
-.cost-mode-btn.active{background:#3b82f6;color:#fff}
-.cost-mode-btn:hover:not(.active){background:#262b36;color:#cfd3db}
-.cost-summary{color:#7d828c;font-size:11px;margin-bottom:10px}
-.cost-bar-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.03)}
-.cost-bar-row:last-child{border-bottom:none}
-.cost-bar-label{width:130px;flex-shrink:0;display:flex;flex-direction:column}
-.cost-bar-name{color:#cfd3db;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cost-bar-count{color:#7d828c;font-size:10px}
-.cost-bar-track{flex:1;height:14px;background:#1a1e27;border-radius:7px;overflow:hidden;min-width:20px}
-.cost-bar-fill{height:100%;border-radius:7px;transition:width .3s;min-width:2px}
-.cost-bar-amount{width:80px;text-align:right;font-size:12px;color:#eef0f4;font-variant-numeric:tabular-nums;flex-shrink:0}
-/* highlights reuse .cost-bar-row but carry text instead of a bar — let
-   the title wrap onto multiple lines and drop the bar-track chrome. */
-.cost-highlight-row{align-items:flex-start}
-.cost-highlight-row .cost-bar-track{height:auto;background:transparent;overflow:visible;border-radius:0;flex-direction:column;align-items:flex-start;gap:2px;padding:2px 0;min-height:14px}
-.cost-highlight-row .cost-bar-track a{color:#8bb4f8;line-height:1.35;word-break:break-word;display:block;max-width:100%}
-.cost-highlight-row .cost-bar-track .cost-bar-count{white-space:normal;word-break:break-all}
 /* epic children list */
 .children-list{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
 .child-ticket{display:flex;align-items:center;gap:8px;padding:4px 8px;background:#1d212c;border:1px solid #262b36;border-radius:4px;font-size:12px;cursor:pointer}.child-ticket:hover{background:#232836}
@@ -231,15 +206,6 @@ text-transform:uppercase;letter-spacing:.04em}
 @keyframes live-spin {
   to { transform: rotate(360deg); }
 }
-/* cost sparkline */
-#cost-sparkline{display:block;width:100%;height:64px;margin-bottom:10px;border-radius:7px}
-/* average trace cost tile */
-.cost-summary-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
-.cost-summary-divider{color:#3a3f4a;font-size:11px}
-.cost-avg-tile{font-size:12px;color:#cfd3db}
-.cost-avg-value{color:#eef0f4;font-variant-numeric:tabular-nums}
-/* cumulative cost badge */
-.cost-cumulative{font-size:10px;color:#aab0bd}
 /* threaded comments */
 .reply-ev{margin-left:20px;border-left:1px solid #4a5568;font-size:12px}
 .thread{margin-bottom:12px;border:1px solid #262b36;border-radius:6px;padding:8px 10px;background:#161922}

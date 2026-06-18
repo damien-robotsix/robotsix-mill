@@ -54,10 +54,10 @@ def test_digest_flags_failures_and_excludes_healthy(tmp_path, monkeypatch):
         # OK but degraded summary -> flagged
         {
             "id": "2",
-            "kind": "cost_reconciliation",
+            "kind": "data_dir_audit",
             "started_at": recent,
             "status": "ok",
-            "summary": "OpenRouter fetch skipped (key missing or API error) … 0 drafts",
+            "summary": "No findings — 0 drafts",
         },
         # Healthy OK run -> excluded
         {
@@ -89,8 +89,10 @@ def test_digest_flags_failures_and_excludes_healthy(tmp_path, monkeypatch):
 
     digest = rhr._build_run_health_digest(s)
     assert "bc_check" in digest  # error flagged
-    assert "cost_reconciliation" in digest  # degraded ok flagged
-    assert "audit" not in digest  # healthy ok excluded
+    assert "data_dir_audit" in digest  # degraded ok flagged
+    # healthy 'audit' excluded — strip the 'data_dir_audit' token first so its
+    # 'audit' substring doesn't false-match.
+    assert "audit" not in digest.replace("data_dir_audit", "")
     assert "survey" not in digest  # running excluded
     assert "stale failure" not in digest  # out-of-window excluded
 

@@ -248,16 +248,6 @@ def test_board_cleanup_registered_in_runners():
     assert entry["format"] == "memory_drafts"
 
 
-def test_cost_analyst_registered_in_runners():
-    """The cost-analyst pass is wired into the generic _RUNNERS dispatch table."""
-    from robotsix_mill.cli import _RUNNERS
-
-    entry = _RUNNERS["cost-analyst"]
-    assert entry["module"] == "runners.cost_analyst_runner"
-    assert entry["function"] == "run_cost_analyst_pass"
-    assert entry["format"] == "memory_drafts"
-
-
 # --- proposed action CLI tests ---
 
 

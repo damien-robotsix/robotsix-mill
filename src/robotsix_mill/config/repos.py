@@ -64,10 +64,7 @@ class RepoConfig(BaseModel):
     # global Langfuse credentials in secrets.yaml (see _apply_global_langfuse).
     # They are identical across every repo — there is no per-repo Langfuse
     # configuration.
-    # Per-repo OpenRouter inference key. When set, cost-reconciliation runs in
-    # PER-KEY mode for this repo (snapshot this key's cumulative usage each pass
-    # + diff against the prior snapshot) so its provider spend reconciles
-    # against ITS Langfuse project. Unset → account-level activity reconcile.
+    # Per-repo OpenRouter inference key.
     openrouter_api_key: str | None = None
     forge_remote_url: str | None = None
     # Optional path to the live deployment's log directory for this repo.
