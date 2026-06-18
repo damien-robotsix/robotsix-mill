@@ -536,6 +536,8 @@ robotsix-llmio Claude Agent SDK transport.
 | `sandbox.command_timeout` | `MILL_COMMAND_TIMEOUT` | `1800` | Wall-clock cap (seconds) for sandbox shell/test commands |
 | `sandbox.data_volume` | `MILL_DATA_VOLUME` | `mill_data` | Named Docker volume for data (fallback when not bind-mounted) |
 | `sandbox.data_mount` | `MILL_SANDBOX_DATA_MOUNT` | `None` | Host path for bind-mounted data directory (overrides `data_volume`) |
+| `sandbox.network` | `MILL_SANDBOX_NETWORK` | `mill-sandbox-net` | Docker network sandbox containers connect to (internal, filtered through proxy) |
+| `sandbox.proxy_url` | `MILL_SANDBOX_PROXY_URL` | `http://sandbox-proxy:8888` | Egress proxy URL (empty = no proxy, `--network none`) |
 | `sandbox.test_command` | `MILL_TEST_COMMAND` | `""` | Command run to verify the implementation (empty = skip). Global fallback only: a managed repo's own `.robotsix-mill/config.yaml` `test_command` takes precedence, then `repos.yaml` per-repo `test_command`, then this value (precedence: per-repo file > repos.yaml > global). |
 
 ### 10. Web research
