@@ -245,6 +245,9 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.limits.transient_backoff_cap": "transient_backoff_cap",
     "core.limits.rate_limit_backoff_base": "rate_limit_backoff_base",
     "core.limits.rate_limit_backoff_cap": "rate_limit_backoff_cap",
+    "core.limits.stage_retry_max_attempts": "stage_retry_max_attempts",
+    "core.limits.stage_retry_base_delay": "stage_retry_base_delay",
+    "core.limits.stage_retry_max_delay": "stage_retry_max_delay",
     # -- core: credit-balance warning --
     "core.low_credit_threshold_usd": "low_credit_threshold_usd",
     "core.low_credit_poll_enabled": "low_credit_poll_enabled",
