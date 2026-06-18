@@ -607,6 +607,68 @@ def _prune_orphan_workspaces(settings: Settings) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Default-on GC: truncate over-cap *_memory.md files on disk
+# ---------------------------------------------------------------------------
+
+# tail_keep prepends a "[… memory truncated: N chars omitted]" note when it
+# truncates.  The note itself can push the file a few dozen chars past the
+# nominal cap.  Reserve a conservative buffer so the final file reliably
+# fits within max_memory_chars even with the note.
+_NOTE_OVERHEAD = 80
+
+
+def _prune_oversized_memory_ledgers(settings: Settings) -> int:
+    """Truncate over-cap ``*_memory.md`` files under ``data_dir`` in place.
+
+    Reuses :func:`persist_memory` from ``pass_runner`` — the same
+    ``tail_keep`` primitive the agent already uses at read/write time —
+    so the on-disk result is byte-for-byte the tail the agent would
+    have seen anyway.  A small buffer (``_NOTE_OVERHEAD``) is
+    subtracted from the target to compensate for the truncation-note
+    overhead.
+
+    Returns the number of files actually truncated.
+    """
+    if settings.max_memory_chars <= 0:
+        return 0
+
+    data_dir = settings.data_dir
+    if not data_dir.is_dir():
+        return 0
+
+    # Lazy import to avoid circular dependency at module load time.
+    from ..pass_runner import persist_memory  # noqa: PLC0415
+
+    target_chars = max(1, settings.max_memory_chars - _NOTE_OVERHEAD)
+    truncated = 0
+
+    for mem_file in sorted(data_dir.rglob("*_memory.md")):
+        if not mem_file.is_file():
+            continue
+        try:
+            text = mem_file.read_text(encoding="utf-8")
+        except OSError:
+            log.warning(
+                "data_dir_audit: cannot read memory ledger %s — skipping",
+                mem_file,
+            )
+            continue
+        if len(text) <= settings.max_memory_chars:
+            continue
+        # persist_memory handles its own OSError on write internally
+        # (logs and returns); no additional guard needed.
+        persist_memory(mem_file, text, max_chars=target_chars)
+        truncated += 1
+
+    if truncated:
+        log.info(
+            "data_dir_audit: truncated %d oversized memory ledger(s)",
+            truncated,
+        )
+    return truncated
+
+
+# ---------------------------------------------------------------------------
 # Runner helper — scans orphans across all boards
 # ---------------------------------------------------------------------------
 

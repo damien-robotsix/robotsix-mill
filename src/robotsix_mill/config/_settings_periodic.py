@@ -300,6 +300,13 @@ class _PeriodicSettings(BaseModel):
     # DONE, which is not an archivable state) eventually get cleaned.
     # Override with MILL_DATA_DIR_AUDIT_PRUNE_DB_ROWS=false.
     data_dir_audit_prune_db_rows: bool = Field(default=True)
+    # Default-on GC: truncate over-cap *_memory.md files on disk
+    # before size measurement, using the same tail_keep primitive
+    # the agent already uses at read/write time.  Eliminates recurring
+    # unbounded: tickets for memory ledgers that grew under old code
+    # paths and are rarely re-written.
+    # Override with MILL_DATA_DIR_AUDIT_PRUNE_MEMORY_LEDGERS=false.
+    data_dir_audit_prune_memory_ledgers: bool = Field(default=True)
     # Default-on GC: prune orphan workspace directories (ticket absent
     # from the board DB) older than the configured age at the start of
     # each data-dir audit pass, before size measurement. Orphans are
