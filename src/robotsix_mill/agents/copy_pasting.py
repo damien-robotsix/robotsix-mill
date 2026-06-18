@@ -11,68 +11,23 @@ the runner has a clear result to work with.
 
 from __future__ import annotations
 
-from ..config import Settings
-from .periodic_base import PeriodicAgentResult, load_periodic_system_prompt
+from .periodic_base import (
+    PeriodicAgentResult,
+    load_periodic_system_prompt,
+    make_agent_runner,
+)
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 SYSTEM_PROMPT: str = load_periodic_system_prompt("copy_paste")
 
-
 MAX_GAPS = 8
-
 
 CopyPasteResult = PeriodicAgentResult
 
-
-def run_copy_paste_agent(
-    *,
-    settings: Settings,
-    memory: str = "",
-    recent_proposals: str = "",
-    verified_proposals: str = "",
-    repo_dir=None,
-    definition_override=None,
-) -> CopyPasteResult:
-    """Run the copy-paste detection pass.
-
-    Runs deterministic clone detection (jscpd via
-    ``detect_duplication``), triages clone pairs by severity
-    (``files × lines`` product, ≥3 files OR ≥30 duplicated lines),
-    cross-references against the memory ledger and ``recent-proposals``
-    for resolved/declined clones, reads clone files with ``read_file``
-    to confirm genuine copy-paste, and files one draft ticket per
-    high-severity clone pair.
-
-    When ``repo_dir`` is provided, the agent gets filesystem tools
-    (``read_file``, ``list_dir``), the ``explore`` scout tool, and
-    the ``detect_duplication`` tool (injected at runtime via
-    ``periodic_base``, following the audit pattern).
-
-    Args:
-        settings: Application configuration — model names
-            (``copy_paste_model``), retry parameters, and tool paths.
-        memory: The agent's memory ledger as a Markdown string.
-            Defaults to ``""`` (the agent starts a fresh ledger).
-        recent_proposals: Prior proposals string from pass runner.
-        repo_dir: Optional path to the local repository clone.
-
-    Returns:
-        A ``CopyPasteResult`` with draft titles, bodies, and gap IDs
-        clipped to ``MAX_GAPS`` (8) entries, plus the updated memory
-        ledger.
-    """
-    from .periodic_base import run_periodic_agent
-
-    return run_periodic_agent(
-        settings=settings,
-        definition_name="copy_paste",
-        definition_override=definition_override,
-        model_setting=settings.copy_paste_model,
-        max_gaps=MAX_GAPS,
-        repo_dir=repo_dir,
-        memory=memory,
-        recent_proposals=recent_proposals,
-        verified_proposals=verified_proposals,
-        prompt_tail="Run detect_duplication, triage the clone pairs, and return your findings.",
-        include_jscpd=True,
-    )
+run_copy_paste_agent = make_agent_runner(
+    definition_name="copy_paste",
+    model_attr="copy_paste_model",
+    prompt_tail="Run detect_duplication, triage the clone pairs, and return your findings.",
+    max_gaps=MAX_GAPS,
+    include_jscpd=True,
+)
