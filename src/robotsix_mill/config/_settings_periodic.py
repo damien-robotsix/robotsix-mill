@@ -354,6 +354,21 @@ class _PeriodicSettings(BaseModel):
     # enforced at 60s in the worker loop.
     copy_paste_interval_seconds: int = Field(default=604800)
 
+    # --- state-sync agent (cross-surface State enum consistency) ---
+    # Model for the state-sync agent. Defaults to a cheap model (read-only
+    # file scan — no web research or code generation).
+    state_sync_model: str = Field(default="deepseek/deepseek-v4-flash")
+    # Path to the state-sync agent's Markdown memory ledger. Override to pin
+    # a specific path; unset (default) derives <data_dir>/state_sync_memory.md.
+    state_sync_memory_path: Path | None = Field(default=None)
+    # Opt-in periodic state-sync pass. Defaults to True (opt-out);
+    # set false to disable the daily State-enum consistency check.
+    state_sync_periodic: bool = Field(default=True)
+    # Seconds between periodic state-sync passes when
+    # MILL_STATE_SYNC_PERIODIC=true. Default 86400 (1 day). Minimum
+    # enforced at 60s in the worker loop.
+    state_sync_interval_seconds: int = Field(default=86400)
+
     # --- config-sync agent (config ↔ .env ↔ docs drift detection) ---
     # Model for the config-sync agent. Defaults to a cheap model (read-only
     # file parsing — no web research or code generation).

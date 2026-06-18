@@ -414,6 +414,11 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.data_dir_audit.prune_db_rows": "data_dir_audit_prune_db_rows",
     "periodic.data_dir_audit.prune_orphans": "data_dir_audit_prune_orphans",
     "periodic.data_dir_audit.prune_orphans_age_seconds": "data_dir_audit_prune_orphans_age_seconds",
+    # -- periodic.state_sync --
+    "periodic.state_sync.model": "state_sync_model",
+    "periodic.state_sync.enabled": "state_sync_periodic",
+    "periodic.state_sync.interval_seconds": "state_sync_interval_seconds",
+    "periodic.state_sync.memory_path": "state_sync_memory_path",
     # -- periodic.config_sync --
     "periodic.config_sync.enabled": "config_sync_periodic",
     "periodic.config_sync.interval_seconds": "config_sync_interval_seconds",

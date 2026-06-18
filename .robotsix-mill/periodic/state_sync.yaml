@@ -1,0 +1,6 @@
+# Per-repo periodic workflow: presence enables state_sync for this repo.
+# Cross-references every State enum member against all string-literal
+# reference sites, and files draft tickets for staleness, typos, and
+# missing references. Name-only → inherits the built-in state_sync
+# definition (robotsix-mill: agent_definitions/periodic/state_sync.yaml).
+name: state_sync

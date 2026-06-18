@@ -43,6 +43,7 @@ class SourceKind(StrEnum):
     TRACE_REVIEW = "trace-review"
     MODULE_CURATOR = "module_curator"
     ROADMAP_SYNC = "roadmap_sync"
+    STATE_SYNC = "state_sync"
     META = "meta"
     RUN_HEALTH = "run-health"
     BOARD_CLEANUP = "board_cleanup"

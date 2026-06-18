@@ -70,6 +70,7 @@ def test_sourcekind_member_count():
         "TRACE_REVIEW",
         "MODULE_CURATOR",
         "ROADMAP_SYNC",
+        "STATE_SYNC",
         "META",
         "BOARD_CLEANUP",
         "RUN_HEALTH",
