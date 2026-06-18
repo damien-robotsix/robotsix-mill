@@ -312,6 +312,9 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "gates.scope_triage_enabled": "scope_triage_enabled",
     "gates.pr_summary_enabled": "pr_summary_enabled",
     "gates.obsolescence_gate_enabled": "obsolescence_gate_enabled",
+    "gates.freshness_gate_enabled": "freshness_gate_enabled",
+    "gates.prerequisite_gate_enabled": "prerequisite_gate_enabled",
+    "gates.auto_merge_main_debt_detection_enabled": "auto_merge_main_debt_detection_enabled",
     # -- ci --
     "ci.codeql_fp_triage_enabled": "codeql_fp_triage_enabled",
     # -- pipeline --
