@@ -1439,7 +1439,7 @@ class TestDeltaCompute:
             _s(
                 data_dir_audit_growth_delta_bytes=100,
                 data_dir_audit_growth_delta_pct=20,
-                data_dir_audit_growth_delta_min_bytes_before_pct=0,
+                data_dir_audit_growth_delta_pct_min_bytes=0,
             ),
         )
         assert len(flags) == 1
@@ -1461,7 +1461,7 @@ class TestDeltaCompute:
             _s(
                 data_dir_audit_growth_delta_bytes=100,
                 data_dir_audit_growth_delta_pct=20,
-                data_dir_audit_growth_delta_min_bytes_before_pct=0,
+                data_dir_audit_growth_delta_pct_min_bytes=0,
             ),
         )
         assert len(flags) == 1
@@ -1478,7 +1478,7 @@ class TestDeltaCompute:
             _s(
                 data_dir_audit_growth_delta_bytes=10_000_000,
                 data_dir_audit_growth_delta_pct=20,
-                data_dir_audit_growth_delta_min_bytes_before_pct=1_048_576,
+                data_dir_audit_growth_delta_pct_min_bytes=1_048_576,
             ),
         )
         assert flags == []
@@ -1493,7 +1493,7 @@ class TestDeltaCompute:
             _s(
                 data_dir_audit_growth_delta_bytes=10_000_000,
                 data_dir_audit_growth_delta_pct=20,
-                data_dir_audit_growth_delta_min_bytes_before_pct=1_048_576,
+                data_dir_audit_growth_delta_pct_min_bytes=1_048_576,
             ),
         )
         assert len(flags) == 1
@@ -1511,7 +1511,7 @@ class TestDeltaCompute:
             _s(
                 data_dir_audit_growth_delta_bytes=10_000_000,
                 data_dir_audit_growth_delta_pct=9999,
-                data_dir_audit_growth_delta_min_bytes_before_pct=1_048_576,
+                data_dir_audit_growth_delta_pct_min_bytes=1_048_576,
             ),
         )
         assert len(flags) == 1

@@ -261,10 +261,10 @@ def _compute_growth_deltas(
     - Compute ``delta_pct``; guard against division by zero.
     - Flag if ``delta_bytes >= growth_delta_bytes`` **OR**
       (``delta_pct >= growth_delta_pct`` **AND**
-      ``delta_bytes >= growth_delta_min_bytes_before_pct``).
+      ``delta_bytes >= growth_delta_pct_min_bytes``).
 
     The percentage check is gated behind a minimum absolute delta
-    (``growth_delta_min_bytes_before_pct``, default 1 MiB) so that tiny
+    (``growth_delta_pct_min_bytes``, default 1 MiB) so that tiny
     baselines (e.g. small JSON state files that swing +100% on a
     single-entry insert while growing only a few KB) do not produce
     false-positive growth flags.
@@ -293,7 +293,7 @@ def _compute_growth_deltas(
         exceeded: list[str] = []
         if delta_bytes >= threshold_bytes:
             exceeded.append("bytes")
-        min_abs = settings.data_dir_audit_growth_delta_min_bytes_before_pct
+        min_abs = settings.data_dir_audit_growth_delta_pct_min_bytes
         if delta_pct >= threshold_pct and delta_bytes >= min_abs:
             exceeded.append("pct")
         if not exceeded:
