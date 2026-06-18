@@ -27,6 +27,9 @@ Invariants (each contributes drift lines; the run fails if any fire):
     4. The top-level keys of ``config/secrets.example.yaml`` equal the
        user-configurable ``Secrets`` fields, modulo
        ``_SECRETS_NOT_IN_EXAMPLE``.
+    5. Every ``Settings`` model field name or alias must appear as a
+       value in ``_YAML_PATH_TO_ALIAS``, except those listed in
+       ``_MODEL_FIELDS_NOT_IN_ALIAS``.
 
 This script is meant to be invoked from the repo root (which CI and the
 ``validate-config-sync`` pre-commit hook both guarantee).
@@ -66,6 +69,100 @@ _SECRETS_EXAMPLE_YAML = _REPO_ROOT / "config" / "secrets.example.yaml"
 # value is actually consumed — it is NOT routed through the YAML→alias
 # flatten flow.
 _DEFAULTS_KEYS_NOT_IN_ALIAS: frozenset[str] = frozenset()
+
+# Settings model fields intentionally absent from
+# ``_YAML_PATH_TO_ALIAS`` values (invariant 5). Each field documents
+# WHY it is not routed through the YAML→alias flatten flow.
+_MODEL_FIELDS_NOT_IN_ALIAS: frozenset[str] = frozenset(
+    {
+        # -- Secrets / credentials — sourced from config/secrets.yaml
+        #    (Secrets model) or env vars, not the main YAML cascade --
+        "openrouter_api_key",
+        "forge_token",
+        "github_app_id",
+        "github_app_private_key",
+        "langfuse_base_url",
+        "langfuse_public_key",
+        "langfuse_secret_key",
+        "langfuse_project_id",
+        "ntfy_url",
+        "ntfy_token",
+        # -- Board-agent settings — managed per-repo, not global config --
+        "board_agent_api_token",
+        "board_agent_api_url",
+        "board_agent_enabled",
+        "board_agent_repo_id",
+        "board_agent_write_ops",
+        # -- Fields with explicit MILL_ prefix alias (env-only) --
+        "claude_max_concurrency",
+        "claude_fallback_to_deepseek",
+        "investigation_workspace",
+        # -- Fields with no YAML entry (yet) — listed here so the
+        #    invariant passes at HEAD; each should eventually gain a
+        #    YAML path or be explicitly documented as env-only --
+        # core: models / limits / operational
+        "parallel_explore_max",
+        "no_change_model",
+        "bespoke_default_model",
+        "web_knowledge_model",
+        "web_knowledge_stale_days",
+        "web_knowledge_request_limit",
+        "subtask_request_limit",
+        "stage_retry_max_attempts",
+        "stage_retry_base_delay",
+        "stage_retry_max_delay",
+        "network_probe_host",
+        "network_outage_retry_seconds",
+        "test_gap_request_limit",
+        "doc_request_limit",
+        "default_repo_id",
+        "shutdown_grace_seconds",
+        # stages: gates / review / CI / maintenance
+        "language_instructions_dir",
+        "auto_merge_main_debt_detection_enabled",
+        "freshness_gate_enabled",
+        "prerequisite_gate_enabled",
+        "delete_branch_on_merge",
+        "review_diff_max_chars",
+        "review_output_token_budget",
+        "trace_review_model",
+        "trace_review_cost_multiplier",
+        "trace_review_obs_multiplier",
+        "trace_review_max_repeated_tool",
+        "trace_review_max_tool_calls",
+        "trace_review_max_errors",
+        "trace_review_max_drafts_per_run",
+        "trace_review_initial_lookback_hours",
+        "trace_review_restart_correlation_window_seconds",
+        "trace_review_dedup_lookback_days",
+        "epic_dedup_lookback_days",
+        "max_proposed_actions",
+        "max_events_per_ticket",
+        "db_maintenance_periodic",
+        "db_maintenance_interval_seconds",
+        "ci_fix_wait_poll_interval_s",
+        "ci_fix_wait_timeout_s",
+        "ci_fix_request_limit",
+        # periodic: toggles / limits
+        "bespoke_periodic",
+        "bespoke_discovery_interval_seconds",
+        "trace_review_periodic",
+        "trace_review_interval_seconds",
+        "survey_request_limit",
+        "module_curator_request_limit",
+        # Belt-and-suspenders: fields that DO have YAML entries today
+        # but are listed here in case those entries are ever removed.
+        # Having them in the exception set is harmless — the invariant
+        # short-circuits on the alias-values match first.
+        "lint_on_edit",
+        "scope_triage_enabled",
+        "pr_summary_enabled",
+        "pr_summary_model",
+        "repo_visibility_default",
+        "scope_triage_max_files",
+        "retrospect_spawn_agented_proposals",
+    }
+)
 
 # ``Secrets`` fields that are intentionally NOT user-configurable via
 # ``config/secrets.yaml`` (invariant 4), so they never appear in
@@ -161,6 +258,30 @@ def check_map_values_resolve(
     ]
 
 
+def check_model_fields_in_alias_map(
+    model: type,
+    alias_map: dict[str, str],
+    exceptions: frozenset[str],
+) -> list[str]:
+    """Invariant 5: every Settings field must be referenced in
+    ``_YAML_PATH_TO_ALIAS``, unless explicitly excepted."""
+
+    alias_values = set(alias_map.values())
+    drift: list[str] = []
+    for name, field in model.model_fields.items():
+        if name in exceptions:
+            continue
+        if name in alias_values:
+            continue
+        if field.alias and field.alias in alias_values:
+            continue
+        drift.append(
+            f"Settings field {name!r} has no _YAML_PATH_TO_ALIAS entry"
+            " and is not in the exception set"
+        )
+    return drift
+
+
 def check_secrets_example(
     example_keys: set[str],
     secrets_fields: set[str],
@@ -203,6 +324,9 @@ def collect_drift() -> list[str]:
     drift += check_map_values_resolve(_YAML_PATH_TO_ALIAS, valid_names)
     drift += check_secrets_example(
         example_keys, secrets_fields, _SECRETS_NOT_IN_EXAMPLE
+    )
+    drift += check_model_fields_in_alias_map(
+        Settings, _YAML_PATH_TO_ALIAS, _MODEL_FIELDS_NOT_IN_ALIAS
     )
     return drift
 
