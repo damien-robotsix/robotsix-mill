@@ -24,9 +24,13 @@ dependencies = [
     # over agent-comm structured ops, so other agents can drive a board
     # programmatically (query, file, comment, transition, approve, merge,
     # resume, migrate).
-    # [prod] pulls robotsix-agent-comm so the board agent can run as a
-    # BrokeredBoardResponder (pull/mailbox over the central broker).
-    "robotsix-board-agent[prod] @ git+https://github.com/damien-robotsix/robotsix-board-agent.git@main",
+    "robotsix-board-agent @ git+https://github.com/damien-robotsix/robotsix-board-agent.git@main",
+    # robotsix-agent-comm is imported by board-agent's BrokeredBoardResponder
+    # (the board agent's pull/mailbox transport). Declared here as a direct git
+    # URL — not via board-agent's [prod] extra — because that extra references
+    # agent-comm by bare name + uv-only sources, which the pip-based license/
+    # security audit can't resolve. A direct URL works for both pip and uv.
+    "robotsix-agent-comm @ git+https://github.com/damien-robotsix/robotsix-agent-comm.git@main",
     "pydantic-settings>=2",
     "pyyaml>=6",
     "sqlmodel>=0.0.22",
@@ -276,6 +280,9 @@ DEP002 = [
     "mkdocstrings",
     "langfuse",
     "robotsix-modules",
+    # Declared so the board agent's BrokeredBoardResponder can import it, but
+    # mill itself never imports robotsix_agent_comm (only board-agent does).
+    "robotsix-agent-comm",
 ]
 # Packages imported directly but pulled in transitively through
 # pydantic-ai-slim / sqlmodel — the imports are intentional.
@@ -285,9 +292,6 @@ DEP003 = ["pydantic", "sqlalchemy", "openai"]
 # runtime/dev dependency: the hermetic pytest suite never imports it and
 # the import is deferred into _drive_browser(). Declaring it would bloat
 # the install and the network-isolated test sandbox can't fetch Chromium.
-# robotsix-agent-comm now arrives transitively via robotsix-board-agent[prod]
-# and is imported only inside board-agent (BrokeredBoardResponder), not mill
-# itself, so it no longer needs a DEP001 (missing-import) exemption here.
 DEP001 = ["playwright"]
 
 [tool.mypy]

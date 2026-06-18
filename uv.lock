@@ -1573,11 +1573,6 @@ dependencies = [
     { name = "robotsix-llmio" },
 ]
 
-[package.optional-dependencies]
-prod = [
-    { name = "robotsix-agent-comm" },
-]
-
 [[package]]
 name = "robotsix-llmio"
 version = "0.1.0"
@@ -1609,8 +1604,9 @@ dependencies = [
     { name = "pyjwt", extra = ["crypto"] },
     { name = "pypdf" },
     { name = "pyyaml" },
+    { name = "robotsix-agent-comm" },
     { name = "robotsix-board" },
-    { name = "robotsix-board-agent", extra = ["prod"] },
+    { name = "robotsix-board-agent" },
     { name = "robotsix-llmio", extra = ["claude-sdk", "openrouter-deepseek"] },
     { name = "robotsix-yaml-config" },
     { name = "sqlmodel" },
@@ -1656,8 +1652,9 @@ requires-dist = [
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2" },
     { name = "pypdf", specifier = ">=5" },
     { name = "pyyaml", specifier = ">=6" },
+    { name = "robotsix-agent-comm", git = "https://github.com/damien-robotsix/robotsix-agent-comm.git?rev=main" },
     { name = "robotsix-board", git = "https://github.com/damien-robotsix/robotsix-board.git?rev=main" },
-    { name = "robotsix-board-agent", extras = ["prod"], git = "https://github.com/damien-robotsix/robotsix-board-agent.git?rev=main" },
+    { name = "robotsix-board-agent", git = "https://github.com/damien-robotsix/robotsix-board-agent.git?rev=main" },
     { name = "robotsix-llmio", extras = ["openrouter-deepseek", "claude-sdk"], git = "https://github.com/damien-robotsix/robotsix-llmio.git?rev=2af509cfbfb6f35e99f02651143dfa265a400a27" },
     { name = "robotsix-yaml-config", git = "https://github.com/damien-robotsix/robotsix-yaml-config.git?rev=main" },
     { name = "sqlmodel", specifier = ">=0.0.22" },
