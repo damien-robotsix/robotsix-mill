@@ -1467,9 +1467,7 @@ def test_mark_done_with_nonexistent_pr_appends_warning(service, tmp_path):
         text=True,
     )
 
-    comment, ticket = service.mark_done(
-        t.id, note="Root cause fixed in PR #1562"
-    )
+    comment, ticket = service.mark_done(t.id, note="Root cause fixed in PR #1562")
     assert comment is not None
     assert "⚠️" in comment.body
     assert "PR #1562" in comment.body
@@ -1509,9 +1507,7 @@ def test_mark_done_with_existing_pr_stores_cleanly(service, tmp_path):
         text=True,
     )
 
-    comment, ticket = service.mark_done(
-        t.id, note="Fixed by PR #42"
-    )
+    comment, ticket = service.mark_done(t.id, note="Fixed by PR #42")
     assert ticket.state is State.DONE
     if comment is not None:
         assert "⚠️" not in comment.body
@@ -1566,11 +1562,10 @@ def test_mark_done_no_repo_clone_no_crash(service):
     # Ensure no repo clone exists.
     if ws.repo_dir.exists():
         import shutil
+
         shutil.rmtree(ws.repo_dir)
 
-    comment, ticket = service.mark_done(
-        t.id, note="Fixed in PR #9999"
-    )
+    comment, ticket = service.mark_done(t.id, note="Fixed in PR #9999")
     assert ticket.state is State.DONE
     if comment is not None:
         assert comment.body == "Fixed in PR #9999"

@@ -141,7 +141,9 @@ def _verify_citations(note: str, repo_dir: Path | None) -> str:
 
     lines: list[str] = []
     for w in sorted(set(warnings)):
-        lines.append(f"⚠️ {w} not found on origin/main at time of closure — verify manually.")
+        lines.append(
+            f"⚠️ {w} not found on origin/main at time of closure — verify manually."
+        )
     return note.rstrip() + "\n\n" + "\n".join(lines)
 
 
