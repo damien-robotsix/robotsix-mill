@@ -256,6 +256,13 @@ class _PeriodicSettings(BaseModel):
     # the last audit pass, flag it for growth.  Default 20 (%).
     # Override with MILL_DATA_DIR_AUDIT_GROWTH_DELTA_PCT.
     data_dir_audit_growth_delta_pct: int = Field(default=20)
+    # A percentage-only growth flag is suppressed unless the path's
+    # current size is at least this many bytes — a floor that stops
+    # tiny-baseline false positives (e.g. small JSON state files that
+    # can swing +100% on a single-entry insert while staying trivial
+    # in absolute terms).  Default 1 MiB (1_048_576).
+    # Override with MILL_DATA_DIR_AUDIT_GROWTH_DELTA_PCT_MIN_BYTES.
+    data_dir_audit_growth_delta_pct_min_bytes: int = Field(default=1_048_576)
     # Maximum number of drafts created per data-dir audit pass.
     # Findings beyond this cap are dropped and re-considered on the
     # next scheduled pass. Mirrors trace_review_max_drafts_per_run.

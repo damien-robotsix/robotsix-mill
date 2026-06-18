@@ -260,13 +260,20 @@ def _compute_growth_deltas(
     - Skip if ``delta_bytes <= 0`` (shrank or unchanged).
     - Compute ``delta_pct``; guard against division by zero.
     - Flag if ``delta_bytes >= growth_delta_bytes`` **OR**
-      ``delta_pct >= growth_delta_pct``.
+      (``delta_pct >= growth_delta_pct`` **AND**
+      ``current_size_bytes >= growth_delta_pct_min_bytes``).
+
+    The ``pct`` contributor is gated behind a minimum absolute-size
+    floor (``growth_delta_pct_min_bytes``, default 1 MiB) so that tiny
+    baselines (e.g. small JSON state files that swing +100% on a
+    single-entry insert) do not produce false-positive growth flags.
 
     Returns a list of flag-dicts (empty if nothing flagged).
     """
     flags: list[dict[str, Any]] = []
     threshold_bytes = settings.data_dir_audit_growth_delta_bytes
     threshold_pct = settings.data_dir_audit_growth_delta_pct
+    min_pct_bytes = settings.data_dir_audit_growth_delta_pct_min_bytes
 
     for path_key in prior:
         if path_key not in current:
@@ -286,7 +293,7 @@ def _compute_growth_deltas(
         exceeded: list[str] = []
         if delta_bytes >= threshold_bytes:
             exceeded.append("bytes")
-        if delta_pct >= threshold_pct:
+        if delta_pct >= threshold_pct and current_info["size_bytes"] >= min_pct_bytes:
             exceeded.append("pct")
         if not exceeded:
             continue
