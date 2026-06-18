@@ -174,9 +174,7 @@ def test_invariant5_detects_model_field_not_in_alias() -> None:
         orphan: int = 0
 
     alias_map = {"some.path": "known"}
-    drift = check_model_fields_in_alias_map(
-        M, alias_map, exceptions=frozenset()
-    )
+    drift = check_model_fields_in_alias_map(M, alias_map, exceptions=frozenset())
     assert len(drift) == 1
     assert "orphan" in drift[0]
     assert "known" not in drift[0]
@@ -206,9 +204,7 @@ def test_invariant5_matches_field_alias() -> None:
         env_field: int = Field(default=0, alias="ENV_FIELD")
 
     alias_map = {"some.path": "known", "other.path": "ENV_FIELD"}
-    drift = check_model_fields_in_alias_map(
-        M, alias_map, exceptions=frozenset()
-    )
+    drift = check_model_fields_in_alias_map(M, alias_map, exceptions=frozenset())
     assert drift == []
 
 
@@ -221,7 +217,5 @@ def test_invariant5_empty_when_all_covered() -> None:
         b: str = ""
 
     alias_map = {"x.a": "a"}
-    drift = check_model_fields_in_alias_map(
-        M, alias_map, exceptions=frozenset({"b"})
-    )
+    drift = check_model_fields_in_alias_map(M, alias_map, exceptions=frozenset({"b"}))
     assert drift == []
