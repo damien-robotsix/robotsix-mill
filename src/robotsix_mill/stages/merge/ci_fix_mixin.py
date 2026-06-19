@@ -173,6 +173,13 @@ class MultiRepoCiFixMixin(_MergeStageBase):
             attempt,
             max_attempts,
         )
+        failing_names = ", ".join(f.get("name", "?") for f in failing) or "CI"
+        self._note_ci_fix_attempt(
+            ctx,
+            ticket.id,
+            f"🔧 ci_fix (cross-repo) attempt {attempt}/{max_attempts} for "
+            f"`{repo_id}` — failing: {failing_names}",
+        )
 
         ok = False
         try:
@@ -247,6 +254,13 @@ class MultiRepoCiFixMixin(_MergeStageBase):
                     attempt,
                     max_attempts,
                 )
+                self._note_ci_fix_attempt(
+                    ctx,
+                    ticket.id,
+                    f"ci_fix (cross-repo) attempt {attempt}/{max_attempts} for "
+                    f"`{repo_id}`: agent reported DONE but made no commits "
+                    f"— re-polling",
+                )
                 return Outcome(ticket.state)
             try:
                 check = _facade.git_ops.post_push_check(
@@ -285,7 +299,34 @@ class MultiRepoCiFixMixin(_MergeStageBase):
             max_attempts,
             repo_id,
         )
+        self._note_ci_fix_attempt(
+            ctx,
+            ticket.id,
+            f"ci_fix (cross-repo) attempt {attempt}/{max_attempts} for "
+            f"`{repo_id}` failed (agent error) — retrying next poll",
+        )
         return Outcome(ticket.state)
+
+    @staticmethod
+    def _note_ci_fix_attempt(
+        ctx: StageContext, ticket_id: str, note: str
+    ) -> None:
+        """Record a per-attempt cross-repo ci-fix breadcrumb in ticket history.
+
+        The multi-repo merge stage runs the ci-fix loop inline — the ticket
+        stays in ``IMPLEMENT_COMPLETE`` for the whole loop, so (unlike the
+        single-repo ``FIXING_CI`` path) there is no state transition per
+        attempt to leave a trail.  Without this, a ticket that BLOCKs with
+        "ci fix for <repo> failed after N attempt(s)" shows zero ``fixing_ci``
+        rows in ``/history`` — which reads as a mystery to a human triaging
+        it.  ``add_history_note`` appends a side-band row at the current state
+        (no transition, hash chain intact).  Recording must never break the
+        loop, so failures here are swallowed.
+        """
+        try:
+            ctx.service.add_history_note(ticket_id, note)
+        except Exception:  # noqa: BLE001 — history note is best-effort
+            log.warning("%s: failed to record ci-fix attempt note", ticket_id)
 
     def _try_multi_codeql_fp_triage(  # noqa: C901 — guardrail chain is inherently branchy
         self,
