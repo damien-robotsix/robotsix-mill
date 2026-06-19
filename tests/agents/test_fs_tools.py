@@ -1462,7 +1462,7 @@ class TestPartialReadRefusalWhenAlreadyLoaded:
         ctx = types.SimpleNamespace(messages=[resp, req])
 
         result = tools["read_file"](ctx, path="A.txt", offset=2, limit=2)
-        assert result.startswith("FILE_ALREADY_IN_CONTEXT:")
+        assert result.startswith("refused: A.txt (5 lines) is already loaded in full")
         assert "A.txt" in result
 
     def test_partial_refused_after_prior_full_runtime_read(
@@ -1489,7 +1489,7 @@ class TestPartialReadRefusalWhenAlreadyLoaded:
         )
 
         result = tools["read_file"](ctx, path="A.txt", offset=2, limit=1)
-        assert result.startswith("FILE_ALREADY_IN_CONTEXT:")
+        assert result.startswith("refused: A.txt (3 lines) is already loaded in full")
 
     def test_partial_allowed_when_only_partial_prior(self, tmp_path, settings):
         """A prior PARTIAL read doesn't block a later partial — the
