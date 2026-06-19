@@ -50,6 +50,8 @@ class RunEntry:
         "roadmap-sync",
         "run-health",
         "run_health",
+        "state-sync",
+        "state_sync",
         "survey",
         "test-gap",
         "trace-health",
