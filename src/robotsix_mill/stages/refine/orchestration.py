@@ -63,7 +63,7 @@ def _write_triage_complexity(ws, complexity: str) -> None:
     )
 
 
-def _read_triage_complexity(ws) -> str:
+def _read_triage_complexity(ws: Workspace) -> str:
     """Read the triage complexity verdict; returns ``"needs-exploration"``
     when the file is absent (conservative default)."""
     path = ws.artifacts_dir / "triage_complexity.json"
@@ -71,7 +71,7 @@ def _read_triage_complexity(ws) -> str:
         return "needs-exploration"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        return data.get("complexity", "needs-exploration")
+        return cast(str, data.get("complexity", "needs-exploration"))
     except json.JSONDecodeError, KeyError:
         return "needs-exploration"
 
@@ -81,8 +81,8 @@ class RefineAgentMixin:
 
     @staticmethod
     def _review_spec_conciseness(
-        s,
-        ws,
+        s: Settings,
+        ws: Workspace,
         ticket: Ticket,
         spec: str,
         verbose_filename: str,
@@ -195,7 +195,7 @@ class RefineAgentMixin:
 
     @staticmethod
     def _write_file_map(
-        ws, entries: list[dict], *, only_if_absent: bool = False
+        ws: Workspace, entries: list[dict], *, only_if_absent: bool = False
     ) -> None:
         """Write ``file_map.json`` to the workspace artifacts dir.
 

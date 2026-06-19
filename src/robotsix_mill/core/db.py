@@ -207,8 +207,8 @@ def load_memory_db(
         return ""
     content = row.content
     if max_chars is not None and len(content) > max_chars:
-        # Import tail_keep lazily to avoid circular imports.
-        from ..runners.pass_runner import tail_keep
+        # Import tail_keep lazily from its canonical home.
+        from .text_utils import tail_keep
 
         original_size = len(content)
         content = tail_keep(content, max_chars, label=f"memory ({name})")
@@ -243,7 +243,8 @@ def persist_memory_db(
 
     from sqlmodel import select
 
-    from ..runners.pass_runner import strip_ephemeral_sections, tail_keep
+    from .text_utils import tail_keep
+    from ..runners.pass_runner import strip_ephemeral_sections
     from .models import Memory
 
     text = strip_ephemeral_sections(text)

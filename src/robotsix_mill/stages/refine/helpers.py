@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ...agents import refining
+from ...config.settings import Settings
 from ...core.constants import BINARY_EXTENSIONS
 from ...core.models import Ticket
 from ...core.states import State
@@ -49,7 +50,7 @@ NON_IMPLEMENTATION_CLOSE_PREFIXES = (
 UNMERGED_BRANCH_PREFIX = "Implementation exists on branch"
 
 
-def _load_refine_memory(s, memory_board_id: str) -> str:
+def _load_refine_memory(s: Settings, memory_board_id: str) -> str:
     """Load the refine memory ledger from the DB-backed store.
 
     Falls back to the legacy Markdown file when the DB row doesn't exist
@@ -68,7 +69,7 @@ def _load_refine_memory(s, memory_board_id: str) -> str:
     return _file_load(legacy_path, max_chars=s.max_memory_chars)
 
 
-def _persist_refine_memory(s, memory_board_id: str, text: str) -> None:
+def _persist_refine_memory(s: Settings, memory_board_id: str, text: str) -> None:
     """Persist the refine memory ledger to the DB-backed store.
 
     On first write, migrates data from the legacy Markdown file (if it

@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 import yaml as _yaml
 
@@ -839,12 +839,12 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
     _explore_call_count: list[int] = [0]
     _explore_cap: int = settings.max_refine_explore_calls
 
-    def _wrap_explore_with_cap(tool):
+    def _wrap_explore_with_cap(tool: Any) -> Any:
         """Return *tool* wrapped to count + cap explore/parallel_explore calls."""
         import functools
 
         @functools.wraps(tool)
-        async def _capped(*args, **kwargs):
+        async def _capped(*args: Any, **kwargs: Any) -> Any:
             if _explore_cap > 0 and _explore_call_count[0] >= _explore_cap:
                 return (
                     f"ERROR: exploration cap reached "
