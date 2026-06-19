@@ -39,7 +39,11 @@ def _has_no_issues(
 
 
 def _prune_lines(
-    clones_pruned: int, closed_pruned: int, db_rows_purged: int, orphans_pruned: int
+    clones_pruned: int,
+    closed_pruned: int,
+    db_rows_purged: int,
+    orphans_pruned: int,
+    memory_ledgers_truncated: int = 0,
 ) -> list[str]:
     """Build prune/purge summary lines (empty when all counts are zero)."""
     lines: list[str] = []
@@ -51,6 +55,8 @@ def _prune_lines(
         lines.append(f"Orphan workspaces pruned: {orphans_pruned}.")
     if db_rows_purged > 0:
         lines.append(f"DB rows purged: {db_rows_purged}.")
+    if memory_ledgers_truncated > 0:
+        lines.append(f"Memory ledgers truncated: {memory_ledgers_truncated}.")
     return lines
 
 
@@ -67,6 +73,7 @@ def _build_summary(
     clones_pruned: int = 0,
     db_rows_purged: int = 0,
     orphans_pruned: int = 0,
+    memory_ledgers_truncated: int = 0,
 ) -> str:
     """Render a multi-line summary for the runs panel.
 
@@ -82,7 +89,11 @@ def _build_summary(
     if _has_no_issues(oversized, all_growth_flags, findings, total_orphans):
         base = header + " No issues found."
         prune = _prune_lines(
-            clones_pruned, closed_pruned, db_rows_purged, orphans_pruned
+            clones_pruned,
+            closed_pruned,
+            db_rows_purged,
+            orphans_pruned,
+            memory_ledgers_truncated,
         )
         if prune:
             base += "\n" + "\n".join(prune)
@@ -126,7 +137,13 @@ def _build_summary(
         lines.append(f"Filed {n} {word}.")
 
     lines.extend(
-        _prune_lines(clones_pruned, closed_pruned, db_rows_purged, orphans_pruned)
+        _prune_lines(
+            clones_pruned,
+            closed_pruned,
+            db_rows_purged,
+            orphans_pruned,
+            memory_ledgers_truncated,
+        )
     )
 
     return "\n".join(lines)

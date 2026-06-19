@@ -38,6 +38,7 @@ from .orphans import (
     _prune_archived_db_rows,
     _prune_closed_workspaces,
     _prune_orphan_workspaces,
+    _prune_oversized_memory_ledgers,
     _prune_terminal_clones,
     _scan_orphan_workspaces,
 )
@@ -70,6 +71,9 @@ class DataDirAuditPassResult:
     # Number of orphan workspace directories removed by the default-on
     # orphan GC step (age-guarded via ticket-ID timestamp).
     orphans_pruned: int = 0
+    # Number of *_memory.md files truncated on disk by the default-on
+    # memory-ledger GC step (before size measurement).
+    memory_ledgers_truncated: int = 0
 
 
 def run_data_dir_audit_pass(
@@ -138,6 +142,14 @@ def run_data_dir_audit_pass(
     if settings.data_dir_audit_prune_orphans:
         orphans_pruned = _prune_orphan_workspaces(settings)
 
+    # Default-on GC: truncate over-cap *_memory.md files on disk
+    # BEFORE size measurement so the capped file no longer trips
+    # check_unbounded_candidates, eliminating recurring unbounded:
+    # tickets for rarely-written memory ledgers.
+    memory_ledgers_truncated = 0
+    if settings.data_dir_audit_prune_memory_ledgers:
+        memory_ledgers_truncated = _prune_oversized_memory_ledgers(settings)
+
     # Walk ``data_dir`` exactly once: the size dicts feed both the
     # top-N oversized check (ticket 2) and the summary header's
     # total-bytes / total-files anchor.
@@ -203,6 +215,7 @@ def run_data_dir_audit_pass(
         clones_pruned=clones_pruned,
         db_rows_purged=db_rows_purged,
         orphans_pruned=orphans_pruned,
+        memory_ledgers_truncated=memory_ledgers_truncated,
     )
 
     log.info("data-dir audit pass done: %s", summary)
@@ -219,4 +232,5 @@ def run_data_dir_audit_pass(
         clones_pruned=clones_pruned,
         db_rows_purged=db_rows_purged,
         orphans_pruned=orphans_pruned,
+        memory_ledgers_truncated=memory_ledgers_truncated,
     )

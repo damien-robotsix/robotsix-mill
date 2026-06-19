@@ -46,6 +46,7 @@ from robotsix_mill.runners.data_dir_audit.orphans import (
     OrphanWorkspace,
     _prune_closed_workspaces,
     _prune_orphan_workspaces,
+    _prune_oversized_memory_ledgers,
     find_orphan_workspaces,
 )
 
@@ -72,6 +73,7 @@ __all__ = [
     "_path_is_self_healing",
     "_prune_closed_workspaces",
     "_prune_orphan_workspaces",
+    "_prune_oversized_memory_ledgers",
     "_save_growth_state",
     "_scan_board_sizes",
     "_self_healing_oversized_paths",

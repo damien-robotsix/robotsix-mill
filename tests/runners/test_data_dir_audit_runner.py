@@ -1016,7 +1016,11 @@ class TestRunDataDirAuditPass:
     def test_returns_findings_and_summary(self, tmp_path, monkeypatch):
         """The pass result must surface flagged findings AND reflect
         the count in ``summary``."""
-        settings = _make_settings(tmp_path, max_memory_chars=100)
+        settings = _make_settings(
+            tmp_path,
+            max_memory_chars=100,
+            data_dir_audit_prune_memory_ledgers=False,
+        )
         ledger = tmp_path / "implement_memory.md"
         _write_bytes(ledger, 500)
 
@@ -2397,7 +2401,10 @@ def test_growth_suppressed_for_periodic_pass_workspace(tmp_path, monkeypatch, ca
 def test_growth_suppressed_for_memory_ledger(tmp_path, monkeypatch, caplog):
     """Growth in a ``*_memory.md`` ledger file is suppressed and an INFO
     line is logged, since these are bounded by ``max_memory_chars``."""
-    s = _make_settings(tmp_path)
+    s = _make_settings(
+        tmp_path,
+        data_dir_audit_prune_memory_ledgers=False,
+    )
     monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
     board_id = "test-board"
     db.init_db(s, board_id)
@@ -3293,3 +3300,183 @@ def test_oversized_noise_scenario_files_nothing(tmp_path, monkeypatch):
     paths = {r["path"] for r in result.oversized_items}
     assert paths == set(), f"expected no oversized findings, got: {paths}"
     db.reset_engine()
+
+
+# ---------------------------------------------------------------------------
+#  Memory-ledger GC step (ticket: unbounded-robotsix-auto-mail-retrospect)
+# ---------------------------------------------------------------------------
+
+
+class TestPruneOversizedMemoryLedgers:
+    """Tests for ``_prune_oversized_memory_ledgers`` and its integration."""
+
+    def test_knob_on_truncates_over_cap_file(self, tmp_path, monkeypatch):
+        """With the knob on (default), an over-cap memory ledger is
+        truncated on disk before size measurement, and no unbounded
+        finding is produced."""
+        s = _make_settings(tmp_path, max_memory_chars=100)
+        ledger = tmp_path / "retrospect_memory.md"
+        _write_bytes(ledger, 5000)
+
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
+        result = run_data_dir_audit_pass()
+
+        # File was truncated on disk.
+        assert ledger.stat().st_size <= 100
+        # GC count reflected.
+        assert result.memory_ledgers_truncated >= 1
+        # No unbounded finding (file now under cap).
+        memory_findings = [
+            f for f in result.findings if f.get("pattern") == "*_memory.md"
+        ]
+        assert memory_findings == []
+
+    def test_knob_off_leaves_file_untouched(self, tmp_path, monkeypatch):
+        """With the knob off, the over-cap file is left untouched and
+        the unbounded finding is still produced."""
+        s = _make_settings(
+            tmp_path,
+            max_memory_chars=100,
+            data_dir_audit_prune_memory_ledgers=False,
+        )
+        ledger = tmp_path / "retrospect_memory.md"
+        _write_bytes(ledger, 5000)
+
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
+        result = run_data_dir_audit_pass()
+
+        # File NOT truncated.
+        assert ledger.stat().st_size >= 5000
+        # GC count stays zero.
+        assert result.memory_ledgers_truncated == 0
+        # Unbounded finding still produced.
+        memory_findings = [
+            f for f in result.findings if f.get("pattern") == "*_memory.md"
+        ]
+        assert len(memory_findings) == 1
+
+    def test_file_at_or_under_cap_left_byte_identical(self, tmp_path, monkeypatch):
+        """A memory ledger at or under the cap is left untouched."""
+        s = _make_settings(tmp_path, max_memory_chars=5000)
+        ledger = tmp_path / "small_memory.md"
+        original = "## Memory\n\n- line 1\n- line 2\n"
+        ledger.write_text(original, encoding="utf-8")
+
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
+        result = run_data_dir_audit_pass()
+
+        assert result.memory_ledgers_truncated == 0
+        assert ledger.read_text(encoding="utf-8") == original
+
+    def test_guard_max_memory_chars_zero(self, tmp_path, monkeypatch):
+        """When max_memory_chars <= 0, no file is touched (guard against
+        truncating to empty)."""
+        s = _make_settings(tmp_path, max_memory_chars=0)
+        ledger = tmp_path / "some_memory.md"
+        _write_bytes(ledger, 500)
+
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
+        result = run_data_dir_audit_pass()
+
+        assert result.memory_ledgers_truncated == 0
+        assert ledger.stat().st_size >= 500
+
+    def test_guard_missing_data_dir(self, tmp_path, monkeypatch):
+        """When data_dir does not exist, the helper returns 0."""
+        s = _make_settings(tmp_path, max_memory_chars=100)
+        # data_dir is tmp_path — but we'll make it point to a nonexistent
+        # subdirectory.
+        s.data_dir = tmp_path / "nonexistent"
+
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
+        result = run_data_dir_audit_pass()
+
+        assert result.memory_ledgers_truncated == 0
+
+    def test_nested_ledgers_in_board_subdirs(self, tmp_path, monkeypatch):
+        """Memory ledgers nested inside board subdirectories are found
+        and truncated."""
+        s = _make_settings(tmp_path, max_memory_chars=100)
+        board_dir = tmp_path / "robotsix-auto-mail"
+        board_dir.mkdir()
+        ledger = board_dir / "retrospect_memory.md"
+        _write_bytes(ledger, 5000)
+
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
+        result = run_data_dir_audit_pass()
+
+        assert result.memory_ledgers_truncated >= 1
+        assert ledger.stat().st_size <= 100
+
+    def test_oserror_on_read_skipped(self, tmp_path, monkeypatch, caplog):
+        """A file that raises OSError on read is skipped (not fatal)."""
+        import errno
+
+        s = _make_settings(tmp_path, max_memory_chars=100)
+        ledger = tmp_path / "broken_memory.md"
+        _write_bytes(ledger, 5000)
+
+        # Patch open to fail for this specific path.
+        original_open = Path.read_text
+
+        def _failing_read_text(self, *args, **kwargs):
+            if self == ledger:
+                raise OSError(errno.EACCES, "Permission denied")
+            return original_open(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", _failing_read_text)
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
+
+        with caplog.at_level(logging.WARNING, logger="robotsix_mill.data_dir_audit"):
+            result = run_data_dir_audit_pass()
+
+        assert result.memory_ledgers_truncated == 0
+        assert any("cannot read memory ledger" in rec.message for rec in caplog.records)
+
+    def test_data_dir_is_file_not_directory(self, tmp_path, monkeypatch):
+        """When data_dir is a file (not a directory), the helper
+        returns 0 without crashing."""
+        s = _make_settings(tmp_path, max_memory_chars=100)
+        not_a_dir = tmp_path / "not_a_dir"
+        not_a_dir.write_text("i am a file", encoding="utf-8")
+        s.data_dir = not_a_dir
+
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
+        result = run_data_dir_audit_pass()
+
+        assert result.memory_ledgers_truncated == 0
+
+    def test_summary_line_when_truncated(self, tmp_path, monkeypatch):
+        """The summary includes a 'Memory ledgers truncated: N.' line."""
+        s = _make_settings(tmp_path, max_memory_chars=100)
+        _write_bytes(tmp_path / "audit_memory.md", 5000)
+
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
+        result = run_data_dir_audit_pass()
+
+        assert "Memory ledgers truncated: 1." in result.summary
+
+    def test_summary_line_absent_when_none_truncated(self, tmp_path, monkeypatch):
+        """When no files are truncated, the summary omits the line."""
+        s = _make_settings(tmp_path, max_memory_chars=5000)
+        ledger = tmp_path / "small_memory.md"
+        ledger.write_text("small content", encoding="utf-8")
+
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
+        result = run_data_dir_audit_pass()
+
+        assert "Memory ledgers truncated:" not in result.summary
+
+    def test_multiple_ledgers_all_truncated(self, tmp_path, monkeypatch):
+        """Multiple over-cap ledgers are all truncated and counted."""
+        s = _make_settings(tmp_path, max_memory_chars=100)
+        _write_bytes(tmp_path / "foo_memory.md", 5000)
+        _write_bytes(tmp_path / "bar_memory.md", 5000)
+
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
+        result = run_data_dir_audit_pass()
+
+        assert result.memory_ledgers_truncated == 2
+        # Both files under cap.
+        assert (tmp_path / "foo_memory.md").stat().st_size <= 100
+        assert (tmp_path / "bar_memory.md").stat().st_size <= 100
