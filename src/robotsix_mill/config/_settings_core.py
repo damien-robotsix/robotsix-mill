@@ -60,6 +60,12 @@ class _CoreSettings(BaseModel):
     web_knowledge_request_limit: int = Field(
         default=8,
     )
+    # Web-knowledge gateway sub-agent model. Defaults to the llmio
+    # tier-1 flash model; override to route this agent to a different
+    # model without changing the global tier defaults.
+    web_knowledge_model: str = Field(
+        default="deepseek/deepseek-v4-flash",
+    )
     # Per-call request caps (bound each role's loop). Sized for slow
     # deepseek-v4-pro + complex tickets: a medium ticket (53de) used
     # ~49 implement calls, so 200 leaves generous headroom; raising it
