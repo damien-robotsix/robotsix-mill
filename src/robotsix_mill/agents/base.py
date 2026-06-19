@@ -119,17 +119,24 @@ def new_deepseek_model(model_name: str, level: int):
     return provider.new_model(model=model_name, level=level)
 
 
-def build_openrouter_model(level: int = 1, *, online: bool = False):
+def build_openrouter_model(level: int | str = 1, *, online: bool = False):
     """``(model, http_client)`` for a DeepSeek (L1/L2) agent built directly
     (web_research, web_knowledge, trace_inspector, consult_expert).
 
-    Resolves the concrete model from *level* via llmio's tier defaults and
-    appends ``:online`` when *online* (web search). Caller owns closing the
-    client (pair with :func:`_aclose_async_client`)."""
-    _, model_name = _resolve_level(level)
+    When *level* is an int, resolves the concrete model via llmio's tier
+    defaults.  When *level* is a str, it is used as the model name directly
+    (with reasoning policy set to level 1).  Appends ``:online`` when
+    *online* (web search). Caller owns closing the client (pair with
+    :func:`_aclose_async_client`)."""
+    if isinstance(level, str):
+        model_name = level
+        level_int = 1
+    else:
+        _, model_name = _resolve_level(level)
+        level_int = level
     if online:
         model_name = f"{model_name}:online"
-    return new_deepseek_model(model_name, level)
+    return new_deepseek_model(model_name, level_int)
 
 
 class AgentHandle:

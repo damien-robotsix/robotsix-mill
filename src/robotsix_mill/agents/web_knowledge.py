@@ -378,7 +378,7 @@ async def run_web_knowledge(
     from .base import _aclose_async_client, build_openrouter_model
     from .retry import acall_with_retry
 
-    model, client = build_openrouter_model(1)
+    model, client = build_openrouter_model(settings.web_knowledge_model)
 
     index = _build_index(settings)
     agent = Agent(
