@@ -289,7 +289,6 @@ src/robotsix_mill/agents/fs_tools.py:0: error: Missing type arguments for generi
 src/robotsix_mill/agents/fs_tools.py:0: error: Missing type arguments for generic type "list"  [type-arg]
 src/robotsix_mill/agents/fs_tools.py:0: error: Missing type arguments for generic type "list"  [type-arg]
 src/robotsix_mill/agents/fs_tools.py:0: error: Missing type arguments for generic type "list"  [type-arg]
-src/robotsix_mill/agents/fs_tools.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/agents/fs_tools.py:0: error: Incompatible default for parameter "ctx" (default has type "None", parameter has type "RunContext[None]")  [assignment]
 src/robotsix_mill/agents/fs_tools.py:0: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
 src/robotsix_mill/agents/fs_tools.py:0: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
