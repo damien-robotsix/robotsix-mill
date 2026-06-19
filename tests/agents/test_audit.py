@@ -83,6 +83,27 @@ def test_audit_prompt_covers_codebase_health_and_tooling():
         "audit prompt missing re-verification budget cap (capped at ≤ 3)"
     )
 
+    # parallel_explore fan-out guidance — conclusions-only invariant
+    # + explicit cap to prevent scout proliferation.
+    fan_out_cues = [
+        (
+            "conclusions-only invariant",
+            "audit prompt missing conclusions-only invariant label",
+        ),
+        (
+            "never its full conversation",
+            "audit prompt missing 'never its full conversation' invariant",
+        ),
+        (
+            "each returned conclusion still consumes context",
+            "audit prompt missing context-consumption warning",
+        ),
+        ("prefer 2", "audit prompt missing 'prefer 2–3 focused explore' guidance"),
+        ("at most", "audit prompt missing 'at most' fan-out cap cue"),
+    ]
+    for cue, msg in fan_out_cues:
+        assert cue in p, f"{msg}: {cue}"
+
 
 def test_mill_ships_an_audit_overlay():
     """Mill's own audit overlay is git-tracked as a ``prompt_overlay:`` in its

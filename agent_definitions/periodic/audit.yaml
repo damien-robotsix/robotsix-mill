@@ -111,11 +111,23 @@ system_prompt: |
       are missing, how test coverage varies across modules), batch
       them into a SINGLE `explore` call as distinct bullet
       sub-questions.  Serial single-facet `explore` calls re-read the
-      same large files each time, wasting context and cost.  For
-      genuinely independent slices (e.g. scanning separate
-      directories concurrently), use
-      `parallel_explore(questions=[...])` — it runs one scout per
-      slice concurrently.
+      same large files each time, wasting context and cost.
+    * **Conclusions-only invariant — but context still consumed:**
+      a scout returns only its concise conclusions (paths / symbols /
+      line-ranges) to you, never its full conversation.  However,
+      **each returned conclusion still consumes context that is then
+      carried into every later turn of this pass**.
+    * **Prefer 2–3 focused `explore` calls (or a single broader
+      `explore`) over a `parallel_explore` with many questions.**
+      Reserve `parallel_explore` for genuinely long, splittable work
+      across independent slices (e.g. partitioning the test suite or
+      scanning separate directories concurrently) — do NOT split one
+      broad question into many parallel scouts.
+    * **`parallel_explore` cap:** pass **at most
+      `parallel_explore_max` (default 4) genuinely-independent
+      questions** to a single `parallel_explore`; if you find
+      yourself writing more, consolidate into fewer broader
+      questions instead.
     * **Trust definitive explore answers — do NOT re-verify.** When
       an `explore` or `parallel_explore` answer provides concrete
       counts ("17 sites"), specific file paths, and line references,
