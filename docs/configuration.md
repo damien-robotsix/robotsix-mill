@@ -384,6 +384,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `core.limits.coordinator_requests` | `MILL_COORDINATOR_REQUEST_LIMIT` | `200` | Per-ticket request cap for the implement (coordinator) agent |
+| `core.limits.subtask_request_limit` | — | `30` | Per-subtask request cap for `spawn_subtask` sub-agents delegated by the coordinator |
 | `core.limits.explore_requests` | `MILL_EXPLORE_REQUEST_LIMIT` | `100` | Per-call request cap for the explore sub-agent |
 | `core.limits.explore_max_tokens` | — | `2048` | Output token cap for explore sub-agent responses |
 | `core.limits.parallel_explore_max` | — | `4` | Max concurrent scouts per `parallel_explore` fan-out |

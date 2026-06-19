@@ -98,7 +98,6 @@ _MODEL_FIELDS_NOT_IN_ALIAS: frozenset[str] = frozenset(
         # core: models / limits / operational
         "web_knowledge_stale_days",
         "web_knowledge_request_limit",
-        "subtask_request_limit",
         "stage_retry_max_attempts",
         "stage_retry_base_delay",
         "stage_retry_max_delay",
