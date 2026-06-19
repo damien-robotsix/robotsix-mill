@@ -28,6 +28,7 @@ from robotsix_mill.agents.refining import (
     TriageResult,
 )
 from robotsix_mill.core import db
+from robotsix_mill.core.models import SourceKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
@@ -925,6 +926,31 @@ def test_triage_maintenance_routes_to_maintenance(ctx_factory, monkeypatch, tmp_
     assert calls == []  # full refine agent never ran
     ws = ctx.service.workspace(t)
     assert (ws.artifacts_dir / "draft-original.md").exists()
+
+
+def test_triage_maintenance_ci_source_falls_through_to_refine(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """A CI-failure ticket (source == ci) is NEVER routed to the read-only
+    maintenance agent even when triage says MAINTENANCE — CI failures are
+    code/config fixes the maintenance agent cannot make. It must fall
+    through to the full refine agent instead (regression: GHCR
+    docker-release `packages: write` tickets mis-triaged to MAINTENANCE
+    and dead-ended in a 'needs a human' block)."""
+    ctx = ctx_factory(maintenance_triage_enabled=True)
+    t = _ticket(ctx, source=SourceKind.CI)
+    calls = _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(
+            decision="MAINTENANCE", reason="looks like an ops permissions issue"
+        ),
+    )
+
+    out = _run_agent(ctx, t, tmp_path, draft="CI failure: Release image on main.")
+
+    assert out.next_state is not State.MAINTENANCE
+    assert not out.note.startswith("maintenance triage (LLM):")
+    assert calls != []  # full refine agent DID run for the CI ticket
 
 
 def test_triage_skip_extracts_backtick_paths(ctx_factory, monkeypatch, tmp_path):

@@ -554,7 +554,9 @@ def _build_meta_investigation_workspace(
     return meta_root, meta_roots or [], None
 
 
-def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResult:
+def run_maintenance_agent(  # noqa: C901 — clone-failure degrade branch + meta/single-repo setup
+    ticket: Ticket, ctx: StageContext
+) -> MaintenanceResult:
     """Load the maintenance agent definition, build its tool set, run the
     agent loop, and return a structured :class:`MaintenanceResult`.
 
@@ -771,6 +773,30 @@ def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResul
                 agent,
                 lambda h: h.run_sync(user_prompt, usage_limits=limits),
                 what="maintenance",
+            )
+        except (FileNotFoundError, NotADirectoryError) as e:
+            # The clone created by clone_repo is ephemeral (deleted after
+            # each LLM turn) and a failed clone leaves the target dir
+            # absent, so a tool that reads/lists/cd's into the clone path
+            # in a later turn raises an unhandled FileNotFoundError that
+            # used to Fatal-block the ticket with a raw traceback (live
+            # class: cross-repo extraction tickets, /tmp/maintenance_*/repo).
+            # Degrade to a clean, actionable block instead of crashing.
+            log.warning(
+                "maintenance: repository clone path unavailable mid-run", exc_info=True
+            )
+            return MaintenanceResult(
+                success=False,
+                note=(
+                    "Maintenance investigation could not access the repository "
+                    f"clone ({type(e).__name__}: {e}). The clone is ephemeral "
+                    "(removed after each turn) and a fresh clone_repo likely "
+                    "failed — common when the task targets a repository that is "
+                    "not this board's repo (a cross-repo task) or a private repo "
+                    "without credentials. If this is cross-repo work, it probably "
+                    "belongs on another board (consider migrate_to_board); "
+                    "otherwise re-run after confirming the clone URL."
+                ),
             )
         finally:
             _safe_close(agent)
