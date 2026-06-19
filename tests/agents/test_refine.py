@@ -504,6 +504,60 @@ def test_system_prompt_requires_path_verification_for_dedup_advisory():
     )
 
 
+def test_strip_explore_call_directives_satisfies_consistency_guard():
+    """When triage gates exploration off for a 'simple' ticket the
+    explore/parallel_explore tools are dropped from the resolved set, so
+    the refine SYSTEM_PROMPT's `parallel_explore(...)` call directive
+    must be stripped — otherwise build_agent_from_definition's
+    prompt/tool-consistency guard raises ValueError (the regression that
+    blocked every 'simple' refine ticket)."""
+    from robotsix_mill.agents.refining import (
+        SYSTEM_PROMPT,
+        _strip_explore_call_directives,
+    )
+    from robotsix_mill.agents.prompt_tool_consistency import (
+        unregistered_call_directives,
+    )
+
+    known = {"explore", "parallel_explore", "read_file", "list_dir", "run_command"}
+    resolved = {"read_file", "list_dir", "run_command"}
+
+    # The unstripped prompt trips the guard for the absent tool.
+    assert unregistered_call_directives(
+        SYSTEM_PROMPT, resolved_tools=resolved, known_tools=known
+    ) == {"parallel_explore"}
+
+    stripped = _strip_explore_call_directives(
+        SYSTEM_PROMPT, include_explore=False, include_parallel_explore=False
+    )
+    # Guard is satisfied, the call directive is gone, and unrelated
+    # guidance (read_file) survives.
+    assert (
+        unregistered_call_directives(
+            stripped, resolved_tools=resolved, known_tools=known
+        )
+        == set()
+    )
+    assert "parallel_explore(" not in stripped
+    assert "read_file" in stripped
+
+
+def test_strip_explore_call_directives_noop_when_enabled():
+    """The needs-exploration path keeps both sub-agent tools, so the
+    prompt must be returned verbatim (no accidental bullet deletion)."""
+    from robotsix_mill.agents.refining import (
+        SYSTEM_PROMPT,
+        _strip_explore_call_directives,
+    )
+
+    assert (
+        _strip_explore_call_directives(
+            SYSTEM_PROMPT, include_explore=True, include_parallel_explore=True
+        )
+        == SYSTEM_PROMPT
+    )
+
+
 # --- dedup guard tests ---
 
 # Substantive body — dedup is skipped for drafts under 100 chars, so

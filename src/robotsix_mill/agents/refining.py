@@ -41,6 +41,67 @@ _STRIP_READFILE_SECTION_RE = re.compile(r"## Tool: `read_file`.*?\n(?=## )", re.
 log = logging.getLogger(__name__)
 
 
+def _strip_explore_call_directives(
+    prompt: str,
+    *,
+    include_explore: bool,
+    include_parallel_explore: bool,
+) -> str:
+    """Remove markdown bullet items that issue a ``\\`tool(...)\\`` call
+    directive for an explore sub-agent tool that is gated OFF.
+
+    When triage rules a ticket ``simple`` the ``explore`` /
+    ``parallel_explore`` sub-agent tools are dropped from refine's
+    resolved tool set (cost gating, PR #1637), but the static refine
+    prompt still tells the agent to *call* them — which trips the
+    build-time prompt/tool-consistency guard in
+    :func:`build_agent_from_definition`
+    (``Prompt contains call directives to unavailable tools``). Stripping
+    the offending bullets keeps the guard satisfied and stops the agent
+    being told to call a tool it no longer has. A bare backtick mention
+    (no trailing ``(``) is left intact — only call directives matter.
+    """
+    disabled: set[str] = set()
+    if not include_explore:
+        disabled.add("explore")
+    if not include_parallel_explore:
+        disabled.add("parallel_explore")
+    if not disabled:
+        return prompt
+    directive = re.compile(
+        r"`+(?:" + "|".join(re.escape(t) for t in sorted(disabled)) + r")\s*\("
+    )
+    lines = prompt.split("\n")
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.lstrip()
+        if stripped.startswith(("* ", "- ")):
+            indent = len(line) - len(stripped)
+            block = [line]
+            j = i + 1
+            # Gather continuation lines: deeper-indented, non-blank, and
+            # not themselves a sibling/parent bullet.
+            while j < len(lines):
+                nxt = lines[j]
+                nstr = nxt.lstrip()
+                nindent = len(nxt) - len(nstr)
+                if nstr == "" or nindent <= indent or nstr.startswith(("* ", "- ")):
+                    break
+                block.append(nxt)
+                j += 1
+            if directive.search("\n".join(block)):
+                i = j
+                continue
+            out.extend(block)
+            i = j
+            continue
+        out.append(line)
+        i += 1
+    return "\n".join(out)
+
+
 # Triggers for "pytest warnings / filterwarnings hardening" tickets — the spec
 # needs the suite's CURRENT warnings enumerated to write the documented-ignore
 # list. Without deterministic injection, the refine agent re-runs the whole
@@ -931,6 +992,18 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
         language_instructions,
         deployed_log_summary,
     )
+
+    # When exploration sub-agents are gated off (triage ruled the ticket
+    # "simple"), strip the now-dangling `explore`/`parallel_explore` call
+    # directives from the system prompt so the build-time prompt/tool
+    # consistency guard doesn't raise ValueError for the absent tools.
+    if not include_explore or not include_parallel_explore:
+        base_prompt = overrides.get("system_prompt", definition.system_prompt)
+        overrides["system_prompt"] = _strip_explore_call_directives(
+            base_prompt,
+            include_explore=include_explore,
+            include_parallel_explore=include_parallel_explore,
+        )
 
     agent = build_agent_from_definition(
         settings,
