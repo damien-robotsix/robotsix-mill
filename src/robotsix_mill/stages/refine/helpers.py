@@ -48,6 +48,37 @@ NON_IMPLEMENTATION_CLOSE_PREFIXES = (
 
 UNMERGED_BRANCH_PREFIX = "Implementation exists on branch"
 
+
+def _load_refine_memory(s, memory_board_id: str) -> str:
+    """Load the refine memory ledger from the DB-backed store.
+
+    Falls back to the legacy Markdown file when the DB row doesn't exist
+    yet (first run after migration).  The file path is still resolved via
+    ``s.memory_file_for("refine", memory_board_id)`` but only used as a
+    fallback; the DB is the primary store.
+    """
+    from robotsix_mill.core.db import load_memory_db
+    from robotsix_mill.runners.pass_runner import load_memory as _file_load
+
+    content = load_memory_db(s, memory_board_id, "refine", max_chars=s.max_memory_chars)
+    if content:
+        return content
+    # Fallback: legacy file (first run after migration, or DB not yet populated).
+    legacy_path = s.memory_file_for("refine", memory_board_id)
+    return _file_load(legacy_path, max_chars=s.max_memory_chars)
+
+
+def _persist_refine_memory(s, memory_board_id: str, text: str) -> None:
+    """Persist the refine memory ledger to the DB-backed store.
+
+    On first write, migrates data from the legacy Markdown file (if it
+    exists) and renames it to ``refine_memory.md.migrated``.
+    """
+    from robotsix_mill.core.db import persist_memory_db
+
+    persist_memory_db(s, memory_board_id, "refine", text, max_chars=s.max_memory_chars)
+
+
 # States that prove a ticket has completed (or moved past) refine.
 # Used by _is_valid_dedup_target to reject an un-refined DRAFT
 # candidate, so a further-along ticket is never buried in it.
@@ -611,6 +642,30 @@ _TRIAGE_REJECTION_PATTERNS: list[str] = [
 ]
 
 
+def _summarize_spec_for_auto_approve(spec: str, max_chars: int = 2000) -> str:
+    """Return a bounded summary of *spec* for the auto-approve classifier.
+
+    The auto-approve classifier only needs to detect design decisions —
+    it doesn't need the full verbose spec.  Keep the first *max_chars*
+    characters (which covers ## Problem + ## Scope + start of
+    ## Acceptance criteria for typical specs), newline-aligned so
+    sections aren't truncated mid-word.  When the spec is already within
+    the limit, return it unchanged.
+    """
+    if len(spec) <= max_chars:
+        return spec
+    note = "\n… (truncated for auto-approve — full spec is available)"
+    # Truncate to max_chars minus note length, then back up to the last newline.
+    effective = max_chars - len(note)
+    if effective <= 0:
+        return spec[:max_chars]
+    truncated = spec[:effective]
+    last_nl = truncated.rfind("\n")
+    if last_nl > 0:
+        truncated = truncated[:last_nl]
+    return truncated + note
+
+
 def _resolve_next_state(
     ctx: StageContext,
     spec: str,
@@ -682,7 +737,7 @@ def _resolve_next_state(
     try:
         result = refining.triage_auto_approve(
             settings=ctx.settings,
-            spec=spec,
+            spec=_summarize_spec_for_auto_approve(spec),
         )
         if result.decision == "APPROVE":
             return State.READY, f"auto-approve: APPROVE — {result.reason}"

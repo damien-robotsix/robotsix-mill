@@ -171,6 +171,28 @@ def _apply_default_mocks(monkeypatch, **overrides):
         "persist_memory",
         overrides.get("persist_memory", lambda memory_file, text: None),
     )
+    # The orchestration now uses _load_refine_memory/_persist_refine_memory
+    # (DB-backed) imported into the orchestration module's namespace.
+    # Patch those so existing tests that set persist_memory/load_memory
+    # overrides still work.
+    import robotsix_mill.stages.refine.orchestration as orch_mod
+
+    monkeypatch.setattr(
+        orch_mod,
+        "_load_refine_memory",
+        overrides.get(
+            "load_memory",
+            lambda s, memory_board_id: "",
+        ),
+    )
+    monkeypatch.setattr(
+        orch_mod,
+        "_persist_refine_memory",
+        overrides.get(
+            "persist_memory",
+            lambda s, memory_board_id, text: None,
+        ),
+    )
     monkeypatch.setattr(
         refine_module,
         "_verify_branch_merged",
@@ -1012,7 +1034,7 @@ def test_side_effect_persists_updated_memory(ctx_factory, monkeypatch, tmp_path)
         run_refine_agent=_mock_refine_returns(
             RefineResult(spec_markdown=_REAL_SPEC, updated_memory="new memory")
         ),
-        persist_memory=lambda memory_file, text: persisted.append(text),
+        persist_memory=lambda s, memory_board_id, text: persisted.append(text),
     )
 
     _run_agent(ctx, t, tmp_path)

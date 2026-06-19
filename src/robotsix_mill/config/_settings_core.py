@@ -48,6 +48,11 @@ class _CoreSettings(BaseModel):
     # scout may spin a sandbox container (~sandbox_memory each), so this
     # bounds peak resource use while letting long splittable work parallelise.
     parallel_explore_max: int = Field(default=4, ge=1)
+    # Hard cap on explore/parallel_explore sub-agent calls per refine run.
+    # Calls beyond this cap are rejected with a clear message. Default 4
+    # mirrors the existing parallel_explore concurrency limit and bounds
+    # per-run sub-agent cost. Set to 0 to disable exploration entirely.
+    max_refine_explore_calls: int = Field(default=4, ge=0)
     # How long a cached web_knowledge .md file is considered fresh
     # (days). A consultation that hits a stale file is allowed to
     # web_search and update the file.

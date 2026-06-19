@@ -119,7 +119,3 @@ system_prompt: |
     design review (e.g. "Mechanical button addition mirroring the
     existing `ApproveButton` handler pattern" or "Comment-only change
     with no logic impact").
-
-  ## Budget discipline
-
-  - ⚠️ **Budget note:** Your `request_limit` budget caps the total requests you can make. Be concise — prefer a single well-structured response over verbose narration.

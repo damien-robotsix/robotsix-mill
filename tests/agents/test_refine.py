@@ -4034,6 +4034,45 @@ def test_system_prompt_forbids_report_issue_for_completion():
     )
 
 
+def test_system_prompt_no_duplicated_budget_admonition():
+    """The refine SYSTEM_PROMPT must NOT contain duplicated budget/delegation
+    admonitions — each unique guidance phrase appears at most once."""
+    from robotsix_mill.agents.refining import SYSTEM_PROMPT
+
+    # The detailed tool-by-tool breakdown ("Use direct tools for the
+    # lookups they're best at") was removed; only the consolidated
+    # bullet remains.
+    detailed_block = "Use direct tools for the lookups they're best at"
+    assert detailed_block not in SYSTEM_PROMPT, (
+        "Detailed tool-by-tool breakdown must not appear — "
+        "it duplicates the consolidated bullet above."
+    )
+
+    # The "delegation doesn't burn a top-level request" sub-explanation
+    # appeared twice (once in consolidated bullet, once in detailed).
+    # Ensure it's now at most once.
+    count = SYSTEM_PROMPT.count("delegation doesn't burn")
+    assert count <= 1, (
+        f"'delegation doesn't burn' appears {count} times — should be ≤ 1"
+    )
+
+
+def test_trimmed_prompt_still_loads():
+    """The trimmed refine.yaml system prompt must still load and validate
+    against the agent loader — output_type RefineResult, tool list match."""
+    from pathlib import Path
+    from robotsix_mill.agents.yaml_loader import load_agent_definition
+
+    definition = load_agent_definition(
+        Path(__file__).parent.parent.parent / "agent_definitions" / "refine.yaml"
+    )
+    assert definition.name == "refine"
+    assert definition.output_type == "RefineResult"
+    assert "explore" in definition.tools
+    assert "read_file" in definition.tools
+    assert "parallel_explore" in definition.tools
+
+
 # ---------------------------------------------------------------------------
 # Continuation guard tests (finish_reason == "tool_call")
 # ---------------------------------------------------------------------------
@@ -4922,3 +4961,679 @@ class TestRefineRunawayLoopGuard:
         assert limits.tool_calls_limit == s.refine_max_tool_calls
         assert limits.request_limit == s.refine_request_limit
         assert captured["max_errors"] == s.refine_max_errors
+
+
+# ---------------------------------------------------------------------------
+# Exploration gating tests (cost-saving: skip explore/parallel_explore
+# for simple tickets)
+# ---------------------------------------------------------------------------
+
+
+def test_max_refine_explore_calls_default():
+    """Default max_refine_explore_calls is 4 (mirrors parallel_explore_max)."""
+    s = Settings(data_dir="/tmp")
+    assert s.max_refine_explore_calls == 4
+
+
+def test_max_refine_explore_calls_zero_disables():
+    """max_refine_explore_calls=0 disables exploration cap enforcement."""
+    from robotsix_mill.config import Settings as S
+
+    s = S(data_dir="/tmp", max_refine_explore_calls="0")
+    assert s.max_refine_explore_calls == 0
+
+
+def test_build_repo_tools_include_explore_false(tmp_path):
+    """With include_explore=False, the explore tool is NOT in the returned list."""
+    from robotsix_mill.agents._repo_tools import _build_repo_tools
+    from robotsix_mill.config import Settings as S
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    s = S(data_dir=str(tmp_path))
+
+    tools = _build_repo_tools(
+        repo_dir, s, include_explore=False, include_parallel_explore=False
+    )
+    tool_names = {t.__name__ for t in tools}
+    assert "explore" not in tool_names, (
+        "explore should be absent when include_explore=False"
+    )
+    assert "parallel_explore" not in tool_names, (
+        "parallel_explore should be absent when include_parallel_explore=False"
+    )
+    assert "read_file" in tool_names, "read_file should still be present"
+
+
+def test_build_repo_tools_include_explore_true_default(tmp_path):
+    """With include_explore=True (default), explore IS in the returned list."""
+    from robotsix_mill.agents._repo_tools import _build_repo_tools
+    from robotsix_mill.config import Settings as S
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    s = S(data_dir=str(tmp_path))
+
+    tools = _build_repo_tools(
+        repo_dir, s, include_explore=True, include_parallel_explore=True
+    )
+    tool_names = {t.__name__ for t in tools}
+    assert "explore" in tool_names
+    assert "parallel_explore" in tool_names
+
+
+def test_run_refine_agent_respects_include_explore_false(
+    monkeypatch, settings, tmp_path
+):
+    """When include_explore=False, run_refine_agent builds tools without
+    explore/parallel_explore, and the log records 'skipped'."""
+    import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
+
+    captured_tools: list = []
+
+    def fake_build_agent(settings, definition, tools, **kwargs):
+        captured_tools.extend(tools)
+        return _simple_agent()
+
+    monkeypatch.setattr(base_module, "build_agent_from_definition", fake_build_agent)
+    monkeypatch.setattr(
+        retry_module,
+        "run_agent",
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(agent),
+    )
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+
+    refining.run_refine_agent(
+        settings=settings,
+        title="Simple ticket",
+        draft="Fix typo in README.md",
+        repo_dir=repo_dir,
+        include_explore=False,
+        include_parallel_explore=False,
+    )
+
+    tool_names = {t.__name__ for t in captured_tools if hasattr(t, "__name__")}
+    assert "explore" not in tool_names
+    assert "parallel_explore" not in tool_names
+    assert "read_file" in tool_names
+    assert "list_dir" in tool_names
+    assert "run_command" in tool_names
+
+
+def test_run_refine_agent_explore_cap_enforcement(monkeypatch, settings, tmp_path):
+    """When max_refine_explore_calls=1, the 2nd explore call is rejected
+    with a cap-exhausted message."""
+    import asyncio
+    import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
+
+    # Cap exploration at 1 call.
+    capped = Settings(data_dir=str(tmp_path), max_refine_explore_calls="1")
+
+    captured_tools: list = []
+
+    def fake_build_agent(settings, definition, tools, **kwargs):
+        captured_tools.extend(tools)
+        return _simple_agent()
+
+    monkeypatch.setattr(base_module, "build_agent_from_definition", fake_build_agent)
+    monkeypatch.setattr(
+        retry_module,
+        "run_agent",
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(agent),
+    )
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+
+    refining.run_refine_agent(
+        settings=capped,
+        title="Test",
+        draft="draft",
+        repo_dir=repo_dir,
+        include_explore=True,
+        include_parallel_explore=True,
+    )
+
+    explore_tool = None
+    for t in captured_tools:
+        if getattr(t, "__name__", "") == "explore":
+            explore_tool = t
+            break
+    assert explore_tool is not None, "explore tool must be present"
+
+    # First call should succeed.
+    r1 = asyncio.run(explore_tool("question one"))
+    assert "cap reached" not in r1.lower()
+
+    # Second call should be rejected (cap = 1).
+    r2 = asyncio.run(explore_tool("question two"))
+    assert "exploration cap reached" in r2.lower()
+    assert "1/1" in r2
+
+
+def test_run_refine_agent_explore_cap_zero_disables_enforcement(
+    monkeypatch, settings, tmp_path
+):
+    """When max_refine_explore_calls=0, exploration is never capped."""
+    import asyncio
+    import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
+
+    capped = Settings(data_dir=str(tmp_path), max_refine_explore_calls="0")
+
+    captured_tools: list = []
+
+    def fake_build_agent(settings, definition, tools, **kwargs):
+        captured_tools.extend(tools)
+        return _simple_agent()
+
+    monkeypatch.setattr(base_module, "build_agent_from_definition", fake_build_agent)
+    monkeypatch.setattr(
+        retry_module,
+        "run_agent",
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(agent),
+    )
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+
+    refining.run_refine_agent(
+        settings=capped,
+        title="Test",
+        draft="draft",
+        repo_dir=repo_dir,
+        include_explore=True,
+        include_parallel_explore=True,
+    )
+
+    explore_tool = next(
+        t for t in captured_tools if getattr(t, "__name__", "") == "explore"
+    )
+
+    # Multiple calls should all succeed (cap=0 disables enforcement).
+    for i in range(10):
+        r = asyncio.run(explore_tool(f"question {i}"))
+        assert "cap reached" not in r.lower()
+
+
+def test_run_refine_agent_logs_exploration_skipped(
+    caplog, monkeypatch, settings, tmp_path
+):
+    """When include_explore=False, a structured log line records 'skipped'."""
+    import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
+    import logging
+
+    caplog.set_level(logging.INFO, logger="robotsix_mill.agents.refining")
+
+    monkeypatch.setattr(
+        base_module, "build_agent_from_definition", lambda *a, **k: _simple_agent()
+    )
+    monkeypatch.setattr(
+        retry_module,
+        "run_agent",
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(agent),
+    )
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+
+    refining.run_refine_agent(
+        settings=settings,
+        title="Simple",
+        draft="draft",
+        repo_dir=repo_dir,
+        include_explore=False,
+        include_parallel_explore=False,
+    )
+
+    assert any("refine exploration: skipped" in r.message for r in caplog.records), (
+        "Must log exploration skipped"
+    )
+
+
+def test_run_refine_agent_logs_exploration_invoked(
+    caplog, monkeypatch, settings, tmp_path
+):
+    """When include_explore=True, a structured log line records 'invoked' + cap."""
+    import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
+    import logging
+
+    caplog.set_level(logging.INFO, logger="robotsix_mill.agents.refining")
+
+    monkeypatch.setattr(
+        base_module, "build_agent_from_definition", lambda *a, **k: _simple_agent()
+    )
+    monkeypatch.setattr(
+        retry_module,
+        "run_agent",
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(agent),
+    )
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+
+    refining.run_refine_agent(
+        settings=settings,
+        title="Complex",
+        draft="draft",
+        repo_dir=repo_dir,
+        include_explore=True,
+        include_parallel_explore=True,
+    )
+
+    assert any("refine exploration: invoked" in r.message for r in caplog.records), (
+        "Must log exploration invoked"
+    )
+    assert any("cap=4" in r.message for r in caplog.records), "Must log the cap value"
+
+
+def _simple_agent():
+    """Return a mock agent that returns a trivial RefineResult."""
+
+    class FakeResult:
+        output = RefineResult(spec_markdown="ok")
+        response = type("R", (), {"finish_reason": "stop"})()
+
+        def all_messages_json(self):
+            return b"[]"
+
+        def new_messages_json(self):
+            return b"[]"
+
+    class FakeAgent:
+        def run_sync(self, prompt, *, message_history=None, usage_limits=None):
+            return FakeResult()
+
+    return FakeAgent()
+
+
+def test_triage_complexity_simple_suppresses_exploration(ctx, service, monkeypatch):
+    """When triage returns REFINE with complexity='simple', run_refine_agent
+    is called with include_explore=False and include_parallel_explore=False."""
+    from robotsix_mill.agents.refining import TriageResult
+
+    refine_kwargs: dict = {}
+
+    def fake_triage(*, settings, title, draft, repo_dir=None, extra_roots=None):
+        return TriageResult(
+            decision="REFINE",
+            reason="single-file change",
+            complexity="simple",
+        )
+
+    def spy_refine(**kwargs):
+        refine_kwargs.update(kwargs)
+        return _single("## Problem\nrefined\n")
+
+    monkeypatch.setattr(refining, "triage_refine", fake_triage)
+    monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
+
+    t = service.create("Fix typo in README", "Change one word in README.md line 3")
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert refine_kwargs.get("include_explore") is False
+    assert refine_kwargs.get("include_parallel_explore") is False
+
+
+def test_triage_complexity_needs_exploration_provides_exploration(
+    ctx, service, monkeypatch
+):
+    """When triage returns REFINE with complexity='needs-exploration',
+    run_refine_agent is called with include_explore=True and
+    include_parallel_explore=True."""
+    from robotsix_mill.agents.refining import TriageResult
+
+    refine_kwargs: dict = {}
+
+    def fake_triage(*, settings, title, draft, repo_dir=None, extra_roots=None):
+        return TriageResult(
+            decision="REFINE",
+            reason="multi-file change, needs codebase search",
+            complexity="needs-exploration",
+        )
+
+    def spy_refine(**kwargs):
+        refine_kwargs.update(kwargs)
+        return _single("## Problem\nrefined\n")
+
+    monkeypatch.setattr(refining, "triage_refine", fake_triage)
+    monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
+
+    t = service.create("Refactor auth", "multi-file auth refactor")
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert refine_kwargs.get("include_explore") is True
+    assert refine_kwargs.get("include_parallel_explore") is True
+
+
+def test_triage_complexity_none_defaults_to_needs_exploration(
+    ctx, service, monkeypatch
+):
+    """When triage returns complexity=None, the default is 'needs-exploration'
+    and run_refine_agent receives full exploration tools (conservative)."""
+    from robotsix_mill.agents.refining import TriageResult
+
+    refine_kwargs: dict = {}
+
+    def fake_triage(*, settings, title, draft, repo_dir=None, extra_roots=None):
+        return TriageResult(
+            decision="REFINE",
+            reason="ambiguous scope",
+            complexity=None,  # backward-compat: no complexity field
+        )
+
+    def spy_refine(**kwargs):
+        refine_kwargs.update(kwargs)
+        return _single("## Problem\nrefined\n")
+
+    monkeypatch.setattr(refining, "triage_refine", fake_triage)
+    monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
+
+    t = service.create("Add feature", "ambiguous feature draft")
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert refine_kwargs.get("include_explore") is True
+    assert refine_kwargs.get("include_parallel_explore") is True
+
+
+def test_split_child_fast_path_sets_simple_complexity(ctx, service, monkeypatch):
+    """Split-child fast path writes triage_complexity.json as 'simple',
+    suppressing exploration on the already-refined child."""
+    parent = service.create("Parent task", "big feature", kind="task")
+    # Close the parent with a "split into" note to trigger fast-path.
+    service.transition(parent.id, State.CLOSED, "split into 1 children: child-1")
+    child = service.create(
+        "Already refined child",
+        "## Problem\nrefined child\n## Scope\n- thing\n## Acceptance criteria\n- [ ] works\n",
+        parent_id=parent.id,
+    )
+
+    refine_called = False
+
+    def spy_refine(**kwargs):
+        nonlocal refine_called
+        refine_called = True
+        return _single("should not be called")
+
+    monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
+
+    out = RefineStage().run(child, ctx)
+
+    assert not refine_called, "Split-child fast path must skip refine agent"
+    assert out.next_state is State.READY
+
+    # Verify complexity artifact was written as "simple"
+    from robotsix_mill.stages.refine.orchestration import _read_triage_complexity
+
+    ws = service.workspace(child)
+    assert _read_triage_complexity(ws) == "simple"
+
+
+def test_triage_skip_writes_complexity_artifact(ctx, service, monkeypatch):
+    """When triage returns REFINE with complexity='simple', the complexity
+    artifact is written before falling through to full refine."""
+    from robotsix_mill.agents.refining import TriageResult
+
+    refine_called = False
+
+    def fake_triage(*, settings, title, draft, repo_dir=None, extra_roots=None):
+        return TriageResult(
+            decision="REFINE",
+            reason="trivial change",
+            complexity="simple",
+        )
+
+    def spy_refine(**kwargs):
+        nonlocal refine_called
+        refine_called = True
+        return _single("## Problem\nrefined\n")
+
+    monkeypatch.setattr(refining, "triage_refine", fake_triage)
+    monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
+
+    t = service.create("Simple change", "trivial draft")
+    RefineStage().run(t, ctx)
+
+    assert refine_called
+
+    # Check the artifact was written.
+    from robotsix_mill.stages.refine.orchestration import _read_triage_complexity
+
+    ws = service.workspace(t)
+    assert _read_triage_complexity(ws) == "simple"
+
+
+# ---------------------------------------------------------------------------
+# Auto-approve input reduction tests
+# ---------------------------------------------------------------------------
+
+
+def test_summarize_spec_for_auto_approve_short_spec_unchanged():
+    """A spec within the 2000-char limit is returned unchanged."""
+    from robotsix_mill.stages.refine.helpers import _summarize_spec_for_auto_approve
+
+    short = "## Problem\nFix typo\n## Scope\n- README.md\n## Acceptance criteria\n- [ ] typo fixed\n"
+    assert _summarize_spec_for_auto_approve(short) == short
+
+
+def test_summarize_spec_for_auto_approve_truncates_long_spec():
+    """A spec exceeding the 2000-char limit is truncated with a note."""
+    from robotsix_mill.stages.refine.helpers import _summarize_spec_for_auto_approve
+
+    # Build a spec longer than 2000 chars.
+    header = "## Problem\nLong spec\n## Scope\n"
+    filler = "- line " + "x" * 80 + "\n"
+    long_spec = header + filler * 100  # ~8000+ chars
+
+    result = _summarize_spec_for_auto_approve(long_spec)
+    assert len(result) <= 2005  # within limit + truncation note
+    assert "… (truncated for auto-approve" in result
+    assert result.startswith(header)
+
+
+def test_auto_approve_receives_summarized_spec(
+    ctx, service, monkeypatch, tmp_path, repo_config
+):
+    """triage_auto_approve receives a summarized (not full) spec payload."""
+    # Build a spec that's long enough to trigger summarization.
+    header = "## Problem\nAdd pagination\n## Scope\n"
+    filler = "- list " + "x" * 80 + "\n"
+    long_spec = header + filler * 80  # well over 2000 chars
+
+    captured_spec: list[str] = []
+
+    def fake_auto_approve(*, settings, spec):
+        captured_spec.append(spec)
+        return refining.AutoApproveResult(decision="APPROVE", reason="precise spec")
+
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(long_spec))
+    monkeypatch.setattr(refining, "triage_auto_approve", fake_auto_approve)
+
+    gated = Settings(
+        data_dir=str(tmp_path),
+        require_approval="true",
+        auto_approve_enabled="true",
+    )
+    gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
+
+    t = service.create("Add pagination", "add pagination to list endpoints")
+    out = RefineStage().run(t, gated_ctx)
+
+    assert out.next_state is State.READY
+    assert len(captured_spec) == 1
+    # The captured spec should be summarized, not the full long_spec.
+    assert captured_spec[0] != long_spec
+    assert len(captured_spec[0]) < len(long_spec)
+    assert "… (truncated for auto-approve" in captured_spec[0]
+    # But it must still contain the Problem header.
+    assert "## Problem" in captured_spec[0]
+
+
+def test_auto_approve_yaml_no_budget_discipline_note():
+    """The auto-approve.yaml system prompt must NOT contain the
+    'Budget discipline' section."""
+    from pathlib import Path
+    import yaml as _yaml
+
+    path = (
+        Path(__file__).parent.parent.parent / "agent_definitions" / "auto-approve.yaml"
+    )
+    prompt = _yaml.safe_load(path.read_text())["system_prompt"]
+    assert "Budget discipline" not in prompt, (
+        "auto-approve.yaml must not contain the 'Budget discipline' note"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Memory DB tests (acceptance criterion 6)
+# ---------------------------------------------------------------------------
+
+
+def test_memory_db_round_trip(tmp_path):
+    """Write memory to DB, read it back — content matches."""
+    from robotsix_mill.config import Settings as S
+    from robotsix_mill.core.db import (
+        load_memory_db,
+        persist_memory_db,
+        reset_engine,
+    )
+
+    reset_engine()
+    s = S(data_dir=str(tmp_path))
+    board_id = "test-board"
+    name = "refine"
+
+    # Initially empty.
+    assert load_memory_db(s, board_id, name) == ""
+
+    # Write some content.
+    content = "## Refine run 2026-06-19\nObserved: tests need better fixtures.\n"
+    persist_memory_db(s, board_id, name, content)
+
+    # Read back.
+    assert load_memory_db(s, board_id, name) == content
+
+    # Second write updates.
+    content2 = content + "## Refine run 2026-06-20\nObserved: use DB for memory.\n"
+    persist_memory_db(s, board_id, name, content2)
+    assert load_memory_db(s, board_id, name) == content2
+
+
+def test_memory_db_truncation(tmp_path):
+    """Long content is truncated with max_chars, keeping most recent entries."""
+    from robotsix_mill.config import Settings as S
+    from robotsix_mill.core.db import (
+        load_memory_db,
+        persist_memory_db,
+        reset_engine,
+    )
+
+    reset_engine()
+    s = S(data_dir=str(tmp_path))
+    board_id = "test-board"
+    name = "refine"
+
+    # Build content with many entries, newest last.
+    entries = []
+    for i in range(20):
+        entries.append(
+            f"## Refine run 2026-06-{i + 1:02d}\n- **Observation**: entry {i}\n"
+        )
+    content = "\n".join(entries)  # ~20 entries
+
+    persist_memory_db(s, board_id, name, content)
+
+    # Read with a cap that keeps only the most recent entries.
+    result = load_memory_db(s, board_id, name, max_chars=500)
+    assert len(result) <= 550  # within cap + truncation note
+    assert "entry 19" in result  # most recent
+    assert "entry 18" in result  # second most recent
+    assert "entry 0" not in result  # oldest dropped
+    assert "truncated" in result.lower()
+
+
+def test_memory_db_migration_from_legacy_file(tmp_path):
+    """First persist_memory_db migrates content from legacy Markdown file."""
+    from robotsix_mill.config import Settings as S
+    from robotsix_mill.core.db import (
+        load_memory_db,
+        persist_memory_db,
+        reset_engine,
+    )
+
+    reset_engine()
+    s = S(data_dir=str(tmp_path))
+    board_id = "test-board"
+    name = "refine"
+
+    # Create legacy file.
+    legacy_dir = tmp_path / board_id
+    legacy_dir.mkdir(parents=True, exist_ok=True)
+    legacy_path = legacy_dir / f"{name}_memory.md"
+    legacy_content = "## Prior observations\nCross-cutting pattern: use DB.\n"
+    legacy_path.write_text(legacy_content, encoding="utf-8")
+
+    # Write new content — new text is non-empty, so legacy is NOT
+    # prepended (only carried over when no new text is given).
+    new_content = "## Refine run 2026-06-20\nNew observation.\n"
+    persist_memory_db(s, board_id, name, new_content)
+
+    # Read back — should contain only the new content (legacy
+    # is not prepended when new text is provided).
+    result = load_memory_db(s, board_id, name)
+    assert "New observation" in result
+    assert "Cross-cutting pattern: use DB" not in result
+
+    # Legacy file should be renamed.
+    migrated_path = legacy_dir / f"{name}_memory.md.migrated"
+    assert migrated_path.exists()
+    assert not legacy_path.exists()
+
+
+def test_memory_db_cross_cutting_entries_survive_retention(tmp_path):
+    """Cross-cutting entries (general patterns) survive retention when
+    they are among the most recent entries; oldest per-ticket entries
+    are dropped first."""
+    from robotsix_mill.config import Settings as S
+    from robotsix_mill.core.db import (
+        load_memory_db,
+        persist_memory_db,
+        reset_engine,
+    )
+
+    reset_engine()
+    s = S(data_dir=str(tmp_path))
+    board_id = "test-board"
+    name = "refine"
+
+    # Build content: many old per-ticket entries first, then a
+    # cross-cutting pattern at the end (most recent).
+    content = ""
+    for i in range(60):
+        content += f"## Refine run 2026-06-{i + 1:02d} — ticket {i}\n"
+        content += f"- Per-ticket observation number {i} with some extra padding text\n"
+    # Cross-cutting pattern at the end (newest entry).
+    content += (
+        "## Cross-cutting: shared libs live in external repos\n"
+        "- src/<pkg>/, Hatchling.\n"
+    )
+
+    persist_memory_db(s, board_id, name, content)
+
+    # Read with a cap that triggers truncation.
+    result = load_memory_db(s, board_id, name, max_chars=2000)
+    # Cross-cutting knowledge is recent — should survive.
+    assert "Cross-cutting" in result
+    # Oldest ticket entries should be gone.
+    assert "ticket 0" not in result
+    # The truncation note signals oldest content was dropped.
+    assert "truncated" in result.lower()

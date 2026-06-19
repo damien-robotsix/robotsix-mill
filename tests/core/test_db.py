@@ -90,7 +90,7 @@ def test_init_db_creates_all_tables(tmp_path: Path):
     engine = db.get_engine(s, "test-init")
     inspector = inspect(engine)
     table_names = set(inspector.get_table_names())
-    expected = {"ticket", "ticketevent", "comment", "proposedaction"}
+    expected = {"ticket", "ticketevent", "comment", "proposedaction", "memory"}
     assert expected.issubset(table_names), f"missing tables: {expected - table_names}"
 
 

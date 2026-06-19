@@ -1699,6 +1699,21 @@ def test_memory_load_and_persist_cycle(ctx_factory, monkeypatch):
         "persist_memory",
         lambda memory_file, text: persisted.append(text),
     )
+    # Also patch the DB-backed helpers (the orchestration now uses these
+    # via a module-level import — must patch the orchestration module's
+    # local names, not the helpers module).
+    from robotsix_mill.stages.refine import orchestration as orch_mod
+
+    monkeypatch.setattr(
+        orch_mod,
+        "_load_refine_memory",
+        lambda s, memory_board_id: "prior knowledge",
+    )
+    monkeypatch.setattr(
+        orch_mod,
+        "_persist_refine_memory",
+        lambda s, memory_board_id, text: persisted.append(text),
+    )
     monkeypatch.setattr(
         refining,
         "run_refine_agent",
