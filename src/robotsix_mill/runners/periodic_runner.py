@@ -440,6 +440,17 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         clone_token_fn=None,  # uses forge_token (raises on missing)
         requires_repo=True,
     ),
+    "env_doc_sync": PeriodicPassConfig(
+        label="env_doc_sync",
+        source_kind=SourceKind.ENV_DOC_SYNC,
+        agent_module_attr="env_doc_syncing",
+        agent_fn_name="run_env_doc_sync_agent",
+        memory_filename="env_doc_sync_memory.md",
+        workspace_subdir="env_doc_sync_workspace",
+        result_dataclass=PeriodicPassResult,
+        clone_token_fn=None,  # uses forge_token (raises on missing)
+        requires_repo=True,
+    ),
 }
 
 

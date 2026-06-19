@@ -330,6 +330,19 @@ state_sync_pass = _make_background_pass(
 router.post("/state-sync", status_code=202)(state_sync_pass)
 
 
+env_doc_sync_pass = _make_background_pass(
+    kind="env-doc-sync",
+    runner_module="robotsix_mill.runners.env_doc_sync_runner",
+    runner_func="run_env_doc_sync_pass",
+    docstring="""Kick off an env-doc-sync pass in the BACKGROUND and return at once.
+
+    The env-doc-sync agent cross-references env-var declarations in the
+    Settings mixins against docs/configuration.md. New draft tickets appear
+    on the board when it finishes.""",
+)
+router.post("/env-doc-sync", status_code=202)(env_doc_sync_pass)
+
+
 # -- handlers with custom summary builders -------------------------------
 
 trace_review_pass = _make_background_pass(

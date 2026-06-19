@@ -323,6 +323,13 @@ periodic:
     interval_seconds: 86400       # seconds between passes (min 60 enforced in worker)
     memory_path: null             # defaults to <data_dir>/state_sync_memory.md
 
+  # -- env-doc-sync — env-var documentation consistency validation --------
+  env_doc_sync:
+    model: "deepseek/deepseek-v4-flash"  # env-doc-sync agent model (read-only file scan)
+    enabled: true                 # enable periodic env-doc-sync passes
+    interval_seconds: 86400       # seconds between passes (min 60 enforced in worker)
+    memory_path: null             # defaults to <data_dir>/env_doc_sync_memory.md
+
   # -- member-sync — deterministic vcs2l workspace-member discovery/registration
   member_sync:
     enabled: true                 # enable periodic member-sync passes

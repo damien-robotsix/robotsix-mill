@@ -529,19 +529,21 @@ def test_periodic_pass_configs_registry_has_all_twelve_entries():
         "module_curator",
         "test_gap",
         "state_sync",
+        "env_doc_sync",
     }
     assert set(PERIODIC_PASS_CONFIGS.keys()) == expected
 
 
-def test_periodic_pass_configs_requires_repo_only_module_curator_and_test_gap():
-    """Only module_curator, test_gap, and state_sync set requires_repo=True
-    (all need a clone to inspect files).
+def test_periodic_pass_configs_requires_repo():
+    """Only module_curator, test_gap, state_sync, and env_doc_sync set
+    requires_repo=True (all need a clone to inspect files).
     All other registry entries keep the default False."""
     assert PERIODIC_PASS_CONFIGS["module_curator"].requires_repo is True
     assert PERIODIC_PASS_CONFIGS["test_gap"].requires_repo is True
     assert PERIODIC_PASS_CONFIGS["state_sync"].requires_repo is True
+    assert PERIODIC_PASS_CONFIGS["env_doc_sync"].requires_repo is True
     for key, cfg in PERIODIC_PASS_CONFIGS.items():
-        if key in ("module_curator", "test_gap", "state_sync"):
+        if key in ("module_curator", "test_gap", "state_sync", "env_doc_sync"):
             continue
         assert cfg.requires_repo is False, f"{key}.requires_repo should be False"
 

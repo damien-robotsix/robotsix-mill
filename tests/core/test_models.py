@@ -71,6 +71,7 @@ def test_sourcekind_member_count():
         "MODULE_CURATOR",
         "ROADMAP_SYNC",
         "STATE_SYNC",
+        "ENV_DOC_SYNC",
         "META",
         "BOARD_CLEANUP",
         "RUN_HEALTH",

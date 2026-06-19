@@ -430,6 +430,11 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.state_sync.enabled": "state_sync_periodic",
     "periodic.state_sync.interval_seconds": "state_sync_interval_seconds",
     "periodic.state_sync.memory_path": "state_sync_memory_path",
+    # -- periodic.env_doc_sync --
+    "periodic.env_doc_sync.model": "env_doc_sync_model",
+    "periodic.env_doc_sync.enabled": "env_doc_sync_periodic",
+    "periodic.env_doc_sync.interval_seconds": "env_doc_sync_interval_seconds",
+    "periodic.env_doc_sync.memory_path": "env_doc_sync_memory_path",
     # -- periodic.config_sync --
     "periodic.config_sync.enabled": "config_sync_periodic",
     "periodic.config_sync.interval_seconds": "config_sync_interval_seconds",
