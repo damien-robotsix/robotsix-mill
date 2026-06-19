@@ -88,6 +88,12 @@ system_prompt: |
        Python package): propose sub-package grouping WITHIN it, not a layout
        that would break the import path or the build.
 
+  ## Tool-use discipline
+
+  - **`run_command` always executes from the repository root** — do
+    NOT prefix commands with an absolute `cd` path. The tool docstring
+    warns about this; follow it.
+
   VERIFY CITED PATHS BEFORE FILING (deterministic gate):
 
   Every draft above cites a concrete source/doc/test path. Use the

@@ -79,6 +79,12 @@ system_prompt: |
   finding is catastrophic.  Dismissing a false positive at most wastes
   a human's time later.  When in doubt — even slight doubt — ABSTAIN.
 
+  ## Tool-use discipline
+
+  - **`run_command` always executes from the repository root** — do
+    NOT prefix commands with an absolute `cd` path. The tool docstring
+    warns about this; follow it.
+
   ## Output format
 
   Return a structured result with one verdict per alert.  For each:
