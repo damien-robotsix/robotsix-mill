@@ -539,3 +539,90 @@ def test_modules_field_present_in_all_real_yamls(tmp_path):
                 f"{yaml_path.name}: modules must be False (only refine.yaml "
                 f"has opted in so far)"
             )
+
+
+# ── inject_language_conventions ──────────────────────────────────────
+
+
+def test_inject_language_conventions_appends_block(monkeypatch, tmp_path):
+    """With the flag set and a repo_dir, the resolved language conventions
+    are appended to the system prompt under a ## Language conventions head."""
+    from robotsix_mill.agents.base import build_agent_from_definition
+    from robotsix_mill.config import Settings
+
+    monkeypatch.setattr(
+        "robotsix_mill.config.repo_settings.resolve_language_instructions",
+        lambda settings, repo_dir: "PEP 758: `except A, B:` is valid 3.14 syntax.",
+    )
+    captured = _capture_build_agent_kwargs(monkeypatch)
+    definition = _make_definition(
+        system_prompt="Review the diff.", inject_language_conventions=True
+    )
+
+    build_agent_from_definition(Settings(), definition, repo_dir=tmp_path)
+    sp = captured[0]["system_prompt"]
+    assert sp.startswith("Review the diff.")
+    assert "## Language conventions" in sp
+    assert "PEP 758" in sp
+
+
+def test_inject_language_conventions_disabled_by_default(monkeypatch, tmp_path):
+    """Default (flag False) leaves the prompt untouched even with a repo_dir."""
+    from robotsix_mill.agents.base import build_agent_from_definition
+    from robotsix_mill.config import Settings
+
+    monkeypatch.setattr(
+        "robotsix_mill.config.repo_settings.resolve_language_instructions",
+        lambda settings, repo_dir: "SHOULD NOT APPEAR",
+    )
+    captured = _capture_build_agent_kwargs(monkeypatch)
+    definition = _make_definition(system_prompt="Refine.")  # flag defaults False
+
+    build_agent_from_definition(Settings(), definition, repo_dir=tmp_path)
+    assert captured[0]["system_prompt"] == "Refine."
+
+
+def test_inject_language_conventions_skipped_without_repo_dir(monkeypatch):
+    """No repo_dir → nothing to resolve → prompt untouched."""
+    from robotsix_mill.agents.base import build_agent_from_definition
+    from robotsix_mill.config import Settings
+
+    monkeypatch.setattr(
+        "robotsix_mill.config.repo_settings.resolve_language_instructions",
+        lambda settings, repo_dir: "SHOULD NOT APPEAR",
+    )
+    captured = _capture_build_agent_kwargs(monkeypatch)
+    definition = _make_definition(
+        system_prompt="Retrospect.", inject_language_conventions=True
+    )
+
+    build_agent_from_definition(Settings(), definition, repo_dir=None)
+    assert captured[0]["system_prompt"] == "Retrospect."
+
+
+def test_inject_language_conventions_empty_block_no_header(monkeypatch, tmp_path):
+    """An empty resolved block (repo declares no language) adds no header."""
+    from robotsix_mill.agents.base import build_agent_from_definition
+    from robotsix_mill.config import Settings
+
+    monkeypatch.setattr(
+        "robotsix_mill.config.repo_settings.resolve_language_instructions",
+        lambda settings, repo_dir: "   ",
+    )
+    captured = _capture_build_agent_kwargs(monkeypatch)
+    definition = _make_definition(
+        system_prompt="Review.", inject_language_conventions=True
+    )
+
+    build_agent_from_definition(Settings(), definition, repo_dir=tmp_path)
+    assert captured[0]["system_prompt"] == "Review."
+    assert "Language conventions" not in captured[0]["system_prompt"]
+
+
+def test_review_type_agents_declare_language_conventions():
+    """Invariant lock: the code-critiquing agents (retrospect, review) must
+    keep inject_language_conventions=True so they receive the repo's Python
+    conventions (e.g. PEP-758) and don't misjudge valid 3.14 syntax."""
+    for name in ("retrospect", "review"):
+        d = load_agent_definition(Path("agent_definitions") / f"{name}.yaml")
+        assert d.inject_language_conventions is True, name

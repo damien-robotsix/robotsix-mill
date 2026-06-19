@@ -349,6 +349,7 @@ def run_retrospect_agent(
         settings,
         definition,
         tools=tools,
+        repo_dir=repo_dir,
     )
 
     # Register a pre-parse repair hook so the agent's output can be
