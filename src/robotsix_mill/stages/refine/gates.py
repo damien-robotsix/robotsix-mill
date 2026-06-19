@@ -16,6 +16,7 @@ import subprocess
 from pathlib import Path
 
 from ...agents import dedup, freshness, obsolescence
+from ...config import Settings
 from ...core.datetime_utils import _as_utc
 from ...core.draft_target import referenced_mill_paths_absent, resolve_mill_service
 from ...core.models import SourceKind, Ticket
@@ -675,7 +676,7 @@ class RefineGatesMixin:
         ticket: Ticket,
         draft: str,
         repo_dir: Path | None,
-        s,
+        s: Settings,
     ) -> Outcome | None:
         """Detect a draft naming mill-specific source paths absent from
         the current checkout and redirect it to the mill maintenance board.
