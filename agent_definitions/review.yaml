@@ -19,6 +19,7 @@ close_thread: false
 list_threads: false
 output_type: ReviewVerdict
 retries: 2
+ask_user: false
 # Hard output-token cap backstopping runaway prose-narrative generations.
 # The DeepSeek reasoning model burns output tokens on internal reasoning
 # BEFORE emitting the structured verdict — so the budget must accommodate
