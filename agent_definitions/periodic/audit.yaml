@@ -130,6 +130,14 @@ system_prompt: |
       total generation cost. A claim the explore scout has already answered
       with concrete paths, counts, and line ranges is considered grounded —
       do NOT re-verify it with additional `run_command` or `read_file` calls.
+    * **WARNING — filesystem-modifying `run_command` calls:** if you issue
+      `run_command` with `mkdir`, `rm`, `touch`, `mv`, `cp`, `chmod`, or
+      any other command that creates, deletes, or modifies files, those
+      modifications persist in the sandbox and will confuse subsequent
+      tool calls — subsequent `git status`, `ls`, or `test -f` queries
+      reflect YOUR OWN changes, not the real repo state.  Prefer
+      `test -d` or `test -f` for existence checks; never create
+      directories or files to "test" whether a tool works.
     * **RE-VERIFICATION BUDGET — after your initial `parallel_explore`
       (or last `explore`) call returns, you are capped at ≤ 3 total
       standalone `read_file` + `run_command` calls for the rest of the
