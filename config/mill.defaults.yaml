@@ -237,6 +237,10 @@ periodic:
   trace_review:
     enabled: true                   # enable periodic trace-review passes
     interval_seconds: 86400         # seconds between passes (min 3600 enforced in worker)
+    cost_multiplier: 3.0            # outlier threshold multiplier for cost (cost > median * N → flagged)
+    obs_multiplier: 3.0             # outlier threshold multiplier for observation count (obs > median * N → flagged)
+    max_repeated_tool: 50           # absolute cap on repeated tool calls before flagging
+    max_drafts_per_run: 5           # cap on drafted findings per pass (prevents board flooding)
 
   # -- stale-branch-cleanup — deletes old mill branches with no open PR -----
   stale_branch_cleanup:
