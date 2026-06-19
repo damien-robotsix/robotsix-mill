@@ -126,7 +126,10 @@ def make_read_ticket_tool(settings: Settings):
         """Return the full details of a ticket: description, history, and comments.
 
         Read-only — cannot modify tickets in any way.
-        ticket_id: the full ticket ID string (e.g. '20250331T142030Z-fix-auth-timeout-a3f2').
+        ticket_id: the full ticket ID string, formatted as 'YYYYMMDDTHHMMSSZ-slug-4hex'
+                   (e.g. '20250331T142030Z-fix-auth-timeout-a3f2').
+                   The ID must include the slug and trailing 4-hex-digit suffix —
+                   a bare timestamp like '20250331T142030Z' is NOT valid.
         Returns a formatted Markdown summary or a clear error message.
         """
         ticket_id = (ticket_id or "").strip()
@@ -166,7 +169,7 @@ def make_read_ticket_tool(settings: Settings):
     ToolRegistry.register(
         ToolInfo(
             name="read_ticket",
-            description="Return the full details of a ticket: description, history, and comments.",
+            description="Return the full details of a ticket (requires ID in 'YYYYMMDDTHHMMSSZ-slug-4hex' format).",
             category="reporting",
             parameters={"ticket_id": "str"},
         )
