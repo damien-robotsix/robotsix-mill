@@ -600,6 +600,7 @@ class TestRunDocAgent:
             "list_dir",
             "edit_file",
             "explore",
+            "parallel_explore",
         }
 
     # -- memory section in system prompt -------------------------------

@@ -75,6 +75,7 @@ def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
         "explore",
         "list_dir",
         "list_threads",
+        "parallel_explore",
         "post_comment",
         "read_file",
         "read_ticket",

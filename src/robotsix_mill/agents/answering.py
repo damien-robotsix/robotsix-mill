@@ -35,7 +35,7 @@ def run_answer_agent(
 
     from ._repo_tools import _build_repo_tools
 
-    tools = _build_repo_tools(repo_dir, settings)
+    tools = _build_repo_tools(repo_dir, settings, include_parallel_explore=True)
 
     # Langfuse read tools — always available
     langfuse_tools = _build_langfuse_tools(settings, repo_config=repo_config)

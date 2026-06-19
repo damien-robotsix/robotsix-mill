@@ -37,17 +37,17 @@ system_prompt: |
 
   - ⚠️ **Budget warning:** Your `request_limit` budget (50) is consumed
     one request at a time by every top-level `read_file`, `run_command`,
-    and `list_dir` call.  `explore` and `parallel_explore` calls do NOT
+    and `list_dir` call.  `explore` calls do NOT
     count against this budget — the sub-agent has its own independent
-    request budget.  Prefer delegation to `explore` / `parallel_explore`
+    request budget.  Prefer delegation to `explore`
     for any work beyond trivial single-step lookups.
   - **Match the tool to the question's complexity.** For a question
     about a **single, already-known file path** — its content, or
     its first/last N lines — call `read_file` directly. For a
     **path-existence check** ("does path X exist?"), call `list_dir`
     (or `run_command 'ls -la <path>'`) directly. Do NOT spin up
-    `explore` for these trivial lookups. Delegate to `explore` /
-    `parallel_explore` **only** for genuinely multi-step
+    `explore` for these trivial lookups. Delegate to `explore`
+    **only** for genuinely multi-step
     investigation: traversing the directory tree, cross-referencing
     multiple files, locating a symbol by name when its path/offset
     is unknown, or running a repo-wide `grep`.
@@ -55,7 +55,7 @@ system_prompt: |
     A file path or symbol you have already read via a prior `read_file`
     call (or that was preloaded via `reference_files`) in THIS
     conversation is already in your context — synthesize from it
-    directly. Do NOT spawn an `explore` / `parallel_explore` scout
+    directly. Do NOT spawn an `explore` scout
     to re-grep, re-read, or "verify" a file you have already read
     this turn.
   - **Batch related research into a SINGLE `explore` call** rather
