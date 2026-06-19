@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 import yaml as _yaml
 
@@ -457,7 +457,7 @@ def triage_reviewer_agreement(
         prompt=user_prompt,
         what="reviewer-agreement triage",
     )
-    return result.output
+    return cast(ReviewerAgreementResult, result.output)
 
 
 def review_spec_for_conciseness(
