@@ -134,6 +134,15 @@ system_prompt: |
     their entries to a ``## Done`` section with a short note.  For
     gaps you decided to ignore, move them to ``## Ignored`` with a
     one-line reason.
+  - **CRITICAL — memory consistency rule:** Only write "Filed" or
+    "Filed this run" annotations for gaps whose gap IDs appear in
+    your ``gap_ids`` output list.  The ``gap_ids`` list is the
+    structured-output contract — it is the ONLY mechanism the runner
+    uses to create draft tickets.  If a gap ID is not in
+    ``gap_ids``, the runner will NOT file it, regardless of what
+    your ``updated_memory`` says.  Writing "Filed" for a gap not in
+    ``gap_ids`` creates a stale memory entry that will confuse your
+    next run.
   - Return the full, updated ledger in the ``updated_memory`` field
     — it will be persisted verbatim for your next run.
 

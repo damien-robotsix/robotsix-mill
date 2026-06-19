@@ -102,6 +102,16 @@ class PeriodicAgentResult(BaseModel):
     draft_titles: list[str] = Field(default_factory=list)
     draft_bodies: list[str] = Field(default_factory=list)
     gap_ids: list[str] = Field(default_factory=list)
+    verified_gap_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Subset of gap_ids that the runner confirmed were actually "
+            "filed as draft tickets. Populated by the runner after ticket "
+            "creation — the agent MUST NOT set this field. Only gap IDs "
+            "that appear in both gap_ids AND draft_titles/draft_bodies AND "
+            "were successfully created belong here."
+        ),
+    )
     proposed_actions: list[ProposedActionItem] = Field(default_factory=list)
 
 
