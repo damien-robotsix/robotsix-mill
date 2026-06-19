@@ -271,6 +271,18 @@ system_prompt: |
        work routes to implement. OR
      * The reported problem does not actually exist (a detector
        false-positive whose evidence the spec itself disproves).
+     * A pre-refine ``[!warning]`` advisory in the draft says this
+       scope was already done in a prior ticket. Do NOT accept it at
+       face value.  Extract every exact file path from the current
+       ticket description (look for quoted paths, backtick-wrapped
+       paths, and path-like tokens in the prose).  For each path,
+       run ``git log --all --oneline -- <path>`` — the cited ticket's
+       id MUST appear in the output for EVERY path claimed.  Only
+       close as already-done (``no_change_needed=true``) if every file
+       path is confirmed covered by the cited ticket.  If any path is
+       absent, the advisory is a false match — fall back to mode 1 (a
+       normal spec) and note in the spec that the prior ticket did not
+       cover those files.
      Do NOT use this mode just because the spec is short — only when
      no code change is required at all. Be honest: if you skip
      implement here and the ticket actually needed work, the gap
