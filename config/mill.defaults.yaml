@@ -191,6 +191,7 @@ pipeline:
   max_archived_tickets: 100                          # max terminal-state tickets retained (0 = no purge)
   trace_review_target_repo_id: ""                    # route all trace-review drafts to this board (empty = source-repo routing)
   ci_patterns_path: null                             # override path to the CI failure-patterns file (null = derive from data_dir)
+  delete_branch_on_merge: true                      # delete per-ticket head branch on the forge after merge to DONE
 
   # per-agent memory ledger path overrides (null = derive from data_dir)
   retrospect_memory_path: null            # defaults to <data_dir>/retrospect_memory.md
