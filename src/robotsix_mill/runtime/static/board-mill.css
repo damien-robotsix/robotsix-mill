@@ -102,6 +102,7 @@ h1 {
 .src-roadmap-sync    { background: #4c1d95; color: #c4b5fd; }
 .src-forge-parity    { background: #2e1065; color: #a78bfa; }
 .src-member-sync     { background: #164e63; color: #0891b2; }
+.src-state-sync      { background: #164e63; color: #0891b2; }
 .src-module-curator  { background: #4a1a00; color: #f97316; }
 .src-copy-paste      { background: #4a0d2e; color: #ec4899; }
 .src-board-cleanup   { background: #064e3b; color: #10b981; }

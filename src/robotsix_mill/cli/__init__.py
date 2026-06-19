@@ -122,6 +122,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Copy-paste pass",
         "format": "memory_drafts",
     },
+    "state-sync": {
+        "module": "runners.state_sync_runner",
+        "function": "run_state_sync_pass",
+        "label": "State-sync pass",
+        "format": "memory_drafts",
+    },
     "forge-parity": {
         "module": "runners.forge_parity_runner",
         "function": "run_forge_parity_pass",
