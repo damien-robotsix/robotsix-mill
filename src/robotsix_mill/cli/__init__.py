@@ -128,6 +128,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "State-sync pass",
         "format": "memory_drafts",
     },
+    "env-doc-sync": {
+        "module": "runners.env_doc_sync_runner",
+        "function": "run_env_doc_sync_pass",
+        "label": "Env-doc-sync pass",
+        "format": "memory_drafts",
+    },
     "forge-parity": {
         "module": "runners.forge_parity_runner",
         "function": "run_forge_parity_pass",
