@@ -746,7 +746,7 @@ class TestRunTraceReviewPass:
         assert result.traces_flagged == 1
         assert result.drafts_created == []
 
-    # -- inspector cap (trace_review_max_inspector_runs_per_pass) --------
+    # -- inspector cap (trace_review_max_inspections_per_run) --------
 
     def test_inspector_cap_top_n_by_cost(self, settings, monkeypatch):
         """When flagged traces exceed the inspector cap, only the
@@ -786,7 +786,7 @@ class TestRunTraceReviewPass:
         # Cap at 3 — only the three most expensive should be inspected.
         capped = Settings(
             data_dir=settings.data_dir,
-            trace_review_max_inspector_runs_per_pass=3,
+            trace_review_max_inspections_per_run=3,
         )
         monkeypatch.setattr(
             "robotsix_mill.runners.trace_review_runner.Settings",
@@ -840,7 +840,7 @@ class TestRunTraceReviewPass:
         )
         capped = Settings(
             data_dir=settings.data_dir,
-            trace_review_max_inspector_runs_per_pass=0,
+            trace_review_max_inspections_per_run=0,
         )
         monkeypatch.setattr(
             "robotsix_mill.runners.trace_review_runner.Settings",
@@ -889,7 +889,7 @@ class TestRunTraceReviewPass:
         )
         capped = Settings(
             data_dir=settings.data_dir,
-            trace_review_max_inspector_runs_per_pass=5,
+            trace_review_max_inspections_per_run=5,
         )
         monkeypatch.setattr(
             "robotsix_mill.runners.trace_review_runner.Settings",
@@ -931,7 +931,7 @@ class TestRunTraceReviewPass:
         )
         capped = Settings(
             data_dir=settings.data_dir,
-            trace_review_max_inspector_runs_per_pass=3,
+            trace_review_max_inspections_per_run=3,
         )
         monkeypatch.setattr(
             "robotsix_mill.runners.trace_review_runner.Settings",
@@ -948,16 +948,15 @@ class TestRunTraceReviewPass:
         run_trace_review_pass(
             session_id="sess-cap-log", repo_config=_test_repo_config()
         )
-        # Expect a log line like: "10 flagged traces exceed inspector cap
-        # of 3 — inspecting top 3 by cost, skipping 7"
+        # Expect a log line like: "inspection cap of 3 reached — 7 flagged
+        # traces not inspected this run"
         cap_logs = [
             r.getMessage()
             for r in caplog.records
-            if "exceed inspector cap" in r.getMessage()
+            if "inspection cap of 3 reached" in r.getMessage()
         ]
         assert len(cap_logs) == 1
-        assert "skipping 7" in cap_logs[0]
-        assert "inspecting top 3 by cost" in cap_logs[0]
+        assert "7 flagged traces not inspected this run" in cap_logs[0]
 
     def test_inspector_cap_watermark_still_advances(self, settings, monkeypatch):
         """Watermark advances past all processed traces even when some
@@ -977,7 +976,7 @@ class TestRunTraceReviewPass:
         )
         capped = Settings(
             data_dir=settings.data_dir,
-            trace_review_max_inspector_runs_per_pass=2,
+            trace_review_max_inspections_per_run=2,
         )
         monkeypatch.setattr(
             "robotsix_mill.runners.trace_review_runner.Settings",
