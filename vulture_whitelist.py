@@ -33,6 +33,7 @@ _validate_name
 reset_for_tests
 run_completeness_check_agent
 run_config_sync_agent
+run_env_doc_sync_agent
 _absorb_summary_typos
 best_k
 failure_summary
@@ -45,6 +46,7 @@ CompletenessCheckResult
 CopyPasteResult
 ForgeParityResult
 HealthResult
+EnvDocSyncResult
 StateSyncResult
 SurveyResult
 TestGapResult
@@ -138,6 +140,10 @@ bc_check_model
 copy_paste_interval_seconds
 config_sync_periodic
 config_sync_interval_seconds
+env_doc_sync_model
+env_doc_sync_memory_path
+env_doc_sync_periodic
+env_doc_sync_interval_seconds
 member_sync_interval_seconds
 meta_periodic
 cost_analyst_periodic
@@ -164,6 +170,7 @@ health_memory_file
 test_gap_memory_file
 survey_memory_file
 config_sync_memory_file
+env_doc_sync_memory_file
 state_sync_memory_file
 bc_check_memory_file
 completeness_check_memory_file
@@ -217,6 +224,7 @@ run_audit_pass
 run_bc_check_pass
 run_completeness_check_pass
 run_config_sync_pass
+run_env_doc_sync_pass
 run_copy_paste_pass
 run_cost_reconciliation_pass
 oversized_items
