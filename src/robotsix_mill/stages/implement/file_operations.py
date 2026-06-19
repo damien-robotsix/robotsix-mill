@@ -61,6 +61,131 @@ class FileOperationsMixin(_ImplementStageBase):
                     return True
         return False
 
+    @staticmethod
+    def _resolve_in_repo(repo_dir: Path, raw_path: str) -> Path:
+        """Map an edit tool-call's verbatim *raw_path* to an absolute path
+        inside *repo_dir*, raising ``ValueError`` if it escapes the clone.
+
+        mill fs tools emit repo-relative paths; the Claude SDK editors emit
+        absolute paths (which, for the agent's own clone, live under
+        *repo_dir*). Anything resolving outside *repo_dir* is rejected so the
+        replay never touches the host filesystem."""
+        root = repo_dir.resolve()
+        p = Path(raw_path)
+        cand = (p if p.is_absolute() else root / p).resolve()
+        if cand != root and root not in cand.parents:
+            raise ValueError(f"path escapes clone: {raw_path}")
+        return cand
+
+    @classmethod
+    def _edits_formatter_reverted(
+        cls, repo_dir: Path, new_messages: bytes | str | None
+    ) -> bool | None:
+        """Distinguish a *redundant / formatter-reverted* empty-diff run from a
+        *lost-work* one, for the edit-claim guard.
+
+        Re-applies the run's recorded edit tool-calls onto the (clean) working
+        tree, runs the project formatter (``ruff format``) on the touched
+        Python files, and inspects the net diff:
+
+        * ``True``  — nothing changed: the edits were redundant or the
+          formatter normalised them away (e.g. ``except (A, B):`` →
+          ``except A, B:`` on a 3.14 target). A genuine no-op — safe to honour
+          ``no_change_needed`` and close DONE.
+        * ``False`` — a real change survived: the edits represent work that the
+          live run lost (reverted / reset / written off-clone). BLOCK.
+        * ``None``  — can't decide safely (un-replayable edit kind, a path
+          outside the clone, an edit whose ``old_string`` no longer matches, or
+          any error). The caller MUST treat this like ``False`` and BLOCK,
+          preserving the work-loss guard whenever the check is inapplicable.
+
+        PRECONDITION: the working tree is clean (the caller already verified
+        ``_any_repo_has_changes`` is False), so the replay is fully reverted
+        afterward to restore a pristine tree.
+        """
+        ops = short_circuit_verify.extract_replayable_edits(new_messages)
+        if not ops:  # None (un-replayable) or [] (no edits) → fail closed
+            return None
+        try:
+            resolved = [(op, cls._resolve_in_repo(repo_dir, op["path"])) for op in ops]
+        except ValueError:
+            return None  # an edit targets a path outside this clone
+
+        created: list[Path] = []
+        py_touched: list[Path] = []
+        try:
+            for op, abs_path in resolved:
+                existed = abs_path.exists()
+                kind = op["kind"]
+                if kind == "delete":
+                    if existed:
+                        abs_path.unlink()
+                elif kind == "write":
+                    if not existed:
+                        created.append(abs_path)
+                    abs_path.parent.mkdir(parents=True, exist_ok=True)
+                    abs_path.write_text(op["content"], encoding="utf-8")
+                else:  # edit
+                    if not existed:
+                        return None  # edit target vanished — can't replay
+                    text = abs_path.read_text(encoding="utf-8")
+                    if op["old"] not in text:
+                        return None  # old_string no longer present — ambiguous
+                    abs_path.write_text(
+                        text.replace(op["old"], op["new"], 1), encoding="utf-8"
+                    )
+                if kind != "delete" and abs_path.suffix == ".py":
+                    py_touched.append(abs_path)
+            if py_touched:
+                cls._run_project_formatter(repo_dir, py_touched)
+            return not git_ops.has_changes(repo_dir)
+        except Exception:  # noqa: BLE001 — any replay failure → fail closed (BLOCK)
+            log.warning(
+                "_edits_formatter_reverted: replay failed; failing closed",
+                exc_info=True,
+            )
+            return None
+        finally:
+            # Restore the pristine tree: revert tracked edits + drop the files
+            # the replay newly created.
+            try:
+                subprocess.run(
+                    ["git", "checkout", "--", "."],
+                    cwd=str(repo_dir),
+                    check=False,
+                    capture_output=True,
+                    timeout=60,
+                )
+            except OSError, subprocess.SubprocessError:
+                log.warning(
+                    "_edits_formatter_reverted: worktree reset failed", exc_info=True
+                )
+            for p in created:
+                try:
+                    if p.exists():
+                        p.unlink()
+                except OSError:
+                    pass
+
+    @staticmethod
+    def _run_project_formatter(repo_dir: Path, files: list[Path]) -> None:
+        """Run ``ruff format`` on *files* with ``cwd=repo_dir`` so the repo's
+        own ``pyproject`` config (e.g. ``target-version``) applies — mirroring
+        what CI and the agent run. Best-effort: a missing/failing ruff leaves
+        the files as the raw replay wrote them (the caller's diff check then
+        treats a surviving raw edit conservatively as work)."""
+        rels = [str(f) for f in files]
+        try:
+            subprocess.run(
+                ["ruff", "format", *rels],
+                cwd=str(repo_dir),
+                check=False,
+                capture_output=True,
+                timeout=120,
+            )
+        except OSError, subprocess.SubprocessError:
+            log.warning("_run_project_formatter: ruff format failed", exc_info=True)
+
     @classmethod
     def _claimed_gitignored_edits(
         cls, repo_dir: Path, new_messages: bytes | str | None

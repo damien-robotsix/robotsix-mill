@@ -618,3 +618,142 @@ def test_file_operations_mixin_is_importable():
     assert hasattr(FileOperationsMixin, "_clone_and_branch")
     assert hasattr(FileOperationsMixin, "_any_repo_has_changes")
     assert hasattr(FileOperationsMixin, "_claimed_gitignored_edits")
+
+
+# ---------------------------------------------------------------------------
+# _edits_formatter_reverted — replay + format discriminator (real git + ruff)
+# ---------------------------------------------------------------------------
+
+
+def _init_git_repo(tmp_path, files: dict):
+    from pathlib import Path
+
+    repo = Path(tmp_path) / "repo"
+    repo.mkdir()
+    for rel, content in files.items():
+        p = repo / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+    env = {"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null"}
+    import os
+
+    runenv = {**os.environ, **env}
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True, env=runenv)
+    subprocess.run(["git", "config", "user.email", "t@t"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "t"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True, env=runenv)
+    subprocess.run(["git", "commit", "-qm", "init"], cwd=repo, check=True, env=runenv)
+    return repo
+
+
+def _edit_msgs(specs: list) -> bytes:
+    import json
+
+    parts = [
+        {
+            "part_kind": "tool-call",
+            "tool_name": name,
+            "args": args,
+            "tool_call_id": f"c{i}",
+        }
+        for i, (name, args) in enumerate(specs)
+    ]
+    return json.dumps([{"parts": parts}]).encode()
+
+
+# A repo whose ruff target is 3.14, so ruff format strips redundant
+# multi-exception parentheses (the PEP-758 normalisation behind ticket c356).
+_PY314_PYPROJECT = '[tool.ruff]\ntarget-version = "py314"\n'
+_CLEAN_PEP758 = (
+    "import json\n\n\n"
+    "def f(p):\n"
+    "    try:\n"
+    "        return json.loads(p)\n"
+    "    except json.JSONDecodeError, KeyError:\n"
+    "        return None\n"
+)
+
+
+def _porcelain(repo) -> str:
+    return subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+
+
+class TestEditsFormatterReverted:
+    def test_formatter_reverted_edit_is_noop_true(self, tmp_path):
+        """The c356 case: parenthesising ``except A, B:`` is reverted by
+        ruff format on a 3.14 target → no net change → True (safe no-op)."""
+        repo = _init_git_repo(
+            tmp_path, {"pyproject.toml": _PY314_PYPROJECT, "m.py": _CLEAN_PEP758}
+        )
+        msgs = _edit_msgs(
+            [
+                (
+                    "edit_file",
+                    {
+                        "path": "m.py",
+                        "old_string": "    except json.JSONDecodeError, KeyError:",
+                        "new_string": "    except (json.JSONDecodeError, KeyError):",
+                    },
+                )
+            ]
+        )
+        assert FileOperationsMixin._edits_formatter_reverted(repo, msgs) is True
+        # Tree restored to pristine afterward.
+        assert _porcelain(repo) == ""
+
+    def test_surviving_change_is_lost_work_false(self, tmp_path):
+        """A real semantic edit that ruff keeps → diff survives → False
+        (work-loss case: must BLOCK)."""
+        repo = _init_git_repo(
+            tmp_path, {"pyproject.toml": _PY314_PYPROJECT, "m.py": _CLEAN_PEP758}
+        )
+        msgs = _edit_msgs(
+            [
+                (
+                    "edit_file",
+                    {
+                        "path": "m.py",
+                        "old_string": "        return None\n",
+                        "new_string": "        return {}\n",
+                    },
+                )
+            ]
+        )
+        assert FileOperationsMixin._edits_formatter_reverted(repo, msgs) is False
+        assert _porcelain(repo) == ""
+
+    def test_unreplayable_kind_fails_closed_none(self, tmp_path):
+        repo = _init_git_repo(
+            tmp_path, {"pyproject.toml": _PY314_PYPROJECT, "m.py": _CLEAN_PEP758}
+        )
+        msgs = _edit_msgs([("MultiEdit", {"file_path": "m.py", "edits": []})])
+        assert FileOperationsMixin._edits_formatter_reverted(repo, msgs) is None
+        assert _porcelain(repo) == ""
+
+    def test_path_outside_clone_fails_closed_none(self, tmp_path):
+        repo = _init_git_repo(
+            tmp_path, {"pyproject.toml": _PY314_PYPROJECT, "m.py": _CLEAN_PEP758}
+        )
+        msgs = _edit_msgs(
+            [
+                (
+                    "edit_file",
+                    {"path": "../escape.py", "old_string": "a", "new_string": "b"},
+                )
+            ]
+        )
+        assert FileOperationsMixin._edits_formatter_reverted(repo, msgs) is None
+
+    def test_no_replayable_edits_fails_closed_none(self, tmp_path):
+        repo = _init_git_repo(
+            tmp_path, {"pyproject.toml": _PY314_PYPROJECT, "m.py": _CLEAN_PEP758}
+        )
+        # only a read tool → extract returns [] → None (caller blocks)
+        msgs = _edit_msgs([("read_file", {"path": "m.py"})])
+        assert FileOperationsMixin._edits_formatter_reverted(repo, msgs) is None
