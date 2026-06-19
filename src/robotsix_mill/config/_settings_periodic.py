@@ -337,6 +337,7 @@ class _PeriodicSettings(BaseModel):
     # MILL_COMPLETENESS_CHECK_PERIODIC=true. Minimum enforced at 60s
     # in the worker loop.
     completeness_check_interval_seconds: int = Field(default=86400)
+    completeness_check_request_limit: int = Field(default=80)
 
     # --- forge-parity agent (forge adapter drift detection) ---
     # Model for the forge-parity agent. Defaults to the same capable model
