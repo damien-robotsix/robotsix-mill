@@ -3318,9 +3318,7 @@ class TestPruneOversizedMemoryLedgers:
         ledger = tmp_path / "retrospect_memory.md"
         _write_bytes(ledger, 5000)
 
-        monkeypatch.setattr(
-            "robotsix_mill.runners.data_dir_audit.Settings", lambda: s
-        )
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
         result = run_data_dir_audit_pass()
 
         # File was truncated on disk.
@@ -3344,9 +3342,7 @@ class TestPruneOversizedMemoryLedgers:
         ledger = tmp_path / "retrospect_memory.md"
         _write_bytes(ledger, 5000)
 
-        monkeypatch.setattr(
-            "robotsix_mill.runners.data_dir_audit.Settings", lambda: s
-        )
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
         result = run_data_dir_audit_pass()
 
         # File NOT truncated.
@@ -3366,9 +3362,7 @@ class TestPruneOversizedMemoryLedgers:
         original = "## Memory\n\n- line 1\n- line 2\n"
         ledger.write_text(original, encoding="utf-8")
 
-        monkeypatch.setattr(
-            "robotsix_mill.runners.data_dir_audit.Settings", lambda: s
-        )
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
         result = run_data_dir_audit_pass()
 
         assert result.memory_ledgers_truncated == 0
@@ -3381,9 +3375,7 @@ class TestPruneOversizedMemoryLedgers:
         ledger = tmp_path / "some_memory.md"
         _write_bytes(ledger, 500)
 
-        monkeypatch.setattr(
-            "robotsix_mill.runners.data_dir_audit.Settings", lambda: s
-        )
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
         result = run_data_dir_audit_pass()
 
         assert result.memory_ledgers_truncated == 0
@@ -3396,9 +3388,7 @@ class TestPruneOversizedMemoryLedgers:
         # subdirectory.
         s.data_dir = tmp_path / "nonexistent"
 
-        monkeypatch.setattr(
-            "robotsix_mill.runners.data_dir_audit.Settings", lambda: s
-        )
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
         result = run_data_dir_audit_pass()
 
         assert result.memory_ledgers_truncated == 0
@@ -3412,9 +3402,7 @@ class TestPruneOversizedMemoryLedgers:
         ledger = board_dir / "retrospect_memory.md"
         _write_bytes(ledger, 5000)
 
-        monkeypatch.setattr(
-            "robotsix_mill.runners.data_dir_audit.Settings", lambda: s
-        )
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
         result = run_data_dir_audit_pass()
 
         assert result.memory_ledgers_truncated >= 1
@@ -3437,9 +3425,7 @@ class TestPruneOversizedMemoryLedgers:
             return original_open(self, *args, **kwargs)
 
         monkeypatch.setattr(Path, "read_text", _failing_read_text)
-        monkeypatch.setattr(
-            "robotsix_mill.runners.data_dir_audit.Settings", lambda: s
-        )
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
 
         with caplog.at_level(logging.WARNING, logger="robotsix_mill.data_dir_audit"):
             result = run_data_dir_audit_pass()
@@ -3455,9 +3441,7 @@ class TestPruneOversizedMemoryLedgers:
         not_a_dir.write_text("i am a file", encoding="utf-8")
         s.data_dir = not_a_dir
 
-        monkeypatch.setattr(
-            "robotsix_mill.runners.data_dir_audit.Settings", lambda: s
-        )
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
         result = run_data_dir_audit_pass()
 
         assert result.memory_ledgers_truncated == 0
@@ -3467,9 +3451,7 @@ class TestPruneOversizedMemoryLedgers:
         s = _make_settings(tmp_path, max_memory_chars=100)
         _write_bytes(tmp_path / "audit_memory.md", 5000)
 
-        monkeypatch.setattr(
-            "robotsix_mill.runners.data_dir_audit.Settings", lambda: s
-        )
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
         result = run_data_dir_audit_pass()
 
         assert "Memory ledgers truncated: 1." in result.summary
@@ -3480,9 +3462,7 @@ class TestPruneOversizedMemoryLedgers:
         ledger = tmp_path / "small_memory.md"
         ledger.write_text("small content", encoding="utf-8")
 
-        monkeypatch.setattr(
-            "robotsix_mill.runners.data_dir_audit.Settings", lambda: s
-        )
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
         result = run_data_dir_audit_pass()
 
         assert "Memory ledgers truncated:" not in result.summary
@@ -3493,9 +3473,7 @@ class TestPruneOversizedMemoryLedgers:
         _write_bytes(tmp_path / "foo_memory.md", 5000)
         _write_bytes(tmp_path / "bar_memory.md", 5000)
 
-        monkeypatch.setattr(
-            "robotsix_mill.runners.data_dir_audit.Settings", lambda: s
-        )
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
         result = run_data_dir_audit_pass()
 
         assert result.memory_ledgers_truncated == 2
