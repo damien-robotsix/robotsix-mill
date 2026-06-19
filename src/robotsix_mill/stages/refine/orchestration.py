@@ -605,10 +605,7 @@ class RefineAgentMixin:
             # Only runs for mill-internal automated proposals (not
             # human-written CI-failure tickets) when auto-approve is
             # enabled.
-            if (
-                s.auto_approve_enabled
-                and ticket.source not in ("user", "ci")
-            ):
+            if s.auto_approve_enabled and ticket.source not in ("user", "ci"):
                 try:
                     auto = refining.triage_auto_approve(
                         settings=s,
@@ -619,15 +616,12 @@ class RefineAgentMixin:
                             draft if draft else "(title-only ticket, no body provided)",
                             encoding="utf-8",
                         )
-                        _PATH_RE = re.compile(
-                            r"`([^`]*/[^`]*\.[a-zA-Z]{1,10})`"
-                        )
+                        _PATH_RE = re.compile(r"`([^`]*/[^`]*\.[a-zA-Z]{1,10})`")
                         extracted = _PATH_RE.findall(draft)
                         if extracted:
                             RefineAgentMixin._write_file_map(
                                 ws,
-                                [{"file": p, "note": "from draft"}
-                                 for p in extracted],
+                                [{"file": p, "note": "from draft"} for p in extracted],
                                 only_if_absent=True,
                             )
                         else:
@@ -642,14 +636,12 @@ class RefineAgentMixin:
                             f"auto-approve APPROVE: {auto.reason}",
                             source=ticket.source,
                             triage_note=(
-                                f"triage REFINE → "
-                                f"auto-approve APPROVE: {auto.reason}"
+                                f"triage REFINE → auto-approve APPROVE: {auto.reason}"
                             ),
                         )
                 except Exception:
                     log.warning(
-                        "%s: mechanical fast-path auto-approve failed, "
-                        "falling through",
+                        "%s: mechanical fast-path auto-approve failed, falling through",
                         ticket.id,
                         exc_info=True,
                     )
