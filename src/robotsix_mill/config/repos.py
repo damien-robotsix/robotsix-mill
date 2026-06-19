@@ -57,6 +57,7 @@ class RepoConfig(BaseModel):
     repo_id: str
     board_id: str
     langfuse_project_name: str
+    langfuse_project_id: str = ""
     langfuse_public_key: str
     langfuse_secret_key: str
     langfuse_base_url: str = "https://cloud.langfuse.com"
@@ -237,6 +238,7 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             if isinstance(repo_data, dict)
             else "",
             langfuse_project_name="",
+            langfuse_project_id="",
             langfuse_public_key="",
             langfuse_secret_key="",
             openrouter_api_key=repo_data.get("openrouter_api_key")
@@ -300,9 +302,11 @@ def _apply_global_langfuse(repos: dict[str, RepoConfig]) -> "RepoConfig | None":
     if not (pk and sk):
         return None
     project_name = s.langfuse_project_name or s.langfuse_project_id or ""
+    project_id = s.langfuse_project_id or ""
     base_url = s.langfuse_base_url or "https://cloud.langfuse.com"
     lf_fields = {
         "langfuse_project_name": project_name,
+        "langfuse_project_id": project_id,
         "langfuse_public_key": pk,
         "langfuse_secret_key": sk,
         "langfuse_base_url": base_url,
@@ -313,6 +317,7 @@ def _apply_global_langfuse(repos: dict[str, RepoConfig]) -> "RepoConfig | None":
         repo_id="meta",
         board_id="meta",
         langfuse_project_name=project_name,
+        langfuse_project_id=project_id,
         langfuse_public_key=pk,
         langfuse_secret_key=sk,
         langfuse_base_url=base_url,

@@ -199,6 +199,7 @@ def repo_config() -> RepoConfig:
         repo_id="test-repo",
         board_id="test-board",
         langfuse_project_name="test-project",
+        langfuse_project_id="",
         langfuse_public_key="pk-test",
         langfuse_secret_key="sk-test",
     )
