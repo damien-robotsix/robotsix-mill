@@ -375,6 +375,14 @@ class _StagesSettings(BaseModel):
     trace_review_inspector_toolless_requests: int = Field(
         default=3,
     )
+    # Request budget for the interactive ``langfuse_inspect_trace``
+    # tool path (invoked by the refine/answer agent).  Ad-hoc
+    # inspections should be a quick, bounded confirmation — not an
+    # unbounded deep audit.  Default 15 keeps per-call cost around
+    # $0.10–$0.15 instead of $0.85.
+    trace_review_tool_request_limit: int = Field(
+        default=15,
+    )
     # Hard cap on the total number of drafts a single trace-review
     # pass may file. The inspector emits one finding per flagged trace
     # and a typical batch flags 5-10 traces with 2-5 findings each →
