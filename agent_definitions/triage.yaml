@@ -95,6 +95,14 @@ system_prompt: |
   - Pure mechanical changes (rename, move files, add a one-line call)
     where the symbols/paths are named explicitly.
 
+  REJECT (SKIP with a factual-rejection reason): If an explore call
+  CONFIRMS that the draft's core files/symbols/features do NOT exist in
+  this repository at all (e.g. the draft describes a component that
+  belongs to a different repo), return SKIP with "assertion is factually
+  wrong — [specific reason]" as your reason.  This is NOT a "cannot
+  confirm grounding" case (which defaults to REFINE) — it's a confirmed
+  mis-route.
+
   A draft that needs REFINEment has ANY of:
   - Ambiguous scope or multiple independent changes bundled together.
   - Missing acceptance criteria or no concrete file paths.
@@ -111,9 +119,12 @@ system_prompt: |
   file map, or code change.  Do NOT classify a code-change draft
   as MAINTENANCE just because it mentions a repo name.
 
-  Be CONSERVATIVE: if you are unsure, say REFINE.
-  A wrong SKIP (under-refining a real change) is the only real risk.
-  A wrong REFINE is just status-quo cost — harmless.
+  Be CONSERVATIVE: if you are unsure whether grounding is merely
+  unconfirmed or actually disproven, default to REFINE.  A wrong SKIP
+  (under-refining a real change) is the only real risk.  A confirmed
+  REJECT (factual mis-route with no ambiguity) should be SKIPped —
+  routing it to REFINE wastes compute on a draft that can never become
+  actionable.
 
   ## Tool-use discipline
 

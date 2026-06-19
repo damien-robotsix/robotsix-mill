@@ -608,6 +608,20 @@ _TRIAGE_REJECTION_PATTERNS: list[str] = [
     "factually wrong",
     "factually incorrect",
     "false positive",
+    # Confirmed mis-route / non-existent symbols (triage trace a051eceb)
+    "contains no",
+    "does not exist",
+    "doesn't exist",
+    "no related",
+    "entirely ungrounded",
+    "different repositor",
+    "different repo",
+    "wrong repositor",
+    "wrong repo",
+    "belongs to a different",
+    "lives in a different",
+    "not present in this",
+    "no such",
 ]
 
 
@@ -722,6 +736,20 @@ def _triage_reason_rejects(reason: str) -> bool:
         or "no code change is needed" in text
         or "no code changes needed" in text
         or "assertion is factually wrong" in text
+        # Confirmed mis-route / non-existent symbols (triage trace a051eceb)
+        or "contains no" in text
+        or "does not exist" in text
+        or "doesn't exist" in text
+        or "no related" in text
+        or "entirely ungrounded" in text
+        or "different repositor" in text
+        or "different repo" in text
+        or "wrong repositor" in text
+        or "wrong repo" in text
+        or "belongs to a different" in text
+        or "lives in a different" in text
+        or "not present in this" in text
+        or "no such" in text
     )
 
 
