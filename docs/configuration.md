@@ -460,6 +460,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `service.api_host` | `MILL_API_HOST` | `127.0.0.1` | FastAPI listen address |
 | `service.api_port` | `MILL_API_PORT` | `8077` | FastAPI listen port |
 | `service.api_url` | `MILL_API_URL` | `http://127.0.0.1:8077` | Base URL the CLI client uses to reach the API |
+| `service.shutdown_grace_seconds` | `MILL_SHUTDOWN_GRACE_SECONDS` | `1800` | Maximum seconds to wait for in-flight periodic-agent passes to finish before tearing the worker down on container shutdown. 0 = wait forever. |
 ### 7. Approval & review
 
 | YAML path | Env var | Default | Description |
