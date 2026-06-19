@@ -281,6 +281,28 @@ def _classify_trace(
                 out_s.startswith("exit=0\n") or "Your command ran successfully" in out_s
             ):
                 pass
+            # read_file path-not-found is user-friendly guidance for a
+            # stale-path guess, not a structural failure.  Its standard
+            # message begins with "error:" which would otherwise match
+            # _TOOL_ERR_PATTERNS (\berror:).  Carve it out via the
+            # stable substring "does not exist — try" from fs_tools.py.
+            elif name == "read_file" and "does not exist — try" in out_s:
+                pass
+            # run_command empty-output failure (e.g. grep that finds
+            # nothing, producing exit>0 + no output).  As of writing
+            # this message does NOT match _TOOL_ERR_PATTERNS, but a
+            # future addition to the pattern could start matching it.
+            # Include a defensive carve-out keyed on the exact wording
+            # from fs_tools.py run_command() so the classifier stays
+            # robust regardless of pattern changes.  Do NOT suppress
+            # exit=<rc>\n<stderr> returns — those carry real stderr and
+            # must still be scanned.
+            elif (
+                name == "run_command"
+                and "failed with exit code" in out_s
+                and "and produced no output" in out_s
+            ):
+                pass
             elif _TOOL_ERR_PATTERNS.search(out_s) or _TOOL_ERR_PATTERNS.search(
                 status_msg
             ):

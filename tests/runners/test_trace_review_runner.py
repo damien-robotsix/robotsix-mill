@@ -313,6 +313,80 @@ class TestClassifier:
         flags = _classify_trace(_trace(), settings, observations=obs)
         assert any("tool_errors" in f for f in flags.flags)
 
+    # -- read_file path-not-found carve-out -----------------------------------
+
+    def test_read_file_path_not_found_skips_error_regex(self, settings):
+        """A read_file observation whose output is the benign
+        path-not-found guidance (begins "error:" but is user-friendly
+        navigation, not a failure) must NOT produce a tool_errors flag."""
+        obs = [
+            _obs(
+                "read_file",
+                output=(
+                    "error: 'src/robotsix_mill/sandbox.py' does not exist — "
+                    "try list_dir('src/robotsix_mill') to find the correct path"
+                ),
+            )
+        ]
+        flags = _classify_trace(_trace(), settings, observations=obs)
+        assert not any("tool_errors" in f for f in flags.flags)
+
+    def test_read_file_traceback_still_flags_error(self, settings):
+        """A read_file observation whose output contains a real Traceback
+        (indicating a crash, not a path-not-found guidance) MUST still
+        produce a tool_errors flag — the carve-out keys on the specific
+        "does not exist — try" substring, not on the tool name alone."""
+        obs = [
+            _obs(
+                "read_file",
+                output=(
+                    "Traceback (most recent call last):\n"
+                    "  File ..., line ..., in read_file\n"
+                    "ValueError: ..."
+                ),
+            )
+        ]
+        flags = _classify_trace(_trace(), settings, observations=obs)
+        assert any("tool_errors" in f for f in flags.flags)
+
+    # -- run_command empty-output carve-out (defensive) -----------------------
+
+    def test_run_command_empty_output_skips_error_regex(self, settings):
+        """A run_command observation whose output is the benign
+        empty-output failure message ("The command failed with exit code
+        1 and produced no output.") must NOT produce a tool_errors flag.
+
+        NOTE: as of writing this string does not match _TOOL_ERR_PATTERNS,
+        so the carve-out is purely defensive.  The test still validates
+        that the classifier bypasses the regex for this message, keeping
+        the classifier robust if patterns change in the future.
+        """
+        obs = [
+            _obs(
+                "run_command",
+                output="The command failed with exit code 1 and produced no output.",
+            )
+        ]
+        flags = _classify_trace(_trace(), settings, observations=obs)
+        assert not any("tool_errors" in f for f in flags.flags)
+
+    def test_run_command_real_stderr_still_flags_error(self, settings):
+        """A run_command observation whose output is of the form
+        exit=<rc>\\n<stderr> with a non-zero exit code and real error
+        content in stderr MUST still produce a tool_errors flag.
+
+        The carve-out only suppresses the empty-output failure message;
+        it must not blanket-suppress all non-zero exit returns.
+        """
+        obs = [
+            _obs(
+                "run_command",
+                output="exit=1\nsrc/app.py:12: error: expected int, got str",
+            )
+        ]
+        flags = _classify_trace(_trace(), settings, observations=obs)
+        assert any("tool_errors" in f for f in flags.flags)
+
     def test_repeated_tool_flag(self, settings):
         n = settings.trace_review_max_repeated_tool + 1
         obs = [_obs("read_file") for _ in range(n)]
