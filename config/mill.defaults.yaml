@@ -37,7 +37,7 @@ core:
     refine_web_fetch_max_calls: 5      # per-refine-run cap on web_fetch calls (across all ask_web_knowledge consults)
     refine_web_fetch_max_total_bytes: 500000  # per-refine-run cap on fetch bytes (0 disables)
     refine_web_search_max_calls: 5     # per-refine-run cap on web_search invocations
-    maintenance_requests: 60           # per-call request cap for the maintenance agent
+    maintenance_requests: 100          # per-call request cap for the maintenance agent
     audit_requests: 80                 # per-call request cap for the periodic audit agent
     dedup_requests: 6                  # per-call cap for dedup check
     dedup_max_candidates: 8               # max candidates passed to dedup LLM (similarity pre-filter cap)

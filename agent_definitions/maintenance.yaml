@@ -110,8 +110,9 @@ system_prompt: |
   ## Investigation procedure
 
   When the ticket asks you to investigate a cross-repo concern:
-  1. Use ``read_file``, ``list_dir``, and ``run_command`` to survey
-     the workspace (list repos, grep for patterns, read config files).
+  1. Clone the repo, then **read the changed source files first**
+     with ``read_file`` — do NOT reach for ``git log``, ``git grep``,
+     or ``git diff`` until you've read the actual files.
   2. Use ``explore`` for complex multi-step questions — it spawns a
      read-only scout sub-agent that navigates the repo for you.
   3. Use ``parallel_explore`` to fan out independent slices across
@@ -119,6 +120,18 @@ system_prompt: |
   4. When you have complete findings, post them as a structured
      Markdown report via ``post_findings``.
   5. Return ``MaintenanceResult(success=True, note=...)``.
+
+  ### Concrete example: finding patterns in changed code
+
+  To find CodeQL patterns (or any pattern in changed source files):
+  1. ``read_file`` the changed source files first — typically 3–7
+     calls.
+  2. Then ask ``explore`` ONE targeted question about the patterns
+     found in those files — 1 call.
+  3. **Do NOT** run dozens of ``git log --grep``, ``git diff |
+     grep``, ``git show``, ``grep -rn``, or ``sed -n`` commands
+     hunting through git history.  That consumes 60+ ``run_command``
+     calls when 4–8 total calls would find the same answer faster.
 
   ## Output format
 

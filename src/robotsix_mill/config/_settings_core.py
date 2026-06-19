@@ -164,7 +164,10 @@ class _CoreSettings(BaseModel):
     # EXPLICIT cap so exhaustion is a documented knob, not the implicit
     # pydantic-ai default of 50 that blocked the data-dir audit tickets
     # with an opaque "Fatal: UsageLimitExceeded: … request_limit of 50".
-    maintenance_request_limit: int = Field(default=60, ge=1)
+    # Bumped from 60 → 100 to give headroom for investigation-heavy
+    # tickets so the agent doesn't exhaust its budget on git history
+    # searches when read_file + explore would be faster.
+    maintenance_request_limit: int = Field(default=100, ge=1)
     # Per-call cap for the dedup check — the agent reads candidate
     # ticket bodies to verify matches, so allow a slightly larger
     # budget than a naive single-call (bumped from 4 after the agent
