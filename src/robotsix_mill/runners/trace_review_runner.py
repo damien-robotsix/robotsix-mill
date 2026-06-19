@@ -262,18 +262,24 @@ def _classify_trace(
         )
         status_msg = o.get("statusMessage") or ""
         if name and not name.startswith("chat "):
+            # ask_user returns are controlled values (the
+            # __ASK_USER_PAUSE__ pause sentinel, or a
+            # self-describing diagnostic string) — never a genuine
+            # tool failure.  Exclude from the error scan regardless
+            # of the recorded output/status text.  NOTE: the
+            # sentinel itself does not match _TOOL_ERR_PATTERNS;
+            # skipping by tool name guards against any ask_user
+            # output (e.g. a controlled "Error: no active ticket"
+            # return) tripping the regex.
+            if name == "ask_user":
+                pass
             # Successful run_command returns exit=0\n... or a success
             # sentence; skip the error-pattern regex for those so grep
             # output that contains test source code lines (e.g. "error:")
             # doesn't produce false positives.
-            if name == "run_command" and (
+            elif name == "run_command" and (
                 out_s.startswith("exit=0\n") or "Your command ran successfully" in out_s
             ):
-                pass
-            elif name == "ask_user" and "__ASK_USER_PAUSE__" in out_s:
-                # The sentinel is the expected happy-path return value;
-                # it is not an error (the error-pattern regex does not
-                # match it, but guard explicitly anyway for clarity).
                 pass
             elif _TOOL_ERR_PATTERNS.search(out_s) or _TOOL_ERR_PATTERNS.search(
                 status_msg

@@ -283,10 +283,33 @@ class TestClassifier:
         flags = _classify_trace(_trace(), settings, observations=obs)
         assert not any("tool_errors" in f for f in flags.flags)
 
-    def test_ask_user_error_output_is_still_a_tool_error(self, settings):
-        """Error returns from ask_user (e.g. "Error: no active ticket
-        session") still match the error regex and must be flagged."""
+    def test_ask_user_error_output_skipped_by_tool_name(self, settings):
+        """ask_user observations are excluded from the error scan by tool
+        name — even an output containing an error token (e.g. "Error: no
+        active ticket session") must NOT produce a tool_errors flag."""
         obs = [_obs("ask_user", output="Error: no active ticket session")]
+        flags = _classify_trace(_trace(), settings, observations=obs)
+        assert not any("tool_errors" in f for f in flags.flags)
+
+    def test_ask_user_status_message_error_skipped_by_tool_name(self, settings):
+        """An ask_user observation whose statusMessage contains an error
+        token must still be skipped (the carve-out is by tool name, not
+        by output field)."""
+        obs = [
+            _obs(
+                "ask_user",
+                output="__ASK_USER_PAUSE__",
+                statusMessage="Traceback (most recent call last):\n  ...",
+            )
+        ]
+        flags = _classify_trace(_trace(), settings, observations=obs)
+        assert not any("tool_errors" in f for f in flags.flags)
+
+    def test_non_exempt_tool_still_flags_error(self, settings):
+        """Guard: a non-exempt tool (e.g. read_file) with an error token
+        in its output still produces a tool_errors flag — the ask_user
+        carve-out didn't disable error detection generally."""
+        obs = [_obs("read_file", output="Traceback (most recent call last)")]
         flags = _classify_trace(_trace(), settings, observations=obs)
         assert any("tool_errors" in f for f in flags.flags)
 
