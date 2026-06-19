@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 class _BoardAgentSettings(BaseModel):
     # Board agent — opt-in agent-comm service (off by default)
     board_agent_enabled: bool = Field(default=False)
-    board_agent_api_url: str = Field(default="http://localhost:8000")
+    board_agent_api_url: str = Field(default="http://127.0.0.1:8077")
     board_agent_api_token: str = Field(default="")
     board_agent_repo_id: str = Field(default="")
     board_agent_write_ops: bool = Field(default=True)
