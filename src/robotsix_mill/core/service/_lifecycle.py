@@ -10,7 +10,7 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from secrets import token_hex
-from typing import Any
+from typing import Any, cast
 
 from sqlmodel import Session, col, select
 
@@ -1409,31 +1409,33 @@ class _LifecycleMixin(_ServiceBase):
             # whose top-level ancestor is open is also protected.
             open_root_ids: set[int] = set()
             for c in all_comments:
+                cid = cast(int, c.id)  # DB-loaded comment, id is never None
                 if c.parent_id is None and c.closed_at is None:
-                    open_root_ids.add(c.id)
+                    open_root_ids.add(cid)
 
             protected_ids: set[int] = set()
             for c in all_comments:
-                if c.id in open_root_ids:
-                    protected_ids.add(c.id)
+                cid = cast(int, c.id)  # DB-loaded comment, id is never None
+                if cid in open_root_ids:
+                    protected_ids.add(cid)
                     continue
                 if c.parent_id is not None:
                     # Walk up to find the root ancestor.
-                    ancestor_pid = c.parent_id
+                    ancestor_pid: int | None = c.parent_id
                     # Guard against cycles (should never exist).
-                    seen: set[int] = {c.id}
-                    while ancestor_pid is not None and ancestor_pid not in seen:
+                    seen: set[int] = {cid}
+                    while ancestor_pid is not None:
+                        if ancestor_pid in seen:
+                            break
                         if ancestor_pid in open_root_ids:
-                            protected_ids.add(c.id)
+                            protected_ids.add(cid)
                             break
                         seen.add(ancestor_pid)
                         # Find the parent comment in the loaded list.
                         parent = next(
                             (x for x in all_comments if x.id == ancestor_pid), None
                         )
-                        if parent is None:
-                            break
-                        ancestor_pid = parent.parent_id
+                        ancestor_pid = parent.parent_id if parent else None
 
             # --- delete oldest unprotected excess ---
             unprotected = [c for c in all_comments if c.id not in protected_ids]
@@ -1443,8 +1445,9 @@ class _LifecycleMixin(_ServiceBase):
             for c in unprotected:
                 if deleted >= excess:
                     break
+                cid = cast(int, c.id)  # DB-loaded comment, id is never None
                 s.delete(c)
-                deleted_ids.add(c.id)
+                deleted_ids.add(cid)
                 deleted += 1
 
             # --- reset parent_id on surviving replies that referenced
