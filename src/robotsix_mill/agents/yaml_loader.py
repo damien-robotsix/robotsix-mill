@@ -67,6 +67,13 @@ class AgentDefinition(BaseModel):
     skills: list[str] = []
     modules: bool = False
     inject_agent_md: bool = True
+    # Opt-in: inject the repo's ``## Language conventions`` block (resolved
+    # via ``resolve_language_instructions``) into the system prompt when a
+    # ``repo_dir`` is available. The refine/implement stages inject these
+    # themselves; this flag wires the SAME conventions into review-type
+    # agents (retrospect/review/audit) so they don't misjudge valid
+    # version-specific syntax (e.g. PEP-758 ``except A, B:`` on Python 3.14).
+    inject_language_conventions: bool = False
     max_tokens: int | None = None
     # Periodic-only scheduling fields. None means "fall back to the
     # corresponding Settings field" — keeps existing YAMLs and the

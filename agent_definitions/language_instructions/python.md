@@ -1,4 +1,24 @@
-# Python language conventions for the implement agent
+# Python language conventions
+
+(Used by the implement and refine agents, and by the review-type agents
+that read/critique code — retrospect, review.)
+
+## Language version & syntax
+
+- Respect the repo's `requires-python` in `pyproject.toml` before judging
+  syntax — this fleet targets recent CPython (commonly `>=3.14`). Do not
+  assume pre-3.14 semantics when reading code.
+- **PEP 758 (Python 3.14+): parentheses around multiple exception types
+  are OPTIONAL.** `except ValueError, KeyError:` is VALID 3.14 syntax and
+  is exactly equivalent to `except (ValueError, KeyError):` — it catches
+  BOTH types. `ruff format` on a `>=3.14` target NORMALISES the
+  parenthesised form to the parens-free one, so the un-parenthesised
+  spelling is the **tool-enforced, preferred** style here — not a defect.
+- This is **not** the legacy Python-2 `except E, var:` (bind-as) form,
+  which bound the exception to a name. `except A, B:` with no `as` lists
+  two *types*. **Never** flag it as a "Python 2 comma-syntax bug" or
+  propose parenthesising it — `ruff format` would only revert the change,
+  so such a fix can never land.
 
 ## Manifest & lockfile workflow
 

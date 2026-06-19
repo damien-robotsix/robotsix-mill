@@ -17,6 +17,10 @@ report_issue: false
 reply_to_thread: false
 close_thread: false
 list_threads: false
+# Inject the repo's ## Language conventions (e.g. PEP-758 except syntax on
+# Python 3.14) so review doesn't request changes against valid
+# version-specific syntax in the diff.
+inject_language_conventions: true
 output_type: ReviewVerdict
 retries: 2
 ask_user: false

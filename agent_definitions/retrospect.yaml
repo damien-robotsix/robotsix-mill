@@ -17,6 +17,10 @@ reply_to_thread: false
 close_thread: false
 list_threads: false
 read_ticket: true
+# Inject the repo's ## Language conventions (e.g. PEP-758 except syntax on
+# Python 3.14) so retrospect doesn't file false "bug" tickets about valid
+# version-specific syntax it reads in the trace / clone.
+inject_language_conventions: true
 output_type: RetrospectResult
 retries: 2
 # The ceiling must fit a full PATH-3 re-emit of the worst-case runtime

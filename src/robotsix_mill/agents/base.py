@@ -247,6 +247,19 @@ def build_agent_from_definition(
             )
             kwargs["system_prompt"] += conventions_block
 
+    # Inject the repo's language conventions for review-type agents. The
+    # refine/implement stages inject these themselves; this opt-in flag wires
+    # the SAME block into agents that READ/critique code (retrospect, review,
+    # audit) so they don't flag valid version-specific syntax as a bug (live
+    # case: a retrospect agent reading PEP-758 ``except A, B:`` on a Python
+    # 3.14 repo as a "Python 2 comma-syntax bug").
+    if definition.inject_language_conventions and repo_dir is not None:
+        from ..config.repo_settings import resolve_language_instructions
+
+        lang_block = resolve_language_instructions(settings, repo_dir).strip()
+        if lang_block:
+            kwargs["system_prompt"] += "\n\n## Language conventions\n\n" + lang_block
+
     return build_agent(settings, **kwargs)
 
 
