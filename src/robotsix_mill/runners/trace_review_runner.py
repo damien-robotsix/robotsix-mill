@@ -260,7 +260,15 @@ def _classify_trace(
         )
         status_msg = o.get("statusMessage") or ""
         if name and not name.startswith("chat "):
-            if _TOOL_ERR_PATTERNS.search(out_s) or _TOOL_ERR_PATTERNS.search(
+            # Successful run_command returns exit=0\n... or a success
+            # sentence; skip the error-pattern regex for those so grep
+            # output that contains test source code lines (e.g. "error:")
+            # doesn't produce false positives.
+            if name == "run_command" and (
+                out_s.startswith("exit=0\n") or "Your command ran successfully" in out_s
+            ):
+                pass
+            elif _TOOL_ERR_PATTERNS.search(out_s) or _TOOL_ERR_PATTERNS.search(
                 status_msg
             ):
                 tool_errors += 1
