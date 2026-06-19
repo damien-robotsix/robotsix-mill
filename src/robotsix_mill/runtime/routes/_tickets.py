@@ -72,6 +72,13 @@ def create_ticket(
     worker=Depends(get_worker),
     settings=Depends(get_settings),
 ) -> TicketRead:
+    """Create a new ticket (``POST /tickets``).
+
+    Resolves the board from *body.repo_id*, creates the ticket row
+    plus workspace, enqueues it for the pipeline, and returns the
+    enriched ``TicketRead``.  Returns 400 when the board cannot be
+    resolved or the ticket data is invalid.
+    """
     repos = request.app.state.repos
     board_id = _resolve_board_id(body.repo_id, repos)
 
@@ -102,6 +109,16 @@ def list_tickets(
     svc=Depends(get_service),
     settings=Depends(get_settings),
 ) -> list[TicketRead]:
+    """List tickets (``GET /tickets``).
+
+    Returns all tickets, optionally filtered by *state* and *repo_id*.
+    ``include_closed=False`` hides CLOSED and EPIC_CLOSED but keeps
+    DONE visible (the transient retrospect window).  Enrichment is
+    downgraded for performance — cost is cache-only and PR URLs are
+    skipped — because the board polls this every 5 s.  A background
+    cost-warming task refreshes the rows on each poll so subsequent
+    requests show real values.
+    """
     # The board polls this every 5s. Both expensive enrichments are
     # downgraded for the list:
     #   blocking_cost=False — cache-only Langfuse cost lookup (no HTTP).
@@ -172,6 +189,11 @@ def get_ticket(
     svc=Depends(get_service),
     settings=Depends(get_settings),
 ) -> TicketRead:
+    """Return a single ticket (``GET /tickets/{ticket_id}``).
+
+    Returns the fully enriched ``TicketRead`` (with cost and PR link).
+    Raises 404 when the ticket does not exist.
+    """
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
@@ -184,6 +206,11 @@ def get_history(
     ticket_id: str,
     svc=Depends(get_service),
 ) -> list[TicketEvent]:
+    """Return event history for a ticket (``GET /tickets/{ticket_id}/history``).
+
+    Returns the ordered list of ``TicketEvent`` rows.  Raises 404 when
+    the ticket does not exist.
+    """
     if svc.get(ticket_id) is None:
         raise HTTPException(404, "ticket not found")
     return svc.history(ticket_id)
@@ -194,6 +221,12 @@ def get_description(
     ticket_id: str,
     svc=Depends(get_service),
 ) -> dict:
+    """Return the current description for a ticket (``GET /tickets/{ticket_id}/description``).
+
+    Reads the description from the ticket's workspace on disk.
+    Returns ``{"description": "..."}``.  Raises 404 when the ticket
+    does not exist.
+    """
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
@@ -453,6 +486,13 @@ def transition(
     worker=Depends(get_worker),
     settings=Depends(get_settings),
 ) -> TicketRead:
+    """Transition a ticket to a new state (``POST /tickets/{ticket_id}/transition``).
+
+    Body: ``{"state": "<state>", "note": "<optional note>"}``.
+    Enqueues the ticket after transition so the pipeline picks it up.
+    Returns the enriched ``TicketRead``.  Raises 404 when the ticket
+    does not exist.
+    """
     try:
         ticket = svc.transition(ticket_id, body.state, body.note)
     except KeyError:
@@ -523,6 +563,14 @@ def approve_ticket(
     worker=Depends(get_worker),
     settings=Depends(get_settings),
 ) -> TicketRead:
+    """Human approval for a ticket (``POST /tickets/{ticket_id}/approve``).
+
+    Transitions the ticket to READY and enqueues it so implement picks
+    it up.  If the ticket has an epic parent and a proposed epic body
+    artifact exists (``epic-body-proposed.md``), that body is applied
+    to the epic as a best-effort side effect.  Returns 404 when the
+    ticket does not exist.
+    """
     try:
         ticket = svc.transition(ticket_id, State.READY, note="approved by human")
     except KeyError:
