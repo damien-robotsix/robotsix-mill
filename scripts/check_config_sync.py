@@ -106,7 +106,6 @@ _MODEL_FIELDS_NOT_IN_ALIAS: frozenset[str] = frozenset(
         "test_gap_request_limit",
         "doc_request_limit",
         "default_repo_id",
-        "shutdown_grace_seconds",
         # stages: gates / review / CI / maintenance
         "language_instructions_dir",
         "auto_merge_main_debt_detection_enabled",

@@ -470,6 +470,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "service.api_host": "api_host",
     "service.api_port": "api_port",
     "service.api_url": "api_url",
+    "service.shutdown_grace_seconds": "shutdown_grace_seconds",
     # -- board_agent (agent-comm broker responder) --
     "board_agent.enabled": "board_agent_enabled",
     "board_agent.api_url": "board_agent_api_url",
