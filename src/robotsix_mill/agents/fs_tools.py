@@ -672,7 +672,10 @@ def build_fs_tools(
 
         Commands automatically execute in the repository root
         directory — do not prefix with an absolute cd to a repo
-        root. Use ``cd <subdir> && …`` to work in a subdirectory."""
+        root. Use ``cd <subdir> && …`` to work in a subdirectory.
+
+        Note: the ``pytest --timeout`` flag is not available in this
+        environment — use plain ``python -m pytest`` without it."""
         if not root.exists():
             return (
                 "error: workspace repo directory does not exist — "
