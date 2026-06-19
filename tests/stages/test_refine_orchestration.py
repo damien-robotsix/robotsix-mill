@@ -739,7 +739,9 @@ def test_reviewer_agreement_guard_agree_short_circuits(
     ctx = ctx_factory()
     t = _ticket(ctx)
     ctx.service.add_comment(
-        t.id, "Confirmed — the refine machinery doesn't exist here. LGTM.", author="user"
+        t.id,
+        "Confirmed — the refine machinery doesn't exist here. LGTM.",
+        author="user",
     )
     calls: list[dict] = []
 
@@ -751,7 +753,8 @@ def test_reviewer_agreement_guard_agree_short_circuits(
         monkeypatch,
         run_refine_agent=_spy,
         triage_reviewer_agreement=lambda **kw: refining.ReviewerAgreementResult(
-            decision="AGREE", reason="Reviewer confirmed the draft's misrouting finding."
+            decision="AGREE",
+            reason="Reviewer confirmed the draft's misrouting finding.",
         ),
     )
 
@@ -800,9 +803,7 @@ def test_reviewer_agreement_guard_gate_disabled_falls_through(
 ):
     ctx = ctx_factory(reviewer_agreement_gate_enabled=False)
     t = _ticket(ctx)
-    ctx.service.add_comment(
-        t.id, "Confirmed — no change needed.", author="user"
-    )
+    ctx.service.add_comment(t.id, "Confirmed — no change needed.", author="user")
     called: list[int] = []
 
     def _fake_triage(**kw):
@@ -837,9 +838,7 @@ def test_reviewer_agreement_guard_exception_falls_through(
 ):
     ctx = ctx_factory()
     t = _ticket(ctx)
-    ctx.service.add_comment(
-        t.id, "Confirmed — no change needed.", author="user"
-    )
+    ctx.service.add_comment(t.id, "Confirmed — no change needed.", author="user")
 
     def _boom(**kw):
         raise RuntimeError("backend unavailable")
