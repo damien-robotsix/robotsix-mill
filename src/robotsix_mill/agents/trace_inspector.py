@@ -480,7 +480,7 @@ def run_trace_inspector(
     # the error budget.
     tools = _wrap_tools_with_error_limit(tools, max_errors=error_limit)
 
-    model, client = build_openrouter_model(1)
+    model, client = build_openrouter_model(settings.trace_review_model_level)
     agent = Agent(
         model=model,
         system_prompt=_SYSTEM_PROMPT,
