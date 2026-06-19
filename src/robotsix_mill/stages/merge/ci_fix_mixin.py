@@ -308,9 +308,7 @@ class MultiRepoCiFixMixin(_MergeStageBase):
         return Outcome(ticket.state)
 
     @staticmethod
-    def _note_ci_fix_attempt(
-        ctx: StageContext, ticket_id: str, note: str
-    ) -> None:
+    def _note_ci_fix_attempt(ctx: StageContext, ticket_id: str, note: str) -> None:
         """Record a per-attempt cross-repo ci-fix breadcrumb in ticket history.
 
         The multi-repo merge stage runs the ci-fix loop inline — the ticket

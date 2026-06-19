@@ -4624,9 +4624,7 @@ def test_multi_repo_fix_ci_diverged_returns_blocked_and_skips_push(
     assert "diverged" in (out.note or "").lower()
 
 
-def test_multi_repo_fix_ci_failed_attempt_records_history_note(
-    tmp_path, monkeypatch
-):
+def test_multi_repo_fix_ci_failed_attempt_records_history_note(tmp_path, monkeypatch):
     """A cross-repo ci-fix attempt whose agent fails must leave a per-attempt
     breadcrumb in ticket history.
 
