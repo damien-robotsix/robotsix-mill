@@ -402,6 +402,8 @@ def make_langfuse_inspect_tool(
 
         trace_data = json.dumps(detail, default=str)
         result = run_trace_inspector(
+            # Shares trace_review_model_level with the automated pass
+            # (configurable via Settings, defaults to cheapest tier).
             settings=settings,
             trace_data=trace_data,
             repo_dir=repo_dir,

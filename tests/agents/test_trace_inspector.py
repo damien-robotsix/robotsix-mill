@@ -331,10 +331,57 @@ class TestRunTraceInspector:
         assert result.findings[0].category == "agent_limitation"
         assert "fix loop" in result.findings[0].symptom
 
+    # -----------------------------------------------------------------------
+    # trace_review_model_level (AC1)
+    # -----------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# fetch_trace_detail public API tests
-# ---------------------------------------------------------------------------
+    def test_model_level_defaults_to_1_and_is_configurable(self, monkeypatch):
+        """``trace_review_model_level`` defaults to 1 and the field is
+        passed to ``build_openrouter_model`` — so a single Settings knob
+        governs the inspector tier for both the automated pass and the
+        ``langfuse_inspect_trace`` tool (AC1)."""
+        # Default settings → level 1
+        s = _settings_with_api_key()
+        assert s.trace_review_model_level == 1
+
+        # Override to level 2 and confirm the field propagates.
+        s2 = _settings_with_api_key(trace_review_model_level=2)
+        assert s2.trace_review_model_level == 2
+
+        # Spy on _resolve_level to assert the level passed through.
+        captured_levels: list[int] = []
+
+        from robotsix_mill.agents import base as base_mod
+
+        _orig_resolve = base_mod._resolve_level
+
+        def fake_resolve(level: int):
+            captured_levels.append(level)
+            return _orig_resolve(level)
+
+        monkeypatch.setattr(base_mod, "_resolve_level", fake_resolve)
+
+        # Stub run_agent so the real model is never exercised.
+        monkeypatch.setattr(
+            "robotsix_mill.agents.retry.run_agent",
+            lambda agent, make_run, **kw: make_run(
+                type(
+                    "_H",
+                    (),
+                    {
+                        "run_sync": lambda s, p, **kw: type(
+                            "_R", (), {"output": TraceInspectResult()}
+                        )(),
+                    },
+                )()
+            ),
+        )
+        trace_inspector_mod.run_trace_inspector(
+            settings=s2,
+            trace_data=_fake_trace_clean(),
+            repo_dir=None,
+        )
+        assert captured_levels == [2]
 
 
 class TestFetchTraceDetail:
