@@ -258,9 +258,7 @@ def build_agent_from_definition(
 
         lang_block = resolve_language_instructions(settings, repo_dir).strip()
         if lang_block:
-            kwargs["system_prompt"] += (
-                "\n\n## Language conventions\n\n" + lang_block
-            )
+            kwargs["system_prompt"] += "\n\n## Language conventions\n\n" + lang_block
 
     return build_agent(settings, **kwargs)
 
