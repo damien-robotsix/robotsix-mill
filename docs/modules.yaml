@@ -101,6 +101,9 @@ modules:
       - src/robotsix_mill/forge/base.py
       - src/robotsix_mill/forge/auth.py
       - src/robotsix_mill/forge/github.py
+      - src/robotsix_mill/forge/github_pr.py
+      - src/robotsix_mill/forge/github_ci.py
+      - src/robotsix_mill/forge/github_code_scanning.py
       - src/robotsix_mill/forge/gitlab.py
       - src/robotsix_mill/forge/_http.py
       - src/robotsix_mill/forge/_log_utils.py

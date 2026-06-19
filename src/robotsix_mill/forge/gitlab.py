@@ -14,11 +14,8 @@ from ._http import _ApiClient
 from ._log_utils import _capture_failure_window
 from .auth import gitlab_token
 from .base import BranchInfo, Forge, NotConfiguredError, RepoInfo
-from .github import (
-    _ANSI_RE,
-    _MAX_FAILED_JOBS,
-    _parse_iso_utc,
-)
+from .github import _parse_iso_utc
+from .github_ci import _ANSI_RE, _MAX_FAILED_JOBS
 
 # Earliest-failure markers in a GitLab CI job log.  GitLab jobs don't
 # emit GitHub Actions–style ``##[error]`` lines; instead we match the
