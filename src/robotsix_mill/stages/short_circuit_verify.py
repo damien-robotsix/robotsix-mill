@@ -244,6 +244,100 @@ def detect_missing_claimed_files(
     return sorted(claimed - landed)
 
 
+# Edit tools whose effect can be faithfully replayed from the recorded
+# tool-call args alone (path + old/new text, or full content, or a delete).
+# ``MultiEdit`` / ``NotebookEdit`` carry structured multi-step payloads that
+# are not safe to reconstruct, so a run that used them is treated as
+# un-replayable (the caller fails closed → BLOCK).
+_REPLAYABLE_EDIT_TOOLS = frozenset(
+    {"write_file", "edit_file", "delete_file", "Write", "Edit"}
+)
+
+
+def _part_args(part: dict[str, object]) -> dict[str, object] | None:
+    """Return a tool-call part's ``args`` as a dict, or ``None``.
+
+    pydantic-ai persists ``args`` either as a dict or as a JSON-encoded
+    string; both are accepted. Anything else fails open to ``None``.
+    """
+    args = part.get("args")
+    if isinstance(args, dict):
+        return args
+    if isinstance(args, str):
+        try:
+            parsed = json.loads(args)
+        except json.JSONDecodeError, TypeError, ValueError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
+    return None
+
+
+def extract_replayable_edits(  # noqa: C901 — flat per-tool arg dispatch; branch count is inherent
+    new_messages: bytes | str | None,
+) -> list[dict[str, str]] | None:
+    """Return the run's edit tool-calls as replayable ops, or ``None``.
+
+    Each op is a dict ``{"kind", "path", ...}`` where *kind* is one of
+    ``"edit"`` (``old`` + ``new`` text), ``"write"`` (full ``content``), or
+    ``"delete"``. *path* is the verbatim tool-call path (repo-relative for
+    mill fs tools, absolute for the Claude SDK editors).
+
+    Returns ``None`` (a *can't-replay-safely* signal the caller MUST treat as
+    BLOCK) when the run invoked an edit tool that cannot be faithfully
+    replayed — an un-replayable kind (``MultiEdit`` / ``NotebookEdit``) or a
+    call missing the args needed to reproduce it. This keeps the work-loss
+    guard fully intact whenever the formatter-revert check is inapplicable.
+
+    Returns ``[]`` when no edit tool was invoked at all (no contradiction to
+    resolve). Fail-closed: malformed top-level JSON yields ``None``.
+    """
+    if not new_messages:
+        return []
+    try:
+        messages = json.loads(new_messages)
+    except json.JSONDecodeError, TypeError, ValueError:
+        log.warning("extract_replayable_edits: invalid messages JSON; failing closed")
+        return None
+    if not isinstance(messages, list):
+        return None
+    ops: list[dict[str, str]] = []
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        for part in msg.get("parts", []) or []:
+            if not isinstance(part, dict):
+                continue
+            if part.get("part_kind") != "tool-call":
+                continue
+            name = part.get("tool_name")
+            if name not in _EDIT_TOOL_NAMES:
+                continue
+            if name not in _REPLAYABLE_EDIT_TOOLS:
+                return None  # un-replayable edit kind → fail closed
+            args = _part_args(part)
+            if args is None:
+                return None
+            path = args.get("path")
+            if not isinstance(path, str) or not path:
+                path = args.get("file_path")
+            if not isinstance(path, str) or not path:
+                return None
+            if name == "delete_file":
+                ops.append({"kind": "delete", "path": path})
+            elif name in ("write_file", "Write"):
+                content = args.get("content")
+                if not isinstance(content, str):
+                    return None
+                ops.append({"kind": "write", "path": path, "content": content})
+            else:  # edit_file / Edit
+                old = args.get("old_string")
+                new = args.get("new_string")
+                if not isinstance(old, str) or not isinstance(new, str):
+                    return None
+                ops.append({"kind": "edit", "path": path, "old": old, "new": new})
+    return ops
+
+
 def detect_edit_claim_contradiction(
     *, has_changes: bool, new_messages: bytes | str | None
 ) -> list[str]:

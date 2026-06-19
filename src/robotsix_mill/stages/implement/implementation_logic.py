@@ -332,21 +332,34 @@ class ImplementationLogicMixin(_ImplementStageBase):
                 edit_tools = short_circuit_verify.detect_edit_claim_contradiction(
                     has_changes=False, new_messages=new_msgs
                 )
-                if edit_tools:
+                # An empty diff after edit calls is usually lost work (BLOCK).
+                # But it is legitimate when the edits were redundant or the
+                # project formatter normalises them away — the canonical case
+                # being a ticket that "fixes" valid PEP-758 ``except A, B:`` to
+                # ``except (A, B):``, which ``ruff format`` reverts on a 3.14
+                # target, so every edit nets to zero and the agent correctly
+                # reports ``no_change_needed``. Replay the edits + format to
+                # tell redundant-no-op from lost-work; only a confirmed no-op
+                # (True) is allowed to close DONE. None/False → BLOCK as before.
+                if edit_tools and (
+                    cls._edits_formatter_reverted(repo_dir, new_msgs) is not True
+                ):
                     tool_list = ", ".join(edit_tools)
                     diag = (
                         f"{no_change_rationale.strip() or summary}\n\n"
                         "[Diagnostic] implement was about to close this ticket "
                         "as ``no_change_needed`` because ``git diff`` is empty "
                         f"— but the agent invoked file-mutating tools "
-                        f"({tool_list}) during the run. An empty diff after "
-                        "real edit calls means the work did NOT persist (edits "
-                        "reverted, workspace reset mid-run, or written outside "
-                        "the clone). Closing as no-change would silently lose "
-                        "that work, so the ticket is BLOCKED for inspection. "
-                        "Re-run implement; if the spec genuinely needs no "
-                        "change, the agent must reach that conclusion WITHOUT "
-                        "calling write_file/edit_file/Write/Edit."
+                        f"({tool_list}) during the run, and replaying those "
+                        "edits + formatting still produced a real change (or "
+                        "could not be verified). An empty diff after real edit "
+                        "calls means the work did NOT persist (edits reverted, "
+                        "workspace reset mid-run, or written outside the clone). "
+                        "Closing as no-change would silently lose that work, so "
+                        "the ticket is BLOCKED for inspection. Re-run implement; "
+                        "if the spec genuinely needs no change, the agent must "
+                        "reach that conclusion WITHOUT calling "
+                        "write_file/edit_file/Write/Edit."
                     )
                     cls._finalize(
                         ctx,

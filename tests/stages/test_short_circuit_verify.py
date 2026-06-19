@@ -322,3 +322,71 @@ def test_rawpaths_ignores_non_edit_tools():
 def test_rawpaths_fail_open_on_malformed_json():
     assert scv.run_claimed_edited_rawpaths(b"{not json") == []
     assert scv.run_claimed_edited_rawpaths(None) == []
+
+
+# --- extract_replayable_edits ----------------------------------------------
+
+
+def test_extract_replayable_edits_mill_tools():
+    payload = _msgs_with_paths(
+        ("edit_file", {"path": "a.py", "old_string": "x", "new_string": "y"}),
+        ("write_file", {"path": "b.py", "content": "hi"}),
+        ("delete_file", {"path": "c.py"}),
+    )
+    assert scv.extract_replayable_edits(payload) == [
+        {"kind": "edit", "path": "a.py", "old": "x", "new": "y"},
+        {"kind": "write", "path": "b.py", "content": "hi"},
+        {"kind": "delete", "path": "c.py"},
+    ]
+
+
+def test_extract_replayable_edits_claude_sdk_tools():
+    payload = _msgs_with_paths(
+        ("Edit", {"file_path": "/clone/a.py", "old_string": "x", "new_string": "y"}),
+        ("Write", {"file_path": "/clone/b.py", "content": "hi"}),
+    )
+    assert scv.extract_replayable_edits(payload) == [
+        {"kind": "edit", "path": "/clone/a.py", "old": "x", "new": "y"},
+        {"kind": "write", "path": "/clone/b.py", "content": "hi"},
+    ]
+
+
+def test_extract_replayable_edits_unreplayable_kind_fails_closed():
+    # MultiEdit cannot be faithfully reconstructed → None (caller BLOCKs).
+    payload = _msgs_with_paths(
+        ("edit_file", {"path": "a.py", "old_string": "x", "new_string": "y"}),
+        ("MultiEdit", {"file_path": "a.py", "edits": [{"old": "1", "new": "2"}]}),
+    )
+    assert scv.extract_replayable_edits(payload) is None
+
+
+def test_extract_replayable_edits_missing_args_fails_closed():
+    # An edit_file without old_string can't be replayed → None.
+    payload = _msgs_with_paths(("edit_file", {"path": "a.py", "new_string": "y"}))
+    assert scv.extract_replayable_edits(payload) is None
+
+
+def test_extract_replayable_edits_args_as_json_string():
+    # pydantic-ai sometimes encodes args as a JSON string; both are accepted.
+    parts = [
+        {
+            "part_kind": "tool-call",
+            "tool_name": "edit_file",
+            "args": json.dumps({"path": "a.py", "old_string": "x", "new_string": "y"}),
+            "tool_call_id": "c1",
+        }
+    ]
+    payload = json.dumps([{"parts": parts}]).encode()
+    assert scv.extract_replayable_edits(payload) == [
+        {"kind": "edit", "path": "a.py", "old": "x", "new": "y"}
+    ]
+
+
+def test_extract_replayable_edits_no_edits_is_empty_list():
+    payload = _msgs_with_paths(("read_file", {"path": "a.py"}))
+    assert scv.extract_replayable_edits(payload) == []
+
+
+def test_extract_replayable_edits_malformed_fails_closed():
+    assert scv.extract_replayable_edits(b"{not json") is None
+    assert scv.extract_replayable_edits(None) == []
