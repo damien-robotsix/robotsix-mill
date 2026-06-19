@@ -345,6 +345,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "pipeline.retrospect_spawn_agented_proposals": "retrospect_spawn_agented_proposals",
     "pipeline.prune_clone_on_close": "prune_clone_on_close",
     "pipeline.max_archived_tickets": "max_archived_tickets",
+    "pipeline.max_comments_per_ticket": "max_comments_per_ticket",
     "pipeline.retrospect_memory_path": "retrospect_memory_path",
     "pipeline.trace_inspector_memory_path": "trace_inspector_memory_path",
     "pipeline.trace_review_target_repo_id": "trace_review_target_repo_id",

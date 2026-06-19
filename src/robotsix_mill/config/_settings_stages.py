@@ -416,6 +416,12 @@ class _StagesSettings(BaseModel):
     # per-ticket event capping entirely (archive purge still runs).
     max_events_per_ticket: int = Field(default=200, ge=0)
 
+    # Maximum Comment rows to retain per non-terminal ticket. Comments
+    # beyond this cap are pruned (oldest first), but OPEN threads (and
+    # their replies) are never pruned so ask_user auto-resume and active
+    # discussions are preserved. Set to 0 to disable comment capping.
+    max_comments_per_ticket: int = Field(default=500, ge=0)
+
     # --- merge stage: auto-rebase of stale PRs ---
     # When a PR in human_mr_approval becomes conflicting (other PRs merged to
     # the target branch), the merge stage invokes the rebase agent to
