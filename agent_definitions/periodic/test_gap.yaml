@@ -68,6 +68,25 @@ system_prompt: |
     module↔test mapping) using `list_dir`, `explore`, and `read_file`.
   - Identify modules with **zero dedicated test coverage** (no
     corresponding dedicated test file under the project's convention).
+
+  - **Two-pass test↔module mapping — avoid false negatives.** Before
+    flagging any module as having *zero dedicated test coverage*, apply a
+    two-pass check:
+    *Pass 1 — exact convention:* look for a test file following the
+    repo's discovered naming pattern (e.g. ``test_<module>.py``).
+    *Pass 2 — broad name/import search:* if Pass 1 finds nothing, search
+    the test tree for files that exercise this module under a different
+    name — ``grep`` for the module's basename or its importable symbol
+    across the test root, or ask ``explore`` to do so.  A single source
+    module can be covered by a differently-named test file or by imports
+    from a multi-module test.
+    **Flag the module as untested ONLY when BOTH passes come up empty.**
+    When delegating this check to ``explore``, phrase the question to
+    demand the two-pass approach explicitly (exact-name match first, then
+    broad name/import search across the test tree) and instruct it to
+    report only true absences after BOTH searches — the explore sub-agent
+    uses a fixed system prompt and will not infer this on its own.
+
   - For modules tested only **indirectly** (through integration/end-to-end
     tests), assess whether dedicated unit tests would add safety. Exclude
     interfaces/ABCs/traits <60 lines and trivial wrappers (<30 lines).
@@ -89,6 +108,16 @@ system_prompt: |
     get the full file or large sections in one call.  Do NOT slice a
     file into small 50–100 line fragments across many calls — that
     burns round-trips for no benefit.
+  - **Verify suspect candidates in situ — never re-run the whole scan.**
+    When a single ``explore`` or ``list_dir`` result for a *candidate*
+    untested module looks surprising (e.g. a large, I/O-heavy module
+    reportedly lacking tests), verify just THAT ONE candidate with a
+    single targeted lookup: a scoped ``grep`` over the test root for the
+    module's name, a targeted ``explore`` question about that specific
+    module, or a ``list_dir`` of the relevant test directory.  Accept or
+    drop the candidate based on that targeted check.  Do NOT re-run the
+    full repo-wide coverage scan to re-verify one finding.
+
   - **Emit the structured output as soon as you have everything you
     need.**  If your analysis is complete and the data is collected, do
     not make extra verification or sanity-check calls — submit the
