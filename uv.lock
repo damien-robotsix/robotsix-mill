@@ -1566,7 +1566,7 @@ source = { git = "https://github.com/damien-robotsix/robotsix-board.git?rev=main
 [[package]]
 name = "robotsix-board-agent"
 version = "0.1.0"
-source = { git = "https://github.com/damien-robotsix/robotsix-board-agent.git?rev=main#f8027b0cb23214b1f0fb31b7bf0be39016a775e5" }
+source = { git = "https://github.com/damien-robotsix/robotsix-board-agent.git?rev=main#8e865e7abdb3f1433e0471bc1c15474aad947acb" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic" },
