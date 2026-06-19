@@ -133,10 +133,31 @@ class AutoApproveResult(BaseModel):
     decision, is ambiguous, or is security-sensitive.  The bias is
     conservative: when unsure whether a real decision exists, return
     NEEDS_APPROVAL.
+
+    The ``reason`` field must follow a concise/structured contract:
+    - For NEEDS_APPROVAL: one short sentence naming the primary
+      factor, then a Markdown bullet list when multiple independent
+      signals apply — each bullet naming the concrete artifact (file,
+      module, API, DB table, dependency, behaviour).  No narration,
+      no meta-commentary.  Target ≤ 5 bullets / ≤ 80 words.
+    - For APPROVE: a single short sentence naming the change and why
+      it requires no design review.
     """
 
     decision: Literal["APPROVE", "NEEDS_APPROVAL"]
-    reason: str
+    reason: str = Field(
+        description=(
+            "Concise classification rationale for a human manager. "
+            "When decision is NEEDS_APPROVAL: lead with one short "
+            "sentence naming the primary factor requiring review, "
+            "then a short Markdown bullet list (≤ 5 bullets, ≤ 80 "
+            "words) when multiple independent design-decision signals "
+            "apply — each bullet naming the concrete artifact (file, "
+            "module, API, DB table, dependency, behaviour).  Omit "
+            "narration, restated spec text, and meta-commentary. "
+            "When decision is APPROVE: a single short sentence."
+        )
+    )
 
 
 class SpecReviewResult(BaseModel):

@@ -77,6 +77,49 @@ system_prompt: |
   approve-mr"), lean toward APPROVE unless another genuine
   design-decision signal is independently present.
 
+  ## Reason output format
+
+  The `reason` field explains your classification to a human manager.
+  Follow these rules:
+
+  **When decision is `NEEDS_APPROVAL`:**
+  - Start with ONE short sentence naming the single most important
+    factor that requires human review (e.g. "New API contract in
+    `src/api/v2/handlers.py`" or "Ambiguous acceptance criteria —
+    implementer would guess at scope").
+  - When more than one independent design-decision signal applies,
+    enumerate them as a short Markdown bullet list — one concise item
+    per signal.
+  - Each bullet must name the concrete artifact: the file, module,
+    API endpoint, database table, dependency, or user-facing behaviour
+    — not a generic restatement of the criteria (e.g. prefer
+    "`src/auth/perms.py` introduces a new permission model" over "new
+    abstraction").
+  - Omit narration, restated spec text, caveats about the triage
+    process itself, and meta-commentary.
+  - Keep it brief: target roughly ≤ 5 bullets and ≤ 80 words total.
+  - Example (good):
+    ```
+    New module boundary at `src/payment/gateway.py` — introduces an
+    external Stripe dependency.
+    - `src/payment/gateway.py` — new third-party API dependency (Stripe).
+    - `src/models/order.py` — new DB column `payment_intent_id`.
+    - Acceptance criteria omit rollback behaviour on payment failure.
+    ```
+  - Example (bad — too generic, no artifacts named):
+    ```
+    This spec has several design decisions that require human review.
+    - New dependency
+    - Schema change
+    - Ambiguous scope
+    ```
+
+  **When decision is `APPROVE`:**
+  - A single short sentence — name the change and why it requires no
+    design review (e.g. "Mechanical button addition mirroring the
+    existing `ApproveButton` handler pattern" or "Comment-only change
+    with no logic impact").
+
   ## Budget discipline
 
   - ⚠️ **Budget note:** Your `request_limit` budget caps the total requests you can make. Be concise — prefer a single well-structured response over verbose narration.
