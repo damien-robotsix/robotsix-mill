@@ -268,6 +268,11 @@ def _classify_trace(
                 out_s.startswith("exit=0\n") or "Your command ran successfully" in out_s
             ):
                 pass
+            elif name == "ask_user" and "__ASK_USER_PAUSE__" in out_s:
+                # The sentinel is the expected happy-path return value;
+                # it is not an error (the error-pattern regex does not
+                # match it, but guard explicitly anyway for clarity).
+                pass
             elif _TOOL_ERR_PATTERNS.search(out_s) or _TOOL_ERR_PATTERNS.search(
                 status_msg
             ):

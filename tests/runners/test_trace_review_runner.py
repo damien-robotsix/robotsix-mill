@@ -276,6 +276,20 @@ class TestClassifier:
         flags = _classify_trace(_trace(), settings, observations=obs)
         assert any("ask_user_loop" in f for f in flags.flags)
 
+    def test_ask_user_pause_sentinel_is_not_a_tool_error(self, settings):
+        """The __ASK_USER_PAUSE__ sentinel is the expected happy-path
+        return value — it must not be flagged as a tool error."""
+        obs = [_obs("ask_user", output="__ASK_USER_PAUSE__")]
+        flags = _classify_trace(_trace(), settings, observations=obs)
+        assert not any("tool_errors" in f for f in flags.flags)
+
+    def test_ask_user_error_output_is_still_a_tool_error(self, settings):
+        """Error returns from ask_user (e.g. "Error: no active ticket
+        session") still match the error regex and must be flagged."""
+        obs = [_obs("ask_user", output="Error: no active ticket session")]
+        flags = _classify_trace(_trace(), settings, observations=obs)
+        assert any("tool_errors" in f for f in flags.flags)
+
     def test_repeated_tool_flag(self, settings):
         n = settings.trace_review_max_repeated_tool + 1
         obs = [_obs("read_file") for _ in range(n)]
