@@ -3452,6 +3452,13 @@ def test_multi_repo_failing_ci_with_clone_runs_ci_fix(tmp_path, monkeypatch):
     # Attempt counter reset on a productive push.
     counter = ctx.service.workspace(t).artifacts_dir / "ci_fix_repo-b.count"
     assert merge_mod._read_counter(counter) == 0
+    # The inline cross-repo loop leaves a per-attempt breadcrumb in history
+    # (it never transitions to FIXING_CI, so without this the trail is empty).
+    notes = [e.note or "" for e in ctx.service.history(t.id)]
+    assert any(
+        "ci_fix (cross-repo) attempt 1/" in n and "repo-b" in n and "tests" in n
+        for n in notes
+    ), notes
 
 
 def test_multi_repo_ci_fix_cycle_ceiling_blocks(tmp_path, monkeypatch):
@@ -4615,6 +4622,74 @@ def test_multi_repo_fix_ci_diverged_returns_blocked_and_skips_push(
     assert out.next_state is State.BLOCKED
     assert pushed["called"] is False
     assert "diverged" in (out.note or "").lower()
+
+
+def test_multi_repo_fix_ci_failed_attempt_records_history_note(tmp_path, monkeypatch):
+    """A cross-repo ci-fix attempt whose agent fails must leave a per-attempt
+    breadcrumb in ticket history.
+
+    The inline multi-repo loop never transitions to FIXING_CI, so a failed
+    attempt returns Outcome(IMPLEMENT_COMPLETE) with no transition row. Without
+    an explicit history note, a ticket that later BLOCKs "failed after N
+    attempt(s)" shows zero fixing_ci rows in /history — the mystery this fix
+    closes."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-b", remote_b)])
+
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [{"name": "tests"}],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_code_scanning_alerts",
+        lambda self, *, source_branch: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_files", lambda self, *, source_branch: []
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": ""},
+    )
+    monkeypatch.setattr(
+        merge_mod.tracing,
+        "start_ticket_root_span",
+        lambda *a, **k: contextlib.nullcontext(),
+    )
+    monkeypatch.setattr(
+        merge_mod.git_ops, "reconcile_with_remote_pr", lambda *a, **k: None
+    )
+    # Agent fails (status != DONE) → failed-attempt re-poll branch.
+    monkeypatch.setattr(
+        merge_mod,
+        "run_ci_fix_agent",
+        lambda **k: type("_R", (), {"status": "ERROR", "updated_memory": ""})(),
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    (ctx.service.workspace(t).dir / "repos" / "repo-b" / ".git").mkdir(parents=True)
+
+    out = MergeStage()._multi_repo_fix_ci(
+        t, ctx, {"repo_id": "repo-b", "branch": branch, "url": "u"}
+    )
+    # Failed attempt re-polls (no transition) but advances the counter…
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    counter = ctx.service.workspace(t).artifacts_dir / "ci_fix_repo-b.count"
+    assert merge_mod._read_counter(counter) == 1
+    # …and leaves both a start and a failure breadcrumb in history.
+    notes = [e.note or "" for e in ctx.service.history(t.id)]
+    assert any("ci_fix (cross-repo) attempt 1/" in n and "repo-b" in n for n in notes)
+    assert any("failed (agent error)" in n for n in notes), notes
 
 
 def test_multi_repo_rebase_diverged_returns_blocked_and_skips_push(
