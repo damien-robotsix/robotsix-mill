@@ -349,6 +349,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "pipeline.ci_fix_memory_path": "ci_fix_memory_path",
     "pipeline.rebase_memory_path": "rebase_memory_path",
     "pipeline.ci_patterns_path": "ci_patterns_path",
+    "pipeline.delete_branch_on_merge": "delete_branch_on_merge",
     "pipeline.review_revision_memory_path": "review_revision_memory_path",
     # -- periodic.audit --
     "periodic.audit.enabled": "audit_periodic",
