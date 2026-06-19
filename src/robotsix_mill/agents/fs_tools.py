@@ -383,23 +383,28 @@ def build_fs_tools(
         except Exception:
             log.debug("read_file: message-history pruning skipped", exc_info=True)
 
-    def _file_already_in_history(ctx, target: Path) -> bool:
-        """Return True if *target* is already in the live message
-        history as a non-pruned full-file ``read_file`` return — either
-        a preload (``tool_call_id`` starts with ``preload_``) or a
-        prior runtime full read (``offset=1, limit=None``).
+    def _find_covering_read(
+        ctx: RunContext[None], target: Path, offset: int, limit: int | None
+    ) -> tuple[int, int | None] | None:
+        """Return ``(o, l)`` of the first non-pruned prior ``read_file``
+        result for *target* whose line range fully contains the requested
+        ``[offset, offset+limit)``, or ``None`` if no such read exists.
 
-        Partial-slice prior reads do NOT count: a slice doesn't cover
-        the whole file, so a later partial of a different range is
-        legitimate. Pruned returns also do not count — their content
+        A prior full read (``offset==1 and limit is None``, or a preload
+        ``tool_call_id`` starting with ``preload_``) covers every line.
+        A prior partial read with ``(o, l)`` covers ``[o, o+l)`` (or
+        ``[o, EOF)`` when *l* is ``None`` but *o* > 1).  Pruned returns
+        (content == ``_PRUNED_PLACEHOLDER``) are skipped — their content
         is gone from context."""
         try:
             messages = getattr(ctx, "messages", None)
             if not messages:
-                return False
+                return None
             canonical = target.resolve()
 
-            full_read_ids: set[str] = set()
+            # Pass 1 — collect (tool_call_id, (o, l)) for every
+            # read_file call on this file.
+            call_info: dict[str, tuple[int, int | None]] = {}
             for msg in messages:
                 if getattr(msg, "kind", None) != "response":
                     continue
@@ -420,14 +425,20 @@ def build_fs_tools(
                     tc_id = getattr(part, "tool_call_id", None)
                     if not tc_id:
                         continue
-                    offset = args.get("offset", 1) or 1
-                    limit = args.get("limit")
-                    if tc_id.startswith("preload_") or (offset == 1 and limit is None):
-                        full_read_ids.add(tc_id)
+                    o = args.get("offset", 1) or 1
+                    if o < 1:
+                        o = 1
+                    lim = args.get("limit")
+                    call_info[tc_id] = (o, lim)
 
-            if not full_read_ids:
-                return False
+            if not call_info:
+                return None
 
+            # Compute the request's end (None limit → EOF / +inf).
+            req_end = offset + limit if limit is not None else float("inf")
+
+            # Pass 2 — find the first non-pruned return whose range
+            # covers the request.
             for msg in messages:
                 if getattr(msg, "kind", None) != "request":
                     continue
@@ -436,18 +447,24 @@ def build_fs_tools(
                         continue
                     if getattr(part, "tool_name", None) != "read_file":
                         continue
-                    if getattr(part, "tool_call_id", None) not in full_read_ids:
+                    tc_id = getattr(part, "tool_call_id", None)
+                    if tc_id not in call_info:
                         continue
                     content = getattr(part, "content", None)
-                    if isinstance(content, str) and content != _PRUNED_PLACEHOLDER:
-                        return True
-            return False
+                    if not isinstance(content, str) or content == _PRUNED_PLACEHOLDER:
+                        continue
+                    # This return is live.  Check coverage.
+                    o, lim = call_info[tc_id]
+                    cov_end = o + lim if lim is not None else float("inf")
+                    if offset >= o and req_end <= cov_end:
+                        return (o, lim)
+            return None
         except Exception:
             log.debug(
                 "read_file: history scan skipped",
                 exc_info=True,
             )
-            return False
+            return None
 
     # Tools return errors as strings so the model can self-correct
     # (try another path, list the dir, ...) instead of the whole agent
@@ -521,26 +538,47 @@ def build_fs_tools(
         _offset = offset if offset >= 1 else 1
         is_full_read = _offset == 1 and limit is None
 
-        # Refuse partial slices when the file is already loaded in
-        # full earlier in the conversation. Encourages the model to
-        # use the content it already has instead of layering a slice
-        # on top of a still-present preload (which doubles the token
-        # cost of that file for every later iteration).
-        if ctx is not None and not is_full_read and _file_already_in_history(ctx, p):
-            # Read the file from disk (cached) to report its line count
-            # so the agent knows how much content it already holds.
-            # The file is guaranteed to exist at this point (p.is_file()
-            # guard above).
-            try:
-                _text = _read_cached(p)
-                line_count: int | str = _text.count("\n")
-            except ValueError, OSError:
-                line_count = "?"
-            return (
-                f"FILE_ALREADY_IN_CONTEXT: {path}"
-                f" (already loaded in full at line offsets 0-{line_count})."
-                f" Use your context window to recall it rather than re-reading."
-            )
+        # Refuse partial slices when the file's content (or the
+        # requested range) is already present earlier in the
+        # conversation — either as a full-file read (including
+        # preloads) or as a prior partial read whose line range
+        # contains the request.  Encourages the model to use the
+        # content it already has instead of layering a redundant
+        # slice onto the still-present context.
+        if ctx is not None and not is_full_read:
+            covering = _find_covering_read(ctx, p, _offset, limit)
+            if covering is not None:
+                cov_o, cov_l = covering
+                if cov_o == 1 and cov_l is None:
+                    # Covered by a prior full read (or preload).
+                    # Read the file from disk (cached) to report its
+                    # line count so the agent knows how much content
+                    # it already holds.  The file is guaranteed to
+                    # exist at this point (p.is_file() guard above).
+                    try:
+                        _text = _read_cached(p)
+                        line_count: int | str = _text.count("\n")
+                    except ValueError, OSError:
+                        line_count = "?"
+                    return (
+                        f"refused: {path} ({line_count} lines) is already "
+                        f"loaded in full earlier in this conversation — "
+                        f"scroll back to find it.  Do not re-read a slice "
+                        f"of a file you already have in full."
+                    )
+                else:
+                    # Covered by a prior partial read.
+                    if cov_l is None:
+                        cov_range = f"lines {cov_o} onward"
+                    else:
+                        cov_end_line = cov_o + cov_l - 1
+                        cov_range = f"lines {cov_o}–{cov_end_line}"
+                    return (
+                        f"refused: {path} {cov_range} already loaded "
+                        f"earlier in this conversation — scroll back to "
+                        f"find them.  Do not re-read a range that is "
+                        f"already in context."
+                    )
 
         # Read (or refresh) via _read_cached, then slice.
         try:

@@ -1462,7 +1462,7 @@ class TestPartialReadRefusalWhenAlreadyLoaded:
         ctx = types.SimpleNamespace(messages=[resp, req])
 
         result = tools["read_file"](ctx, path="A.txt", offset=2, limit=2)
-        assert result.startswith("FILE_ALREADY_IN_CONTEXT:")
+        assert result.startswith("refused: A.txt (5 lines) is already loaded in full")
         assert "A.txt" in result
 
     def test_partial_refused_after_prior_full_runtime_read(
@@ -1489,7 +1489,7 @@ class TestPartialReadRefusalWhenAlreadyLoaded:
         )
 
         result = tools["read_file"](ctx, path="A.txt", offset=2, limit=1)
-        assert result.startswith("FILE_ALREADY_IN_CONTEXT:")
+        assert result.startswith("refused: A.txt (3 lines) is already loaded in full")
 
     def test_partial_allowed_when_only_partial_prior(self, tmp_path, settings):
         """A prior PARTIAL read doesn't block a later partial — the
@@ -1584,6 +1584,121 @@ class TestPartialReadRefusalWhenAlreadyLoaded:
 
         result = tools["read_file"](path="A.txt", offset=2, limit=1)
         assert result == "l2\n"
+
+
+# ===================================================================
+# read_file — partial-slice dedup (new in slice-coverage extension)
+# ===================================================================
+
+
+class TestPartialSliceDedup:
+    """``read_file`` refuses a partial-slice re-read when the requested
+    line range is fully contained within a still-present (non-pruned)
+    prior partial read of the same file — the natural extension of the
+    existing full-read-then-partial-refusal guard."""
+
+    def test_identical_slice_refused(self, tmp_path, settings):
+        """Prior ``offset=2,limit=2`` (lines 2–3) → new
+        ``offset=2,limit=2`` refused."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "A.txt", "l1\nl2\nl3\nl4\nl5\n")
+        tools = _build(root, settings)
+
+        a_call = ToolCallPart(
+            tool_name="read_file",
+            args={"path": "A.txt", "offset": 2, "limit": 2},
+            tool_call_id="call-A",
+        )
+        a_return = _read_return("l2\nl3\n", "call-A")
+        ctx = types.SimpleNamespace(
+            messages=[
+                ModelResponse(parts=[a_call]),
+                ModelRequest(parts=[a_return]),
+            ]
+        )
+
+        result = tools["read_file"](ctx, path="A.txt", offset=2, limit=2)
+        assert result.startswith("refused:")
+        assert "A.txt" in result
+        assert "already loaded earlier" in result
+        # The refusal names the covering range (lines 2–3).
+        assert "2" in result
+
+    def test_sub_range_of_prior_slice_refused(self, tmp_path, settings):
+        """Prior ``offset=2,limit=4`` (lines 2–5) → new
+        ``offset=3,limit=1`` (line 3) refused."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "A.txt", "l1\nl2\nl3\nl4\nl5\nl6\n")
+        tools = _build(root, settings)
+
+        a_call = ToolCallPart(
+            tool_name="read_file",
+            args={"path": "A.txt", "offset": 2, "limit": 4},
+            tool_call_id="call-A",
+        )
+        a_return = _read_return("l2\nl3\nl4\nl5\n", "call-A")
+        ctx = types.SimpleNamespace(
+            messages=[
+                ModelResponse(parts=[a_call]),
+                ModelRequest(parts=[a_return]),
+            ]
+        )
+
+        result = tools["read_file"](ctx, path="A.txt", offset=3, limit=1)
+        assert result.startswith("refused:")
+        assert "A.txt" in result
+
+    def test_overlapping_but_extending_allowed(self, tmp_path, settings):
+        """Prior ``offset=2,limit=2`` (lines 2–3) → new
+        ``offset=3,limit=3`` (lines 3–5) returns content because the
+        request extends beyond the prior range."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "A.txt", "l1\nl2\nl3\nl4\nl5\nl6\n")
+        tools = _build(root, settings)
+
+        a_call = ToolCallPart(
+            tool_name="read_file",
+            args={"path": "A.txt", "offset": 2, "limit": 2},
+            tool_call_id="call-A",
+        )
+        a_return = _read_return("l2\nl3\n", "call-A")
+        ctx = types.SimpleNamespace(
+            messages=[
+                ModelResponse(parts=[a_call]),
+                ModelRequest(parts=[a_return]),
+            ]
+        )
+
+        result = tools["read_file"](ctx, path="A.txt", offset=3, limit=3)
+        assert result == "l3\nl4\nl5\n"
+
+    def test_prior_slice_pruned_does_not_block(self, tmp_path, settings):
+        """Prior slice with ``_PRUNED_PLACEHOLDER`` content → identical
+        new slice returns content (pruned content is gone from context,
+        so a re-read is legitimate)."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "A.txt", "l1\nl2\nl3\nl4\nl5\n")
+        tools = _build(root, settings)
+
+        a_call = ToolCallPart(
+            tool_name="read_file",
+            args={"path": "A.txt", "offset": 2, "limit": 2},
+            tool_call_id="call-A",
+        )
+        a_return = _read_return(_PRUNED_PLACEHOLDER, "call-A")
+        ctx = types.SimpleNamespace(
+            messages=[
+                ModelResponse(parts=[a_call]),
+                ModelRequest(parts=[a_return]),
+            ]
+        )
+
+        result = tools["read_file"](ctx, path="A.txt", offset=2, limit=2)
+        assert result == "l2\nl3\n"
 
 
 # ===================================================================
