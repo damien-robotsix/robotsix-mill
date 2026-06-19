@@ -30,8 +30,10 @@ only) to avoid circular imports back to ``retrospect.py`` /
 from __future__ import annotations
 
 import logging
+import pathlib
 
 from ..config import Settings
+from .dedup import _extract_paths
 from .service import TicketService
 
 log = logging.getLogger("robotsix_mill.core.draft_target")
@@ -96,6 +98,22 @@ MILL_STRONG_SIGNAL_TERMS: frozenset[str] = frozenset(
     {
         "src/robotsix_mill/",
         "agent_definitions/",
+    }
+)
+
+
+# Path prefixes unique to the mill source tree.  When a draft
+# references a token that starts with one of these (case-insensitive
+# match on the normalised token) and the path does NOT exist in the
+# audited repo, the token is likely a mill-internal path that the
+# audited repo's refining agent cannot resolve.
+MILL_PATH_PREFIXES: frozenset[str] = frozenset(
+    {
+        "src/robotsix_mill/",
+        "agent_definitions/",
+        "agent_definitions/language_instructions/",
+        "config/mill.defaults.yaml",
+        "config/mill.",
     }
 )
 
@@ -193,3 +211,43 @@ def resolve_mill_service(
         )
         return None
     return TicketService(settings, board_id=rc.board_id)
+
+
+def referenced_mill_paths_absent(
+    title: str | None,
+    body: str | None,
+    repo_dir: pathlib.Path | None,
+) -> list[str]:
+    """Return mill-prefixed file-path tokens that are absent from *repo_dir*.
+
+    Extracts candidate path tokens from ``f"{title}\\n{body}"`` (via
+    :func:`_extract_paths`), keeps only those whose normalized form
+    starts with one of :data:`MILL_PATH_PREFIXES` (case-insensitive),
+    and returns the subset for which ``(repo_dir / token).exists()``
+    is ``False``.
+
+    When *repo_dir* is ``None`` returns an empty list immediately
+    (no filesystem is available to check).  The function is pure /
+    read-only and must never raise — token iteration is wrapped
+    defensively with a broad ``except``.
+    """
+    if repo_dir is None:
+        return []
+    haystack = f"{title or ''}\n{body or ''}"
+    try:
+        candidates = _extract_paths(haystack)
+    except Exception:
+        return []
+    absent: list[str] = []
+    for token in candidates:
+        try:
+            token_lower = token.lower()
+        except Exception:
+            log.debug(
+                "referenced_mill_paths_absent: token.lower() failed for %r", token
+            )
+            continue
+        if any(token_lower.startswith(prefix.lower()) for prefix in MILL_PATH_PREFIXES):
+            if not (repo_dir / token).exists():
+                absent.append(token)
+    return absent

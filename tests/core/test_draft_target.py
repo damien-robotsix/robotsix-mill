@@ -12,8 +12,11 @@ in ``tests/stages/test_retrospect_stage.py``.)
 import logging
 from types import SimpleNamespace
 
+from robotsix_mill.core.draft_target import (
+    referenced_mill_paths_absent,
+    resolve_mill_service,
+)
 from robotsix_mill.core.service import TicketService
-from robotsix_mill.core.draft_target import resolve_mill_service
 
 
 def test_resolve_mill_service_unset_target_returns_none(settings, service, caplog):
@@ -83,3 +86,95 @@ def test_resolve_mill_service_success_returns_bound_service(
     assert isinstance(result, TicketService)
     assert result.board_id == "mill-board"
     assert result is not service
+
+
+# ---------------------------------------------------------------------------
+# Tests for ``referenced_mill_paths_absent``
+# ---------------------------------------------------------------------------
+
+
+def test_referenced_mill_paths_absent_repo_dir_none_returns_empty():
+    """``repo_dir`` is None → returns [] regardless of text mentioning mill paths."""
+    result = referenced_mill_paths_absent(
+        title="Fix src/robotsix_mill/core/notify.py",
+        body="The file agent_definitions/language_instructions/python.md needs changes.",
+        repo_dir=None,
+    )
+    assert result == []
+
+
+def test_referenced_mill_paths_absent_no_mill_paths_returns_empty(tmp_path):
+    """Text with no mill-prefixed paths → []."""
+    result = referenced_mill_paths_absent(
+        title="Fix the login bug",
+        body="Update the auth module and add tests.",
+        repo_dir=tmp_path,
+    )
+    assert result == []
+
+
+def test_referenced_mill_paths_absent_mill_paths_exist_returns_empty(tmp_path):
+    """Text references a mill-prefixed path that exists on disk → []."""
+    file_path = tmp_path / "src/robotsix_mill/core/draft_target.py"
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_path.write_text("")
+
+    result = referenced_mill_paths_absent(
+        title="Refactor src/robotsix_mill/core/draft_target.py",
+        body="",
+        repo_dir=tmp_path,
+    )
+    assert result == []
+
+
+def test_referenced_mill_paths_absent_mill_paths_absent_returns_them(tmp_path):
+    """Text references a mill-prefixed path that does NOT exist → returns it."""
+    result = referenced_mill_paths_absent(
+        title="Update agent_definitions/language_instructions/python.md",
+        body="",
+        repo_dir=tmp_path,
+    )
+    assert result == ["agent_definitions/language_instructions/python.md"]
+
+
+def test_referenced_mill_paths_absent_mixed_present_absent(tmp_path):
+    """Present and absent mill paths → returns only the absent ones."""
+    (tmp_path / "src/robotsix_mill").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "src/robotsix_mill/__init__.py").write_text("")
+
+    result = referenced_mill_paths_absent(
+        title="src/robotsix_mill/__init__.py exists, src/robotsix_mill/notify.py missing",
+        body="",
+        repo_dir=tmp_path,
+    )
+    assert result == ["src/robotsix_mill/notify.py"]
+
+
+def test_referenced_mill_paths_absent_case_insensitive_prefix(tmp_path):
+    """Uppercase mill-prefixed path is detected (prefix match is case-insensitive)."""
+    result = referenced_mill_paths_absent(
+        title="Check SRC/ROBOTSIX_MILL/core/test.py",
+        body="",
+        repo_dir=tmp_path,
+    )
+    assert result == ["SRC/ROBOTSIX_MILL/core/test.py"]
+
+
+def test_referenced_mill_paths_absent_non_mill_prefixed_paths_ignored(tmp_path):
+    """Path not starting with a mill prefix → ignored even if absent."""
+    result = referenced_mill_paths_absent(
+        title="Update tests/stages/test_foo.py",
+        body="",
+        repo_dir=tmp_path,
+    )
+    assert result == []
+
+
+def test_referenced_mill_paths_absent_config_mill_prefix(tmp_path):
+    """Path starting with ``config/mill.`` prefix and absent → returned."""
+    result = referenced_mill_paths_absent(
+        title="Tweak config/mill.settings.yaml",
+        body="",
+        repo_dir=tmp_path,
+    )
+    assert result == ["config/mill.settings.yaml"]
