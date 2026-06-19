@@ -208,10 +208,12 @@ modules:
       - src/robotsix_mill/runners/bc_check_runner.py
       - src/robotsix_mill/runners/completeness_check_runner.py
       - src/robotsix_mill/runners/run_health_runner.py
+      - src/robotsix_mill/runners/state_sync_runner.py
       - src/robotsix_mill/runners/diagnostic_runner.py
       - src/robotsix_mill/runners/diagnostic_checks.py
       - src/robotsix_mill/runners/diagnostic_check_errors.py
       - src/robotsix_mill/runners/diagnostic_data.py
+      - src/robotsix_mill/runners/env_doc_sync_runner.py
       - src/robotsix_mill/runners/config_sync_runner.py
       - src/robotsix_mill/runners/member_sync_runner.py
       - src/robotsix_mill/runners/health_runner.py
