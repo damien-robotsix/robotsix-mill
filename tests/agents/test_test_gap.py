@@ -54,6 +54,11 @@ def test_test_gap_system_prompt_covers_key_dimensions():
     assert "explore" in p
     assert "read_file" in p
     assert "list_dir" in p
+    # Tool-priority guidance: prefer run_command for enumerable work.
+    assert "run_command" in p, "prompt must mention run_command"
+    assert any(
+        phrase in p for phrase in ("line count", "enumerable", "file existence")
+    ), "prompt must reference enumerable/deterministic file work for run_command"
 
 
 def test_test_gap_prompt_is_language_agnostic():
