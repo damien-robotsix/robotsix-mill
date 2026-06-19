@@ -37,11 +37,13 @@ DEDUP_DUPLICATE_PREFIX = "duplicate of "
 DEDUP_ALREADY_DONE_PREFIX = "already implemented in "
 FRESHNESS_STALE_PREFIX = "stale or invalid finding"
 OBSOLESCENCE_GAP_PREFIX = "obsolete — gap already resolved"
+REFINE_MILL_MISROUTE_PREFIX = "redirected to mill board"
 NON_IMPLEMENTATION_CLOSE_PREFIXES = (
     DEDUP_DUPLICATE_PREFIX,
     DEDUP_ALREADY_DONE_PREFIX,
     FRESHNESS_STALE_PREFIX,
     OBSOLESCENCE_GAP_PREFIX,
+    REFINE_MILL_MISROUTE_PREFIX,
 )
 
 UNMERGED_BRANCH_PREFIX = "Implementation exists on branch"

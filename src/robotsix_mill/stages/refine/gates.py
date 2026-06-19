@@ -17,6 +17,7 @@ from pathlib import Path
 
 from ...agents import dedup, freshness, obsolescence
 from ...core.datetime_utils import _as_utc
+from ...core.draft_target import referenced_mill_paths_absent, resolve_mill_service
 from ...core.models import SourceKind, Ticket
 from ...core.states import State
 from ..base import Outcome, StageContext
@@ -29,6 +30,7 @@ from .helpers import (
     NON_IMPLEMENTATION_CLOSE_PREFIXES,
     OBSOLESCENCE_GAP_PREFIX,
     OPERATOR_SENDBACK_PREFIX,
+    REFINE_MILL_MISROUTE_PREFIX,
     REFINE_PROGRESS_STATES,
     _build_candidates_block,
     _rationale_claims_external_fix,
@@ -666,3 +668,76 @@ class RefineGatesMixin:
             result.get("reason", ""),
         )
         return None
+
+    @staticmethod
+    def _run_mill_misroute_gate(
+        ctx: StageContext,
+        ticket: Ticket,
+        draft: str,
+        repo_dir: Path | None,
+        s,
+    ) -> Outcome | None:
+        """Detect a draft naming mill-specific source paths absent from
+        the current checkout and redirect it to the mill maintenance board.
+
+        Runs before any LLM-invoking gate; purely deterministic
+        (filesystem ``.exists()`` checks against the cloned working
+        tree).  Returns ``Outcome(State.DONE, …)`` when a misroute is
+        confirmed and the draft was successfully re-filed on the mill
+        board, or ``None`` to proceed with refine.
+        """
+        if not s.refine_mill_misroute_gate_enabled:
+            return None
+
+        absent = referenced_mill_paths_absent(ticket.title, draft, repo_dir)
+        if not absent:
+            return None
+
+        # A misroute is detected — resolve the mill board.
+        try:
+            mill_svc = resolve_mill_service(s, ctx.service, caller_label="refine")
+        except Exception:
+            log.warning(
+                "%s: resolve_mill_service raised — proceeding with refine",
+                ticket.id,
+                exc_info=True,
+            )
+            return None
+
+        if mill_svc is None:
+            log.warning(
+                "%s: mill board not configured — cannot redirect; "
+                "proceeding with refine",
+                ticket.id,
+            )
+            return None
+
+        if mill_svc.board_id == ctx.service.board_id:
+            # Already on the mill board — nothing to redirect.
+            log.debug(
+                "%s: already on the mill board (%s) — proceeding with refine",
+                ticket.id,
+                mill_svc.board_id,
+            )
+            return None
+
+        try:
+            new = mill_svc.create(
+                ticket.title,
+                draft,
+                source=ticket.source,
+                origin_session=ticket.origin_session,
+            )
+        except Exception:
+            log.warning(
+                "%s: failed to create draft on mill board — proceeding with refine",
+                ticket.id,
+                exc_info=True,
+            )
+            return None
+
+        return Outcome(
+            State.DONE,
+            f"{REFINE_MILL_MISROUTE_PREFIX} {new.id}: draft names mill "
+            f"paths absent from this checkout ({', '.join(absent)})",
+        )

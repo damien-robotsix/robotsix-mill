@@ -37,6 +37,7 @@ from robotsix_mill.stages.refine.helpers import (
     DEDUP_DUPLICATE_PREFIX,
     FRESHNESS_STALE_PREFIX,
     OBSOLESCENCE_GAP_PREFIX,
+    REFINE_MILL_MISROUTE_PREFIX,
 )
 
 
@@ -919,3 +920,188 @@ error: missing `contents:read` permission
     )
     # No annotation — fingerprints differ, title fallback suppressed.
     assert "[!warning]" not in result
+
+
+# ===========================================================================
+# 7. _run_mill_misroute_gate
+# ===========================================================================
+
+
+def test_mill_misroute_gate_disabled_returns_none(ctx_factory):
+    """Gate disabled → returns None (proceed with refine)."""
+    ctx = ctx_factory()
+    ctx.settings.refine_mill_misroute_gate_enabled = False
+    t = _ticket(ctx)
+
+    out = RefineStage._run_mill_misroute_gate(ctx, t, _DEDUP_DRAFT, None, ctx.settings)
+
+    assert out is None
+
+
+def test_mill_misroute_gate_no_absent_paths_returns_none(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """No mill paths absent from checkout → gate returns None."""
+    ctx = ctx_factory()
+    ctx.settings.refine_mill_misroute_gate_enabled = True
+    t = _ticket(ctx)
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_mill_paths_absent",
+        lambda *a, **k: [],
+    )
+
+    out = RefineStage._run_mill_misroute_gate(ctx, t, _DEDUP_DRAFT, None, ctx.settings)
+
+    assert out is None
+
+
+def test_mill_misroute_gate_mill_board_unconfigured_returns_none(
+    ctx_factory, monkeypatch, tmp_path, caplog
+):
+    """resolve_mill_service returns None → gate returns None, warning logged."""
+    ctx = ctx_factory()
+    ctx.settings.refine_mill_misroute_gate_enabled = True
+    t = _ticket(ctx)
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_mill_paths_absent",
+        lambda *a, **k: ["src/robotsix_mill/foo.py"],
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.resolve_mill_service",
+        lambda *a, **k: None,
+    )
+
+    out = RefineStage._run_mill_misroute_gate(ctx, t, _DEDUP_DRAFT, None, ctx.settings)
+
+    assert out is None
+    assert any(
+        "mill board not configured" in rec.message
+        for rec in caplog.records
+        if rec.levelname == "WARNING"
+    )
+
+
+def test_mill_misroute_gate_already_on_mill_board_returns_none(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """Mill board equals current board → gate returns None (no self-redirect)."""
+    from unittest.mock import MagicMock
+
+    ctx = ctx_factory()
+    ctx.settings.refine_mill_misroute_gate_enabled = True
+    t = _ticket(ctx)
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_mill_paths_absent",
+        lambda *a, **k: ["src/robotsix_mill/foo.py"],
+    )
+    mock_svc = MagicMock()
+    mock_svc.board_id = ctx.service.board_id
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.resolve_mill_service",
+        lambda *a, **k: mock_svc,
+    )
+
+    out = RefineStage._run_mill_misroute_gate(ctx, t, _DEDUP_DRAFT, None, ctx.settings)
+
+    assert out is None
+
+
+def test_mill_misroute_gate_success_redirects_and_returns_done(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """Misroute detected → draft created on mill board → Outcome(State.DONE)."""
+    from unittest.mock import MagicMock
+
+    ctx = ctx_factory()
+    ctx.settings.refine_mill_misroute_gate_enabled = True
+    t = _ticket(ctx)
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_mill_paths_absent",
+        lambda *a, **k: ["src/robotsix_mill/foo.py"],
+    )
+    mock_svc = MagicMock()
+    mock_svc.board_id = "mill-board"
+    mock_svc.create.return_value = MagicMock(id="mill-draft-123")
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.resolve_mill_service",
+        lambda *a, **k: mock_svc,
+    )
+
+    out = RefineStage._run_mill_misroute_gate(ctx, t, _DEDUP_DRAFT, None, ctx.settings)
+
+    assert out is not None
+    assert out.next_state is State.DONE
+    assert out.note.startswith(REFINE_MILL_MISROUTE_PREFIX)
+    assert "mill-draft-123" in out.note
+    mock_svc.create.assert_called_once()
+
+
+def test_mill_misroute_gate_resolve_service_raises_returns_none(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """resolve_mill_service raises → gate returns None (never raises)."""
+    ctx = ctx_factory()
+    ctx.settings.refine_mill_misroute_gate_enabled = True
+    t = _ticket(ctx)
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_mill_paths_absent",
+        lambda *a, **k: ["src/robotsix_mill/foo.py"],
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.resolve_mill_service",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("mill resolve boom")),
+    )
+
+    out = RefineStage._run_mill_misroute_gate(ctx, t, _DEDUP_DRAFT, None, ctx.settings)
+
+    assert out is None
+
+
+def test_mill_misroute_gate_create_raises_returns_none(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """mill_svc.create raises → gate returns None (never raises)."""
+    from unittest.mock import MagicMock
+
+    ctx = ctx_factory()
+    ctx.settings.refine_mill_misroute_gate_enabled = True
+    t = _ticket(ctx)
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_mill_paths_absent",
+        lambda *a, **k: ["src/robotsix_mill/foo.py"],
+    )
+    mock_svc = MagicMock()
+    mock_svc.board_id = "mill-board"
+    mock_svc.create.side_effect = RuntimeError("create boom")
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.resolve_mill_service",
+        lambda *a, **k: mock_svc,
+    )
+
+    out = RefineStage._run_mill_misroute_gate(ctx, t, _DEDUP_DRAFT, None, ctx.settings)
+
+    assert out is None
+
+
+def test_mill_misroute_gate_mill_paths_exist_in_checkout_returns_none(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """Mill paths exist on disk (refine on mill repo itself) → no self-redirect."""
+    ctx = ctx_factory()
+    ctx.settings.refine_mill_misroute_gate_enabled = True
+    t = _ticket(ctx)
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_mill_paths_absent",
+        lambda *a, **k: [],
+    )
+
+    out = RefineStage._run_mill_misroute_gate(ctx, t, _DEDUP_DRAFT, None, ctx.settings)
+
+    assert out is None

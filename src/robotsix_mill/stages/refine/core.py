@@ -120,6 +120,14 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
         if stale is not None:
             return stale
 
+        # Phase 2.1: mill-misroute gate — detect drafts that name
+        # mill-specific source paths absent from this checkout and
+        # redirect them to the mill maintenance board.  Deterministic,
+        # no LLM; runs before the first LLM-invoking gate.
+        misrouted = RefineStage._run_mill_misroute_gate(ctx, ticket, draft, repo_dir, s)
+        if misrouted is not None:
+            return misrouted
+
         # Phase 2.5: obsolescence gate — for *spawned* follow-up drafts,
         # re-evaluate (via a cheap LLM call) whether the cited gap was
         # already resolved in place by a parallel/parent ticket.  Runs

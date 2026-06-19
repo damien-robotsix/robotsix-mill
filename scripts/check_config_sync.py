@@ -110,6 +110,8 @@ _MODEL_FIELDS_NOT_IN_ALIAS: frozenset[str] = frozenset(
         "language_instructions_dir",
         "auto_merge_main_debt_detection_enabled",
         "freshness_gate_enabled",
+        "obsolescence_gate_enabled",
+        "refine_mill_misroute_gate_enabled",
         "prerequisite_gate_enabled",
         "delete_branch_on_merge",
         "review_output_token_budget",
