@@ -372,6 +372,39 @@ def test_langfuse_inspect_trace_surfaces_inspector_error(tmp_path, monkeypatch):
     assert "_inspector error: context length exceeded_" in output
 
 
+def test_langfuse_inspect_trace_passes_request_limit_override(tmp_path, monkeypatch):
+    """The tool passes request_limit_override from settings to
+    run_trace_inspector."""
+    s = _settings(
+        tmp_path,
+        OPENROUTER_API_KEY="k",
+        trace_review_tool_request_limit=12,
+    )
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.fetch_trace_detail",
+        lambda settings, tid: {"id": tid, "name": "test", "observations": []},
+    )
+
+    captured_kwargs = {}
+
+    def fake_run_trace_inspector(**kwargs):
+        captured_kwargs.update(kwargs)
+        from robotsix_mill.agents.trace_inspector import TraceInspectResult
+
+        return TraceInspectResult()
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.trace_inspector.run_trace_inspector",
+        fake_run_trace_inspector,
+    )
+
+    tool = make_langfuse_inspect_tool(s)
+    tool("trace-1")
+
+    assert captured_kwargs["request_limit_override"] == 12
+
+
 # ── make_cost_inspect_tool tests ─────────────────────────────────────
 
 

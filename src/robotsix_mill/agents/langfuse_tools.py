@@ -407,6 +407,7 @@ def make_langfuse_inspect_tool(
             settings=settings,
             trace_data=trace_data,
             repo_dir=repo_dir,
+            request_limit_override=settings.trace_review_tool_request_limit,
             **kwargs,
         )
 

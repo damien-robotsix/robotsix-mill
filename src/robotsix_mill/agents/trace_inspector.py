@@ -359,6 +359,7 @@ def run_trace_inspector(
     memory: str = "",
     started_at: datetime | None = None,
     classifier_flags: list[str] | None = None,
+    request_limit_override: int | None = None,
 ) -> TraceInspectResult:
     """Analyse a single trace's full observation tree and return
     structured findings with proposed solutions.
@@ -410,6 +411,13 @@ def run_trace_inspector(
     ``trace_data`` and makes no further Langfuse calls, so this is
     threaded for credential-resolution consistency; the OpenRouter
     key (``get_secrets()``) stays global.
+
+    **``request_limit_override``** (``int | None``, default ``None``)
+    caps the tools-on ``request_limit`` from above — when set the
+    effective limit is ``min(dynamic_limit, request_limit_override)``.
+    The tool-less path is unaffected.  Intended for interactive tool
+    call-sites (e.g. ``langfuse_inspect_trace``) that should do a
+    quick, bounded confirmation rather than an unbounded deep audit.
 
     On error, the result's ``error`` field is populated rather than
     returning a silent empty findings list — the previous behaviour
@@ -467,6 +475,11 @@ def run_trace_inspector(
                 int(obs_count * settings.trace_review_inspector_requests_per_obs),
             ),
         )
+        # Interactive tool call-sites can pass a tighter cap to keep
+        # ad-hoc inspections cheap.  The override only lowers, never
+        # raises — a caller cannot punch through the dynamic ceiling.
+        if request_limit_override is not None:
+            request_limit = min(request_limit, request_limit_override)
         tool_calls_limit = settings.trace_review_max_tool_calls
         error_limit = settings.trace_review_max_errors
     else:

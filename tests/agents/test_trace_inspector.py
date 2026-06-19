@@ -678,6 +678,7 @@ class TestDynamicRequestBudget:
         *,
         repo_dir=True,
         extra_settings: dict | None = None,
+        request_limit_override: int | None = None,
     ):
         """Run trace_inspector with a fake trace of *obs_count* observations
         and capture the UsageLimits + tool list passed to run_sync."""
@@ -718,11 +719,14 @@ class TestDynamicRequestBudget:
         if extra_settings:
             settings_kwargs.update(extra_settings)
         settings = _settings_with_api_key(**settings_kwargs)
-        trace_inspector_mod.run_trace_inspector(
-            settings=settings,
-            trace_data=json.dumps(trace),
-            repo_dir=Path("/tmp") if repo_dir else None,
-        )
+        kwargs: dict = {
+            "settings": settings,
+            "trace_data": json.dumps(trace),
+            "repo_dir": Path("/tmp") if repo_dir else None,
+        }
+        if request_limit_override is not None:
+            kwargs["request_limit_override"] = request_limit_override
+        trace_inspector_mod.run_trace_inspector(**kwargs)
         return captured
 
     def test_moderate_obs_tools_on_sets_scaled_request_limit(self, monkeypatch):
@@ -774,6 +778,63 @@ class TestDynamicRequestBudget:
         agent = captured["agent"]
         tool_dict = agent._function_toolset.tools
         assert tool_dict == {}
+
+    def test_request_limit_override_caps_dynamic_budget(self, monkeypatch):
+        """request_limit_override caps (lowers, never raises) the tools-on request_limit."""
+        # 500 obs with high max_obs_for_tools → dynamic budget = min(80, 50) = 50
+        captured = self._capture_limits_and_tools(
+            monkeypatch,
+            500,
+            extra_settings={
+                "trace_review_inspector_max_obs_for_tools": 1000,
+            },
+            request_limit_override=15,
+        )
+        limits = captured["limits"]
+        # Dynamic: max(20, min(80, int(500 * 0.1))) = max(20, min(80, 50)) = 50
+        # Override: min(50, 15) = 15
+        assert limits.request_limit == 15
+        # override does NOT affect tool_calls_limit
+        assert limits.tool_calls_limit == 100
+
+    def test_request_limit_override_does_not_raise_below_floor(self, monkeypatch):
+        """override can go below the min_requests floor — it's a caller-imposed cap."""
+        captured = self._capture_limits_and_tools(
+            monkeypatch,
+            10,
+            extra_settings={
+                "trace_review_inspector_max_obs_for_tools": 300,
+            },
+            request_limit_override=5,
+        )
+        limits = captured["limits"]
+        # Dynamic: max(20, min(80, int(10 * 0.1))) = 20
+        # Override: min(20, 5) = 5
+        assert limits.request_limit == 5
+
+    def test_request_limit_override_never_raises_dynamic_ceiling(self, monkeypatch):
+        """override=500 (> dynamic 50) → effective is still 50 (override only lowers)."""
+        captured = self._capture_limits_and_tools(
+            monkeypatch,
+            500,
+            extra_settings={
+                "trace_review_inspector_max_obs_for_tools": 1000,
+            },
+            request_limit_override=500,
+        )
+        limits = captured["limits"]
+        # Dynamic = 50, override = 500 → effective = min(50, 500) = 50
+        assert limits.request_limit == 50
+
+    def test_request_limit_override_ignored_on_tool_less_path(self, monkeypatch):
+        """override does NOT affect the tool-less path (repo_dir=None)."""
+        captured = self._capture_limits_and_tools(
+            monkeypatch, 5, repo_dir=False, request_limit_override=100
+        )
+        limits = captured["limits"]
+        # Tool-less should still be the toolless default (3)
+        assert limits.request_limit == 3
+        assert limits.tool_calls_limit is None
 
 
 # ---------------------------------------------------------------------------
