@@ -207,6 +207,65 @@ class TestClassifier:
         )
         assert not any("cost_outlier" in f for f in flags.flags)
 
+    def test_cheap_high_volume_skips_cost_outlier(self, settings):
+        """$0.92 across 2718 obs ($0.00034/obs) is NOT flagged."""
+        baselines = self._baselines(
+            cost_threshold=0.90,
+            cost_median=0.30,
+        )
+        flags = _classify_trace(
+            _trace(totalCost=0.92),
+            settings,
+            observations=[_obs("chat gpt-4") for _ in range(2718)],
+            baselines=baselines,
+        )
+        assert not any("cost_outlier" in f for f in flags.flags)
+
+    def test_expensive_low_volume_still_flagged(self, settings):
+        """$0.92 across 50 obs ($0.0184/obs) IS flagged."""
+        baselines = self._baselines(
+            cost_threshold=0.90,
+            cost_median=0.30,
+        )
+        flags = _classify_trace(
+            _trace(totalCost=0.92),
+            settings,
+            observations=[_obs("chat gpt-4") for _ in range(50)],
+            baselines=baselines,
+        )
+        assert any("cost_outlier" in f for f in flags.flags)
+
+    def test_zero_observations_falls_through_to_cost_check(self, settings):
+        """0 observations skips per-obs guard (division by zero), normal check applies."""
+        baselines = self._baselines(
+            cost_threshold=0.90,
+            cost_median=0.30,
+        )
+        flags = _classify_trace(
+            _trace(totalCost=2.50),
+            settings,
+            observations=[],
+            baselines=baselines,
+        )
+        assert any("cost_outlier" in f for f in flags.flags)
+
+    def test_zero_cost_skips_both_guard_and_check(self, settings):
+        """totalCost=0 means per_obs_cost=0 < threshold, so guard skips
+        the cost_outlier check entirely. Even if cost_threshold is
+        non-None and 0 > threshold would be false anyway, this
+        confirms no exception is raised."""
+        baselines = self._baselines(
+            cost_threshold=0.01,
+            cost_median=0.0,
+        )
+        flags = _classify_trace(
+            _trace(totalCost=0.0),
+            settings,
+            observations=[_obs("read_file") for _ in range(10)],
+            baselines=baselines,
+        )
+        assert not any("cost_outlier" in f for f in flags.flags)
+
     def test_observation_storm_relative(self, settings):
         baselines = self._baselines(
             obs_threshold=45,

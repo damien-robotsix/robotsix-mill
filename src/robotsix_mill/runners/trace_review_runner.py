@@ -185,8 +185,20 @@ def _classify_trace(
     """
     flags: list[str] = []
     total_cost = float(trace.get("totalCost") or 0.0)
+
+    _per_obs_cost = (
+        (total_cost / len(observations))
+        if observations and len(observations) > 0
+        else None
+    )
+    _is_cheap_high_volume = (
+        _per_obs_cost is not None
+        and _per_obs_cost < settings.trace_review_per_obs_cost_threshold
+    )
+
     if (
-        baselines is not None
+        not _is_cheap_high_volume
+        and baselines is not None
         and baselines.cost_threshold is not None
         and total_cost > baselines.cost_threshold
     ):
