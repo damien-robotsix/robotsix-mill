@@ -344,6 +344,17 @@ class _StagesSettings(BaseModel):
     trace_review_max_drafts_per_run: int = Field(
         default=5,
     )
+    # Hard cap on how many traces a single trace-review run pulls full
+    # detail for (and holds in memory at once). The runner pre-loads every
+    # trace's detail + observations into memory; an unbounded window (which
+    # happens when a run is interrupted before it can advance the watermark)
+    # made that grow without limit and exhaust the host. When the window
+    # holds more than this, the run processes the OLDEST N and advances the
+    # watermark to the last processed trace, so it converges incrementally
+    # instead of re-loading an ever-growing backlog. 0 disables the cap.
+    trace_review_max_traces_per_run: int = Field(
+        default=300,
+    )
     # First-run lookback window when no watermark exists yet (hours).
     trace_review_initial_lookback_hours: int = Field(
         default=24,

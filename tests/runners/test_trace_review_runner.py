@@ -1127,3 +1127,68 @@ class TestPathExistenceGuard:
             repo_config=_test_repo_config(),
         )
         assert len(result.drafts_created) == 1
+
+
+class TestTraceReviewMemoryCap:
+    """The per-run trace cap bounds memory + advances the watermark
+    incrementally (regression for the unbounded-window memory explosion)."""
+
+    def test_window_capped_processes_oldest_and_advances_watermark(
+        self, settings, monkeypatch
+    ):
+        rc = _test_repo_config()
+        capped = Settings(
+            data_dir=settings.data_dir,
+            trace_review_max_traces_per_run=3,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.runners.trace_review_runner.Settings",
+            lambda: capped,
+        )
+        # 6 traces oldest→newest, supplied newest-first to exercise the sort.
+        traces = [
+            _trace(
+                id=f"t{i}",
+                timestamp=f"2026-06-19T0{i}:00:00+00:00",
+                totalCost=0.01,
+            )
+            for i in range(6)
+        ]
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.list_all_traces_since",
+            lambda *a, **kw: list(reversed(traces)),
+        )
+        detail_ids: list[str] = []
+
+        def _detail(_settings, trace_id, **kw):
+            detail_ids.append(trace_id)
+            return {"observations": []}
+
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
+            _detail,
+        )
+
+        run_trace_review_pass(session_id="sess-cap", repo_config=rc)
+
+        # Only the OLDEST 3 traces had their detail loaded — bounded memory.
+        assert sorted(detail_ids) == ["t0", "t1", "t2"]
+        # Watermark advanced to the last PROCESSED trace (t2), not ``now``,
+        # so the unprocessed tail (t3–t5) drains on the next run.
+        wm = _load_watermark(capped, rc.board_id)
+        assert wm is not None
+        assert wm.isoformat() == "2026-06-19T02:00:00+00:00"
+
+    def test_window_under_cap_fetches_all(self, settings, monkeypatch):
+        rc = _test_repo_config()
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.list_all_traces_since",
+            lambda *a, **kw: [_trace(id="only", totalCost=0.01)],
+        )
+        detail_ids: list[str] = []
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
+            lambda _s, tid, **kw: detail_ids.append(tid) or {"observations": []},
+        )
+        run_trace_review_pass(session_id="sess-small", repo_config=rc)
+        assert detail_ids == ["only"]
