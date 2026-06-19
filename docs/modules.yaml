@@ -395,6 +395,7 @@ modules:
       - src/robotsix_mill/agents/log_tools.py
       - src/robotsix_mill/agents/list_threads.py
       - src/robotsix_mill/agents/ci_patterns.py
+      - src/robotsix_mill/agents/ci_wait_tool.py
       - src/robotsix_mill/agents/consult_expert.py
       - src/robotsix_mill/agents/read_ticket.py
       - src/robotsix_mill/agents/list_epic_children.py
@@ -413,7 +414,9 @@ modules:
       - tests/agents/test_list_epic_children.py
       - tests/agents/test_ask_user.py
       - tests/agents/test_consult_expert.py
+      - tests/agents/test_bridged_git_tools.py
       - tests/agents/test_ci_patterns.py
+      - tests/agents/test_ci_wait_tool.py
       - tests/agents/test_jscpd_tool.py
       - tests/agents/test_workflow_caller_audit.py
       - tests/agents/test_validate_artifact_tool.py
@@ -426,6 +429,7 @@ modules:
       - tests/agents/test_reply_thread.py
       - tests/agents/test_copy_pasting.py
       - tests/agents/test_web_knowledge.py
+      - tests/agents/test_forge_parity.py
     dependencies: [config, core, agent-infra, sandbox, langfuse]
 
   - id: agents
