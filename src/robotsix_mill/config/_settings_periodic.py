@@ -383,6 +383,21 @@ class _PeriodicSettings(BaseModel):
     # enforced at 60s in the worker loop.
     state_sync_interval_seconds: int = Field(default=86400)
 
+    # --- env-doc-sync agent (env-var documentation consistency) ---
+    # Model for the env-doc-sync agent. Defaults to a cheap model (read-only
+    # file scan — no web research or code generation).
+    env_doc_sync_model: str = Field(default="deepseek/deepseek-v4-flash")
+    # Path to the env-doc-sync agent's Markdown memory ledger. Override to pin
+    # a specific path; unset (default) derives <data_dir>/env_doc_sync_memory.md.
+    env_doc_sync_memory_path: Path | None = Field(default=None)
+    # Opt-in periodic env-doc-sync pass. Defaults to True (opt-out);
+    # set false to disable the daily env-var documentation consistency check.
+    env_doc_sync_periodic: bool = Field(default=True)
+    # Seconds between periodic env-doc-sync passes when
+    # MILL_ENV_DOC_SYNC_PERIODIC=true. Default 86400 (1 day). Minimum
+    # enforced at 60s in the worker loop.
+    env_doc_sync_interval_seconds: int = Field(default=86400)
+
     # --- config-sync agent (config ↔ .env ↔ docs drift detection) ---
     # Model for the config-sync agent. Defaults to a cheap model (read-only
     # file parsing — no web research or code generation).

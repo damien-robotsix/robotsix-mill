@@ -44,6 +44,7 @@ class SourceKind(StrEnum):
     MODULE_CURATOR = "module_curator"
     ROADMAP_SYNC = "roadmap_sync"
     STATE_SYNC = "state_sync"
+    ENV_DOC_SYNC = "env_doc_sync"
     META = "meta"
     RUN_HEALTH = "run-health"
     BOARD_CLEANUP = "board_cleanup"
