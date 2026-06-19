@@ -409,7 +409,7 @@ class GitHubForgeCIMixin:
         # but CodeQL's py/uninitialized-local-variable can't prove it through
         # the retry/continue/break flow — initialise so the analysis is clean
         # without changing behaviour (a double-401 still raises before use).
-        jobs: list[dict] = []
+        jobs: list[Any] = []
         for retry in range(2):
             with self._http.client() as (c, api, headers):  # type: ignore[attr-defined]
                 jobs_resp = c.get(
