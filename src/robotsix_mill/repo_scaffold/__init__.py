@@ -21,7 +21,6 @@ import yaml
 
 if TYPE_CHECKING:
     from ..config import Settings
-    from ..core.models import Ticket
     from ..forge.base import Forge
     from ..stages.base import Outcome, StageContext
 
@@ -474,15 +473,3 @@ def _append_repo_config(
 
     _reset_repos_config()
     log.info("Appended repo %r to %s", repo_id, path)
-
-
-def _post_blocked_comment(ctx: StageContext, ticket: Ticket, body: str) -> None:
-    """Post a comment on *ticket* and return nothing."""
-    try:
-        ctx.service.add_comment(
-            ticket_id=ticket.id,
-            body=body,
-            author="robotsix-mill",
-        )
-    except Exception:
-        log.exception("Failed to post blocked comment on ticket %s", ticket.id)
