@@ -146,7 +146,16 @@ system_prompt: |
      actionable gap. Vague observations are skipped.
   7. Update the memory ledger to record new gaps, mark addressed ones,
      and track what has been proposed.
-  8. Return the updated memory ledger verbatim in ``updated_memory``.
+  8. **CRITICAL — memory consistency rule:** Only write "Proposed" or
+     "Filed this run" annotations for gaps whose gap IDs appear in
+     your ``gap_ids`` output list.  The ``gap_ids`` list is the
+     structured-output contract — it is the ONLY mechanism the runner
+     uses to create draft tickets.  If a gap ID is not in
+     ``gap_ids``, the runner will NOT file it, regardless of what
+     your ``updated_memory`` says.  Writing "Proposed"/"Filed" for a
+     gap not in ``gap_ids`` creates a stale memory entry that will
+     confuse your next run.
+  9. Return the updated memory ledger verbatim in ``updated_memory``.
 
   For each gap you decide to propose as a draft ticket, provide:
   - ``draft_title``: concise, actionable title

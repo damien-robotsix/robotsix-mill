@@ -15,6 +15,7 @@ from robotsix_mill.runners.pass_runner import (
     _source_module_exists_for_gap,
     _module_curator_premise_check,
     strip_ephemeral_sections,
+    _strip_unverified_filed_annotations,
     ProposedActionItem,
     _verify_proposed_actions,
 )
@@ -3624,3 +3625,91 @@ def test_persist_memory_creates_parent_dirs_with_truncation(tmp_path):
     written = memory_file.read_text(encoding="utf-8")
     assert written.startswith("[... memory truncated:")
     assert len(written) <= 2000 + 100
+
+
+# ------------------------------------------------------------------
+# _strip_unverified_filed_annotations
+# ------------------------------------------------------------------
+
+
+def test_strip_unverified_filed_annotations_empty_verified_ids():
+    """When verified_gap_ids is empty, ALL 'Filed' annotations are stripped
+    because none of them were verified as filed."""
+    memory = "- gap-foo — Filed this run\nOther text\n"
+    result = _strip_unverified_filed_annotations(memory, [])
+    # The 'Filed' annotation line is stripped; non-annotation lines survive.
+    assert "gap-foo" not in result
+    assert "Other text" in result
+
+
+def test_strip_unverified_filed_annotations_empty_memory():
+    """Empty memory string returns empty string."""
+    result = _strip_unverified_filed_annotations("", ["gap-foo"])
+    assert result == ""
+
+
+def test_strip_unverified_filed_annotations_none_memory():
+    """None-like (empty string) memory is returned as-is."""
+    result = _strip_unverified_filed_annotations("", [])
+    assert result == ""
+
+
+def test_strip_unverified_filed_annotations_keeps_verified():
+    """Lines with gap_ids in verified list are preserved."""
+    memory = "- gap-foo — Filed this run\n- gap-bar — Filed this run\n"
+    result = _strip_unverified_filed_annotations(memory, ["gap-foo", "gap-bar"])
+    assert "- gap-foo — Filed this run" in result
+    assert "- gap-bar — Filed this run" in result
+
+
+def test_strip_unverified_filed_annotations_removes_unverified():
+    """Lines with gap_ids NOT in verified list are stripped."""
+    memory = (
+        "- gap-foo — Filed this run\n"
+        "- gap-unverified — Filed this run\n"
+        "- gap-bar — Filed this run\n"
+    )
+    result = _strip_unverified_filed_annotations(memory, ["gap-foo", "gap-bar"])
+    assert "- gap-foo — Filed this run" in result
+    assert "- gap-bar — Filed this run" in result
+    assert "gap-unverified" not in result
+
+
+def test_strip_unverified_filed_annotations_lowercase_filed():
+    """Case-insensitive match for 'filed'."""
+    memory = "- gap-foo — filed this run\n"
+    result = _strip_unverified_filed_annotations(memory, [])
+    assert "gap-foo" not in result
+
+
+def test_strip_unverified_filed_annotations_emdash():
+    """Matches em-dash separator."""
+    memory = "- gap-foo — Filed this run\n"
+    result = _strip_unverified_filed_annotations(memory, [])
+    assert "gap-foo" not in result
+
+
+def test_strip_unverified_filed_annotations_endash():
+    """Matches en-dash separator."""
+    memory = "- gap-foo – Filed this run\n"
+    result = _strip_unverified_filed_annotations(memory, [])
+    assert "gap-foo" not in result
+
+
+def test_strip_unverified_filed_annotations_preserves_non_annotation_lines():
+    """Lines that don't match the 'filed' pattern are left untouched."""
+    memory = (
+        "## Proposals\nSome prose about gaps\n- gap-foo — Filed this run\nMore text\n"
+    )
+    result = _strip_unverified_filed_annotations(memory, ["gap-foo"])
+    assert "## Proposals" in result
+    assert "Some prose about gaps" in result
+    assert "- gap-foo — Filed this run" in result
+    assert "More text" in result
+
+
+def test_strip_unverified_filed_annotations_no_filed_annotations():
+    """Memory with no 'Filed' annotations is returned unchanged."""
+    memory = "## Proposals\n- gap-foo: observed, not filed yet\n"
+    result = _strip_unverified_filed_annotations(memory, ["gap-foo"])
+    assert result == memory

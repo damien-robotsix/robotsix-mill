@@ -284,6 +284,60 @@ def strip_ephemeral_sections(memory_text: str) -> str:
     return cleaned + "\n" if cleaned else ""
 
 
+# Pattern for "Filed this run" / "filed this run" annotations in memory
+# ledgers. Group 1 captures the gap_id before the dash/colon/space.
+_FILED_ANNOTATION_RE = re.compile(
+    r"(?:^|\n)\s*[-*]\s+(?P<gap_id>\S+)\s+[—–-]\s*[Ff]iled\b.*",
+)
+
+
+def _strip_unverified_filed_annotations(
+    memory_text: str, verified_gap_ids: list[str]
+) -> str:
+    """Remove ``Filed this run`` / ``filed`` annotations from
+    *memory_text* for gap IDs that are NOT in *verified_gap_ids*.
+
+    An agent may write "gap-X — Filed this run" into its memory ledger
+    for a gap that never made it into ``draft_titles``/``draft_bodies``/
+    ``gap_ids`` (the structured-output contract).  On the next run the
+    stale entry causes confusion and wasted budget.  This function
+    strips those stale annotations before the memory is persisted,
+    logging a warning for each removed line.
+
+    Annotations whose gap ID IS in *verified_gap_ids* are left untouched.
+    Lines that don't match the annotation pattern are left untouched.
+    """
+    if not memory_text:
+        return memory_text
+
+    verified_set = set(verified_gap_ids)
+    lines = memory_text.split("\n")
+    cleaned: list[str] = []
+    stripped_count = 0
+
+    for line in lines:
+        m = _FILED_ANNOTATION_RE.match(line)
+        if m:
+            gap_id = m.group("gap_id")
+            if gap_id not in verified_set:
+                stripped_count += 1
+                log.warning(
+                    "stripping unverified 'Filed' annotation for gap %s "
+                    "(not in verified_gap_ids: %s)",
+                    gap_id,
+                    verified_gap_ids,
+                )
+                continue
+        cleaned.append(line)
+
+    if stripped_count > 0:
+        log.info(
+            "stripped %d unverified 'Filed' annotation(s) from memory ledger",
+            stripped_count,
+        )
+    return "\n".join(cleaned)
+
+
 def _format_recent_proposals(tickets: list[Ticket]) -> str:
     """Format a ``<recent_proposals>`` block for agent prompt injection.
 
@@ -674,13 +728,7 @@ def run_agent_pass(
             proposed_actions=[],
         )
 
-    # 5. Persist the agent's updated memory verbatim.
-    if res.updated_memory:
-        persist_memory(
-            memory_file, res.updated_memory, max_chars=settings.max_memory_chars
-        )
-
-    # 5b. Persist proposed actions (proposed-action subsystem).
+    # 5. Persist proposed actions (proposed-action subsystem).
     proposed_actions = getattr(res, "proposed_actions", [])
     proposed_created: list[dict] = []
     for pa_item in proposed_actions:
@@ -717,8 +765,9 @@ def run_agent_pass(
             )
 
     # 6. Create draft tickets for each proposal.
-    gap_ids = getattr(res, "gap_ids", [])
+    gap_ids: list[str] = getattr(res, "gap_ids", [])
     created: list[dict] = []
+    verified_gap_ids: list[str] = []
     limit = min(len(res.draft_titles), len(res.draft_bodies))
     if max_drafts is not None:
         limit = min(limit, max_drafts)
@@ -827,6 +876,10 @@ def run_agent_pass(
                 origin_session=origin_session,
             )
             created.append({"id": ticket.id, "title": ticket.title})
+            # Track which gap_ids were actually filed — used to
+            # validate the agent's memory ledger before persisting.
+            if i < len(gap_ids) and gap_ids[i]:
+                verified_gap_ids.append(gap_ids[i])
             log.info(
                 "%s spawned draft %s: %s",
                 source_label,
@@ -835,6 +888,16 @@ def run_agent_pass(
             )
         except Exception:
             log.exception("failed to create draft ticket: %s", title)
+
+    # 7. Persist the agent's updated memory, stripping any "Filed"
+    #    annotations for gap IDs that weren't actually filed this run.
+    if res.updated_memory:
+        res.updated_memory = _strip_unverified_filed_annotations(
+            res.updated_memory, verified_gap_ids
+        )
+        persist_memory(
+            memory_file, res.updated_memory, max_chars=settings.max_memory_chars
+        )
 
     return AgentPassResult(
         updated_memory=res.updated_memory or memory_text,
