@@ -72,6 +72,12 @@ system_prompt: |
   ticket's comments before deciding whether to skip the reply.  Only
   skip if the correct ID is genuinely impossible to determine.
 
+  When read_ticket returns an "invalid ticket_id format" error, the ID
+  you used was likely a truncated reference from a workflow note or
+  comment — do not retry the same truncated ID.  Either reconstruct the
+  full ID (timestamp + slug + 4-hex suffix) from context or skip the
+  lookup.
+
   PARALLEL TOOL CALLS:
 
   To minimize latency and cost, when you have multiple independent tool
