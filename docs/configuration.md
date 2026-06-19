@@ -597,6 +597,10 @@ Additional fields:
 |-----------|---------|---------|-------------|
 | `periodic.trace_review.enabled` | `MILL_TRACE_REVIEW_PERIODIC` | `true` | Enable periodic trace-review passes |
 | `periodic.trace_review.interval_seconds` | `MILL_TRACE_REVIEW_INTERVAL_SECONDS` | `86400` | Seconds between trace-review passes |
+| `periodic.trace_review.cost_multiplier` | — | `3.0` | Outlier threshold: cost > median × N → flagged |
+| `periodic.trace_review.obs_multiplier` | — | `3.0` | Outlier threshold: observation count > median × N → flagged |
+| `periodic.trace_review.max_repeated_tool` | — | `50` | Absolute cap on repeated tool calls before flagging |
+| `periodic.trace_review.max_drafts_per_run` | — | `5` | Cap on drafted findings per trace-review pass |
 | `periodic.board_cleanup.enabled` | `MILL_BOARD_CLEANUP_PERIODIC` | `true` | Enable periodic board-cleanup passes |
 | `periodic.board_cleanup.interval_seconds` | `MILL_BOARD_CLEANUP_INTERVAL_SECONDS` | `86400` | Seconds between board-cleanup passes |
 | `periodic.board_cleanup.memory_path` | `MILL_BOARD_CLEANUP_MEMORY_PATH` | `None` | Override path for board-cleanup memory; defaults to `<data_dir>/<repo_id>/board_cleanup_memory.md` |
