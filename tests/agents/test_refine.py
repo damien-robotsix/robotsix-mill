@@ -490,6 +490,20 @@ def test_system_prompt_forbids_re_exploring_already_read_files():
     )
 
 
+def test_system_prompt_requires_path_verification_for_dedup_advisory():
+    """Invariant lock: the refine agent's SYSTEM_PROMPT must require
+    path-level verification before accepting a pre-refine ``[!warning]``
+    dedup advisory — extract file paths from the draft and run
+    ``git log --all --oneline -- <path>`` for each."""
+    from robotsix_mill.agents.refining import SYSTEM_PROMPT
+
+    sentinel = "git log --all --oneline -- <path>"
+    assert sentinel in SYSTEM_PROMPT, (
+        f"SYSTEM_PROMPT must require git-log path verification "
+        f"before accepting a dedup advisory ({sentinel!r}); found no match."
+    )
+
+
 # --- dedup guard tests ---
 
 # Substantive body — dedup is skipped for drafts under 100 chars, so
