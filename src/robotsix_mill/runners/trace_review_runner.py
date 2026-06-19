@@ -41,6 +41,8 @@ from typing import TYPE_CHECKING, Any
 from sqlmodel import select
 
 if TYPE_CHECKING:
+    from typing import Any
+
     from ..agents.trace_inspector import TraceFinding
 
 from ..config import RepoConfig, Settings
@@ -633,7 +635,7 @@ def run_trace_review_pass(
         )
 
     # Phase 1: classify every trace and collect flagged ones.
-    flagged: list = []
+    flagged: list[tuple[dict[str, Any], _TraceFlags, dict[str, Any] | None]] = []
     for trace in traces:
         trace_id = trace.get("id")
         if not trace_id:
