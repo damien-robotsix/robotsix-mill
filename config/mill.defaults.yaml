@@ -162,6 +162,7 @@ gates:
 stages:
   review:
     prior_context_max_chars: 8000          # max chars of re-review prior-context (comments + rebuttal); 0 = no cap
+    diff_max_chars: 200000                 # max chars of combined git diff injected into review prompt; 0 = unbounded
 
 # ---------------------------------------------------------------------------
 #  ci — CI retry ceiling for flake-storm prevention

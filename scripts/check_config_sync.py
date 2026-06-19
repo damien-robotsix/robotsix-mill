@@ -115,7 +115,6 @@ _MODEL_FIELDS_NOT_IN_ALIAS: frozenset[str] = frozenset(
         "freshness_gate_enabled",
         "prerequisite_gate_enabled",
         "delete_branch_on_merge",
-        "review_diff_max_chars",
         "review_output_token_budget",
         "trace_review_cost_multiplier",
         "trace_review_obs_multiplier",
