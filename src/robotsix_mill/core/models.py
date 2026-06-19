@@ -297,3 +297,22 @@ class CommentRead(SQLModel):
     parent_id: int | None
     closed_at: datetime | None
     created_at: datetime
+
+
+# --- Agent memory ledger (DB-backed, with retention) ---
+
+
+class Memory(SQLModel, table=True):
+    """Per-board, per-agent memory ledger row.
+
+    Replaces the file-based Markdown ledger with a DB-backed table so
+    retention is enforced and the full file is never injected unbounded
+    into agent prompts.  Each row is one agent's ledger for one board.
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    board_id: str = Field(index=True)
+    name: str = Field(index=True)
+    content: str = Field(default="")
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

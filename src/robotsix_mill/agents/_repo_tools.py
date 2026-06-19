@@ -20,6 +20,7 @@ def _build_repo_tools(
     tool_names: tuple[str, ...] = ("read_file", "list_dir", "run_command"),
     extra_roots: list[Path] | None = None,
     include_parallel_explore: bool = False,
+    include_explore: bool = True,
 ) -> list[Any]:
     """Return repo-scoped tools when *repo_dir* is set, else [].
 
@@ -27,6 +28,11 @@ def _build_repo_tools(
     ground an agent in a local repository clone.  When *repo_dir* is
     ``None`` returns an empty list so the agent runs in reasoning-only
     mode (no repo access).
+
+    *include_explore* can be set to ``False`` to suppress the ``explore``
+    tool (and *include_parallel_explore* must also be ``False`` for
+    ``parallel_explore`` to be suppressed).  Both default to their
+    current values so existing callers are unchanged.
     """
     if repo_dir is None:
         return []
@@ -40,7 +46,9 @@ def _build_repo_tools(
         if t.__name__ in tool_names
     ]
     explore_kwargs: dict[str, Any] = {"extra_roots": extra_roots} if extra_roots else {}
-    tools: list[Any] = [make_explore_tool(settings, repo_dir, **explore_kwargs)]
+    tools: list[Any] = []
+    if include_explore:
+        tools.append(make_explore_tool(settings, repo_dir, **explore_kwargs))
     if include_parallel_explore:
         tools.insert(
             0, make_parallel_explore_tool(settings, repo_dir, **explore_kwargs)

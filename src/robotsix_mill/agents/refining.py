@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 import yaml as _yaml
 
@@ -122,6 +122,18 @@ class TriageResult(BaseModel):
 
     decision: Literal["REFINE", "SKIP", "MAINTENANCE"]
     reason: str
+    complexity: Literal["simple", "needs-exploration"] | None = Field(
+        default=None,
+        description=(
+            "When decision is REFINE: 'simple' means the ticket is a "
+            "single-file / auto-approve-class change that needs no "
+            "multi-step codebase exploration — the refine agent can "
+            "work from read_file/list_dir/run_command alone. "
+            "'needs-exploration' (or None for backward compat) means "
+            "full explore/parallel_explore tools should be provided. "
+            "When decision is SKIP or MAINTENANCE this field is ignored."
+        ),
+    )
 
 
 class AutoApproveResult(BaseModel):
@@ -744,6 +756,8 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
     deployed_log_summary: str = "",
     deployed_log_dir: Path | None = None,
     screenshot_paths: list[Path] | None = None,
+    include_explore: bool = True,
+    include_parallel_explore: bool = True,
 ) -> RefineResult:
     """Return a structured ``RefineResult``. When ``repo_dir`` is given
     the agent grounds the spec in that local clone via explore/
@@ -811,8 +825,58 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
     from ._repo_tools import _build_repo_tools
 
     tools = _build_repo_tools(
-        repo_dir, settings, extra_roots=extra_roots, include_parallel_explore=True
+        repo_dir,
+        settings,
+        extra_roots=extra_roots,
+        include_parallel_explore=include_parallel_explore,
+        include_explore=include_explore,
     )
+
+    # Wrap explore / parallel_explore tools with a cap-enforcing counter
+    # so sub-agent calls beyond settings.max_refine_explore_calls are
+    # rejected.  Track the count in a mutable cell closed over by each
+    # wrapper.
+    _explore_call_count: list[int] = [0]
+    _explore_cap: int = settings.max_refine_explore_calls
+
+    def _wrap_explore_with_cap(tool: Any) -> Any:
+        """Return *tool* wrapped to count + cap explore/parallel_explore calls."""
+        import functools
+
+        @functools.wraps(tool)
+        async def _capped(*args: Any, **kwargs: Any) -> Any:
+            if _explore_cap > 0 and _explore_call_count[0] >= _explore_cap:
+                return (
+                    f"ERROR: exploration cap reached "
+                    f"({_explore_call_count[0]}/{_explore_cap} explore/parallel_explore "
+                    f"calls already made).  Synthesise your spec from the information "
+                    f"you already have — do not request further exploration."
+                )
+            _explore_call_count[0] += 1
+            return await tool(*args, **kwargs)
+
+        return _capped
+
+    _EXPLORE_TOOL_NAMES = {"explore", "parallel_explore"}
+    for i, t in enumerate(tools):
+        if getattr(t, "__name__", "") in _EXPLORE_TOOL_NAMES:
+            tools[i] = _wrap_explore_with_cap(t)
+
+    # Emit a structured log line recording exploration skip/invoke + cap.
+    _explore_enabled = include_explore or include_parallel_explore
+    if not _explore_enabled:
+        log.info(
+            "refine exploration: skipped (include_explore=%s, include_parallel_explore=%s)",
+            include_explore,
+            include_parallel_explore,
+        )
+    else:
+        log.info(
+            "refine exploration: invoked (cap=%d, include_explore=%s, include_parallel_explore=%s)",
+            _explore_cap,
+            include_explore,
+            include_parallel_explore,
+        )
 
     # Langfuse read tools — always available (four simple closures).
     from .langfuse_tools import _build_langfuse_tools

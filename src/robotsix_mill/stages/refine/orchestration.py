@@ -45,6 +45,8 @@ from .helpers import (
     _COMMIT_SHA_RE,
     _TICKET_ID_RE,
     _build_deployed_log_summary,
+    _load_refine_memory,
+    _persist_refine_memory,
     _rationale_claims_external_fix,
     _resolve_next_state,
     _spec_is_degenerate,
@@ -54,13 +56,33 @@ from .helpers import (
 )
 
 
+def _write_triage_complexity(ws, complexity: str) -> None:
+    """Persist the triage complexity verdict for downstream consumption."""
+    (ws.artifacts_dir / "triage_complexity.json").write_text(
+        json.dumps({"complexity": complexity}), encoding="utf-8"
+    )
+
+
+def _read_triage_complexity(ws: Workspace) -> str:
+    """Read the triage complexity verdict; returns ``"needs-exploration"``
+    when the file is absent (conservative default)."""
+    path = ws.artifacts_dir / "triage_complexity.json"
+    if not path.exists():
+        return "needs-exploration"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return cast(str, data.get("complexity", "needs-exploration"))
+    except json.JSONDecodeError, KeyError:
+        return "needs-exploration"
+
+
 class RefineAgentMixin:
     """Refine-agent pipeline staticmethods mixed into :class:`RefineStage`."""
 
     @staticmethod
     def _review_spec_conciseness(
-        s,
-        ws,
+        s: Settings,
+        ws: Workspace,
         ticket: Ticket,
         spec: str,
         verbose_filename: str,
@@ -173,7 +195,7 @@ class RefineAgentMixin:
 
     @staticmethod
     def _write_file_map(
-        ws, entries: list[dict], *, only_if_absent: bool = False
+        ws: Workspace, entries: list[dict], *, only_if_absent: bool = False
     ) -> None:
         """Write ``file_map.json`` to the workspace artifacts dir.
 
@@ -440,6 +462,9 @@ class RefineAgentMixin:
         if not (is_split_child and not reviewer_comments):
             return None
 
+        # Split children are already refined — no exploration needed.
+        _write_triage_complexity(ws, "simple")
+
         spec = draft
         if not spec.strip():
             return Outcome(State.BLOCKED, "split child has empty description")
@@ -487,6 +512,11 @@ class RefineAgentMixin:
         - the feature flag is enabled, AND
         - no reviewer sendback (human-flagged changes always refine).
 
+        Also captures the complexity verdict from the triage classifier
+        and persists it to ``ws.artifacts_dir / "triage_complexity.json"``
+        so ``_run_and_collect`` can read it and pass it to
+        ``run_refine_agent`` for exploration gating.
+
         Returns an :class:`Outcome` to short-circuit, or ``None`` to fall
         through to the full refine agent.
         """
@@ -500,6 +530,13 @@ class RefineAgentMixin:
                 repo_dir=repo_dir,
                 extra_roots=extra_roots,
             )
+            # Persist complexity verdict for exploration gating downstream.
+            complexity = triage.complexity
+            if complexity is None:
+                # Default: needs-exploration for backward compat / safety.
+                complexity = "needs-exploration"
+            _write_triage_complexity(ws, complexity)
+
             if triage.decision == "MAINTENANCE" and s.maintenance_triage_enabled:
                 # LLM detected a maintenance request the keyword
                 # classifier missed.  Route to MAINTENANCE without
@@ -586,22 +623,13 @@ class RefineAgentMixin:
         non-``None``: an :class:`Outcome` to short-circuit, or the
         ``RefineResult`` to continue with.
         """
-        # Resolve the patchable module-level seams (``load_memory``,
-        # ``persist_memory``, ``_verify_branch_merged``) through the package
-        # façade so tests that patch ``robotsix_mill.stages.refine.<name>``
-        # (module-level seams in the pre-split module) still take effect.
-        from robotsix_mill.stages import refine as _facade
-
         # Meta tickets have no registered repo_config; their memory ledger
         # is keyed on the ticket's own board_id ("meta"). Every other board
         # uses its repo_config.board_id.
         memory_board_id = (
             ctx.repo_config.board_id if ctx.repo_config else ticket.board_id
         )
-        refine_memory_path = s.memory_file_for("refine", memory_board_id)
-        memory_text = _facade.load_memory(
-            refine_memory_path, max_chars=s.max_memory_chars
-        )
+        memory_text = _load_refine_memory(s, memory_board_id)
 
         # extra_roots is passed in (non-empty for meta-board multi-repo
         # workspaces; None for the normal single-repo path).
@@ -686,6 +714,10 @@ class RefineAgentMixin:
                 )
 
         try:
+            # Read the triage complexity verdict to gate exploration tools.
+            triage_complexity = _read_triage_complexity(ws)
+            _explore_simple = triage_complexity == "simple"
+
             result = refining.run_refine_agent(
                 settings=s,
                 title=ticket.title,
@@ -703,6 +735,8 @@ class RefineAgentMixin:
                 deployed_log_summary=deployed_log_summary,
                 deployed_log_dir=deployed_log_dir,
                 screenshot_paths=ws.list_screenshots(),
+                include_explore=not _explore_simple,
+                include_parallel_explore=not _explore_simple,
             )
         except RuntimeError as e:  # e.g. OPENROUTER_API_KEY not set
             # ModelHTTPError subclasses RuntimeError, so a transient model
@@ -793,14 +827,11 @@ class RefineAgentMixin:
         the raw-draft preservation, and the ``file_map`` / ``reference_files``
         artifacts.
         """
-        from robotsix_mill.stages import refine as _facade
-
         if result.updated_memory:
             memory_board_id = (
                 ctx.repo_config.board_id if ctx.repo_config else ticket.board_id
             )
-            refine_memory_path = s.memory_file_for("refine", memory_board_id)
-            _facade.persist_memory(refine_memory_path, result.updated_memory)
+            _persist_refine_memory(s, memory_board_id, result.updated_memory)
 
         if result.title and result.title.strip():
             ctx.service.set_title(ticket.id, result.title.strip())

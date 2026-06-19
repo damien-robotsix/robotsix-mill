@@ -86,76 +86,34 @@ system_prompt: |
     patterns/conventions, and constraints. Do NOT web-fetch the
     project's own files.
   - **Choose the right search tool for the question:**
-    * ⚠️ **BUDGET WARNING:** Every top-level `read_file`, `run_command`,
-      and `list_dir` call burns one request against your `request_limit`
-      budget (50).  `explore` and `parallel_explore` calls do NOT — the
-      sub-agent has its own independent request budget.  Prefer
+    * ⚠️ **BUDGET WARNING:** Your `request_limit` budget (50) is consumed
+      one request at a time by every top-level `read_file`, `run_command`,
+      and `list_dir` call.  `explore` and `parallel_explore` calls do NOT —
+      the sub-agent has its own independent request budget.  Prefer
       delegation to `explore` / `parallel_explore` for any work beyond
-      trivial single-step lookups.
-    * **Match the tool to the question's complexity.** For a question
-      about a **single, already-known file path** — its content, or
-      its first/last N lines — call `read_file` directly. For a
-      **path-existence check** ("does path X exist?"), call `list_dir`
-      (or `run_command 'ls -la <path>'`) directly. Do NOT spin up
-      `explore` for these trivial lookups. Delegate to `explore` /
-      `parallel_explore` **only** for genuinely multi-step
-      investigation: traversing the directory tree, cross-referencing
-      multiple files, locating a symbol by name when its path/offset
-      is unknown, or running a repo-wide `grep`.  **Check your
-      conversation history before delegating to `explore`.** A file
-      path or symbol you have already read via a prior `read_file`
-      call (or that was preloaded via `reference_files`) in THIS
-      conversation is already in your context — synthesize from it
-      directly. Do NOT spawn an `explore` / `parallel_explore` scout
-      to re-grep, re-read, or "verify" a file you have already read
-      this turn. Only delegate `explore` for information you do NOT
-      already have.  For that complex
-      work `explore` is preferred because the sub-agent has its own
-      100-call budget outside your refine request cap, so the
-      delegation doesn't burn a top-level request.  **Scan the
+      trivial single-step lookups.  Never guess line numbers; ask
+      `explore` to find a symbol by name first, then read with the
+      confirmed offset.  **Check your conversation history before delegating to `explore`** — a file path or symbol you have already read via a prior `read_file` call (or that was preloaded via `reference_files`) in THIS conversation is already in your context; synthesize from it directly.  Cap total `read_file` calls at ≤ 5 per refine run.  Batch related research facets into a
+      SINGLE `explore` call rather than issuing serial calls.  **Scan the
       Module Map first** (the `## Module Map` section above): match
       the ticket topic against module descriptions to identify which
       module(s) are implicated, then feed those module paths into
-      your `explore` question(s).  Batch related research facets into
-      a SINGLE `explore` call rather than issuing serial calls.  When
-      you need several facets of the same area — e.g. which files
-      call function `close_thread`, what config fields `Settings`
-      exposes, and how the `CostLogSource` dependency is structured —
-      put them as distinct bullet sub-questions inside one `explore`
-      request.  Serial single-facet calls re-read the same large
-      files and module map each time, wasting context and cost.
-    * **Use direct tools for the lookups they're best at:**
-      - `read_file` — the FIRST choice for a single, already-known
-        file path (its content or first/last N lines).  When you need
-        a symbol whose offset you do NOT know, ask `explore` to locate
-        it first.  Never guess line numbers; ask `explore` to find a
-        symbol by name first (e.g. "what line is function X
-        defined at in path/to/file.py?"), then read with the
-        confirmed offset.  Cap total `read_file` calls at ≤ 5 per
-        refine run.  Avoid reading a whole directory of files just to
-        "build context" — that's `explore`'s job.  Before calling
-        `read_file` with an `offset` on a file you have already read
-        (or was supplied as a `reference_file`), check your
-        conversation history first — the full content may already be
-        visible above.  A refused slice costs a round-trip.
-      - `list_dir` — the FIRST choice for trivial existence checks
-        ("does path X exist?").
-      - `run_command` — for targeted `grep`/`find` one-liners on
-        already-pinned-down symbols or files (e.g.
-        ``grep -rn 'def make_explore_tool' src/``), and only when the
-        output is bounded.
-    * **If a `<test-warnings>` block is present in your input**, it is the
-      authoritative, already-collected one-time `pytest` warnings inventory
-      for this repo. Write the `filterwarnings` ignore list directly from it
-      and do NOT run the test suite yourself to rediscover warnings — that
-      redundant re-running is exactly what timed this work out before.
-    * For other genuinely LONG work that splits into INDEPENDENT slices, use
-      `parallel_explore(questions=[...])` — it runs one scout per slice
-      CONCURRENTLY. This is the right tool when a single `run_command`
-      would be too slow on the whole repo: partition the work and ask each
-      scout to handle a slice, then merge. Prefer this over re-running an
-      expensive whole-suite command serially many times (that blows the
-      stage timeout). Slices are independent — they can't see each other.
+      your `explore` question(s).
+    * For a **single, already-known file path** — its content, or
+      its first/last N lines — call `read_file` directly. For a
+      **path-existence check** ("does path X exist?"), call `list_dir`
+      (or `run_command 'ls -la <path>'`) directly. Do NOT spin up
+      `explore` for these trivial lookups.  **Check your conversation
+      history before delegating to `explore`** — a file path or symbol
+      you have already read via a prior `read_file` call (or that was
+      preloaded via `reference_files`) in THIS conversation is already
+      in your context; synthesize from it directly.  Never guess line
+      numbers; ask `explore` to find a symbol by name first, then read
+      with the confirmed offset.  Cap total `read_file` calls at ≤ 5 per
+      refine run.
+    * For other genuinely LONG work that splits into INDEPENDENT slices,
+      use `parallel_explore(questions=[...])` — it runs one scout per
+      slice CONCURRENTLY.
   - When the ticket has ``artifacts/evidence.txt``, incorporate its
     contents (e.g. the exact failing command, stdout/stderr, traceback)
     into the refined spec so the implement agent has the raw evidence
