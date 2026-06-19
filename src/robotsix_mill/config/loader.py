@@ -371,6 +371,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.trace_review.obs_multiplier": "trace_review_obs_multiplier",
     "periodic.trace_review.max_repeated_tool": "trace_review_max_repeated_tool",
     "periodic.trace_review.max_drafts_per_run": "trace_review_max_drafts_per_run",
+    "periodic.trace_review.max_traces_per_run": "trace_review_max_traces_per_run",
     # -- periodic.stale_branch_cleanup --
     "periodic.stale_branch_cleanup.enabled": "stale_branch_cleanup_periodic",
     "periodic.stale_branch_cleanup.interval_seconds": "stale_branch_cleanup_interval_seconds",

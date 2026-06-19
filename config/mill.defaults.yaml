@@ -241,6 +241,7 @@ periodic:
     obs_multiplier: 3.0             # outlier threshold multiplier for observation count (obs > median * N → flagged)
     max_repeated_tool: 50           # absolute cap on repeated tool calls before flagging
     max_drafts_per_run: 5           # cap on drafted findings per pass (prevents board flooding)
+    max_traces_per_run: 300         # cap on traces detail-loaded per pass; watermark advances incrementally so a backlog drains with bounded memory (0 disables)
 
   # -- stale-branch-cleanup — deletes old mill branches with no open PR -----
   stale_branch_cleanup:
