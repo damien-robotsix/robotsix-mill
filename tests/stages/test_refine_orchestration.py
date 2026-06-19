@@ -952,6 +952,182 @@ def test_triage_skip_extracts_backtick_paths(ctx_factory, monkeypatch, tmp_path)
 
 
 # ===========================================================================
+# _triage_skip — mechanical draft fast-path
+# ===========================================================================
+
+
+def test_mechanical_draft_fast_path_skips_refine_agent(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """When a mill-internal automated ticket passes triage with REFINE but
+    auto-approve confirms it is purely mechanical, the expensive refine
+    agent is skipped entirely and the draft passes through as the spec."""
+    ctx = ctx_factory(auto_approve_enabled=True)
+    t = _ticket(ctx, source="test_gap")
+    calls = _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(
+            decision="REFINE", reason="needs minor wording polish"
+        ),
+    )
+    from robotsix_mill.agents.refining import AutoApproveResult
+
+    monkeypatch.setattr(
+        refining,
+        "triage_auto_approve",
+        lambda **kw: AutoApproveResult(
+            decision="APPROVE",
+            reason="Mechanical rename — no design decisions",
+        ),
+    )
+
+    out = _run_agent(
+        ctx,
+        t,
+        tmp_path,
+        draft="Rename `old_func` to `new_func` in `src/foo/bar.py`.",
+    )
+
+    assert out.note.startswith("mechanical draft fast-path")
+    assert "APPROVE" in out.note
+    assert calls == []  # full refine agent never invoked
+    ws = ctx.service.workspace(t)
+    assert (ws.artifacts_dir / "draft-original.md").exists()
+    file_map = json.loads(
+        (ws.artifacts_dir / "file_map.json").read_text(encoding="utf-8")
+    )
+    assert {"file": "src/foo/bar.py", "note": "from draft"} in file_map
+
+
+def test_mechanical_draft_fast_path_not_triggered_for_user_tickets(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """Human-written tickets never take the mechanical fast-path, even
+    when the draft is mechanical and auto-approve is enabled."""
+    ctx = ctx_factory(auto_approve_enabled=True)
+    t = _ticket(ctx, source="user")
+    calls = _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(decision="REFINE", reason="needs refinement"),
+    )
+
+    out = _run_agent(
+        ctx,
+        t,
+        tmp_path,
+        draft="Rename `old_func` to `new_func` in `src/foo/bar.py`.",
+    )
+
+    # Should NOT hit the fast-path; should run the full refine agent.
+    assert not out.note.startswith("mechanical draft fast-path")
+    assert len(calls) == 1  # full refine agent WAS invoked
+
+
+def test_mechanical_draft_fast_path_not_triggered_for_ci_tickets(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """CI-failure tickets never take the mechanical fast-path."""
+    ctx = ctx_factory(auto_approve_enabled=True)
+    t = _ticket(ctx, source="ci")
+    calls = _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(decision="REFINE", reason="needs refinement"),
+    )
+
+    out = _run_agent(
+        ctx,
+        t,
+        tmp_path,
+        draft="Fix the SHA in `.github/workflows/ci.yml`.",
+    )
+
+    assert not out.note.startswith("mechanical draft fast-path")
+    assert len(calls) == 1  # full refine agent WAS invoked
+
+
+def test_mechanical_draft_fast_path_not_triggered_when_auto_approve_disabled(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """The fast-path is gated on auto_approve_enabled=True."""
+    ctx = ctx_factory(auto_approve_enabled=False)
+    t = _ticket(ctx, source="test_gap")
+    calls = _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(decision="REFINE", reason="needs refinement"),
+    )
+
+    out = _run_agent(
+        ctx,
+        t,
+        tmp_path,
+        draft="Rename `old_func` to `new_func` in `src/foo/bar.py`.",
+    )
+
+    assert not out.note.startswith("mechanical draft fast-path")
+    assert len(calls) == 1  # full refine agent WAS invoked
+
+
+def test_mechanical_draft_fast_path_falls_through_on_needs_approval(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """When auto-approve returns NEEDS_APPROVAL, fall through to the full
+    refine agent."""
+    ctx = ctx_factory(auto_approve_enabled=True)
+    t = _ticket(ctx, source="test_gap")
+    calls = _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(decision="REFINE", reason="needs refinement"),
+    )
+    from robotsix_mill.agents.refining import AutoApproveResult
+
+    monkeypatch.setattr(
+        refining,
+        "triage_auto_approve",
+        lambda **kw: AutoApproveResult(
+            decision="NEEDS_APPROVAL",
+            reason="New API contract introduced",
+        ),
+    )
+
+    out = _run_agent(
+        ctx,
+        t,
+        tmp_path,
+        draft="Add a new public endpoint with authentication.",
+    )
+
+    assert not out.note.startswith("mechanical draft fast-path")
+    assert len(calls) == 1  # full refine agent WAS invoked
+
+
+def test_mechanical_draft_fast_path_falls_through_on_auto_approve_error(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """When the auto-approve call raises, fall through gracefully."""
+    ctx = ctx_factory(auto_approve_enabled=True)
+    t = _ticket(ctx, source="test_gap")
+    calls = _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(decision="REFINE", reason="needs refinement"),
+    )
+
+    def _boom(**kw):
+        raise RuntimeError("OpenRouter transient error")
+
+    monkeypatch.setattr(refining, "triage_auto_approve", _boom)
+
+    out = _run_agent(
+        ctx,
+        t,
+        tmp_path,
+        draft="Rename `old_func` to `new_func` in `src/foo/bar.py`.",
+    )
+
+    assert not out.note.startswith("mechanical draft fast-path")
+    assert len(calls) == 1  # full refine agent WAS invoked
+
+
+# ===========================================================================
 # _no_change_path — external-fix claim re-verification branch
 # ===========================================================================
 

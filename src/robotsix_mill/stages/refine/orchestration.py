@@ -593,6 +593,66 @@ class RefineAgentMixin:
                     source=ticket.source,
                     triage_note=triage.reason,
                 )
+
+            # --- mechanical draft fast-path: when a mill-internal
+            # automated ticket passes triage with REFINE but the
+            # auto-approve classifier confirms it is purely mechanical,
+            # skip the expensive refine agent entirely.  The draft IS
+            # the spec — preserve it unchanged, exactly like the SKIP
+            # path above, but with the extra safety of the auto-approve
+            # gate confirming there are no design decisions.
+            #
+            # Only runs for mill-internal automated proposals (not
+            # human-written CI-failure tickets) when auto-approve is
+            # enabled.
+            if (
+                s.auto_approve_enabled
+                and ticket.source not in ("user", "ci")
+            ):
+                try:
+                    auto = refining.triage_auto_approve(
+                        settings=s,
+                        spec=f"{ticket.title}\n\n{draft}",
+                    )
+                    if auto.decision == "APPROVE":
+                        (ws.artifacts_dir / "draft-original.md").write_text(
+                            draft if draft else "(title-only ticket, no body provided)",
+                            encoding="utf-8",
+                        )
+                        _PATH_RE = re.compile(
+                            r"`([^`]*/[^`]*\.[a-zA-Z]{1,10})`"
+                        )
+                        extracted = _PATH_RE.findall(draft)
+                        if extracted:
+                            RefineAgentMixin._write_file_map(
+                                ws,
+                                [{"file": p, "note": "from draft"}
+                                 for p in extracted],
+                                only_if_absent=True,
+                            )
+                        else:
+                            RefineAgentMixin._write_file_map(
+                                ws, [], only_if_absent=True
+                            )
+                        return RefineAgentMixin._resolved_outcome(
+                            ctx,
+                            draft,
+                            ticket.id,
+                            f"mechanical draft fast-path — "
+                            f"auto-approve APPROVE: {auto.reason}",
+                            source=ticket.source,
+                            triage_note=(
+                                f"triage REFINE → "
+                                f"auto-approve APPROVE: {auto.reason}"
+                            ),
+                        )
+                except Exception:
+                    log.warning(
+                        "%s: mechanical fast-path auto-approve failed, "
+                        "falling through",
+                        ticket.id,
+                        exc_info=True,
+                    )
         except Exception:
             log.warning(
                 "%s: triage failed, falling through to full refine",
