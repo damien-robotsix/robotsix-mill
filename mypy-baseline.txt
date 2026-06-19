@@ -370,7 +370,6 @@ src/robotsix_mill/stages/review.py:0: error: Function is missing a type annotati
 src/robotsix_mill/agents/consult_expert.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/robotsix_mill/stages/document.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/stages/document.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
-src/robotsix_mill/agents/trace_inspector.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/agents/trace_inspector.py:0: error: Returning Any from function declared to return "TraceInspectResult"  [no-any-return]
 src/robotsix_mill/agents/config_syncing.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/agents/config_syncing.py:0: error: Returning Any from function declared to return "ConfigSyncResult"  [no-any-return]
