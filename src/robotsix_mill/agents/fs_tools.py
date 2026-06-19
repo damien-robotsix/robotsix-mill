@@ -537,9 +537,9 @@ def build_fs_tools(
             except ValueError, OSError:
                 line_count = "?"
             return (
-                f"refused: {path} ({line_count} lines) is already loaded in full "
-                f"earlier in this conversation — scroll back to find it. "
-                f"Do not re-read a slice of a file you already have in full."
+                f"FILE_ALREADY_IN_CONTEXT: {path}"
+                f" (already loaded in full at line offsets 0-{line_count})."
+                f" Use your context window to recall it rather than re-reading."
             )
 
         # Read (or refresh) via _read_cached, then slice.
