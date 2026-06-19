@@ -146,6 +146,12 @@ class _StagesSettings(BaseModel):
     # implementation-ready skip the full refine — saving cost & latency.
     # Set False to force full refine for all tickets without a deploy.
     refine_triage_enabled: bool = Field(default=True)
+    # When True (default), a pre-Opus guard checks whether the reviewer's
+    # feedback on a sendback ticket already agrees with the draft's
+    # no-change-needed conclusion.  When the reviewer confirms, the
+    # pipeline short-circuits to DONE, skipping the expensive Opus refine
+    # agent (~$0.28).  Requires ``refine_triage_enabled=True``.
+    reviewer_agreement_gate_enabled: bool = Field(default=True)
     # When True (default), a maintenance-triage check runs during refine
     # to detect operational-action drafts (create repo, fork repo,
     # investigate) and route them directly to the MAINTENANCE state,

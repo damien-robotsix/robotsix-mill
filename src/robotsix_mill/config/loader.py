@@ -321,6 +321,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "gates.pr_summary_enabled": "pr_summary_enabled",
     "gates.obsolescence_gate_enabled": "obsolescence_gate_enabled",
     "gates.freshness_gate_enabled": "freshness_gate_enabled",
+    "gates.reviewer_agreement_gate_enabled": "reviewer_agreement_gate_enabled",
     "gates.prerequisite_gate_enabled": "prerequisite_gate_enabled",
     "gates.auto_merge_main_debt_detection_enabled": "auto_merge_main_debt_detection_enabled",
     # -- ci --

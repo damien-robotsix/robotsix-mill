@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 import yaml as _yaml
 
@@ -183,6 +183,17 @@ class FileMapEntry(BaseModel):
 
     file: str
     note: str
+
+
+class ReviewerAgreementResult(BaseModel):
+    """Pre-Opus classifier output: does the reviewer agree with the draft?
+
+    When AGREE, the pipeline short-circuits to DONE (skipping Opus).
+    When DISAGREE, the full refine agent runs as normal.
+    """
+
+    decision: Literal["AGREE", "DISAGREE"]
+    reason: str
 
 
 class RefineResult(BaseModel):
@@ -412,6 +423,41 @@ def triage_auto_approve(
         what="auto-approve triage",
     )
     return result.output
+
+
+def triage_reviewer_agreement(
+    *,
+    settings: Settings,
+    draft: str,
+    reviewer_comments: str,
+) -> ReviewerAgreementResult:
+    """Return a ``ReviewerAgreementResult`` from a single cheap LLM call.
+
+    Checks whether the reviewer's feedback on a sendback ticket already
+    agrees with the draft's no-change-needed conclusion.  When AGREE,
+    the pipeline short-circuits to DONE — skipping the expensive Opus
+    refine agent (~$0.28 vs ~$0.0003 for this DeepSeek flash call).
+
+    NO tools, NO web, NO explore — just a tiny prompt and a
+    structured classification.
+    """
+
+    from .yaml_loader import load_and_run_agent
+
+    user_prompt = (
+        section("draft", draft)
+        + "\n\n"
+        + section("reviewer_feedback", reviewer_comments)
+    )
+
+    result = load_and_run_agent(
+        settings=settings,
+        definition_name="reviewer-agreement",
+        tools=[],
+        prompt=user_prompt,
+        what="reviewer-agreement triage",
+    )
+    return cast(ReviewerAgreementResult, result.output)
 
 
 def review_spec_for_conciseness(
