@@ -181,7 +181,7 @@ def run_coordinator(
 
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
-    from .explore import make_explore_tool
+    from .explore import make_explore_tool, make_parallel_explore_tool
     from .fs_tools import build_fs_tools
     from .retry import run_agent
 
@@ -286,6 +286,11 @@ def run_coordinator(
                 repo_dir,
                 extra_roots=extra_roots,
                 pre_seeded_paths=pre_seeded_paths,
+            ),
+            make_parallel_explore_tool(
+                settings,
+                repo_dir,
+                extra_roots=extra_roots,
             ),
             make_consult_expert_tool(settings, repo_dir, board_id=board_id),
             make_spawn_subtask_tool(settings, repo_dir),

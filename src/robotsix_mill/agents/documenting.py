@@ -156,7 +156,7 @@ def run_doc_agent(
 
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
-    from .explore import make_explore_tool
+    from .explore import make_explore_tool, make_parallel_explore_tool
     from .fs_tools import build_fs_tools
     from .retry import run_agent
     from ..runners.pass_runner import load_memory, persist_memory
@@ -203,6 +203,11 @@ def run_doc_agent(
                 repo_dir,
                 extra_roots=extra_roots,
                 pre_seeded_paths=reference_files,
+            ),
+            make_parallel_explore_tool(
+                settings,
+                repo_dir,
+                extra_roots=extra_roots,
             ),
             *(
                 t
