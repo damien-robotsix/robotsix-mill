@@ -29,7 +29,11 @@ CompletenessCheckResult = PeriodicAgentResult
 def _completeness_check_dynamic_kwargs(settings: Settings) -> dict[str, Any]:
     from pydantic_ai.usage import UsageLimits
 
-    return {"usage_limits": UsageLimits(request_limit=settings.completeness_check_request_limit)}
+    return {
+        "usage_limits": UsageLimits(
+            request_limit=settings.completeness_check_request_limit
+        )
+    }
 
 
 run_completeness_check_agent = make_agent_runner(
