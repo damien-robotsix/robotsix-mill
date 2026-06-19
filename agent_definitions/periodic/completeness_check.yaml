@@ -154,6 +154,11 @@ system_prompt: |
     content is already in your context, the tool will return a
     refusal string.  This wastes a round-trip.  Always check your
     history first.
+  - **WARNING:** each refused ``read_file`` call (requesting a slice
+    of an already-loaded file) reduces the number of gap findings the
+    operator will accept by 1.  Verify in your mental context whether
+    a file is already loaded before calling ``read_file`` with
+    ``offset``/``limit``.
   - **Batch multi-step research into ``explore`` calls.**  When you
     need to cross-reference several files or answer multiple related
     questions, put them as sub-questions inside a SINGLE ``explore``
