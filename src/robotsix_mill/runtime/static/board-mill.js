@@ -629,6 +629,31 @@
 
   function renderHistoryHtml(history, ticketId, traces) {
     var events = history || [];
+
+    // --- merge trace-link breadcrumbs into their matching transition ---
+    // A stage run writes two events: a breadcrumb note (🔍 [Trace: <stage>]) and a
+    // transition.  Pair them here so renderHistoryHtml produces one row per action.
+    var absorbed = new Set();   // original indices of breadcrumb events to skip
+    var bcForIdx = {};          // transition index → { event, idx } of the absorbed breadcrumb
+
+    for (var bi = 0; bi < events.length; bi++) {
+      var be = events[bi];
+      var bcStage = parseTraceStage(be.note);
+      if (!bcStage) continue;
+      var bPrev = events[bi - 1];
+      if (!bPrev || bPrev.state !== be.state) continue;  // must be a step
+      var next = events[bi + 1];
+      if (!next) continue;                                 // nothing to pair with
+      if (next.state === be.state) continue;               // not a state transition
+      var nextStep = matchStep(next.note);
+      var nextTraceStage = parseTraceStage(next.note);
+      var transitionStage = (nextStep && nextStep.label) || nextTraceStage || STATE_TRACE[next.state] || null;
+      if (transitionStage === bcStage) {
+        absorbed.add(bi);
+        bcForIdx[bi + 1] = { event: be, idx: bi };
+      }
+    }
+
     var costByIndex = buildEventTraceMap(events, traces || []);
     var claimed = new Set(Object.values(costByIndex).map(function(t) { return t.trace_id; }));
     var orphanRows = (traces || [])
@@ -660,14 +685,18 @@
       }
       var e = item;
       var i = item.__idx;
+      if (absorbed.has(i)) return '';
+      var bcData = bcForIdx[i];
+      var bcEvent = bcData ? bcData.event : null;
+      var bcIdx = bcData ? bcData.idx : -1;
       var prev = events[i - 1];
       var isStep = prev && prev.state === e.state;
       var chip = eventChip(e, prev, i);
       var chipLabel = chip.label;
       var chipClass = chip.cls;
       var art = chip.art;
-      var hasDetail = !!(e.note || art);
-      var trace = costByIndex[i];
+      var hasDetail = !!(e.note || art || (bcEvent && bcEvent.note));
+      var trace = costByIndex[i] || (bcIdx >= 0 ? costByIndex[bcIdx] : null);
       var cost = trace ? '<span class="ev-cost" title="Langfuse trace ' + esc(trace.trace_id) + '">$' + trace.cost.toFixed(4) + '</span>' : "";
       return '<div class="ev' + (isStep ? " ev-is-step" : "") + '" data-tid="' + esc(ticketId) + '" data-art="' + esc(art) + '" data-open="0">' +
         '<div class="ev-summary" onclick="toggleEvent(this)">' +
@@ -678,6 +707,7 @@
         '</div>' +
         '<div class="ev-detail" style="display:none">' +
         (e.note ? '<div class="ev-note">' + renderMD(e.note) + '</div>' : "") +
+        (bcEvent && bcEvent.note ? '<div class="ev-note">' + renderMD(bcEvent.note) + '</div>' : "") +
         (art ? '<div class="ev-artifact" data-loaded="0"><span class="muted">Click expand for ' + esc(art) + '…</span></div>' : "") +
         '</div>' +
         '</div>';
