@@ -228,6 +228,34 @@ class TestClassifier:
         flags = _classify_trace(_trace(), settings, observations=obs)
         assert any("tool_errors" in f for f in flags.flags)
 
+    def test_run_command_exit_zero_skips_error_regex(self, settings):
+        """A successful run_command (exit=0) whose output happens to
+        contain 'error:' (e.g. grep matching test source lines) must
+        NOT produce a false-positive tool_errors flag."""
+        obs = [
+            _obs(
+                "run_command",
+                output=(
+                    "exit=0\n"
+                    "tests/runners/test_trace_review_runner.py:227: "
+                    'obs = [_obs("run_command", output="error: command failed")]\n'
+                ),
+            )
+        ]
+        flags = _classify_trace(_trace(), settings, observations=obs)
+        assert not any("tool_errors" in f for f in flags.flags)
+
+    def test_run_command_success_message_skips_error_regex(self, settings):
+        """The success-with-no-output sentence also skips the regex."""
+        obs = [
+            _obs(
+                "run_command",
+                output="Your command ran successfully and did not produce any output.",
+            )
+        ]
+        flags = _classify_trace(_trace(), settings, observations=obs)
+        assert not any("tool_errors" in f for f in flags.flags)
+
     def test_traceback_in_status_message_is_a_tool_error(self, settings):
         obs = [
             _obs(
