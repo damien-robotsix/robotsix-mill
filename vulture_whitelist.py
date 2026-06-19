@@ -215,7 +215,6 @@ todo_drafts_created
 MARKERS
 
 # -- repo_scaffold -----------------------------------------------------------
-_post_blocked_comment
 
 # -- runners -----------------------------------------------------------------
 BoardCleanupPassResult
