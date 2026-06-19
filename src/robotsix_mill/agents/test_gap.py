@@ -44,5 +44,6 @@ run_test_gap_agent = make_agent_runner(
     prompt_tail="Perform the test-gap inspection and return your result.",
     max_gaps=MAX_GAPS,
     include_forge_url=True,
+    include_run_command=True,
     dynamic_kwargs_fn=_test_gap_dynamic_kwargs,
 )
