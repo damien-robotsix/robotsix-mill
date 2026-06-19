@@ -750,6 +750,10 @@ def run_maintenance_agent(ticket: Ticket, ctx: StageContext) -> MaintenanceResul
             "read those .md files yourself with ``read_file``, extract the module "
             "paths, then verify each with ``list_dir`` on its parent — do not hand "
             "the whole tree to ``explore``.\n"
+            "- **Cloned repos are ephemeral.** The clone created by ``clone_repo`` "
+            "is deleted after each LLM turn. If you need to re-access the repo in "
+            "a later turn, clone it again. Batch all file reads together in one "
+            "turn to avoid repeated clones.\n"
         )
         user_prompt = (
             f"{repo_context}{investigation_guidance}"
