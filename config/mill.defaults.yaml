@@ -29,6 +29,7 @@ core:
     consult_requests: 15               # per-call cap for domain-expert consultation sub-agent
     explore_requests: 100              # per-call cap for explore sub-agent
     explore_max_tokens: 2048              # output token cap for explore sub-agent responses
+    parallel_explore_max: 4               # max concurrent scouts per parallel_explore fan-out
     refine_requests: 80                # per-call request cap for the refine agent
     refine_max_tool_calls: 120         # hard cap on total tool calls per refine trace (runaway-loop backstop)
     refine_max_errors: 20              # max tool-call errors before aborting a refine trace
