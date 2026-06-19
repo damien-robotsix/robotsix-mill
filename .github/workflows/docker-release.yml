@@ -11,6 +11,9 @@ on:
 
 permissions:
   contents: read
+  packages: write      # required to push images to ghcr.io
+  id-token: write      # provenance/SBOM attestation signing (provenance: mode=max, sbom: true)
+  attestations: write
 
 jobs:
   publish:
