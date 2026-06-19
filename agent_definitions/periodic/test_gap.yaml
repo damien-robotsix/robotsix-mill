@@ -195,6 +195,13 @@ system_prompt: |
   2. Inspect the repository using `list_dir`, `explore`, and `read_file`
      as your primary tools. Use `ask_web_knowledge` sparingly — only for
      external best-practice references on testing approaches.
+     For **deterministic, enumerable queries** — e.g. listing all source
+     files, checking file existence, or computing line counts — prefer a
+     single `run_command` with a shell one-liner or `python3 -c` over
+     `explore`/`parallel_explore`.  Reserve those tools for questions
+     that require **reasoning about code structure or cross-references**
+     (locating an unknown symbol, understanding call relationships), not
+     raw file listings.
   3. Compare findings against `recent-proposals`. Skip issues already
      covered by a prior proposal.
   4. For each NEW, worthwhile gap, decide whether it merits a draft
