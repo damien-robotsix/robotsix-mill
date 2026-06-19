@@ -149,7 +149,10 @@ def _build_langfuse_url(
 ) -> str | None:
     """Build a Langfuse web-UI URL for a session or trace.
 
-    When *repo_config* is provided, its ``langfuse_base_url`` and
+    Uses the cuid ``langfuse_project_id`` in the URL path when
+    available, falling back to ``langfuse_project_name`` only when no
+    project id is configured (legacy).  When *repo_config* is provided,
+    its ``langfuse_base_url``, ``langfuse_project_id``, and
     ``langfuse_project_name`` are used; otherwise the global
     :class:`Secrets` singleton is consulted.
 
@@ -159,11 +162,13 @@ def _build_langfuse_url(
         base = (repo_config.langfuse_base_url or "https://cloud.langfuse.com").rstrip(
             "/"
         )
-        project_id = repo_config.langfuse_project_name
+        project_id = (
+            repo_config.langfuse_project_id or repo_config.langfuse_project_name
+        )
     else:
         secrets = get_secrets()
         base = (secrets.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
-        project_id = secrets.langfuse_project_name or secrets.langfuse_project_id
+        project_id = secrets.langfuse_project_id or secrets.langfuse_project_name
     if entity_id and base and project_id:
         return f"{base}/project/{project_id}/{entity_type}/{entity_id}"
     return None

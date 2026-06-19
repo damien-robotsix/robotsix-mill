@@ -609,6 +609,26 @@ def test_langfuse_trace_url_with_repo_config(repo_config):
     )
 
 
+def test_langfuse_trace_url_repo_config_project_id_preferred(repo_config):
+    """langfuse_trace_url uses RepoConfig.langfuse_project_id over
+    langfuse_project_name when both are set."""
+    repo_config.langfuse_project_id = "cuid-abc123"
+    repo_config.langfuse_project_name = "My Project"
+    url = tracing.langfuse_trace_url("trace-xyz", repo_config=repo_config)
+    assert url == ("https://cloud.langfuse.com/project/cuid-abc123/traces/trace-xyz")
+
+
+def test_langfuse_trace_url_repo_config_name_fallback(repo_config):
+    """langfuse_trace_url falls back to langfuse_project_name when
+    langfuse_project_id is empty."""
+    repo_config.langfuse_project_id = ""
+    repo_config.langfuse_project_name = "name-only-project"
+    url = tracing.langfuse_trace_url("trace-1", repo_config=repo_config)
+    assert url == (
+        "https://cloud.langfuse.com/project/name-only-project/traces/trace-1"
+    )
+
+
 def test_langfuse_trace_url_repo_config_custom_base(repo_config):
     """langfuse_trace_url honours a custom base_url in RepoConfig."""
     repo_config.langfuse_base_url = "https://selfhosted.lf.example.com"
@@ -638,15 +658,15 @@ def test_langfuse_trace_url_secrets_fallback(secrets_set):
     )
 
 
-def test_langfuse_trace_url_secrets_project_name_preferred(secrets_set):
-    """secrets fallback prefers langfuse_project_name over langfuse_project_id."""
+def test_langfuse_trace_url_secrets_project_id_preferred(secrets_set):
+    """secrets fallback prefers langfuse_project_id over langfuse_project_name."""
     secrets_set(
         langfuse_base_url="https://cloud.langfuse.com",
         langfuse_project_name="name-project",
         langfuse_project_id="id-project",
     )
     url = tracing.langfuse_trace_url("trace-789")
-    assert url == ("https://cloud.langfuse.com/project/name-project/traces/trace-789")
+    assert url == ("https://cloud.langfuse.com/project/id-project/traces/trace-789")
 
 
 def test_langfuse_trace_url_secrets_project_id_fallback(secrets_set):
