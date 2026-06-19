@@ -294,6 +294,7 @@ modules:
       - src/robotsix_mill/stages/merge/ci_poll.py
       - src/robotsix_mill/stages/merge/core.py
       - src/robotsix_mill/stages/merge/multi_repo.py
+      - src/robotsix_mill/stages/merge/ci_fix_mixin.py
       - src/robotsix_mill/stages/merge/rebase.py
       - src/robotsix_mill/stages/merge/review_revision.py
       - src/robotsix_mill/stages/ci_fix.py
@@ -318,6 +319,7 @@ modules:
       - tests/stages/test_refine_gates.py
       - tests/stages/test_merge.py
       - tests/stages/test_ci_fix.py
+      - tests/stages/test_ci_poll.py
       - tests/stages/test_codeql_fp_triage.py
       - tests/stages/test_pause.py
       - tests/stages/test_retrospect_stage.py
