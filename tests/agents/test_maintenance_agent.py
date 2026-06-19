@@ -390,7 +390,7 @@ class TestYamlDefinition:
         assert definition.module == "maintenance"
         assert definition.reply_to_thread is False
         assert definition.close_thread is False
-        assert definition.ask_user is False
+        assert definition.ask_user is True
         assert definition.report_issue is True
         assert definition.retries == 2
         assert definition.output_type == "MaintenanceResult"
