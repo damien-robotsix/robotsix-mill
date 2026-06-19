@@ -243,6 +243,11 @@ periodic:
     max_repeated_tool: 50           # absolute cap on repeated tool calls before flagging
     max_drafts_per_run: 5           # cap on drafted findings per pass (prevents board flooding)
     max_traces_per_run: 300         # cap on traces detail-loaded per pass; watermark advances incrementally so a backlog drains with bounded memory (0 disables)
+    inspector_min_requests: 20         # floor for tools-on request budget (even tiny traces get enough)
+    inspector_max_requests: 80         # ceiling for tools-on request budget
+    inspector_requests_per_obs: 0.1    # requests granted per observation (before min/max clamp)
+    inspector_max_obs_for_tools: 200   # traces with more obs use cheap tool-less summary path
+    inspector_toolless_requests: 3     # request budget for tool-less summary-only path
 
   # -- stale-branch-cleanup — deletes old mill branches with no open PR -----
   stale_branch_cleanup:

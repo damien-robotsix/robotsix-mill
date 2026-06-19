@@ -613,3 +613,164 @@ class TestToolCallsLimitInUsageLimits:
         assert len(captured_limits) == 1
         limits = captured_limits[0]
         assert limits.tool_calls_limit is None
+
+
+# ---------------------------------------------------------------------------
+# Dynamic request budget / large-trace fallback tests
+# ---------------------------------------------------------------------------
+
+
+class TestDynamicRequestBudget:
+    """Verify request_limit scales with observation count and large
+    traces fall back to the tool-less path."""
+
+    def _capture_limits_and_tools(
+        self,
+        monkeypatch,
+        obs_count: int,
+        *,
+        repo_dir=True,
+        extra_settings: dict | None = None,
+    ):
+        """Run trace_inspector with a fake trace of *obs_count* observations
+        and capture the UsageLimits + tool list passed to run_sync."""
+        from pathlib import Path
+
+        trace = {
+            "id": "trace-dyn",
+            "name": "implement",
+            "observations": [
+                {
+                    "id": f"obs-{i}",
+                    "type": "GENERATION",
+                    "level": "DEFAULT",
+                    "statusMessage": "ok",
+                }
+                for i in range(obs_count)
+            ],
+        }
+
+        captured: dict = {}
+
+        class _Handle:
+            def run_sync(self, prompt, **kw):
+                captured["limits"] = kw.get("usage_limits")
+                captured["prompt"] = prompt
+                return type("_R", (), {"output": TraceInspectResult()})()
+
+        def fake_run_agent(agent, make_run, **kw):
+            captured["agent"] = agent
+            return make_run(_Handle())
+
+        monkeypatch.setattr(
+            "robotsix_mill.agents.retry.run_agent",
+            fake_run_agent,
+        )
+
+        settings_kwargs = {}
+        if extra_settings:
+            settings_kwargs.update(extra_settings)
+        settings = _settings_with_api_key(**settings_kwargs)
+        trace_inspector_mod.run_trace_inspector(
+            settings=settings,
+            trace_data=json.dumps(trace),
+            repo_dir=Path("/tmp") if repo_dir else None,
+        )
+        return captured
+
+    def test_moderate_obs_tools_on_sets_scaled_request_limit(self, monkeypatch):
+        """235 obs (with max_obs_for_tools=300) → request_limit > 20 and ≤ 80."""
+        captured = self._capture_limits_and_tools(
+            monkeypatch,
+            235,
+            extra_settings={"trace_review_inspector_max_obs_for_tools": 300},
+        )
+        limits = captured["limits"]
+        # Formula: max(20, min(80, int(235 * 0.1))) = max(20, min(80, 23)) = 23
+        assert limits.request_limit == 23
+        assert limits.tool_calls_limit == 100  # default trace_review_max_tool_calls
+
+    def test_small_obs_clamps_to_min_request_floor(self, monkeypatch):
+        """10 obs → request_limit = 20 (floor)."""
+        captured = self._capture_limits_and_tools(
+            monkeypatch,
+            10,
+            extra_settings={"trace_review_inspector_max_obs_for_tools": 300},
+        )
+        limits = captured["limits"]
+        # Formula: max(20, min(80, int(10 * 0.1))) = max(20, min(80, 1)) = 20
+        assert limits.request_limit == 20
+        assert limits.tool_calls_limit == 100
+
+    def test_large_obs_exceeds_max_tools_threshold_falls_back_to_tool_less(
+        self, monkeypatch
+    ):
+        """250 obs (> max_obs_for_tools=200) with repo_dir → tool-less path."""
+        captured = self._capture_limits_and_tools(monkeypatch, 250, repo_dir=True)
+        limits = captured["limits"]
+        # Should be tool-less: request_limit = 3, tool_calls_limit = None
+        assert limits.request_limit == 3
+        assert limits.tool_calls_limit is None
+        # Agent must have no tools (no explore / parallel_explore / read_file).
+        agent = captured["agent"]
+        tool_dict = agent._function_toolset.tools
+        assert "explore" not in tool_dict
+        assert "parallel_explore" not in tool_dict
+        assert "read_file" not in tool_dict
+
+    def test_tool_less_path_when_repo_dir_none_stays_cheap(self, monkeypatch):
+        """repo_dir=None → always tool-less, regardless of obs count."""
+        captured = self._capture_limits_and_tools(monkeypatch, 5, repo_dir=False)
+        limits = captured["limits"]
+        assert limits.request_limit == 3
+        assert limits.tool_calls_limit is None
+        agent = captured["agent"]
+        tool_dict = agent._function_toolset.tools
+        assert tool_dict == {}
+
+
+# ---------------------------------------------------------------------------
+# _shrink_trace_data unit tests
+# ---------------------------------------------------------------------------
+
+
+class TestShrinkTraceData:
+    """Unit tests for _shrink_trace_data's new (str, int) return type."""
+
+    def test_valid_json_returns_count_equal_to_observations_length(self):
+        """The count matches len(trace['observations'])."""
+        trace = {"id": "t1", "observations": [{"id": "a"}, {"id": "b"}, {"id": "c"}]}
+        shrunk, count = trace_inspector_mod._shrink_trace_data(json.dumps(trace))
+        assert isinstance(shrunk, str)
+        assert count == 3
+
+    def test_empty_observations_returns_zero(self):
+        """Empty observations list → count = 0."""
+        trace = {"id": "t2", "observations": []}
+        shrunk, count = trace_inspector_mod._shrink_trace_data(json.dumps(trace))
+        assert count == 0
+
+    def test_missing_observations_key_returns_zero(self):
+        """No 'observations' key → count = 0."""
+        shrunk, count = trace_inspector_mod._shrink_trace_data(json.dumps({"id": "t3"}))
+        assert count == 0
+
+    def test_unparseable_string_returns_zero(self):
+        """Non-JSON input returns count = 0."""
+        shrunk, count = trace_inspector_mod._shrink_trace_data("not json at all")
+        assert count == 0
+        # The shrunk string should still contain something useful.
+        assert len(shrunk) > 0
+
+    def test_short_valid_json_preserves_content(self):
+        """When the trace is well under max_chars, the returned string
+        is valid JSON and contains the original observation ids."""
+        trace = {
+            "id": "t4",
+            "observations": [{"id": "obs-1", "input": "hello", "output": "world"}],
+        }
+        shrunk, count = trace_inspector_mod._shrink_trace_data(json.dumps(trace))
+        assert count == 1
+        parsed = json.loads(shrunk)
+        assert parsed["observations"][0]["id"] == "obs-1"
+        assert parsed["observations"][0]["input"] == "hello"

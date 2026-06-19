@@ -219,9 +219,10 @@ class TraceInspectResult(BaseModel):
     error: str = ""
 
 
-def _shrink_trace_data(trace_data: str, max_chars: int = 400_000) -> str:
+def _shrink_trace_data(trace_data: str, max_chars: int = 400_000) -> tuple[str, int]:
     """Shrink a serialised Langfuse trace so a real implement-run trace
-    (~15 MB raw, ~2-4 M tokens) fits the model's 1 M-token context.
+    (~15 MB raw, ~2-4 M tokens) fits the model's 1 M-token context
+    and return the observation count for budget scaling.
 
     Strategy: parse the JSON, walk every observation, and cap each
     observation's verbose ``input``/``output`` to a head+tail snippet.
@@ -232,10 +233,14 @@ def _shrink_trace_data(trace_data: str, max_chars: int = 400_000) -> str:
     If the trace isn't valid JSON or shrinking doesn't get us under
     ``max_chars``, the raw string is returned truncated head+tail —
     the model will see context but the prompt won't blow up.
+
+    Returns ``(shrunk_or_truncated_json: str, obs_count: int)``.
+    The count is ``len(observations)`` for valid JSON, ``0`` for
+    unparseable data.
     """
     import json as _json
 
-    def _trim(v, head: int = 800, tail: int = 800) -> str:
+    def _trim(v: Any, head: int = 800, tail: int = 800) -> str:
         s = v if isinstance(v, str) else _json.dumps(v, default=str)
         if len(s) <= head + tail + 64:
             return s
@@ -245,14 +250,16 @@ def _shrink_trace_data(trace_data: str, max_chars: int = 400_000) -> str:
         trace = _json.loads(trace_data)
     except Exception:  # noqa: BLE001
         if len(trace_data) <= max_chars:
-            return trace_data
+            return trace_data, 0
         return (
             trace_data[: max_chars // 2]
             + f"\n…[trimmed {len(trace_data) - max_chars} chars]…\n"
-            + trace_data[-max_chars // 2 :]
+            + trace_data[-max_chars // 2 :],
+            0,
         )
 
     obs = trace.get("observations") or []
+    obs_count = len(obs)
     for o in obs:
         for k in ("input", "output", "metadata"):
             if k in o and o[k] is not None:
@@ -267,12 +274,13 @@ def _shrink_trace_data(trace_data: str, max_chars: int = 400_000) -> str:
 
     shrunk = _json.dumps(trace, default=str)
     if len(shrunk) <= max_chars:
-        return shrunk
+        return shrunk, obs_count
     # Still too big — last-resort head/tail truncation on the whole thing.
     return (
         shrunk[: max_chars // 2]
         + f"\n…[trimmed {len(shrunk) - max_chars} chars]…\n"
-        + shrunk[-max_chars // 2 :]
+        + shrunk[-max_chars // 2 :],
+        obs_count,
     )
 
 
@@ -358,18 +366,24 @@ def run_trace_inspector(
     Two operating modes:
 
     - **Tool-less** (``repo_dir is None``): no code access, no tools,
-      tight ``request_limit=3``. Used by the retrospect agent's
-      ``trace_inspect`` tool path — retrospect already runs in a
-      tools-rich agent of its own, and the tool's contract is a quick
-      text summary, not a deep dive. Behaviour matches the legacy
-      shape.
+      tight ``request_limit`` from
+      ``trace_review_inspector_toolless_requests`` (default 3). Used
+      by the retrospect agent's ``trace_inspect`` tool path —
+      retrospect already runs in a tools-rich agent of its own, and
+      the tool's contract is a quick text summary, not a deep dive.
 
     - **Tools-on** (``repo_dir`` provided): the inspector gets
-      ``read_file``, ``list_dir``, ``run_command``, and ``explore`` —
-      everything it needs to confirm a hypothesis in the code before
-      writing a ``proposed_solution``. ``request_limit`` bumps to 20
-      so it has room to read → reason → emit. Used by the manual
-      Deep Review surface.
+      ``read_file``, ``list_dir``, ``run_command``, ``explore``, and
+      ``parallel_explore`` — everything it needs to confirm a
+      hypothesis in the code before writing a ``proposed_solution``.
+      ``request_limit`` scales dynamically with the observation
+      count: ``max(min_requests, min(max_requests, int(obs_count *
+      requests_per_obs)))``, defaulting to 20–80 range at 0.1
+      requests/obs.  When *obs_count* exceeds
+      ``trace_review_inspector_max_obs_for_tools`` (default 200) the
+      inspector falls back to the tool-less path even though
+      *repo_dir* is supplied — a trace that large cannot be
+      deep-verified in a bounded run.
 
     The optional ``memory`` is rendered into the prompt as
     ``<memory>...</memory>`` so the agent can avoid re-proposing what
@@ -408,7 +422,9 @@ def run_trace_inspector(
     # Shrink the payload BEFORE sending. A full implement-run trace
     # routinely serialises to 15+ MB / 2-4 M tokens; the model caps at
     # 1 M, and Langfuse's OTel ingest 413s on huge span attributes.
-    trimmed = _shrink_trace_data(trace_data)
+    # Also returns the observation count so we can scale the request
+    # budget without a second parse.
+    trimmed, obs_count = _shrink_trace_data(trace_data)
 
     # lazy: keep core import-light / the suite hermetic
     from pydantic_ai import Agent, PromptedOutput
@@ -421,18 +437,47 @@ def run_trace_inspector(
     # is analysis-only, no side effects.
     from ._repo_tools import _build_repo_tools
 
-    tools = _build_repo_tools(repo_dir, settings, include_parallel_explore=True)
-    # Tool-less path stays cheap (3 reqs); tools-on path needs room
-    # to read → reason → emit (20 reqs is generous but bounded).
-    request_limit = 20 if repo_dir is not None else 3
+    # Decide whether to enable code-access tools.  When a trace
+    # exceeds the observation threshold, deep per-file code
+    # verification is impractical — the explore fan-out is exactly
+    # what exhausts the budget — so fall back to the cheap tool-less
+    # summary path even when *repo_dir* is supplied.
+    tools_on = (
+        repo_dir is not None
+        and obs_count <= settings.trace_review_inspector_max_obs_for_tools
+    )
+
+    # Build tools: pass repo_dir=None when tools are off so
+    # _build_repo_tools returns an empty list (no explore /
+    # parallel_explore / read_file / list_dir / run_command).
+    tools = _build_repo_tools(
+        repo_dir if tools_on else None,
+        settings,
+        include_parallel_explore=tools_on,
+    )
+
+    # Request budget: tools-on scales with observation count so the
+    # inspector has room to read → reason → emit for complex traces;
+    # tool-less (including the oversized-trace fallback) stays cheap.
+    if tools_on:
+        request_limit = max(
+            settings.trace_review_inspector_min_requests,
+            min(
+                settings.trace_review_inspector_max_requests,
+                int(obs_count * settings.trace_review_inspector_requests_per_obs),
+            ),
+        )
+        tool_calls_limit = settings.trace_review_max_tool_calls
+        error_limit = settings.trace_review_max_errors
+    else:
+        request_limit = settings.trace_review_inspector_toolless_requests
+        tool_calls_limit = None
+        error_limit = 0
+
     # Guard against runaway tool loops: cap total tool calls and
     # errors per trace.  pydantic-ai's built-in ``tool_calls_limit``
     # counts successful calls; a custom error-counter wrapper handles
     # the error budget.
-    tool_calls_limit = (
-        settings.trace_review_max_tool_calls if repo_dir is not None else None
-    )
-    error_limit = settings.trace_review_max_errors if repo_dir is not None else 0
     tools = _wrap_tools_with_error_limit(tools, max_errors=error_limit)
 
     model, client = build_openrouter_model(1)

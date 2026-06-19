@@ -347,6 +347,34 @@ class _StagesSettings(BaseModel):
     trace_review_max_errors: int = Field(
         default=20,
     )
+    # ---------- trace inspector dynamic budget ----------
+    # Floor for the tools-on request budget.  Even a tiny trace gets
+    # enough requests to read at least one code locus and emit a
+    # grounded finding.
+    trace_review_inspector_min_requests: int = Field(
+        default=20,
+    )
+    # Ceiling for the tools-on request budget.  Caps the formula so
+    # a trace with 10 000 observations doesn't get an absurd budget.
+    trace_review_inspector_max_requests: int = Field(
+        default=80,
+    )
+    # Requests granted per observation before clamping to min/max.
+    # 0.1 → every 10 observations earn one request.  A 235-obs trace
+    # gets floor(23.5) = 23 requests, comfortably above the floor.
+    trace_review_inspector_requests_per_obs: float = Field(
+        default=0.1,
+    )
+    # Observation count above which the inspector drops code-access
+    # tools and uses the cheap tool-less summary path instead.  A
+    # trace this large cannot be deep-verified in a bounded run.
+    trace_review_inspector_max_obs_for_tools: int = Field(
+        default=200,
+    )
+    # Request budget for the tool-less (summary-only) path.
+    trace_review_inspector_toolless_requests: int = Field(
+        default=3,
+    )
     # Hard cap on the total number of drafts a single trace-review
     # pass may file. The inspector emits one finding per flagged trace
     # and a typical batch flags 5-10 traces with 2-5 findings each →
