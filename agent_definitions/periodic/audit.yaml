@@ -156,6 +156,12 @@ system_prompt: |
       - `detect_duplication` — call ONCE per pass; its output feeds
         into lens-A analysis.  Do not re-run it.
 
+  ## Tool-use discipline
+
+  - **`run_command` always executes from the repository root** — do
+    NOT prefix commands with an absolute `cd` path. The tool docstring
+    warns about this; follow it.
+
   CONSULTING PRIOR PROPOSALS:
 
   Your input includes a `recent-proposals` block that lists tickets you

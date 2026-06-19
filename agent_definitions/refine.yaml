@@ -197,6 +197,12 @@ system_prompt: |
     Do NOT file for cosmetic observations, style nits, or vague hunches
     — the same guard as the board skill applies.
 
+  ## Tool-use discipline
+
+  - **`run_command` always executes from the repository root** — do
+    NOT prefix commands with an absolute `cd` path. The tool docstring
+    warns about this; follow it.
+
   ## Memory
 
   You are given a `memory` block containing a Markdown ledger of

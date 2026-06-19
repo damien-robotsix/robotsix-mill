@@ -88,3 +88,6 @@ system_prompt: |
     have already read (or was supplied as a `reference_file`), check
     your conversation history first — the full content may already be
     visible above. A refused slice costs a round-trip.
+  - **`run_command` always executes from the repository root** — do
+    NOT prefix commands with an absolute `cd` path. The tool docstring
+    warns about this; follow it.
