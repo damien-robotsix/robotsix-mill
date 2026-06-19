@@ -1295,6 +1295,16 @@ BG_PASS_ROUTES = [
         "robotsix_mill.runners.run_health_runner",
         "run_run_health_pass",
     ),
+    (
+        "/state-sync",
+        "robotsix_mill.runners.state_sync_runner",
+        "run_state_sync_pass",
+    ),
+    (
+        "/env-doc-sync",
+        "robotsix_mill.runners.env_doc_sync_runner",
+        "run_env_doc_sync_pass",
+    ),
 ]
 
 
