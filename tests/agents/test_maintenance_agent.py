@@ -970,3 +970,62 @@ class TestCloneDirPrecreation:
         assert seen.get("clone_exists") is True
         assert result.success is True
         db.reset_engine()
+
+    def test_vanished_clone_degrades_gracefully(self, tmp_path, monkeypatch):
+        """When a tool touches the clone path in a later turn after the
+        ephemeral clone was removed (or a clone_repo failed), the
+        FileNotFoundError must be caught and returned as a clean
+        MaintenanceResult(success=False) instead of propagating as a Fatal
+        block with a raw traceback (live class: cross-repo extraction
+        tickets, ``/tmp/maintenance_*/repo``)."""
+        from types import SimpleNamespace
+
+        from robotsix_mill.core import db
+        from robotsix_mill.agents import base
+        from robotsix_mill.agents import retry as retry_mod
+        from robotsix_mill.config import RepoConfig
+        from robotsix_mill.core.service import TicketService
+        from robotsix_mill.stages import StageContext
+
+        s = _settings(tmp_path)
+        db.reset_engine()
+        db.init_db(s, board_id="test-board")
+        service = TicketService(s, board_id="test-board")
+        repo_config = RepoConfig(
+            repo_id="test-repo",
+            board_id="test-board",
+            langfuse_project_name="test-project",
+            langfuse_public_key="pk-test",
+            langfuse_secret_key="sk-test",
+        )
+        ticket = service.create("Extract helper into other-repo", "cross-repo work")
+        service.workspace(ticket).repo_dir.mkdir(parents=True, exist_ok=True)
+        ctx = StageContext(settings=s, service=service, repo_config=repo_config)
+
+        glob = run_maintenance_agent.__globals__
+        monkeypatch.setitem(
+            glob,
+            "_build_meta_investigation_workspace",
+            lambda ctx, ticket, ws, draft: (None, [], None),
+        )
+        monkeypatch.setattr(
+            base, "build_agent_from_definition", lambda *a, **k: SimpleNamespace()
+        )
+        monkeypatch.setattr(base, "_safe_close", lambda agent: None)
+        monkeypatch.setattr(
+            "robotsix_mill.forge.auth._resolve_remote_url",
+            lambda settings, rc: "https://github.com/test/test.git",
+        )
+
+        def fake_run_agent(agent, fn, *, what):
+            raise FileNotFoundError(
+                2, "No such file or directory", "/tmp/maintenance_x/repo"
+            )
+
+        monkeypatch.setattr(retry_mod, "run_agent", fake_run_agent)
+
+        result = run_maintenance_agent(ticket, ctx)
+
+        assert result.success is False
+        assert "could not access the repository clone" in result.note
+        db.reset_engine()

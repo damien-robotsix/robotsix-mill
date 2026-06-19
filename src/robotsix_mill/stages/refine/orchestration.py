@@ -26,7 +26,7 @@ from typing import Any, cast
 
 from ...agents import refining
 from ...config.settings import Settings
-from ...core.models import Ticket
+from ...core.models import SourceKind, Ticket
 from ...core.states import State
 from ...core.workspace import Workspace
 from ...vcs import git_ops
@@ -537,10 +537,25 @@ class RefineAgentMixin:
                 complexity = "needs-exploration"
             _write_triage_complexity(ws, complexity)
 
-            if triage.decision == "MAINTENANCE" and s.maintenance_triage_enabled:
+            if (
+                triage.decision == "MAINTENANCE"
+                and s.maintenance_triage_enabled
+                and ticket.source != SourceKind.CI
+            ):
                 # LLM detected a maintenance request the keyword
                 # classifier missed.  Route to MAINTENANCE without
                 # running the full refine agent.
+                #
+                # NB: a CI-failure ticket (source == ci) is deliberately
+                # NOT routed here even when triage says MAINTENANCE. CI
+                # tickets carry the failing logs and are a code/config fix
+                # in THIS repo (e.g. a workflow-permissions YAML edit);
+                # the maintenance agent is READ-ONLY and cannot edit
+                # files, so routing a CI failure there always dead-ends in
+                # a "needs a human" misdiagnosis (live class: the GHCR
+                # docker-release `packages: write` tickets were mis-triaged
+                # to MAINTENANCE and blocked). For source == ci we fall
+                # through to the full refine agent so it scopes a real fix.
                 (ws.artifacts_dir / "draft-original.md").write_text(
                     draft if draft else "(title-only ticket, no body provided)",
                     encoding="utf-8",
