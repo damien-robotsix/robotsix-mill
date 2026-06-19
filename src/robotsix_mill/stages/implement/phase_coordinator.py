@@ -165,12 +165,26 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         reference_files = None
         ref_files_path = ws.artifacts_dir / "reference_files.json"
         if ref_files_path.exists():
-            reference_files = json.loads(ref_files_path.read_text(encoding="utf-8"))
+            try:
+                reference_files = json.loads(ref_files_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                log.warning(
+                    "%s: reference_files.json corrupted — treating as empty",
+                    ticket.id,
+                )
+                reference_files = None
 
         file_map: set[str] | None = None
         file_map_path = ws.artifacts_dir / "file_map.json"
         if file_map_path.exists():
-            raw = json.loads(file_map_path.read_text(encoding="utf-8"))
+            try:
+                raw = json.loads(file_map_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                log.warning(
+                    "%s: file_map.json corrupted — treating as empty",
+                    ticket.id,
+                )
+                raw = None
             if raw:  # non-empty list → extract paths
                 file_map = {entry["file"] for entry in raw}
 
