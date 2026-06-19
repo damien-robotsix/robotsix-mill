@@ -36,7 +36,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlmodel import select
 
@@ -632,6 +632,13 @@ def run_trace_review_pass(
             len(traces),
         )
 
+    # Phase 1 — classify every trace, collect flagged entries.
+    # Each flagged entry bundles the trace metadata, classifier flags,
+    # and the pre-fetched detail so Phase 2 can inspect without
+    # re-fetching.
+    flagged_entries: list[
+        tuple[dict[str, Any], _TraceFlags, dict[str, Any] | None]
+    ] = []
     for trace in traces:
         trace_id = trace.get("id")
         if not trace_id:
@@ -647,7 +654,37 @@ def run_trace_review_pass(
         )
         if not flags.flagged:
             continue
-        flagged_count += 1
+        flagged_entries.append((trace, flags, detail))
+
+    flagged_count = len(flagged_entries)
+
+    # Phase 2 — apply the per-pass inspector cap.  When more traces are
+    # flagged than the cap allows, sort by cost descending and retain
+    # only the top-N; the rest are skipped for this cycle (they remain
+    # in Langfuse and re-surface next cycle).  0 disables the cap.
+    inspector_cap = settings.trace_review_max_inspector_runs_per_pass
+    if inspector_cap > 0 and len(flagged_entries) > inspector_cap:
+        flagged_entries.sort(
+            key=lambda entry: entry[1].total_cost or 0.0,
+            reverse=True,
+        )
+        skipped = len(flagged_entries) - inspector_cap
+        log.info(
+            "trace-review: %d flagged traces exceed inspector cap of %d — "
+            "inspecting top %d by cost, skipping %d",
+            flagged_count,
+            inspector_cap,
+            inspector_cap,
+            skipped,
+        )
+        flagged_entries = flagged_entries[:inspector_cap]
+
+    # Phase 3 — inspect retained (top-N) traces and file findings as
+    # drafts.  All per-trace behaviour (inspector call, error handling,
+    # dedup, per-finding draft creation, trace_review_max_drafts_per_run
+    # cap) is preserved unchanged.
+    for trace, flags, detail in flagged_entries:
+        trace_id = trace.get("id") or "(unknown)"
         log.info(
             "trace-review: trace %s flagged (%s) — sending to inspector",
             trace_id[:8],
@@ -758,7 +795,8 @@ def run_trace_review_pass(
                     "trace-review: failed to create draft for %r",
                     title,
                 )
-        # Also break out of the per-trace loop when the run-wide cap hit.
+        # Also break out of the inspection loop when the run-wide draft
+        # cap is hit (bumped findings stay in Langfuse for the next cycle).
         if (
             settings.trace_review_max_drafts_per_run > 0
             and len(drafts) >= settings.trace_review_max_drafts_per_run

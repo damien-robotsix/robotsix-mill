@@ -120,6 +120,7 @@ _MODEL_FIELDS_NOT_IN_ALIAS: frozenset[str] = frozenset(
         "trace_review_initial_lookback_hours",
         "trace_review_restart_correlation_window_seconds",
         "trace_review_dedup_lookback_days",
+        "trace_review_max_inspector_runs_per_pass",
         "max_proposed_actions",
         "max_events_per_ticket",
         "db_maintenance_periodic",

@@ -746,6 +746,258 @@ class TestRunTraceReviewPass:
         assert result.traces_flagged == 1
         assert result.drafts_created == []
 
+    # -- inspector cap (trace_review_max_inspector_runs_per_pass) --------
+
+    def test_inspector_cap_top_n_by_cost(self, settings, monkeypatch):
+        """When flagged traces exceed the inspector cap, only the
+        highest-cost flagged traces are inspected; lower-cost traces
+        are skipped.  flagged_count in the result still reports the
+        total pre-cap count."""
+        import json as _json
+
+        # 6 traces all with tool errors (binary flag) so all are flagged.
+        # Distinct costs so we can verify top-N selection.
+        traces = [
+            _trace(id="t-lowest", totalCost=0.01),
+            _trace(id="t-low", totalCost=0.05),
+            _trace(id="t-mid", totalCost=0.20),
+            _trace(id="t-high", totalCost=0.50),
+            _trace(id="t-higher", totalCost=0.80),
+            _trace(id="t-highest", totalCost=1.20),
+        ]
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.list_all_traces_since",
+            lambda *a, **kw: traces,
+        )
+
+        def _detail(_s, trace_id, **kw):
+            return {
+                "id": trace_id,
+                "observations": [
+                    _obs("run_command", output="error: command failed"),
+                ],
+            }
+
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
+            _detail,
+        )
+
+        # Cap at 3 — only the three most expensive should be inspected.
+        capped = Settings(
+            data_dir=settings.data_dir,
+            trace_review_max_inspector_runs_per_pass=3,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.runners.trace_review_runner.Settings",
+            lambda: capped,
+        )
+
+        inspected_ids: list[str] = []
+
+        def _capture(**kw):
+            # The inspector receives trace_data (JSON string), not trace_id
+            # directly.  Parse the id from the JSON blob.
+            trace_data = _json.loads(kw["trace_data"])
+            inspected_ids.append(trace_data.get("id", ""))
+            return TraceInspectResult()
+
+        monkeypatch.setattr(
+            "robotsix_mill.agents.trace_inspector.run_trace_inspector",
+            _capture,
+        )
+
+        result = run_trace_review_pass(
+            session_id="sess-cap-topn", repo_config=_test_repo_config()
+        )
+        # All 6 flagged (pre-cap count), only 3 inspected.
+        assert result.traces_flagged == 6
+        assert len(inspected_ids) == 3
+        # Highest-cost traces by descending cost: t-highest ($1.20),
+        # t-higher ($0.80), t-high ($0.50).
+        assert set(inspected_ids) == {"t-highest", "t-higher", "t-high"}
+
+    def test_inspector_cap_zero_is_unlimited(self, settings, monkeypatch):
+        """cap=0 → all flagged traces are inspected (unbounded)."""
+        import json as _json
+
+        traces = [
+            _trace(id="t1", totalCost=0.01),
+            _trace(id="t2", totalCost=0.01),
+            _trace(id="t3", totalCost=0.01),
+        ]
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.list_all_traces_since",
+            lambda *a, **kw: traces,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
+            lambda *a, **kw: {
+                "observations": [
+                    _obs("run_command", output="error: command failed"),
+                ]
+            },
+        )
+        capped = Settings(
+            data_dir=settings.data_dir,
+            trace_review_max_inspector_runs_per_pass=0,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.runners.trace_review_runner.Settings",
+            lambda: capped,
+        )
+        inspected_ids: list[str] = []
+
+        def _capture(**kw):
+            trace_data = _json.loads(kw["trace_data"])
+            inspected_ids.append(trace_data.get("id", ""))
+            return TraceInspectResult()
+
+        monkeypatch.setattr(
+            "robotsix_mill.agents.trace_inspector.run_trace_inspector",
+            _capture,
+        )
+
+        result = run_trace_review_pass(
+            session_id="sess-cap-zero", repo_config=_test_repo_config()
+        )
+        assert result.traces_flagged == 3
+        assert len(inspected_ids) == 3
+
+    def test_inspector_cap_no_truncation_when_flagged_le_cap(
+        self, settings, monkeypatch
+    ):
+        """When flagged count ≤ cap, every flagged trace is inspected
+        — no truncation (regression test)."""
+        import json as _json
+
+        traces = [
+            _trace(id="t1", totalCost=0.01),
+            _trace(id="t2", totalCost=0.02),
+        ]
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.list_all_traces_since",
+            lambda *a, **kw: traces,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
+            lambda *a, **kw: {
+                "observations": [
+                    _obs("run_command", output="error: command failed"),
+                ]
+            },
+        )
+        capped = Settings(
+            data_dir=settings.data_dir,
+            trace_review_max_inspector_runs_per_pass=5,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.runners.trace_review_runner.Settings",
+            lambda: capped,
+        )
+        inspected_ids: list[str] = []
+
+        def _capture(**kw):
+            trace_data = _json.loads(kw["trace_data"])
+            inspected_ids.append(trace_data.get("id", ""))
+            return TraceInspectResult()
+
+        monkeypatch.setattr(
+            "robotsix_mill.agents.trace_inspector.run_trace_inspector",
+            _capture,
+        )
+
+        result = run_trace_review_pass(
+            session_id="sess-cap-nocut", repo_config=_test_repo_config()
+        )
+        assert result.traces_flagged == 2
+        assert len(inspected_ids) == 2
+
+    def test_inspector_cap_logs_skipped_count(self, settings, monkeypatch, caplog):
+        """A log.info message reports how many flagged traces were
+        skipped due to the inspector cap."""
+        traces = [_trace(id=f"t{i}", totalCost=0.01) for i in range(10)]
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.list_all_traces_since",
+            lambda *a, **kw: traces,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
+            lambda *a, **kw: {
+                "observations": [
+                    _obs("run_command", output="error: command failed"),
+                ]
+            },
+        )
+        capped = Settings(
+            data_dir=settings.data_dir,
+            trace_review_max_inspector_runs_per_pass=3,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.runners.trace_review_runner.Settings",
+            lambda: capped,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.trace_inspector.run_trace_inspector",
+            lambda **kw: TraceInspectResult(),
+        )
+
+        import logging
+
+        caplog.set_level(logging.INFO, logger="robotsix_mill.trace_review")
+        run_trace_review_pass(
+            session_id="sess-cap-log", repo_config=_test_repo_config()
+        )
+        # Expect a log line like: "10 flagged traces exceed inspector cap
+        # of 3 — inspecting top 3 by cost, skipping 7"
+        cap_logs = [
+            r.getMessage()
+            for r in caplog.records
+            if "exceed inspector cap" in r.getMessage()
+        ]
+        assert len(cap_logs) == 1
+        assert "skipping 7" in cap_logs[0]
+        assert "inspecting top 3 by cost" in cap_logs[0]
+
+    def test_inspector_cap_watermark_still_advances(self, settings, monkeypatch):
+        """Watermark advances past all processed traces even when some
+        are skipped from inspection — they don't stall convergence."""
+        traces = [_trace(id=f"t{i}", totalCost=0.01) for i in range(6)]
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.list_all_traces_since",
+            lambda *a, **kw: traces,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
+            lambda *a, **kw: {
+                "observations": [
+                    _obs("run_command", output="error: command failed"),
+                ]
+            },
+        )
+        capped = Settings(
+            data_dir=settings.data_dir,
+            trace_review_max_inspector_runs_per_pass=2,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.runners.trace_review_runner.Settings",
+            lambda: capped,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.trace_inspector.run_trace_inspector",
+            lambda **kw: TraceInspectResult(),
+        )
+
+        rc = _test_repo_config()
+        before = _load_watermark(capped, rc.board_id)
+        assert before is None
+
+        run_trace_review_pass(session_id="sess-cap-wm", repo_config=rc)
+
+        after = _load_watermark(capped, rc.board_id)
+        assert after is not None
+        assert after.tzinfo is not None  # UTC
+
 
 class TestTargetRepoRouting:
     """``trace_review_target_repo_id`` overrides the destination board

@@ -385,6 +385,18 @@ class _StagesSettings(BaseModel):
     trace_review_max_drafts_per_run: int = Field(
         default=5,
     )
+    # Hard cap on how many flagged traces are sent to the LLM inspector
+    # in a single pass.  The inspector reads files (expensive tool
+    # calls), so limiting its invocations directly bounds per-pass
+    # spend.  When more traces are flagged than the cap, only the
+    # highest-cost flagged traces are inspected; lower-cost traces are
+    # skipped for this cycle but still advance the watermark so they
+    # don't stall convergence.  Default 8 — a typical batch flags 5–10
+    # traces, so this inspects most of them; 0 disables the cap
+    # (unbounded, current behaviour).
+    trace_review_max_inspector_runs_per_pass: int = Field(
+        default=8,
+    )
     # Hard cap on how many traces a single trace-review run pulls full
     # detail for (and holds in memory at once). The runner pre-loads every
     # trace's detail + observations into memory; an unbounded window (which
