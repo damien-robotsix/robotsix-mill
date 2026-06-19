@@ -323,6 +323,9 @@ class _StagesSettings(BaseModel):
     trace_review_cost_multiplier: float = Field(
         default=3.0,
     )
+    trace_review_per_obs_cost_threshold: float = Field(
+        default=0.001,
+    )
     trace_review_obs_multiplier: float = Field(
         default=3.0,
     )
