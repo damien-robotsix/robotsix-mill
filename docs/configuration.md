@@ -576,7 +576,7 @@ Periodic agents: `audit`, `board_cleanup`, `trace_health`, `trace_review`, `heal
 `completeness_check`, `diagnostic`, `forge_parity`, `module_curator`,
 `copy_paste`, `timeout_escalation`, `langfuse_cleanup`, `data_dir_audit`, `run_health`.
 
-> ¹ Most agents default to `enabled: true`. Exceptions: `diagnostic`, `stale_branch_cleanup`, `meta_periodic`, and `run_health_periodic` default to `false`.
+> ¹ Most agents default to `enabled: true`. Exceptions: `diagnostic`, `stale_branch_cleanup`, and `meta_periodic` default to `false`.
 >
 > ² `trace_health`, `ci_monitor`, `member_sync`, and `diagnostic` do **not** have a
 > `memory_path` field — they write no per-agent memory ledger
