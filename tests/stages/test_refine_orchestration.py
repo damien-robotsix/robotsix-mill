@@ -148,6 +148,16 @@ def _apply_default_mocks(monkeypatch, **overrides):
     )
     monkeypatch.setattr(
         refining,
+        "triage_reviewer_agreement",
+        overrides.get(
+            "triage_reviewer_agreement",
+            lambda **kw: refining.ReviewerAgreementResult(
+                decision="DISAGREE", reason="default — fall through"
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        refining,
         "review_spec_for_conciseness",
         overrides.get("review_spec_for_conciseness", _mock_spec_review()),
     )
@@ -715,6 +725,141 @@ def test_parent_closed_non_split_does_not_short_circuit(
     out = _run_agent(ctx, child, tmp_path, draft=_REAL_SPEC)
 
     assert len(calls) == 1  # full refine agent ran
+    assert out.note.startswith("refined")
+
+
+# ===========================================================================
+# _reviewer_agreement_guard
+# ===========================================================================
+
+
+def test_reviewer_agreement_guard_agree_short_circuits(
+    ctx_factory, monkeypatch, tmp_path
+):
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    ctx.service.add_comment(
+        t.id, "Confirmed — the refine machinery doesn't exist here. LGTM.", author="user"
+    )
+    calls: list[dict] = []
+
+    def _spy(**kw):
+        calls.append(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_spy,
+        triage_reviewer_agreement=lambda **kw: refining.ReviewerAgreementResult(
+            decision="AGREE", reason="Reviewer confirmed the draft's misrouting finding."
+        ),
+    )
+
+    out = _run_agent(ctx, t, tmp_path)
+
+    assert out.next_state is State.DONE
+    assert out.note.startswith("reviewer agreement — no change needed:")
+    assert "Reviewer confirmed" in out.note
+    assert calls == []  # full refine agent never invoked
+    ws = ctx.service.workspace(t)
+    assert (ws.artifacts_dir / "draft-original.md").exists()
+    assert (ws.artifacts_dir / "file_map.json").exists()
+
+
+def test_reviewer_agreement_guard_disagree_falls_through(
+    ctx_factory, monkeypatch, tmp_path
+):
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    ctx.service.add_comment(
+        t.id, "Please also update the README with this finding.", author="user"
+    )
+    calls: list[dict] = []
+
+    def _spy(**kw):
+        calls.append(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_spy,
+        triage_reviewer_agreement=lambda **kw: refining.ReviewerAgreementResult(
+            decision="DISAGREE",
+            reason="Reviewer requested a README update — full refine needed.",
+        ),
+    )
+
+    out = _run_agent(ctx, t, tmp_path)
+
+    assert len(calls) == 1  # full refine agent ran
+    assert out.note.startswith("refined")
+
+
+def test_reviewer_agreement_guard_gate_disabled_falls_through(
+    ctx_factory, monkeypatch, tmp_path
+):
+    ctx = ctx_factory(reviewer_agreement_gate_enabled=False)
+    t = _ticket(ctx)
+    ctx.service.add_comment(
+        t.id, "Confirmed — no change needed.", author="user"
+    )
+    called: list[int] = []
+
+    def _fake_triage(**kw):
+        called.append(1)
+        return refining.ReviewerAgreementResult(
+            decision="AGREE", reason="Would have agreed."
+        )
+
+    calls: list[dict] = []
+
+    def _spy(**kw):
+        calls.append(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_spy,
+        triage_reviewer_agreement=_fake_triage,
+    )
+
+    out = _run_agent(ctx, t, tmp_path)
+
+    # Gate disabled — triage_reviewer_agreement never called.
+    assert called == []
+    # Full refine agent ran.
+    assert len(calls) == 1
+    assert out.note.startswith("refined")
+
+
+def test_reviewer_agreement_guard_exception_falls_through(
+    ctx_factory, monkeypatch, tmp_path
+):
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    ctx.service.add_comment(
+        t.id, "Confirmed — no change needed.", author="user"
+    )
+
+    def _boom(**kw):
+        raise RuntimeError("backend unavailable")
+
+    calls: list[dict] = []
+
+    def _spy(**kw):
+        calls.append(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_spy,
+        triage_reviewer_agreement=_boom,
+    )
+
+    out = _run_agent(ctx, t, tmp_path)
+
+    # Exception in guard → falls through to full refine.
+    assert len(calls) == 1
     assert out.note.startswith("refined")
 
 

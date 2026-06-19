@@ -212,6 +212,12 @@ class RefineAgentMixin:
             RefineAgentMixin._collect_reviewer_comments(ctx, ticket)
         )
 
+        outcome = RefineAgentMixin._reviewer_agreement_guard(
+            ctx, ticket, draft, ws, s, reviewer_comments
+        )
+        if outcome is not None:
+            return outcome
+
         outcome = RefineAgentMixin._split_child_fast_path(
             ctx, ticket, draft, ws, reviewer_comments
         )
@@ -321,6 +327,65 @@ class RefineAgentMixin:
         except Exception:
             log.warning("%s: list_comments failed, proceeding without", ticket.id)
         return reviewer_comments, open_thread_ids
+
+    # -- phase: reviewer-agreement guard (pre-Opus cost saver) ------------
+
+    @staticmethod
+    def _reviewer_agreement_guard(
+        ctx: StageContext,
+        ticket: Ticket,
+        draft: str,
+        ws: Workspace,
+        s: Settings,
+        reviewer_comments: str | None,
+    ) -> Outcome | None:
+        """Pre-Opus guard: when reviewer feedback confirms the draft's
+        no-change-needed conclusion, short-circuit to DONE — skipping the
+        expensive Opus refine agent.
+
+        Gated by ``reviewer_agreement_gate_enabled`` AND
+        ``refine_triage_enabled`` (both must be True), and only runs when
+        ``reviewer_comments`` is present (truthy).  A single cheap L1
+        classifier (DeepSeek flash, ~$0.0003) replaces what would
+        otherwise be a full Opus refine call (~$0.28).
+
+        Returns an :class:`Outcome` to short-circuit, or ``None`` to fall
+        through to the full pipeline.
+        """
+        if not (
+            s.reviewer_agreement_gate_enabled
+            and s.refine_triage_enabled
+            and reviewer_comments
+        ):
+            return None
+        try:
+            agreement = refining.triage_reviewer_agreement(
+                settings=s,
+                draft=f"{ticket.title}\n\n{draft}",
+                reviewer_comments=reviewer_comments,
+            )
+        except Exception:
+            log.warning(
+                "%s: reviewer-agreement triage failed, falling through",
+                ticket.id,
+                exc_info=True,
+            )
+            return None
+
+        if agreement.decision != "AGREE":
+            return None
+
+        # Reviewer agrees with the draft's conclusion — short-circuit.
+        (ws.artifacts_dir / "draft-original.md").write_text(
+            draft if draft else "(title-only ticket, no body provided)",
+            encoding="utf-8",
+        )
+        RefineAgentMixin._write_file_map(ws, [], only_if_absent=True)
+        short = agreement.reason[:400] + ("…" if len(agreement.reason) > 400 else "")
+        return Outcome(
+            State.DONE,
+            f"reviewer agreement — no change needed: {short}",
+        )
 
     # -- phase: split-child fast-path ---------------------------------------
 
