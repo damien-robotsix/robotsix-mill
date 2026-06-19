@@ -613,7 +613,7 @@ Additional fields:
 
 #### Env-var-only periodic agents
 
-`bc_check` and `completeness_check` model, enabled, interval, and memory_path
+`bc_check` and `completeness_check` enabled, interval, and memory_path
 fields are available as YAML paths (`periodic.bc_check.*`, `periodic.completeness_check.*`)
 and as environment variables:
 
@@ -621,10 +621,8 @@ and as environment variables:
 |---------|---------|-------------|
 | `MILL_BC_CHECK_PERIODIC` | `true` | Enable periodic backward-compatibility inspection |
 | `MILL_BC_CHECK_INTERVAL_SECONDS` | `86400` | Seconds between bc-check passes |
-| `MILL_BC_CHECK_MODEL` | `deepseek/deepseek-v4-flash` | BC-check agent model |
 | `MILL_COMPLETENESS_CHECK_PERIODIC` | `true` | Enable periodic feature-wiring completeness inspection |
 | `MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS` | `86400` | Seconds between completeness-check passes |
-| `MILL_COMPLETENESS_CHECK_MODEL` | `deepseek/deepseek-v4-flash` | Completeness-check agent model |
 
 ### 13. Skills
 
