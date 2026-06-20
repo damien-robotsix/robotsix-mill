@@ -22,7 +22,7 @@ from ..agents.ci_fixing import CiFixResult, run_ci_fix_agent
 from ..config import target_branch_for
 from ..core.models import SourceKind, Ticket
 from ..core.states import State
-from ..forge import get_forge
+from ..forge import Forge, get_forge
 from ..forge.auth import _resolve_remote_url, github_token
 from ..runners.pass_runner import load_memory, persist_memory
 from ..runtime import tracing
@@ -111,7 +111,7 @@ def _partition_alerts_by_diff(
     return in_scope, out_of_scope
 
 
-def _pr_changed_paths(forge, branch: str) -> set[str]:
+def _pr_changed_paths(forge: Forge, branch: str) -> set[str]:
     # Best-effort: if pr_files cannot be fetched, the set is empty → no alert
     # is provably in-diff → the stage falls back to today's behaviour (may
     # spawn). This is the conservative direction and is intentional.
