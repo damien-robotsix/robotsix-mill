@@ -578,7 +578,7 @@ def verify_already_done(
         )
     finally:
         _safe_close(agent)
-    return result.output
+    return cast(AlreadyDoneResult, result.output)
 
 
 def _classify_maintenance_draft(title: str, draft: str) -> str | None:
@@ -1205,7 +1205,7 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
         and level_uses_claude(3)  # refine is level 3 → Claude SDK
         and claude_sdk_supports_inline_image(settings)
     )
-    binary_contents: list = []
+    binary_contents: list[Any] = []
     if _vision:
         from pydantic_ai import BinaryContent
 
