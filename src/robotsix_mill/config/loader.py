@@ -488,6 +488,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.board_cleanup.memory_path": "board_cleanup_memory_path",
     # -- service --
     "service.data_dir": "data_dir",
+    "service.default_repo_id": "default_repo_id",
     "service.api_host": "api_host",
     "service.api_port": "api_port",
     "service.api_url": "api_url",
