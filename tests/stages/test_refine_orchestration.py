@@ -1816,3 +1816,353 @@ def test_re_refine_counter_disabled_by_zero(ctx_factory, monkeypatch, tmp_path):
         f"Expected refine_level=None when counter is disabled (threshold=0), "
         f"got {refine_kwargs.get('refine_level')}"
     )
+
+
+# ===========================================================================
+# MIGRATE triage branch tests
+# ===========================================================================
+
+
+def _install_migrate_spy(monkeypatch, ctx):
+    """Install a spy on ``ctx.service.migrate`` and return the calls list."""
+    calls: list[tuple] = []
+
+    def _spy(ticket_id, target_board, note=None):
+        calls.append((ticket_id, target_board, note))
+        return ctx.service.get(ticket_id)
+
+    monkeypatch.setattr(ctx.service, "migrate", _spy)
+    return calls
+
+
+def _mock_repos_config(monkeypatch, extra_repos=None):
+    """Patch ``get_repos_config`` with a registry that includes the default
+    ``test-board`` / ``test-repo`` plus any *extra_repos*."""
+    from robotsix_mill.config import ReposRegistry, RepoConfig
+
+    repos = {
+        "test-repo": RepoConfig(
+            repo_id="test-repo",
+            board_id="test-board",
+            langfuse_project_name="test",
+            langfuse_public_key="pk-test",
+            langfuse_secret_key="sk-test",
+        ),
+    }
+    if extra_repos:
+        repos.update(extra_repos)
+    monkeypatch.setattr(
+        "robotsix_mill.config.get_repos_config",
+        lambda: ReposRegistry(repos=repos),
+    )
+
+
+def _mock_triage_migrate(
+    monkeypatch, target_board="other-board", reason="belongs elsewhere"
+):
+    """Install a triage_refine stub that returns MIGRATE with *target_board*."""
+    from robotsix_mill.agents.refining import TriageResult
+
+    def _triage(*, settings, title, draft, **kw):
+        return TriageResult(
+            decision="MIGRATE",
+            reason=reason,
+            target_board=target_board,
+        )
+
+    monkeypatch.setattr("robotsix_mill.agents.refining.triage_refine", _triage)
+
+
+def test_triage_migrate_success_calls_migrate_and_returns_draft(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """A MIGRATE triage with a valid target board on a fresh ticket calls
+    ctx.service.migrate and returns Outcome(State.DRAFT, ...)."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+
+    from robotsix_mill.config import RepoConfig
+
+    _mock_repos_config(
+        monkeypatch,
+        extra_repos={
+            "other-repo": RepoConfig(
+                repo_id="other-repo",
+                board_id="other-board",
+                langfuse_project_name="test",
+                langfuse_public_key="pk-test",
+                langfuse_secret_key="sk-test",
+            ),
+        },
+    )
+    _apply_default_mocks(monkeypatch)
+    _mock_triage_migrate(monkeypatch, target_board="other-board")
+    migrate_calls = _install_migrate_spy(monkeypatch, ctx)
+
+    out = _run_agent(ctx, t, tmp_path)
+
+    assert len(migrate_calls) == 1
+    assert migrate_calls[0][0] == t.id
+    assert migrate_calls[0][1] == "other-board"
+    assert migrate_calls[0][2] == "belongs elsewhere"
+    assert out.next_state is State.DRAFT
+    assert "migrated to board 'other-board'" in out.note
+    ws = ctx.service.workspace(t)
+    assert (ws.artifacts_dir / "draft-original.md").exists()
+    assert (ws.artifacts_dir / "file_map.json").exists()
+
+
+def test_triage_migrate_invalid_target_none_escalates_to_human(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """When target_board is None, migrate is NOT called and the ticket
+    escalates to human (same as SKIP path)."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+
+    _mock_repos_config(monkeypatch)
+    _apply_default_mocks(monkeypatch)
+    _mock_triage_migrate(monkeypatch, target_board=None, reason="should go elsewhere")
+    migrate_calls = _install_migrate_spy(monkeypatch, ctx)
+
+    out = _run_agent(ctx, t, tmp_path)
+
+    assert len(migrate_calls) == 0
+    assert out.next_state in (State.READY, State.HUMAN_ISSUE_APPROVAL)
+    assert "MIGRATE invalid target" in out.note
+
+
+def test_triage_migrate_invalid_target_unknown_escalates(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """When target_board names a board not in the registry, escalate."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+
+    _mock_repos_config(monkeypatch)
+    _apply_default_mocks(monkeypatch)
+    _mock_triage_migrate(monkeypatch, target_board="no-such-board")
+    migrate_calls = _install_migrate_spy(monkeypatch, ctx)
+
+    out = _run_agent(ctx, t, tmp_path)
+
+    assert len(migrate_calls) == 0
+    assert out.next_state in (State.READY, State.HUMAN_ISSUE_APPROVAL)
+    assert "MIGRATE invalid target" in out.note
+
+
+def test_triage_migrate_same_board_escalates_to_human(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """When target_board equals the current board, migrate is NOT called."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+
+    _mock_repos_config(monkeypatch)
+    _apply_default_mocks(monkeypatch)
+    _mock_triage_migrate(monkeypatch, target_board="test-board", reason="same board")
+    migrate_calls = _install_migrate_spy(monkeypatch, ctx)
+
+    out = _run_agent(ctx, t, tmp_path)
+
+    assert len(migrate_calls) == 0
+    assert out.next_state in (State.READY, State.HUMAN_ISSUE_APPROVAL)
+    assert "MIGRATE invalid target" in out.note
+
+
+def test_triage_migrate_anti_bounce_prior_migration_escalates(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """A ticket whose history already contains a migration event must NOT
+    be migrated again — escalate to human."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+
+    from robotsix_mill.config import RepoConfig
+
+    _mock_repos_config(
+        monkeypatch,
+        extra_repos={
+            "other-repo": RepoConfig(
+                repo_id="other-repo",
+                board_id="other-board",
+                langfuse_project_name="test",
+                langfuse_public_key="pk-test",
+                langfuse_secret_key="sk-test",
+            ),
+        },
+    )
+    # Add a prior migration event to the ticket history.
+    ctx.service.add_history_note(
+        t.id,
+        "migrated from board 'auto-mail' to 'test-board'",
+    )
+    t = ctx.service.get(t.id)
+
+    _apply_default_mocks(monkeypatch)
+    _mock_triage_migrate(monkeypatch, target_board="other-board")
+    migrate_calls = _install_migrate_spy(monkeypatch, ctx)
+
+    out = _run_agent(ctx, t, tmp_path)
+
+    assert len(migrate_calls) == 0
+    assert out.next_state in (State.READY, State.HUMAN_ISSUE_APPROVAL)
+    assert "anti-bounce" in out.note.lower()
+
+
+def test_triage_migrate_anti_bounce_target_is_prior_board_escalates(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """When the chosen target_board is a board the ticket has previously
+    been on, migrate is blocked — prevents ping-pong."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+
+    from robotsix_mill.config import RepoConfig
+
+    _mock_repos_config(
+        monkeypatch,
+        extra_repos={
+            "other-repo": RepoConfig(
+                repo_id="other-repo",
+                board_id="other-board",
+                langfuse_project_name="test",
+                langfuse_public_key="pk-test",
+                langfuse_secret_key="sk-test",
+            ),
+        },
+    )
+    # Add a prior migration event FROM other-board TO test-board.
+    # This means other-board is a prior board of this ticket.
+    ctx.service.add_history_note(
+        t.id,
+        "migrated from board 'other-board' to 'test-board'",
+    )
+    t = ctx.service.get(t.id)
+
+    _apply_default_mocks(monkeypatch)
+    _mock_triage_migrate(
+        monkeypatch, target_board="other-board", reason="back to other-board"
+    )
+    migrate_calls = _install_migrate_spy(monkeypatch, ctx)
+
+    out = _run_agent(ctx, t, tmp_path)
+
+    assert len(migrate_calls) == 0
+    assert out.next_state in (State.READY, State.HUMAN_ISSUE_APPROVAL)
+    assert "anti-bounce" in out.note.lower()
+
+
+def test_triage_migrate_value_error_escalates_to_human(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """When ctx.service.migrate raises ValueError, the branch catches it
+    and escalates to human instead of crashing."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+
+    from robotsix_mill.config import RepoConfig
+
+    _mock_repos_config(
+        monkeypatch,
+        extra_repos={
+            "other-repo": RepoConfig(
+                repo_id="other-repo",
+                board_id="other-board",
+                langfuse_project_name="test",
+                langfuse_public_key="pk-test",
+                langfuse_secret_key="sk-test",
+            ),
+        },
+    )
+
+    def _failing_migrate(ticket_id, target_board, note=None):
+        raise ValueError("unknown target board")
+
+    monkeypatch.setattr(ctx.service, "migrate", _failing_migrate)
+    _apply_default_mocks(monkeypatch)
+    _mock_triage_migrate(monkeypatch, target_board="other-board")
+
+    out = _run_agent(ctx, t, tmp_path)
+
+    assert out.next_state in (State.READY, State.HUMAN_ISSUE_APPROVAL)
+    assert "MIGRATE failed" in out.note
+
+
+def test_triage_migrate_resolves_repo_id_to_board(ctx_factory, monkeypatch, tmp_path):
+    """target_board can be a repo_id; the validation resolves it to the
+    corresponding board_id before migrating."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+
+    from robotsix_mill.config import RepoConfig
+
+    _mock_repos_config(
+        monkeypatch,
+        extra_repos={
+            "other-repo": RepoConfig(
+                repo_id="other-repo",
+                board_id="other-board",
+                langfuse_project_name="test",
+                langfuse_public_key="pk-test",
+                langfuse_secret_key="sk-test",
+            ),
+        },
+    )
+    _apply_default_mocks(monkeypatch)
+    # Pass repo_id "other-repo" as target_board — should resolve to "other-board"
+    _mock_triage_migrate(
+        monkeypatch, target_board="other-repo", reason="belongs to other-repo"
+    )
+    migrate_calls = _install_migrate_spy(monkeypatch, ctx)
+
+    out = _run_agent(ctx, t, tmp_path)
+
+    assert len(migrate_calls) == 1
+    # Should be resolved to board_id "other-board", not the raw repo_id.
+    assert migrate_calls[0][1] == "other-board"
+    assert out.next_state is State.DRAFT
+
+
+def test_triage_migrate_note_suffix_parsing_and_anti_bounce(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """Migration notes with suffixes like ' (was implementing)' or ': note'
+    are parsed correctly for prior-board extraction, and the anti-bounce
+    cap blocks a second migration."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+
+    from robotsix_mill.config import RepoConfig
+
+    _mock_repos_config(
+        monkeypatch,
+        extra_repos={
+            "other-repo": RepoConfig(
+                repo_id="other-repo",
+                board_id="other-board",
+                langfuse_project_name="test",
+                langfuse_public_key="pk-test",
+                langfuse_secret_key="sk-test",
+            ),
+        },
+    )
+    # Migration note WITH state suffix AND user note suffix — the
+    # parsing must handle " (was <state>)" and ": <note>" correctly.
+    ctx.service.add_history_note(
+        t.id,
+        "migrated from board 'auto-mail' to 'third-board' (was implementing): operator requested",
+    )
+    t = ctx.service.get(t.id)
+
+    _apply_default_mocks(monkeypatch)
+    _mock_triage_migrate(monkeypatch, target_board="other-board")
+    migrate_calls = _install_migrate_spy(monkeypatch, ctx)
+
+    out = _run_agent(ctx, t, tmp_path)
+
+    # Anti-bounce: the ticket already has ≥ 1 migration event, so this
+    # second automated reroot is blocked.
+    assert len(migrate_calls) == 0
+    assert out.next_state in (State.READY, State.HUMAN_ISSUE_APPROVAL)
+    assert "anti-bounce" in out.note.lower()

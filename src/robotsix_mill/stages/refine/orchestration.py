@@ -632,6 +632,180 @@ class RefineAgentMixin:
                     triage_note=triage.reason,
                 )
 
+            if triage.decision == "MIGRATE":
+                # --- MIGRATE: self-reroot a confidently-misrouted ticket ---
+                #
+                # The triage classifier identified the ticket as belonging to
+                # another board and named a specific target_board from the
+                # registered-boards catalog.  Validate, apply anti-bounce
+                # guards, and migrate — or fall through to human escalation
+                # when anything looks off.
+
+                from ...config import get_repos_config
+
+                # Determine the set of valid board ids (mirrors TicketService.migrate
+                # resolution: accepts board-id or repo-id, plus the synthetic
+                # cross-repo "meta" board).
+                try:
+                    repos_config = get_repos_config()
+                    known: dict[str, str] = {"meta": "meta"}
+                    for rc in repos_config.repos.values():
+                        known[rc.repo_id] = rc.board_id
+                        known[rc.board_id] = rc.board_id
+                except Exception:
+                    log.warning(
+                        "%s: could not load repos config for MIGRATE validation, "
+                        "escalating to human",
+                        ticket.id,
+                        exc_info=True,
+                    )
+                    known = {}
+
+                target = (triage.target_board or "").strip()
+                resolved_board = known.get(target) if known else None
+
+                # Validate: target must be non-empty, resolvable, and != current board.
+                if (
+                    not target
+                    or resolved_board is None
+                    or resolved_board == ticket.board_id
+                ):
+                    log.info(
+                        "%s: MIGRATE target invalid (target=%r, resolved=%r, current=%r) "
+                        "— escalating to human",
+                        ticket.id,
+                        target,
+                        resolved_board,
+                        ticket.board_id,
+                    )
+                    # Fall through to human escalation (same as SKIP path) —
+                    # write artifacts then resolve.
+                    (ws.artifacts_dir / "draft-original.md").write_text(
+                        draft if draft else "(title-only ticket, no body provided)",
+                        encoding="utf-8",
+                    )
+                    RefineAgentMixin._write_file_map(ws, [], only_if_absent=True)
+                    return RefineAgentMixin._resolved_outcome(
+                        ctx,
+                        draft,
+                        ticket.id,
+                        f"triage MIGRATE invalid target: {triage.reason}",
+                        source=ticket.source,
+                        triage_note=triage.reason,
+                    )
+
+                # Anti-bounce cap: derive prior boards from migration history events.
+                # A ticket that has already been automatically migrated at least once
+                # (or whose target is a board it has previously been on) must NOT be
+                # migrated again — escalate to human instead.
+                _MIGRATE_NOTE_PREFIX = "migrated from board "
+                prior_boards: set[str] = set()
+                migration_count = 0
+                try:
+                    for ev in ctx.service.history(ticket.id):
+                        note = ev.note or ""
+                        if note.startswith(_MIGRATE_NOTE_PREFIX):
+                            migration_count += 1
+                            # Parse "migrated from board 'src' to 'dst'"
+                            # dst is repr-quoted, e.g. 'auto-mail'.
+                            to_pos = note.find(" to ")
+                            if to_pos != -1:
+                                rest = note[to_pos + 4 :]  # after " to "
+                                # Strip optional suffixes: " (was <state>)" and ": <note>"
+                                suffix_pos = rest.find(" (was ")
+                                if suffix_pos == -1:
+                                    suffix_pos = rest.find(": ")
+                                dst_repr = (
+                                    rest[:suffix_pos] if suffix_pos != -1 else rest
+                                )
+                                # Un-repr: strip leading/trailing quotes.
+                                dst_board = dst_repr.strip().strip("'\"")
+                                if dst_board:
+                                    prior_boards.add(dst_board)
+                except Exception:
+                    log.warning(
+                        "%s: could not read ticket history for anti-bounce check, "
+                        "escalating to human",
+                        ticket.id,
+                        exc_info=True,
+                    )
+                    (ws.artifacts_dir / "draft-original.md").write_text(
+                        draft if draft else "(title-only ticket, no body provided)",
+                        encoding="utf-8",
+                    )
+                    RefineAgentMixin._write_file_map(ws, [], only_if_absent=True)
+                    return RefineAgentMixin._resolved_outcome(
+                        ctx,
+                        draft,
+                        ticket.id,
+                        f"triage MIGRATE anti-bounce error: {triage.reason}",
+                        source=ticket.source,
+                        triage_note=triage.reason,
+                    )
+
+                if migration_count >= 1 or resolved_board in prior_boards:
+                    log.info(
+                        "%s: anti-bounce blocked MIGRATE to %r "
+                        "(prior boards=%r, migration_count=%d) — escalating to human",
+                        ticket.id,
+                        resolved_board,
+                        prior_boards,
+                        migration_count,
+                    )
+                    (ws.artifacts_dir / "draft-original.md").write_text(
+                        draft if draft else "(title-only ticket, no body provided)",
+                        encoding="utf-8",
+                    )
+                    RefineAgentMixin._write_file_map(ws, [], only_if_absent=True)
+                    return RefineAgentMixin._resolved_outcome(
+                        ctx,
+                        draft,
+                        ticket.id,
+                        f"triage MIGRATE anti-bounce blocked: {triage.reason}",
+                        source=ticket.source,
+                        triage_note=triage.reason,
+                    )
+
+                # Perform the migration.
+                try:
+                    ctx.service.migrate(
+                        ticket.id,
+                        resolved_board,
+                        note=triage.reason,
+                    )
+                except (KeyError, ValueError) as exc:
+                    log.warning(
+                        "%s: MIGRATE call failed: %s — escalating to human",
+                        ticket.id,
+                        exc,
+                    )
+                    (ws.artifacts_dir / "draft-original.md").write_text(
+                        draft if draft else "(title-only ticket, no body provided)",
+                        encoding="utf-8",
+                    )
+                    RefineAgentMixin._write_file_map(ws, [], only_if_absent=True)
+                    return RefineAgentMixin._resolved_outcome(
+                        ctx,
+                        draft,
+                        ticket.id,
+                        f"triage MIGRATE failed: {exc} — {triage.reason}",
+                        source=ticket.source,
+                        triage_note=triage.reason,
+                    )
+
+                # Success: migrate() already landed the ticket in DRAFT on the
+                # target board.  Write artifacts and return a DRAFT outcome
+                # matching the maintenance-stage precedent.
+                (ws.artifacts_dir / "draft-original.md").write_text(
+                    draft if draft else "(title-only ticket, no body provided)",
+                    encoding="utf-8",
+                )
+                RefineAgentMixin._write_file_map(ws, [], only_if_absent=True)
+                return Outcome(
+                    State.DRAFT,
+                    f"migrated to board {resolved_board!r}: {triage.reason}",
+                )
+
             # --- mechanical draft fast-path: when a mill-internal
             # automated ticket passes triage with REFINE but the
             # auto-approve classifier confirms it is purely mechanical,

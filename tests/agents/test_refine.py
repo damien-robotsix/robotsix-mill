@@ -5790,3 +5790,162 @@ def test_memory_db_cross_cutting_entries_survive_retention(tmp_path):
     assert "ticket 0" not in result
     # The truncation note signals oldest content was dropped.
     assert "truncated" in result.lower()
+
+
+# ---------------------------------------------------------------------------
+# TriageResult MIGRATE decision tests
+# ---------------------------------------------------------------------------
+
+
+def test_triage_result_accepts_migrate_decision():
+    """TriageResult.model_validate accepts decision='MIGRATE' with a target_board."""
+    from robotsix_mill.agents.refining import TriageResult
+
+    r = TriageResult.model_validate(
+        {
+            "decision": "MIGRATE",
+            "reason": "belongs to robotsix-mill board",
+            "target_board": "robotsix-mill",
+        }
+    )
+    assert r.decision == "MIGRATE"
+    assert r.target_board == "robotsix-mill"
+    assert r.reason == "belongs to robotsix-mill board"
+
+
+def test_triage_result_migrate_without_target_board_is_valid():
+    """TriageResult with decision='MIGRATE' but no target_board is still
+    valid at the model level (the stage validates, not the model)."""
+    from robotsix_mill.agents.refining import TriageResult
+
+    r = TriageResult.model_validate(
+        {"decision": "MIGRATE", "reason": "belongs elsewhere"}
+    )
+    assert r.decision == "MIGRATE"
+    assert r.target_board is None
+
+
+def test_triage_result_migrate_target_board_preserved():
+    """target_board is preserved through model round-trip."""
+    from robotsix_mill.agents.refining import TriageResult
+
+    r = TriageResult(
+        decision="MIGRATE",
+        reason="misrouted",
+        target_board="other-board",
+    )
+    assert r.target_board == "other-board"
+    # Round-trip through dict
+    d = r.model_dump()
+    r2 = TriageResult.model_validate(d)
+    assert r2.decision == "MIGRATE"
+    assert r2.target_board == "other-board"
+
+
+def test_triage_prompt_includes_registered_boards():
+    """The triage prompt built by triage_refine includes a registered-boards
+    catalog section when get_repos_config succeeds."""
+    from unittest.mock import patch
+
+    from robotsix_mill.agents.refining import triage_refine, TriageResult
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+
+    # Build a fake repos registry with a few boards.
+    fake_registry = ReposRegistry(
+        repos={
+            "repo-a": RepoConfig(
+                repo_id="repo-a",
+                board_id="board-a",
+                langfuse_project_name="test",
+                langfuse_public_key="pk-test",
+                langfuse_secret_key="sk-test",
+            ),
+            "repo-b": RepoConfig(
+                repo_id="repo-b",
+                board_id="board-b",
+                langfuse_project_name="test",
+                langfuse_public_key="pk-test",
+                langfuse_secret_key="sk-test",
+            ),
+            "repo-c": RepoConfig(
+                repo_id="repo-c",
+                board_id="board-c",
+                langfuse_project_name="test",
+                langfuse_public_key="pk-test",
+                langfuse_secret_key="sk-test",
+            ),
+        }
+    )
+
+    # Capture the user prompt passed to the agent.
+    captured_prompts: list[str] = []
+
+    class _FakeAgent:
+        def run_sync(self, user_prompt, *, usage_limits=None):
+            captured_prompts.append(user_prompt)
+            from types import SimpleNamespace
+
+            return SimpleNamespace(output=TriageResult(decision="REFINE", reason="ok"))
+
+    with patch(
+        "robotsix_mill.agents.base.build_agent_from_definition",
+        return_value=_FakeAgent(),
+    ):
+        with patch(
+            "robotsix_mill.config.get_repos_config",
+            return_value=fake_registry,
+        ):
+            from types import SimpleNamespace as _NS
+
+            triage_refine(
+                settings=_NS(triage_request_limit=10),
+                title="Test ticket",
+                draft="test draft",
+                repo_dir=None,
+            )
+
+    assert len(captured_prompts) == 1
+    prompt = captured_prompts[0]
+    assert "# Registered boards" in prompt
+    assert "valid target_board" in prompt
+    assert "- board-a" in prompt
+    assert "- board-b" in prompt
+    assert "- board-c" in prompt
+
+
+def test_triage_prompt_graceful_on_repos_config_failure():
+    """When get_repos_config raises, the triage prompt does NOT include the
+    registered-boards section, and triage_refine still succeeds."""
+    from unittest.mock import patch
+
+    from robotsix_mill.agents.refining import triage_refine, TriageResult
+
+    captured_prompts: list[str] = []
+
+    class _FakeAgent:
+        def run_sync(self, user_prompt, *, usage_limits=None):
+            captured_prompts.append(user_prompt)
+            from types import SimpleNamespace
+
+            return SimpleNamespace(output=TriageResult(decision="REFINE", reason="ok"))
+
+    with patch(
+        "robotsix_mill.agents.base.build_agent_from_definition",
+        return_value=_FakeAgent(),
+    ):
+        with patch(
+            "robotsix_mill.config.get_repos_config",
+            side_effect=RuntimeError("boom"),
+        ):
+            from types import SimpleNamespace as _NS
+
+            triage_refine(
+                settings=_NS(triage_request_limit=10),
+                title="Test ticket",
+                draft="test draft",
+                repo_dir=None,
+            )
+
+    assert len(captured_prompts) == 1
+    prompt = captured_prompts[0]
+    assert "# Registered boards" not in prompt

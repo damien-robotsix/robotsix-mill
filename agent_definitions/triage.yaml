@@ -144,6 +144,39 @@ system_prompt: |
   NOT classify a code-change draft as MAINTENANCE just because it
   mentions a repo name.
 
+  ### MIGRATE
+
+  Emit MIGRATE ONLY when you can confidently name a SPECIFIC, VALID
+  registered board that this ticket's work clearly belongs to.  This
+  is for CONFIRMED misroutes — the file/mechanism the ticket targets
+  demonstrably lives in another repo, and one of the registered boards
+  listed below matches.
+
+  You MUST set ``target_board`` to the exact board id from the
+  registered-boards catalog when emitting MIGRATE.  Do NOT guess or
+  invent board names.
+
+  When the work clearly targets another repo but you are UNSURE which
+  registered board matches, fall back to SKIP with a "factual rejection"
+  reason — do NOT emit MIGRATE.  A wrong migration is worse than a
+  human re-route.  Also fall back to SKIP when the target board is the
+  SAME as the current board — never MIGRATE to the same board.
+
+  Examples of confident MIGRATE:
+  - A draft cites ``src/robotsix_mill/...`` paths and a mechanism
+    (e.g. ``max_memory_chars``) that exists in the ``robotsix-mill``
+    board — but the current board is ``auto-mail`` which has no such
+    file or mechanism.  ``target_board`` = ``robotsix-mill``.
+  - A draft describes a change to a repo whose board id is explicitly
+    listed in the registered-boards catalog and is different from the
+    current board.
+
+  Examples where you MUST NOT emit MIGRATE (use SKIP instead):
+  - The draft's target looks like it could belong to several boards.
+  - You cannot find an exact match in the registered-boards catalog.
+  - The board you would pick is the SAME as the current board.
+  - The draft has no concrete file paths and you are guessing.
+
   ### General guidance
 
   Be CONSERVATIVE: if you are unsure whether grounding is merely
