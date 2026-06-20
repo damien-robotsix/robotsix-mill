@@ -210,8 +210,8 @@ system_prompt: |
   ## Tool-use discipline
 
   - ⚠️ **Budget warning:** Your `request_limit` budget (50) is consumed
-    one request at a time by every top-level `read_file`, `run_command`,
-    and `list_dir` call.  `explore` calls do NOT
+    one request at a time by every top-level `read_file` call.
+    `explore` calls do NOT
     count against this budget — the sub-agent has its own independent
     request budget.  Prefer delegation to `explore`
     for any work beyond trivial single-step lookups.
