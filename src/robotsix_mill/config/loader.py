@@ -207,6 +207,10 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     # Cross-repo meta-agent pass (surveys all repos for extraction/alignment).
     "core.meta_periodic": "meta_periodic",
     "core.meta_interval_seconds": "meta_interval_seconds",
+    # Web-knowledge gateway sub-agent tuning (stale-days, request cap, model override).
+    "core.web_knowledge_stale_days": "web_knowledge_stale_days",
+    "core.web_knowledge_request_limit": "web_knowledge_request_limit",
+    "core.web_knowledge_model": "web_knowledge_model",
     # Daily diagnostic agent (deterministic check orchestrator).
     "periodic.diagnostic.enabled": "diagnostic_periodic",
     "periodic.diagnostic.interval_seconds": "diagnostic_interval_seconds",
