@@ -653,7 +653,13 @@ def _prune_oversized_memory_ledgers(settings: Settings) -> int:
                 mem_file,
             )
             continue
-        if len(text) <= settings.max_memory_chars:
+        # Compare encoded byte size, not char count — the unbounded-
+        # candidate check in finders.py compares st_size (bytes)
+        # against the same cap, so a file whose character count fits
+        # within max_memory_chars but whose UTF-8 byte count does not
+        # (e.g. due to multi-byte characters) would otherwise be
+        # skipped here and produce a false-positive unbounded finding.
+        if len(text.encode("utf-8")) <= settings.max_memory_chars:
             continue
         # persist_memory handles its own OSError on write internally
         # (logs and returns); no additional guard needed.
