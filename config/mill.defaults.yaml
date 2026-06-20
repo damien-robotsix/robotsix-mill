@@ -22,6 +22,11 @@ core:
   # via llmio tier defaults: L1 DeepSeek flash, L2 DeepSeek pro, L3 Claude
   # Opus). There is no per-agent model config and no backend toggle.
 
+  # -- web-knowledge gateway sub-agent tuning ------------------------------
+  web_knowledge_stale_days: 30          # days a cached .md file is considered fresh
+  web_knowledge_request_limit: 8        # max tool requests per web-knowledge consultation
+  web_knowledge_model: "deepseek/deepseek-v4-flash"  # override model for web-knowledge sub-agent
+
   # -- request caps, concurrency, retry, and timeouts (20 fields) -----------
   limits:
     coordinator_requests: 200          # per-ticket request cap for implement (coordinator)
