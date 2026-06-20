@@ -176,8 +176,16 @@ SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt
 class TriageResult(BaseModel):
     """Triage agent output — a single cheap classification call."""
 
-    decision: Literal["REFINE", "SKIP", "MAINTENANCE", "NO_CHANGE"]
+    decision: Literal["REFINE", "SKIP", "MAINTENANCE", "NO_CHANGE", "MIGRATE"]
     reason: str
+    target_board: str | None = Field(
+        default=None,
+        description=(
+            "Required when decision == 'MIGRATE'. MUST be a board listed "
+            "in the registered-boards catalog given in the prompt. "
+            "Specifies the target board to migrate this ticket to."
+        ),
+    )
     complexity: Literal["simple", "needs-exploration"] | None = Field(
         default=None,
         description=(
@@ -444,6 +452,21 @@ def triage_refine(
     )
 
     user_prompt = section("title", title) + "\n" + section("draft", draft)
+
+    # List the registered boards so the classifier can name a valid
+    # target_board when emitting a MIGRATE decision.
+    try:
+        from ..config import get_repos_config
+
+        board_ids = sorted({rc.board_id for rc in get_repos_config().repos.values()})
+        if board_ids:
+            user_prompt += (
+                "\n# Registered boards (valid target_board values for a MIGRATE decision)\n"
+                + "\n".join(f"- {b}" for b in board_ids)
+                + "\n"
+            )
+    except Exception:
+        log.debug("could not list registered boards for triage prompt", exc_info=True)
 
     limits = UsageLimits(request_limit=settings.triage_request_limit)
 
