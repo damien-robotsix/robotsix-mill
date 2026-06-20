@@ -257,6 +257,21 @@ class SpecReviewResult(BaseModel):
     stripped_summary: str
 
 
+class AlreadyDoneResult(BaseModel):
+    """Cheap (level-1) verification result: does the working tree confirm
+    that the work described by a ticket has already shipped?
+
+    Used by ``verify_already_done`` — the small-cost LLM call that
+    replaces the deterministic Jaccard short-circuit as the final
+    ``no_change_needed`` decision.  The rationale MUST cite the concrete
+    filesystem evidence checked (e.g. the grep/ls/wc result for each
+    named symbol/file/call-site).
+    """
+
+    already_done: bool
+    rationale: str
+
+
 class ChildSpec(BaseModel):
     """A split child."""
 
@@ -461,6 +476,109 @@ def triage_refine(
     finally:
         _safe_close(agent)
     return result.output
+
+
+def verify_already_done(
+    *,
+    settings: Settings,
+    title: str,
+    draft: str,
+    candidate_rationale: str,
+    repo_dir: Path | None,
+    extra_roots: list[Path] | None = None,
+) -> AlreadyDoneResult:
+    """Confirm or reject a candidate "already done" memory match by
+    inspecting the actual working tree.
+
+    This is a cheap (level-1) LLM call — the *decision* step that
+    replaces the deterministic Jaccard short-circuit.  The candidate
+    pre-filter (``_check_memory_for_no_change``) has already matched a
+    prior ``no_change_needed`` memory entry; this agent verifies that
+    the *specific* symbols, file paths, and call sites named in the
+    ticket are actually absent from *repo_dir* before returning
+    ``already_done=True``.
+
+    When *repo_dir* is not provided (i.e. the caller passes ``None``),
+    the function returns ``AlreadyDoneResult(already_done=False,
+    rationale="no repo clone available")`` without making an LLM call —
+    the short-circuit is only available with a working tree to verify
+    against.
+    """
+    if repo_dir is None:
+        return AlreadyDoneResult(
+            already_done=False,
+            rationale="no repo clone available — cannot verify against working tree",
+        )
+
+    from pydantic_ai.usage import UsageLimits
+
+    from .yaml_loader import load_agent_definition
+    from .base import build_agent_from_definition, _safe_close
+    from .retry import run_agent
+    from .explore import make_explore_tool
+    from .fs_tools import build_fs_tools
+
+    definition = load_agent_definition(
+        Path(__file__).parent.parent.parent.parent
+        / "agent_definitions"
+        / "already_done_check.yaml"
+    )
+
+    # Build the same read-only tool set as triage_refine: explore +
+    # read_file + run_command.  The verifier uses these to git-grep
+    # symbols, wc -l files, ls expected paths, etc.
+    tools: list = [make_explore_tool(settings, repo_dir, extra_roots=extra_roots)]
+    all_fs = build_fs_tools(repo_dir, settings, extra_roots=extra_roots)
+    # Keep only the read-only tools: read_file, list_dir, run_command.
+    # write_file, edit_file, delete_file are excluded — this agent
+    # must never modify the working tree.
+    for name in ("read_file", "list_dir", "run_command"):
+        try:
+            t = next(f for f in all_fs if f.__name__ == name)
+        except StopIteration:
+            continue
+        tools.append(t)
+
+    system_prompt = definition.system_prompt
+    if repo_dir is None:
+        # Strip tool sections when no clone is available (should not
+        # reach here — the early-return above guards this — but keep
+        # the strip logic for defensive correctness).
+        system_prompt = _STRIP_EXPLORE_SECTION_RE.sub("", system_prompt)
+        system_prompt = _STRIP_READFILE_SECTION_RE.sub("", system_prompt)
+
+    agent = build_agent_from_definition(
+        settings,
+        definition,
+        tools=tools,
+        system_prompt=system_prompt,
+    )
+
+    user_prompt = (
+        section("title", title)
+        + "\n"
+        + section("draft", draft)
+        + "\n\n"
+        + section(
+            "candidate-rationale",
+            "The following rationale is from a prior `no_change_needed` "
+            "memory entry whose TOPIC is similar to this ticket.  It is a "
+            "HINT only — do NOT accept it as truth.  Verify against the "
+            "working tree:\n\n" + candidate_rationale,
+        )
+    )
+
+    limits = UsageLimits(request_limit=settings.already_done_request_limit)
+
+    try:
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(user_prompt, usage_limits=limits),
+            what="already-done verifier",
+        )
+    finally:
+        _safe_close(agent)
+    return cast(AlreadyDoneResult, result.output)
 
 
 def _classify_maintenance_draft(title: str, draft: str) -> str | None:
@@ -871,17 +989,34 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
 
     # ------------------------------------------------------------------
     # Pre-LLM short-circuit: check the memory ledger for a prior
-    # ``no_change_needed`` conclusion for the same topic.  This avoids
-    # re-running an expensive LLM exploration cycle when we already
-    # know there's nothing to do.
+    # ``no_change_needed`` conclusion for the same topic.  The
+    # deterministic Jaccard guard (``_check_memory_for_no_change``) is
+    # only a CANDIDATE PRE-FILTER — it may select a prior memory entry
+    # whose topic is similar, but it CANNOT decide.  The final decision
+    # comes from a cheap (level-1) LLM verifier that MUST grep/read the
+    # SPECIFIC symbols, file paths, and call-sites named in the ticket
+    # before it may confirm "already done."
     # ------------------------------------------------------------------
-    memory_match = _check_memory_for_no_change(title, draft, memory)
-    if memory_match is not None:
-        return RefineResult(
-            no_change_needed=True,
-            no_change_rationale=memory_match,
-            updated_memory=memory,  # unchanged — nothing new to record
+    candidate_rationale = _check_memory_for_no_change(title, draft, memory)
+    if candidate_rationale is not None and repo_dir is not None:
+        verification = verify_already_done(
+            settings=settings,
+            title=title,
+            draft=draft,
+            candidate_rationale=candidate_rationale,
+            repo_dir=repo_dir,
+            extra_roots=extra_roots,
         )
+        if verification.already_done:
+            return RefineResult(
+                no_change_needed=True,
+                no_change_rationale=verification.rationale,
+                updated_memory=memory,  # unchanged — nothing new to record
+            )
+        # Verifier rejected the candidate — fall through to full refine.
+    # When ``repo_dir`` is None (no clone), do NOT short-circuit on
+    # memory alone — a memory match without filesystem verification is
+    # not a safe basis for closing a ticket.
 
     from pydantic_ai.usage import UsageLimits
 
@@ -1070,7 +1205,7 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
         and level_uses_claude(3)  # refine is level 3 → Claude SDK
         and claude_sdk_supports_inline_image(settings)
     )
-    binary_contents: list = []
+    binary_contents: list[Any] = []
     if _vision:
         from pydantic_ai import BinaryContent
 

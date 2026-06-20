@@ -498,6 +498,7 @@ modules:
       - tests/agents/test_ask_to_ticket.py
       - tests/agents/test_audit.py
       - tests/agents/test_refine.py
+      - tests/agents/test_already_done_verifier.py
       - tests/agents/test_refine_screenshots.py
       - tests/agents/test_dedup.py
       - tests/agents/test_obsolescence.py

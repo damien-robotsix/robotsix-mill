@@ -4596,12 +4596,18 @@ def test_guard_no_rationale_line_still_matches():
 # --- Integration test: run_refine_agent short-circuits without LLM call ---
 
 
-def test_run_refine_agent_short_circuits_on_memory_match(monkeypatch, settings):
-    """When memory contains a matching no_change_needed entry,
-    run_refine_agent returns RefineResult(no_change_needed=True) without
-    calling build_agent_from_definition or making any LLM call."""
+def test_run_refine_agent_memory_match_without_repo_dir_falls_through(
+    monkeypatch,
+    settings,
+):
+    """When memory contains a matching no_change_needed entry but repo_dir
+    is None, the guard does NOT short-circuit — it falls through to the
+    full refine path because filesystem verification is impossible
+    without a clone.  (The old deterministic Jaccard-only short-circuit
+    has been replaced; the LLM verifier requires a repo clone.)"""
 
     import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
 
     memory = _memory_entry(
         "2026-06-02",
@@ -4609,22 +4615,44 @@ def test_run_refine_agent_short_circuits_on_memory_match(monkeypatch, settings):
         rationale="prompt-level fixes don't compose",
     )
 
-    # build_agent_from_definition must NOT be called — if it is, the test fails.
-    def _fail_if_called(*args, **kwargs):
-        pytest.fail("build_agent_from_definition was called — short-circuit failed")
+    agent_called = False
 
-    monkeypatch.setattr(base_module, "build_agent_from_definition", _fail_if_called)
+    class _MockAgent:
+        def run_sync(self, user_prompt, *, message_history=None, usage_limits=None):
+            nonlocal agent_called
+            agent_called = True
+            # Return a simple valid result to avoid continuation guard
+            return _FakeRunResult(
+                output=RefineResult(split=False, spec_markdown="## Problem\nok\n"),
+                finish_reason="stop",
+                all_messages=[],
+            )
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        base_module, "build_agent_from_definition", lambda *a, **kw: _MockAgent()
+    )
+    monkeypatch.setattr(
+        retry_module,
+        "run_agent",
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(agent),
+    )
 
     result = refining.run_refine_agent(
         settings=settings,
         title="refine-agent-no-change-needed-guard-self-check",
         draft="add a pre-LLM guard",
         memory=memory,
+        # NO repo_dir — must fall through to full refine
     )
 
-    assert result.no_change_needed is True
-    assert result.no_change_rationale == "prompt-level fixes don't compose"
-    assert result.updated_memory == memory  # unchanged
+    # The full refine agent WAS called (no short-circuit without a clone).
+    assert agent_called is True
+    # Must NOT short-circuit to no_change_needed on memory alone.
+    assert result.no_change_needed is False
+    assert result.spec_markdown == "## Problem\nok\n"
 
 
 def test_run_refine_agent_no_match_proceeds_to_llm(monkeypatch, settings):
