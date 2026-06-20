@@ -39,6 +39,7 @@ _CI_REFRESH_COUNTER = "ci_fix_refresh_attempts.txt"
 _CI_FAILURE_FINGERPRINT = "ci_failure_fingerprint.txt"
 _CI_IDENTICAL_FAILURE_COUNT = "ci_identical_failure_count.txt"
 _CODQL_FP_TRIAGE_SENTINEL = "codeql_fp_triage_ran.txt"
+_CODQL_FP_TRIAGE_VERDICTS = "codeql_fp_triage_verdicts.json"
 
 # Maximum number of alerts the codeql_fp_triage agent may dismiss in a
 # single pass.  Caps the blast radius of a misjudged dismissal.
@@ -288,6 +289,116 @@ def _eligible_for_triage(
     return eligible
 
 
+def _codeql_block_note(  # noqa: C901
+    failing: list[dict[str, Any]],
+    alerts: list[dict[str, Any]],
+    changed_paths: set[str],
+    verdicts: list[dict[str, Any]] | None = None,
+) -> str | None:
+    """Return a CodeQL-specific BLOCKED note, or None when CodeQL is not a blocker.
+
+    Detects whether CodeQL is among the failing checks (sole or contributing)
+    and, when it is, builds a markdown note that lists every gating alert with
+    the reason the auto-solver abstained.
+    """
+    # --- gate: is CodeQL among the failing checks? ---
+    codeql_blocking = False
+    for chk in failing:
+        name = (chk.get("name") or "").lower()
+        if any(token in name for token in _CODQL_CHECK_NAMES):
+            codeql_blocking = True
+            break
+    if not codeql_blocking:
+        return None
+
+    only_codeql = _only_codeql_failing(failing)
+
+    # --- no alert details available ---
+    if not alerts:
+        header = (
+            "Blocked on CodeQL code-scanning"
+            if only_codeql
+            else "Blocked partly on CodeQL code-scanning (other checks also red)"
+        )
+        return (
+            f"{header} — a human must act.\n\n"
+            "Alert details could not be retrieved from the code-scanning API."
+        )
+
+    # --- partition & sort ---
+    _in_scope, _out_of_scope = _partition_alerts_by_diff(alerts, changed_paths)
+
+    verdict_by_number: dict[int, dict[str, Any]] = {}
+    if verdicts:
+        for v in verdicts:
+            n = v.get("alert_number")
+            if n is not None:
+                verdict_by_number[n] = v
+
+    sorted_alerts = sorted(alerts, key=lambda a: a.get("number", 0))
+
+    # --- build the note ---
+    header = (
+        "Blocked on CodeQL code-scanning"
+        if only_codeql
+        else "Blocked partly on CodeQL code-scanning (other checks also red)"
+    )
+    lines = [f"{header} — a human must act.", ""]
+
+    for a in sorted_alerts:
+        num = a.get("number", "?")
+        rule = a.get("rule", "?")
+        sev = a.get("security_severity_level")
+        sev_str = str(sev) if sev is not None else "n/a"
+        path = a.get("path", "?")
+        line = a.get("line")
+        loc = f"{path}:{line}" if line is not None else path
+
+        lines.append(
+            f"- Alert {num}: `{rule}` ({loc}), security_severity_level={sev_str}"
+        )
+
+        # Determine why the auto-solver abstained.
+        if sev is not None:
+            lines.append(
+                f"  → security-severity (level={sev}) → "
+                f"requires human sign-off (guardrail policy)"
+            )
+        elif path and path not in changed_paths:
+            lines.append(
+                "  → out-of-scope of this PR's diff "
+                "(pre-existing on the base branch) → needs human review"
+            )
+        elif path and path in changed_paths and a.get("number") is not None:
+            alert_number: int = a["number"]
+            verdict = verdict_by_number.get(alert_number)
+            if verdict is not None and verdict.get("verdict") == "abstain":
+                rationale = verdict.get("rationale", "")
+                if rationale:
+                    truncated = (
+                        rationale[:200] + "..." if len(rationale) > 200 else rationale
+                    )
+                    lines.append(f"  → codeql_fp_triage abstained: {truncated}")
+                else:
+                    lines.append("  → codeql_fp_triage abstained")
+            elif verdicts is not None:
+                # We had verdicts but none for this alert, or verdict != abstain.
+                lines.append("  → agent could not produce a code fix")
+            else:
+                # No verdicts available at all — combined fallback.
+                lines.append(
+                    "  → codeql_fp_triage abstained or agent could not "
+                    "produce a code fix"
+                )
+        else:
+            # In-scope but missing number or other edge case.
+            lines.append(
+                "  → codeql_fp_triage abstained or agent could not produce a code fix"
+            )
+
+    return "\n".join(lines)
+
+
 def _ci_failure_fingerprint(failing_summary: str, repo_id: str) -> str:
     """Compute a stable hex fingerprint for a CI failure.
 
@@ -380,7 +491,14 @@ class CIFixStage(Stage):
             ticket.id,
         )
         return self._run_agent_and_finalize(
-            ticket, ctx, repo_dir, branch, failing_summary
+            ticket,
+            ctx,
+            repo_dir,
+            branch,
+            failing_summary,
+            failing,
+            alerts,
+            changed_paths,
         )
 
     def _resolve_clone_and_status(
@@ -643,6 +761,21 @@ class CIFixStage(Stage):
             log.warning("%s: codeql_fp_triage agent crashed", ticket.id, exc_info=True)
             return None
 
+        # Persist verdicts for the block-note builder.
+        try:
+            verdicts_path = artifacts_dir / _CODQL_FP_TRIAGE_VERDICTS
+            verdicts_path.parent.mkdir(parents=True, exist_ok=True)
+            verdicts_path.write_text(
+                json.dumps([v.model_dump() for v in result.verdicts]),
+                encoding="utf-8",
+            )
+        except Exception:  # noqa: BLE001 — best-effort
+            log.warning(
+                "%s: failed to persist codeql_fp_triage verdicts",
+                ticket.id,
+                exc_info=True,
+            )
+
         # --- dismiss alerts the agent greenlit ---
         dismissals = [v for v in result.verdicts if v.verdict == "dismiss"]
         if not dismissals:
@@ -712,6 +845,9 @@ class CIFixStage(Stage):
         repo_dir: str,
         branch: str,
         failing_summary: str,
+        failing: list[dict[str, Any]],
+        alerts: list[dict[str, Any]],
+        changed_paths: set[str],
     ) -> Outcome:
         """Reconcile, run the agent (which owns the loop), and route its verdict.
 
@@ -759,6 +895,26 @@ class CIFixStage(Stage):
         # FAILED, or None on crash — the agent could not turn CI green within
         # its iteration budget (or hit an unrecoverable error). Block so a
         # human can intervene; resume re-enters from human_mr_approval.
+        #
+        # Before emitting the generic message, check whether CodeQL code-
+        # scanning is the blocker and, when it is, produce a specific note
+        # naming every gating alert and explaining why the auto-solver
+        # abstained.
+        artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
+        verdicts: list[dict[str, Any]] | None = None
+        try:
+            import json as _json
+
+            vp = artifacts_dir / _CODQL_FP_TRIAGE_VERDICTS
+            if vp.exists():
+                verdicts = _json.loads(vp.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001, S110 — best-effort; silent fallback
+            pass
+
+        codeql_note = _codeql_block_note(failing, alerts, changed_paths, verdicts)
+        if codeql_note is not None:
+            return Outcome(State.BLOCKED, codeql_note)
+
         return Outcome(
             State.BLOCKED,
             "ci fix agent could not turn CI green within its iteration budget "

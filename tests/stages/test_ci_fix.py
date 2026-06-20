@@ -1570,6 +1570,85 @@ def test_agent_failed_blocks_immediately(tmp_path, monkeypatch):
     assert "iteration budget" in out.note
 
 
+def test_codeql_security_severity_block_note(tmp_path, monkeypatch):
+    """A CodeQL-only failure with a security-severity alert produces a BLOCKED
+    note that names the alert and states human sign-off is required, without
+    the generic 'iteration budget' wording."""
+    ctx = _gh(tmp_path)
+    # Failing check is CodeQL
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {
+                    "name": "CodeQL / Analyze (python)",
+                    "summary": "alert",
+                    "text": None,
+                    "annotations": [],
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    # Return a security-severity alert (high).
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_code_scanning_alerts",
+        lambda self, *, source_branch: [
+            {
+                "number": 42,
+                "rule": "py/clear-text-logging-sensitive-data",
+                "security_severity_level": "high",
+                "severity": "error",
+                "path": "src/foo.py",
+                "line": 10,
+                "message": "Sensitive data logged",
+            }
+        ],
+    )
+    # The alert's file is in the PR's diff.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [
+            {
+                "path": "src/foo.py",
+                "status": "modified",
+                "additions": 1,
+                "deletions": 0,
+            }
+        ],
+    )
+    # No failed workflow runs (no job logs needed).
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_workflow_runs",
+        lambda self, *, head_sha=None, branch=None: [],
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(status="FAILED", summary="could not fix"),
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "CodeQL" in out.note
+    assert "py/clear-text-logging-sensitive-data" in out.note
+    assert "42" in out.note
+    assert "security" in out.note.lower()
+    assert "human sign-off" in out.note.lower()
+    assert "iteration budget" not in out.note
+
+
 def test_agent_crash_blocks(tmp_path, monkeypatch):
     """An agent crash (run_ci_fix_agent raises → _invoke_agent returns None)
     is treated as FAILED → BLOCKED."""
