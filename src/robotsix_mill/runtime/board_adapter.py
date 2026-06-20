@@ -18,6 +18,8 @@ except ImportError:  # pragma: no cover — robotsix-board is a required depende
 if TYPE_CHECKING:
     from ..core.models import TicketRead
 
+from ..core.states import State
+
 # Ordered column definitions for the board (left → right).
 # The LAST column is treated as the terminal/closed column by board.js.
 _COLUMNS: list[tuple[str, str]] = [
@@ -54,6 +56,9 @@ class MillBoardAdapter:
     importable but ``render_mode()`` raises ``RuntimeError``.
     """
 
+    BLOCKED_WAITING = "⛔ waiting on ticket"
+    BLOCKED_NEEDS_HUMAN = "🙋 needs human"
+
     def columns(self) -> list[tuple[str, str]]:
         """Return the ordered ``(status_key, label)`` pairs for the board."""
         return list(_COLUMNS)
@@ -67,7 +72,7 @@ class MillBoardAdapter:
         return _ticket(card).title
 
     def card_badges(self, card: object) -> list[str]:
-        """Return badge labels: priority and kind."""
+        """Return badge labels: priority, kind, source, and blocked status."""
         t = _ticket(card)
         badges: list[str] = []
         if t.priority:
@@ -77,6 +82,12 @@ class MillBoardAdapter:
         # Source badge
         if t.source and t.source != "user":
             badges.append(t.source)
+        # Blocked-state badges: distinguish auto-unblock vs. human-needed.
+        if t.state == State.BLOCKED:
+            if t.unmet_deps:
+                badges.append(self.BLOCKED_WAITING)
+            else:
+                badges.append(self.BLOCKED_NEEDS_HUMAN)
         return badges
 
     def card_timestamps(self, card: object) -> dict[str, str]:

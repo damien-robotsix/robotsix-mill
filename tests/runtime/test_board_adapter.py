@@ -177,6 +177,72 @@ def test_card_badges_raises_typeerror_for_non_ticket():
 
 
 # ---------------------------------------------------------------------------
+# card_badges() — BLOCKED state badges
+# ---------------------------------------------------------------------------
+
+
+def test_card_badges_blocked_waiting_on_ticket():
+    """When state=blocked and unmet_deps is non-empty → waiting badge."""
+    adapter = MillBoardAdapter()
+    ticket = _make_ticket(state="blocked", unmet_deps=["t-2"])
+    badges = adapter.card_badges(ticket)
+    assert adapter.BLOCKED_WAITING in badges
+    assert adapter.BLOCKED_NEEDS_HUMAN not in badges
+
+
+def test_card_badges_blocked_needs_human():
+    """When state=blocked and unmet_deps is empty → needs-human badge."""
+    adapter = MillBoardAdapter()
+    ticket = _make_ticket(state="blocked", unmet_deps=[])
+    badges = adapter.card_badges(ticket)
+    assert adapter.BLOCKED_NEEDS_HUMAN in badges
+    assert adapter.BLOCKED_WAITING not in badges
+
+
+def test_card_badges_blocked_combined_with_existing_badges():
+    """Blocked badge composes correctly after priority/kind/source."""
+    adapter = MillBoardAdapter()
+    ticket = _make_ticket(
+        priority=True,
+        kind="epic",
+        source="api",
+        state="blocked",
+        unmet_deps=["t-2"],
+    )
+    assert adapter.card_badges(ticket) == [
+        "★ priority",
+        "epic",
+        "api",
+        adapter.BLOCKED_WAITING,
+    ]
+
+
+def test_card_badges_non_blocked_state_no_blocked_badge():
+    """Non-blocked states (ready/draft) never get a blocked badge."""
+    adapter = MillBoardAdapter()
+    for state in ("ready", "draft"):
+        ticket = _make_ticket(state=state, unmet_deps=["t-2"])
+        badges = adapter.card_badges(ticket)
+        assert adapter.BLOCKED_WAITING not in badges
+        assert adapter.BLOCKED_NEEDS_HUMAN not in badges
+
+
+def test_card_badges_non_blocked_with_unmet_deps():
+    """Even with unmet_deps, non-blocked states get no blocked badge."""
+    adapter = MillBoardAdapter()
+    ticket = _make_ticket(
+        state="ready",
+        kind="task",
+        unmet_deps=["t-2"],
+    )
+    badges = adapter.card_badges(ticket)
+    assert adapter.BLOCKED_WAITING not in badges
+    assert adapter.BLOCKED_NEEDS_HUMAN not in badges
+    # Should still have normal badges (none for kind=task, source=user)
+    assert badges == []
+
+
+# ---------------------------------------------------------------------------
 # card_timestamps()
 # ---------------------------------------------------------------------------
 
