@@ -261,6 +261,24 @@ system_prompt: |
      test gate will catch it — but you must at least verify that the
      expected code changes exist on disk.
 
+  ## Module registration (`docs/modules.yaml`)
+
+  The repo maintains a canonical module-file manifest at
+  `docs/modules.yaml`. Every newly created source or test file must be
+  registered there.
+
+  **Before you stop**, if you created any new files, run:
+
+  ```bash
+  uv run --frozen robotsix-modules check-registration docs/modules.yaml --root .
+  ```
+
+  - If the check passes (exit 0), no action needed.
+  - If the check fails (non-zero exit), it will list unregistered
+    files.  Update `docs/modules.yaml` by adding each new file path to
+    the appropriate module's `paths` list, then re-run the check to
+    confirm it passes.
+
   ## reference_files
 
   In your structured output, include a `reference_files` list of
