@@ -497,7 +497,6 @@ src/robotsix_mill/stages/refine/orchestration.py:0: error: "list?[robotsix_mill.
 src/robotsix_mill/stages/refine/orchestration.py:0: error: "list?[robotsix_mill.core.models.Comment]" has no attribute "__iter__" (not iterable)  [attr-defined]
 src/robotsix_mill/stages/refine/orchestration.py:0: error: "list?[robotsix_mill.core.models.TicketEvent]" has no attribute "__iter__" (not iterable)  [attr-defined]
 src/robotsix_mill/stages/refine/orchestration.py:0: error: "list?[robotsix_mill.core.models.TicketEvent]" has no attribute "__iter__" (not iterable)  [attr-defined]
-src/robotsix_mill/stages/refine/orchestration.py:0: error: "list?[robotsix_mill.core.models.TicketEvent]" has no attribute "__iter__" (not iterable)  [attr-defined]
 src/robotsix_mill/stages/refine/orchestration.py:0: error: Missing type arguments for generic type "list"  [type-arg]
 src/robotsix_mill/stages/refine/orchestration.py:0: error: "list?[robotsix_mill.core.models.TicketEvent]" has no attribute "__iter__" (not iterable)  [attr-defined]
 src/robotsix_mill/stages/refine/orchestration.py:0: error: Unsupported operand types for / ("None" and "Path")  [operator]
