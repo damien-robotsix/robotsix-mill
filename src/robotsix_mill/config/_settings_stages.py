@@ -296,6 +296,12 @@ class _StagesSettings(BaseModel):
     )
     # Per-call cap for pre-refine triage agent (main call + tool calls).
     triage_request_limit: int = Field(default=8)
+    # Per-call cap for the already-done verifier (main call + tool calls).
+    # This is a cheap level-1 agent that runs only as a candidate
+    # short-circuit when the deterministic Jaccard pre-filter matches a
+    # prior ``no_change_needed`` memory entry.  Default 8 — same tier as
+    # triage.  Configured via ``core.limits.already_done_requests``.
+    already_done_request_limit: int = Field(default=8)
 
     # --- retrospect stage (done -> reviewed) ---
     # When True, retrospect may file an improvement DRAFT. Until the
