@@ -1347,3 +1347,127 @@ def test_bg_pass_route_unknown_repo_400(client, route):
     r = client.post(f"{route}?repo_id=unknown")
     assert r.status_code == 400, f"{route}: expected 400, got {r.status_code}"
     assert "Unknown repo" in r.json()["detail"]
+
+
+# -- Health endpoint coverage -------------------------------------------
+
+
+class _FakeLangfuseClient:
+    """A non-None sentinel so _build_read_client → "configured"."""
+
+
+def test_health_live_returns_alive(client):
+    """GET /health/live returns 200 with status 'alive' and uptime_seconds."""
+    r = client.get("/health/live")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["status"] == "alive"
+    assert "uptime_seconds" in data
+    assert isinstance(data["uptime_seconds"], int)
+    assert data["uptime_seconds"] >= 0
+
+
+def test_health_legacy_still_ok(client):
+    """GET /health keeps returning 200 with status 'ok' (unchanged)."""
+    r = client.get("/health")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["status"] == "ok"
+    assert "uptime_seconds" in data
+
+
+def test_health_ready_all_ok(client, monkeypatch):
+    """GET /health/ready returns 200 with status 'ready' when both checks pass."""
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.routes._health._build_read_client",
+        lambda settings: _FakeLangfuseClient(),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.routes._health._langfuse_api_get",
+        lambda settings, path, params=None, repo_config=None: {"data": []},
+    )
+
+    r = client.get("/health/ready")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["status"] == "ready"
+    names = {c["name"] for c in data["checks"]}
+    assert names == {"database", "langfuse"}
+    for c in data["checks"]:
+        assert c["status"] == "ok"
+        assert isinstance(c["latency_ms"], int)
+        assert c["latency_ms"] >= 0
+
+
+def test_health_ready_db_failure_returns_503(client, monkeypatch):
+    """GET /health/ready returns 503 when the database check raises."""
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.routes._health._build_read_client",
+        lambda settings: _FakeLangfuseClient(),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.routes._health._langfuse_api_get",
+        lambda settings, path, params=None, repo_config=None: {"data": []},
+    )
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("simulated DB outage")
+
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.routes._health.db",
+        type(
+            "BoomDB",
+            (),
+            {
+                "get_engine": lambda *a, **kw: (_ for _ in ()).throw(
+                    RuntimeError("simulated DB outage")
+                )
+            },
+        )(),
+    )
+
+    r = client.get("/health/ready")
+    assert r.status_code == 503
+    data = r.json()
+    assert data["status"] == "not_ready"
+    db_check = next(c for c in data["checks"] if c["name"] == "database")
+    assert db_check["status"] == "error"
+
+
+def test_health_ready_langfuse_unconfigured_is_skipped_not_503(client, monkeypatch):
+    """GET /health/ready returns 200 with langfuse 'skipped' when
+    _build_read_client returns None (Langfuse not configured)."""
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.routes._health._build_read_client",
+        lambda settings: None,
+    )
+
+    r = client.get("/health/ready")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["status"] == "ready"
+    lf = next(c for c in data["checks"] if c["name"] == "langfuse")
+    assert lf["status"] == "skipped"
+    # Database should still be ok.
+    db_check = next(c for c in data["checks"] if c["name"] == "database")
+    assert db_check["status"] == "ok"
+
+
+def test_health_ready_langfuse_error_returns_503(client, monkeypatch):
+    """GET /health/ready returns 503 when _build_read_client returns a
+    client (configured) but _langfuse_api_get returns None (unreachable)."""
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.routes._health._build_read_client",
+        lambda settings: _FakeLangfuseClient(),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.routes._health._langfuse_api_get",
+        lambda settings, path, params=None, repo_config=None: None,
+    )
+
+    r = client.get("/health/ready")
+    assert r.status_code == 503
+    data = r.json()
+    assert data["status"] == "not_ready"
+    lf = next(c for c in data["checks"] if c["name"] == "langfuse")
+    assert lf["status"] == "error"

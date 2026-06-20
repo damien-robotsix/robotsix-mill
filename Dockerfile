@@ -178,7 +178,7 @@ EXPOSE 8077
 
 # Health check uses Python stdlib (no curl needed).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "from urllib.request import urlopen; urlopen('http://localhost:8077/health')" || exit 1
+    CMD python -c "from urllib.request import urlopen; urlopen('http://localhost:8077/health/live')" || exit 1
 
 ENTRYPOINT ["/app/entrypoint.sh"]
 

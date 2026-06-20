@@ -2,37 +2,154 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
+from collections.abc import Coroutine
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse, JSONResponse
+from sqlmodel import text
 
 if TYPE_CHECKING:
     from ..worker import Worker
-from fastapi.responses import HTMLResponse
 
+from ...config import Settings
+from ...core import db
+from ...core.states import State
 from ..board_adapter import MillBoardAdapter
 from ..board_html import build_board_skeleton, render_board_html
-from ...core.states import State
 from ..deps import enrich_ticket_read, get_repos_registry, get_settings, get_worker
+from ...langfuse.client import _build_read_client, _langfuse_api_get
 
 log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Health"])
 
 
-@router.get("/health")
-def health(request: Request) -> dict:
+def _uptime_payload(request: Request) -> dict[str, Any]:
+    """Return a dict with ``started_at`` / ``uptime_seconds`` when the
+    app-state ``started_at`` is set, empty dict otherwise."""
     started_at: datetime | None = getattr(request.app.state, "started_at", None)
     if started_at is not None:
         uptime = (datetime.now(timezone.utc) - started_at).total_seconds()
         return {
-            "status": "ok",
             "started_at": started_at.isoformat(),
             "uptime_seconds": int(uptime),
         }
-    return {"status": "ok"}
+    return {}
+
+
+@router.get("/health")
+def health(request: Request) -> dict[str, Any]:
+    payload: dict[str, Any] = {"status": "ok"}
+    payload.update(_uptime_payload(request))
+    return payload
+
+
+@router.get("/health/live")
+def health_live(request: Request) -> dict[str, Any]:
+    payload: dict[str, Any] = {"status": "alive"}
+    payload.update(_uptime_payload(request))
+    return payload
+
+
+def _resolve_board_id(request: Request) -> str | None:
+    """Return a board_id suitable for a health-check DB probe.
+
+    When ``single_repo_id`` is set on app state use its board_id;
+    otherwise pick the first registered repo's board_id.  Returns
+    ``None`` when the repos registry is empty.
+    """
+    repos = request.app.state.repos
+    single: str | None = request.app.state.single_repo_id
+    if single is not None:
+        rc = repos.repos[single]
+        return str(rc.board_id)
+    if not repos.repos:
+        return None
+    return str(next(iter(repos.repos.values())).board_id)
+
+
+async def _check_database(settings: Settings, board_id: str) -> dict[str, Any]:
+    start = time.perf_counter()
+    try:
+        with db.get_engine(settings, board_id).connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as exc:
+        log.warning("health /ready: database check failed: %s", exc)
+        elapsed = int((time.perf_counter() - start) * 1000)
+        return {"name": "database", "status": "error", "latency_ms": elapsed}
+    else:
+        elapsed = int((time.perf_counter() - start) * 1000)
+        return {"name": "database", "status": "ok", "latency_ms": elapsed}
+
+
+async def _check_langfuse(settings: Settings) -> dict[str, Any]:
+    start = time.perf_counter()
+    client = await asyncio.to_thread(_build_read_client, settings)
+    if client is None:
+        return {"name": "langfuse", "status": "skipped", "latency_ms": 0}
+    try:
+        result = await asyncio.to_thread(
+            _langfuse_api_get, settings, "/api/public/traces", {"limit": 1}
+        )
+    except Exception as exc:
+        log.warning("health /ready: langfuse check failed: %s", exc)
+        elapsed = int((time.perf_counter() - start) * 1000)
+        return {"name": "langfuse", "status": "error", "latency_ms": elapsed}
+    else:
+        elapsed = int((time.perf_counter() - start) * 1000)
+        if result is None:
+            return {"name": "langfuse", "status": "error", "latency_ms": elapsed}
+        return {"name": "langfuse", "status": "ok", "latency_ms": elapsed}
+
+
+@router.get("/health/ready", response_model=None)
+async def health_ready(
+    request: Request, settings: Settings = Depends(get_settings)
+) -> JSONResponse | dict[str, Any]:
+    board_id = _resolve_board_id(request)
+
+    async def _with_timeout(
+        coro: Coroutine[Any, Any, dict[str, Any] | None],
+    ) -> dict[str, Any] | None:
+        try:
+            return await asyncio.wait_for(coro, timeout=2.0)
+        except asyncio.TimeoutError:
+            return None  # caller must replace with a timeout result
+
+    async def _db_check() -> dict[str, Any]:
+        if board_id is None:
+            return {"name": "database", "status": "skipped", "latency_ms": 0}
+        return await _check_database(settings, board_id)
+
+    checks: list[dict[str, Any]] = []
+
+    # DB check
+    db_result = await _with_timeout(_db_check())
+    if db_result is None:
+        checks.append({"name": "database", "status": "timeout", "latency_ms": 2000})
+    else:
+        checks.append(db_result)
+
+    # Langfuse check
+    lf_result = await _with_timeout(_check_langfuse(settings))
+    if lf_result is None:
+        checks.append({"name": "langfuse", "status": "timeout", "latency_ms": 2000})
+    else:
+        checks.append(lf_result)
+
+    any_down = any(c["status"] in {"error", "timeout"} for c in checks)
+    body: dict[str, Any] = {
+        "status": "ready" if not any_down else "not_ready",
+        "checks": checks,
+    }
+    if any_down:
+        return JSONResponse(status_code=503, content=body)
+    return body
 
 
 @router.get("/langfuse-status")
