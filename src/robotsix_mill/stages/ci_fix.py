@@ -60,6 +60,11 @@ def _write_counter(path, value: int) -> None:
     path.write_text(str(value), encoding="utf-8")
 
 
+def _write_text(path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
 def _workspace_repo_dir(ctx, ticket) -> str | None:
     """Return the ticket's workspace clone dir, or None if missing."""
     ws = ctx.service.workspace(ticket)
@@ -462,6 +467,8 @@ class CIFixStage(Stage):
         failing_summary, alerts, changed_paths = self._build_failure_detail(
             ticket, ctx, branch, failing
         )
+        # Persist the failure detail for observability.
+        self._write_failing_summary_artifact(ctx, ticket, failing_summary, failing)
         return _FailingContext(
             repo_dir, branch, failing_summary, failing, alerts, changed_paths
         )
@@ -509,6 +516,29 @@ class CIFixStage(Stage):
             alerts,
             changed_paths,
         )
+
+    def _write_failing_summary_artifact(
+        self,
+        ctx: StageContext,
+        ticket: Ticket,
+        failing_summary: str,
+        failing: list[dict[str, Any]],
+    ) -> None:
+        """Persist the failure detail to ``failing_summary.txt``.
+
+        Best-effort: a write failure is logged, not raised.
+        If *failing_summary* is empty, falls back to the raw check names
+        so the file is never silently empty.
+        """
+        try:
+            content = failing_summary.strip()
+            if not content:
+                names = [chk.get("name", "?") for chk in failing]
+                content = f"(no detail available) failing checks: {', '.join(names)}"
+            path = ctx.service.workspace(ticket).artifacts_dir / "failing_summary.txt"
+            _write_text(path, content)
+        except Exception:
+            log.exception("%s: failed to write failing_summary.txt artifact", ticket.id)
 
     def _check_consecutive_identical_failure(
         self,
@@ -748,6 +778,12 @@ class CIFixStage(Stage):
 
         result = self._invoke_agent(ticket, ctx, repo_dir, branch, failing_summary)
 
+        # Write the per-cycle ci_fix.md artifact and an informative
+        # history note (both best-effort) so the ticket history surfaces
+        # what the agent saw and what it did.
+        self._write_ci_fix_artifact(ctx, ticket, failing_summary, result)
+        self._add_ci_fix_history_note(ctx, ticket, failing_summary, result)
+
         if result is not None and result.status == "DONE":
             return self._finalize_success(ticket, ctx, repo_dir, branch)
 
@@ -765,6 +801,66 @@ class CIFixStage(Stage):
             "— manual intervention required. "
             "Resume-blocked to retry from human_mr_approval.",
         )
+
+    def _write_ci_fix_artifact(
+        self,
+        ctx: StageContext,
+        ticket: Ticket,
+        failing_summary: str,
+        result: CiFixResult | None,
+    ) -> None:
+        """Write the per-cycle ``ci_fix.md`` artifact (single latest, overwrite).
+
+        Includes the detected failure detail and, when the agent produced a
+        result, a recap of what it did and its verdict.  Best-effort only.
+        """
+        try:
+            parts: list[str] = []
+            parts.append("# CI Fix Cycle\n")
+            parts.append("## Detected Failure\n")
+            parts.append(failing_summary.strip() or "(no detail available)")
+            parts.append("\n")
+            if result is not None:
+                parts.append("## Agent Recap\n")
+                parts.append(f"**Verdict:** {result.status}\n")
+                if result.summary:
+                    parts.append(result.summary)
+            else:
+                parts.append("## Agent Recap\n")
+                parts.append("The ci-fix agent crashed before producing a result.")
+            path = ctx.service.workspace(ticket).artifacts_dir / "ci_fix.md"
+            _write_text(path, "\n".join(parts))
+        except Exception:
+            log.exception("%s: failed to write ci_fix.md artifact", ticket.id)
+
+    def _add_ci_fix_history_note(
+        self,
+        ctx: StageContext,
+        ticket: Ticket,
+        failing_summary: str,
+        result: CiFixResult | None,
+    ) -> None:
+        """Record one informative history note per ci-fix cycle.
+
+        Contains the detected failure detail and the agent's recap.
+        Best-effort: a failure to write the note is logged, not raised.
+        """
+        try:
+            lines: list[str] = []
+            lines.append("**CI Fix Cycle**\n")
+            lines.append("### Detected Failure\n")
+            lines.append(failing_summary.strip() or "(no detail available)")
+            if result is not None:
+                lines.append("\n### Agent Result\n")
+                lines.append(f"**Verdict:** {result.status}")
+                if result.summary:
+                    lines.append(result.summary)
+            else:
+                lines.append("\n### Agent Result\n")
+                lines.append("The ci-fix agent crashed before producing a result.")
+            ctx.service.add_history_note(ticket.id, "\n".join(lines))
+        except Exception:
+            log.exception("%s: failed to write ci-fix history note", ticket.id)
 
     def _invoke_agent(
         self,

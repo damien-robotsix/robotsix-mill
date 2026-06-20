@@ -1712,3 +1712,298 @@ def test_branch_own_failure_goes_straight_to_agent(tmp_path, monkeypatch):
     assert out.next_state is State.IMPLEMENT_COMPLETE
     assert agent_calls == [1], "agent must run on the first cycle"
     assert rebase_calls == [], "no proactive rebase before the agent"
+
+
+# ---------------------------------------------------------------------------
+# Artifact + history note observability
+# ---------------------------------------------------------------------------
+
+
+def test_failing_summary_txt_written_on_failure(tmp_path, monkeypatch):
+    """failing_summary.txt is written (non-empty) when CI is detected failing."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "lint", "summary": "err", "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(status="DONE", summary="fixed lint"),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    CIFixStage().run(t, ctx)
+
+    artifacts = ctx.service.workspace(t).artifacts_dir
+    summary_path = artifacts / "failing_summary.txt"
+    assert summary_path.exists(), "failing_summary.txt must exist after failure"
+    content = summary_path.read_text(encoding="utf-8")
+    assert content.strip(), "failing_summary.txt must not be empty"
+    assert "lint" in content
+
+
+def test_failing_summary_txt_fallback_when_summary_empty(tmp_path, monkeypatch):
+    """When _build_failing_summary produces an empty string, the file still
+    contains a fallback with the failing check names."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "build", "summary": None, "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(status="DONE", summary="ok"),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    CIFixStage().run(t, ctx)
+
+    artifacts = ctx.service.workspace(t).artifacts_dir
+    summary_path = artifacts / "failing_summary.txt"
+    assert summary_path.exists()
+    content = summary_path.read_text(encoding="utf-8")
+    assert content.strip(), "must not be empty even when summary is empty"
+    assert "build" in content
+
+
+def test_ci_fix_md_written_with_failure_and_agent_recap(tmp_path, monkeypatch):
+    """ci_fix.md is written after the agent runs and contains both the
+    detected failure and the agent's recap."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {
+                    "name": "lint",
+                    "summary": "ruff found errors",
+                    "text": None,
+                    "annotations": [],
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(status="DONE", summary="applied ruff fixes"),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    CIFixStage().run(t, ctx)
+
+    artifacts = ctx.service.workspace(t).artifacts_dir
+    md_path = artifacts / "ci_fix.md"
+    assert md_path.exists(), "ci_fix.md must exist after a failure-driven cycle"
+    content = md_path.read_text(encoding="utf-8")
+    assert "Detected Failure" in content
+    assert "ruff found errors" in content
+    assert "Agent Recap" in content
+    assert "**Verdict:** DONE" in content
+    assert "applied ruff fixes" in content
+
+
+def test_ci_fix_md_written_when_agent_crashes(tmp_path, monkeypatch):
+    """ci_fix.md is still written when the agent crashes (result is None)."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "lint", "summary": "err", "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    # Simulate agent crash.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    CIFixStage().run(t, ctx)
+
+    artifacts = ctx.service.workspace(t).artifacts_dir
+    md_path = artifacts / "ci_fix.md"
+    assert md_path.exists(), "ci_fix.md must exist even on agent crash"
+    content = md_path.read_text(encoding="utf-8")
+    assert "Detected Failure" in content
+    assert "Agent Recap" in content
+    assert "crashed" in content.lower()
+
+
+def test_failure_cycle_writes_history_note(tmp_path, monkeypatch):
+    """A failure-driven ci-fix cycle records exactly one informative history note."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {
+                    "name": "lint",
+                    "summary": "ruff found errors",
+                    "text": None,
+                    "annotations": [],
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(status="DONE", summary="applied ruff fixes"),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    # Count history notes before the cycle.
+    notes_before = len(ctx.service.history(t.id))
+
+    CIFixStage().run(t, ctx)
+
+    notes_after = len(ctx.service.history(t.id))
+    # Expect exactly one new history note from the ci-fix cycle.
+    assert notes_after == notes_before + 1, (
+        f"expected 1 new note, got {notes_after - notes_before}"
+    )
+
+    events = ctx.service.history(t.id)
+    last_note = events[-1]
+    assert "CI Fix Cycle" in last_note.note
+    assert "Detected Failure" in last_note.note
+    assert "ruff found errors" in last_note.note
+    assert "Agent Result" in last_note.note
+    assert "**Verdict:** DONE" in last_note.note
+    assert "applied ruff fixes" in last_note.note
+
+
+def test_success_repoll_does_not_write_history_note(tmp_path, monkeypatch):
+    """A benign re-poll path (conclusion=success) records NO history note."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    notes_before = len(ctx.service.history(t.id))
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+    notes_after = len(ctx.service.history(t.id))
+    assert notes_after == notes_before, (
+        f"success re-poll must not add a note, but {notes_after - notes_before} added"
+    )
+
+
+def test_pending_repoll_does_not_write_history_note(tmp_path, monkeypatch):
+    """A benign re-poll path (conclusion=pending) records NO history note."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "pending", "failing": []},
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    notes_before = len(ctx.service.history(t.id))
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+    notes_after = len(ctx.service.history(t.id))
+    assert notes_after == notes_before, (
+        f"pending re-poll must not add a note, but {notes_after - notes_before} added"
+    )
+
+
+def test_check_status_none_does_not_write_history_note(tmp_path, monkeypatch):
+    """PR-disappeared re-poll (status is None) records NO history note."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: None,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    notes_before = len(ctx.service.history(t.id))
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+    notes_after = len(ctx.service.history(t.id))
+    assert notes_after == notes_before, (
+        f"status-None re-poll must not add a note, but {notes_after - notes_before} added"
+    )

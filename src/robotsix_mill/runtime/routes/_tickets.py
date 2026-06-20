@@ -326,6 +326,7 @@ _STAGE_ARTIFACTS: dict[str, list[str]] = {
     "merge": ["merge.md", "merge_reason.txt", "review_feedback.json"],
     "retrospect": ["retrospect.md"],
     "answer": ["question-original.md"],
+    "ci_fix": ["ci_fix.md", "failing_summary.txt"],
 }
 
 
