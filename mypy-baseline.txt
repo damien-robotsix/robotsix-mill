@@ -39,7 +39,6 @@ src/robotsix_mill/runtime/tracing.py:0: error: Function is missing a type annota
 src/robotsix_mill/runtime/tracing.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/runtime/tracing.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/runtime/tracing.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
-src/robotsix_mill/runtime/tracing.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/runtime/tracing.py:0: error: Call to untyped function "_RootIO" in typed context  [no-untyped-call]
 src/robotsix_mill/agents/web_tools.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/robotsix_mill/core/models.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
