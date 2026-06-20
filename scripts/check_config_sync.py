@@ -119,6 +119,9 @@ _MODEL_FIELDS_NOT_IN_ALIAS: frozenset[str] = frozenset(
         "trace_review_max_tool_calls",
         "trace_review_max_errors",
         "trace_review_model_level",
+        # refine trivial-scope routing (model-level override)
+        "refine_trivial_routing_enabled",
+        "refine_trivial_model_level",
         "trace_review_max_inspections_per_run",
         "trace_review_initial_lookback_hours",
         "trace_review_restart_correlation_window_seconds",

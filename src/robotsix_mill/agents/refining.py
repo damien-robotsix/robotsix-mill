@@ -195,6 +195,20 @@ class TriageResult(BaseModel):
             "When decision is SKIP or MAINTENANCE this field is ignored."
         ),
     )
+    trivial_scope: bool | None = Field(
+        default=None,
+        description=(
+            "Only meaningful when decision == 'REFINE'. True ONLY when "
+            "ALL THREE of the following hold: (1) the scope is a "
+            "single-file edit (one file, not a module + tests pair); "
+            "(2) the change is mechanical — no new abstractions, design "
+            "decisions, or external research; (3) the draft already "
+            "contains the exact diff or equivalent imperative line-level "
+            "instructions. When True the refine agent may be routed to "
+            "a cheaper model level. Default None/False ⇒ standard "
+            "(Opus) routing. Bias conservative: when unsure, False."
+        ),
+    )
 
 
 class AutoApproveResult(BaseModel):
@@ -819,6 +833,7 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
     screenshot_paths: list[Path] | None = None,
     include_explore: bool = True,
     include_parallel_explore: bool = True,
+    refine_level: int | None = None,
 ) -> RefineResult:
     """Return a structured ``RefineResult``. When ``repo_dir`` is given
     the agent grounds the spec in that local clone via explore/
@@ -992,6 +1007,12 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
         language_instructions,
         deployed_log_summary,
     )
+
+    # When a cheap triage classifier rules the ticket trivial-scope,
+    # override the YAML's default model level (3 / Opus) with the
+    # configured cheaper tier (1 / DeepSeek flash by default).
+    if refine_level is not None:
+        overrides["level"] = refine_level
 
     # When exploration sub-agents are gated off (triage ruled the ticket
     # "simple"), strip the now-dangling `explore`/`parallel_explore` call

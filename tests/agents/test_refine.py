@@ -5413,6 +5413,135 @@ def test_triage_complexity_none_defaults_to_needs_exploration(
     assert refine_kwargs.get("include_parallel_explore") is True
 
 
+# ---------------------------------------------------------------------------
+# Trivial-scope routing tests (AC: TriageResult.trivial_scope +
+# run_refine_agent level override)
+# ---------------------------------------------------------------------------
+
+
+def test_triage_result_trivial_scope_default():
+    """TriageResult.trivial_scope defaults to None when not provided."""
+    from robotsix_mill.agents.refining import TriageResult
+
+    r = TriageResult(decision="REFINE", reason="test")
+    assert r.trivial_scope is None
+
+
+def test_triage_result_trivial_scope_parsed_from_json():
+    """TriageResult.trivial_scope parses correctly from JSON/dict input."""
+    from robotsix_mill.agents.refining import TriageResult
+
+    r = TriageResult.model_validate(
+        {"decision": "REFINE", "reason": "test", "trivial_scope": True}
+    )
+    assert r.trivial_scope is True
+
+    r2 = TriageResult.model_validate(
+        {"decision": "REFINE", "reason": "test", "trivial_scope": False}
+    )
+    assert r2.trivial_scope is False
+
+
+def test_triage_result_trivial_scope_false_by_default():
+    """When trivial_scope is omitted, _read_triage_trivial returns False
+    (conservative default — no cheap-model routing)."""
+    import json
+    import tempfile
+    from pathlib import Path
+
+    from robotsix_mill.stages.refine.orchestration import _read_triage_trivial
+
+    # Simulate a workspace with triage_complexity.json that lacks trivial_scope.
+    tmp = Path(tempfile.mkdtemp())
+    artifacts = tmp / "artifacts"
+    artifacts.mkdir()
+    (artifacts / "triage_complexity.json").write_text(
+        json.dumps({"complexity": "simple"}), encoding="utf-8"
+    )
+
+    class FakeWS:
+        artifacts_dir = artifacts
+
+    assert _read_triage_trivial(FakeWS()) is False  # type: ignore[arg-type]
+
+
+def test_run_refine_agent_passes_refine_level_to_build_agent(
+    monkeypatch, settings, tmp_path
+):
+    """When refine_level=1 is passed, build_agent_from_definition receives
+    level=1 in its overrides dict."""
+    import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
+
+    captured_overrides: list[dict] = []
+
+    def fake_build_agent(*a, **kw):
+        captured_overrides.append(kw)
+        return _simple_agent()
+
+    monkeypatch.setattr(base_module, "build_agent_from_definition", fake_build_agent)
+    monkeypatch.setattr(
+        retry_module,
+        "run_agent",
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(agent),
+    )
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+
+    refining.run_refine_agent(
+        settings=settings,
+        title="Test",
+        draft="test draft",
+        repo_dir=repo_dir,
+        refine_level=1,
+    )
+
+    assert len(captured_overrides) == 1
+    assert captured_overrides[0].get("level") == 1, (
+        f"Expected level=1 in overrides, got {captured_overrides[0]}"
+    )
+
+
+def test_run_refine_agent_no_refine_level_leaves_level_unchanged(
+    monkeypatch, settings, tmp_path
+):
+    """When refine_level is NOT passed (None/default), build_agent_from_definition
+    does NOT receive a 'level' key in its overrides — the YAML default applies."""
+    import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
+
+    captured_overrides: list[dict] = []
+
+    def fake_build_agent(*a, **kw):
+        captured_overrides.append(kw)
+        return _simple_agent()
+
+    monkeypatch.setattr(base_module, "build_agent_from_definition", fake_build_agent)
+    monkeypatch.setattr(
+        retry_module,
+        "run_agent",
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(agent),
+    )
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+
+    refining.run_refine_agent(
+        settings=settings,
+        title="Test",
+        draft="test draft",
+        repo_dir=repo_dir,
+        # refine_level not passed
+    )
+
+    assert len(captured_overrides) == 1
+    assert "level" not in captured_overrides[0], (
+        f"Expected no 'level' in overrides when refine_level not passed, "
+        f"got {captured_overrides[0]}"
+    )
+
+
 def test_split_child_fast_path_sets_simple_complexity(ctx, service, monkeypatch):
     """Split-child fast path writes triage_complexity.json as 'simple',
     suppressing exploration on the already-refined child."""

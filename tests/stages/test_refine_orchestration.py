@@ -1423,3 +1423,161 @@ def test_ack_threads_and_review_suppression_single_scope(
         ctx.service.workspace(t).description_path.read_text(encoding="utf-8")
         == _REAL_SPEC
     )
+
+
+# ===========================================================================
+# Trivial-scope routing tests (AC: orchestration routing)
+# ===========================================================================
+
+
+def test_trivial_scope_routes_to_cheap_model(ctx_factory, monkeypatch, tmp_path):
+    """When triage returns trivial_scope=True and the feature flag is on,
+    run_refine_agent receives refine_level=s.refine_trivial_model_level."""
+    ctx = ctx_factory(refine_trivial_routing_enabled=True)
+    t = _ticket(ctx)
+
+    refine_kwargs: dict = {}
+
+    def _run(**kw):
+        refine_kwargs.update(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    _apply_default_mocks(
+        monkeypatch,
+        triage_refine=lambda **kw: TriageResult(
+            decision="REFINE",
+            reason="trivial one-liner",
+            complexity="simple",
+            trivial_scope=True,
+        ),
+        run_refine_agent=_run,
+    )
+
+    _run_agent(ctx, t, tmp_path)
+
+    assert (
+        refine_kwargs.get("refine_level") == ctx.settings.refine_trivial_model_level
+    ), (
+        f"Expected refine_level={ctx.settings.refine_trivial_model_level}, "
+        f"got {refine_kwargs.get('refine_level')}"
+    )
+
+
+def test_non_trivial_scope_routes_to_none(ctx_factory, monkeypatch, tmp_path):
+    """When triage returns trivial_scope=False, refine_level is None (Opus default)."""
+    ctx = ctx_factory(refine_trivial_routing_enabled=True)
+    t = _ticket(ctx)
+
+    refine_kwargs: dict = {}
+
+    def _run(**kw):
+        refine_kwargs.update(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    _apply_default_mocks(
+        monkeypatch,
+        triage_refine=lambda **kw: TriageResult(
+            decision="REFINE",
+            reason="multi-file refactor",
+            complexity="needs-exploration",
+            trivial_scope=False,
+        ),
+        run_refine_agent=_run,
+    )
+
+    _run_agent(ctx, t, tmp_path)
+
+    assert refine_kwargs.get("refine_level") is None, (
+        f"Expected refine_level=None for non-trivial, "
+        f"got {refine_kwargs.get('refine_level')}"
+    )
+
+
+def test_flag_off_forces_none_regardless_of_verdict(ctx_factory, monkeypatch, tmp_path):
+    """When refine_trivial_routing_enabled=False, refine_level is always None
+    even when triage returns trivial_scope=True."""
+    ctx = ctx_factory(refine_trivial_routing_enabled=False)
+    t = _ticket(ctx)
+
+    refine_kwargs: dict = {}
+
+    def _run(**kw):
+        refine_kwargs.update(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    _apply_default_mocks(
+        monkeypatch,
+        triage_refine=lambda **kw: TriageResult(
+            decision="REFINE",
+            reason="trivial but flag off",
+            complexity="simple",
+            trivial_scope=True,
+        ),
+        run_refine_agent=_run,
+    )
+
+    _run_agent(ctx, t, tmp_path)
+
+    assert refine_kwargs.get("refine_level") is None, (
+        f"Expected refine_level=None when flag is off, "
+        f"got {refine_kwargs.get('refine_level')}"
+    )
+
+
+def test_missing_verdict_defaults_to_false(ctx_factory, monkeypatch, tmp_path):
+    """When no triage artifact is written (e.g. reviewer sendback, triage
+    disabled), _read_triage_trivial returns False, refine_level=None."""
+    ctx = ctx_factory(refine_trivial_routing_enabled=True)
+    t = _ticket(ctx)
+
+    refine_kwargs: dict = {}
+
+    def _run(**kw):
+        refine_kwargs.update(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    _apply_default_mocks(
+        monkeypatch,
+        triage_refine=lambda **kw: TriageResult(
+            decision="REFINE",
+            reason="normal refine",
+            complexity="needs-exploration",
+            trivial_scope=None,
+        ),
+        run_refine_agent=_run,
+    )
+
+    _run_agent(ctx, t, tmp_path)
+
+    assert refine_kwargs.get("refine_level") is None, (
+        f"Expected refine_level=None when trivial_scope is None, "
+        f"got {refine_kwargs.get('refine_level')}"
+    )
+
+
+def test_trivial_scope_true_persisted_to_artifact(ctx_factory, monkeypatch, tmp_path):
+    """When triage returns trivial_scope=True, the artifact file records it."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+
+    _apply_default_mocks(
+        monkeypatch,
+        triage_refine=lambda **kw: TriageResult(
+            decision="REFINE",
+            reason="trivial",
+            complexity="simple",
+            trivial_scope=True,
+        ),
+    )
+
+    _run_agent(ctx, t, tmp_path)
+
+    import json
+    from robotsix_mill.stages.refine.orchestration import _read_triage_trivial
+
+    ws = ctx.service.workspace(t)
+    data = json.loads(
+        (ws.artifacts_dir / "triage_complexity.json").read_text(encoding="utf-8")
+    )
+    assert data.get("trivial_scope") is True
+    assert _read_triage_trivial(ws) is True
