@@ -17,6 +17,8 @@ from ...forge import get_forge
 from ..base import Outcome, StageContext
 from ..ci_fix import (
     _CODQL_FP_TRIAGE_SENTINEL,
+    _CODQL_FP_TRIAGE_VERDICTS,
+    _codeql_block_note,
     _eligible_for_triage,
     _only_codeql_failing,
     _pr_changed_paths,
@@ -129,6 +131,16 @@ class MultiRepoCiFixMixin(_MergeStageBase):
         max_attempts = s.ci_fix_max_attempts
         if attempt > max_attempts:
             _write_counter(counter_path, 0)
+            # Try to produce a CodeQL-specific block note when applicable.
+            # NOTE: verdicts are not loaded here (categories 2/3 fall back to
+            # the combined message); full verdict-aware diagnosis is delivered
+            # by the single-repo CIFixStage path.
+            codeql_note = _codeql_block_note(failing, alerts, changed_paths)
+            if codeql_note is not None:
+                return Outcome(
+                    State.BLOCKED,
+                    f"[{repo_id}] {codeql_note}",
+                )
             return Outcome(
                 State.BLOCKED,
                 f"ci fix for {repo_id} failed after {max_attempts} attempt(s) — "
@@ -155,6 +167,16 @@ class MultiRepoCiFixMixin(_MergeStageBase):
                     repo_id,
                     s.ci_fix_max_cycles,
                 )
+                # Try to produce a CodeQL-specific block note when applicable.
+                # NOTE: verdicts are not loaded here (categories 2/3 fall back
+                # to the combined message); full verdict-aware diagnosis is
+                # delivered by the single-repo CIFixStage path.
+                codeql_note2 = _codeql_block_note(failing, alerts, changed_paths)
+                if codeql_note2 is not None:
+                    return Outcome(
+                        State.BLOCKED,
+                        f"[{repo_id}] {codeql_note2}",
+                    )
                 return Outcome(
                     State.BLOCKED,
                     f"ci fix for {repo_id} exhausted hard ceiling of "
@@ -397,6 +419,24 @@ class MultiRepoCiFixMixin(_MergeStageBase):
                 exc_info=True,
             )
             return None
+
+        # Persist verdicts for the block-note builder.
+        try:
+            import json as _json
+
+            verdicts_path = ws.artifacts_dir / _CODQL_FP_TRIAGE_VERDICTS
+            verdicts_path.parent.mkdir(parents=True, exist_ok=True)
+            verdicts_path.write_text(
+                _json.dumps([v.model_dump() for v in result.verdicts]),
+                encoding="utf-8",
+            )
+        except Exception:  # noqa: BLE001 — best-effort
+            log.warning(
+                "%s: failed to persist codeql_fp_triage verdicts for %s",
+                ticket.id,
+                repo_id,
+                exc_info=True,
+            )
 
         dismissals = [v for v in result.verdicts if v.verdict == "dismiss"]
         if not dismissals:
