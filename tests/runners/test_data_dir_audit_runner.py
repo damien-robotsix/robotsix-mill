@@ -3506,3 +3506,29 @@ class TestPruneOversizedMemoryLedgers:
         # Both files under cap.
         assert (tmp_path / "foo_memory.md").stat().st_size <= 100
         assert (tmp_path / "bar_memory.md").stat().st_size <= 100
+
+    def test_byte_size_over_cap_char_count_under(self, tmp_path, monkeypatch):
+        """A file whose UTF-8 byte size exceeds max_memory_chars but
+        whose character count does not (e.g. due to multi-byte chars)
+        is still truncated — the guard uses encoded byte size to match
+        the unbounded-candidate check which compares st_size."""
+        s = _make_settings(tmp_path, max_memory_chars=100)
+        ledger = tmp_path / "copy_paste_memory.md"
+        # 90 single-byte chars + 10 multi-byte (2-byte) chars:
+        # char count = 100, byte count = 90 + 20 = 110 > 100
+        content = ("x" * 90) + ("\N{LATIN SMALL LETTER E WITH ACUTE}" * 10)
+        assert len(content) == 100
+        assert len(content.encode("utf-8")) == 110
+        ledger.write_text(content, encoding="utf-8")
+
+        monkeypatch.setattr("robotsix_mill.runners.data_dir_audit.Settings", lambda: s)
+        result = run_data_dir_audit_pass()
+
+        # File was truncated.
+        assert result.memory_ledgers_truncated >= 1
+        assert ledger.stat().st_size <= 100
+        # No unbounded finding.
+        memory_findings = [
+            f for f in result.findings if f.get("pattern") == "*_memory.md"
+        ]
+        assert memory_findings == []
