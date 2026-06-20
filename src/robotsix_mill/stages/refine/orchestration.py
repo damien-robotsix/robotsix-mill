@@ -42,6 +42,7 @@ from ..pause import (
     _collect_ask_user_replies,
 )
 from .helpers import (
+    OPERATOR_SENDBACK_PREFIX,
     UNMERGED_BRANCH_PREFIX,
     _COMMIT_SHA_RE,
     _TICKET_ID_RE,
@@ -808,10 +809,40 @@ class RefineAgentMixin:
             _explore_simple = triage_complexity == "simple"
 
             # Read the trivial-scope verdict to route the refine model level.
+            # Because `ws.artifacts_dir` persists across refine rounds (the
+            # workspace is keyed on `ticket.id` and never wiped), this file
+            # — written by the FIRST refine round — is still present on every
+            # later re-refine.  Therefore `_read_triage_trivial(ws)` already
+            # reflects the first-run verdict; a first-run-trivial ticket stays
+            # on the cheap model during re-refine with no extra logic.
             _trivial = _read_triage_trivial(ws)
             refine_level: int | None = None
             if s.refine_trivial_routing_enabled and _trivial:
                 refine_level = s.refine_trivial_model_level
+
+            # Re-refine round counter: force the cheap model after a
+            # configurable threshold of operator "changes requested"
+            # send-backs.  This caps the cost of repeated full-Opus
+            # re-refine runs when the triage verdict was non-trivial
+            # (or triage was disabled / short-circuited).  The counter
+            # is independent of the persisted triage verdict so it
+            # catches re-refine runaway regardless of first-run
+            # classification.
+            if (
+                reviewer_comments
+                and s.max_re_refine_cycles_before_cheap > 0
+                and refine_level is None  # not already downgraded above
+            ):
+                re_refine_rounds = sum(
+                    1
+                    for ev in ctx.service.history(ticket.id)
+                    if ev.state == State.DRAFT
+                    and ev.note
+                    and ev.note.startswith(OPERATOR_SENDBACK_PREFIX)
+                )
+                if re_refine_rounds >= s.max_re_refine_cycles_before_cheap:
+                    refine_level = s.refine_trivial_model_level
+                    set_current_span_attribute("refine.forced_cheap_re_refine", True)
 
             # Record the routing decision on the current span for Langfuse.
             set_current_span_attribute(
@@ -819,6 +850,10 @@ class RefineAgentMixin:
             )
             set_current_span_attribute("refine.routed_trivial", _trivial)
 
+            # When reviewer comments are present (sendback path), disable
+            # exploration sub-agents — the agent's only job is text-level
+            # spec revision against the reviewer's feedback.
+            _sendback = bool(reviewer_comments)
             result = refining.run_refine_agent(
                 settings=s,
                 title=ticket.title,
@@ -836,8 +871,8 @@ class RefineAgentMixin:
                 deployed_log_summary=deployed_log_summary,
                 deployed_log_dir=deployed_log_dir,
                 screenshot_paths=ws.list_screenshots(),
-                include_explore=not _explore_simple,
-                include_parallel_explore=not _explore_simple,
+                include_explore=not _explore_simple and not _sendback,
+                include_parallel_explore=not _explore_simple and not _sendback,
                 refine_level=refine_level,
             )
         except RuntimeError as e:  # e.g. OPENROUTER_API_KEY not set

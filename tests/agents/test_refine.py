@@ -4995,6 +4995,98 @@ def test_run_refine_agent_respects_include_explore_false(
     assert "run_command" in tool_names
 
 
+def test_sendback_agent_has_no_filesystem_tools(monkeypatch, settings, tmp_path):
+    """When reviewer_comments is truthy, the agent built for refine
+    cannot call explore, parallel_explore, read_file, list_dir, or
+    run_command — but can still call reply_to_thread, close_thread,
+    and report_issue."""
+    import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
+
+    captured_tools: list = []
+
+    def fake_build_agent(settings, definition, tools, **kwargs):
+        captured_tools.extend(tools)
+        return _simple_agent()
+
+    monkeypatch.setattr(base_module, "build_agent_from_definition", fake_build_agent)
+    monkeypatch.setattr(
+        retry_module,
+        "run_agent",
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(agent),
+    )
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+
+    refining.run_refine_agent(
+        settings=settings,
+        title="Sendback ticket",
+        draft="Fix the scope per feedback",
+        repo_dir=repo_dir,
+        reviewer_comments="Please tighten the acceptance criteria",
+    )
+
+    tool_names = {t.__name__ for t in captured_tools if hasattr(t, "__name__")}
+    # Filesystem/exploration tools must be absent.
+    for forbidden in (
+        "explore",
+        "parallel_explore",
+        "read_file",
+        "list_dir",
+        "run_command",
+    ):
+        assert forbidden not in tool_names, (
+            f"sendback agent must not have '{forbidden}' tool, "
+            f"got tools: {sorted(tool_names)}"
+        )
+    # Thread-management tools must be present (they're auto-injected by
+    # build_agent based on reply_to_thread/close_thread/report_issue flags,
+    # not via the explicit tools list — so they won't show up here).
+    # The sendback overrides set reply_to_thread=True and close_thread=True,
+    # and report_issue remains True from the YAML definition.  We verify
+    # those flags are in the build_agent kwargs (tested separately in
+    # test_sendback_enables_reply_and_close_thread_tools).
+
+
+def test_first_refine_has_full_tool_set(monkeypatch, settings, tmp_path):
+    """Without reviewer_comments, the full tool set is available
+    (explore, parallel_explore, read_file, list_dir, run_command)."""
+    import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
+
+    captured_tools: list = []
+
+    def fake_build_agent(settings, definition, tools, **kwargs):
+        captured_tools.extend(tools)
+        return _simple_agent()
+
+    monkeypatch.setattr(base_module, "build_agent_from_definition", fake_build_agent)
+    monkeypatch.setattr(
+        retry_module,
+        "run_agent",
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(agent),
+    )
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+
+    refining.run_refine_agent(
+        settings=settings,
+        title="First refine",
+        draft="Add a new feature",
+        repo_dir=repo_dir,
+        # no reviewer_comments
+    )
+
+    tool_names = {t.__name__ for t in captured_tools if hasattr(t, "__name__")}
+    for required in ("explore", "read_file", "list_dir", "run_command"):
+        assert required in tool_names, (
+            f"first-refine agent must have '{required}' tool, "
+            f"got tools: {sorted(tool_names)}"
+        )
+
+
 def test_run_refine_agent_explore_cap_enforcement(monkeypatch, settings, tmp_path):
     """When max_refine_explore_calls=1, the 2nd explore call is rejected
     with a cap-exhausted message."""

@@ -900,6 +900,22 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
 
     tools = _wrap_tools_with_error_limit(tools, max_errors=settings.refine_max_errors)
 
+    # --- sendback tool-strip: when handling reviewer feedback the agent's
+    # only job is text-level spec revision — filesystem/exploration tools
+    # are a cost risk with no legitimate use.  Strip them from the resolved
+    # tool set while preserving thread-management tools (reply_to_thread,
+    # close_thread, report_issue) which the sendback prompt instructs the
+    # agent to use.
+    if reviewer_comments:
+        _SENDBACK_STRIP_TOOLS = frozenset(
+            {"explore", "parallel_explore", "read_file", "list_dir", "run_command"}
+        )
+        tools = [
+            t
+            for t in tools
+            if getattr(t, "__name__", None) not in _SENDBACK_STRIP_TOOLS
+        ]
+
     overrides = _build_refine_overrides(
         definition,
         settings,
