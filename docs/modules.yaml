@@ -173,6 +173,8 @@ modules:
       - tests/runtime/board_convert_harness.mjs
       - tests/runtime/test_board_refresh_filter_js.py
       - tests/runtime/board_refresh_filter_harness.mjs
+      - tests/runtime/test_board_history_js.py
+      - tests/runtime/board_history_harness.mjs
       - tests/runtime/test_board_browser_smoke.py
       - tests/runtime/test_board_adapter.py
       - tests/runtime/test_board_assets.py
