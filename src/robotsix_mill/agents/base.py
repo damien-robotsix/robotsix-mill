@@ -73,11 +73,17 @@ def _safe_close(agent: Any) -> None:
             pass
 
 
+# Provider prefix (hyphen-free) that selects the Claude SDK backend in the
+# combined ``provider-model`` tier identifier (e.g. ``claudeSDK-opus``). This
+# is llmio's new provider id — NOT the legacy ``"claude-sdk"`` transport alias.
+_CLAUDE_SDK_PROVIDER = "claudeSDK"
+
+
 def _default_tier_config() -> "TierConfig":
     """The default llmio three-level tier config from baked defaults.
 
     L1 → DeepSeek flash, L2 → DeepSeek pro, L3 → Claude SDK opus. This is the
-    single source of the per-level ``(transport, model)`` binding ("use
+    single source of the per-level ``(provider, model)`` binding ("use
     defaults")."""
     from robotsix_llmio.config.tier import (
         LEVEL1_DEFAULT,
@@ -92,15 +98,23 @@ def _default_tier_config() -> "TierConfig":
 
 
 def _resolve_level(level: int) -> tuple[str, str]:
-    """Resolve a capability *level* (1/2/3) to its ``(transport, model)`` via
-    llmio's baked tier defaults."""
+    """Resolve a capability *level* (1/2/3) to its ``(provider, model)`` via
+    llmio's baked tier defaults.
+
+    ``provider`` is the hyphen-free provider prefix parsed from the tier's
+    combined ``provider-model`` identifier (e.g. ``"claudeSDK"`` /
+    ``"openrouter"``); ``model`` is the bare model name (e.g. ``"opus"`` /
+    ``"deepseek/deepseek-v4-flash"``)."""
+    from robotsix_llmio.core.identifier import parse_model_identifier
+
     tlc = _default_tier_config().for_level(level)
-    return tlc.transport, tlc.model
+    parsed = parse_model_identifier(tlc.model)
+    return parsed.provider, parsed.model_name
 
 
 def level_uses_claude(level: int) -> bool:
-    """Whether *level* routes to the Claude SDK transport (L3 by default)."""
-    return _resolve_level(level)[0] == "claude-sdk"
+    """Whether *level* routes to the Claude SDK provider (L3 by default)."""
+    return _resolve_level(level)[0] == _CLAUDE_SDK_PROVIDER
 
 
 def new_deepseek_model(model_name: str, level: int):
@@ -554,14 +568,14 @@ def build_agent(  # noqa: C901
             f"Prompt contains call directives to unavailable tools: "
             f"{', '.join(sorted(unreg))}"
         )
-    # llmio levels are the single source of transport+model: resolve the
-    # capability `level` (1/2/3) to its baked `(transport, model)` binding.
-    transport, effective_model = _resolve_level(level)
+    # llmio levels are the single source of provider+model: resolve the
+    # capability `level` (1/2/3) to its baked `(provider, model)` binding.
+    provider, effective_model = _resolve_level(level)
 
-    # --- Transport selection (level-driven) ------------------------------
-    # L3 resolves to the Claude SDK transport; L1/L2 to DeepSeek/OpenRouter.
+    # --- Provider selection (level-driven) -------------------------------
+    # L3 resolves to the Claude SDK provider; L1/L2 to DeepSeek/OpenRouter.
     # There is no separate backend toggle — the level *is* the choice.
-    if transport == "claude-sdk":
+    if provider == _CLAUDE_SDK_PROVIDER:
         # Lazy: claude_agent_sdk is only imported when a Claude-transport
         # agent is actually built.
         from robotsix_llmio.claude_sdk.provider import ClaudeSDKProvider

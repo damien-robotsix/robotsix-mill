@@ -19,7 +19,7 @@ import asyncio
 import logging
 import random
 import time
-from typing import Any, Awaitable, Callable, TypeVar, cast
+from typing import Any, Awaitable, Callable, TypeVar
 
 from robotsix_llmio.claude_sdk.transient import (
     is_claude_sdk_transient as _is_claude_sdk_transient,
@@ -115,15 +115,12 @@ def call_with_retry(
     fallback_fn: Callable[[], T] | None = None,
 ) -> T:
     """Run ``fn`` with bounded transient/rate-limit retry."""
-    return cast(
-        T,
-        _lib_call_with_retry(
-            fn,
-            what=what,
-            sleep=sleep,
-            fallback_fn=fallback_fn,
-            is_transient_fn=is_transient,
-        ),
+    return _lib_call_with_retry(
+        fn,
+        what=what,
+        sleep=sleep,
+        fallback_fn=fallback_fn,
+        is_transient_fn=is_transient,
     )
 
 
@@ -197,12 +194,9 @@ def run_agent(
     ``lambda h: h.run_sync(prompt, message_history=hist, usage_limits=limits)``.
     The transport is fixed by the agent's level (no cross-backend fallback);
     transient errors retry on the same handle."""
-    return cast(
-        T,
-        _lib_call_with_retry(
-            lambda: make_run(agent),
-            what=what,
-            sleep=sleep,
-            is_transient_fn=is_transient,
-        ),
+    return _lib_call_with_retry(
+        lambda: make_run(agent),
+        what=what,
+        sleep=sleep,
+        is_transient_fn=is_transient,
     )
