@@ -165,11 +165,6 @@ def _collect_test_warnings_block(
     )
 
 
-# Pre-LLM memory guard: skip the model call when a recent prior refine
-# run already concluded no_change_needed for the same topic.
-MEMORY_NO_CHANGE_MAX_AGE_DAYS: int = 90
-MEMORY_NO_CHANGE_SIMILARITY_THRESHOLD: float = 0.25
-
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 
 _SYSPROMPT_PATH = (
@@ -181,7 +176,7 @@ SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt
 class TriageResult(BaseModel):
     """Triage agent output — a single cheap classification call."""
 
-    decision: Literal["REFINE", "SKIP", "MAINTENANCE"]
+    decision: Literal["REFINE", "SKIP", "MAINTENANCE", "NO_CHANGE"]
     reason: str
     complexity: Literal["simple", "needs-exploration"] | None = Field(
         default=None,
@@ -255,21 +250,6 @@ class SpecReviewResult(BaseModel):
 
     concise_spec: str
     stripped_summary: str
-
-
-class AlreadyDoneResult(BaseModel):
-    """Cheap (level-1) verification result: does the working tree confirm
-    that the work described by a ticket has already shipped?
-
-    Used by ``verify_already_done`` — the small-cost LLM call that
-    replaces the deterministic Jaccard short-circuit as the final
-    ``no_change_needed`` decision.  The rationale MUST cite the concrete
-    filesystem evidence checked (e.g. the grep/ls/wc result for each
-    named symbol/file/call-site).
-    """
-
-    already_done: bool
-    rationale: str
 
 
 class ChildSpec(BaseModel):
@@ -476,109 +456,6 @@ def triage_refine(
     finally:
         _safe_close(agent)
     return result.output
-
-
-def verify_already_done(
-    *,
-    settings: Settings,
-    title: str,
-    draft: str,
-    candidate_rationale: str,
-    repo_dir: Path | None,
-    extra_roots: list[Path] | None = None,
-) -> AlreadyDoneResult:
-    """Confirm or reject a candidate "already done" memory match by
-    inspecting the actual working tree.
-
-    This is a cheap (level-1) LLM call — the *decision* step that
-    replaces the deterministic Jaccard short-circuit.  The candidate
-    pre-filter (``_check_memory_for_no_change``) has already matched a
-    prior ``no_change_needed`` memory entry; this agent verifies that
-    the *specific* symbols, file paths, and call sites named in the
-    ticket are actually absent from *repo_dir* before returning
-    ``already_done=True``.
-
-    When *repo_dir* is not provided (i.e. the caller passes ``None``),
-    the function returns ``AlreadyDoneResult(already_done=False,
-    rationale="no repo clone available")`` without making an LLM call —
-    the short-circuit is only available with a working tree to verify
-    against.
-    """
-    if repo_dir is None:
-        return AlreadyDoneResult(
-            already_done=False,
-            rationale="no repo clone available — cannot verify against working tree",
-        )
-
-    from pydantic_ai.usage import UsageLimits
-
-    from .yaml_loader import load_agent_definition
-    from .base import build_agent_from_definition, _safe_close
-    from .retry import run_agent
-    from .explore import make_explore_tool
-    from .fs_tools import build_fs_tools
-
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "already_done_check.yaml"
-    )
-
-    # Build the same read-only tool set as triage_refine: explore +
-    # read_file + run_command.  The verifier uses these to git-grep
-    # symbols, wc -l files, ls expected paths, etc.
-    tools: list = [make_explore_tool(settings, repo_dir, extra_roots=extra_roots)]
-    all_fs = build_fs_tools(repo_dir, settings, extra_roots=extra_roots)
-    # Keep only the read-only tools: read_file, list_dir, run_command.
-    # write_file, edit_file, delete_file are excluded — this agent
-    # must never modify the working tree.
-    for name in ("read_file", "list_dir", "run_command"):
-        try:
-            t = next(f for f in all_fs if f.__name__ == name)
-        except StopIteration:
-            continue
-        tools.append(t)
-
-    system_prompt = definition.system_prompt
-    if repo_dir is None:
-        # Strip tool sections when no clone is available (should not
-        # reach here — the early-return above guards this — but keep
-        # the strip logic for defensive correctness).
-        system_prompt = _STRIP_EXPLORE_SECTION_RE.sub("", system_prompt)
-        system_prompt = _STRIP_READFILE_SECTION_RE.sub("", system_prompt)
-
-    agent = build_agent_from_definition(
-        settings,
-        definition,
-        tools=tools,
-        system_prompt=system_prompt,
-    )
-
-    user_prompt = (
-        section("title", title)
-        + "\n"
-        + section("draft", draft)
-        + "\n\n"
-        + section(
-            "candidate-rationale",
-            "The following rationale is from a prior `no_change_needed` "
-            "memory entry whose TOPIC is similar to this ticket.  It is a "
-            "HINT only — do NOT accept it as truth.  Verify against the "
-            "working tree:\n\n" + candidate_rationale,
-        )
-    )
-
-    limits = UsageLimits(request_limit=settings.already_done_request_limit)
-
-    try:
-        result = run_agent(
-            agent,
-            lambda h: h.run_sync(user_prompt, usage_limits=limits),
-            what="already-done verifier",
-        )
-    finally:
-        _safe_close(agent)
-    return cast(AlreadyDoneResult, result.output)
 
 
 def _classify_maintenance_draft(title: str, draft: str) -> str | None:
@@ -796,87 +673,6 @@ that can each ship alone, split into focused children:
 """
 
 
-def _check_memory_for_no_change(  # noqa: C901 — Jaccard guard with date-cutoff/outcome parsing; refactoring would scatter tightly-coupled logic
-    title: str,
-    draft: str,
-    memory: str,
-) -> str | None:
-    """Check *memory* ledger for a prior ``no_change_needed`` entry whose
-    topic is similar to the current ticket.  Returns the rationale string
-    from the matched entry, or ``None`` when no applicable match exists.
-
-    The guard mirrors the pre-refine dedup check's Jaccard word-overlap
-    approach — same tokenizer, same threshold heuristic — to catch obvious
-    near-duplicates before the LLM is invoked.
-
-    Constants (hardcoded per 2026-06-03 memory-ledger design; promote to
-    ``Settings`` fields if operational tuning is ever needed):
-      - LOOKBACK_DAYS = 90
-      - JACCARD_THRESHOLD = 0.25
-    """
-    import re
-    from datetime import datetime, timedelta
-
-    from .dedup import tokenize
-
-    if not memory or not memory.strip():
-        return None
-
-    LOOKBACK_DAYS = 90
-    JACCARD_THRESHOLD = 0.25
-
-    cutoff = datetime.now() - timedelta(days=LOOKBACK_DAYS)
-    query_tokens = tokenize(title + " " + draft)
-    if not query_tokens:
-        return None
-
-    # Split into entries delimited by "## Refine run" headers.
-    entries = re.split(r"\n(?=## Refine run )", memory)
-
-    for entry in entries:
-        header_match = re.match(
-            r"## Refine run (\d{4}-\d{2}-\d{2}) — (.+?)(?:\n|$)", entry
-        )
-        if not header_match:
-            continue
-
-        date_str = header_match.group(1)
-        topic = header_match.group(2).strip()
-
-        try:
-            entry_date = datetime.strptime(date_str, "%Y-%m-%d")
-        except ValueError:
-            continue
-
-        if entry_date < cutoff:
-            continue
-
-        # Only consider entries that concluded no_change_needed.
-        if "**Outcome**: `no_change_needed`" not in entry:
-            continue
-
-        topic_tokens = tokenize(topic)
-        if not topic_tokens:
-            continue
-
-        intersection = query_tokens & topic_tokens
-        union = query_tokens | topic_tokens
-        jaccard = len(intersection) / len(union)
-
-        if jaccard >= JACCARD_THRESHOLD:
-            # Extract rationale from the outcome line:
-            #   **Outcome**: `no_change_needed` — <rationale>
-            rationale_match = re.search(
-                r"\*\*Outcome\*\*: *`no_change_needed`(?: *[—–-] *(.+))?(?:\n|$)",
-                entry,
-            )
-            if rationale_match and rationale_match.group(1):
-                return rationale_match.group(1).strip()
-            return ""  # matched entry but no rationale text on that line
-
-    return None
-
-
 def _coerce_refine_output(output: object) -> "RefineResult":
     """Return *output* as a ``RefineResult``.
 
@@ -986,37 +782,6 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
         was provided, otherwise ``None``
       - ``conversation_state``: raw conversation JSON for pause/resume
     """
-
-    # ------------------------------------------------------------------
-    # Pre-LLM short-circuit: check the memory ledger for a prior
-    # ``no_change_needed`` conclusion for the same topic.  The
-    # deterministic Jaccard guard (``_check_memory_for_no_change``) is
-    # only a CANDIDATE PRE-FILTER — it may select a prior memory entry
-    # whose topic is similar, but it CANNOT decide.  The final decision
-    # comes from a cheap (level-1) LLM verifier that MUST grep/read the
-    # SPECIFIC symbols, file paths, and call-sites named in the ticket
-    # before it may confirm "already done."
-    # ------------------------------------------------------------------
-    candidate_rationale = _check_memory_for_no_change(title, draft, memory)
-    if candidate_rationale is not None and repo_dir is not None:
-        verification = verify_already_done(
-            settings=settings,
-            title=title,
-            draft=draft,
-            candidate_rationale=candidate_rationale,
-            repo_dir=repo_dir,
-            extra_roots=extra_roots,
-        )
-        if verification.already_done:
-            return RefineResult(
-                no_change_needed=True,
-                no_change_rationale=verification.rationale,
-                updated_memory=memory,  # unchanged — nothing new to record
-            )
-        # Verifier rejected the candidate — fall through to full refine.
-    # When ``repo_dir`` is None (no clone), do NOT short-circuit on
-    # memory alone — a memory match without filesystem verification is
-    # not a safe basis for closing a ticket.
 
     from pydantic_ai.usage import UsageLimits
 

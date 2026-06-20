@@ -51,7 +51,6 @@ from .helpers import (
     _rationale_claims_external_fix,
     _resolve_next_state,
     _spec_is_degenerate,
-    _triage_reason_rejects,
     _verify_cited_fix_at_head,
     log,
 )
@@ -584,19 +583,22 @@ class RefineAgentMixin:
                     State.MAINTENANCE,
                     f"maintenance triage (LLM): {triage.reason} — {title}",
                 )
+            if triage.decision == "NO_CHANGE":
+                # Triage verified at level 2 that the deliverable already
+                # exists on disk. Honoured directly — no further confirmation.
+                (ws.artifacts_dir / "draft-original.md").write_text(
+                    draft if draft else "(title-only ticket, no body provided)",
+                    encoding="utf-8",
+                )
+                RefineAgentMixin._write_file_map(ws, [], only_if_absent=True)
+                short_reason = triage.reason[:400] + (
+                    "…" if len(triage.reason) > 400 else ""
+                )
+                return Outcome(
+                    State.DONE,
+                    f"triage NO_CHANGE: {short_reason}",
+                )
             if triage.decision == "SKIP":
-                if _triage_reason_rejects(triage.reason):
-                    (ws.artifacts_dir / "draft-original.md").write_text(
-                        draft if draft else "(title-only ticket, no body provided)",
-                        encoding="utf-8",
-                    )
-                    short_reason = triage.reason[:400] + (
-                        "…" if len(triage.reason) > 400 else ""
-                    )
-                    return Outcome(
-                        State.DONE,
-                        f"triage SKIP — no change needed: {short_reason}",
-                    )
                 # The draft IS the spec — preserve it unchanged.
                 (ws.artifacts_dir / "draft-original.md").write_text(
                     draft if draft else "(title-only ticket, no body provided)",
@@ -1039,15 +1041,14 @@ class RefineAgentMixin:
             )
 
         # Live re-verification gate: an "already shipped
-        # elsewhere" rationale (from the LLM mode-4 path OR the
-        # deterministic memory short-circuit — both converge
-        # here) is NOT trusted on its word. A reverted fix leaves
-        # the original commit as an ancestor of origin/main, so
-        # ancestry alone cannot detect the bug's return (the
-        # 2026-06-09 incident). Synthesize a verification spec and
-        # route to implement, which works against live HEAD and
-        # re-applies the fix if the bug recurred (or cheaply
-        # closes via its empty-diff path if genuinely resolved).
+        # elsewhere" rationale (from the LLM refine agent) is NOT
+        # trusted on its word. A reverted fix leaves the original
+        # commit as an ancestor of origin/main, so ancestry alone
+        # cannot detect the bug's return (the 2026-06-09 incident).
+        # Synthesize a verification spec and route to implement,
+        # which works against live HEAD and re-applies the fix if
+        # the bug recurred (or cheaply closes via its empty-diff
+        # path if genuinely resolved).
         if _rationale_claims_external_fix(rationale):
             cited_refs = _TICKET_ID_RE.findall(rationale) + _COMMIT_SHA_RE.findall(
                 rationale.lower()

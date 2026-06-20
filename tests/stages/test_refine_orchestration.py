@@ -890,7 +890,32 @@ def test_reviewer_agreement_guard_exception_falls_through(
 # ===========================================================================
 
 
-def test_triage_skip_rejection_gate_returns_done(ctx_factory, monkeypatch, tmp_path):
+def test_triage_no_change_verdict_returns_done(ctx_factory, monkeypatch, tmp_path):
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    calls = _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(
+            decision="NO_CHANGE",
+            reason="The file `.robotsix-mill/periodic/audit.yaml` already exists with the expected content.",
+        ),
+    )
+
+    out = _run_agent(
+        ctx, t, tmp_path, draft="Create `.robotsix-mill/periodic/audit.yaml`."
+    )
+
+    assert out.next_state is State.DONE
+    assert "NO_CHANGE" in out.note
+    assert out.note.startswith("triage NO_CHANGE:")
+    assert calls == []  # full refine agent never invoked
+    ws = ctx.service.workspace(t)
+    assert (ws.artifacts_dir / "draft-original.md").exists()
+
+
+def test_triage_skip_always_routes_to_implement(ctx_factory, monkeypatch, tmp_path):
+    """SKIP must ALWAYS route to implement, never to State.DONE, even for
+    reasons that previously matched _triage_reason_rejects."""
     ctx = ctx_factory()
     t = _ticket(ctx)
     calls = _spy_refine(
@@ -903,12 +928,37 @@ def test_triage_skip_rejection_gate_returns_done(ctx_factory, monkeypatch, tmp_p
 
     out = _run_agent(ctx, t, tmp_path, draft="Some draft.")
 
-    assert out.next_state is State.DONE
-    assert "no change needed" in out.note
-    assert out.note.startswith("triage SKIP — no change needed:")
+    # SKIP now routes to implement (not DONE) — the old reject-gate is removed.
+    assert out.next_state is not State.DONE
+    assert out.note.startswith("triage SKIP")
     assert calls == []  # full refine agent never invoked
     ws = ctx.service.workspace(t)
     assert (ws.artifacts_dir / "draft-original.md").exists()
+
+
+def test_triage_presence_file_regression(ctx_factory, monkeypatch, tmp_path):
+    """Regression: a config-only `.robotsix-mill/periodic/<agent>.yaml`
+    presence-file draft whose file is absent does NOT close to State.DONE.
+    The triage mock returns SKIP (the correct verdict for a verified-absent
+    deliverable) which routes to implement — never DONE."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    calls = _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(
+            decision="SKIP",
+            reason="precise draft — routes to implement",
+        ),
+    )
+
+    out = _run_agent(
+        ctx, t, tmp_path, draft="Create `.robotsix-mill/periodic/copy_paste.yaml`."
+    )
+
+    # SKIP routes to implement, not DONE
+    assert out.next_state not in (State.DONE, State.CLOSED)
+    assert out.note.startswith("triage SKIP")
+    assert calls == []  # full refine agent never invoked
 
 
 def test_triage_maintenance_routes_to_maintenance(ctx_factory, monkeypatch, tmp_path):
