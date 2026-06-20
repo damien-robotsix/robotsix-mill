@@ -703,3 +703,87 @@ def test_langfuse_trace_url_trailing_slash_stripped(repo_config):
     repo_config.langfuse_base_url = "https://cloud.langfuse.com/"
     url = tracing.langfuse_trace_url("trace-slash", repo_config=repo_config)
     assert url == ("https://cloud.langfuse.com/project/test-project/traces/trace-slash")
+
+
+# ===========================================================================
+# set_current_span_attribute tests
+# ===========================================================================
+
+
+def test_set_current_span_attribute_noop_when_no_span(monkeypatch):
+    """set_current_span_attribute is a no-op when no span is recording."""
+    from robotsix_mill.runtime.tracing import set_current_span_attribute
+
+    # No active span — should not raise.
+    set_current_span_attribute("test.key", "test_value")
+
+
+def test_set_current_span_attribute_sets_on_recording_span(monkeypatch):
+    """set_current_span_attribute sets the attribute on a recording span."""
+    from robotsix_mill.runtime.tracing import set_current_span_attribute
+
+    captured: dict = {}
+
+    class FakeSpan:
+        def is_recording(self):
+            return True
+
+        def set_attribute(self, key, value):
+            captured[key] = value
+
+    def fake_get_current_span():
+        return FakeSpan()
+
+    monkeypatch.setattr("opentelemetry.trace.get_current_span", fake_get_current_span)
+
+    set_current_span_attribute("refine.model_level", 1)
+    assert captured.get("refine.model_level") == 1
+
+
+def test_set_current_span_attribute_skips_non_recording_span(monkeypatch):
+    """set_current_span_attribute does nothing on a non-recording span."""
+    from robotsix_mill.runtime.tracing import set_current_span_attribute
+
+    captured: dict = {}
+
+    class FakeSpan:
+        def is_recording(self):
+            return False
+
+        def set_attribute(self, key, value):
+            captured[key] = value
+
+    def fake_get_current_span():
+        return FakeSpan()
+
+    monkeypatch.setattr("opentelemetry.trace.get_current_span", fake_get_current_span)
+
+    set_current_span_attribute("refine.model_level", 1)
+    assert "refine.model_level" not in captured
+
+
+def test_set_current_span_attribute_noop_on_import_error(monkeypatch):
+    """set_current_span_attribute is a no-op when opentelemetry is not installed."""
+    import robotsix_mill.runtime.tracing as tracing_mod
+
+    # Simulate ImportError by removing opentelemetry from sys.modules
+    # temporarily — but this is fragile.  Instead, test that the function
+    # handles ImportError gracefully.
+    import builtins
+
+    orig_import = builtins.__import__
+
+    def fail_opentelemetry(name, *args, **kwargs):
+        if name == "opentelemetry" or name.startswith("opentelemetry."):
+            raise ImportError("No module named 'opentelemetry'")
+        return orig_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fail_opentelemetry)
+    # Clear the cached module if present.
+    import sys
+
+    sys.modules.pop("opentelemetry", None)
+    sys.modules.pop("opentelemetry.trace", None)
+
+    # Should not raise.
+    tracing_mod.set_current_span_attribute("test.key", "value")

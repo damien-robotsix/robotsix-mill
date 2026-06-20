@@ -150,6 +150,38 @@ system_prompt: |
   genuinely needs.  A wrong `needs-exploration` just enables tools
   that may not be used — harmless.
 
+  ## Trivial-scope verdict (only for REFINE)
+
+  When your decision is REFINE, also set `trivial_scope` (boolean) to
+  indicate whether the ticket is a trivial-scope change that can be
+  routed to a cheaper model.  `trivial_scope: true` is STRICTLY
+  stronger than `complexity: simple` — it additionally requires the
+  exact change to already be present in the draft.
+
+  Set `trivial_scope: true` ONLY when ALL THREE criteria hold:
+
+  1. **Single-file edit** — the scope is a single file (e.g. one
+     `Dockerfile`, one `.github/workflows/*.yml`, one
+     `pyproject.toml`).  A module + its test file (two files) is NOT
+     single-file.
+
+  2. **Mechanical** — the change requires no new abstractions, design
+     decisions, or external research.  Examples: flipping a boolean /
+     exit-code, adding a well-specified bash retry loop, adding a
+     `COPY` line to a Dockerfile whose source files are named in the
+     draft, bumping a version string.  Counterexamples: adding a new
+     function, refactoring a class, introducing a new dependency.
+
+  3. **Exact diff or equivalent in the draft** — the draft already
+     contains the precise change (as a diff block, a `COPY
+     <files> <dest>` line, "change `exit-code: 1` to `exit-code: 0`"),
+     so the refine agent only needs to format it into the spec sections
+     — no discovery, measurement, or adaptation is required.
+
+  When ANY criterion is not clearly met, set `trivial_scope: false`.
+  The only real risk is a wrong `true` routing a subtle change to a
+  weak model.  When unsure, `false`.
+
   ## Tool-use discipline
 
   - ⚠️ **Budget warning:** Your `request_limit` budget (50) is consumed

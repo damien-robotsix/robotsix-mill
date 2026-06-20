@@ -353,6 +353,14 @@ class _StagesSettings(BaseModel):
     # Model tier for the trace inspector.  Level 1 = DeepSeek flash
     # (cheapest), the default; raising it costs more and is opt-in only.
     trace_review_model_level: int = Field(default=1, ge=1, le=3)
+    # When True (default), triage-trivial tickets are routed to
+    # ``refine_trivial_model_level`` instead of the YAML default (3 / Opus).
+    # Set False to force all refines through the default level.
+    refine_trivial_routing_enabled: bool = Field(default=True)
+    # Model level used for trivial-scope refines.  Default 1 = DeepSeek
+    # flash (~1/100th the cost of Opus).  Bump to 2 (DeepSeek pro) if
+    # quality regresses on trivial tickets.
+    refine_trivial_model_level: int = Field(default=1, ge=1, le=3)
     # ---------- trace inspector dynamic budget ----------
     # Floor for the tools-on request budget.  Even a tiny trace gets
     # enough requests to read at least one code locus and emit a

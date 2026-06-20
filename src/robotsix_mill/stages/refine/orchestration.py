@@ -29,6 +29,7 @@ from ...config.settings import Settings
 from ...core.models import SourceKind, Ticket
 from ...core.states import State
 from ...core.workspace import Workspace
+from ...runtime.tracing import set_current_span_attribute
 from ...vcs import git_ops
 from ..base import Outcome, StageContext
 from ..pause import (
@@ -56,10 +57,16 @@ from .helpers import (
 )
 
 
-def _write_triage_complexity(ws, complexity: str) -> None:
-    """Persist the triage complexity verdict for downstream consumption."""
+def _write_triage_complexity(
+    ws, complexity: str, trivial_scope: bool | None = None
+) -> None:
+    """Persist the triage complexity verdict (and optionally the trivial-scope
+    flag) for downstream consumption."""
+    data: dict = {"complexity": complexity}
+    if trivial_scope is not None:
+        data["trivial_scope"] = trivial_scope
     (ws.artifacts_dir / "triage_complexity.json").write_text(
-        json.dumps({"complexity": complexity}), encoding="utf-8"
+        json.dumps(data), encoding="utf-8"
     )
 
 
@@ -74,6 +81,19 @@ def _read_triage_complexity(ws: Workspace) -> str:
         return cast(str, data.get("complexity", "needs-exploration"))
     except json.JSONDecodeError, KeyError:
         return "needs-exploration"
+
+
+def _read_triage_trivial(ws: Workspace) -> bool:
+    """Read the triage trivial-scope verdict; returns ``False`` when the
+    file or key is absent (conservative default — no cheap-model routing)."""
+    path = ws.artifacts_dir / "triage_complexity.json"
+    if not path.exists():
+        return False
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return cast(bool, data.get("trivial_scope", False))
+    except json.JSONDecodeError, KeyError:
+        return False
 
 
 class RefineAgentMixin:
@@ -195,7 +215,7 @@ class RefineAgentMixin:
 
     @staticmethod
     def _write_file_map(
-        ws: Workspace, entries: list[dict], *, only_if_absent: bool = False
+        ws: Workspace, entries: list[dict[str, str]], *, only_if_absent: bool = False
     ) -> None:
         """Write ``file_map.json`` to the workspace artifacts dir.
 
@@ -535,7 +555,7 @@ class RefineAgentMixin:
             if complexity is None:
                 # Default: needs-exploration for backward compat / safety.
                 complexity = "needs-exploration"
-            _write_triage_complexity(ws, complexity)
+            _write_triage_complexity(ws, complexity, trivial_scope=triage.trivial_scope)
 
             if (
                 triage.decision == "MAINTENANCE"
@@ -785,6 +805,18 @@ class RefineAgentMixin:
             triage_complexity = _read_triage_complexity(ws)
             _explore_simple = triage_complexity == "simple"
 
+            # Read the trivial-scope verdict to route the refine model level.
+            _trivial = _read_triage_trivial(ws)
+            refine_level: int | None = None
+            if s.refine_trivial_routing_enabled and _trivial:
+                refine_level = s.refine_trivial_model_level
+
+            # Record the routing decision on the current span for Langfuse.
+            set_current_span_attribute(
+                "refine.model_level", refine_level if refine_level is not None else 3
+            )
+            set_current_span_attribute("refine.routed_trivial", _trivial)
+
             result = refining.run_refine_agent(
                 settings=s,
                 title=ticket.title,
@@ -804,6 +836,7 @@ class RefineAgentMixin:
                 screenshot_paths=ws.list_screenshots(),
                 include_explore=not _explore_simple,
                 include_parallel_explore=not _explore_simple,
+                refine_level=refine_level,
             )
         except RuntimeError as e:  # e.g. OPENROUTER_API_KEY not set
             # ModelHTTPError subclasses RuntimeError, so a transient model

@@ -285,6 +285,24 @@ def current_session() -> str | None:
     return _llmio_tracing.current_session()
 
 
+def set_current_span_attribute(key: str, value) -> None:
+    """Set an attribute on the current active OTel span.
+
+    No-op when tracing is disabled or no span is currently recording.
+    Mirrors the guard in :class:`_RootIO.set_input`.
+    """
+    try:
+        from opentelemetry import trace
+    except ImportError:
+        return
+    span = trace.get_current_span()
+    if span is None:
+        return
+    if not span.is_recording():
+        return
+    span.set_attribute(key, value)
+
+
 def flush_tracing(timeout: int = 10_000) -> None:
     """Force-flush any pending spans.  Call at worker shutdown.
 
@@ -395,10 +413,10 @@ class _NoopRootIO:
     def trace_id(self) -> None:
         return None
 
-    def set_input(self, value) -> None:  # noqa: D401, ARG002
+    def set_input(self, value: object) -> None:  # noqa: D401, ARG002
         pass
 
-    def set_output(self, value) -> None:  # noqa: D401, ARG002
+    def set_output(self, value: object) -> None:  # noqa: D401, ARG002
         pass
 
 
