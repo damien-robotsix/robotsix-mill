@@ -621,8 +621,11 @@ and as environment variables:
 |---------|---------|-------------|
 | `MILL_BC_CHECK_PERIODIC` | `true` | Enable periodic backward-compatibility inspection |
 | `MILL_BC_CHECK_INTERVAL_SECONDS` | `86400` | Seconds between bc-check passes |
+| `MILL_BC_CHECK_MEMORY_PATH` | `None` | Override path for bc-check memory; defaults to `<data_dir>/bc_check_memory.md` |
 | `MILL_COMPLETENESS_CHECK_PERIODIC` | `true` | Enable periodic feature-wiring completeness inspection |
 | `MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS` | `86400` | Seconds between completeness-check passes |
+| `MILL_COMPLETENESS_CHECK_MEMORY_PATH` | `None` | Override path for completeness-check memory; defaults to `<data_dir>/completeness_check_memory.md` |
+| `MILL_COMPLETENESS_CHECK_REQUEST_LIMIT` | `80` | Per-call request cap for the completeness-check agent |
 
 ### 13. Skills
 
