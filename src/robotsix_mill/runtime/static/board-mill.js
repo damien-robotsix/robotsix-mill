@@ -103,7 +103,7 @@
     implement_complete: "deliver.md",
     human_mr_approval: "merge.md",
     waiting_auto_merge: "merge.md",
-    fixing_ci: "merge.md",
+    fixing_ci: "ci_fix.md",
     rebasing: "merge.md",
     done: "merge.md",
     closed: "retrospect.md",
@@ -669,6 +669,25 @@
       var tb = new Date(b.at).getTime();
       return ta - tb;
     });
+    // Dedupe repeated implement_complete (deliver.md) cards from ci_fix
+    // loops: only the last such event gets its artifact rendered.
+    // Also suppress the artifact placeholder for fixing_ci rows so the
+    // drawer doesn't show "(ci_fix.md not yet written)" noise.
+    var suppressArt = new Set();
+    var deliverLast = -1;
+    for (var si = 0; si < events.length; si++) {
+      if (absorbed.has(si)) continue;
+      if (events[si].state === "implement_complete") deliverLast = si;
+    }
+    for (var si = 0; si < events.length; si++) {
+      if (absorbed.has(si)) continue;
+      if (events[si].state === "implement_complete" && si !== deliverLast) {
+        suppressArt.add(si);
+      }
+      if (events[si].state === "fixing_ci") {
+        suppressArt.add(si);
+      }
+    }
     return '<h3>History</h3>' + merged.map(function(item) {
       if (item.__orphan) {
         return '<div class="ev ev-is-step ev-orphan" data-tid="' + esc(ticketId) + '" data-art="" data-open="0">' +
@@ -694,7 +713,7 @@
       var chip = eventChip(e, prev, i);
       var chipLabel = chip.label;
       var chipClass = chip.cls;
-      var art = chip.art;
+      var art = suppressArt.has(i) ? "" : chip.art;
       var hasDetail = !!(e.note || art || (bcEvent && bcEvent.note));
       var trace = costByIndex[i] || (bcIdx >= 0 ? costByIndex[bcIdx] : null);
       var cost = trace ? '<span class="ev-cost" title="Langfuse trace ' + esc(trace.trace_id) + '">$' + trace.cost.toFixed(4) + '</span>' : "";
