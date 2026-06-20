@@ -458,6 +458,63 @@ def _count_runs_json_entries(path: Path) -> tuple[int | None, int | None]:
     return None, None
 
 
+_EMBED_FULL_THRESHOLD = 20 * 1024  # 20 KB
+
+
+def _is_char_capped(pattern: str) -> bool:
+    """Return ``True`` only for ``*_memory.md``, whose cap is measured in
+    **characters** rather than bytes."""
+    return pattern == "*_memory.md"
+
+
+def _capture_file_content(path: Path) -> tuple[str, bool]:
+    """Return ``(content_string, was_truncated)`` for embedding in a ticket body.
+
+    * Small text files (≤ 20 KB, valid UTF-8) → full content.
+    * Large text files (> 20 KB, valid UTF-8) → head (first 50 lines)
+      + tail (last 50 lines) with a truncation marker.
+    * Binary / undecodable → placeholder note.
+    * On any read failure → ``("", False)``.
+    """
+    try:
+        file_size = path.stat().st_size
+    except OSError:
+        return ("", False)
+
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return ("", False)
+
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return (
+            f"_(Binary / non-UTF-8 content — {file_size} bytes on disk, "
+            "excerpt not shown.)_\n",
+            True,
+        )
+
+    if file_size <= _EMBED_FULL_THRESHOLD:
+        return (text, False)
+
+    # Large text file — head + tail excerpt
+    lines = text.splitlines(keepends=True)
+    if len(lines) <= 100:
+        return (text, False)
+
+    head_lines = lines[:50]
+    tail_lines = lines[-50:]
+    head_text = "".join(head_lines)
+    tail_text = "".join(tail_lines)
+    omitted = (
+        file_size - len(head_text.encode("utf-8")) - len(tail_text.encode("utf-8"))
+    )
+    omitted = max(0, omitted)
+    marker = f"\n… [{omitted} bytes omitted] …\n"
+    return (head_text + marker + tail_text, True)
+
+
 def _evaluate_path(
     path: Path,
     data_dir: Path,
@@ -477,8 +534,34 @@ def _evaluate_path(
     if pattern == "runs.json":
         record_count, record_max = _count_runs_json_entries(path)
 
-    if size <= cap_bytes and record_count is None:
-        return None
+    char_capped = _is_char_capped(pattern)
+    measured_value: int
+    measured_unit: str
+
+    if char_capped:
+        # Character-capped: read the file as UTF-8 text and compare
+        # its character length against the cap, with a tolerance to
+        # avoid flagging transient post-write overages.
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            log.debug("Could not read %s — skipping: %s", path, exc)
+            return None
+        measured = len(text)
+        tolerance = max(round(cap_bytes * 0.02), 200)
+        if measured <= cap_bytes + tolerance:
+            return None
+        measured_value = measured
+        measured_unit = "chars"
+    else:
+        # Byte-capped: use st_size exactly as before.
+        if size <= cap_bytes and record_count is None:
+            return None
+        measured_value = size
+        measured_unit = "bytes"
+
+    # Capture file content for embedding in the ticket body.
+    embedded_content, content_truncated = _capture_file_content(path)
 
     return _build_finding(
         path,
@@ -489,6 +572,10 @@ def _evaluate_path(
         pattern,
         record_count,
         record_max,
+        measured_value=measured_value,
+        measured_unit=measured_unit,
+        embedded_content=embedded_content,
+        content_truncated=content_truncated,
     )
 
 
