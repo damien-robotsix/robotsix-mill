@@ -215,7 +215,7 @@ class RefineAgentMixin:
 
     @staticmethod
     def _write_file_map(
-        ws: Workspace, entries: list[dict], *, only_if_absent: bool = False
+        ws: Workspace, entries: list[dict[str, str]], *, only_if_absent: bool = False
     ) -> None:
         """Write ``file_map.json`` to the workspace artifacts dir.
 

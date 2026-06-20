@@ -413,10 +413,10 @@ class _NoopRootIO:
     def trace_id(self) -> None:
         return None
 
-    def set_input(self, value) -> None:  # noqa: D401, ARG002
+    def set_input(self, value: object) -> None:  # noqa: D401, ARG002
         pass
 
-    def set_output(self, value) -> None:  # noqa: D401, ARG002
+    def set_output(self, value: object) -> None:  # noqa: D401, ARG002
         pass
 
 
