@@ -15,6 +15,7 @@ from types import SimpleNamespace
 from robotsix_mill.config.repo_settings import (
     load_extra_sandbox_packages,
     load_repo_languages,
+    load_repo_skip_ci,
     load_repo_smoke_command,
     load_repo_smoke_paths,
     load_repo_test_command,
@@ -339,3 +340,59 @@ def test_warn_if_deprecated_log_folder_present_key_warns(tmp_path, caplog):
         "deployed_log_folder" in r.message and "deprecated" in r.message
         for r in caplog.records
     )
+
+
+# --- skip_ci ---------------------------------------------------------------
+
+
+def test_skip_ci_none_repo_dir_returns_false():
+    assert load_repo_skip_ci(None) is False
+
+
+def test_skip_ci_missing_file_returns_false(tmp_path):
+    assert load_repo_skip_ci(tmp_path) is False
+
+
+def test_skip_ci_missing_key_returns_false_no_warning(tmp_path, caplog):
+    _write_config(tmp_path, "test_command: pytest\n")
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.config.repo_settings"):
+        assert load_repo_skip_ci(tmp_path) is False
+    assert not any("skip_ci" in r.message for r in caplog.records)
+
+
+def test_skip_ci_true(tmp_path):
+    _write_config(tmp_path, "skip_ci: true\n")
+    assert load_repo_skip_ci(tmp_path) is True
+
+
+def test_skip_ci_false(tmp_path):
+    _write_config(tmp_path, "skip_ci: false\n")
+    assert load_repo_skip_ci(tmp_path) is False
+
+
+def test_skip_ci_non_bool_string_warns_and_returns_false(tmp_path, caplog):
+    _write_config(tmp_path, 'skip_ci: "yes"\n')
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.config.repo_settings"):
+        assert load_repo_skip_ci(tmp_path) is False
+    assert any("bool" in r.message for r in caplog.records)
+
+
+def test_skip_ci_non_bool_int_warns_and_returns_false(tmp_path, caplog):
+    _write_config(tmp_path, "skip_ci: 1\n")
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.config.repo_settings"):
+        assert load_repo_skip_ci(tmp_path) is False
+    assert any("bool" in r.message for r in caplog.records)
+
+
+def test_skip_ci_malformed_yaml_returns_false(tmp_path, caplog):
+    _write_config(tmp_path, "skip_ci: [unterminated\n")
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.config.repo_settings"):
+        assert load_repo_skip_ci(tmp_path) is False
+    assert any("read/parse error" in r.message for r in caplog.records)
+
+
+def test_skip_ci_non_mapping_top_level_returns_false(tmp_path, caplog):
+    _write_config(tmp_path, "- just\n- a\n- list\n")
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.config.repo_settings"):
+        assert load_repo_skip_ci(tmp_path) is False
+    assert any("mapping" in r.message for r in caplog.records)

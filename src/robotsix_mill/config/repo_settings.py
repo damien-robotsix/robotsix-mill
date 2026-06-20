@@ -9,10 +9,13 @@ This file mirrors the per-repo keys of the fleet operator's central
 ``repos.yaml`` — a managed repo declares the value in its own source
 tree instead of requiring an edit to the operator's central config.
 It carries ``test_command`` (the shell command the implement test-gate
-runs in the sandbox) and ``languages`` (the programming language(s) the
+runs in the sandbox), ``languages`` (the programming language(s) the
 repo uses, which drive per-language instruction injection into the
-implement + refine agents); the file is named generically so it can be
-extended with other per-repo settings later.
+implement + refine agents), ``skip_ci`` (a boolean that opts the repo
+out of forge-CI gating, ci_fix, and the periodic CI monitor),
+``extra_sandbox_packages``, ``smoke_command``, and ``smoke_paths``;
+the file is named generically so it can be extended with other per-repo
+settings later.
 
 Every loader here follows the same hardening contract used by
 ``agents/periodic_loader.py`` and ``agents/overlays.py``: a managed
@@ -111,6 +114,30 @@ def load_repo_smoke_paths(repo_dir: Path | None) -> list[str]:
     if "smoke_paths" in raw:
         log.warning("repo settings: 'smoke_paths' must be a list — ignoring")
     return []
+
+
+def load_repo_skip_ci(repo_dir: Path | None) -> bool:
+    """Return the per-repo ``skip_ci`` flag from
+    ``<repo_dir>/.robotsix-mill/config.yaml``, or ``False``.
+
+    Never raises — a missing or malformed file is treated as "not set"
+    so a managed repo can't take mill down by committing a broken file:
+
+    * ``repo_dir is None`` → ``False``.
+    * file absent → ``False`` (silent no-op).
+    * unreadable / invalid YAML → ``log.warning`` + ``False``.
+    * top-level not a mapping → ``log.warning`` + ``False``.
+    * ``skip_ci`` value present but not a bool → ``log.warning`` + ``False``.
+    * key absent → ``False`` (plain absence, no warning).
+    """
+    raw = _load_repo_config_dict(repo_dir)
+    if raw is None or "skip_ci" not in raw:
+        return False
+    value = raw["skip_ci"]
+    if not isinstance(value, bool):
+        log.warning("repo settings: 'skip_ci' must be a bool — ignoring")
+        return False
+    return value
 
 
 def _load_repo_config_dict(repo_dir: Path | None) -> dict | None:
