@@ -273,6 +273,8 @@ generate_children
 credit_status
 credit_status_clear
 health
+health_live
+health_ready
 langfuse_status
 langfuse_status_clear
 worker_status
