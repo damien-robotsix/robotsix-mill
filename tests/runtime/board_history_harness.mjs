@@ -297,6 +297,108 @@ test("first event with trace-like note is not absorbed", () => {
 });
 
 // ======================================================================
+// Scenario 7 — dedupe repeated implement_complete deliver.md cards
+// ======================================================================
+test("dedupe repeated implement_complete: only last gets deliver artifact", () => {
+  const events = [
+    { state: "ready", note: "", at: "2025-01-01T00:00:00Z" },
+    { state: "implement_complete", note: "", at: "2025-01-01T00:01:00Z" },
+    { state: "fixing_ci", note: "", at: "2025-01-01T00:02:00Z" },
+    { state: "implement_complete", note: "", at: "2025-01-01T00:03:00Z" },
+    { state: "fixing_ci", note: "", at: "2025-01-01T00:04:00Z" },
+    { state: "implement_complete", note: "", at: "2025-01-01T00:05:00Z" },
+  ];
+  const html = renderHistoryHtml(events, "test-ticket", []);
+
+  // Count data-art="deliver.md" occurrences — at most 1
+  const deliverMatches = html.match(/data-art="deliver\.md"/g);
+  const deliverCount = deliverMatches ? deliverMatches.length : 0;
+  assert.equal(deliverCount, 1, "expected exactly 1 deliver.md artifact card, got " + deliverCount);
+
+  // fixing_ci rows have suppressed artifact: data-art should be ""
+  // (no ci_fix.md or merge.md artifact reference)
+  const ciFixArt = html.match(/data-art="ci_fix\.md"/g);
+  assert.equal(ciFixArt, null, "fixing_ci artifact must be suppressed (no data-art='ci_fix.md')");
+
+  // No merge.md artifact reference for fixing_ci
+  const mergeFixMatches = html.match(/fixing_ci.*merge\.md/);
+  assert.equal(mergeFixMatches, null, "fixing_ci must not reference merge.md");
+
+  // fixing_ci transition label should include "ci_fix" from STATE_TRACE
+  assert.ok(html.includes("ci_fix → fixing_ci"), "missing ci_fix → fixing_ci transition label");
+});
+
+// ======================================================================
+// Scenario 8 — no "(not yet written)" placeholder for suppressed rows
+// ======================================================================
+test("no not-yet-written placeholder for collapsed deliver or fixing_ci rows", () => {
+  const events = [
+    { state: "ready", note: "", at: "2025-01-01T00:00:00Z" },
+    { state: "implement_complete", note: "", at: "2025-01-01T00:01:00Z" },
+    { state: "fixing_ci", note: "", at: "2025-01-01T00:02:00Z" },
+    { state: "implement_complete", note: "", at: "2025-01-01T00:03:00Z" },
+  ];
+  const html = renderHistoryHtml(events, "test-ticket", []);
+
+  // Only the last implement_complete gets a deliver.md artifact; the
+  // earlier one and the fixing_ci row have data-art="" (suppressed).
+  const deliverMatches = html.match(/data-art="deliver\.md"/g);
+  const deliverCount = deliverMatches ? deliverMatches.length : 0;
+  assert.equal(deliverCount, 1, "expected exactly 1 deliver.md artifact card, got " + deliverCount);
+
+  // No ci_fix.md artifact reference (suppressed for fixing_ci rows)
+  const ciFixArt = html.match(/data-art="ci_fix\.md"/g);
+  assert.equal(ciFixArt, null, "fixing_ci artifact must be suppressed (no data-art='ci_fix.md')");
+
+  // No "(not yet written)" text anywhere
+  assert.ok(!html.includes("not yet written"), "must not contain 'not yet written' placeholder");
+});
+
+// ======================================================================
+// Scenario 9 — single implement_complete (no loop) still shows its artifact
+// ======================================================================
+test("single implement_complete (no loop) still shows deliver card", () => {
+  const events = [
+    { state: "ready", note: "", at: "2025-01-01T00:00:00Z" },
+    { state: "code_review", note: "review: lgtm", at: "2025-01-01T00:01:00Z" },
+    { state: "implement_complete", note: "", at: "2025-01-01T00:02:00Z" },
+  ];
+  const html = renderHistoryHtml(events, "test-ticket", []);
+
+  // Should have exactly one deliver.md artifact
+  const deliverMatches = html.match(/data-art="deliver\.md"/g);
+  const deliverCount = deliverMatches ? deliverMatches.length : 0;
+  assert.equal(deliverCount, 1, "expected 1 deliver.md artifact for single implement_complete, got " + deliverCount);
+});
+
+// ======================================================================
+// Scenario 10 — distinct non-loop stages render unchanged
+// ======================================================================
+test("distinct non-loop stages (refine, review, merge, done) render unchanged", () => {
+  const events = [
+    { state: "ready", note: "", at: "2025-01-01T00:00:00Z" },
+    { state: "code_review", note: "review: lgtm", at: "2025-01-01T00:01:00Z" },
+    { state: "waiting_auto_merge", note: "", at: "2025-01-01T00:02:00Z" },
+    { state: "done", note: "merge: merged", at: "2025-01-01T00:03:00Z" },
+    { state: "closed", note: "retrospect: all good", at: "2025-01-01T00:04:00Z" },
+  ];
+  const html = renderHistoryHtml(events, "test-ticket", []);
+
+  // Review artifact
+  assert.ok(html.includes('data-art="review.md"'), "missing review.md artifact");
+  // Merge artifact (waiting_auto_merge → merge.md; done → merge.md)
+  const mergeMatches = html.match(/data-art="merge\.md"/g);
+  const mergeCount = mergeMatches ? mergeMatches.length : 0;
+  assert.ok(mergeCount >= 1, "expected at least 1 merge.md artifact, got " + mergeCount);
+  // Retrospect artifact
+  assert.ok(html.includes('data-art="retrospect.md"'), "missing retrospect.md artifact");
+  // Transition labels
+  assert.ok(html.includes("review → code_review"), "missing review transition");
+  assert.ok(html.includes("merge → done"), "missing merge transition");
+  assert.ok(html.includes("retrospect → closed"), "missing retrospect transition");
+});
+
+// ======================================================================
 
 if (failures > 0) {
   console.error("\n" + failures + " scenario(s) failed.");
