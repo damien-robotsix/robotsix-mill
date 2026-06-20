@@ -152,11 +152,25 @@ def _has_buildout_placeholder(clone: Path) -> bool:
     """True when a clone still ships build-out placeholders (skeleton lib).
 
     Matches the exact ``TODO(build-out)`` marker convention (e.g. in
-    robotsix-board's placeholder ``static/board.{js,css}``), NOT loose
-    prose mentions of "build-out" — so a repo that merely *describes*
-    build-out in prompts/docs (mill, auto-mail) is not misflagged.
+    robotsix-board's placeholder ``static/board.{js,css}``).  Excludes
+    agent definitions (prompts that instruct agents to *skip* the marker),
+    tests (fixtures), and meta tooling (this file's own docstring) so that
+    repos like mill are not misflagged as skeletons.
     """
-    return bool(_git_grep(clone, ["-lF", "TODO(build-out)"], timeout=30).strip())
+    return bool(
+        _git_grep(
+            clone,
+            [
+                "-lF",
+                "TODO(build-out)",
+                "--",
+                ":!agent_definitions/",
+                ":!tests/",
+                ":!src/robotsix_mill/meta/",
+            ],
+            timeout=30,
+        ).strip()
+    )
 
 
 def _robotsix_deps_of(clone: Path) -> tuple[str, set[str]]:

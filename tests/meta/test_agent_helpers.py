@@ -44,6 +44,18 @@ def test_has_buildout_placeholder_exact_marker_only(tmp_path):
     # loose 'build-out' prose must NOT misflag a non-skeleton repo
     assert _has_buildout_placeholder(prose) is False
 
+    # TODO(build-out) markers inside agent_definitions/, tests/, or
+    # meta/ tooling are false positives — exclude them.
+    false_positive = _git_repo(
+        tmp_path / "mill-real",
+        {
+            "agent_definitions/p.yaml": "skip TODO(build-out) markers\n",
+            "tests/fixture.py": "# TODO(build-out): synthetic fixture\n",
+            "src/robotsix_mill/meta/agent.py": '"""TODO(build-out) docstring."""\n',
+        },
+    )
+    assert _has_buildout_placeholder(false_positive) is False
+
 
 def test_robotsix_deps_of_parses_pyproject(tmp_path):
     repo = tmp_path / "consumer"
