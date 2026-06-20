@@ -3220,7 +3220,7 @@ def test_triage_refine_agent_config(monkeypatch, tmp_path):
     assert seen_kwargs["tools"] == []
     assert seen_kwargs["web_knowledge"] is False
     assert seen_kwargs["report_issue"] is False
-    assert seen_kwargs["level"] == 1  # triage.yaml level
+    assert seen_kwargs["level"] == 2  # triage.yaml level (promoted per #1692)
     assert seen_kwargs["name"] == "triage"
     assert seen_kwargs["ask_user"] is False
 
@@ -4436,184 +4436,24 @@ def test_continuation_guard_skipped_when_low_remaining_quota(monkeypatch, settin
 
 
 # ---------------------------------------------------------------------------
-# _check_memory_for_no_change — pre-LLM short-circuit guard tests
-# ---------------------------------------------------------------------------
+# --- run_refine_agent no longer short-circuits from memory ---
+# The deterministic _check_memory_for_no_change function and its
+# Jaccard-based short-circuit have been removed per review directive.
+# Memory is still passed to the LLM as context, but no_change_needed
+# can only originate from the LLM's structured output. The following
+# test verifies that run_refine_agent does NOT skip the LLM call even
+# when a matching memory entry exists.
 
 
-def _memory_entry(
-    date: str,
-    topic: str,
-    outcome: str = "`no_change_needed`",
-    rationale: str = "the fix already landed in a sibling ticket",
-) -> str:
-    """Build a single memory ledger entry matching the real format."""
-    return (
-        f"## Refine run {date} — {topic}\n"
-        f"- **Outcome**: {outcome} — {rationale}\n"
-        f"- **Tickets**: none\n"
-    )
-
-
-# --- Direct unit tests for the guard function ---
-
-
-def test_guard_empty_memory_returns_none():
-    """Empty / whitespace memory → None (no short-circuit)."""
-    from robotsix_mill.agents.refining import _check_memory_for_no_change
-
-    assert _check_memory_for_no_change("title", "draft", "") is None
-    assert _check_memory_for_no_change("title", "draft", "   ") is None
-
-
-def test_guard_old_entry_skipped():
-    """Entry older than 90 days is skipped even if topic matches."""
-    from robotsix_mill.agents.refining import _check_memory_for_no_change
-
-    memory = _memory_entry("2020-01-15", "refine-agent-no-change-needed-guard")
-    result = _check_memory_for_no_change(
-        "refine agent no change needed guard",
-        "add a pre-LLM guard in the refine agent",
-        memory,
-    )
-    assert result is None
-
-
-def test_guard_low_jaccard_skipped():
-    """Entry with Jaccard < 0.25 is skipped."""
-    from robotsix_mill.agents.refining import _check_memory_for_no_change
-
-    memory = _memory_entry("2026-06-02", "database migration helper")
-    result = _check_memory_for_no_change(
-        "Add dark mode toggle to settings",
-        "We need a dark mode toggle in the UI",
-        memory,
-    )
-    assert result is None
-
-
-def test_guard_non_no_change_outcome_skipped():
-    """Entries with outcomes other than no_change_needed are ignored."""
-    from robotsix_mill.agents.refining import _check_memory_for_no_change
-
-    # Entry is recent + similar topic, but outcome is 'spec' not 'no_change_needed'
-    memory = _memory_entry(
-        "2026-06-02",
-        "no change needed guard self check",
-        outcome="`spec`",
-        rationale="wrote a spec",
-    )
-    result = _check_memory_for_no_change(
-        "no change needed guard self check",
-        "add a pre-LLM guard",
-        memory,
-    )
-    assert result is None
-
-
-def test_guard_exact_topic_match_short_circuits():
-    """Exact topic match within 90 days with no_change_needed → returns rationale."""
-    from robotsix_mill.agents.refining import _check_memory_for_no_change
-
-    memory = _memory_entry(
-        "2026-06-02",
-        "refine-agent-no-change-needed-guard-self-check",
-        rationale="prompt-level fixes don't compose; a code-level guard is needed",
-    )
-    result = _check_memory_for_no_change(
-        "refine-agent-no-change-needed-guard-self-check",
-        "add a pre-LLM guard in the refine agent",
-        memory,
-    )
-    assert result == "prompt-level fixes don't compose; a code-level guard is needed"
-
-
-def test_guard_similar_topic_rephrased_short_circuits():
-    """Topic rephrased but sharing many tokens → Jaccard ≥ 0.25 → short-circuits."""
-    from robotsix_mill.agents.refining import _check_memory_for_no_change
-
-    memory = _memory_entry(
-        "2026-06-02",
-        "refine agent no change needed short circuit guard",
-        rationale="avoid wasting LLM calls when memory already knows the answer",
-    )
-    result = _check_memory_for_no_change(
-        "short circuit guard for refine agent no change needed",
-        "we should add a code-level check before calling the LLM",
-        memory,
-    )
-    assert result == "avoid wasting LLM calls when memory already knows the answer"
-
-
-def test_guard_multiple_entries_finds_match():
-    """Multiple memory entries — the matching one is found, older/non-matching skipped."""
-    from robotsix_mill.agents.refining import _check_memory_for_no_change
-
-    memory = (
-        _memory_entry("2020-01-01", "old irrelevant topic", rationale="old")
-        + "\n"
-        + _memory_entry("2026-06-01", "database migration helper", rationale="db")
-        + "\n"
-        + _memory_entry(
-            "2026-06-02",
-            "refine guard pre llm short circuit",
-            rationale="the correct match rationale",
-        )
-        + "\n"
-        + _memory_entry(
-            "2026-06-03",
-            "not this one",
-            outcome="`spec`",
-            rationale="wrong outcome",
-        )
-    )
-    result = _check_memory_for_no_change(
-        "refine guard pre llm short circuit",
-        "add code-level pre-LLM short circuit",
-        memory,
-    )
-    assert result == "the correct match rationale"
-
-
-def test_guard_no_rationale_line_still_matches():
-    """Entry with no rationale text after no_change_needed returns empty string."""
-    from robotsix_mill.agents.refining import _check_memory_for_no_change
-
-    # Format the entry manually to avoid the rationale dash
-    memory = (
-        "## Refine run 2026-06-02 — no change needed guard self check\n"
-        "- **Outcome**: `no_change_needed`\n"
-        "- **Tickets**: none\n"
-    )
-    result = _check_memory_for_no_change(
-        "no change needed guard self check",
-        "add a code level pre LLM short circuit for the refine agent",
-        memory,
-    )
-    # Should match (topic similar) but no rationale after the outcome marker
-    assert result == ""
-
-
-# --- Integration test: run_refine_agent short-circuits without LLM call ---
-
-
-def test_run_refine_agent_memory_match_without_repo_dir_falls_through(
+def test_run_refine_agent_no_memory_short_circuit(
     monkeypatch,
     settings,
 ):
-    """When memory contains a matching no_change_needed entry but repo_dir
-    is None, the guard does NOT short-circuit — it falls through to the
-    full refine path because filesystem verification is impossible
-    without a clone.  (The old deterministic Jaccard-only short-circuit
-    has been replaced; the LLM verifier requires a repo clone.)"""
+    """run_refine_agent does NOT return no_change_needed from memory
+    alone — the LLM must be invoked to decide."""
 
     import robotsix_mill.agents.base as base_module
     import robotsix_mill.agents.retry as retry_module
-
-    memory = _memory_entry(
-        "2026-06-02",
-        "refine-agent-no-change-needed-guard-self-check",
-        rationale="prompt-level fixes don't compose",
-    )
 
     agent_called = False
 
@@ -4621,7 +4461,6 @@ def test_run_refine_agent_memory_match_without_repo_dir_falls_through(
         def run_sync(self, user_prompt, *, message_history=None, usage_limits=None):
             nonlocal agent_called
             agent_called = True
-            # Return a simple valid result to avoid continuation guard
             return _FakeRunResult(
                 output=RefineResult(split=False, spec_markdown="## Problem\nok\n"),
                 finish_reason="stop",
@@ -4642,13 +4481,12 @@ def test_run_refine_agent_memory_match_without_repo_dir_falls_through(
 
     result = refining.run_refine_agent(
         settings=settings,
-        title="refine-agent-no-change-needed-guard-self-check",
-        draft="add a pre-LLM guard",
-        memory=memory,
-        # NO repo_dir — must fall through to full refine
+        title="some title",
+        draft="some draft",
+        memory="",
     )
 
-    # The full refine agent WAS called (no short-circuit without a clone).
+    # The full refine agent WAS called (no memory short-circuit).
     assert agent_called is True
     # Must NOT short-circuit to no_change_needed on memory alone.
     assert result.no_change_needed is False
@@ -4656,13 +4494,11 @@ def test_run_refine_agent_memory_match_without_repo_dir_falls_through(
 
 
 def test_run_refine_agent_no_match_proceeds_to_llm(monkeypatch, settings):
-    """When memory has no matching entry, run_refine_agent proceeds to the
-    normal LLM path (build_agent_from_definition is called)."""
+    """run_refine_agent always proceeds to the LLM path — there is no
+    memory-based short-circuit."""
 
     import robotsix_mill.agents.base as base_module
     import robotsix_mill.agents.retry as retry_module
-
-    memory = _memory_entry("2026-06-02", "some unrelated topic")
 
     agent_called = False
 
@@ -4693,7 +4529,7 @@ def test_run_refine_agent_no_match_proceeds_to_llm(monkeypatch, settings):
         settings=settings,
         title="completely different ticket",
         draft="something else entirely",
-        memory=memory,
+        memory="",
     )
 
     assert agent_called is True

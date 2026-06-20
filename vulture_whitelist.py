@@ -154,6 +154,7 @@ review_revision_model
 stale_branch_cleanup_periodic
 db_maintenance_periodic
 scope_triage_request_limit
+already_done_request_limit
 langfuse_cleanup_periodic
 _validate_non_empty
 _validate_ci_monitor_interval_seconds

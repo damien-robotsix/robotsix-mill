@@ -429,7 +429,6 @@ src/robotsix_mill/agents/refining.py:0: error: Function is missing a type annota
 src/robotsix_mill/agents/refining.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/agents/refining.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/agents/refining.py:0: error: Missing type arguments for generic type "list"  [type-arg]
-src/robotsix_mill/agents/refining.py:0: error: Missing type arguments for generic type "list"  [type-arg]
 src/robotsix_mill/meta/runner.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/meta/runner.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/meta/runner.py:0: error: Missing type arguments for generic type "dict"  [type-arg]

@@ -773,42 +773,6 @@ def _resolve_next_state(
     )
 
 
-def _triage_reason_rejects(reason: str) -> bool:
-    """Return ``True`` when the triage *reason* signals a factual rejection.
-
-    The triage classifier only has three decisions — ``REFINE``,
-    ``SKIP``, ``MAINTENANCE``.  When it detects that a draft's core gap
-    assertion is factually wrong (e.g. a draft claims a directory is
-    missing when it actually exists), it classifies the draft as ``SKIP``
-    and embeds the rejection signal in the free-text reason.  This
-    function detects those signals (case-insensitive substring match) so
-    the orchestration can route the ticket to ``State.DONE`` instead of
-    auto-approving a false spec through to implement.
-    """
-    text = reason.lower()
-    return (
-        "no change is needed" in text
-        or "no change needed" in text
-        or "no code change is needed" in text
-        or "no code changes needed" in text
-        or "assertion is factually wrong" in text
-        # Confirmed mis-route / non-existent symbols (triage trace a051eceb)
-        or "contains no" in text
-        or "does not exist" in text
-        or "doesn't exist" in text
-        or "no related" in text
-        or "entirely ungrounded" in text
-        or "different repositor" in text
-        or "different repo" in text
-        or "wrong repositor" in text
-        or "wrong repo" in text
-        or "belongs to a different" in text
-        or "lives in a different" in text
-        or "not present in this" in text
-        or "no such" in text
-    )
-
-
 def _build_candidates_block(candidates: list[Ticket], ctx: StageContext) -> str:
     """Render candidates for the dedup check as one Markdown section
     per ticket.
