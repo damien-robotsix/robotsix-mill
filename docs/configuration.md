@@ -441,6 +441,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `pipeline.rebase_memory_path` | `MILL_REBASE_MEMORY_PATH` | `None` | Override path for rebase memory; defaults to `<data_dir>/rebase_memory.md` |
 | `pipeline.review_revision_memory_path` | `MILL_REVIEW_REVISION_MEMORY_PATH` | `None` | Override path for review-revision memory; defaults to `<data_dir>/review_revision_memory.md` |
 | `pipeline.ci_patterns_path` | `MILL_CI_PATTERNS_PATH` | `None` | Override path for the ci-fix agent's structured pattern memory; defaults to `<data_dir>/ci_patterns.json` |
+| `pipeline.doc_memory_path` | `MILL_DOC_MEMORY_PATH` | `None` | Override path for the document agent's Markdown memory ledger; defaults to `<data_dir>/doc_memory.md` |
 
 ### 5. Dedup
 
