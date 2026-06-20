@@ -117,20 +117,22 @@ def test_safe_close_swallows_exceptions_from_close():
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_level_maps_to_transport_and_model():
-    """Each capability level resolves to its baked (transport, model) via
-    llmio's tier defaults: L1/L2 → DeepSeek-on-OpenRouter, L3 → Claude SDK."""
+def test_resolve_level_maps_to_provider_and_model():
+    """Each capability level resolves to its baked (provider, model) via
+    llmio's tier defaults: the provider is the hyphen-free prefix parsed from
+    the combined identifier and the model is the bare model name.
+    L1/L2 → DeepSeek-on-OpenRouter, L3 → Claude SDK."""
     from robotsix_mill.agents.base import _resolve_level
 
     assert _resolve_level(1) == (
-        "openrouter[deepseek]",
+        "openrouter",
         "deepseek/deepseek-v4-flash",
     )
     assert _resolve_level(2) == (
-        "openrouter[deepseek]",
+        "openrouter",
         "deepseek/deepseek-v4-pro",
     )
-    assert _resolve_level(3) == ("claude-sdk", "opus")
+    assert _resolve_level(3) == ("claudeSDK", "opus")
 
 
 def test_level_uses_claude_only_for_level_3():

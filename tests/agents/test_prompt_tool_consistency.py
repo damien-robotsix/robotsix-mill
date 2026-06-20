@@ -182,16 +182,17 @@ def _capture(monkeypatch, output_obj):
     monkeypatch.setattr(
         bmod, "new_deepseek_model", lambda model_name, level: (object(), object())
     )
-    # Force the DeepSeek (pydantic-ai) transport for ALL levels so the
+    # Force the DeepSeek (pydantic-ai) provider for ALL levels so the
     # FakeAgent above intercepts the build. refine is level 3 (Claude SDK)
     # which would otherwise bypass pydantic_ai.Agent and spawn a real
     # subprocess. Tool injection — what these tests assert — is
-    # transport-independent, so this keeps the check meaningful while
-    # staying hermetic.
+    # provider-independent, so this keeps the check meaningful while
+    # staying hermetic. The provider token is the hyphen-free prefix
+    # ("openrouter"); the second element is the bare model name.
     monkeypatch.setattr(
         bmod,
         "_resolve_level",
-        lambda level: ("openrouter[deepseek]", "deepseek/deepseek-v4-flash"),
+        lambda level: ("openrouter", "deepseek/deepseek-v4-flash"),
     )
     return captured
 
