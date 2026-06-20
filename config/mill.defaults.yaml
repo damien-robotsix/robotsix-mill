@@ -157,6 +157,7 @@ gates:
   review_feedback_enabled: false           # enable autonomous review-revision (opt-in — implements changes requested by human reviewers)
   pr_summary_enabled: false               # generate structured PR body from diff via cheap LLM (opt-in)
   refine_triage_enabled: true              # cheap triage before full refine (skip if precise)
+  max_re_refine_cycles_before_cheap: 2     # force cheap model after this many "changes requested" send-backs; 0 = never
   reviewer_agreement_gate_enabled: true     # pre-Opus guard: skip refine when reviewer agrees with draft's no-change conclusion
   maintenance_triage_enabled: true         # cheap triage before a full maintenance pass
   spec_review_enabled: false               # post-refinement spec narrative stripping

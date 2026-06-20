@@ -367,6 +367,12 @@ class _StagesSettings(BaseModel):
     # flash (~1/100th the cost of Opus).  Bump to 2 (DeepSeek pro) if
     # quality regresses on trivial tickets.
     refine_trivial_model_level: int = Field(default=1, ge=1, le=3)
+    # Maximum number of "changes requested" re-refine rounds before the
+    # refine agent is forced to the cheap model (``refine_trivial_model_level``)
+    # regardless of the persisted triage verdict.  A value of 0 disables
+    # the counter-forced downgrade entirely — every sendback runs at full
+    # Opus unless already caught by trivial-scope routing.
+    max_re_refine_cycles_before_cheap: int = Field(default=2, ge=0)
     # ---------- trace inspector dynamic budget ----------
     # Floor for the tools-on request budget.  Even a tiny trace gets
     # enough requests to read at least one code locus and emit a

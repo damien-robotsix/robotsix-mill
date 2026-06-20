@@ -1631,3 +1631,188 @@ def test_trivial_scope_true_persisted_to_artifact(ctx_factory, monkeypatch, tmp_
     )
     assert data.get("trivial_scope") is True
     assert _read_triage_trivial(ws) is True
+
+
+# ===========================================================================
+# Re-refine round counter → force cheap model after threshold
+# ===========================================================================
+
+
+def _add_sendback_event(ctx, ticket, body="fix the scope"):
+    """Create a "changes requested:" history event mirroring what
+    ``Service.request_changes`` writes.  Uses ``add_history_note``
+    because the ticket is already in DRAFT — ``transition`` would
+    reject DRAFT→DRAFT as a no-op transition."""
+    ctx.service.add_history_note(
+        ticket.id,
+        f"changes requested: {body}",
+    )
+
+
+def test_re_refine_counter_forces_cheap_after_threshold(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """A ticket with ≥ max_re_refine_cycles_before_cheap sendback events
+    and a non-trivial triage verdict routes to the cheap model."""
+    ctx = ctx_factory(max_re_refine_cycles_before_cheap=2)
+    t = _ticket(ctx)
+
+    # Simulate 2 prior "changes requested" sendbacks — at threshold.
+    _add_sendback_event(ctx, t, "first round feedback")
+    _add_sendback_event(ctx, t, "second round feedback")
+
+    # Add an open reviewer comment so the sendback path activates.
+    ctx.service.add_comment(t.id, "Please revise the scope.", author="user")
+
+    refine_kwargs: dict = {}
+
+    def _run(**kw):
+        refine_kwargs.update(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    # Triage returns non-trivial so the trivial-routing block leaves
+    # refine_level=None — the counter must force the downgrade.
+    _apply_default_mocks(
+        monkeypatch,
+        triage_refine=lambda **kw: TriageResult(
+            decision="REFINE",
+            reason="needs refinement",
+            complexity="needs-exploration",
+            trivial_scope=False,
+        ),
+        run_refine_agent=_run,
+    )
+
+    _run_agent(ctx, t, tmp_path)
+
+    assert (
+        refine_kwargs.get("refine_level") == ctx.settings.refine_trivial_model_level
+    ), (
+        f"Expected refine_level={ctx.settings.refine_trivial_model_level} "
+        f"(cheap) after {ctx.settings.max_re_refine_cycles_before_cheap} "
+        f"sendbacks, got {refine_kwargs.get('refine_level')}"
+    )
+    # Exploration sub-agents must be disabled on sendback.
+    assert refine_kwargs.get("include_explore") is False
+    assert refine_kwargs.get("include_parallel_explore") is False
+
+
+def test_re_refine_below_threshold_keeps_opus(ctx_factory, monkeypatch, tmp_path):
+    """A ticket with fewer than max_re_refine_cycles_before_cheap sendbacks
+    and a non-trivial verdict keeps refine_level=None (full Opus)."""
+    ctx = ctx_factory(max_re_refine_cycles_before_cheap=2)
+    t = _ticket(ctx)
+
+    # Only 1 prior sendback — below the default threshold of 2.
+    _add_sendback_event(ctx, t, "one round of feedback")
+
+    ctx.service.add_comment(t.id, "Please adjust.", author="user")
+
+    refine_kwargs: dict = {}
+
+    def _run(**kw):
+        refine_kwargs.update(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    _apply_default_mocks(
+        monkeypatch,
+        triage_refine=lambda **kw: TriageResult(
+            decision="REFINE",
+            reason="needs refinement",
+            complexity="needs-exploration",
+            trivial_scope=False,
+        ),
+        run_refine_agent=_run,
+    )
+
+    _run_agent(ctx, t, tmp_path)
+
+    assert refine_kwargs.get("refine_level") is None, (
+        f"Expected refine_level=None (full Opus) when below threshold, "
+        f"got {refine_kwargs.get('refine_level')}"
+    )
+
+
+def test_re_refine_first_run_trivial_stays_cheap(ctx_factory, monkeypatch, tmp_path):
+    """Regression: a re-refine where triage_complexity.json from the
+    first round has trivial_scope=true stays on the cheap model
+    regardless of the re-refine counter."""
+    ctx = ctx_factory(
+        max_re_refine_cycles_before_cheap=2,
+        refine_trivial_routing_enabled=True,
+    )
+    t = _ticket(ctx)
+
+    # Write the first-run triage artifact (simulating a prior round).
+    ws = ctx.service.workspace(t)
+    import json as _json
+
+    (ws.artifacts_dir / "triage_complexity.json").write_text(
+        _json.dumps({"complexity": "simple", "trivial_scope": True}),
+        encoding="utf-8",
+    )
+
+    # Simulate 2 prior sendbacks (at threshold) — but the persisted
+    # trivial verdict should keep the cheap model regardless.
+    _add_sendback_event(ctx, t, "feedback 1")
+    _add_sendback_event(ctx, t, "feedback 2")
+
+    ctx.service.add_comment(t.id, "Revise.", author="user")
+
+    refine_kwargs: dict = {}
+
+    def _run(**kw):
+        refine_kwargs.update(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    # Triage is skipped (reviewer_comments present), so the triage mock
+    # is irrelevant — the trivial-routing block reads from the artifact.
+    _apply_default_mocks(monkeypatch, run_refine_agent=_run)
+
+    _run_agent(ctx, t, tmp_path)
+
+    assert (
+        refine_kwargs.get("refine_level") == ctx.settings.refine_trivial_model_level
+    ), (
+        f"Expected refine_level={ctx.settings.refine_trivial_model_level} "
+        f"(cheap) from persisted first-run trivial verdict, "
+        f"got {refine_kwargs.get('refine_level')}"
+    )
+
+
+def test_re_refine_counter_disabled_by_zero(ctx_factory, monkeypatch, tmp_path):
+    """When max_re_refine_cycles_before_cheap=0, the counter-forced
+    downgrade is disabled — even with many sendbacks, refine_level
+    stays None (full Opus) for non-trivial tickets."""
+    ctx = ctx_factory(max_re_refine_cycles_before_cheap=0)
+    t = _ticket(ctx)
+
+    # Many sendbacks, but threshold is 0 (disabled).
+    for i in range(5):
+        _add_sendback_event(ctx, t, f"feedback {i}")
+
+    ctx.service.add_comment(t.id, "Revise again.", author="user")
+
+    refine_kwargs: dict = {}
+
+    def _run(**kw):
+        refine_kwargs.update(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    _apply_default_mocks(
+        monkeypatch,
+        triage_refine=lambda **kw: TriageResult(
+            decision="REFINE",
+            reason="needs refinement",
+            complexity="needs-exploration",
+            trivial_scope=False,
+        ),
+        run_refine_agent=_run,
+    )
+
+    _run_agent(ctx, t, tmp_path)
+
+    assert refine_kwargs.get("refine_level") is None, (
+        f"Expected refine_level=None when counter is disabled (threshold=0), "
+        f"got {refine_kwargs.get('refine_level')}"
+    )
