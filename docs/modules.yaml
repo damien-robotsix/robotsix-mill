@@ -703,6 +703,8 @@ modules:
       - .trivyignore
       - .secrets.baseline
       - mypy-baseline.txt
+      - mypy-baseline-test.txt
+      - mypy-baseline.txt.bak
       - vulture_whitelist.py
       - scripts/**/*
       - dev/**/*
