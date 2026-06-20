@@ -647,3 +647,182 @@ def test_clean_green_still_promotes(tmp_path, monkeypatch):
     t = _implement_complete(ctx)
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.HUMAN_MR_APPROVAL
+
+
+# === skip_ci toggle =======================================================
+
+
+def test_skip_ci_implement_complete_bypasses_ci_gate(tmp_path, monkeypatch):
+    """With skip_ci=True, failing CI does NOT route to FIXING_CI —
+    the ticket promotes straight to HUMAN_MR_APPROVAL."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    _ci_failing_mergeable(monkeypatch, mergeable_state="clean")
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+
+    # Enable skip_ci for this repo.
+    monkeypatch.setattr(
+        "robotsix_mill.config.repo_settings.load_repo_skip_ci",
+        lambda repo_dir: True,
+    )
+
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert "skip_ci" in out.note
+    assert "awaiting human merge approval" in out.note
+
+
+def test_skip_ci_implement_complete_conflict_still_rebases(tmp_path, monkeypatch):
+    """Even with skip_ci=True, a conflicting PR still routes to REBASING
+    because skip_ci only bypasses the CI gate, not the conflict gate."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    # PR is open but mergeable=False (conflicting).
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": False,
+            "mergeable_state": "dirty",
+        },
+    )
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+
+    monkeypatch.setattr(
+        "robotsix_mill.config.repo_settings.load_repo_skip_ci",
+        lambda repo_dir: True,
+    )
+
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.REBASING
+
+
+def test_skip_ci_false_implement_complete_unchanged(tmp_path, monkeypatch):
+    """With skip_ci=False, failing CI still routes to FIXING_CI (existing behaviour)."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    _ci_failing_mergeable(monkeypatch)
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": False,
+    )
+
+    monkeypatch.setattr(
+        "robotsix_mill.config.repo_settings.load_repo_skip_ci",
+        lambda repo_dir: False,
+    )
+
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.FIXING_CI
+
+
+def test_skip_ci_human_mr_approval_failing_ci_stays_noop(tmp_path, monkeypatch):
+    """With skip_ci=True, a HUMAN_MR_APPROVAL ticket with failing CI
+    stays in HUMAN_MR_APPROVAL instead of falling back to IMPLEMENT_COMPLETE."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    _ci_failing_mergeable(monkeypatch, mergeable_state="clean")
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+
+    monkeypatch.setattr(
+        "robotsix_mill.config.repo_settings.load_repo_skip_ci",
+        lambda repo_dir: True,
+    )
+
+    # Create a ticket and move it to HUMAN_MR_APPROVAL.
+    t = ctx.service.create("x", "y")
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+    ):
+        ctx.service.transition(t.id, st)
+    ctx.service.set_branch(t.id, f"mill/{t.id}")
+
+    out = MergeStage().run(t, ctx)
+    # Should stay in HUMAN_MR_APPROVAL — no fallback to IMPLEMENT_COMPLETE.
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+
+
+def test_skip_ci_human_mr_approval_conflict_still_falls_back(tmp_path, monkeypatch):
+    """Even with skip_ci=True, a conflicting PR in HUMAN_MR_APPROVAL
+    still falls back to IMPLEMENT_COMPLETE for rebase handling."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    # PR is open but mergeable=False.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": False,
+            "mergeable_state": "dirty",
+        },
+    )
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+
+    monkeypatch.setattr(
+        "robotsix_mill.config.repo_settings.load_repo_skip_ci",
+        lambda repo_dir: True,
+    )
+
+    t = ctx.service.create("x", "y")
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+    ):
+        ctx.service.transition(t.id, st)
+    ctx.service.set_branch(t.id, f"mill/{t.id}")
+
+    out = MergeStage().run(t, ctx)
+    # Conflict → fallback to IMPLEMENT_COMPLETE regardless of skip_ci.
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+
+def test_skip_ci_false_human_mr_approval_still_falls_back_on_failing_ci(
+    tmp_path, monkeypatch
+):
+    """With skip_ci=False, failing CI in HUMAN_MR_APPROVAL still falls back
+    to IMPLEMENT_COMPLETE (existing behaviour)."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    _ci_failing_mergeable(monkeypatch, mergeable_state="clean")
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+
+    monkeypatch.setattr(
+        "robotsix_mill.config.repo_settings.load_repo_skip_ci",
+        lambda repo_dir: False,
+    )
+
+    t = ctx.service.create("x", "y")
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+    ):
+        ctx.service.transition(t.id, st)
+    ctx.service.set_branch(t.id, f"mill/{t.id}")
+
+    out = MergeStage().run(t, ctx)
+    # Failing CI → fallback to IMPLEMENT_COMPLETE.
+    assert out.next_state is State.IMPLEMENT_COMPLETE

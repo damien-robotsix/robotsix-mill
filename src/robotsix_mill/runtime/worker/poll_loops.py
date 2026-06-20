@@ -803,6 +803,12 @@ class PollLoopsMixin(_WorkerBase):
         await asyncio.sleep(self._initial_delay("ci_monitor", min_interval))
         while True:
             for rc in repo_configs:
+                # Skip repos that opt out of forge-CI gating.
+                from ...config.repo_settings import load_repo_skip_ci
+
+                if load_repo_skip_ci(self._find_config_clone_dir(rc)):
+                    continue
+
                 repo_label = rc.repo_id
                 target = target_branch_for(settings, rc)
                 interval = max(60, rc.ci_monitor_interval_seconds)

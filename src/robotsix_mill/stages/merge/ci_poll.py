@@ -92,6 +92,15 @@ class CIPollMixin(_MergeStageBase):
             0,
         )
 
+        # Check whether this repo opts out of forge-CI gating.
+        from ...config.repo_settings import load_repo_skip_ci
+
+        if load_repo_skip_ci(ctx.service.workspace(ticket).dir / "repo"):
+            return Outcome(
+                State.HUMAN_MR_APPROVAL,
+                "CI gate skipped for this repo (skip_ci); PR mergeable — awaiting human merge approval",
+            )
+
         # Check remote CI.
         try:
             ci_status = get_forge(s, repo_config=ctx.repo_config).check_status(
@@ -343,6 +352,12 @@ class CIPollMixin(_MergeStageBase):
             ctx.service.workspace(ticket).artifacts_dir / _REBASE_COUNTER,
             0,
         )
+
+        # Check whether this repo opts out of forge-CI gating.
+        from ...config.repo_settings import load_repo_skip_ci
+
+        if load_repo_skip_ci(ctx.service.workspace(ticket).dir / "repo"):
+            return Outcome(State.HUMAN_MR_APPROVAL)
 
         # Check remote CI before returning no-op.
         try:

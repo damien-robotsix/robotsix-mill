@@ -931,3 +931,193 @@ def test_log_fetch_error_defers_then_files_with_error_note(tmp_path, monkeypatch
     state = json.loads(state_path.read_text("utf-8"))
     assert "300:deadbeef" in state["seen"]
     assert "300:deadbeef" not in state.get("deferred", {})
+
+
+# === skip_ci toggle =======================================================
+
+
+def test_ci_monitor_skips_repo_when_skip_ci_true(tmp_path, monkeypatch):
+    """When a repo has skip_ci=True in its .robotsix-mill/config.yaml,
+    the CI monitor skips it entirely — no poll, no tickets filed."""
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    forge = _make_fake_forge(
+        monkeypatch,
+        runs=[
+            {
+                "id": 1,
+                "name": "docker-publish",
+                "workflow_id": 200,
+                "head_sha": "abc",
+                "conclusion": "failure",
+                "html_url": "http://run/1",
+                "created_at": "2025-01-01T00:00:00Z",
+            },
+        ],
+        logs="build error\n",
+    )
+
+    # Write skip_ci: true into the repo's config via the piggyback clone dir.
+    clone_dir = ctx.settings.data_dir / "test-repo" / "periodic_workspace" / "repo"
+    clone_dir.mkdir(parents=True, exist_ok=True)
+    (clone_dir / ".git").mkdir(exist_ok=True)
+    cfg_dir = clone_dir / ".robotsix-mill"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    (cfg_dir / "config.yaml").write_text("skip_ci: true\n", encoding="utf-8")
+
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    if state_path.exists():
+        state_path.unlink()
+
+    worker = Worker(ctx)
+    worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
+
+    import asyncio
+
+    loop = asyncio.new_event_loop()
+
+    async def _run_one_cycle():
+        async def _fast_sleep(s):
+            if s >= 1:
+                raise asyncio.CancelledError()
+
+        monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
+        try:
+            await worker._ci_monitor_poll_loop()
+        except asyncio.CancelledError:
+            pass
+
+    loop.run_until_complete(_run_one_cycle())
+    loop.close()
+
+    # No CI tickets should have been filed.
+    ci_tickets = [t for t in ctx.service.list() if t.source == "ci"]
+    assert len(ci_tickets) == 0
+
+    # The forge should never have been called.
+    assert forge.logs_call_count == 0
+
+
+def test_ci_monitor_polls_repo_when_skip_ci_false(tmp_path, monkeypatch):
+    """When a repo has skip_ci=False, the CI monitor polls it normally."""
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    _make_fake_forge(
+        monkeypatch,
+        runs=[
+            {
+                "id": 1,
+                "name": "docker-publish",
+                "workflow_id": 200,
+                "head_sha": "abc",
+                "conclusion": "failure",
+                "html_url": "http://run/1",
+                "created_at": "2025-01-01T00:00:00Z",
+            },
+        ],
+        logs="build error\n",
+    )
+
+    # Write skip_ci: false into the repo's config.
+    clone_dir = ctx.settings.data_dir / "test-repo" / "periodic_workspace" / "repo"
+    clone_dir.mkdir(parents=True, exist_ok=True)
+    (clone_dir / ".git").mkdir(exist_ok=True)
+    cfg_dir = clone_dir / ".robotsix-mill"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    (cfg_dir / "config.yaml").write_text("skip_ci: false\n", encoding="utf-8")
+
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    if state_path.exists():
+        state_path.unlink()
+
+    worker = Worker(ctx)
+    worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
+
+    import asyncio
+
+    loop = asyncio.new_event_loop()
+
+    async def _run_one_cycle():
+        async def _fast_sleep(s):
+            if s >= 1:
+                raise asyncio.CancelledError()
+
+        monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
+        try:
+            await worker._ci_monitor_poll_loop()
+        except asyncio.CancelledError:
+            pass
+
+    loop.run_until_complete(_run_one_cycle())
+    loop.close()
+
+    # A CI ticket should have been filed (normal behaviour).
+    ci_tickets = [t for t in ctx.service.list() if t.source == "ci"]
+    assert len(ci_tickets) == 1
+
+
+def test_ci_monitor_polls_repo_when_no_config_clone(tmp_path, monkeypatch):
+    """When no piggyback clone exists (_find_config_clone_dir returns None),
+    load_repo_skip_ci returns False and the repo is polled normally."""
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    _make_fake_forge(
+        monkeypatch,
+        runs=[
+            {
+                "id": 1,
+                "name": "docker-publish",
+                "workflow_id": 200,
+                "head_sha": "abc",
+                "conclusion": "failure",
+                "html_url": "http://run/1",
+                "created_at": "2025-01-01T00:00:00Z",
+            },
+        ],
+        logs="build error\n",
+    )
+
+    # Ensure NO clone dirs exist at all.
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    if state_path.exists():
+        state_path.unlink()
+
+    worker = Worker(ctx)
+    worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
+
+    import asyncio
+
+    loop = asyncio.new_event_loop()
+
+    async def _run_one_cycle():
+        async def _fast_sleep(s):
+            if s >= 1:
+                raise asyncio.CancelledError()
+
+        monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
+        try:
+            await worker._ci_monitor_poll_loop()
+        except asyncio.CancelledError:
+            pass
+
+    loop.run_until_complete(_run_one_cycle())
+    loop.close()
+
+    # A CI ticket should have been filed (normal behaviour — no clone = no skip).
+    ci_tickets = [t for t in ctx.service.list() if t.source == "ci"]
+    assert len(ci_tickets) == 1
