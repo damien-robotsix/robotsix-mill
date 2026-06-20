@@ -770,7 +770,8 @@ class TestMemoryLedger:
     def test_memory_md_over_cap_flagged(self, tmp_path):
         settings = _make_settings(tmp_path, max_memory_chars=100)
         ledger = tmp_path / "implement_memory.md"
-        _write_bytes(ledger, 200)
+        # 500 bytes of 'x' = 500 chars, well above cap+tolerance (100+200=300).
+        _write_bytes(ledger, 500)
 
         findings = check_unbounded_candidates(tmp_path, settings)
 
@@ -778,7 +779,7 @@ class TestMemoryLedger:
         f = findings[0]
         assert f["pattern"] == "*_memory.md"
         assert f["path"] == "implement_memory.md"
-        assert f["current_size"] == 200
+        assert f["current_size"] == 500
         assert f["cap_size"] == 100
         assert f["cap_detail"] == "max_memory_chars=100"
         assert f["check"] == "unbounded_candidates"
@@ -1015,6 +1016,191 @@ class TestNonMatchingFiles:
 # ---------------------------------------------------------------------------
 # ticket 4 — Integration with run_data_dir_audit_pass
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# ticket 4 — char-aware cap comparison + content embed
+# ---------------------------------------------------------------------------
+
+
+class TestCharAwareMemoryCap:
+    """Tests for character-aware cap comparison for ``*_memory.md`` patterns
+    (distinguishing char-capped from byte-capped), tolerance against
+    transient post-write overages, deployed-data framing in the ticket
+    body, and embedded file content."""
+
+    def test_multibyte_at_cap_no_finding(self, tmp_path):
+        """A ``*_memory.md`` whose character count is ≤ cap but whose
+        UTF-8 byte size exceeds the cap (due to multibyte chars) is NOT
+        flagged."""
+        settings = _make_settings(tmp_path, max_memory_chars=100)
+        ledger = tmp_path / "implement_memory.md"
+        # 🔍 is 4 bytes in UTF-8, 1 char. 25 × 🔍 = 25 chars, 100 bytes.
+        # + 75 single-byte chars = 100 chars total, 75 + 100 = 175 bytes > 100.
+        text = ("🔍" * 25) + ("x" * 75)
+        assert len(text) == 100
+        assert len(text.encode("utf-8")) == 175  # bytes > cap (100)
+        ledger.write_text(text, encoding="utf-8")
+
+        findings = check_unbounded_candidates(tmp_path, settings)
+
+        # Char count (100) ≤ cap (100) → NO finding, even though bytes > cap.
+        assert findings == []
+
+    def test_multibyte_just_under_cap_no_finding(self, tmp_path):
+        """Chars ≤ cap but bytes well over cap (all multibyte) → no finding."""
+        settings = _make_settings(tmp_path, max_memory_chars=100)
+        ledger = tmp_path / "retrospect_memory.md"
+        # 90 × 🔍 = 90 chars, 360 bytes. Under the char cap of 100.
+        text = "🔍" * 90
+        assert len(text) == 90
+        assert len(text.encode("utf-8")) == 360
+        ledger.write_text(text, encoding="utf-8")
+
+        findings = check_unbounded_candidates(tmp_path, settings)
+        assert findings == []
+
+    def test_transient_overage_within_tolerance_no_finding(self, tmp_path):
+        """A memory file only ~22 chars over the cap is within the
+        ~2%/~200-char tolerance and is NOT flagged."""
+        settings = _make_settings(tmp_path, max_memory_chars=8000)
+        ledger = tmp_path / "retrospect_memory.md"
+        # 8022 chars — 22 over the 8000 cap. Tolerance = max(160, 200) = 200.
+        # 8022 ≤ 8200 → no finding.
+        text = "x" * 8022
+        assert len(text) == 8022
+        ledger.write_text(text, encoding="utf-8")
+
+        findings = check_unbounded_candidates(tmp_path, settings)
+        assert findings == []
+
+    def test_transient_overage_at_tolerance_boundary(self, tmp_path):
+        """Exactly cap + tolerance chars → NOT flagged (≤ check)."""
+        settings = _make_settings(tmp_path, max_memory_chars=100)
+        ledger = tmp_path / "boundary_memory.md"
+        # cap=100, tolerance = max(2, 200) = 200, threshold = 300.
+        text = "x" * 300
+        assert len(text) == 300
+        ledger.write_text(text, encoding="utf-8")
+
+        findings = check_unbounded_candidates(tmp_path, settings)
+        assert findings == []
+
+    def test_genuinely_over_cap_finding_with_framing(self, tmp_path):
+        """A memory file whose chars exceed cap beyond tolerance IS flagged,
+        and the rendered body contains the deployed-.data/code-fix framing,
+        chars in the size line, and embedded file contents."""
+        from robotsix_mill.runners.data_dir_audit.filing import _build_unbounded_finding
+
+        settings = _make_settings(tmp_path, max_memory_chars=100)
+        ledger = tmp_path / "overflow_memory.md"
+        text = "x" * 450  # 450 chars > 100 + 200 (tolerance) = 300
+        ledger.write_text(text, encoding="utf-8")
+
+        findings = check_unbounded_candidates(tmp_path, settings)
+
+        assert len(findings) == 1
+        f = findings[0]
+        assert f["pattern"] == "*_memory.md"
+        assert f["path"] == "overflow_memory.md"
+        assert f["current_size"] == 450  # st_size (bytes, all ASCII)
+        assert f["cap_size"] == 100
+        assert f["measured_value"] == 450
+        assert f["measured_unit"] == "chars"
+        assert f["embedded_content"] == text
+        assert f["content_truncated"] is False
+
+        # Render the body.
+        gap_id, title, body = _build_unbounded_finding(f)
+
+        # gap_id / title unchanged in structure.
+        assert gap_id == "unbounded:overflow_memory.md"
+        assert "overflow_memory.md" in title
+
+        # Size line expressed in chars.
+        assert "450 chars" in body
+        assert "450 B" in body  # the byte-size parenthetical
+
+        # Cap line in chars.
+        assert "100 chars" in body
+
+        # Deployed-data framing.
+        assert "`.data/<repo>/` runtime directory" in body
+        assert "not part of the source tree" in body.lower()
+        assert "no agent has host data-dir access" in body.lower()
+        assert "CODE change" in body
+
+        # Memory-ledger writer named.
+        assert "`persist_memory`" in body
+        assert "`load_memory`" in body
+        assert "`settings.max_memory_chars`" in body
+
+        # File contents section with the embedded text.
+        assert "## File contents" in body
+        assert "```" in body
+        assert text in body
+
+    def test_memory_over_cap_finding_has_embedded_full_content(self, tmp_path):
+        """A small over-cap memory file (≤ 20 KB) gets its full content
+        embedded in the finding body."""
+        from robotsix_mill.runners.data_dir_audit.filing import _build_unbounded_finding
+
+        settings = _make_settings(tmp_path, max_memory_chars=100)
+        ledger = tmp_path / "small_overflow_memory.md"
+        text = "line 1\nline 2\nline 3\n"
+        # 21 chars (all ASCII), cap=100, tolerance=200, 21 ≤ 300 → NOT over cap.
+        # Need > 300 chars to flag. Let's make a file with 400 chars.
+        text = "line " + "x" * 394 + "\n"  # ~400 chars
+        assert len(text) >= 400
+        ledger.write_text(text, encoding="utf-8")
+
+        findings = check_unbounded_candidates(tmp_path, settings)
+        assert len(findings) == 1
+        f = findings[0]
+
+        # Content should be fully embedded (file ≤ 20 KB).
+        assert f["embedded_content"] == text
+        assert f["content_truncated"] is False
+
+        _gap_id, _title, body = _build_unbounded_finding(f)
+        assert text in body
+        assert "head+tail excerpt" not in body
+
+    def test_large_file_gets_excerpt_not_full_dump(self, tmp_path):
+        """A finding on a file larger than the 20 KB embed threshold
+        yields a body whose embed contains a truncation marker and does
+        NOT contain the entire content."""
+        from robotsix_mill.runners.data_dir_audit.filing import _build_unbounded_finding
+
+        settings = _make_settings(tmp_path, max_memory_chars=100)
+        ledger = tmp_path / "big_overflow_memory.md"
+        # Create > 20 KB of text. 50000 chars of 'x' = 50000 bytes > 20480.
+        text = ("line %05d\n" * 5000) % tuple(range(5000))  # many lines
+        # Ensure it's > 20 KB.
+        assert len(text.encode("utf-8")) > 20 * 1024
+        # Ensure it's over the cap (100 chars + tolerance 200 = 300).
+        assert len(text) > 300
+        ledger.write_text(text, encoding="utf-8")
+
+        findings = check_unbounded_candidates(tmp_path, settings)
+        assert len(findings) == 1
+        f = findings[0]
+
+        # Content should be truncated.
+        assert f["content_truncated"] is True
+        embedded = f["embedded_content"]
+        # The truncation marker should be present.
+        assert "bytes omitted" in embedded
+        # The embedded content should NOT be the full text.
+        assert embedded != text
+        # It should contain some lines from the beginning.
+        assert "line 00000" in embedded
+        # And some lines from the end.
+        assert "line 04999" in embedded
+
+        # The body note.
+        _gap_id, _title, body = _build_unbounded_finding(f)
+        assert "head+tail excerpt" in body
 
 
 class TestRunDataDirAuditPass:

@@ -64,6 +64,10 @@ def _build_finding(
     pattern: str,
     record_count: int | None,
     record_max: int | None,
+    measured_value: int | None = None,
+    measured_unit: str = "bytes",
+    embedded_content: str = "",
+    content_truncated: bool = False,
 ) -> dict[str, Any]:
     """Build a finding dict for ``path`` against its pattern's caps."""
     try:
@@ -80,6 +84,10 @@ def _build_finding(
         "severity": "warning",
         "record_count": record_count,
         "record_max": record_max,
+        "measured_value": measured_value if measured_value is not None else size,
+        "measured_unit": measured_unit,
+        "embedded_content": embedded_content,
+        "content_truncated": content_truncated,
     }
 
 
@@ -172,25 +180,60 @@ def _build_unbounded_finding(finding: dict[str, Any]) -> tuple[str, str, str]:
     pattern = finding.get("pattern", "")
     record_count = finding.get("record_count")
     record_max = finding.get("record_max")
+    measured_value = int(finding.get("measured_value", current_size))
+    measured_unit = finding.get("measured_unit", "bytes")
+    embedded_content = finding.get("embedded_content", "")
+    content_truncated = finding.get("content_truncated", False)
+
     gap_id = f"unbounded:{_sanitize_gap_segment(path)}"
     title = f"unbounded {path} (>{_human_bytes(cap_bytes)})"
+
+    if measured_unit == "chars":
+        size_str = f"{measured_value} chars ({_human_bytes(current_size)})"
+        cap_str = f"{cap_detail} ({cap_bytes} chars)"
+    else:
+        size_str = f"{_human_bytes(current_size)} ({current_size} bytes)"
+        cap_str = f"{cap_detail} ({_human_bytes(cap_bytes)})"
+
     body_lines = [
         "_Filed by the periodic data-dir audit pass._",
         "",
         "## Finding",
         "",
         f"- **Path:** `{path}`",
-        f"- **Current size:** {_human_bytes(current_size)} ({current_size} bytes)",
-        f"- **Cap:** {cap_detail} ({_human_bytes(cap_bytes)})",
+        f"- **Current size:** {size_str}",
+        f"- **Cap:** {cap_str}",
         f"- **Pattern:** `{pattern}`",
     ]
     if record_count is not None and record_max is not None:
         body_lines.append(f"- **Record count:** {record_count} (max {record_max})")
     body_lines.append("")
     body_lines.append(
-        f"This file exceeds its documented cap ({cap_detail}); "
-        "consider pruning or capping.\n"
+        "This file lives under the deployed host's `.data/<repo>/` runtime "
+        "directory — it is NOT part of the source tree. No agent has host "
+        "data-dir access, so the file cannot be hand-edited. The fix is a "
+        "CODE change in the writer that produces this file: enforce the cap "
+        "or add rotation logic."
     )
+    if pattern == "*_memory.md":
+        body_lines.append(
+            "For this memory ledger, the writer is `persist_memory` / "
+            "`load_memory` in `runners/pass_runner.py`; the cap is "
+            "`settings.max_memory_chars`."
+        )
+    body_lines.append("")
+
+    if embedded_content:
+        body_lines.append("## File contents")
+        body_lines.append("")
+        body_lines.append("```")
+        body_lines.append(embedded_content.strip())
+        body_lines.append("```")
+        if content_truncated:
+            body_lines.append("")
+            body_lines.append("_(head+tail excerpt — full file not shown.)_")
+        body_lines.append("")
+
     body = "\n".join(body_lines)
     return gap_id, title, body
 
