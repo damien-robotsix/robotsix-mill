@@ -302,7 +302,10 @@ def run_coordinator(
     try:
         from .prompt_blocks import section
 
-        limits = UsageLimits(request_limit=settings.coordinator_request_limit)
+        limits = UsageLimits(
+            request_limit=settings.coordinator_request_limit,
+            tool_calls_limit=settings.coordinator_max_tool_calls,
+        )
         user_prompt = ""
         if epic_context:
             user_prompt += f"{epic_context}\n\n"

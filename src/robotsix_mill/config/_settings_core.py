@@ -76,6 +76,11 @@ class _CoreSettings(BaseModel):
     # ~49 implement calls, so 200 leaves generous headroom; raising it
     # only matters if a ticket genuinely needs more steps.
     coordinator_request_limit: int = Field(default=200, ge=1)
+    # Hard cap on total tool calls per coordinator (implement) trace.
+    # The request cap is 200; this ceiling sits generously above any
+    # legitimate implement run while still terminating the 1000+-read
+    # runaway loops that produced incomplete_trace + cost_outlier flags.
+    coordinator_max_tool_calls: int = Field(default=300, ge=1)
     # Per-subtask request budget when the coordinator delegates via
     # ``spawn_subtask``. The parent's ``coordinator_request_limit``
     # still bounds the outer loop; this cap bounds each individual
