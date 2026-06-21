@@ -6,6 +6,8 @@
 # Python package installs (pip / uv):
 (^|\.)pypi\.org$
 (^|\.)pythonhosted\.org$
+# Node package installs (npm):
+(^|\.)npmjs\.org$
 # Git operations + release/asset downloads on GitHub:
 (^|\.)github\.com$
 (^|\.)githubusercontent\.com$
