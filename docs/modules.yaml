@@ -711,9 +711,9 @@ modules:
       - tests/__init__.py
       - tests/conftest.py
       - tests/script_loader.py
-      - tests/meta/test_docs_nav.py
-      - tests/meta/test_modules_yaml_paths.py
-      - tests/runners/test_check_config_sync.py
+      - tests/dev-tooling/test_docs_nav.py
+      - tests/dev-tooling/test_modules_yaml_paths.py
+      - tests/dev-tooling/test_check_config_sync.py
     dependencies: []
 
   # -------------------------------------------------------------------
