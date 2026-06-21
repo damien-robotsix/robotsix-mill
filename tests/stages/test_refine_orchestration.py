@@ -229,7 +229,8 @@ def test_review_conciseness_success_returns_concise_and_writes_verbose(
     t = _ticket(ctx)
     ws = ctx.service.workspace(t)
     monkeypatch.setattr(
-        refining, "review_spec_for_conciseness",
+        refining,
+        "review_spec_for_conciseness",
         _mock_spec_review(concise_spec=_CONCISE_SPEC),
     )
 
@@ -285,7 +286,8 @@ def test_review_conciseness_child_index_variant(ctx_factory, monkeypatch, caplog
     t = _ticket(ctx)
     ws = ctx.service.workspace(t)
     monkeypatch.setattr(
-        refining, "review_spec_for_conciseness",
+        refining,
+        "review_spec_for_conciseness",
         _mock_spec_review(concise_spec=_CONCISE_SPEC),
     )
 
