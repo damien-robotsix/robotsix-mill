@@ -971,7 +971,8 @@ class RefineAgentMixin:
         # Write the minimal spec to the workspace description so implement
         # picks it up (unlike the triage-skip and split-child paths, which
         # keep the draft as-is, this path produces a new spec).
-        ws.write_description(spec)
+        new_hash = ws.write_description(spec)
+        ctx.service.set_content_hash(ticket.id, new_hash)
 
         # Write an empty file_map so implement treats this as scope-free mode.
         RefineAgentMixin._write_file_map(ws, [], only_if_absent=True)
