@@ -100,4 +100,7 @@ def run_test_scope_agent(
             needs_full_suite=True,
             rationale=f"agent call failed ({type(exc).__name__}: {exc}) — defaulting to full suite",
         )
-    return result.output
+    output = result.output
+    if not isinstance(output, TestScopeVerdict):
+        raise TypeError(f"Expected TestScopeVerdict, got {type(output).__name__}")
+    return output
