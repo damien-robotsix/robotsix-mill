@@ -637,8 +637,7 @@ class ReviewStage(Stage):
                         + "\n\nIn-scope items to fix now (out-of-scope asks were "
                         "spawned as follow-ups):\n"
                         + "\n".join(
-                            f"- {a.description.splitlines()[0][:200]}"
-                            for a in in_scope
+                            f"- {a.description.splitlines()[0][:200]}" for a in in_scope
                         )
                     )
                 ctx.service.add_comment(ticket.id, body, author="review")

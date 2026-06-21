@@ -873,9 +873,7 @@ def test_out_of_scope_ask_uses_explicit_title(ctx_factory, monkeypatch):
 # --- gaps-already-addressed filtering ------------------------------------
 
 
-def test_gaps_already_addressed_all_filtered_approves(
-    ctx_factory, monkeypatch
-):
+def test_gaps_already_addressed_all_filtered_approves(ctx_factory, monkeypatch):
     """Every out-of-scope ask targets files already in the implementer's
     branch diff → all filtered as already-addressed, no follow-ups
     spawned, ticket approved directly (DOCUMENTING)."""
@@ -921,9 +919,7 @@ def test_gaps_already_addressed_all_filtered_approves(
     assert any("no follow-up needed" in b for b in bodies)
 
 
-def test_gaps_already_addressed_mixed_some_filtered(
-    ctx_factory, monkeypatch
-):
+def test_gaps_already_addressed_mixed_some_filtered(ctx_factory, monkeypatch):
     """Mixed out-of-scope asks: one already addressed (files in diff),
     one still pending (files NOT in diff).  The pending ask spawns a
     follow-up; the already-addressed ask is skipped with a comment.
@@ -974,9 +970,7 @@ def test_gaps_already_addressed_mixed_some_filtered(
     comments = ctx.service.list_comments(t.id)
     bodies = [c.body for c in comments]
     assert any("already addressed in the implementer" in b for b in bodies)
-    assert any(
-        "spawned as follow-up ticket" in b for b in bodies
-    )
+    assert any("spawned as follow-up ticket" in b for b in bodies)
 
 
 def test_gaps_already_addressed_empty_files_touched_still_pending():
