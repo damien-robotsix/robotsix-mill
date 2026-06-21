@@ -180,11 +180,12 @@ def _mock_auto_approve(decision="NEEDS_APPROVAL", reason="design decision presen
     return _run
 
 
-def _mock_spec_review(concise_spec="## concise", stripped_summary="stripped 3 lines"):
+def _mock_spec_review(concise_spec=None, stripped_summary="stripped 3 lines"):
     def _run(*, settings, spec_markdown, **kw):
-        del settings, spec_markdown, kw
+        del settings, kw
         return SpecReviewResult(
-            concise_spec=concise_spec, stripped_summary=stripped_summary
+            concise_spec=concise_spec if concise_spec is not None else spec_markdown,
+            stripped_summary=stripped_summary,
         )
 
     return _run

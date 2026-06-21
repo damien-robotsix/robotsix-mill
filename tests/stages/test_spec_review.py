@@ -178,8 +178,9 @@ def test_flag_off_no_review_and_no_artifact(
     monkeypatch,
     tmp_path,
 ):
-    """With spec_review_enabled=False (default), no review is applied and
+    """With spec_review_enabled=False, no review is applied and
     no refine-verbose.md artifact is saved."""
+    ctx.settings.spec_review_enabled = False
     monkeypatch.setattr(
         "robotsix_mill.stages.refine.dedup.run_dedup_check",
         lambda **kw: {
