@@ -99,7 +99,7 @@ def make_list_epic_children_tool(settings: Settings, current_ticket_id: str):
                 service, ticket.parent_id, children, current_ticket_id
             )
 
-        except Exception as e:  # noqa: BLE001 — never abort the agent run
+        except Exception as e:
             return f"list_epic_children: error ({e!r})"
 
     from .tool_registry import ToolInfo, ToolRegistry

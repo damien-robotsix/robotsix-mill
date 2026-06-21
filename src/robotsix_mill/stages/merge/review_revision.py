@@ -137,7 +137,7 @@ class ReviewRevisionMixin(_MergeStageBase):
                     _facade.persist_memory(
                         review_revision_memory_path, result.updated_memory
                     )
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.exception("%s: review-revision agent crashed: %s", ticket.id, e)
             ok = False
 
@@ -146,7 +146,7 @@ class ReviewRevisionMixin(_MergeStageBase):
             try:
                 local = _facade.git_ops.head_sha(repo_dir)
                 remote = _facade.git_ops.remote_branch_sha(repo_dir, branch)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 local, remote = None, "force-push"
 
             if local is not None and remote == local:
@@ -179,7 +179,7 @@ class ReviewRevisionMixin(_MergeStageBase):
                     remote_url=_facade._resolve_remote_url(s, ctx.repo_config),
                     token=_facade.github_token(s, repo_config=ctx.repo_config),
                 )
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 log.exception(
                     "%s: force-push after review-revision failed: %s", ticket.id, e
                 )
@@ -230,7 +230,7 @@ class ReviewRevisionMixin(_MergeStageBase):
             return None
         try:
             review_status = forge.pr_review_status(source_branch=branch)
-        except Exception as e:  # noqa: BLE001 — transient
+        except Exception as e:
             log.warning("%s: pr_review_status failed (retry): %s", ticket.id, e)
             return None
 

@@ -301,7 +301,7 @@ def _run_cross_repo_detection(
     cross-repo dependency is detected.
     """
     try:
-        from ..config.repos import get_repos_config  # noqa: E402
+        from ..config.repos import get_repos_config
 
         repos = get_repos_config()
         if repos is None:

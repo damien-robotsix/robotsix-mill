@@ -159,14 +159,14 @@ def spawn_dependency_fix(
             ticket.id,
             f"parked pending dependency fix {fix_id}: {block_reason_prefix}",
         )
-    except Exception:  # noqa: BLE001 — history note is best-effort
+    except Exception:
         log.warning("%s: failed to record dependency-fix park note", ticket.id)
     try:
         ctx.service.add_history_note(
             fix_id,
             f"spawned by {ticket.id}: {block_reason_prefix}",
         )
-    except Exception:  # noqa: BLE001 — history note is best-effort
+    except Exception:
         log.warning("%s: failed to record dependency-fix spawn note", fix_id)
 
     return Outcome(

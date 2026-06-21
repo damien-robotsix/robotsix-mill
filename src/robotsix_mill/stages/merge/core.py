@@ -130,5 +130,5 @@ class MergeStage(
             get_forge(ctx.settings, repo_config=ctx.repo_config).delete_branch(
                 branch=branch
             )
-        except Exception as e:  # noqa: BLE001 — best-effort cleanup, never fatal
+        except Exception as e:
             log.warning("%s: branch cleanup failed for %s: %s", ticket.id, branch, e)

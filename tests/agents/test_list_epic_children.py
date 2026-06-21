@@ -68,7 +68,7 @@ def test_never_raises_returns_error_string(settings, service, monkeypatch):
     # it and return an error string rather than propagating.
     import robotsix_mill.core.service as service_mod
 
-    def _boom(self, ticket_id):  # noqa: ANN001
+    def _boom(self, ticket_id):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(service_mod.TicketService, "list_children", _boom)

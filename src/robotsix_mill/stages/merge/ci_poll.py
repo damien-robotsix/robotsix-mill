@@ -54,7 +54,7 @@ class CIPollMixin(_MergeStageBase):
             pr = get_forge(s, repo_config=ctx.repo_config).pr_status(
                 source_branch=branch
             )
-        except Exception as e:  # noqa: BLE001 — transient: retry next poll
+        except Exception as e:
             log.warning("%s: PR status check failed (retry): %s", ticket.id, e)
             return Outcome(State.IMPLEMENT_COMPLETE)
 
@@ -106,7 +106,7 @@ class CIPollMixin(_MergeStageBase):
             ci_status = get_forge(s, repo_config=ctx.repo_config).check_status(
                 source_branch=branch
             )
-        except Exception as e:  # noqa: BLE001 — transient
+        except Exception as e:
             log.warning("%s: check_status failed (retry): %s", ticket.id, e)
             return Outcome(State.IMPLEMENT_COMPLETE)
 
@@ -298,7 +298,7 @@ class CIPollMixin(_MergeStageBase):
             pr = get_forge(s, repo_config=ctx.repo_config).pr_status(
                 source_branch=branch
             )
-        except Exception as e:  # noqa: BLE001 — transient: retry next poll
+        except Exception as e:
             log.warning("%s: PR status check failed (retry): %s", ticket.id, e)
             return Outcome(State.HUMAN_MR_APPROVAL)  # no-op
 
@@ -364,7 +364,7 @@ class CIPollMixin(_MergeStageBase):
             ci_status = get_forge(s, repo_config=ctx.repo_config).check_status(
                 source_branch=branch
             )
-        except Exception as e:  # noqa: BLE001 — transient
+        except Exception as e:
             log.warning("%s: check_status failed (retry): %s", ticket.id, e)
             return Outcome(State.HUMAN_MR_APPROVAL)
 
@@ -514,7 +514,7 @@ class CIPollMixin(_MergeStageBase):
             pr = get_forge(s, repo_config=ctx.repo_config).pr_status(
                 source_branch=branch
             )
-        except Exception as e:  # noqa: BLE001 — transient
+        except Exception as e:
             log.warning("%s: PR status check failed (retry): %s", ticket.id, e)
             return Outcome(State.WAITING_AUTO_MERGE)
 
@@ -573,7 +573,7 @@ class CIPollMixin(_MergeStageBase):
             ci_status = get_forge(s, repo_config=ctx.repo_config).check_status(
                 source_branch=branch
             )
-        except Exception as e:  # noqa: BLE001 — transient
+        except Exception as e:
             log.warning("%s: check_status failed (retry): %s", ticket.id, e)
             return Outcome(State.WAITING_AUTO_MERGE)
 
@@ -666,5 +666,5 @@ class CIPollMixin(_MergeStageBase):
             if main_failing and pr_failing <= main_failing:
                 return pr_failing & main_failing
             return set()
-        except Exception:  # noqa: BLE001 — best-effort; fall through to normal retry
+        except Exception:
             return set()

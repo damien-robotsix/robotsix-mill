@@ -129,7 +129,7 @@ def _load_growth_state(state_path: Path) -> dict[str, dict[str, Any]]:
                 if isinstance(v, dict) and "size_bytes" in v and "mtime" in v
             }
         return {}
-    except Exception:  # noqa: BLE001 — corrupt state = first-run
+    except Exception:
         log.warning("data_dir_audit_state.json unreadable at %s — ignoring", state_path)
         return {}
 

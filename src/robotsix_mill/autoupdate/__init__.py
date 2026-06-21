@@ -137,7 +137,7 @@ def _build_parser() -> argparse.ArgumentParser:
 # ---------------------------------------------------------------------------
 
 
-def run(args: argparse.Namespace) -> int:  # noqa: C901
+def run(args: argparse.Namespace) -> int:
     """Execute the full autoupdate workflow given parsed *args*.
 
     Returns 0 on success/skip, non-zero on failure.

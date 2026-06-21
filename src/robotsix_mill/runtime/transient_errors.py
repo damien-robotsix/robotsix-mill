@@ -205,7 +205,7 @@ def _matches_insufficient_credit(exc: BaseException) -> bool:
                 err = str(js.get("error", {}).get("message", ""))
                 if _INSUFFICIENT_CREDIT_RE.search(err):
                     return True
-            except Exception:  # noqa: S110 -- defensive parse, ignore
+            except Exception:
                 pass
     # openai.PermissionDeniedError (402)
     if openai is not None and isinstance(exc, openai.PermissionDeniedError):
@@ -262,14 +262,14 @@ def parse_credit_shortfall(exc: BaseException) -> str:
             body = exc.response.text
             if body:
                 msg = body
-        except Exception:  # noqa: S110 -- defensive parse, ignore
+        except Exception:
             pass
         try:
             js = exc.response.json()
             err = str(js.get("error", {}).get("message", ""))
             if err:
                 msg = err
-        except Exception:  # noqa: S110 -- defensive parse, ignore
+        except Exception:
             pass
 
     m = _SHORTFALL_RE.search(msg)

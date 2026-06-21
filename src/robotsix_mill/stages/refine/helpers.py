@@ -431,7 +431,7 @@ def _verify_cited_fix_at_head(repo_dir: Path | None, rationale: str) -> bool:
             )
             if anc.returncode == 0:
                 return True
-    except Exception:  # noqa: BLE001 — best-effort; never raise out of the stage
+    except Exception:
         log.debug(
             "cited-fix ancestry check failed for rationale — ignoring",
             exc_info=True,

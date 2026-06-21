@@ -363,9 +363,9 @@ def _multi_page_mock_client(pages: dict[int, dict]):
 # ---------------------------------------------------------------------------
 
 
-from types import SimpleNamespace  # noqa: E402
+from types import SimpleNamespace
 
-from robotsix_mill.langfuse.client import session_cost  # noqa: E402
+from robotsix_mill.langfuse.client import session_cost
 
 
 def _capturing_api_get(captured: list):

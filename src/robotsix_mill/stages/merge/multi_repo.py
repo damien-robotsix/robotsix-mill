@@ -82,7 +82,7 @@ class MultiRepoMixin(_MergeStageBase):
 
             try:
                 pr = get_forge(s, repo_config=rc).pr_status(source_branch=branch)
-            except Exception as e:  # noqa: BLE001 — transient: re-poll next cycle
+            except Exception as e:
                 log.warning(
                     "%s: pr_status failed for %s (retry): %s", ticket.id, repo_id, e
                 )
@@ -101,7 +101,7 @@ class MultiRepoMixin(_MergeStageBase):
                 # pending for this poll.
                 try:
                     pr = get_forge(s, repo_config=rc).pr_status_by_url(url=url)
-                except Exception as e:  # noqa: BLE001 — transient: re-poll next cycle
+                except Exception as e:
                     log.warning(
                         "%s: pr_status_by_url failed for %s (retry): %s",
                         ticket.id,
@@ -127,7 +127,7 @@ class MultiRepoMixin(_MergeStageBase):
 
             try:
                 ci = get_forge(s, repo_config=rc).check_status(source_branch=branch)
-            except Exception as e:  # noqa: BLE001 — transient
+            except Exception as e:
                 log.warning(
                     "%s: check_status failed for %s (retry): %s",
                     ticket.id,
@@ -299,7 +299,7 @@ class MultiRepoMixin(_MergeStageBase):
                 ok = result.status == "DONE"
                 if result.updated_memory:
                     _facade.persist_memory(mem_path, result.updated_memory)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.exception(
                 "%s: multi-repo rebase crashed for %s: %s", ticket.id, repo_id, e
             )
@@ -313,7 +313,7 @@ class MultiRepoMixin(_MergeStageBase):
             try:
                 local = _facade.git_ops.head_sha(repo_dir)
                 remote = _facade.git_ops.remote_branch_sha(repo_dir, branch)
-            except Exception:  # noqa: BLE001 — be safe: assume changes
+            except Exception:
                 local, remote = None, "force-push"
             if local is not None and remote == local:
                 _write_counter(counter_path, attempt)
@@ -346,7 +346,7 @@ class MultiRepoMixin(_MergeStageBase):
                     State.BLOCKED,
                     f"rebase for {repo_id} post-check failed: {check}",
                 )
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 _write_counter(counter_path, attempt)
                 return Outcome(
                     State.BLOCKED,
@@ -413,7 +413,7 @@ class MultiRepoMixin(_MergeStageBase):
                 if s.delete_branch_on_merge:
                     try:
                         get_forge(s, repo_config=rc).delete_branch(branch=r["branch"])
-                    except Exception as e:  # noqa: BLE001 — best-effort cleanup
+                    except Exception as e:
                         log.warning(
                             "%s: branch cleanup failed for %s (%s): %s",
                             ticket.id,
@@ -421,7 +421,7 @@ class MultiRepoMixin(_MergeStageBase):
                             r["branch"],
                             e,
                         )
-            except Exception as e:  # noqa: BLE001 — transient; re-poll
+            except Exception as e:
                 log.warning(
                     "%s: multi-repo merge failed for %s (retry): %s",
                     ticket.id,

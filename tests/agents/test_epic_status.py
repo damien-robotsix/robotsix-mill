@@ -860,9 +860,9 @@ def test_closure_triggers_from_child_closed(settings, service, monkeypatch):
 # Orphaned-epic safety-net sweep (_maybe_sweep_orphaned_epic)
 # -----------------------------------------------------------------------
 
-from types import SimpleNamespace  # noqa: E402
+from types import SimpleNamespace
 
-from robotsix_mill.runtime.worker import Worker  # noqa: E402
+from robotsix_mill.runtime.worker import Worker
 
 
 def _sweep_self(ctx):

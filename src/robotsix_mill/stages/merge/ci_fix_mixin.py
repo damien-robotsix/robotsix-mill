@@ -74,7 +74,7 @@ class MultiRepoCiFixMixin(_MergeStageBase):
         forge = get_forge(s, repo_config=rc)
         try:
             ci = forge.check_status(source_branch=branch)
-        except Exception as e:  # noqa: BLE001 — transient
+        except Exception as e:
             log.warning(
                 "%s: check_status failed for %s (retry): %s", ticket.id, repo_id, e
             )
@@ -107,7 +107,7 @@ class MultiRepoCiFixMixin(_MergeStageBase):
                                 f"\n--- {run.get('name', 'workflow')} "
                                 f"(run {run['id']}) ---\n{logs}"
                             )
-        except Exception:  # noqa: BLE001 — best-effort enrichment
+        except Exception:
             log.warning(
                 "%s: failed to fetch job logs / alerts for %s", ticket.id, repo_id
             )
@@ -253,7 +253,7 @@ class MultiRepoCiFixMixin(_MergeStageBase):
                 ok = result.status == "DONE"
                 if result.updated_memory:
                     _facade.persist_memory(mem_path, result.updated_memory)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.exception(
                 "%s: multi-repo ci-fix crashed for %s: %s", ticket.id, repo_id, e
             )
@@ -265,7 +265,7 @@ class MultiRepoCiFixMixin(_MergeStageBase):
             try:
                 local = _facade.git_ops.head_sha(repo_dir)
                 remote = _facade.git_ops.remote_branch_sha(repo_dir, branch)
-            except Exception:  # noqa: BLE001 — be safe: assume changes
+            except Exception:
                 local, remote = None, "force-push"
             if local is not None and remote == local:
                 _write_counter(counter_path, attempt)
@@ -305,7 +305,7 @@ class MultiRepoCiFixMixin(_MergeStageBase):
                     State.BLOCKED,
                     f"ci fix for {repo_id} post-check failed: {check}",
                 )
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 _write_counter(counter_path, attempt)
                 return Outcome(
                     State.BLOCKED,
@@ -345,10 +345,10 @@ class MultiRepoCiFixMixin(_MergeStageBase):
         """
         try:
             ctx.service.add_history_note(ticket_id, note)
-        except Exception:  # noqa: BLE001 — history note is best-effort
+        except Exception:
             log.warning("%s: failed to record ci-fix attempt note", ticket_id)
 
-    def _try_multi_codeql_fp_triage(  # noqa: C901 — guardrail chain is inherently branchy
+    def _try_multi_codeql_fp_triage(
         self,
         ticket: Ticket,
         ctx: StageContext,
@@ -411,7 +411,7 @@ class MultiRepoCiFixMixin(_MergeStageBase):
                 ticket_id=ticket.id,
                 board_id=rc.board_id,
             )
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.warning(
                 "%s: codeql_fp_triage agent crashed for %s",
                 ticket.id,
@@ -430,7 +430,7 @@ class MultiRepoCiFixMixin(_MergeStageBase):
                 _json.dumps([v.model_dump() for v in result.verdicts]),
                 encoding="utf-8",
             )
-        except Exception:  # noqa: BLE001 — best-effort
+        except Exception:
             log.warning(
                 "%s: failed to persist codeql_fp_triage verdicts for %s",
                 ticket.id,
@@ -486,7 +486,7 @@ class MultiRepoCiFixMixin(_MergeStageBase):
                 "re-open any alert via the GitHub security tab."
             )
             ctx.service.add_history_note(ticket.id, "\n".join(note_lines))
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.warning("%s: failed to record codeql_fp_triage note", ticket.id)
 
         if dismissed_count > 0:

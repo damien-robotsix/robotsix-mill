@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..config import RepoConfig, Settings  # noqa: F401 — Settings kept for monkeypatch seam
+from ..config import RepoConfig, Settings
 from .periodic_runner import (
     ForgeParityPassResult,
     PERIODIC_PASS_CONFIGS,

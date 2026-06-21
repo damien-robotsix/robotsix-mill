@@ -248,7 +248,7 @@ def _shrink_trace_data(trace_data: str, max_chars: int = 400_000) -> tuple[str, 
 
     try:
         trace = _json.loads(trace_data)
-    except Exception:  # noqa: BLE001
+    except Exception:
         if len(trace_data) <= max_chars:
             return trace_data, 0
         return (
@@ -532,7 +532,7 @@ def run_trace_inspector(
             lambda h: h.run_sync(prompt, usage_limits=limits),
             what="trace_inspector",
         )
-    except Exception as e:  # noqa: BLE001 — degrade, never break the caller
+    except Exception as e:
         log.warning("trace inspector failed: %s", e)
         msg = str(e)
         # Common, recognisable failure modes get a user-readable hint.

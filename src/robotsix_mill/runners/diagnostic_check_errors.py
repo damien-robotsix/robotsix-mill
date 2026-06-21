@@ -62,7 +62,7 @@ class ErroredRunsCheck:
     def run(self, ctx: DiagnosticCheckContext) -> DiagnosticCheckResult:
         try:
             return self._run(ctx)
-        except Exception:  # noqa: BLE001 — preserve the log-and-swallow contract
+        except Exception:
             log.exception("errored_runs check failed")
             return DiagnosticCheckResult(
                 name=self.name,
@@ -115,7 +115,7 @@ class ErroredRunsCheck:
                 )
                 log.info("errored_runs: created ticket %s — %r", ticket.id, title)
                 drafts_created.append({"id": ticket.id, "title": title})
-            except Exception:  # noqa: BLE001 — one failed group must not block others
+            except Exception:
                 log.exception(
                     "errored_runs: failed to file ticket for fingerprint "
                     "(kind=%s, signature=%r)",

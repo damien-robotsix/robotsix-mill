@@ -100,7 +100,7 @@ Generate the structured PR body."""
 def generate_pr_description(
     diff: str,
     spec: str,
-    settings: "Settings",  # noqa: F821 — forward reference
+    settings: "Settings",
 ) -> str:
     """Generate a structured PR body from the implementation diff.
 
@@ -531,7 +531,7 @@ class DeliverStage(Stage):
                 get_forge(s, repo_config=repo_config).fork_repo(
                     source_owner=up_owner, source_repo=up_repo
                 )
-            except Exception as e:  # noqa: BLE001 — resumable, don't lose branch
+            except Exception as e:
                 log.exception("%s: auto-fork failed for %s", ticket.id, repo_label)
                 return None, Outcome(
                     State.BLOCKED,
@@ -595,7 +595,7 @@ class DeliverStage(Stage):
                 url = forge.open_merge_request(
                     source_branch=branch, title=title, body=body
                 )
-        except Exception as e:  # noqa: BLE001 — resumable, don't lose branch
+        except Exception as e:
             log.exception("%s: open PR failed for %s", ticket.id, repo_label)
             return None, Outcome(
                 State.BLOCKED,

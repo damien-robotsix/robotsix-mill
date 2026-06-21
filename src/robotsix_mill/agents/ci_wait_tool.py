@@ -128,7 +128,7 @@ def build_ci_wait_tool(
 
 # Register in the system-wide capability catalog so the prompt-tool-consistency
 # guard and smoke tests recognise the tool name.
-from .tool_registry import ToolInfo, ToolRegistry  # noqa: E402
+from .tool_registry import ToolInfo, ToolRegistry
 
 ToolRegistry.register(
     ToolInfo(

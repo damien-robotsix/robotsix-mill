@@ -100,7 +100,7 @@ def query_runs(
                     continue
             result.append(entry)
         return result
-    except Exception:  # noqa: BLE001 — a data-source outage must not crash callers
+    except Exception:
         log.exception("query_runs failed for board %s", board_id)
         return []
 
@@ -149,7 +149,7 @@ def _repo_config_for(
         if repo_config is None:
             log.warning("diagnostic data: unknown repo_id %r", repo_id)
         return repo_config
-    except Exception:  # noqa: BLE001 — never crash the caller
+    except Exception:
         log.exception("_repo_config_for failed for repo %s", repo_id)
         return None
 
@@ -203,7 +203,7 @@ def query_traces_since(
             settings, from_timestamp, repo_config
         )
         return [_normalize_trace(t) for t in raw_traces]
-    except Exception:  # noqa: BLE001 — Langfuse outage must not crash callers
+    except Exception:
         log.exception("query_traces_since failed for repo %s", repo_id)
         return []
 
@@ -229,7 +229,7 @@ def query_recent_traces(
             settings, limit=limit, repo_config=repo_config
         )
         return [_normalize_trace(t) for t in raw_traces]
-    except Exception:  # noqa: BLE001 — Langfuse outage must not crash callers
+    except Exception:
         log.exception("query_recent_traces failed for repo %s", repo_id)
         return []
 
@@ -251,6 +251,6 @@ def query_session_summary(
             settings = Settings()
         repo_config = _repo_config_for(repo_id, settings=settings)
         return langfuse_client.fetch_session_summary(settings, session_id, repo_config)
-    except Exception:  # noqa: BLE001 — Langfuse outage must not crash callers
+    except Exception:
         log.exception("query_session_summary failed for repo %s", repo_id)
         return None

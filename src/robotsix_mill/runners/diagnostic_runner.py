@@ -66,7 +66,7 @@ def _accessible_repos(monitored: list[str]) -> tuple[list[str], list[str]]:
             else:
                 invalid.append(repo_id)
         return valid, invalid
-    except Exception:  # noqa: BLE001 — a config-load outage must not crash the pass
+    except Exception:
         log.exception(
             "diagnostic: load_repos_config failed; attempting all "
             "configured repos unvalidated"

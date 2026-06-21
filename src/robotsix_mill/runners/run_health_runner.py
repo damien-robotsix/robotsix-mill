@@ -229,7 +229,7 @@ def _ticket_body(service: TicketService, ticket: object) -> str:
     """Best-effort read of a ticket's description body (for gap-id dedup)."""
     try:
         return service.workspace(ticket).read_description() or ""  # type: ignore[arg-type]
-    except Exception:  # noqa: BLE001 — best-effort dedup
+    except Exception:
         return ""
 
 

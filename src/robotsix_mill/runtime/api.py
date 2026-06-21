@@ -20,7 +20,7 @@ from .exception_handlers import (
     not_configured_error_handler,
     transition_error_handler,
 )
-from .lifespan import create_lifespan, setup_logging  # noqa: F401 — re-exported
+from .lifespan import create_lifespan, setup_logging
 from .middleware import RequestIDMiddleware
 from . import routes
 

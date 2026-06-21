@@ -187,7 +187,7 @@ def resolve_mill_service(
         from ..config import get_repos_config
 
         rc = get_repos_config().repos.get(target_repo_id)
-    except Exception:  # noqa: BLE001 — fallback must always work
+    except Exception:
         log.exception(
             "%s: target-repo lookup failed; caller should fall back "
             "to the current repo",

@@ -21,7 +21,7 @@ from typing import Any
 from ..vcs import git_ops
 
 
-def build_bridged_git_tools(  # noqa: C901 — four inner closures, each ~20 lines
+def build_bridged_git_tools(
     *,
     repo_dir: Path,
     branch: str,
@@ -179,7 +179,7 @@ def build_bridged_git_tools(  # noqa: C901 — four inner closures, each ~20 lin
 
 # Register the bridged git tools in the system-wide capability catalog so
 # the prompt-tool-consistency guard and smoke tests see them.
-from .tool_registry import ToolInfo, ToolRegistry  # noqa: E402
+from .tool_registry import ToolInfo, ToolRegistry
 
 ToolRegistry.register(
     ToolInfo(

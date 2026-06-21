@@ -141,7 +141,7 @@ def _make_background_pass(
                     )
                     registry.finish_ok(run_id, summary)
                     log.info("%s pass done", kind)
-                except Exception as e:  # noqa: BLE001 — background; just log
+                except Exception as e:
                     log.exception("%s pass failed", kind)
                     if run_id:
                         registry.finish_error(run_id, str(e))
@@ -431,7 +431,7 @@ def trace_health_check(
                         r.name_missing_count,
                         r.total_traces,
                     )
-            except Exception as e:  # noqa: BLE001 — background; just log
+            except Exception as e:
                 log.exception("trace-health check failed")
                 if run_id:
                     registry.finish_error(run_id, str(e))
@@ -479,7 +479,7 @@ def langfuse_cleanup_pass(
                     r.traces_before,
                     r.traces_deleted,
                 )
-            except Exception as e:  # noqa: BLE001 — background; just log
+            except Exception as e:
                 log.exception("langfuse-cleanup failed")
                 if run_id:
                     registry.finish_error(run_id, str(e))
@@ -529,7 +529,7 @@ def board_cleanup_pass(
                     )
                 registry.finish_ok(run_id, _default_summary(r))
                 log.info("board-cleanup pass done")
-            except Exception as e:  # noqa: BLE001 — background; just log
+            except Exception as e:
                 log.exception("board-cleanup pass failed")
                 if run_id:
                     registry.finish_error(run_id, str(e))
@@ -579,7 +579,7 @@ def meta_pass(
                 len(result.alignment_drafts_created),
                 total_drafts,
             )
-        except Exception as e:  # noqa: BLE001 — background; just log
+        except Exception as e:
             log.exception("meta pass failed")
             if run_id:
                 registry.finish_error(run_id, str(e))
@@ -621,7 +621,7 @@ def run_health_pass(
             )
             registry.finish_ok(run_id, summary)
             log.info("run-health pass done: %d draft(s)", len(result.drafts_created))
-        except Exception as e:  # noqa: BLE001 — background; just log
+        except Exception as e:
             log.exception("run-health pass failed")
             if run_id:
                 registry.finish_error(run_id, str(e))

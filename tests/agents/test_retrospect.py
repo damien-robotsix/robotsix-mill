@@ -1317,9 +1317,9 @@ def test_run_retrospect_agent_reprompts_once_on_unstructured_output(
 # --- insufficient-audit-data guard -----------------------------------------
 
 
-import pytest  # noqa: E402
+import pytest
 
-from robotsix_mill.agents.retrospecting import (  # noqa: E402
+from robotsix_mill.agents.retrospecting import (
     _NO_LANGFUSE_PLACEHOLDER,
     _NO_TRACES_PLACEHOLDER,
 )

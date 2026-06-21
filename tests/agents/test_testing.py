@@ -843,7 +843,7 @@ def test_run_test_agent_broken_pyproject_toml_short_circuits(monkeypatch, tmp_pa
     """run_test_agent returns (False, ...) for broken TOML without hitting sandbox."""
     from types import SimpleNamespace
 
-    from robotsix_mill.sandbox import SandboxError  # noqa: F401 — ensures module is loaded
+    from robotsix_mill.sandbox import SandboxError
 
     monkeypatch.setattr(
         "robotsix_mill.agents.testing.load_repo_test_command",
@@ -877,7 +877,7 @@ def test_run_smoke_agent_broken_pyproject_toml_short_circuits(monkeypatch, tmp_p
     """run_smoke_agent returns (False, ...) for broken TOML without hitting sandbox."""
     from types import SimpleNamespace
 
-    from robotsix_mill.sandbox import SandboxError  # noqa: F401 — ensures module is loaded
+    from robotsix_mill.sandbox import SandboxError
 
     monkeypatch.setattr(
         "robotsix_mill.agents.testing.load_repo_smoke_command",

@@ -289,7 +289,7 @@ def generate_children(
                 len(created_ids),
                 ticket_id,
             )
-        except Exception as e:  # noqa: BLE001 — background; just log
+        except Exception as e:
             log.exception("epic-breakdown failed for %s", ticket_id)
             registry.finish_error(run_id, str(e))
 

@@ -352,7 +352,7 @@ async def _process_ticket_inner(
                 root_io.set_output({"error": f"stub: {e}"})
             _post_trace_event(ctx, ticket_id, trace_id, stage_name)
             return
-        except Exception as e:  # noqa: BLE001 — any failure fails the ticket
+        except Exception as e:
             if root_io is not None:
                 root_io.set_output({"error": f"{type(e).__name__}: {str(e)[:200]}"})
             await _handle_stage_error(ticket_id, ctx, stage_name, e, trace_id)

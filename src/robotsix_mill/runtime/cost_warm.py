@@ -47,7 +47,7 @@ def warm_ticket_costs(settings: Any, items: Sequence[tuple[str, Any]]) -> None:
             ticket_id, repo_config = item
             try:
                 session_cost(settings, ticket_id, repo_config=repo_config)
-            except Exception:  # noqa: BLE001 — best-effort cache warm
+            except Exception:
                 log.debug("cost warm: lookup failed for %s", ticket_id, exc_info=True)
 
         with ThreadPoolExecutor(max_workers=_WARM_WORKERS) as ex:

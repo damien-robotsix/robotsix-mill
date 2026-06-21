@@ -155,7 +155,7 @@ def _list_existing_epics(service: TicketService) -> dict[str, Ticket]:
 def _read_body(service: TicketService, ticket: Ticket) -> str:
     try:
         return service.workspace(ticket).read_description().strip()
-    except Exception:  # noqa: BLE001 — be forgiving on read errors
+    except Exception:
         return ""
 
 
@@ -302,7 +302,7 @@ def _commit_and_open_pr(
             title=pr_title,
             body=pr_body,
         )
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         log.warning("roadmap-sync: open PR failed (%s) — branch pushed but no PR", e)
         return None
 

@@ -637,7 +637,7 @@ def _prune_oversized_memory_ledgers(settings: Settings) -> int:
         return 0
 
     # Lazy import to avoid circular dependency at module load time.
-    from ..pass_runner import persist_memory  # noqa: PLC0415
+    from ..pass_runner import persist_memory
 
     target_chars = max(1, settings.max_memory_chars - _NOTE_OVERHEAD)
     truncated = 0

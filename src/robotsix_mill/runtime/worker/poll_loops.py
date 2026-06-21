@@ -106,7 +106,7 @@ class PollLoopsMixin(_WorkerBase):
             hashlib.md5(kind.encode(), usedforsecurity=False).hexdigest(), 16
         )
         stagger_cap = max(60, min(interval // 12, 3600))  # 1 min .. 1 hour
-        stagger = (kind_hash % stagger_cap) + random.uniform(0, 60)  # noqa: S311
+        stagger = (kind_hash % stagger_cap) + random.uniform(0, 60)
         return base + stagger
 
     _PERIODIC_POLL_TICK_SECONDS = 60
@@ -256,7 +256,7 @@ class PollLoopsMixin(_WorkerBase):
                     self.run_registry.finish_ok(run_id, summary)
             except asyncio.CancelledError:
                 raise
-            except Exception as e:  # noqa: BLE001 — loop must survive
+            except Exception as e:
                 log.exception(
                     "bespoke %s/%s pass failed",
                     repo_config.repo_id,
@@ -442,7 +442,7 @@ class PollLoopsMixin(_WorkerBase):
                             result.traces_before,
                             settings.langfuse_cleanup_max_traces,
                         )
-                except Exception:  # noqa: BLE001 — periodic sweep must not die
+                except Exception:
                     log.exception("langfuse-cleanup poll failed for %s", label)
             await asyncio.sleep(interval)
 
@@ -471,7 +471,7 @@ class PollLoopsMixin(_WorkerBase):
                     result.get("escaped", 0),
                     result.get("skipped", 0),
                 )
-            except Exception:  # noqa: BLE001 — never let the poll die
+            except Exception:
                 log.exception("timeout-escalation poll failed")
             await asyncio.sleep(interval)
 
@@ -671,7 +671,7 @@ class PollLoopsMixin(_WorkerBase):
                     logs = forge.fetch_workflow_job_logs(run_id=run_id_val)
                     fetch_error = ""
                     break
-                except Exception as exc:  # noqa: BLE001 — captured for the draft
+                except Exception as exc:
                     fetch_error = f"{type(exc).__name__}: {exc}"
                     log.warning(
                         "CI monitor: failed to fetch logs for run %s "
@@ -823,7 +823,7 @@ class PollLoopsMixin(_WorkerBase):
 
                 try:
                     await self._poll_one_repo_ci(rc, target, now, ttl_seconds, _ansi_re)
-                except Exception:  # noqa: BLE001 — never let the poll die
+                except Exception:
                     log.exception("CI monitor poll failed for repo %s", repo_label)
 
                 last_polled[repo_label] = time.time()

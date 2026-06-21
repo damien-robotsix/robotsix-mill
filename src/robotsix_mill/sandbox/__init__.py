@@ -242,7 +242,7 @@ def _build_extra_packages_prefix(extra_packages: list[str]) -> tuple[str, bool]:
     return prefix, needs_write
 
 
-def run(  # noqa: C901 — extra-packages loading adds one branch; tightly-coupled argv construction
+def run(
     command: str,
     *,
     repo_dir: Path,

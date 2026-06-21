@@ -70,7 +70,7 @@ def get_engine(settings: Settings, board_id: str):
 def init_db(settings: Settings, board_id: str) -> None:
     """Create tables (if missing) on the per-board DB."""
     # import models so SQLModel.metadata is populated before create_all
-    from . import models  # noqa: F401
+    from . import models
 
     engine = get_engine(settings, board_id)
     SQLModel.metadata.create_all(engine)

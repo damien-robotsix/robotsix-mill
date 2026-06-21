@@ -240,7 +240,7 @@ you've learned).
 # ---------------------------------------------------------------------------
 
 
-def _make_tools(settings: Settings) -> list:  # noqa: C901 — factory intentionally groups all tool closures
+def _make_tools(settings: Settings) -> list:
     """Build the closures the agent calls during a consult."""
     from .web_research import run_web_research
 
@@ -399,7 +399,7 @@ async def run_web_knowledge(
             what="web_knowledge",
         )
         return str(result.output)
-    except Exception as e:  # noqa: BLE001 — degrade
+    except Exception as e:
         log.warning("web_knowledge failed: %s", e)
         return f"web_knowledge failed: {e}"
     finally:

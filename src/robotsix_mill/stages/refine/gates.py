@@ -80,7 +80,7 @@ class RefineGatesMixin:
                     ticket.id,
                 )
                 return None
-        except Exception:  # noqa: BLE001 — best-effort; never block refine
+        except Exception:
             log.debug("%s: dedup sendback-check skipped", ticket.id, exc_info=True)
 
         # Gather candidate tickets: all non-terminal + recently closed.

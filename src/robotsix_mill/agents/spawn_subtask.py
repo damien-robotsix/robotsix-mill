@@ -154,7 +154,7 @@ async def run_spawn_subtask(
             "Coordinator should narrow the next subtask's scope or "
             "split this work across two subtasks."
         )
-    except Exception as exc:  # noqa: BLE001 — surface errors to parent
+    except Exception as exc:
         log.exception("subtask %r failed", name)
         return f"subtask failed: {type(exc).__name__}: {exc}"
     finally:

@@ -289,7 +289,7 @@ async def run_explore(
             output += "\n" + str(continuation_result.output).strip()
 
         return output
-    except Exception as e:  # noqa: BLE001 — degrade, don't break the driver
+    except Exception as e:
         return f"explore failed: {e}"
     finally:
         await _aclose_async_client(main_client)
@@ -461,7 +461,7 @@ def make_parallel_explore_tool(
                         question=q,
                         extra_roots=extra_roots,
                     )
-                except Exception as e:  # noqa: BLE001 — isolate per-slot failure
+                except Exception as e:
                     ans = f"(explore failed: {e})"
             return f"### [{idx + 1}] {q}\n{ans}"
 

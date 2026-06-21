@@ -179,7 +179,7 @@ def run_implement_agent(
             ) from e
     except AgentBudgetError, AgentRunError:
         raise
-    except Exception as e:  # noqa: BLE001 — block-as-resumable
+    except Exception as e:
         raise AgentRunError(str(e), [], cause=e) from e
 
     from .explore import is_explore_budget_exhausted, reset_explore_budget_exhausted

@@ -111,7 +111,7 @@ def _available_periodic_catalog() -> str:
             try:
                 raw = _yaml.safe_load(f.read_text(encoding="utf-8")) or {}
                 desc = str(raw.get("description") or "").strip().split("\n")[0].strip()
-            except Exception:  # noqa: BLE001 — best-effort catalogue
+            except Exception:
                 desc = ""
         lines.append(f"- `{name}`: {desc or '(periodic schedule/maintenance task)'}")
     return "\n".join(lines)
@@ -143,7 +143,7 @@ def _git_grep(clone: Path, args: list[str], *, timeout: int = 60) -> str:
             text=True,
             timeout=timeout,
         )
-    except Exception:  # noqa: BLE001 — best-effort; never crash the pass
+    except Exception:
         return ""
     return proc.stdout
 
@@ -189,7 +189,7 @@ def _robotsix_deps_of(clone: Path) -> tuple[str, set[str]]:
         return clone.name.lower(), set()
     try:
         data = tomllib.loads(pp.read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001 — best-effort
+    except Exception:
         return clone.name.lower(), set()
     proj = data.get("project", {}) or {}
     pkg = str(proj.get("name", clone.name)).lower()

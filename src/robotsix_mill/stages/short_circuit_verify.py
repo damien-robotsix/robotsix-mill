@@ -272,7 +272,7 @@ def _part_args(part: dict[str, object]) -> dict[str, object] | None:
     return None
 
 
-def extract_replayable_edits(  # noqa: C901 — flat per-tool arg dispatch; branch count is inherent
+def extract_replayable_edits(
     new_messages: bytes | str | None,
 ) -> list[dict[str, str]] | None:
     """Return the run's edit tool-calls as replayable ops, or ``None``.

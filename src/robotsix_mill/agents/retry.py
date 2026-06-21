@@ -148,7 +148,7 @@ async def acall_with_retry(
                 assert fallback_fn is not None  # type-narrowing
                 return await fallback_fn()
             return await fn()
-        except Exception as e:  # noqa: BLE001 — re-raised unless retryable
+        except Exception as e:
             if attempt >= attempts:
                 raise
             if is_transient(e):

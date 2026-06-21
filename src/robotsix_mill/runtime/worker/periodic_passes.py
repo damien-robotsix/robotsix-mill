@@ -177,7 +177,7 @@ class PeriodicPassesMixin(_WorkerBase):
                         repo_config,
                     )
                     last_run_by_board[board_id] = datetime.now(timezone.utc)
-            except Exception:  # noqa: BLE001 — never let the poll die
+            except Exception:
                 log.exception("%s scheduler tick failed", label)
 
     async def _tracked_to_thread(self, fn, *args, **kwargs):
@@ -264,7 +264,7 @@ class PeriodicPassesMixin(_WorkerBase):
                         f"{'…' if n > 5 else ''}"
                     )
                 reg.finish_ok(run_id, summary)
-        except Exception as e:  # noqa: BLE001 — periodic must survive
+        except Exception as e:
             log.exception(
                 "%s poll failed for repo %s",
                 label,
@@ -325,7 +325,7 @@ class PeriodicPassesMixin(_WorkerBase):
                             f"{'…' if len(result.drafts_created) > 5 else ''}"
                         )
                     self.run_registry.finish_ok(run_id, summary)
-            except Exception as e:  # noqa: BLE001 — never let the poll die
+            except Exception as e:
                 log.exception("%s poll failed", label)
                 if self.run_registry and run_id:
                     self.run_registry.finish_error(run_id, str(e))
@@ -392,7 +392,7 @@ class PeriodicPassesMixin(_WorkerBase):
                     if total_drafts > 6:
                         summary += " …"
                     registry.finish_ok(run_id, summary)
-            except Exception as e:  # noqa: BLE001 — never let the poll die
+            except Exception as e:
                 log.exception("Meta pass failed")
                 if registry and run_id:
                     registry.finish_error(run_id, str(e))
@@ -440,7 +440,7 @@ class PeriodicPassesMixin(_WorkerBase):
                         else "No drafts created"
                     )
                     self.run_registry.finish_ok(run_id, summary)
-            except Exception as e:  # noqa: BLE001 — never let the poll die
+            except Exception as e:
                 log.exception("Run-health pass failed")
                 if self.run_registry and run_id:
                     self.run_registry.finish_error(run_id, str(e))
@@ -584,7 +584,7 @@ class PeriodicPassesMixin(_WorkerBase):
                             f"{'draft created' if result.draft_created else 'no alert'}"
                         )
                         self.run_registry.finish_ok(run_id, summary)
-                except Exception as e:  # noqa: BLE001 — never let the poll die
+                except Exception as e:
                     log.exception(
                         "trace-health poll failed for repo %s",
                         repo_label,
@@ -677,7 +677,7 @@ class PeriodicPassesMixin(_WorkerBase):
                                 target,
                                 _clone_token(settings, repo_config),
                             )
-                        except Exception:  # noqa: BLE001 — supervisor must survive
+                        except Exception:
                             log.exception(
                                 "bespoke supervisor (%s): clone failed",
                                 board_id,
@@ -706,7 +706,7 @@ class PeriodicPassesMixin(_WorkerBase):
                                 check=False,
                                 capture_output=True,
                             )
-                        except Exception:  # noqa: BLE001
+                        except Exception:
                             log.exception(
                                 "bespoke supervisor (%s): refresh failed",
                                 board_id,
@@ -742,7 +742,7 @@ class PeriodicPassesMixin(_WorkerBase):
                                     repo_config.repo_id,
                                     current_hash,
                                 )
-                    except Exception:  # noqa: BLE001 — must not crash supervisor
+                    except Exception:
                         log.exception(
                             "periodic supervisor (%s): member-sync trigger failed",
                             board_id,
@@ -819,7 +819,7 @@ class PeriodicPassesMixin(_WorkerBase):
                         task = asyncio.create_task(spawn())
                         running[key] = (task, cmp_obj)
                         log.info("periodic %s/%s: scheduled", board_id, key)
-                except Exception:  # noqa: BLE001
+                except Exception:
                     log.exception(
                         "bespoke supervisor (%s) cycle failed",
                         board_id,

@@ -163,7 +163,7 @@ def _patch_agent_definition(monkeypatch, agent):
 
 # A minimal but valid 1x1 PNG (content is irrelevant — the code only
 # reads the bytes and wraps them in a BinaryContent).
-import base64  # noqa: E402
+import base64
 
 _PNG_1X1 = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"

@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..config import RepoConfig, Settings
-from .langfuse_tools import _build_langfuse_tools  # noqa: F401 — re-export
+from .langfuse_tools import _build_langfuse_tools
 
 
 def run_answer_agent(

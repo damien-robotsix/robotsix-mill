@@ -56,7 +56,7 @@ class RebaseMixin(_MergeStageBase):
             pr = get_forge(s, repo_config=ctx.repo_config).pr_status(
                 source_branch=branch
             )
-        except Exception:  # noqa: BLE001 — best-effort; fall through to rebase
+        except Exception:
             pr = None
         if (
             pr is not None
@@ -231,7 +231,7 @@ class RebaseMixin(_MergeStageBase):
                 detail = result.summary or ""
                 if result.updated_memory:
                     _facade.persist_memory(rebase_memory_path, result.updated_memory)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.exception("%s: rebase attempt failed: %s", ticket.id, e)
             ok = False
             detail = f"rebase agent crashed: {e}"

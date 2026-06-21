@@ -442,7 +442,7 @@ def _build_deepseek_handle(
     return AgentHandle(agent, http_client)
 
 
-def build_agent(  # noqa: C901
+def build_agent(
     settings: Settings,
     *,
     system_prompt: str,

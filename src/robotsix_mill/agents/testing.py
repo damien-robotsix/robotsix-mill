@@ -96,7 +96,7 @@ def _env_error_diag(rc: int, out: str) -> str | None:
                 f"{ENV_ERROR_PREFIX} command not executable in sandbox: "
                 f"'{noexec_path}' (rc={rc}). A pip --user console script "
                 "under $HOME/.local/bin could not execute — the sandbox "
-                "/tmp tmpfs must be mounted exec (not noexec). This is a "  # noqa: S108 — /tmp is the in-sandbox Docker tmpfs path, not a host temp file
+                "/tmp tmpfs must be mounted exec (not noexec). This is a "
                 "sandbox regression, not fixable by editing code."
             )
         return None
@@ -462,7 +462,7 @@ def _distill_failure(
             what="test-distill",
         )
         return str(result.output).strip()
-    except Exception as e:  # noqa: BLE001 — degrade to raw tail
+    except Exception as e:
         return f"tests failed (rc={rc}); distill error {e}:\n{tail[-1500:]}"
     finally:
         _safe_close(agent)

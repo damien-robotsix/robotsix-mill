@@ -265,7 +265,7 @@ class GitHubForgePRMixin:
                 # branch already up to date — nothing to do
                 return {"updated": False, "reason": "already up to date"}
             return {"updated": False, "reason": f"HTTP {r.status_code}: {r.text[:200]}"}
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             return {"updated": False, "reason": str(e)}
 
     def list_pr_reviews(self, *, source_branch: str) -> list[dict]:

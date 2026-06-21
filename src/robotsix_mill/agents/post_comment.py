@@ -86,7 +86,7 @@ def make_post_comment_tool(settings: Settings, agent_name: str):
                 body,
                 author=agent_name,
             )
-        except Exception as exc:  # noqa: BLE001 — never crash the agent loop
+        except Exception as exc:
             log.exception(
                 "post_comment: add_comment failed for %s",
                 ticket_id,

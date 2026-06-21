@@ -163,7 +163,7 @@ def _canonical_url(url: str) -> str:
     """
     try:
         parts = urlsplit(url)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return url
     return urlunsplit(
         (parts.scheme, parts.netloc, parts.path, parts.query, ""),
@@ -208,7 +208,7 @@ def _apply_text_cap(body: str, max_bytes: int) -> str:
     return truncate_at_boundary(body, max_bytes)
 
 
-def make_web_fetch(settings: Settings):  # noqa: C901 — adds a per-consult fetch budget gate to the existing cache/extract/cap pipeline
+def make_web_fetch(settings: Settings):
     """Build the ``web_fetch`` tool exposed to web-knowledge agents.
 
     The returned callable performs an http(s) GET via the dedicated
@@ -230,7 +230,7 @@ def make_web_fetch(settings: Settings):  # noqa: C901 — adds a per-consult fet
         budget-exhausted sentinel string.
     """
 
-    def web_fetch(url: str) -> str:  # noqa: C901 — budget gates + cache + extract + cap pipeline
+    def web_fetch(url: str) -> str:
         """Fetch an http(s) URL and return its text content (size
         capped). Use for official docs, source files, package
         metadata. Runs in an isolated, no-local-access network
@@ -291,7 +291,7 @@ def make_web_fetch(settings: Settings):  # noqa: C901 — adds a per-consult fet
         if _looks_like_html(body):
             try:
                 body = html_to_text(body)
-            except Exception:  # noqa: BLE001 — never crash the tool
+            except Exception:
                 log.warning(
                     "web_fetch: html_to_text failed on %r — returning raw",
                     url,

@@ -392,7 +392,7 @@ def _load_watermark(settings: Settings, board_id: str) -> datetime | None:
         if not ts:
             return None
         return datetime.fromisoformat(ts.replace("Z", "+00:00"))
-    except Exception:  # noqa: BLE001 — corrupted state file = behave as no watermark
+    except Exception:
         log.warning("trace_review_state.json unreadable at %s — ignoring", p)
         return None
 
@@ -458,7 +458,7 @@ def _resolve_target_repo_dir(
             cand = workspace / "repo"
             if (cand / ".git").exists():
                 return cand
-    except Exception:  # noqa: BLE001 — resolution is best-effort
+    except Exception:
         log.debug("trace-review: repo_dir resolution failed", exc_info=True)
     return None
 
@@ -507,7 +507,7 @@ def _finding_cites_only_missing_paths(
                 missing.append(raw)
         if not any_exists:
             return True, missing
-    except Exception:  # noqa: BLE001 — guard never blocks a legitimate filing
+    except Exception:
         log.debug("trace-review: path-existence guard failed", exc_info=True)
     return False, []
 
@@ -571,7 +571,7 @@ def run_trace_review_pass(
                     settings.trace_review_target_repo_id,
                     source_board_id,
                 )
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.exception(
                 "trace-review: target-repo lookup failed; using source board",
             )
@@ -822,7 +822,7 @@ def run_trace_review_pass(
                     origin_session=session_id or None,
                 )
                 drafts.append({"id": ticket.id, "title": ticket.title})
-            except Exception:  # noqa: BLE001
+            except Exception:
                 log.exception(
                     "trace-review: failed to create draft for %r",
                     title,
@@ -849,7 +849,7 @@ def run_trace_review_pass(
         next_watermark = now
     try:
         _save_watermark(settings, source_board_id, next_watermark)
-    except Exception:  # noqa: BLE001
+    except Exception:
         log.exception("trace-review: failed to persist watermark")
 
     summary = f"scanned={len(traces)} flagged={flagged_count} drafts={len(drafts)}"

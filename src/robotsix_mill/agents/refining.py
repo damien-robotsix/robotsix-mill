@@ -145,7 +145,7 @@ def _collect_test_warnings_block(
         _code, out = sandbox_run(
             cmd, repo_dir=Path(repo_dir), settings=settings, install_project=True
         )
-    except Exception:  # noqa: BLE001 — best-effort; never block refine (incl. SandboxError)
+    except Exception:
         log.warning(
             "refine: deterministic test-warnings collection failed", exc_info=True
         )
@@ -750,7 +750,7 @@ def _build_refine_overrides(
     return overrides
 
 
-def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota checks add branches; tightly-coupled control flow
+def run_refine_agent(
     *,
     settings: Settings,
     title: str,

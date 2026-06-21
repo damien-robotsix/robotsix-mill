@@ -396,7 +396,7 @@ def test_refine_clones_repo_and_passes_repo_dir(ctx, service, monkeypatch):
     assert seen["repo_dir"] == repo  # agent got the local clone
 
     # second run: clone already present -> reused, not re-cloned
-    service.create  # noqa - keep ref
+    service.create
     seen["clone"] = 0
     t2 = service.get(t.id)
     RefineStage().run(t2, ctx)

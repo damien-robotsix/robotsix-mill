@@ -89,4 +89,4 @@ def get_registered_checks() -> list[DiagnosticCheck]:
 # register_check is already defined; the import is cached so registration
 # runs exactly once. The back-reference from diagnostic_check_errors to
 # this module resolves against the already-populated module above.
-from . import diagnostic_check_errors  # noqa: E402,F401
+from . import diagnostic_check_errors

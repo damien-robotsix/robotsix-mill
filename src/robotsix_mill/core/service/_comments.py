@@ -189,7 +189,7 @@ class _CommentMixin(_ServiceBase):
             # every one is closed.
             stmt = select(Comment).where(
                 Comment.ticket_id == ticket_id,
-                Comment.parent_id == None,  # noqa: E711 (SQLAlchemy needs == None for SQL IS NULL)
+                Comment.parent_id == None,
                 Comment.body.startswith("[ASK_USER]"),
             )
             ask_threads = list(s.exec(stmt).all())

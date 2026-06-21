@@ -435,17 +435,17 @@ def _resolve_repo_id(
 
 # Subcommand implementations live in sibling modules of this package.
 # These imports must appear after the helpers above to avoid circular imports.
-from .serve import _serve, _repos_list  # noqa: E402
-from .ticket import (  # noqa: E402
+from .serve import _serve, _repos_list
+from .ticket import (
     _ticket_new,
     _ticket_list,
     _ticket_show,
     _ticket_approve,
     _ticket_resume_blocked,
 )
-from .epic import _epic_new  # noqa: E402
-from .action import _action_list, _action_approve, _action_reject  # noqa: E402
-from .inquire import _inquire  # noqa: E402
+from .epic import _epic_new
+from .action import _action_list, _action_approve, _action_reject
+from .inquire import _inquire
 
 
 def main(argv: list[str] | None = None) -> int:

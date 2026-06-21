@@ -532,7 +532,7 @@ class PostPushResult(str, Enum):
         transiently, etc.).  Callers should re-poll rather than block.
     """
 
-    PASS = "pass"  # noqa: S105 — enum value, not a credential
+    PASS = "pass"
     NOT_LANDED = "not_landed"
     FOREIGN_DIVERGENCE = "foreign_divergence"
     UNAVAILABLE = "unavailable"
@@ -836,7 +836,7 @@ def conflicted_files(repo: Path) -> list[str]:
     """
     try:
         out = _git(repo, "diff", "--name-only", "--diff-filter=U")
-    except Exception:  # noqa: BLE001 — diagnostics must not fail the caller
+    except Exception:
         return []
     return [line for line in out.split("\n") if line] if out else []
 

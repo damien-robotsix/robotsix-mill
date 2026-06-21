@@ -161,7 +161,7 @@ def _wait_for_health(base_url: str, timeout: float = 30.0) -> None:
     last_err: Exception | None = None
     while time.monotonic() < deadline:
         try:
-            with urllib.request.urlopen(  # noqa: S310 — fixed loopback URL
+            with urllib.request.urlopen(
                 base_url + "/health", timeout=2
             ) as resp:
                 if resp.status == 200:
@@ -313,7 +313,7 @@ def run_browser_check() -> int:
         _drive_browser(base_url, len(_COLUMNS), screenshot_path=_screenshot_target())
         print("board browser smoke check: PASS")
         return 0
-    except Exception as exc:  # noqa: BLE001 — top-level smoke driver
+    except Exception as exc:
         print(f"board browser smoke check: FAIL — {exc}", file=sys.stderr)
         return 1
     finally:

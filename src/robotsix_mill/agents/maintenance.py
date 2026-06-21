@@ -554,7 +554,7 @@ def _build_meta_investigation_workspace(
     return meta_root, meta_roots or [], None
 
 
-def run_maintenance_agent(  # noqa: C901 — clone-failure degrade branch + meta/single-repo setup
+def run_maintenance_agent(
     ticket: Ticket, ctx: StageContext
 ) -> MaintenanceResult:
     """Load the maintenance agent definition, build its tool set, run the

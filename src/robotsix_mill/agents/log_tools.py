@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 _MAX_LINES_PER_FILE = 5000
 
 
-def make_log_query_tool(log_dir: Path):  # noqa: C901 — nested closure's recency/keyword/truncation branches inflate the count
+def make_log_query_tool(log_dir: Path):
     """Build the ``query_app_logs`` tool closure bound to *log_dir*.
 
     Registers the tool in :class:`ToolRegistry` at construction time
@@ -35,7 +35,7 @@ def make_log_query_tool(log_dir: Path):  # noqa: C901 — nested closure's recen
     a missing/empty/unreadable folder yields a short explanatory string.
     """
 
-    def query_app_logs(  # noqa: C901 — sequential recency/keyword/truncation filters, not deep nesting
+    def query_app_logs(
         keywords: str = "", since_hours: int = 24, max_lines: int = 200
     ) -> str:
         """Query the managed repo's deployed application logs.

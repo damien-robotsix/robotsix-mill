@@ -361,7 +361,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                     after.state if after else None,
                     repo_config=ticket_repo_config,
                 )
-            except Exception:  # noqa: BLE001 — never let the consumer die
+            except Exception:
                 log.exception("processing %s crashed", ticket_id)
             finally:
                 # drop from in-flight FIRST so a re-enqueue (e.g. next
@@ -566,7 +566,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                         if svc.unmet_dependencies(t):
                             continue
                         self.enqueue(t.id)
-            except Exception:  # noqa: BLE001 — never let the poll die
+            except Exception:
                 log.exception("reconcile sweep failed")
 
     def start(self) -> None:

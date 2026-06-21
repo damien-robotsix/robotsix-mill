@@ -177,7 +177,7 @@ def make_report_issue_tool(
                 full_body = _attach_evidence(service, ticket, full_body, evidence)
 
             return f"report_issue: filed draft {ticket.id}"
-        except Exception as e:  # noqa: BLE001 — never abort the agent run
+        except Exception as e:
             return f"report_issue: could not file ticket ({e!r})"
 
     from .tool_registry import ToolInfo, ToolRegistry

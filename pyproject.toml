@@ -131,7 +131,7 @@ exclude_dirs = ["tests/"]
 skips = ["B101"]
 
 [tool.ruff.lint]
-extend-select = ["S", "DTZ001", "DTZ002", "DTZ003", "C90", "B"]
+extend-select = ["S", "DTZ001", "DTZ002", "DTZ003", "C90", "B", "RUF100", "RUF200"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10

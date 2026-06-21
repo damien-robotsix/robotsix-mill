@@ -332,7 +332,7 @@ async def ws_board(websocket: WebSocket) -> None:
             await websocket.send_text(data)
     except WebSocketDisconnect:
         pass
-    except Exception:  # noqa: BLE001 — never let a push error kill the socket
+    except Exception:
         pass
     finally:
         broadcaster.unsubscribe(q)

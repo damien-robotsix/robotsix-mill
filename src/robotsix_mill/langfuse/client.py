@@ -106,7 +106,7 @@ def _langfuse_api_get(
         if r.status_code != 200:
             return None
         return r.json()
-    except Exception:  # noqa: BLE001 — analysis must not fail the caller
+    except Exception:
         return None
 
 
@@ -513,6 +513,6 @@ def list_all_traces_since(
         ):
             all_traces.extend(page)
         return all_traces
-    except Exception:  # noqa: BLE001 — never crash the caller
+    except Exception:
         log.exception("failed to list Langfuse traces since %s", from_timestamp)
         return []

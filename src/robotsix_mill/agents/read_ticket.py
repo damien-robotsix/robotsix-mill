@@ -161,7 +161,7 @@ def make_read_ticket_tool(settings: Settings):
                 ("\n### ", "\n## ", "\n\n", "\n"),
             )
 
-        except Exception as e:  # noqa: BLE001 — never abort the agent run
+        except Exception as e:
             return f"read_ticket: error reading ticket '{ticket_id}' ({e!r})"
 
     from .tool_registry import ToolInfo, ToolRegistry

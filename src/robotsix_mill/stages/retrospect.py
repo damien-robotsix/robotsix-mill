@@ -717,7 +717,7 @@ class RetrospectStage(Stage):
                     pr = get_forge(s, repo_config=rc).pr_status(
                         source_branch=entry["branch"]
                     )
-                except Exception:  # noqa: BLE001 — transient is merge's job
+                except Exception:
                     continue
                 if pr is None or not pr.get("merged"):
                     unmerged.append(f"{entry['repo_id']}: {entry['url']}")
@@ -820,7 +820,7 @@ class RetrospectStage(Stage):
                 sibling_context=sibling_ctx,
                 repo_dir=repo_dir,
             )
-        except Exception as e:  # noqa: BLE001 — resumable, never lose the ticket
+        except Exception as e:
             log.exception("%s: retrospect agent failed", ticket.id)
             # Transient model blips get a fresh stage re-run via the
             # worker's stage-retry rather than a hard BLOCK — same fix as
