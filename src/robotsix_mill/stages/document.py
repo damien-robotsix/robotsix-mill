@@ -45,72 +45,6 @@ def _paths_from_diff(diff: str) -> list[str]:
     return out
 
 
-def _build_doc_agent_failure_hint(repo_dir: Path) -> str:
-    """Build a diagnostic hint when the doc agent fails.
-
-    Inspects ``pyproject.toml`` and ``uv.lock`` to produce a
-    parenthetical hint that operators can act on.  Returns ``""``
-    (no hint) when the repo is not a Python project or when the
-    file is unparsable.
-
-    The function must never raise — all parse/I/O errors are
-    caught, logged at ``debug``, and result in ``""``.
-    """
-    pp = repo_dir / "pyproject.toml"
-    if not pp.exists():
-        return ""
-
-    try:
-        import tomllib
-
-        data = tomllib.loads(pp.read_text(encoding="utf-8"))
-    except Exception:
-        log.debug(
-            "could not parse pyproject.toml for doc agent failure hint",
-            exc_info=True,
-        )
-        return ""
-
-    # Check 3 — has Python dependencies?
-    has_deps = False
-    deps = data.get("project", {}).get("dependencies")
-    if isinstance(deps, list) and len(deps) > 0:
-        has_deps = True
-
-    # Check 4 — has [tool.uv.sources]?
-    has_uv_sources = False
-    sources = data.get("tool", {}).get("uv", {}).get("sources")
-    if isinstance(sources, dict) and len(sources) > 0:
-        has_uv_sources = True
-
-    if not has_deps and not has_uv_sources:
-        return ""
-
-    # Check 4 only (no project.dependencies) — preserve the
-    # existing standalone text exactly.
-    if has_uv_sources and not has_deps:
-        return " (repo has [tool.uv.sources] — uv-only git deps may block tools)"
-
-    # Build combined hint: deps flag, then uv-sources flag,
-    # then lockfile detail (only when uv-sources is set).
-    parts: list[str] = []
-    if has_deps:
-        parts.append(
-            "project has Python dependencies — "
-            "pip install may be needed for sandbox commands"
-        )
-    if has_uv_sources:
-        parts.append("[tool.uv.sources] — uv-only git deps may block tools")
-        # Check 5 — uv.lock presence
-        lockfile = repo_dir / "uv.lock"
-        if lockfile.exists():
-            parts.append("uv.lock present but sync may have failed")
-        else:
-            parts.append("no uv.lock — pip fallback cannot resolve git deps")
-
-    return " (" + "; ".join(parts) + ")"
-
-
 class DocumentStage(Stage):
     """Generate or update project documentation from the implemented code changes in the cloned repo."""
 
@@ -226,23 +160,27 @@ class DocumentStage(Stage):
                 board_id=ctx.repo_config.board_id if ctx.repo_config else "",
                 reference_files=preload_paths or None,
             )
-        except Exception:
-            hint = _build_doc_agent_failure_hint(repo_dir)
+        except Exception as e:
+            from ..vcs.git_ops import redact_credentials
+
+            redacted = redact_credentials(str(e))
+            note = f"doc agent failed (non-blocking): {type(e).__name__}: {redacted}"
             log.warning(
-                "%s: doc agent failed — passing through%s",
+                "%s: doc agent failed — passing through (%s: %s)",
                 ticket.id,
-                hint,
+                type(e).__name__,
+                redacted,
                 exc_info=True,
             )
             send_notification(
                 ticket,
                 State.ERRORED,
-                f"doc agent failed (non-blocking){hint}",
+                note,
                 ctx.settings,
             )
             return Outcome(
                 State.DELIVERABLE,
-                f"doc agent failed (non-blocking){hint}",
+                note,
             )
 
         next_state = State.DELIVERABLE
