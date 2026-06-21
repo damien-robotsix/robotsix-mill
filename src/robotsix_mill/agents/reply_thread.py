@@ -26,15 +26,12 @@ def make_reply_to_thread_tool(settings: Settings, agent_name: str):
             thread_id: The id of the top-level comment to reply to.
             body: The reply text.
         """
-        from ..runtime.tracing import current_ticket_id
+        from ._ticket_context import current_ticket_service
 
-        ticket_id = current_ticket_id()
-        if ticket_id is None:
+        result = current_ticket_service(settings)
+        if result is None:
             return "Error: no active ticket session — cannot determine current ticket."
-
-        from ..core.service import TicketService
-
-        svc = TicketService(settings)
+        svc, ticket_id = result
         try:
             comment = svc.add_comment(
                 ticket_id, body, author=agent_name, parent_id=thread_id

@@ -27,15 +27,12 @@ def make_list_threads_tool(settings: Settings, agent_name: str):
         and the first line of each comment body, or "(no threads)" if
         none exist.
         """
-        from ..runtime.tracing import current_ticket_id
+        from ._ticket_context import current_ticket_service
 
-        ticket_id = current_ticket_id()
-        if ticket_id is None:
+        result = current_ticket_service(settings)
+        if result is None:
             return "Error: no active ticket session — cannot determine current ticket."
-
-        from ..core.service import TicketService
-
-        svc = TicketService(settings)
+        svc, ticket_id = result
         try:
             comments = svc.list_comments(ticket_id)
         except KeyError:

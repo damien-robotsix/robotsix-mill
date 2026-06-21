@@ -31,15 +31,12 @@ def make_close_thread_tool(settings: Settings, agent_name: str):
             comment_id: The id of the top-level comment whose thread
                 should be closed (resolved).
         """
-        from ..runtime.tracing import current_ticket_id
+        from ._ticket_context import current_ticket_service
 
-        ticket_id = current_ticket_id()
-        if ticket_id is None:
+        result = current_ticket_service(settings)
+        if result is None:
             return "Error: no active ticket session — cannot determine current ticket."
-
-        from ..core.service import TicketService
-
-        svc = TicketService(settings)
+        svc, ticket_id = result
         try:
             # Pass ticket_id so the service resolves the correct
             # per-board DB — comment ids are per-board, not globally
