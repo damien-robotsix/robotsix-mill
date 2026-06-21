@@ -331,7 +331,7 @@ def install_signal_handlers() -> None:
     """
     import signal
 
-    def _handler(signum: int, frame: object) -> None:
+    def _handler(_signum: int, frame: object) -> None:
         global _shutdown_requested
         if _shutdown_requested:
             return  # already flushing; avoid re-entrant calls
