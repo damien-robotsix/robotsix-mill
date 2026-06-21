@@ -77,3 +77,8 @@ jobs:
         run: |
           ! grep -nE 'uses:\s*\S+\.github/workflows/[^@]*@(main|master|latest|v\d+)' \
             .github/workflows/*.yml
+
+      - name: Validate workflow permissions
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+        run: uv run python scripts/validate_workflow_permissions.py

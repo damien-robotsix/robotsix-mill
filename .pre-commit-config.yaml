@@ -76,6 +76,15 @@ repos:
         pass_filenames: false
   - repo: local
     hooks:
+      - id: validate-workflow-permissions
+        name: Validate workflow security-events permission
+        entry: python scripts/validate_workflow_permissions.py
+        language: python
+        additional_dependencies: ["pyyaml>=6"]
+        files: ^\.github/workflows/.*\.ya?ml$
+        pass_filenames: false
+  - repo: local
+    hooks:
       - id: vulture
         name: Vulture (dead code)
         entry: vulture src/ vulture_whitelist.py
