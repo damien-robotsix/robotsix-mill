@@ -1483,6 +1483,6 @@ def test_metrics_endpoint_returns_valid_prometheus_format(client):
 
     r = client.get("/metrics")
     assert r.status_code == 200
-    assert r.headers["content-type"] == "text/plain; version=0.0.4; charset=utf-8"
+    assert r.headers["content-type"] == "text/plain; version=1.0.0; charset=utf-8"
     assert "http_requests_total" in r.text
     assert "http_request_duration_seconds" in r.text
