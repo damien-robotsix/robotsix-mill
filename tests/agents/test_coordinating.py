@@ -753,6 +753,34 @@ class TestRunCoordinator:
         assert isinstance(ul, UsageLimits)
         assert ul.request_limit == 12
 
+    def test_usage_limits_uses_coordinator_max_tool_calls(
+        self,
+        settings,
+        tmp_path,
+    ):
+        """The ``tool_calls_limit`` on the ``UsageLimits`` passed to
+        ``run_sync`` comes from ``settings.coordinator_max_tool_calls``
+        (not None — the backstop is always wired)."""
+        s = _settings(tmp_path, coordinator_max_tool_calls="42")
+        self._run(s, tmp_path)
+        ul = self.captured["usage_limits"]
+        assert isinstance(ul, UsageLimits)
+        assert ul.tool_calls_limit == 42
+
+    def test_usage_limits_tool_calls_limit_is_never_none(
+        self,
+        settings,
+        tmp_path,
+    ):
+        """Even with default settings, ``tool_calls_limit`` is not None
+        — the default 300 from ``LimitsSettings`` is wired through."""
+        s = _settings(tmp_path)
+        self._run(s, tmp_path)
+        ul = self.captured["usage_limits"]
+        assert isinstance(ul, UsageLimits)
+        assert ul.tool_calls_limit is not None
+        assert ul.tool_calls_limit == 300
+
     # -- previous_attempt_summary ----------------------------------------
 
     def test_previous_attempt_summary_prepended_before_feedback(

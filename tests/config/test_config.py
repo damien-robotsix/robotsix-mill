@@ -75,6 +75,15 @@ def test_default_max_spend_sentinel():
     assert s.max_spend_usd_per_ticket == 20.0
 
 
+def test_default_coordinator_max_tool_calls():
+    """coordinator_max_tool_calls defaults to 300 — the deterministic
+    tool-call backstop for the implement/coordinator agent, sitting
+    generously above any legitimate run while terminating runaway
+    read-file loops."""
+    s = Settings()
+    assert s.coordinator_max_tool_calls == 300
+
+
 def test_default_board_agent_disabled():
     """Board agent is opt-in — off by default, pointed at this mill's own
     board API, with writes enabled and no broker configured."""
@@ -1840,6 +1849,15 @@ class TestFlattenYamlConfig:
         # map to web_research_request_limit; web.research_request_limit is
         # traversed second because 'web' > 'core' alphabetically
         assert result["web_research_request_limit"] == 2
+
+    def test_flatten_coordinator_max_tool_calls(self):
+        """``core.limits.coordinator_max_tool_calls`` flattens to the
+        ``coordinator_max_tool_calls`` Settings field name."""
+        from robotsix_mill.config.loader import flatten_yaml_config
+
+        yaml_config = {"core": {"limits": {"coordinator_max_tool_calls": 123}}}
+        result = flatten_yaml_config(yaml_config)
+        assert result["coordinator_max_tool_calls"] == 123
 
 
 class TestPeriodicPresenceModel:

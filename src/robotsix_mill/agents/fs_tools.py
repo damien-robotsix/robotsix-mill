@@ -496,6 +496,12 @@ def build_fs_tools(
         the session already sits in context; requesting a slice will
         fail. Use the content you already have.
 
+        To FIND where a symbol/pattern lives, use ``explore`` /
+        ``parallel_explore``, or ``run_command`` with
+        ``git grep <pattern>`` — do NOT read files one-by-one to
+        search. Reserve ``read_file`` for files you have already
+        identified as relevant.
+
         Return the text content of a file in the repository.
 
         Optionally narrow to a line range with ``offset`` and
@@ -713,7 +719,13 @@ def build_fs_tools(
         root. Use ``cd <subdir> && …`` to work in a subdirectory.
 
         Note: the ``pytest --timeout`` flag is not available in this
-        environment — use plain ``python -m pytest`` without it."""
+        environment — use plain ``python -m pytest`` without it.
+
+        For fast symbol/string search across the repository before
+        reading files, use ``git grep <pattern>`` (or plain ``grep``
+        when ``.git`` is absent).  Prefer this over exhaustive
+        ``read_file`` loops — it finds the files that matter in one
+        command so you can then ``read_file`` only those."""
         if not root.exists():
             return (
                 "error: workspace repo directory does not exist — "
