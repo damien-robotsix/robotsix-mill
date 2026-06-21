@@ -10,6 +10,7 @@ trace-inspector sub-agent for deep analysis.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from pathlib import Path
@@ -377,19 +378,11 @@ def make_langfuse_inspect_tool(
     otherwise the global :class:`Secrets` fallback applies.
     """
 
-    def langfuse_inspect_trace(trace_id: str) -> str:
-        """Deep-inspect a single Langfuse trace by ID.
-
-        Fetches the full observation tree and delegates to a
-        trace-inspector sub-agent that analyses tool errors, agent
-        limitations, and optimisation opportunities.  When the repo
-        clone is available, findings are grounded in the actual source
-        code.
-
-        Use this when you need to deep-dive into a specific trace for
-        error patterns or behavioural analysis — it surfaces the root
-        cause, not just the symptom.
-        """
+    def _blocking(trace_id: str) -> str:
+        """Synchronous body of langfuse_inspect_trace — runs on a worker
+        thread via ``asyncio.to_thread`` so ``run_trace_inspector`` (which
+        internally calls ``run_sync`` → ``run_until_complete``) executes
+        safely in a thread with no active event loop."""
         from ..langfuse.client import fetch_trace_detail
         from .trace_inspector import run_trace_inspector
 
@@ -412,6 +405,21 @@ def make_langfuse_inspect_tool(
         )
 
         return render_trace_findings(result.findings, trace_id, result.error or None)
+
+    async def langfuse_inspect_trace(trace_id: str) -> str:
+        """Deep-inspect a single Langfuse trace by ID.
+
+        Fetches the full observation tree and delegates to a
+        trace-inspector sub-agent that analyses tool errors, agent
+        limitations, and optimisation opportunities.  When the repo
+        clone is available, findings are grounded in the actual source
+        code.
+
+        Use this when you need to deep-dive into a specific trace for
+        error patterns or behavioural analysis — it surfaces the root
+        cause, not just the symptom.
+        """
+        return await asyncio.to_thread(_blocking, trace_id)
 
     from .tool_registry import ToolInfo, ToolRegistry
 

@@ -106,7 +106,8 @@ def _langfuse_api_get(
         if r.status_code != 200:
             return None
         return r.json()
-    except Exception:  # noqa: BLE001 — analysis must not fail the caller
+    except Exception as e:
+        log.debug("Langfuse API GET %s failed: %s: %s", path, type(e).__name__, e)
         return None
 
 
