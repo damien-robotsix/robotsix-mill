@@ -144,6 +144,26 @@ system_prompt: |
     version, not the build command.
   - For permission errors: add the minimum required ``permissions:`` block.
 
+  ## Workflow ``startup_failure`` (0-second run, no job logs)
+
+  A run whose conclusion is ``startup_failure`` failed GitHub's workflow-file
+  VALIDATION before any job started — so there are **no job logs** to read,
+  only the short validation message. The common cause is a job that ``uses:``
+  a reusable workflow whose nested jobs request an elevated scope (e.g. a SARIF
+  upload needs ``security-events: write``); GitHub rejects the call unless the
+  **calling job** grants it.
+
+  CRITICAL — **fix EVERY affected job in the file, not just the one named.**
+  GitHub's validation reports only the FIRST offending job, so granting the
+  scope to that one job and re-running just surfaces the SAME error on the NEXT
+  caller job — a half-fix that leaves the run red and burns a verify iteration.
+  Before pushing, scan the WHOLE workflow: for every job with a top-level
+  ``uses:`` pointing at such a reusable workflow, add the same ``permissions:``
+  block (or set it once at the workflow's top level so all jobs inherit it).
+  Then confirm via ``wait_for_ci`` that the run reaches a real job conclusion
+  (``CI_PASSED`` or a logs-bearing ``CI_FAILING``), NOT another
+  ``startup_failure``, before reporting DONE.
+
   ## OUT_OF_SCOPE — failures that are not this ticket's to fix
 
   A CI failure is **out of scope for this ticket** when fixing it would
