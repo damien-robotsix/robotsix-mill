@@ -411,10 +411,22 @@ async def run_web_knowledge(
 # ---------------------------------------------------------------------------
 
 
-def make_ask_web_knowledge_tool(settings: Settings):
+def make_ask_web_knowledge_tool(
+    settings: Settings,
+    *,
+    block_reason: str | None = None,
+):
     """Build the ``ask_web_knowledge`` tool that calling agents use as
     their single gateway to the internet. Other agents do NOT receive
-    a direct ``web_search`` tool — only this gateway."""
+    a direct ``web_search`` tool — only this gateway.
+
+    When *block_reason* is set the tool returns it immediately
+    (no ``run_web_knowledge`` call, no web budget spent) — the
+    caller uses this to disable web consultation for drafts that
+    are internal toolchain failures (CI/type/lint/test), where
+    web-searching wastes turns on irrelevant results.  The tool
+    is still registered in ``ToolRegistry`` so the prompt-tool-
+    consistency guard is not tripped."""
 
     async def ask_web_knowledge(question: str) -> str:
         """Ask the web-knowledge agent ONE focused question about a
@@ -444,6 +456,8 @@ def make_ask_web_knowledge_tool(settings: Settings):
                 figures out which library file (if any) to read and
                 whether to refresh from the web.
         """
+        if block_reason is not None:
+            return block_reason
         return await run_web_knowledge(settings=settings, question=question)
 
     from .tool_registry import ToolInfo, ToolRegistry

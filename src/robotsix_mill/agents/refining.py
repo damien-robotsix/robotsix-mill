@@ -695,6 +695,71 @@ that can each ship alone, split into focused children:
   ``file_map=[]``.
 """
 
+# Markers that signal an internal CI/type/lint/test failure — NOT an
+# external knowledge gap.  The ``ask_web_knowledge`` tool is blocked
+# during refine when the draft carries any of these, because
+# web-searching internal toolchain errors wastes model turns on
+# irrelevant results.  The markers are a module constant so the unit
+# tests can inspect them (no hidden strings).  The predicate is
+# conservative: it requires a recognisable tool/failure token, not
+# just the bare word "test".
+_INTERNAL_FAILURE_MARKERS: tuple[str, ...] = (
+    # Python traceback
+    "Traceback (most recent call last)",
+    # pytest failure summary lines
+    "FAILED ",
+    "= FAILURES =",
+    "short test summary",
+    # mypy error lines: ``error: … [code]`` (e.g. ``[arg-type]``)
+    "[arg-type]",
+    "[attr-defined]",
+    "[call-overload]",
+    "[misc]",
+    "[name-defined]",
+    "[no-untyped-def]",
+    "[operator]",
+    "[override]",
+    "[return-value]",
+    "[union-attr]",
+    "[valid-type]",
+    "[var-annotated]",
+    # ruff / lint codes (bare codes are too noisy — require the
+    # tool name or a recognisable code pattern)
+    "ruff",
+    "E501",
+    "F401",
+    "F811",
+    "F841",
+    # Generic tool exit codes (require a named tool, not just "exit")
+    "exit code",
+    "exit=1",
+    # Explicitly named tools
+    "mypy",
+    "pytest",
+    "pyright",
+    "bandit",
+    "vulture",
+    "deptry",
+)
+
+
+def is_internal_toolchain_failure(draft: str) -> bool:
+    """Return ``True`` when *draft* text carries concrete internal
+    CI/type/lint/test failure signals.
+
+    Designed as a refine-stage gate: when ``True`` the draft describes
+    a local code fix scoped from the repo and logs, NOT an external
+    knowledge gap.  The caller uses this to disable
+    ``ask_web_knowledge`` (web-search) and/or to short-circuit to a
+    minimal spec.
+
+    The predicate is conservative — it requires at least one
+    recognisable tool/failure token (see ``_INTERNAL_FAILURE_MARKERS``)
+    and does NOT match on the bare word "test" alone.
+    """
+    lowered = draft.lower()
+    return any(marker.lower() in lowered for marker in _INTERNAL_FAILURE_MARKERS)
+
 
 def _coerce_refine_output(output: object) -> "RefineResult":
     """Return *output* as a ``RefineResult``.
@@ -963,6 +1028,18 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
             base_prompt,
             include_explore=include_explore,
             include_parallel_explore=include_parallel_explore,
+        )
+
+    # Block ask_web_knowledge when the draft is an internal
+    # CI/type/lint/test failure — web-searching internal toolchain
+    # errors wastes model turns on irrelevant results.  The tool
+    # stays registered (no prompt-tool-consistency violation); the
+    # block_reason is returned immediately if the agent calls it.
+    if is_internal_toolchain_failure(draft):
+        overrides["web_knowledge_block_reason"] = (
+            "ask_web_knowledge is disabled for this ticket: it is an internal "
+            "CI/type/lint/test failure, which is a local code fix. Work from "
+            "the failing logs and the repo — do not web-search."
         )
 
     agent = build_agent_from_definition(
