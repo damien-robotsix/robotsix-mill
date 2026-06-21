@@ -105,7 +105,7 @@ def _workflow_refs_from_diff(diff: str) -> set[str]:
 
 _ACTION_USES_RE = re.compile(
     r"uses:\s*"
-    r"([a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+(?:/[^@#\s]+)*)"
+    r"([a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+(?:/[^@#\s/]+)*)"
     r"@(\S+)"
     r"(?:\s*#\s*(.*))?",
 )
