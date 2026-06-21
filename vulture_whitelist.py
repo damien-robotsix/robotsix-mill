@@ -252,6 +252,7 @@ run_verify_pass
 branch_is_behind_main
 
 # -- runtime -----------------------------------------------------------------
+Instrumentator
 BoardAdapter
 move_endpoint
 move_endpoint_template

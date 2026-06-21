@@ -31,6 +31,7 @@ dependencies = [
     # agent-comm by bare name + uv-only sources, which the pip-based license/
     # security audit can't resolve. A direct URL works for both pip and uv.
     "robotsix-agent-comm @ git+https://github.com/damien-robotsix/robotsix-agent-comm.git@main",
+    "prometheus-fastapi-instrumentator>=8",
     "pydantic-settings>=2",
     "pyyaml>=6",
     "sqlmodel>=0.0.22",

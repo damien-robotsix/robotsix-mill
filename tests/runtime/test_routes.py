@@ -1471,3 +1471,18 @@ def test_health_ready_langfuse_error_returns_503(client, monkeypatch):
     assert data["status"] == "not_ready"
     lf = next(c for c in data["checks"] if c["name"] == "langfuse")
     assert lf["status"] == "error"
+
+
+# -- GET /metrics (Prometheus) -----------------------------------------
+
+
+def test_metrics_endpoint_returns_valid_prometheus_format(client):
+    """GET /metrics returns 200, text/plain Prometheus exposition format,
+    and contains standard http_* metrics."""
+    pytest.importorskip("prometheus_fastapi_instrumentator")
+
+    r = client.get("/metrics")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "text/plain; version=1.0.0; charset=utf-8"
+    assert "http_requests_total" in r.text
+    assert "http_request_duration_seconds" in r.text

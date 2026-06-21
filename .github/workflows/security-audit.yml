@@ -150,7 +150,7 @@ jobs:
           )
           .venv/bin/pip-licenses \
             --from=mixed \
-            --allow-only="MIT;MIT License;Apache-2.0;Apache Software License;BSD License;BSD-2-Clause;BSD-3-Clause;3-Clause BSD License;ISC;ISC License (ISCL);PSF-2.0;Python Software Foundation License;Mozilla Public License 2.0 (MPL 2.0);MPL-2.0;The Unlicense (Unlicense);Apache-2.0 OR BSD-3-Clause;Apache-2.0 OR BSD-2-Clause;MIT OR Apache-2.0;MIT AND PSF-2.0;MPL-2.0 AND MIT;Apache-2.0 AND CNRI-Python" \
+            --allow-only="MIT;MIT License;Apache-2.0;Apache Software License;BSD License;BSD-2-Clause;BSD-3-Clause;3-Clause BSD License;ISC;ISC License (ISCL);PSF-2.0;Python Software Foundation License;Mozilla Public License 2.0 (MPL 2.0);MPL-2.0;The Unlicense (Unlicense);Apache-2.0 OR BSD-3-Clause;Apache-2.0 OR BSD-2-Clause;MIT OR Apache-2.0;MIT AND PSF-2.0;MPL-2.0 AND MIT;Apache-2.0 AND CNRI-Python;Apache-2.0 AND BSD-2-Clause" \
             --ignore-packages "${ignore_packages[@]}" \
             --fail-on="GPL;AGPL;LGPL"
 
