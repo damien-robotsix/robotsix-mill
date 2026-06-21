@@ -212,11 +212,16 @@ def _verify_action_sha(owner_repo: str, sha: str) -> bool | None:
     Returns True when confirmed, False when the SHA is absent from
     ``ls-remote`` output, None when the check could not be performed
     (network error, timeout, non-zero exit, empty output, etc.).
+
+    Note: ``git ls-remote`` patterns filter by *ref name*, not object
+    SHA — so we call it without a pattern and grep the full output for
+    the SHA.  Passing the SHA as a positional argument would filter
+    refs by that hex string (always producing empty output).
     """
     try:
         url = f"https://github.com/{owner_repo}.git"
         result = subprocess.run(  # noqa: S603
-            ["git", "ls-remote", url, sha],  # noqa: S607
+            ["git", "ls-remote", url],  # noqa: S607
             capture_output=True,
             text=True,
             timeout=15,
