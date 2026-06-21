@@ -20,7 +20,7 @@ from ..models import (
 )
 from ..states import State
 from ._base import _ServiceBase
-from ._helpers import _parse_depends_on_str
+from ._helpers import _get_ticket, _parse_depends_on_str
 
 if TYPE_CHECKING:
     from ...config import RepoConfig
@@ -359,9 +359,7 @@ class _QueryMixin(_ServiceBase):
         """Return all comments for *ticket_id*, ordered oldest-first.
         Raises ``KeyError`` if the ticket does not exist."""
         with db.session(self.settings, self._board_for(ticket_id)) as s:
-            ticket = s.get(Ticket, ticket_id)
-            if ticket is None:
-                raise KeyError(ticket_id)
+            _get_ticket(s, ticket_id)
             stmt = (
                 select(Comment)
                 .where(Comment.ticket_id == ticket_id)

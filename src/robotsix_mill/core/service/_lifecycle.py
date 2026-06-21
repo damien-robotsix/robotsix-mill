@@ -28,6 +28,7 @@ from ..workspace import Workspace, prune_clone
 from ._base import _ServiceBase
 from ._helpers import (
     TransitionError,
+    _get_ticket,
     _make_event,
     _parse_depends_on_str,
     _slug,
@@ -322,9 +323,7 @@ class _LifecycleMixin(_ServiceBase):
         is extended like any other event.
         """
         with db.session(self.settings, self._board_for(ticket_id)) as s:
-            ticket = s.get(Ticket, ticket_id)
-            if ticket is None:
-                raise KeyError(ticket_id)
+            ticket = _get_ticket(s, ticket_id)
             s.add(
                 _make_event(
                     s,
@@ -385,9 +384,7 @@ class _LifecycleMixin(_ServiceBase):
         when the ticket has any open ``[ASK_USER]`` comment threads.
         """
         with db.session(self.settings, self._board_for(ticket_id)) as s:
-            ticket = s.get(Ticket, ticket_id)
-            if ticket is None:
-                raise KeyError(ticket_id)
+            ticket = _get_ticket(s, ticket_id)
             blocked_from = State(ticket.blocked_from) if ticket.blocked_from else None
             paused_from = State(ticket.paused_from) if ticket.paused_from else None
             if not can_transition(ticket.state, dst, blocked_from, paused_from):
@@ -498,9 +495,7 @@ class _LifecycleMixin(_ServiceBase):
         transition's ``prev_hash`` correctly points at this entry.
         """
         with db.session(self.settings, self._board_for(ticket_id)) as s:
-            ticket = s.get(Ticket, ticket_id)
-            if ticket is None:
-                raise KeyError(ticket_id)
+            ticket = _get_ticket(s, ticket_id)
             event = _make_event(s, ticket_id=ticket_id, state=ticket.state, note=note)
             s.add(event)
             s.commit()
@@ -514,9 +509,7 @@ class _LifecycleMixin(_ServiceBase):
         that state so only the failed stage is re-run.
         """
         with db.session(self.settings, self._board_for(ticket_id)) as s:
-            ticket = s.get(Ticket, ticket_id)
-            if ticket is None:
-                raise KeyError(ticket_id)
+            ticket = _get_ticket(s, ticket_id)
             if ticket.state is not State.BLOCKED:
                 raise TransitionError(
                     f"{ticket_id}: cannot resume — not BLOCKED (currently {ticket.state})"
@@ -566,9 +559,7 @@ class _LifecycleMixin(_ServiceBase):
         Does NOT create a ``TicketEvent`` — the workflow state hasn't changed.
         """
         with db.session(self.settings, self._board_for(ticket_id)) as s:
-            ticket = s.get(Ticket, ticket_id)
-            if ticket is None:
-                raise KeyError(ticket_id)
+            ticket = _get_ticket(s, ticket_id)
             ticket.retry_attempt = retry_attempt
             ticket.last_transient_error = last_transient_error
             ticket.next_retry_at = next_retry_at
@@ -617,9 +608,7 @@ class _LifecycleMixin(_ServiceBase):
             State.EPIC_OPEN,
         }
         with db.session(self.settings, self._board_for(ticket_id)) as s:
-            ticket = s.get(Ticket, ticket_id)
-            if ticket is None:
-                raise KeyError(ticket_id)
+            ticket = _get_ticket(s, ticket_id)
             if ticket.state in _NON_REDRAFTABLE:
                 raise TransitionError(
                     f"{ticket_id}: cannot redraft — "
@@ -725,9 +714,7 @@ class _LifecycleMixin(_ServiceBase):
         if it is not in ``human_issue_approval``.
         """
         with db.session(self.settings, self._board_for(ticket_id)) as s:
-            ticket = s.get(Ticket, ticket_id)
-            if ticket is None:
-                raise KeyError(ticket_id)
+            ticket = _get_ticket(s, ticket_id)
             if ticket.state is not State.HUMAN_ISSUE_APPROVAL:
                 raise TransitionError(
                     f"{ticket_id}: cannot request changes — "
@@ -782,9 +769,7 @@ class _LifecycleMixin(_ServiceBase):
         except ValueError:
             board = self.board_id or ""
         with db.session(self.settings, board) as s:
-            ticket = s.get(Ticket, ticket_id)
-            if ticket is None:
-                raise KeyError(ticket_id)
+            ticket = _get_ticket(s, ticket_id)
             if ticket.state in _NON_MARK_DONEABLE:
                 raise TransitionError(
                     f"{ticket_id}: cannot mark done — "
@@ -1136,9 +1121,7 @@ class _LifecycleMixin(_ServiceBase):
 
         # --- snapshot everything from the source DB (no mutation yet) ---
         with db.session(self.settings, src_board) as s:
-            ticket = s.get(Ticket, ticket_id)
-            if ticket is None:
-                raise KeyError(ticket_id)
+            ticket = _get_ticket(s, ticket_id)
             if ticket.kind == "epic":
                 return self._migrate_epic_subtree(s, ticket, src_board, dst_board, note)
             if ticket.parent_id:
