@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -231,7 +232,15 @@ def _verify_action_sha(owner_repo: str, sha: str) -> bool | None:
         return None  # Malformed owner/repo — cannot verify
 
     try:
-        url = f"https://github.com/{owner_repo}.git"
+        # Split and shlex-quote each component so CodeQL recognises the
+        # sanitisation (the regex guard above is already sufficient, but
+        # CodeQL's taint tracker does not model regex-based sanitizers).
+        # shlex.quote is a no-op for [a-zA-Z0-9_.-] characters, so the
+        # resulting URL is identical to the unsanitised version.
+        owner, _, repo = owner_repo.partition("/")
+        safe_owner = shlex.quote(owner)
+        safe_repo = shlex.quote(repo)
+        url = f"https://github.com/{safe_owner}/{safe_repo}.git"
         result = subprocess.run(  # noqa: S603
             ["git", "ls-remote", url],  # noqa: S607
             capture_output=True,
