@@ -377,12 +377,6 @@ periodic:
     interval_seconds: 86400         # seconds between passes (min 60 enforced in worker)
     memory_path: null               # defaults to <data_dir>/module_curator_memory.md
 
-  # -- board_cleanup agent — reviews the board, proposes hygiene actions ----
-  board_cleanup:
-    enabled: true                   # enable periodic board-cleanup passes
-    interval_seconds: 86400         # seconds between passes (min 60 enforced in worker)
-    memory_path: null               # defaults to <data_dir>/board_cleanup_memory.md
-
   # -- CI monitor — enabled/interval are now per-repo fields in repos.yaml --
   #    ci_log_max_bytes stays here as a global operational cap.
   ci_monitor:

@@ -61,7 +61,7 @@ retries: 4
 
 module: health
 
-skills: [board-read, board-propose]
+skills: [board-read]
 
 system_prompt: |
   You are a codebase-health inspection agent …

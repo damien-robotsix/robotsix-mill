@@ -1284,11 +1284,6 @@ BG_PASS_ROUTES = [
         "robotsix_mill.runners.langfuse_cleanup_runner",
         "run_langfuse_cleanup_pass",
     ),
-    (
-        "/board-cleanup",
-        "robotsix_mill.runners.periodic_runner",
-        "run_board_cleanup_pass",
-    ),
     ("/meta", "robotsix_mill.meta.runner", "run_meta_pass"),
     (
         "/run-health",
@@ -1337,7 +1332,6 @@ def test_bg_pass_route_success(client, monkeypatch, route, target_module, target
 _REPO_ID_ERROR_ROUTES = [
     "/trace-health",
     "/langfuse-cleanup",
-    "/board-cleanup",
 ]
 
 

@@ -45,7 +45,7 @@ in the file as an audit trail (visibility is controlled by the UI filter).
 
 A `📋 AGENT.md` button sits in the board toolbar header. Clicking it
 (`openCandidates()`) opens the right-hand drawer; it is mutually exclusive
-with the Runs, Cost, and Proposals panels (opening one closes the others).
+with the Runs and Cost panels (opening one closes the others).
 
 The panel shows **pending** candidates for the **currently selected repo**.
 When the repo selector is on "all repos", the panel aggregates pending
@@ -148,8 +148,6 @@ Routes live in
 ## See also
 
 - [index.md](index.md) — documentation home
-- [docs/proposed-actions.md](proposed-actions.md) — operator review/approve/reject
-  of agent-proposed ticket mutations
 - [docs/board-operations.md](board-operations.md) — board UI and automated column
   transitions
 - [docs/agents.md](agents.md) — agent catalog (includes retrospect)

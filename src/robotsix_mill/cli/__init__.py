@@ -8,13 +8,9 @@
     robotsix-mill ticket resume-blocked <id>
     robotsix-mill epic new --title T [--description-file F | -]
     robotsix-mill inquire --title T [--description-file F | -]
-    robotsix-mill action list --repo-id X [--status S]
-    robotsix-mill action approve <id> --repo-id X
-    robotsix-mill action reject <id> --repo-id X
     robotsix-mill audit                        # run an audit pass
     robotsix-mill trace-health                 # run a trace-health check
     robotsix-mill health                        # run a health pass
-    robotsix-mill board-cleanup                # run a board-cleanup pass
     robotsix-mill copy-paste                   # run a copy-paste detection pass
 
 The same API backs a future web frontend.
@@ -152,12 +148,6 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Verify",
         "format": "verify",
     },
-    "board-cleanup": {
-        "module": "runners.periodic_runner",
-        "function": "run_board_cleanup_pass",
-        "label": "Board-cleanup pass",
-        "format": "memory_drafts",
-    },
 }
 
 
@@ -185,33 +175,6 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                 repo_config=None,
                 max_traces=settings.langfuse_cleanup_max_traces,
             )
-        elif cmd == "board-cleanup":
-            from ..runtime.tracing import make_session_id
-            from ..config import Settings, get_repos_config
-
-            session_id = make_session_id(cmd)
-            repos = get_repos_config()
-            repo_id = getattr(args, "repo_id", None)
-            if repo_id is None:
-                if len(repos.repos) == 1:
-                    rc = next(iter(repos.repos.values()))
-                else:
-                    print(
-                        "board-cleanup: --repo-id is required (multiple repos "
-                        f"configured). Known repos: {sorted(repos.repos.keys())}",
-                        file=sys.stderr,
-                    )
-                    return 2
-            elif repo_id not in repos.repos:
-                print(
-                    f"board-cleanup: unknown repo '{repo_id}'. "
-                    f"Known repos: {sorted(repos.repos.keys())}",
-                    file=sys.stderr,
-                )
-                return 2
-            else:
-                rc = repos.repos[repo_id]
-            result = func(session_id=session_id, repo_config=rc, settings=Settings())
         elif cmd == "member-sync":
             from ..runtime.tracing import make_session_id
             from ..config import get_repos_config
@@ -444,7 +407,6 @@ from .ticket import (  # noqa: E402
     _ticket_resume_blocked,
 )
 from .epic import _epic_new  # noqa: E402
-from .action import _action_list, _action_approve, _action_reject  # noqa: E402
 from .inquire import _inquire  # noqa: E402
 
 
@@ -688,20 +650,6 @@ def main(argv: list[str] | None = None) -> int:
         help="output full JSON result (default: summary)",
     )
 
-    # --- board-cleanup command ---
-    p_board_cleanup = sub.add_parser(
-        "board-cleanup", help="run a board-cleanup pass and emit cleanup drafts"
-    )
-    p_board_cleanup.add_argument(
-        "--json",
-        action="store_true",
-        help="output full JSON result (default: summary)",
-    )
-    p_board_cleanup.add_argument(
-        "--repo-id",
-        help="scope to a specific repo (required when multiple repos are configured)",
-    )
-
     # --- inquire command ---
     p_inquire = sub.add_parser(
         "inquire", help="ask a one-shot question (no code-change lifecycle)"
@@ -726,24 +674,6 @@ def main(argv: list[str] | None = None) -> int:
         "registered; optional when only one)",
     )
 
-    # --- action command ---
-    p_action = sub.add_parser("action", help="proposed action operations")
-    asub = p_action.add_subparsers(dest="acmd", required=True)
-
-    p_action_list = asub.add_parser("list", help="list pending proposed actions")
-    p_action_list.add_argument("--repo-id", required=True)
-    p_action_list.add_argument("--status", default="pending")
-
-    p_action_approve = asub.add_parser(
-        "approve", help="approve and execute a proposed action"
-    )
-    p_action_approve.add_argument("id", type=int)
-    p_action_approve.add_argument("--repo-id", required=True)
-
-    p_action_reject = asub.add_parser("reject", help="reject a proposed action")
-    p_action_reject.add_argument("id", type=int)
-    p_action_reject.add_argument("--repo-id", required=True)
-
     args = parser.parse_args(argv)
     settings = Settings()
 
@@ -757,13 +687,6 @@ def main(argv: list[str] | None = None) -> int:
         return _inquire(args, settings)
     if args.cmd == "epic" and args.ecmd == "new":
         return _epic_new(args, settings)
-    if args.cmd == "action":
-        if args.acmd == "list":
-            return _action_list(args, settings)
-        if args.acmd == "approve":
-            return _action_approve(args, settings)
-        if args.acmd == "reject":
-            return _action_reject(args, settings)
     if args.cmd == "ticket":
         if args.tcmd == "new":
             return _ticket_new(args, settings)

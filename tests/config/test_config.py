@@ -597,23 +597,6 @@ class TestComputedProperties:
         # (Path("") which equals Path(".")).
         assert s.retrospect_memory_file == Path("")
 
-    def test_board_cleanup_memory_file_fallback(self, tmp_path):
-        """board_cleanup_memory_file derives a per-repo path under data_dir
-        when no override is set."""
-        s = Settings(data_dir=str(tmp_path))
-        assert (
-            s.board_cleanup_memory_file("my-repo")
-            == tmp_path / "my-repo" / "board_cleanup_memory.md"
-        )
-
-    def test_board_cleanup_memory_file_override(self, monkeypatch, tmp_path):
-        """A board_cleanup_memory_path override wins over the per-repo
-        derived path, ignoring repo_id."""
-        custom = Path("/custom/board_cleanup_memory.md")
-        monkeypatch.setenv("MILL_BOARD_CLEANUP_MEMORY_PATH", str(custom))
-        s = Settings(data_dir=str(tmp_path))
-        assert s.board_cleanup_memory_file("my-repo") == custom
-
 
 # ---------------------------------------------------------------------------
 # 5. extra="ignore" behaviour

@@ -16,7 +16,6 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from ..config import Settings
-from ..runners.pass_runner import ProposedActionItem
 
 # ---------------------------------------------------------------------------
 # Load the static system prompt from the YAML definition
@@ -75,7 +74,6 @@ class MetaAgentResult(BaseModel):
     extraction_drafts: list[DraftProposal] = Field(default_factory=list)
     alignment_drafts: list[DraftProposal] = Field(default_factory=list)
     todo_drafts: list[DraftProposal] = Field(default_factory=list)
-    proposed_actions: list[ProposedActionItem] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

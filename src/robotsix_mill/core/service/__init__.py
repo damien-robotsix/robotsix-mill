@@ -9,8 +9,7 @@ The implementation is split across responsibility mixins for navigability
 (this package was previously a single ``service.py`` module): read/query
 access (:mod:`._queries`), lifecycle/state mutation
 (:mod:`._lifecycle`), single-column metadata setters (:mod:`._metadata`),
-comment/thread handling (:mod:`._comments`), and proposed-action
-execution (:mod:`._actions`). The module-level helpers and
+and comment/thread handling (:mod:`._comments`). The module-level helpers and
 :class:`TransitionError` live in :mod:`._helpers`. The concrete
 :class:`TicketService` is assembled here by multiple inheritance; the
 public import path ``robotsix_mill.core.service`` is unchanged.
@@ -24,7 +23,6 @@ from ...config import Settings
 from ..models import Ticket
 from ..states import State
 from ..workspace import Workspace
-from ._actions import _ActionMixin
 from ._comments import _CommentMixin
 from ._helpers import TransitionError
 from ._helpers import _event_hash as _event_hash
@@ -40,9 +38,7 @@ from ._queries import _QueryMixin
 __all__ = ["TicketService", "TransitionError"]
 
 
-class TicketService(
-    _QueryMixin, _LifecycleMixin, _MetadataMixin, _CommentMixin, _ActionMixin
-):
+class TicketService(_QueryMixin, _LifecycleMixin, _MetadataMixin, _CommentMixin):
     """Manage the ticket lifecycle over per-repo SQLite databases.
 
     Central service for creating tickets, moving them through the state
@@ -66,9 +62,6 @@ class TicketService(
     * **Relationships / metadata** — :meth:`set_parent`,
       :meth:`set_unblocks`, :meth:`set_depends_on`,
       :meth:`promote_to_epic`, :meth:`set_priority`, :meth:`set_title`.
-    * **Proposed actions** — :meth:`create_proposed_action`,
-      :meth:`approve_proposed_action`, :meth:`reject_proposed_action`,
-      :meth:`execute_proposed_action`.
     """
 
     _ARCHIVABLE_STATES: set[State] = {State.CLOSED, State.ANSWERED, State.EPIC_CLOSED}

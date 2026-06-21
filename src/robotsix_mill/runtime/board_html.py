@@ -107,7 +107,6 @@ BOARD_HTML = """<!doctype html><html><head><meta charset="utf-8">
     <button onclick="runModuleCurator()" data-agent="module_curator">Module Curator</button>
     <button onclick="runForgeParity()" data-agent="forge_parity">Forge Parity</button>
     <button onclick="runCopyPaste()" data-agent="copy_paste">Copy Paste</button>
-    <button onclick="runBoardCleanup()" data-agent="board_cleanup">Board Cleanup</button>
     <button onclick="runStateSync()" data-agent="state_sync">State Sync</button>
     <button onclick="runEnvDocSync()" data-agent="env_doc_sync">Env Doc Sync</button>
     <button onclick="runMeta()" data-agent="meta" class="meta-only">Meta</button>
@@ -139,11 +138,6 @@ margin-left:4px">
 background:#6b7280;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">
   Runs
-</button>
-<button onclick="toggleProposals()" style="font-size:11px;padding:3px 10px;
-background:#7c3aed;color:#fff;border:none;border-radius:4px;cursor:pointer;
-margin-left:4px">
-  📝 Pending
 </button>
 <button id="toggle-closed-btn" onclick="toggleClosed()" style="font-size:11px;padding:3px 10px;
 background:#6b7280;color:#fff;border:none;border-radius:4px;cursor:pointer;

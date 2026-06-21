@@ -29,7 +29,7 @@ read_ticket: true
 output_type: ForgeParityResult
 retries: 2
 module: forge_parity
-skills: [board-read, board-propose]
+skills: [board-read]
 
 system_prompt: |
   You are a forge parity agent for an autonomous software project.

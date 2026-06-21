@@ -273,34 +273,6 @@ Additional context.
     assert "Additional context" in stored
 
 
-def test_ephemeral_proposed_actions_stripped(tmp_path: Path):
-    """persist_memory_db strips '## Prior proposed actions — decided' tables."""
-    s = _make_settings(tmp_path)
-    bid, name = "board-m", "audit"
-
-    content = """## Notes
-
-Pattern seen.
-
-## Prior proposed actions — decided
-
-| id | target_ticket | action | status | decided_by | rationale |
-|----|---------------|--------|--------|------------|-----------|
-| 1 | abc1234 | close | approved | user | good |
-
-## More patterns
-
-Another note.
-"""
-    db.persist_memory_db(s, bid, name, content)
-
-    stored = db.load_memory_db(s, bid, name)
-    assert "Prior proposed actions — decided" not in stored
-    assert "| 1 |" not in stored
-    assert "Pattern seen" in stored
-    assert "Another note" in stored
-
-
 def test_recent_proposals_block_stripped(tmp_path: Path):
     """persist_memory_db strips echoed <recent_proposals> blocks."""
     s = _make_settings(tmp_path)

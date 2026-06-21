@@ -575,7 +575,7 @@ Each periodic agent shares this pattern:
 | `periodic.<name>.interval_seconds` | `MILL_<NAME>_INTERVAL_SECONDS` | `86400` | Seconds between automatic passes |
 | `periodic.<name>.memory_path` | `MILL_<NAME>_MEMORY_PATH` | `None` | Override path for memory ledger ² ³ |
 
-Periodic agents: `audit`, `board_cleanup`, `trace_health`, `trace_review`, `health`, `test_gap`,
+Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_monitor`, `config_sync`, `member_sync`, `bc_check`,
 `completeness_check`, `diagnostic`, `forge_parity`, `module_curator`,
 `copy_paste`, `timeout_escalation`, `langfuse_cleanup`, `data_dir_audit`, `run_health`.
@@ -605,9 +605,6 @@ Additional fields:
 | `periodic.trace_review.obs_multiplier` | — | `3.0` | Outlier threshold: observation count > median × N → flagged |
 | `periodic.trace_review.max_repeated_tool` | — | `50` | Absolute cap on repeated tool calls before flagging |
 | `periodic.trace_review.max_drafts_per_run` | — | `5` | Cap on drafted findings per trace-review pass |
-| `periodic.board_cleanup.enabled` | `MILL_BOARD_CLEANUP_PERIODIC` | `true` | Enable periodic board-cleanup passes |
-| `periodic.board_cleanup.interval_seconds` | `MILL_BOARD_CLEANUP_INTERVAL_SECONDS` | `86400` | Seconds between board-cleanup passes |
-| `periodic.board_cleanup.memory_path` | `MILL_BOARD_CLEANUP_MEMORY_PATH` | `None` | Override path for board-cleanup memory; defaults to `<data_dir>/<repo_id>/board_cleanup_memory.md` |
 | `periodic.ci_monitor.log_max_bytes` | `MILL_CI_LOG_MAX_BYTES` | `65536` | Max bytes fetched per CI job log |
 | `periodic.diagnostic.target_repo_id` | `MILL_DIAGNOSTIC_TARGET_REPO_ID` | `robotsix-mill` | Board the diagnostic agent routes activity to; single-repo fallback when the monitored list is empty |
 | `periodic.diagnostic.monitored_repo_ids` | `MILL_DIAGNOSTIC_MONITORED_REPO_IDS` | `[]` | Repos the diagnostic agent monitors each pass (JSON list); empty → falls back to `target_repo_id`. Add/remove repos here — no code change. See [diagnostic-agent.md](diagnostic-agent.md) |

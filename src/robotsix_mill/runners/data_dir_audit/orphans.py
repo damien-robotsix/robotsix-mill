@@ -18,7 +18,7 @@ from sqlmodel import select
 
 from ...config import Settings
 from ...core import db
-from ...core.models import Comment, ProposedAction, Ticket, TicketEvent, _now
+from ...core.models import Comment, Ticket, TicketEvent, _now
 
 from .growth import _TICKET_ID_PREFIX_RE, _BATCH_SIZE, _TERMINAL_STATES
 
@@ -427,19 +427,14 @@ def _has_active_child(settings: Settings, board_id: str, ticket_id: str) -> bool
 def _cascade_delete_ticket(settings: Settings, board_id: str, ticket_id: str) -> None:
     """Hard-delete *ticket_id* and its dependent rows in one transaction.
 
-    Deletes ``TicketEvent``, ``ProposedAction``, and ``Comment`` rows
-    referencing *ticket_id*, then the ``Ticket`` itself — mirrors
-    ``TicketService.delete``.
+    Deletes ``TicketEvent`` and ``Comment`` rows referencing *ticket_id*,
+    then the ``Ticket`` itself — mirrors ``TicketService.delete``.
     """
     with db.session(settings, board_id) as s:
         for ev in s.exec(
             select(TicketEvent).where(TicketEvent.ticket_id == ticket_id)
         ).all():
             s.delete(ev)
-        for pa in s.exec(
-            select(ProposedAction).where(ProposedAction.target_ticket_id == ticket_id)
-        ).all():
-            s.delete(pa)
         for c in s.exec(select(Comment).where(Comment.ticket_id == ticket_id)).all():
             s.delete(c)
         t = s.get(Ticket, ticket_id)

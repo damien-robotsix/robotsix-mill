@@ -293,23 +293,6 @@ class PollLoopsMixin(_WorkerBase):
 
             definition = wf.definition
 
-            # board_cleanup is an llm_agent but has a BESPOKE runner (it
-            # operates on the board, not the code tree, so it needs the
-            # full board snapshot injected) — route it before the generic
-            # PERIODIC_PASS_CONFIGS lookup.
-            if wf.name == "board_cleanup":
-                from ...runners.periodic_runner import run_board_cleanup_pass
-
-                def _run_board_cleanup(*, session_id, repo_config):
-                    return run_board_cleanup_pass(
-                        session_id,
-                        repo_config,
-                        settings=Settings(),
-                        definition_override=definition,
-                    )
-
-                return _run_board_cleanup
-
             from ...runners.periodic_runner import (
                 PERIODIC_PASS_CONFIGS,
                 run_periodic_pass,

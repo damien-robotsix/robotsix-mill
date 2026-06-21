@@ -30,7 +30,6 @@ nav:
       - Merge stage: merge-stage.md
       - Epic dedup: epic-dedup.md
       - Inquiry to task: inquiry-to-task.md
-      - Proposed actions: proposed-actions.md
       - "AGENT.md candidates": agent-md-candidates.md
       - Scope triage: scope-triage.md
   - Agents & Internals:
@@ -44,7 +43,6 @@ nav:
       - Meta board: meta-board.md
   - Operations:
       - Board agent: board-agent.md
-      - Board cleanup: board-cleanup.md
       - Board operations: board-operations.md
       - Cost controls & resilience: cost-and-resilience.md
       - Notifications: notifications.md

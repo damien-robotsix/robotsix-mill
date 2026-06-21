@@ -44,9 +44,6 @@ enterprise process. These are hard rules, learned the hard way.
 - **Never inline JS/CSS back into the `board_html.py` Python string.**
   A `\n` in a Python-embedded JS string becomes a real newline and
   silently breaks the entire board. Put JS in `board.js`.
-- The board exposes a **Proposals** panel (`📝 Proposals` in the
-  toolbar) for reviewing and approving/rejecting agent-proposed ticket
-  mutations — see [docs/proposed-actions.md](docs/proposed-actions.md).
 
 ## Git / CI
 
@@ -94,7 +91,7 @@ are:
   `periodic/health.yaml`, `periodic/survey.yaml`,
   `periodic/meta.yaml`, `periodic/test_gap.yaml`,
   `periodic/agent_check.yaml`, `periodic/bc_check.yaml`,
-  `periodic/board_cleanup.yaml`, `periodic/completeness_check.yaml`,
+  `periodic/completeness_check.yaml`,
   `periodic/copy_paste.yaml`, `periodic/cost_analyst.yaml`,
   `periodic/diagnostic.yaml`, `periodic/forge_parity.yaml`,
   `periodic/module_curator.yaml`, `periodic/run_health.yaml`, and

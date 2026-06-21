@@ -79,7 +79,6 @@ _BUILTIN_KINDS: dict[str, str] = {
     "survey": "llm_agent",
     "test_gap": "llm_agent",
     "module_curator": "llm_agent",
-    "board_cleanup": "llm_agent",
     "forge_parity": "llm_agent",
     "state_sync": "llm_agent",
     "env_doc_sync": "llm_agent",
