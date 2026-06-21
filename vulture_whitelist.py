@@ -64,12 +64,9 @@ run_forge_parity_agent
 run_health_agent
 _coerce_redirect_to
 run_module_curator_agent
-reasoning_setting
 _interval_xor
 _prompt_xor
 _name_slug
-MEMORY_NO_CHANGE_MAX_AGE_DAYS
-MEMORY_NO_CHANGE_SIMILARITY_THRESHOLD
 _absorb_spec_markdown_typos
 _absorb_findings_list_shape
 output_context
@@ -113,10 +110,6 @@ module_curator_periodic
 module_curator_interval_seconds
 board_cleanup_periodic
 board_cleanup_interval_seconds
-cost_reconciliation_memory_path
-cost_reconciliation_periodic
-cost_reconciliation_interval_seconds
-data_dir_audit_model
 data_dir_audit_memory_path
 data_dir_audit_periodic
 data_dir_audit_interval_seconds
@@ -127,16 +120,9 @@ forge_parity_periodic
 forge_parity_interval_seconds
 state_sync_periodic
 state_sync_interval_seconds
-copy_paste_model
 copy_paste_memory_path
 copy_paste_periodic
-completeness_check_model
-forge_parity_model
-health_model
 state_sync_model
-survey_model
-test_gap_model
-bc_check_model
 copy_paste_interval_seconds
 config_sync_periodic
 config_sync_interval_seconds
@@ -146,11 +132,9 @@ env_doc_sync_periodic
 env_doc_sync_interval_seconds
 member_sync_interval_seconds
 meta_periodic
-cost_analyst_periodic
 run_health_periodic
 run_health_memory_path
 diagnostic_periodic
-review_revision_model
 stale_branch_cleanup_periodic
 db_maintenance_periodic
 scope_triage_request_limit
@@ -183,7 +167,6 @@ rebase_memory_file
 ci_patterns_file
 _validate_trace_health_interval
 _validate_trace_review_interval
-_validate_dedup_model_is_cheap
 _validate_cross_field
 get_field_value
 
@@ -208,8 +191,6 @@ list_pr_reviews
 list_review_comments
 
 # -- langfuse ----------------------------------------------------------------
-ticket_with_most_steps
-trace_with_most_errors
 
 # -- meta --------------------------------------------------------------------
 todo_drafts_created
@@ -226,7 +207,6 @@ run_completeness_check_pass
 run_config_sync_pass
 run_env_doc_sync_pass
 run_copy_paste_pass
-run_cost_reconciliation_pass
 oversized_items
 query_traces_since
 query_recent_traces
@@ -264,10 +244,6 @@ board_move
 list_candidates
 validate_candidate
 reject_candidate
-cost_trend
-cost_by_agent
-most_expensive_ticket_endpoint
-most_expensive_trace_endpoint
 cost_breakdown
 create_epic
 generate_children
@@ -286,7 +262,6 @@ trace_health_check
 langfuse_cleanup_pass
 board_cleanup_pass
 meta_pass
-cost_analyst_pass
 create_ticket
 list_tickets
 get_ticket
@@ -307,7 +282,6 @@ get_merge_status
 list_runs
 list_active
 finished_at
-signum
 _audit_task
 _trace_health_task
 _trace_review_task
@@ -320,12 +294,10 @@ _module_curator_task
 _test_gap_task
 _survey_task
 _config_sync_task
-_cost_reconciliation_task
 _data_dir_audit_task
 _langfuse_cleanup_task
 _timeout_escalation_task
 _meta_task
-_cost_analyst_task
 _run_health_task
 _diagnostic_task
 _stale_branch_task
