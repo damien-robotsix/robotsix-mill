@@ -90,3 +90,10 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+  - repo: local
+    hooks:
+      - id: check-registration
+        name: Check module file registration
+        entry: robotsix-modules check-registration docs/modules.yaml --root .
+        language: system
+        always_run: true
