@@ -39,7 +39,10 @@ _WORKFLOWS_DIR = _REPO_ROOT / ".github" / "workflows"
 # itself grant ``security-events: write``. Cross-repo ``uses:`` references can't
 # be introspected, so the well-known ones are listed by basename; local
 # reusable workflows are additionally auto-discovered (see _required_workflows).
-_KNOWN_SARIF_REUSABLE = {"python-ci.yml", "python-security.yml"}
+# Only ``python-ci.yml`` uploads SARIF — ``python-security.yml`` runs TruffleHog
+# / pip-audit / SBOM (no ``upload-sarif``), so its callers do NOT need the scope
+# and must not be flagged.
+_KNOWN_SARIF_REUSABLE = {"python-ci.yml"}
 
 
 def _load(path: Path) -> dict[str, Any] | None:
