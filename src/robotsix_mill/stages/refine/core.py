@@ -128,6 +128,22 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
         if misrouted is not None:
             return misrouted
 
+        # Phase 2.2: triage classifier — a single cheap LLM call that
+        # classifies the draft as SKIP / NO_CHANGE / MAINTENANCE /
+        # REFINE.  Run BEFORE any expensive LLM gates (obsolescence,
+        # dedup) so tickets that are already satisfied on disk
+        # (NO_CHANGE) or already-precise specs (SKIP) short-circuit
+        # without wasting LLM budget on the dedup check or full refine
+        # agent.  Collect reviewer comments first so we don't run triage
+        # on sendback drafts (human feedback always goes through full
+        # refine).
+        reviewer_comments, _ = RefineStage._collect_reviewer_comments(ctx, ticket)
+        triage = RefineStage._triage_skip(
+            ctx, ticket, draft, repo_dir, extra_roots, title, ws, s, reviewer_comments
+        )
+        if triage is not None:
+            return triage
+
         # Phase 2.5: obsolescence gate — for *spawned* follow-up drafts,
         # re-evaluate (via a cheap LLM call) whether the cited gap was
         # already resolved in place by a parallel/parent ticket.  Runs

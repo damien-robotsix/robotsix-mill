@@ -266,11 +266,22 @@ class RefineAgentMixin:
         if outcome is not None:
             return outcome
 
-        outcome = RefineAgentMixin._triage_skip(
-            ctx, ticket, draft, repo_dir, extra_roots, title, ws, s, reviewer_comments
-        )
-        if outcome is not None:
-            return outcome
+        # Triage already ran in RefineStage.run() (Phase 2.2) — skip
+        # the duplicate call when the complexity artifact exists.
+        if not (ws.artifacts_dir / "triage_complexity.json").exists():
+            outcome = RefineAgentMixin._triage_skip(
+                ctx,
+                ticket,
+                draft,
+                repo_dir,
+                extra_roots,
+                title,
+                ws,
+                s,
+                reviewer_comments,
+            )
+            if outcome is not None:
+                return outcome
 
         outcome, result = RefineAgentMixin._run_and_collect(
             ctx,
