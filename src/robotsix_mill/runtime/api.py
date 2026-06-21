@@ -90,4 +90,20 @@ def create_app(
         )
 
     app.include_router(routes.router)
+
+    # Prometheus metrics: auto-discovers all routes, exports request
+    # counts, latency histograms (dual-bucket), and request/response sizes
+    # at GET /metrics (excluded from OpenAPI schema).
+    try:
+        from prometheus_fastapi_instrumentator import Instrumentator
+
+        Instrumentator().instrument(app).expose(app)
+    except ImportError:
+        import logging
+
+        logging.warning(
+            "prometheus_fastapi_instrumentator not installed — "
+            "/metrics endpoint unavailable"
+        )
+
     return app
