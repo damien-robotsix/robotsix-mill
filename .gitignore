@@ -29,3 +29,5 @@ docker-compose.override.yml
 # to <clone>/artifacts/board.png and moves it out to the workspace; this
 # ignore is defence-in-depth so a lingering copy is never staged.
 /artifacts/board.png
+# Stray pip-install output file accidentally committed (see ticket 20260621T173905Z)
+=8
