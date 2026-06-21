@@ -4758,6 +4758,74 @@ class TestClassifyMaintenanceDraft:
         assert refining._classify_maintenance_draft("", "") is None
 
 
+class TestIsInternalToolchainFailure:
+    """Unit tests for ``is_internal_toolchain_failure`` — the predicate
+    that gates ``ask_web_knowledge`` during refine when the draft carries
+    CI/type/lint/test failure signals."""
+
+    def test_traceback_positive(self):
+        """Draft containing a Python traceback → True."""
+        assert refining.is_internal_toolchain_failure(
+            "Traceback (most recent call last):\n  File ..."
+        )
+
+    def test_pytest_failed_summary_positive(self):
+        """Draft with a pytest ``FAILED`` summary line → True."""
+        assert refining.is_internal_toolchain_failure(
+            "FAILED tests/foo.py::test_bar - AssertionError"
+        )
+
+    def test_pytest_failures_section_positive(self):
+        """Draft with ``= FAILURES =`` → True."""
+        assert refining.is_internal_toolchain_failure(
+            "= FAILURES =\n something went wrong"
+        )
+
+    def test_pytest_short_test_summary_positive(self):
+        """Draft with ``short test summary`` → True."""
+        assert refining.is_internal_toolchain_failure("short test summary info")
+
+    def test_mypy_arg_type_positive(self):
+        """Draft with a mypy ``error: ... [arg-type]`` line → True."""
+        assert refining.is_internal_toolchain_failure(
+            'src/foo.py:10: error: Argument 1 to "f" has incompatible type '
+            '"int"; expected "str"  [arg-type]'
+        )
+
+    def test_ruff_code_positive(self):
+        """Draft explicitly mentioning ``ruff`` → True."""
+        assert refining.is_internal_toolchain_failure(
+            "ruff check failed: E501 line too long"
+        )
+
+    def test_flake8_code_positive(self):
+        """Draft with an ``F401`` lint code → True."""
+        assert refining.is_internal_toolchain_failure("unused import: F401")
+
+    def test_exit_code_positive(self):
+        """Draft with ``exit code`` → True."""
+        assert refining.is_internal_toolchain_failure("mypy exited with exit code 1")
+
+    def test_feature_draft_negative(self):
+        """Ordinary feature draft with no failure markers → False."""
+        assert not refining.is_internal_toolchain_failure(
+            "Add a new endpoint to the API that returns user preferences."
+        )
+
+    def test_bare_test_word_negative(self):
+        """Draft that mentions 'test' but no failure markers → False
+        (predicate is conservative)."""
+        assert not refining.is_internal_toolchain_failure(
+            "We should test the new feature thoroughly."
+        )
+
+    def test_case_insensitive(self):
+        """Markers are matched case-insensitively."""
+        assert refining.is_internal_toolchain_failure(
+            "TRACEBACK (most recent call last):"
+        )
+
+
 class TestRefineTraceWebBudgetDefaults:
     """The refine stage reuses the proven per-trace web budget helpers
     (``reset_trace_web_fetch_budget`` / ``reset_trace_web_search_budget``)

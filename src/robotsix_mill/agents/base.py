@@ -181,6 +181,7 @@ def build_agent_from_definition(
     tools: list[Any] | None = None,
     repo_dir: Path | None = None,
     current_ticket_id: str = "",
+    web_knowledge_block_reason: str | None = None,
     **overrides,
 ) -> AgentHandle:
     """Build an agent from an :class:`AgentDefinition`, bridging the YAML
@@ -240,6 +241,7 @@ def build_agent_from_definition(
         output_type=resolved_output_type,
         skills=definition.skills,
         modules=definition.modules,
+        web_knowledge_block_reason=web_knowledge_block_reason,
     )
     kwargs.update(overrides)
     kwargs["tools"] = tools
@@ -465,6 +467,7 @@ def build_agent(  # noqa: C901
     modules: bool = False,
     board_id: str = "",
     repo_dir: "Path | None" = None,
+    web_knowledge_block_reason: str | None = None,
 ):
     """Construct a pydantic-ai Agent for a capability ``level`` (1/2/3).
 
@@ -541,7 +544,11 @@ def build_agent(  # noqa: C901
         # repos.
         from .web_knowledge import make_ask_web_knowledge_tool
 
-        all_tools.append(make_ask_web_knowledge_tool(settings))
+        all_tools.append(
+            make_ask_web_knowledge_tool(
+                settings, block_reason=web_knowledge_block_reason
+            )
+        )
 
     composed_system = compose_prompt(
         settings,

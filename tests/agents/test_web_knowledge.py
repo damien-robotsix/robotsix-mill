@@ -473,6 +473,49 @@ class TestMakeTool:
         info = ToolRegistry._tools["ask_web_knowledge"]
         assert "question" in info.parameters
 
+    def test_block_reason_returns_immediately_no_run_web_knowledge(
+        self, tmp_path, monkeypatch
+    ):
+        """When *block_reason* is set, the tool returns it immediately
+        without calling ``run_web_knowledge`` — no web budget is spent."""
+        s = _settings(tmp_path)
+        called = False
+
+        async def fake_run_web_knowledge(*, settings, question):
+            nonlocal called
+            called = True
+            return "should not be reached"
+
+        monkeypatch.setattr(web_knowledge, "run_web_knowledge", fake_run_web_knowledge)
+        tool = make_ask_web_knowledge_tool(s, block_reason="blocked: internal failure")
+        out = asyncio.run(tool("why did mypy fail?"))
+        assert out == "blocked: internal failure"
+        assert not called, "run_web_knowledge should not have been called"
+
+    def test_tool_still_registered_when_blocked(self, tmp_path):
+        """Even when *block_reason* is set, the tool is still registered
+        in ToolRegistry — the prompt-tool-consistency guard is not
+        tripped by its absence."""
+        s = _settings(tmp_path)
+        make_ask_web_knowledge_tool(s, block_reason="blocked: internal failure")
+        info = ToolRegistry._tools.get("ask_web_knowledge")
+        assert info is not None
+        assert info.name == "ask_web_knowledge"
+        assert info.category == "exploration"
+
+    def test_block_reason_none_delegates_normally(self, tmp_path, monkeypatch):
+        """With *block_reason=None* (default), the tool delegates to
+        ``run_web_knowledge`` as before."""
+        s = _settings(tmp_path)
+
+        async def fake_run_web_knowledge(*, settings, question):
+            return "normal answer"
+
+        monkeypatch.setattr(web_knowledge, "run_web_knowledge", fake_run_web_knowledge)
+        tool = make_ask_web_knowledge_tool(s)  # block_reason defaults to None
+        out = asyncio.run(tool("what is X?"))
+        assert out == "normal answer"
+
 
 # ---------------------------------------------------------------------------
 # TestTraceWebSearchBudget — per-survey-run web_search budget
