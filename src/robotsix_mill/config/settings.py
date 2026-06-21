@@ -220,16 +220,6 @@ class Settings(
             return self.bc_check_memory_path
         return self.data_dir / "bc_check_memory.md"
 
-    def board_cleanup_memory_file(self, repo_id: str) -> Path:
-        """Resolved path to the board-cleanup agent's memory ledger.
-
-        Honors the ``board_cleanup_memory_path`` override when set;
-        otherwise derives ``<data_dir>/<repo_id>/board_cleanup_memory.md``.
-        """
-        if self.board_cleanup_memory_path is not None:
-            return self.board_cleanup_memory_path
-        return self.data_dir / repo_id / "board_cleanup_memory.md"
-
     @property
     def completeness_check_memory_file(self) -> Path:
         """Resolved path to the agent-maintained completeness-check memory ledger."""

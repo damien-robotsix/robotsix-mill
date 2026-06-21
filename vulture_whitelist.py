@@ -108,8 +108,6 @@ bc_check_interval_seconds
 module_curator_memory_path
 module_curator_periodic
 module_curator_interval_seconds
-board_cleanup_periodic
-board_cleanup_interval_seconds
 data_dir_audit_memory_path
 data_dir_audit_periodic
 data_dir_audit_interval_seconds
@@ -260,7 +258,6 @@ gates
 ws_board
 trace_health_check
 langfuse_cleanup_pass
-board_cleanup_pass
 meta_pass
 create_ticket
 list_tickets

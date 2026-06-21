@@ -105,7 +105,6 @@ h1 {
 .src-state-sync      { background: #164e63; color: #0891b2; }
 .src-module-curator  { background: #4a1a00; color: #f97316; }
 .src-copy-paste      { background: #4a0d2e; color: #ec4899; }
-.src-board-cleanup   { background: #064e3b; color: #10b981; }
 .src-data-dir-audit  { background: #312e81; color: #a5b4fc; }
 .src-meta            { background: #3b0764; color: #a855f7; }
 .src-run-health      { background: #1e3a5f; color: #3b82f6; }
@@ -1045,62 +1044,3 @@ pre {
   padding: 1px 4px;
   border-radius: 3px;
 }
-
-/* ============================================================
-   Proposals panel / proposed-action cards
-   ============================================================ */
-.proposal-card {
-  border: 1px solid #2c313d;
-  border-radius: 6px;
-  padding: 10px 12px;
-  margin-bottom: 10px;
-  background: #1d212c;
-}
-.proposal-meta { font-size: 11px; color: #7d828c; }
-
-.proposal-card .pa-source {
-  display: inline-block;
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 3px;
-  margin-right: 6px;
-  text-transform: uppercase;
-  letter-spacing: .04em;
-}
-.proposal-card .pa-action {
-  display: inline-block;
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 3px;
-  margin-right: 6px;
-  font-weight: 600;
-}
-.proposal-card .pa-target {
-  font-family: monospace;
-  font-size: 11px;
-  color: #8bb4f8;
-  cursor: pointer;
-  text-decoration: underline;
-}
-.proposal-card .pa-target:hover { color: #60a5fa; }
-.proposal-card .pa-rationale {
-  font-size: 12px;
-  color: #cfd3db;
-  margin: 6px 0;
-  line-height: 1.4;
-}
-.proposal-card .pa-meta { font-size: 10px; color: #7d828c; margin-top: 4px; }
-.proposal-card .pa-buttons { display: flex; gap: 6px; margin-top: 8px; }
-
-/* Proposed-action types */
-.pa-action-close      { background: #3b1f1f; color: #f87171; }
-.pa-action-transition { background: #1d3a5c; color: #60a5fa; }
-.pa-action-comment    { background: #1a3b2f; color: #34d399; }
-.pa-action-relabel    { background: #2e1065; color: #c084fc; }
-
-/* Proposed-action statuses */
-.pa-status-pending   { color: #f59e0b; }
-.pa-status-approved  { color: #34d399; }
-.pa-status-rejected  { color: #f87171; }
-.pa-status-executed  { color: #60a5fa; }
-.pa-status-failed    { color: #ef4444; }

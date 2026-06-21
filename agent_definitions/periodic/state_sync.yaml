@@ -28,7 +28,7 @@ web_knowledge: false
 output_type: StateSyncResult
 retries: 3
 module: state_syncing
-skills: [board-read, board-propose]
+skills: [board-read]
 
 system_prompt: |
   You are the state-sync agent for an autonomous software project. Your

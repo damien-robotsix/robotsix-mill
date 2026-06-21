@@ -90,7 +90,7 @@ Which class of agent this is:
   pipeline/meta_triage).
 - **`periodic`** — an agent run on a schedule or as a background task
   (audit, health, survey, test_gap, agent_check, epic_status, bc_check,
-  board_cleanup, completeness_check, copy_paste,
+  completeness_check, copy_paste,
   diagnostic, forge_parity, meta, module_curator, run_health).
 - **`sub_agent`** — a utility agent called by other agents as a tool
   (explore, web_research, trace_inspector).

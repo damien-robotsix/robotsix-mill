@@ -17,8 +17,6 @@ from sqlmodel import Session, col, select
 from .. import db
 from ..models import (
     Comment,
-    ProposedAction,
-    ProposedActionStatus,
     SourceKind,
     Ticket,
     TicketEvent,
@@ -418,21 +416,6 @@ class _LifecycleMixin(_ServiceBase):
             ticket.state = dst
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
-            # Auto-reject stale PENDING proposals when the ticket enters a
-            # terminal (archivable) state — there is nothing left to approve.
-            if dst in self._ARCHIVABLE_STATES:
-                _now = datetime.now(timezone.utc)
-                pending = s.exec(
-                    select(ProposedAction).where(
-                        ProposedAction.target_ticket_id == ticket_id,
-                        ProposedAction.status == ProposedActionStatus.PENDING,
-                    )
-                ).all()
-                for pa in pending:
-                    pa.status = ProposedActionStatus.REJECTED
-                    pa.decided_at = _now
-                    pa.decided_by = "system"
-                    s.add(pa)
             s.flush()
             s.add(_make_event(s, ticket_id=ticket_id, state=dst, note=note))
             s.commit()
@@ -816,12 +799,6 @@ class _LifecycleMixin(_ServiceBase):
                 select(TicketEvent).where(TicketEvent.ticket_id == ticket_id)
             ).all():
                 s.delete(ev)
-            for pa in s.exec(
-                select(ProposedAction).where(
-                    ProposedAction.target_ticket_id == ticket_id
-                )
-            ).all():
-                s.delete(pa)
             for c in s.exec(
                 select(Comment).where(Comment.ticket_id == ticket_id)
             ).all():
@@ -933,14 +910,6 @@ class _LifecycleMixin(_ServiceBase):
                         .order_by(col(Comment.id))
                     ).all()
                 ],
-                "actions": [
-                    a.model_dump()
-                    for a in s.exec(
-                        select(ProposedAction)
-                        .where(ProposedAction.target_ticket_id == t.id)
-                        .order_by(col(ProposedAction.id))
-                    ).all()
-                ],
             }
 
         # 4. Move workspace dirs (fail early, before any DB write).
@@ -1015,10 +984,6 @@ class _LifecycleMixin(_ServiceBase):
                             )
                         global_id_map[old_id] = comment.id
 
-                    for ad in snap["actions"]:
-                        ad["id"] = None
-                        s2.add(ProposedAction(**ad))
-
                     s2.flush()
                     s2.add(
                         _make_event(
@@ -1042,12 +1007,6 @@ class _LifecycleMixin(_ServiceBase):
         # 6. Delete every ticket from the source DB (reverse order).
         with db.session(self.settings, src_board) as s3:
             for t in reversed(subtree):
-                for action in s3.exec(
-                    select(ProposedAction).where(
-                        ProposedAction.target_ticket_id == t.id
-                    )
-                ).all():
-                    s3.delete(action)
                 for comment in s3.exec(
                     select(Comment).where(Comment.ticket_id == t.id)
                 ).all():
@@ -1077,7 +1036,7 @@ class _LifecycleMixin(_ServiceBase):
         self, ticket_id: str, target_board: str, note: str | None = None
     ) -> Ticket:
         """Move a ticket to another board: its row, history events,
-        comments, proposed actions, and workspace directory.
+        comments, and workspace directory.
 
         The migrated ticket lands in ``DRAFT`` on the target board so
         its refine stage re-triages it with the right repo context.
@@ -1162,14 +1121,6 @@ class _LifecycleMixin(_ServiceBase):
                     .order_by(col(Comment.id))
                 ).all()
             ]
-            action_data = [
-                a.model_dump()
-                for a in s.exec(
-                    select(ProposedAction)
-                    .where(ProposedAction.target_ticket_id == ticket_id)
-                    .order_by(col(ProposedAction.id))
-                ).all()
-            ]
 
         # --- move the workspace directory (fail early, before any DB write) ---
         src_ws = self.settings.workspaces_dir_for(src_board) / ticket_id
@@ -1229,9 +1180,6 @@ class _LifecycleMixin(_ServiceBase):
                     if comment.id is None:  # pragma: no cover - flush assigns the pk
                         raise RuntimeError("migrate: comment id missing after flush")
                     id_map[old_id] = comment.id
-                for ad in action_data:
-                    ad["id"] = None
-                    s.add(ProposedAction(**ad))
                 s.flush()
                 s.add(
                     _make_event(
@@ -1252,12 +1200,6 @@ class _LifecycleMixin(_ServiceBase):
 
         # --- remove from the source DB (the target copy is committed) ---
         with db.session(self.settings, src_board) as s:
-            for action in s.exec(
-                select(ProposedAction).where(
-                    ProposedAction.target_ticket_id == ticket_id
-                )
-            ).all():
-                s.delete(action)
             for comment in s.exec(
                 select(Comment).where(Comment.ticket_id == ticket_id)
             ).all():
@@ -1312,8 +1254,6 @@ class _LifecycleMixin(_ServiceBase):
                 continue
             self.delete(ticket.id)
             deleted += 1
-
-    # _maybe_purge_stale_proposed_actions moved to _ActionMixin.
 
     def _maybe_purge_ticket_events(self, ticket_id: str) -> int:
         """Prune oldest TicketEvent rows for *ticket_id* when the count

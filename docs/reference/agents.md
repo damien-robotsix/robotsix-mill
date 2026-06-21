@@ -52,8 +52,6 @@
 
 ::: robotsix_mill.agents.bc_check
 
-::: robotsix_mill.agents.board_cleanup
-
 ::: robotsix_mill.agents.candidates
 
 ::: robotsix_mill.agents.ci_fixing

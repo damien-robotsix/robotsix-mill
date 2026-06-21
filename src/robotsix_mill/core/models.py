@@ -47,28 +47,8 @@ class SourceKind(StrEnum):
     ENV_DOC_SYNC = "env_doc_sync"
     META = "meta"
     RUN_HEALTH = "run-health"
-    BOARD_CLEANUP = "board_cleanup"
     CI_FIX_DEPENDENCY = "ci_fix_dependency"
     IMPLEMENT_BASELINE_DEPENDENCY = "implement_baseline_dependency"
-
-
-class ActionType(StrEnum):
-    """Enumeration of actions a periodic agent can propose."""
-
-    CLOSE = "close"
-    TRANSITION = "transition"
-    COMMENT = "comment"
-    RELABEL = "relabel"
-
-
-class ProposedActionStatus(StrEnum):
-    """Enumeration of lifecycle states for a proposed action."""
-
-    PENDING = "pending"
-    APPROVED = "approved"
-    REJECTED = "rejected"
-    EXECUTED = "executed"
-    FAILED = "failed"
 
 
 def _now() -> datetime:
@@ -181,33 +161,6 @@ class Comment(SQLModel, table=True):
         default_factory=_now,
         sa_column=Column(TZDateTime()),
     )
-
-
-class ProposedAction(SQLModel, table=True):
-    """Pending mutation proposed by a periodic agent (health, audit, survey, etc.).
-
-    Held PENDING until a human approves or rejects; only then does the
-    executor apply the mutation to its target ticket.
-    """
-
-    id: int | None = Field(default=None, primary_key=True)
-    source: str  # Periodic agent label, e.g. "health", "audit", "trace-review"
-    target_ticket_id: str = Field(foreign_key="ticket.id", index=True)
-    action_type: ActionType
-    payload: str | None = Field(
-        default=None
-    )  # JSON string; schema varies by action_type
-    rationale: str  # Free-text explanation from the agent
-    status: ProposedActionStatus = Field(default=ProposedActionStatus.PENDING)
-    created_at: datetime = Field(
-        default_factory=_now,
-        sa_column=Column(TZDateTime()),
-    )
-    decided_at: datetime | None = Field(
-        default=None, sa_column=Column(TZDateTime(), nullable=True)
-    )
-    decided_by: str | None = Field(default=None)
-    failure_reason: str | None = Field(default=None)
 
 
 # --- API request/response shapes ---

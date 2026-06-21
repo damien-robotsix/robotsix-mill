@@ -46,7 +46,7 @@ output_type: AuditResult
 # gives the model the slack to recover.
 retries: 4
 module: auditing
-skills: [board-read, board-propose]
+skills: [board-read]
 
 system_prompt: |
   You are a meta-audit agent for an autonomous software project. Your job

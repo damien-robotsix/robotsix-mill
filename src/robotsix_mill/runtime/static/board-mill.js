@@ -18,7 +18,6 @@
   let currentRepoId = null;
   let mergeLoading = new Set();
   let candidatesOpen = false;
-  let proposalsOpen = false;
   let _runsLastSig = null;
   const _detailLast = {};
   let wsReconnectTimer = null;
@@ -60,7 +59,6 @@
     module_curator: '#f97316',
     forge_parity: '#a78bfa',
     copy_paste: '#ec4899',
-    board_cleanup: '#10b981',
     state_sync: '#0891b2',
     env_doc_sync: '#7c3aed',
     meta: '#a855f7',
@@ -85,7 +83,6 @@
     forge_parity: "forge-parity",
     module_curator: "module-curator",
     copy_paste: "copy-paste",
-    board_cleanup: "board-cleanup",
     state_sync: "state-sync",
     env_doc_sync: "env-doc-sync",
     data_dir_audit: "data-dir-audit",
@@ -941,7 +938,6 @@
     sel = id;
     runsOpen = false;
     candidatesOpen = false;
-    proposalsOpen = false;
 
     document.getElementById("drawer").classList.add("open");
 
@@ -1138,7 +1134,6 @@
     sel = null;
     runsOpen = false;
     candidatesOpen = false;
-    proposalsOpen = false;
     document.getElementById("drawer").classList.remove("open");
   }
 
@@ -1999,23 +1994,6 @@
     }
   }
 
-  async function runBoardCleanup() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var repoId = getRepoId();
-      var url = repoId !== "all" ? "/board-cleanup?repo_id=" + encodeURIComponent(repoId) : "/board-cleanup";
-      var r = await jpost(url);
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("Board cleanup started — new draft tickets will appear on the board when it finishes.");
-      setTimeout(refresh, 4000);
-    } catch (e) {
-      alert("Board cleanup failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Board Cleanup';
-    }
-  }
-
   async function runBcCheck() {
     var btn = event.target;
     btn.disabled = true; btn.textContent = 'Running...';
@@ -2183,73 +2161,6 @@
   }
 
   // =========================================================================
-  // Proposals panel
-  // =========================================================================
-  async function toggleProposals() {
-    if (proposalsOpen) { close_(); return; }
-    if (sel || runsOpen || candidatesOpen) close_();
-    proposalsOpen = true;
-    document.getElementById("drawer").classList.add("open");
-    await renderProposals();
-  }
-
-  async function renderProposals() {
-    var drawer = document.getElementById("d");
-    var repo = getRepoId();
-    var pas;
-    try { pas = await jget("/proposed-actions?status=pending&repo_id=" + encodeURIComponent(repo)); }
-    catch (e) { pas = null; }
-    var shell = '<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>' +
-      '<h3>Pending actions</h3>';
-    if (!Array.isArray(pas)) {
-      drawer.innerHTML = shell + '<div class="muted" style="padding:12px 0;color:#f87171">failed to load pending actions.</div>';
-      return;
-    }
-    if (!pas.length) {
-      drawer.innerHTML = shell + '<div class="muted">No pending actions.</div>';
-      return;
-    }
-    var html = '';
-    pas.forEach(function(pa) {
-      var at = String(pa.action_type || "").toLowerCase();
-      var st = String(pa.status || "").toLowerCase();
-      html += '<div class="proposal-card">' +
-       '<div>' +
-        '<span class="pa-source src-' + esc(srcClass(pa.source)) + '">' + esc(pa.source) + '</span>' +
-        '<span class="pa-action pa-action-' + esc(at) + '">' + esc(pa.action_type) + '</span>' +
-        '<span class="pa-target" onclick="open_(' + jsq(pa.target_ticket_id) + ')">' + esc(pa.target_ticket_id) + '</span>' +
-       '</div>' +
-       '<div class="pa-rationale">' + esc(pa.rationale) + '</div>' +
-       '<div class="pa-meta">' + esc(pa.created_at) + ' · <span class="pa-status-' + esc(st) + '">' + esc(pa.status) + '</span></div>' +
-       (st === "pending" ?
-        '<div class="pa-buttons">' +
-         '<button class="approve-btn" onclick="approveProposal(' + jsq(pa.id) + ')">Approve</button>' +
-         '<button class="reject-btn" onclick="rejectProposal(' + jsq(pa.id) + ')">Reject</button>' +
-        '</div>' : '') +
-      '</div>';
-    });
-    drawer.innerHTML = shell + html;
-  }
-
-  async function approveProposal(id) {
-    await lockWhile(async function () {
-      var repo = getRepoId();
-      var r = await jpost("/proposed-actions/" + encodeURIComponent(id) + "/approve?repo_id=" + encodeURIComponent(repo));
-      if (!r.ok) { alert("Approve failed: " + await r.text()); return; }
-      await renderProposals();
-    });
-  }
-
-  async function rejectProposal(id) {
-    await lockWhile(async function () {
-      var repo = getRepoId();
-      var r = await jpost("/proposed-actions/" + encodeURIComponent(id) + "/reject?repo_id=" + encodeURIComponent(repo));
-      if (!r.ok) { alert("Reject failed: " + await r.text()); return; }
-      await renderProposals();
-    });
-  }
-
-  // =========================================================================
   // AGENT.md candidates
   // =========================================================================
   async function refreshCandidateBadge() {
@@ -2277,7 +2188,7 @@
 
   async function openCandidates() {
     if (candidatesOpen) { close_(); return; }
-    if (sel || runsOpen || proposalsOpen) close_();
+    if (sel || runsOpen) close_();
     candidatesOpen = true;
     document.getElementById("drawer").classList.add("open");
     await renderCandidatesList();
@@ -2488,10 +2399,9 @@
       removeDuplicateClosedToggle();
       updateMeta();
       if (runsOpen) renderRuns();
-      else if (proposalsOpen) renderProposals();
       else if (sel) refreshDetail(sel);
       // Refresh active labels on the board every 5s when drawer is closed
-      if (!sel && !runsOpen && !candidatesOpen && !proposalsOpen) {
+      if (!sel && !runsOpen && !candidatesOpen) {
         fetchActive().then(applyActiveLabels).then(applyMoveButtons);
       }
     }, 1000);
@@ -2535,12 +2445,9 @@
   window.dismissCreditStatus = dismissCreditStatus;
   window.validateCandidate = validateCandidate;
   window.rejectCandidate = rejectCandidate;
-  window.approveProposal = approveProposal;
-  window.rejectProposal = rejectProposal;
   window.toggleBody = toggleBody;
   window.toggleRuns = toggleRuns;
   window.openCandidates = openCandidates;
-  window.toggleProposals = toggleProposals;
   window.newTicket = newTicket;
   window.newEpic = newEpic;
   window.newInquiry = newInquiry;
@@ -2560,7 +2467,6 @@
   window.runModuleCurator = runModuleCurator;
   window.runForgeParity = runForgeParity;
   window.runCopyPaste = runCopyPaste;
-  window.runBoardCleanup = runBoardCleanup;
   window.runStateSync = runStateSync;
   window.runEnvDocSync = runEnvDocSync;
   window.runBcCheck = runBcCheck;

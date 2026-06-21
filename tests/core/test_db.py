@@ -81,7 +81,7 @@ def test_get_engine_creates_parent_directory(tmp_path: Path):
 
 
 def test_init_db_creates_all_tables(tmp_path: Path):
-    """init_db creates ticket, ticketevent, comment, proposedaction tables."""
+    """init_db creates ticket, ticketevent, comment, memory tables."""
     db.reset_engine()
     s = Settings(data_dir=str(tmp_path))
 
@@ -90,7 +90,7 @@ def test_init_db_creates_all_tables(tmp_path: Path):
     engine = db.get_engine(s, "test-init")
     inspector = inspect(engine)
     table_names = set(inspector.get_table_names())
-    expected = {"ticket", "ticketevent", "comment", "proposedaction", "memory"}
+    expected = {"ticket", "ticketevent", "comment", "memory"}
     assert expected.issubset(table_names), f"missing tables: {expected - table_names}"
 
 

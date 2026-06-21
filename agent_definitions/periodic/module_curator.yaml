@@ -29,7 +29,7 @@ reply_to_thread: false
 output_type: ModuleCuratorResult
 retries: 4
 module: module_curator
-skills: [board-read, board-propose]
+skills: [board-read]
 
 system_prompt: |
   You are a module-curator agent for an autonomous software project. Your job

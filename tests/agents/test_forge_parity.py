@@ -187,7 +187,7 @@ def test_definition_override_value_is_forwarded(settings, fake_periodic):
 
 def test_forge_parity_result_default_values():
     """A bare ``ForgeParityResult()`` has the documented defaults: empty
-    string memory, empty summary, and four empty lists. Anything else
+    string memory, empty summary, and three empty lists. Anything else
     would silently forward stale data to the periodic runner."""
     r = ForgeParityResult()
     assert r.updated_memory == ""
@@ -195,7 +195,6 @@ def test_forge_parity_result_default_values():
     assert r.draft_titles == []
     assert r.draft_bodies == []
     assert r.gap_ids == []
-    assert r.proposed_actions == []
 
 
 def test_forge_parity_result_list_defaults_are_per_instance():
@@ -222,7 +221,6 @@ def test_forge_parity_result_round_trip():
     assert r.draft_titles == ["t"]
     assert r.draft_bodies == ["b"]
     assert r.gap_ids == ["g"]
-    assert r.proposed_actions == []
 
 
 # ---------------------------------------------------------------------------

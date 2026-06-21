@@ -28,7 +28,7 @@ web_knowledge: false
 output_type: EnvDocSyncResult
 retries: 3
 module: env_doc_syncing
-skills: [board-read, board-propose]
+skills: [board-read]
 
 system_prompt: |
   You are the env-doc-sync agent for an autonomous software project. Your

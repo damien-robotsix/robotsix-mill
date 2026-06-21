@@ -994,147 +994,30 @@ class TestArchivedPurge:
 
 
 # ---------------------------------------------------------------------------
-# proposed-action purge
+# delete cascades to comments
 # ---------------------------------------------------------------------------
 
 
-class TestProposedActionPurge:
-    """Purge of stale ProposedAction rows when `max_proposed_actions` is
-    exceeded."""
+def test_delete_cascades_to_comments(service):
+    """Deleting a ticket also removes its Comment rows."""
+    t = service.create("target")
+    c = service.add_comment(t.id, "will be cascade-deleted", author="test")
 
-    def test_no_op_when_under_cap(self, service, settings):
-        """Creating proposals under the cap does not delete anything."""
-        settings.max_proposed_actions = 10
-        t = service.create("target")
-        for i in range(5):
-            service.create_proposed_action("test", t.id, "close", f"rationale {i}")
-        from sqlmodel import select
+    from robotsix_mill.core import db
+    from robotsix_mill.core.models import Comment
 
-        from robotsix_mill.core import db
-        from robotsix_mill.core.models import ProposedAction
+    # Confirm it exists before delete.
+    with db.session(service.settings, service.board_id) as s:
+        assert s.get(Comment, c.id) is not None
 
-        with db.session(service.settings, service.board_id) as s:
-            count = len(s.exec(select(ProposedAction)).all())
-        assert count == 5
+    service.delete(t.id)
 
-    def test_deletes_oldest_on_cap_exceeded(self, service, settings):
-        """Oldest terminal-status ProposedAction rows are purged when the
-        cap is exceeded.  PENDING rows are preserved."""
-        from sqlmodel import select
-
-        from robotsix_mill.core import db
-        from robotsix_mill.core.models import ProposedAction, ProposedActionStatus
-
-        settings.max_proposed_actions = 3
-        t = service.create("target")
-
-        # Create 5 proposals: 3 EXECUTED (oldest), 1 PENDING, 1
-        # EXECUTED (newest).  The two oldest EXECUTED should be purged.
-        pa1 = service.create_proposed_action("test", t.id, "close", "oldest-ex")
-        pa2 = service.create_proposed_action("test", t.id, "close", "middle-ex")
-        pa3 = service.create_proposed_action("test", t.id, "close", "pending")
-        pa4 = service.create_proposed_action("test", t.id, "close", "newest-ex")
-
-        # Set statuses directly via the DB session.
-        with db.session(service.settings, service.board_id) as s:
-            for pa_id, status in [
-                (pa1.id, ProposedActionStatus.EXECUTED),
-                (pa2.id, ProposedActionStatus.EXECUTED),
-                # pa3 stays PENDING
-                (pa4.id, ProposedActionStatus.EXECUTED),
-            ]:
-                row = s.get(ProposedAction, pa_id)
-                row.status = status
-                s.add(row)
-            s.commit()
-
-        # One more proposal triggers purge (total 5, cap 3 → excess 2).
-        pa5 = service.create_proposed_action("test", t.id, "close", "trigger-purge")
-
-        with db.session(service.settings, service.board_id) as s:
-            ids = {pa.id for pa in s.exec(select(ProposedAction)).all()}
-        assert pa1.id not in ids  # oldest EXECUTED, purged
-        assert pa2.id not in ids  # second-oldest EXECUTED, purged
-        assert pa3.id in ids  # PENDING preserved
-        assert pa4.id in ids  # third EXECUTED preserved (within cap)
-        assert pa5.id in ids  # the trigger row
-
-    def test_max_proposed_actions_zero_disables_purge(self, service, settings):
-        """Setting max_proposed_actions = 0 disables purging entirely."""
-        settings.max_proposed_actions = 0
-        t = service.create("target")
-        for i in range(50):
-            service.create_proposed_action("test", t.id, "close", f"rationale {i}")
-        from sqlmodel import select
-
-        from robotsix_mill.core import db
-        from robotsix_mill.core.models import ProposedAction
-
-        with db.session(service.settings, service.board_id) as s:
-            count = len(s.exec(select(ProposedAction)).all())
-        assert count == 50
-
-    def test_delete_cascades_to_proposed_actions(self, service, settings):
-        """Deleting a ticket also removes its ProposedAction rows."""
-        settings.max_proposed_actions = 0  # disable purge for this test
-        t = service.create("target")
-        pa = service.create_proposed_action(
-            "test", t.id, "close", "will be cascade-deleted"
-        )
-        assert pa is not None
-
-        from robotsix_mill.core import db
-        from robotsix_mill.core.models import ProposedAction
-
-        # Confirm it exists before delete.
-        with db.session(service.settings, service.board_id) as s:
-            assert s.get(ProposedAction, pa.id) is not None
-
-        service.delete(t.id)
-
-        # After ticket delete, the proposed action should be gone.
-        with db.session(service.settings, service.board_id) as s:
-            assert s.get(ProposedAction, pa.id) is None
-
-    def test_delete_cascades_to_comments(self, service, settings):
-        """Deleting a ticket also removes its Comment rows."""
-        settings.max_proposed_actions = 0  # disable purge for this test
-        t = service.create("target")
-        c = service.add_comment(t.id, "will be cascade-deleted", author="test")
-
-        from robotsix_mill.core import db
-        from robotsix_mill.core.models import Comment
-
-        # Confirm it exists before delete.
-        with db.session(service.settings, service.board_id) as s:
-            assert s.get(Comment, c.id) is not None
-
-        service.delete(t.id)
-
-        # After ticket delete, the comment should be gone.
-        with db.session(service.settings, service.board_id) as s:
-            assert s.get(Comment, c.id) is None
-
-    def test_cap_soft_when_only_pending_and_approved(self, service, settings):
-        """When cap is exceeded but only PENDING/APPROVED rows exist,
-        nothing is deleted."""
-        settings.max_proposed_actions = 1
-        t = service.create("target")
-        for i in range(3):
-            service.create_proposed_action("test", t.id, "close", f"rationale {i}")
-
-        from sqlmodel import select
-
-        from robotsix_mill.core import db
-        from robotsix_mill.core.models import ProposedAction
-
-        with db.session(service.settings, service.board_id) as s:
-            count = len(s.exec(select(ProposedAction)).all())
-        assert (
-            count == 3
-        )  # nothing purged — all are PENDING# ---------------------------------------------------------------------------
+    # After ticket delete, the comment should be gone.
+    with db.session(service.settings, service.board_id) as s:
+        assert s.get(Comment, c.id) is None
 
 
+# ---------------------------------------------------------------------------
 # _all_descendants cycle-safety
 # ---------------------------------------------------------------------------
 
@@ -1163,205 +1046,8 @@ def test_all_descendants_is_cycle_safe(service):
     assert result[0].id == "cyc-B"
 
 
-# -- auto-reject proposals on terminal transition -----------------------
-
-
-def test_auto_reject_pending_on_task_close(service):
-    """A PENDING proposal on a task is auto-rejected when the task
-    transitions DONE → CLOSED."""
-    from robotsix_mill.core import db
-    from robotsix_mill.core.models import (
-        ProposedAction,
-        ActionType,
-        ProposedActionStatus,
-    )
-    from datetime import datetime, timezone
-
-    t = service.create("Proposal target task")
-    # Create a PENDING proposal directly in the DB.
-    pa = ProposedAction(
-        source="test-agent",
-        target_ticket_id=t.id,
-        action_type=ActionType.TRANSITION,
-        payload=None,
-        rationale="test rationale",
-        status=ProposedActionStatus.PENDING,
-        created_at=datetime.now(timezone.utc),
-    )
-    with db.session(service.settings, service.board_id) as s:
-        s.add(pa)
-        s.commit()
-        s.refresh(pa)
-
-    # Transition task to terminal state (DONE → CLOSED).
-    service.transition(t.id, State.DONE)
-    service.transition(t.id, State.CLOSED)
-
-    # Re-read the proposal — it should be REJECTED by "system".
-    with db.session(service.settings, service.board_id) as s:
-        reloaded = s.get(ProposedAction, pa.id)
-    assert reloaded.status == ProposedActionStatus.REJECTED
-    assert reloaded.decided_by == "system"
-    assert reloaded.decided_at is not None
-
-
-def test_auto_reject_pending_on_inquiry_answered(service):
-    """A PENDING proposal on an inquiry is auto-rejected when the
-    inquiry transitions to ANSWERED."""
-    from robotsix_mill.core import db
-    from robotsix_mill.core.models import (
-        ProposedAction,
-        ActionType,
-        ProposedActionStatus,
-    )
-    from datetime import datetime, timezone
-
-    t = service.create("Proposal target inquiry", kind="inquiry")
-    pa = ProposedAction(
-        source="test-agent",
-        target_ticket_id=t.id,
-        action_type=ActionType.TRANSITION,
-        payload=None,
-        rationale="test rationale",
-        status=ProposedActionStatus.PENDING,
-        created_at=datetime.now(timezone.utc),
-    )
-    with db.session(service.settings, service.board_id) as s:
-        s.add(pa)
-        s.commit()
-        s.refresh(pa)
-
-    # Inquiry starts in ASKED → ANSWERED.
-    service.transition(t.id, State.ANSWERED)
-
-    with db.session(service.settings, service.board_id) as s:
-        reloaded = s.get(ProposedAction, pa.id)
-    assert reloaded.status == ProposedActionStatus.REJECTED
-    assert reloaded.decided_by == "system"
-    assert reloaded.decided_at is not None
-
-
-def test_auto_reject_pending_on_epic_closed(service):
-    """A PENDING proposal on an epic is auto-rejected when the epic
-    transitions to EPIC_CLOSED."""
-    from robotsix_mill.core import db
-    from robotsix_mill.core.models import (
-        ProposedAction,
-        ActionType,
-        ProposedActionStatus,
-    )
-    from datetime import datetime, timezone
-
-    t = service.create("Proposal target epic", kind="epic")
-    pa = ProposedAction(
-        source="test-agent",
-        target_ticket_id=t.id,
-        action_type=ActionType.TRANSITION,
-        payload=None,
-        rationale="test rationale",
-        status=ProposedActionStatus.PENDING,
-        created_at=datetime.now(timezone.utc),
-    )
-    with db.session(service.settings, service.board_id) as s:
-        s.add(pa)
-        s.commit()
-        s.refresh(pa)
-
-    # Epic starts in EPIC_OPEN → EPIC_CLOSED.
-    service.transition(t.id, State.EPIC_CLOSED)
-
-    with db.session(service.settings, service.board_id) as s:
-        reloaded = s.get(ProposedAction, pa.id)
-    assert reloaded.status == ProposedActionStatus.REJECTED
-    assert reloaded.decided_by == "system"
-    assert reloaded.decided_at is not None
-
-
-def test_auto_reject_skips_non_pending_proposals(service):
-    """Non-PENDING proposals (APPROVED, REJECTED, EXECUTED, FAILED) are
-    NOT touched when the ticket transitions to a terminal state."""
-    from robotsix_mill.core import db
-    from robotsix_mill.core.models import (
-        ProposedAction,
-        ActionType,
-        ProposedActionStatus,
-    )
-    from datetime import datetime, timezone
-
-    t = service.create("Non-pending proposals")
-    # Insert one proposal per non-PENDING status.
-    statuses = [
-        ProposedActionStatus.APPROVED,
-        ProposedActionStatus.REJECTED,
-        ProposedActionStatus.EXECUTED,
-        ProposedActionStatus.FAILED,
-    ]
-    pa_ids: dict[ProposedActionStatus, int] = {}
-    for status in statuses:
-        pa = ProposedAction(
-            source="test-agent",
-            target_ticket_id=t.id,
-            action_type=ActionType.TRANSITION,
-            payload=None,
-            rationale=f"rationale {status.value}",
-            status=status,
-            created_at=datetime.now(timezone.utc),
-        )
-        with db.session(service.settings, service.board_id) as s:
-            s.add(pa)
-            s.commit()
-            s.refresh(pa)
-            pa_ids[status] = pa.id
-
-    # Transition to CLOSED.
-    service.transition(t.id, State.DONE)
-    service.transition(t.id, State.CLOSED)
-
-    # All non-PENDING proposals should retain their status.
-    with db.session(service.settings, service.board_id) as s:
-        for status, pa_id in pa_ids.items():
-            reloaded = s.get(ProposedAction, pa_id)
-            assert reloaded.status == status, (
-                f"expected {status.value}, got {reloaded.status.value}"
-            )
-
-
-def test_auto_reject_not_triggered_on_non_archivable_transition(service):
-    """Transitioning to a non-archivable state (e.g. READY, DONE,
-    BLOCKED) does NOT auto-reject proposals."""
-    from robotsix_mill.core import db
-    from robotsix_mill.core.models import (
-        ProposedAction,
-        ActionType,
-        ProposedActionStatus,
-    )
-    from datetime import datetime, timezone
-
-    t = service.create("Non-terminal ticket")
-    pa = ProposedAction(
-        source="test-agent",
-        target_ticket_id=t.id,
-        action_type=ActionType.TRANSITION,
-        payload=None,
-        rationale="test rationale",
-        status=ProposedActionStatus.PENDING,
-        created_at=datetime.now(timezone.utc),
-    )
-    with db.session(service.settings, service.board_id) as s:
-        s.add(pa)
-        s.commit()
-        s.refresh(pa)
-
-    # Transition to READY (non-terminal).
-    service.transition(t.id, State.READY)
-
-    with db.session(service.settings, service.board_id) as s:
-        reloaded = s.get(ProposedAction, pa.id)
-    assert reloaded.status == ProposedActionStatus.PENDING  # untouched
-
-
-def test_auto_reject_no_proposals_clean_transition(service):
-    """A ticket with no proposals at all transitions cleanly (no error)."""
+def test_transition_no_proposals_clean_transition(service):
+    """A ticket transitions cleanly to a terminal state (no error)."""
     t = service.create("No proposals ticket")
     # Should not raise.
     service.transition(t.id, State.DONE)

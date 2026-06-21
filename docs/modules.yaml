@@ -68,7 +68,6 @@ modules:
       - tests/core/test_duration.py
       - tests/core/test_memory_db.py
       - tests/core/test_prune_clone.py
-      - tests/core/test_proposed_action_executor.py
       - tests/core/test_workspace.py
       - tests/core/test_workspace_screenshots.py
       - tests/core/test_draft_target.py
@@ -164,9 +163,6 @@ modules:
       - tests/runtime/test_deps.py
       - tests/runtime/test_lifespan.py
       - tests/runtime/test_stage_retry.py
-      - tests/runtime/test_proposed_actions.py
-      - tests/runtime/test_board_proposals_js.py
-      - tests/runtime/board_proposals_harness.mjs
       - tests/runtime/test_board_agent_colors_js.py
       - tests/runtime/board_agent_colors_harness.mjs
       - tests/runtime/test_board_convert_js.py
@@ -483,7 +479,6 @@ modules:
       - src/robotsix_mill/agents/bespoke_loader.py
       - src/robotsix_mill/agents/maintenance.py
       - src/robotsix_mill/agents/module_curator.py
-      - src/robotsix_mill/agents/board_cleanup.py
       - src/robotsix_mill/agents/freshness.py
       - src/robotsix_mill/agents/prerequisite.py
       - src/robotsix_mill/agents/periodic_loader.py
@@ -492,7 +487,6 @@ modules:
       - tests/agents/test_candidates.py
       - tests/agents/test_maintenance_agent.py
       - tests/agents/test_module_curator.py
-      - tests/agents/test_board_cleanup.py
       - tests/agents/test_periodic_loader.py
       - tests/agents/test_documenting.py
       - tests/agents/test_answering.py

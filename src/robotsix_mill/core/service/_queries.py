@@ -12,8 +12,6 @@ from .. import db
 from ...config import Settings
 from ..models import (
     Comment,
-    ProposedAction,
-    ProposedActionStatus,
     SourceKind,
     Ticket,
     TicketEvent,
@@ -29,7 +27,7 @@ log = logging.getLogger("robotsix_mill.service")
 
 
 class _QueryMixin(_ServiceBase):
-    """Read-only access: lookups, listings, history, and proposed-action reads."""
+    """Read-only access: lookups, listings, and history."""
 
     # --- reads ---
     def get(self, ticket_id: str) -> Ticket | None:
@@ -203,41 +201,6 @@ class _QueryMixin(_ServiceBase):
                 stmt = stmt.where(Ticket.source.in_(list(sources)))
             stmt = stmt.order_by(Ticket.created_at.desc()).limit(limit)
             return list(s.exec(stmt).all())
-
-    def list_proposed_actions(
-        self,
-        source: str | None = None,
-        *,
-        status: ProposedActionStatus | None = None,
-        exclude_status: ProposedActionStatus | None = ProposedActionStatus.PENDING,
-    ) -> list[ProposedAction]:
-        """Return ``ProposedAction`` rows on this board, newest first.
-
-        Three optional, orthogonal filters:
-
-        * ``source`` — restrict to one producing agent label.
-        * ``status`` — keep ONLY rows in this status.
-        * ``exclude_status`` — drop rows in this status; **defaults to
-          ``PENDING``** so the pass-runner verification path
-          (``list_proposed_actions(source=...)``) gets decided rows only.
-          The GET ``/proposed-actions?status=`` route passes
-          ``exclude_status=None`` to filter purely by ``status``.
-        """
-        with db.session(self.settings, self.board_id) as s:
-            stmt = select(ProposedAction)
-            if source is not None:
-                stmt = stmt.where(ProposedAction.source == source)
-            if status is not None:
-                stmt = stmt.where(ProposedAction.status == status)
-            if exclude_status is not None:
-                stmt = stmt.where(ProposedAction.status != exclude_status)
-            stmt = stmt.order_by(ProposedAction.created_at.desc())
-            return list(s.exec(stmt).all())
-
-    def get_proposed_action(self, action_id: int) -> ProposedAction | None:
-        """Single-row lookup by primary key; returns ``None`` on miss."""
-        with db.session(self.settings, self.board_id) as s:
-            return s.get(ProposedAction, action_id)
 
     def list_children(self, ticket_id: str) -> list[Ticket]:
         """Return all tickets whose ``parent_id`` equals *ticket_id*."""

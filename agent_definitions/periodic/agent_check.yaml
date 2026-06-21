@@ -30,7 +30,7 @@ read_ticket: true
 output_type: AgentCheckResult
 retries: 4
 module: agent_check
-skills: [board-read, board-propose]
+skills: [board-read]
 
 system_prompt: |
   You are an agent-definition **coherence checker** for an autonomous

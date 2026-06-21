@@ -66,10 +66,6 @@ local.
 - **Ticket / Comment** — `core/models.py`. The DB row holds metadata,
   state, history, and a pointer + content hash for the file-canonical
   `description.md`.
-- **ProposedAction** — agent-proposed ticket mutations (close /
-  transition / comment / relabel) that an operator reviews via the
-  board's Proposals panel. See
-  [docs/proposed-actions.md](docs/proposed-actions.md).
 - **Run registry** — `runtime/run_registry.py` tracks in-flight stage
   runs for observability on the board.
 

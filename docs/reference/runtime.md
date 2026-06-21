@@ -28,8 +28,6 @@
 
 ::: robotsix_mill.runtime.routes._passes
 
-::: robotsix_mill.runtime.routes._proposed_actions
-
 ::: robotsix_mill.runtime.routes._repo_helpers
 
 ::: robotsix_mill.runtime.routes._tickets

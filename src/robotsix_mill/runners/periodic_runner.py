@@ -42,7 +42,6 @@ class PeriodicPassResult:
     updated_memory: str
     drafts_created: list[dict]
     session_id: str = ""
-    proposed_actions: list[dict] = field(default_factory=list)
 
 
 # Backward-compat aliases — tests and stubs import these by name.
@@ -298,7 +297,6 @@ def run_periodic_pass(
         updated_memory=result.updated_memory,
         drafts_created=result.drafts_created,
         session_id=session_id,
-        proposed_actions=result.proposed_actions,
     )
 
 
@@ -452,123 +450,3 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         requires_repo=True,
     ),
 }
-
-
-# ---------------------------------------------------------------------------
-# Bespoke board-cleanup pass
-# ---------------------------------------------------------------------------
-#
-# board_cleanup does not fit the generic PeriodicPassConfig shape: unlike the
-# code-oriented periodic agents it operates on the BOARD (existing tickets),
-# not the code tree, so it needs the full board snapshot injected into its
-# prompt. recent_proposals_for() (what run_agent_pass injects) only returns the
-# agent's OWN prior proposals — insufficient to spot stale tickets from other
-# sources. So a small bespoke runner fetches the board via recent_tickets() and
-# threads it into the agent, then delegates the proposed-action / draft /
-# memory persistence to the shared run_agent_pass.
-
-
-def _render_board_snapshot(tickets) -> str:
-    """Render a compact one-line-per-ticket snapshot of the board for
-    agent-prompt injection: ``[STATE] id | title``, most recent
-    first. The full ``t.id`` is emitted so the agent can pass it
-    straight to ``read_ticket`` (which rejects truncated IDs)."""
-    if not tickets:
-        return "(no tickets on the board)"
-    lines = []
-    for t in tickets:
-        state_val = t.state.value
-        lines.append(f"[{state_val}] {t.id} | {t.title}")
-    return "\n".join(lines)
-
-
-def run_board_cleanup_pass(
-    session_id: str,
-    repo_config: RepoConfig,
-    *,
-    settings,
-    definition_override: Any = None,
-) -> PeriodicPassResult:
-    """Execute one board-cleanup pass.
-
-    Fetches a snapshot of recent board tickets (across all sources),
-    threads it into ``run_board_cleanup_agent``, and delegates proposed
-    action / draft / memory persistence to the shared
-    :func:`run_agent_pass`.
-
-    Args:
-        session_id: Langfuse session id from the poll loop.
-        repo_config: Per-repo configuration. Required — the legacy
-            board-less fallback is gone (cf. ``run_periodic_pass``).
-        settings: Pre-resolved ``Settings`` instance injected by the
-            caller so the monkeypatch seam stays intact.
-        definition_override: The per-repo merged agent definition
-            resolved by the periodic supervisor, threaded into the
-            agent fn (ignored when ``None``).
-
-    Returns:
-        A ``PeriodicPassResult``.
-    """
-    if repo_config is None:
-        raise ValueError(
-            "run_board_cleanup_pass: repo_config is required — configure "
-            "at least one repo in config/repos.yaml and pass its "
-            "RepoConfig in."
-        )
-
-    service = TicketService(settings, board_id=repo_config.board_id)
-    memory_file = settings.board_cleanup_memory_file(repo_config.repo_id)
-    memory_file.parent.mkdir(parents=True, exist_ok=True)
-
-    # Fetch the full board (across all sources) so the agent can spot
-    # stale/obsolete tickets, not just its own prior proposals.
-    try:
-        board = service.recent_tickets(limit=200)
-    except Exception:
-        log.debug(
-            "run_board_cleanup_pass: recent_tickets() failed — "
-            "passing an empty board snapshot (DB may not be initialised)"
-        )
-        board = []
-    board_snapshot = _render_board_snapshot(board)
-
-    # Deterministic short-circuit: an empty board (empty DB result or the
-    # ``except → board = []`` fallback) has nothing to clean up, so skip the
-    # agent pass entirely — invoking the LLM here is guaranteed wasted cost +
-    # latency. The no-op path MUST NOT write the memory file (run_agent_pass,
-    # which normally persists memory, is skipped); preserve existing contents.
-    if not board:
-        log.info("board_cleanup pass skipped: board is empty (session %s)", session_id)
-        return PeriodicPassResult(
-            updated_memory=(memory_file.read_text() if memory_file.exists() else ""),
-            drafts_created=[],
-            session_id=session_id,
-            proposed_actions=[],
-        )
-
-    from ..agents import board_cleanup as agent_module
-
-    log.info("board_cleanup pass starting (session %s)", session_id)
-
-    agent_fn = partial(
-        agent_module.run_board_cleanup_agent,
-        repo_dir=None,
-        board_snapshot=board_snapshot,
-        definition_override=definition_override,
-    )
-    result = run_agent_pass(
-        agent_fn=agent_fn,
-        memory_file=memory_file,
-        source_label=SourceKind.BOARD_CLEANUP,
-        service=service,
-        settings=settings,
-        origin_session=session_id,
-        repo_dir=None,
-    )
-
-    return PeriodicPassResult(
-        updated_memory=result.updated_memory,
-        drafts_created=result.drafts_created,
-        session_id=session_id,
-        proposed_actions=result.proposed_actions,
-    )

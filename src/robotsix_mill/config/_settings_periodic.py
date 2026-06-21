@@ -213,21 +213,6 @@ class _PeriodicSettings(BaseModel):
     # MILL_MODULE_CURATOR_REQUEST_LIMIT if a board outgrows it.
     module_curator_request_limit: int = Field(default=120, ge=1)
 
-    # --- board_cleanup agent (kanban board-hygiene proposer) ---
-    # Model for the board-cleanup agent. Defaults to the same capable
-    # model as other read-only periodic agents.
-    # Path to the board-cleanup agent's Markdown memory ledger.
-    # Override to pin a specific path; unset (default) derives
-    # <data_dir>/<repo_id>/board_cleanup_memory.md.
-    board_cleanup_memory_path: Path | None = Field(default=None)
-    # Opt-in periodic board-cleanup pass. Defaults to True (opt-out);
-    # set false to disable the daily board-hygiene review on this repo.
-    board_cleanup_periodic: bool = Field(default=True)
-    # Seconds between periodic board-cleanup passes when
-    # MILL_BOARD_CLEANUP_PERIODIC=true. Minimum enforced at 60s in the
-    # worker loop.
-    board_cleanup_interval_seconds: int = Field(default=86400)
-
     # --- data-dir audit agent (.data/ monotonic growth survey) ---
     # Model for the data-dir audit agent. Defaults to flash —
     # the agent does file listing + size checks, not deep reasoning.

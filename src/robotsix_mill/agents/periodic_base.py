@@ -16,7 +16,6 @@ from typing import Any, cast
 from pydantic import BaseModel, Field
 
 from ..config import Settings
-from ..runners.pass_runner import ProposedActionItem
 
 # Uniform verification gate appended to every periodic detector's prompt.
 # Modelled on the trace-review optimization gate (PR #1135) in
@@ -112,7 +111,6 @@ class PeriodicAgentResult(BaseModel):
             "were successfully created belong here."
         ),
     )
-    proposed_actions: list[ProposedActionItem] = Field(default_factory=list)
 
 
 def _build_periodic_tools(

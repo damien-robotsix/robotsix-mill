@@ -10,13 +10,12 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePath
 from typing import Any, Callable
 
 import yaml
-from pydantic import BaseModel, Field
 
 from ..config import Settings
 from ..core.models import (
@@ -41,26 +40,6 @@ log = logging.getLogger("robotsix_mill.pass_runner")
 # new SourceKinds are added (was a hardcoded alternation of 11 labels that
 # left bespoke + 3 others silently unmatched).
 _GAP_ID_RE = re.compile(r"<!--\s*(\S+)-gap-id:\s*(\S+)\s*-->")
-
-
-class ProposedActionItem(BaseModel):
-    """A single action proposal emitted by a periodic agent.
-
-    Mirrors the fields of the ``ProposedAction`` DB row that the agent
-    controls — ``source``, ``status``, and lifecycle timestamps are set
-    by the runner/service, not by the agent.
-    """
-
-    target_ticket_id: str = Field(description="Ticket ID the action applies to")
-    action_type: str = Field(description="One of: close, transition, comment, relabel")
-    payload: str | None = Field(
-        default=None,
-        description="JSON string whose schema varies by action_type "
-        "(e.g. target state for transition, comment body for comment)",
-    )
-    rationale: str = Field(
-        description="Why the agent believes this action is warranted"
-    )
 
 
 def _verify_prior_proposals(
@@ -157,60 +136,6 @@ def _render_verified_table(verified: dict[str, dict]) -> str:
     return "\n".join(lines)
 
 
-def _verify_proposed_actions(
-    service: TicketService,
-    source_label: SourceKind,
-) -> list[dict]:
-    """Return decided (non-PENDING) ProposedAction rows for *source_label*.
-
-    Each dict: {id, target_ticket_id, action_type, status, rationale,
-    decided_at, decided_by}.
-    """
-    try:
-        rows = service.list_proposed_actions(source=str(source_label))
-    except Exception:
-        log.debug(
-            "_verify_proposed_actions: list_proposed_actions failed — "
-            "returning empty list (DB may not be initialised)"
-        )
-        return []
-
-    result: list[dict] = []
-    for pa in rows:
-        result.append(
-            {
-                "id": pa.id,
-                "target_ticket_id": pa.target_ticket_id,
-                "action_type": pa.action_type,
-                "status": pa.status,
-                "rationale": pa.rationale,
-                "decided_at": pa.decided_at.isoformat() if pa.decided_at else "",
-                "decided_by": pa.decided_by or "",
-            }
-        )
-    return result
-
-
-def _render_proposed_actions_table(decided: list[dict]) -> str:
-    """Render a Markdown table of decided proposed actions for agent context."""
-    if not decided:
-        return ""
-    lines = [
-        "## Prior proposed actions — decided",
-        "",
-        "| id | target_ticket | action | status | decided_by | rationale |",
-        "|----|---------------|--------|--------|------------|-----------|",
-    ]
-    for pa in decided:
-        tid_short = pa["target_ticket_id"][:7]
-        rationale_short = pa["rationale"][:80].replace("|", "\\|")
-        lines.append(
-            f"| {pa['id']} | {tid_short} | {pa['action_type']} "
-            f"| {pa['status']} | {pa['decided_by']} | {rationale_short} |"
-        )
-    return "\n".join(lines)
-
-
 # The verified-state table (above) is injected fresh into the agent prompt every
 # run as an EPHEMERAL block. When an agent copies it into its ``updated_memory``
 # output it bakes per-ticket state (gap_id/ticket_id/state) into the cross-run
@@ -229,12 +154,6 @@ _EPHEMERAL_MEMORY_SECTION_RE = re.compile(
     r"(?:[ \t]*\|[^\n]*\n?)+"  # one or more table rows (| … |)
 )
 
-_EPHEMERAL_PROPOSED_ACTIONS_SECTION_RE = re.compile(
-    r"(?m)^[ \t]*##\s*Prior proposed actions\b[^\n]*\n"
-    r"(?:[ \t]*\n)*"
-    r"(?:[ \t]*\|[^\n]*\n?)+"
-)
-
 # The ``<recent_proposals>…</recent_proposals>`` block is injected fresh into
 # the agent prompt every run as transient DB-surfaced data (see
 # ``_format_recent_proposals``). An agent that echoes that block into its
@@ -249,10 +168,9 @@ _EPHEMERAL_RECENT_PROPOSALS_RE = re.compile(
 
 
 def strip_ephemeral_sections(memory_text: str) -> str:
-    """Remove the DB-derived ``## Prior proposals — verified state`` and
-    ``## Prior proposed actions — decided`` tables, plus any echoed
-    ``<recent_proposals>…</recent_proposals>`` block, from a memory document
-    before it is persisted to the cross-run ledger.
+    """Remove the DB-derived ``## Prior proposals — verified state`` table,
+    plus any echoed ``<recent_proposals>…</recent_proposals>`` block, from a
+    memory document before it is persisted to the cross-run ledger.
 
     Removes only the heading + the contiguous table rows (and the XML block) —
     any surrounding cross-ticket notes the agent wrote are preserved.
@@ -262,15 +180,12 @@ def strip_ephemeral_sections(memory_text: str) -> str:
     # when a section is actually removed.
     if not memory_text or (
         "## Prior proposals" not in memory_text
-        and "## Prior proposed actions" not in memory_text
         and "<recent_proposals>" not in memory_text
     ):
         return memory_text
     cleaned: str | None = None
     if "## Prior proposals" in memory_text:
         cleaned = _EPHEMERAL_MEMORY_SECTION_RE.sub("", memory_text)
-    if "## Prior proposed actions" in (cleaned or memory_text):
-        cleaned = _EPHEMERAL_PROPOSED_ACTIONS_SECTION_RE.sub("", cleaned or memory_text)
     if "<recent_proposals>" in (cleaned if cleaned is not None else memory_text):
         cleaned = _EPHEMERAL_RECENT_PROPOSALS_RE.sub(
             "", cleaned if cleaned is not None else memory_text
@@ -385,10 +300,10 @@ def load_memory(memory_file: Path, max_chars: int | None = None) -> str:
 def persist_memory(memory_file: Path, text: str, max_chars: int | None = None) -> None:
     """Write *text* to *memory_file*, creating parent dirs as needed.
 
-    Strips the ephemeral ``## Prior proposals — verified state`` and
-    ``## Proposed actions — pending`` tables an agent may have copied
-    back into its memory output — those blocks are injected fresh each
-    run from the DB and must never accrete in the cross-run ledger.
+    Strips the ephemeral ``## Prior proposals — verified state`` table an
+    agent may have copied back into its memory output — that block is
+    injected fresh each run from the DB and must never accrete in the
+    cross-run ledger.
 
     When *max_chars* is set and ``len(text) > max_chars``, the text is
     tail-truncated via :func:`tail_keep` before writing — the same
@@ -425,9 +340,6 @@ class AgentPassResult:
     # number of drafts it filed. Surfaced as the run-registry summary so an
     # operator can tell a legitimate 0-draft run from a no-op.
     summary: str = ""
-    # Proposed actions extracted from agent output and persisted.
-    # [{"id": ..., "action_type": ..., "target_ticket_id": ..., "status": ...}, ...]
-    proposed_actions: list[dict] = field(default_factory=list)
 
 
 def _test_file_exists_for_gap(repo_dir: Path, title: str) -> bool:
@@ -672,13 +584,7 @@ def run_agent_pass(
     #    runner persists it, the next tick re-prepends a fresh table on
     #    top, …).
     verified = _verify_prior_proposals(service, settings, source_label)
-    verified_block = _render_verified_table(verified) if verified else ""
-
-    decided_actions = _verify_proposed_actions(service, source_label)
-    decided_block = _render_proposed_actions_table(decided_actions)
-
-    # Concatenate both ephemeral sections
-    combined_verified = "\n\n".join(filter(None, [verified_block, decided_block]))
+    combined_verified = _render_verified_table(verified) if verified else ""
 
     # 3. Build the recent-proposals block for prompt injection.
     recent = service.recent_proposals_for(source_label, limit=100)
@@ -725,46 +631,9 @@ def run_agent_pass(
                 "⚠ agent did not emit a parseable structured result — pass "
                 "degraded to a no-op (this is NOT a clean 0-draft run)"
             ),
-            proposed_actions=[],
         )
 
-    # 5. Persist proposed actions (proposed-action subsystem).
-    proposed_actions = getattr(res, "proposed_actions", [])
-    proposed_created: list[dict] = []
-    for pa_item in proposed_actions:
-        try:
-            created_pa = service.create_proposed_action(
-                source=str(source_label),
-                target_ticket_id=pa_item.target_ticket_id,
-                action_type=pa_item.action_type,
-                rationale=pa_item.rationale,
-                payload=pa_item.payload,
-            )
-            if created_pa is not None:
-                proposed_created.append(
-                    {
-                        "id": created_pa.id,
-                        "action_type": str(created_pa.action_type),
-                        "target_ticket_id": created_pa.target_ticket_id,
-                        "status": str(created_pa.status),
-                    }
-                )
-                log.info(
-                    "%s proposed %s on %s (proposal id %s)",
-                    source_label,
-                    pa_item.action_type,
-                    pa_item.target_ticket_id,
-                    created_pa.id,
-                )
-        except Exception:
-            log.exception(
-                "%s: failed to persist proposed action (%s on %s)",
-                source_label,
-                pa_item.action_type,
-                pa_item.target_ticket_id,
-            )
-
-    # 6. Create draft tickets for each proposal.
+    # 5. Create draft tickets for each proposal.
     gap_ids: list[str] = getattr(res, "gap_ids", [])
     created: list[dict] = []
     verified_gap_ids: list[str] = []
@@ -889,7 +758,7 @@ def run_agent_pass(
         except Exception:
             log.exception("failed to create draft ticket: %s", title)
 
-    # 7. Persist the agent's updated memory, stripping any "Filed"
+    # 6. Persist the agent's updated memory, stripping any "Filed"
     #    annotations for gap IDs that weren't actually filed this run.
     if res.updated_memory:
         res.updated_memory = _strip_unverified_filed_annotations(
@@ -904,5 +773,4 @@ def run_agent_pass(
         drafts_created=created,
         session_id=origin_session or "",
         summary=(getattr(res, "summary", "") or "").strip(),
-        proposed_actions=proposed_created,
     )
