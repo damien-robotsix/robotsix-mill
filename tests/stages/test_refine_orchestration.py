@@ -115,11 +115,12 @@ def _mock_refine_returns(result: RefineResult):
     return _run
 
 
-def _mock_spec_review(concise_spec=_CONCISE_SPEC, stripped_summary="stripped 3 lines"):
+def _mock_spec_review(concise_spec=None, stripped_summary="stripped 3 lines"):
     def _run(*, settings, spec_markdown, **kw):
-        del settings, spec_markdown, kw
+        del settings, kw
         return SpecReviewResult(
-            concise_spec=concise_spec, stripped_summary=stripped_summary
+            concise_spec=concise_spec if concise_spec is not None else spec_markdown,
+            stripped_summary=stripped_summary,
         )
 
     return _run
@@ -227,7 +228,11 @@ def test_review_conciseness_success_returns_concise_and_writes_verbose(
     ctx = ctx_factory()
     t = _ticket(ctx)
     ws = ctx.service.workspace(t)
-    monkeypatch.setattr(refining, "review_spec_for_conciseness", _mock_spec_review())
+    monkeypatch.setattr(
+        refining,
+        "review_spec_for_conciseness",
+        _mock_spec_review(concise_spec=_CONCISE_SPEC),
+    )
 
     out = RefineStage._review_spec_conciseness(
         ctx.settings, ws, t, _REAL_SPEC, "refine-verbose.md"
@@ -280,7 +285,11 @@ def test_review_conciseness_child_index_variant(ctx_factory, monkeypatch, caplog
     ctx = ctx_factory()
     t = _ticket(ctx)
     ws = ctx.service.workspace(t)
-    monkeypatch.setattr(refining, "review_spec_for_conciseness", _mock_spec_review())
+    monkeypatch.setattr(
+        refining,
+        "review_spec_for_conciseness",
+        _mock_spec_review(concise_spec=_CONCISE_SPEC),
+    )
 
     with caplog.at_level("INFO", logger="robotsix_mill.stages.refine"):
         out = RefineStage._review_spec_conciseness(

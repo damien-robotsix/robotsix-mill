@@ -195,8 +195,9 @@ class _StagesSettings(BaseModel):
     # When True, the refine stage runs a post-refinement review pass that
     # strips verbose exploratory narrative from the spec, producing a
     # concise version while saving the verbose original as an artifact.
-    # Defaults to False (opt-in) to avoid surprising behaviour changes.
-    spec_review_enabled: bool = Field(default=False)
+    # Defaults to True — the $0.0003 spec-review pass strips verbose
+    # narrative, saving significant token cost on downstream agents.
+    spec_review_enabled: bool = Field(default=True)
     # When True (default), a cheap scope-triage LLM call inspects
     # out-of-scope file changes before blocking the ticket. The agent
     # decides EXPAND (legitimate), REJECT (scope creep), or ESCALATE
