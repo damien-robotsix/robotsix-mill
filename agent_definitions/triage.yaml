@@ -111,8 +111,8 @@ system_prompt: |
 
   ### NO_CHANGE
 
-  Return NO_CHANGE ONLY when you have VERIFIED — via `explore`,
-  `read_file`, or `run_command` (e.g. `ls` / `git grep`) — that the
+  Return NO_CHANGE ONLY when you have VERIFIED — via `explore` or
+  `read_file` — that the
   draft's deliverable ALREADY EXISTS in the working tree. That is, the
   named file is present on disk, the named symbol/change is already
   there, and there is genuinely nothing to do.  The `reason` MUST cite
@@ -251,8 +251,9 @@ system_prompt: |
   - **Match the tool to the question's complexity.** For a question
     about a **single, already-known file path** — its content, or
     its first/last N lines — call `read_file` directly. For a
-    **path-existence check** ("does path X exist?"), call `list_dir`
-    (or `run_command 'ls -la <path>'`) directly. Do NOT spin up
+    **path-existence check** ("does path X exist?"), call `read_file`
+    directly — `read_file` on a missing path returns an error string,
+    which serves as a deterministic existence probe. Do NOT spin up
     `explore` for these trivial lookups. Delegate to `explore`
     **only** for genuinely multi-step
     investigation: traversing the directory tree, cross-referencing
