@@ -870,6 +870,134 @@ def test_out_of_scope_ask_uses_explicit_title(ctx_factory, monkeypatch):
     assert children[0].title == "Add __pycache__ to .gitignore"
 
 
+# --- gaps-already-addressed filtering ------------------------------------
+
+
+def test_gaps_already_addressed_all_filtered_approves(
+    ctx_factory, monkeypatch
+):
+    """Every out-of-scope ask targets files already in the implementer's
+    branch diff → all filtered as already-addressed, no follow-ups
+    spawned, ticket approved directly (DOCUMENTING)."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, ["feature.txt"])  # .gitignore is out-of-scope
+
+    # Simulate the implementer having already touched .gitignore in their
+    # branch — this puts it in modified_paths and makes the gap
+    # "already addressed".
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    (repo_dir / ".gitignore").write_text("__pycache__/\n")
+    _git(repo_dir, "add", "-A")
+    _git(repo_dir, "commit", "-q", "-m", "add gitignore")
+
+    def _fake_review(**_kw):
+        return ReviewVerdict(
+            verdict="REQUEST_CHANGES",
+            comments="add .gitignore for __pycache__",
+            request_changes=[
+                ReviewAsk(
+                    description="Add a .gitignore that excludes __pycache__",
+                    files_touched=[".gitignore"],
+                )
+            ],
+        )
+
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
+
+    out = ReviewStage().run(t, ctx)
+    # All gaps already addressed, nothing in-scope → approve.
+    assert out.next_state is State.DOCUMENTING
+    assert "already addressed" in out.note
+
+    # No child tickets spawned.
+    children = _spawned_children(ctx, t.id)
+    assert len(children) == 0
+
+    # A comment notes the gap was skipped.
+    comments = ctx.service.list_comments(t.id)
+    bodies = [c.body for c in comments]
+    assert any("already addressed in the implementer" in b for b in bodies)
+    assert any("no follow-up needed" in b for b in bodies)
+
+
+def test_gaps_already_addressed_mixed_some_filtered(
+    ctx_factory, monkeypatch
+):
+    """Mixed out-of-scope asks: one already addressed (files in diff),
+    one still pending (files NOT in diff).  The pending ask spawns a
+    follow-up; the already-addressed ask is skipped with a comment.
+    In-scope asks still return READY."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, ["feature.txt"])
+
+    # The implementer touched .gitignore (already addressed) but NOT
+    # README.md (still pending).
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    (repo_dir / ".gitignore").write_text("__pycache__/\n")
+    _git(repo_dir, "add", "-A")
+    _git(repo_dir, "commit", "-q", "-m", "add gitignore")
+
+    def _fake_review(**_kw):
+        return ReviewVerdict(
+            verdict="REQUEST_CHANGES",
+            comments="two out-of-scope issues + one in-scope",
+            request_changes=[
+                ReviewAsk(
+                    description="Tighten bounds in feature.txt",
+                    files_touched=["feature.txt"],  # in-scope
+                ),
+                ReviewAsk(
+                    description="Add a .gitignore for __pycache__",
+                    files_touched=[".gitignore"],  # out-of-scope, already in diff
+                ),
+                ReviewAsk(
+                    description="Add a README section about setup",
+                    files_touched=["README.md"],  # out-of-scope, NOT in diff
+                ),
+            ],
+        )
+
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
+
+    out = ReviewStage().run(t, ctx)
+    # In-scope ask still exists → READY for re-implement.
+    assert out.next_state is State.READY
+
+    # Exactly one follow-up spawned (for README.md only).
+    children = _spawned_children(ctx, t.id)
+    assert len(children) == 1
+    assert "README" in ctx.service.workspace(children[0]).read_description()
+
+    # Comments include both the "already addressed" note and the spawn note.
+    comments = ctx.service.list_comments(t.id)
+    bodies = [c.body for c in comments]
+    assert any("already addressed in the implementer" in b for b in bodies)
+    assert any(
+        "spawned as follow-up ticket" in b for b in bodies
+    )
+
+
+def test_gaps_already_addressed_empty_files_touched_still_pending():
+    """An ask with empty ``files_touched`` is never classified as
+    already-addressed — we cannot verify file-less clarifications from
+    the diff alone, so they stay pending.  (Unit test: in the full stage
+    flow ``_split_asks`` routes empty-files_touched asks to in_scope, so
+    they never reach ``_gaps_already_addressed``.  Verify the helper's
+    own contract directly.)"""
+    from robotsix_mill.stages.review import _gaps_already_addressed
+
+    ask = ReviewAsk(
+        description="Clarify the spec: should the feature handle empty input?",
+        files_touched=[],  # file-less clarification
+    )
+    already, pending = _gaps_already_addressed([ask], ["feature.txt", "README.md"])
+    assert len(already) == 0
+    assert len(pending) == 1
+    assert pending[0] is ask
+
+
 # --- board screenshot plumbing -----------------------------------------
 
 
