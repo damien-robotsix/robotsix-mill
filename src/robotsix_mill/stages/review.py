@@ -406,6 +406,31 @@ def _spawn_dependency_tickets(
     return ids
 
 
+def _gaps_already_addressed(
+    asks: list[ReviewAsk],
+    modified_paths: list[str],
+) -> tuple[list[ReviewAsk], list[ReviewAsk]]:
+    """Partition *asks* into *(already_addressed, still_pending)*.
+
+    An ask is "already addressed" when every file it would touch already
+    appears in *modified_paths* — the implementer's branch diff includes
+    changes to those files, so the gap flagged by the reviewer may have
+    been handled inline.  Asks with empty ``files_touched`` are treated as
+    still pending (we cannot verify them from the diff alone).
+    """
+    mp_set = set(modified_paths)
+    already: list[ReviewAsk] = []
+    pending: list[ReviewAsk] = []
+    for ask in asks:
+        if not ask.files_touched:
+            pending.append(ask)
+        elif all(f in mp_set for f in ask.files_touched):
+            already.append(ask)
+        else:
+            pending.append(ask)
+    return already, pending
+
+
 def _build_prior_context(ticket, ctx, ws) -> str | None:
     """Assemble prior review comments and the implement agent's rebuttal
     from the last round into a ``prior-context`` fenced block.
@@ -806,10 +831,38 @@ class ReviewStage(Stage):
                 verdict.request_changes,
                 file_map,
             )
+            # Filter out-of-scope asks: some gaps may already be addressed
+            # in the implementer's branch diff.  If every file an ask would
+            # touch already appears in modified_paths, the implementer
+            # likely handled it inline — skip the follow-up and post a note.
+            already_addressed: list[ReviewAsk] = []
+            still_out_of_scope: list[ReviewAsk] = []
             if out_of_scope:
+                already_addressed, still_out_of_scope = _gaps_already_addressed(
+                    out_of_scope,
+                    modified_paths,
+                )
+
+            if already_addressed:
+                lines = [
+                    f"Review found {len(already_addressed)} gap(s) that appear "
+                    "already addressed in the implementer's commits — "
+                    "no follow-up needed:",
+                    "",
+                ]
+                for a in already_addressed:
+                    desc = a.description.splitlines()[0][:120]
+                    lines.append(f"- {desc}")
+                ctx.service.add_comment(
+                    ticket.id,
+                    "\n".join(lines),
+                    author="review",
+                )
+
+            if still_out_of_scope:
                 new_ids = _spawn_dependency_tickets(
                     ticket,
-                    out_of_scope,
+                    still_out_of_scope,
                     ctx,
                 )
                 for nid in new_ids:
@@ -817,12 +870,12 @@ class ReviewStage(Stage):
                     # land (do NOT park the parent on it — that deadlocks).
                     ctx.service.set_depends_on(nid, [ticket.id])
                 lines = [
-                    f"Review found {len(out_of_scope)} out-of-scope ask(s) — "
-                    "spawned as follow-up ticket(s) that depend on this one "
-                    "(they run after it merges):",
+                    f"Review found {len(still_out_of_scope)} out-of-scope "
+                    "ask(s) — spawned as follow-up ticket(s) that depend on "
+                    "this one (they run after it merges):",
                     "",
                 ]
-                for nid, ask in zip(new_ids, out_of_scope, strict=True):
+                for nid, ask in zip(new_ids, still_out_of_scope, strict=True):
                     desc = ask.description.splitlines()[0][:120]
                     lines.append(f"- `{nid}` — {desc}")
                 ctx.service.add_comment(
@@ -835,7 +888,7 @@ class ReviewStage(Stage):
                 # In-scope changes remain — re-implement just those; the
                 # out-of-scope asks are now follow-ups and are not re-asked.
                 body = _sanitize_comments(verdict.comments)
-                if out_of_scope:
+                if still_out_of_scope:
                     body = (
                         _sanitize_comments(verdict.comments)
                         + "\n\nIn-scope items to fix now (out-of-scope asks were "
@@ -847,7 +900,7 @@ class ReviewStage(Stage):
                 ctx.service.add_comment(ticket.id, body, author="review")
                 return Outcome(State.READY, verdict.comments)
 
-            if out_of_scope:
+            if still_out_of_scope:
                 # No in-scope changes: the ticket's own work is sound and the
                 # only asks were out-of-scope (now follow-ups). Approve so it
                 # can merge and release them — rather than parking it on work
@@ -855,8 +908,19 @@ class ReviewStage(Stage):
                 ctx.service.set_review_rounds(ticket.id, 0)
                 return Outcome(
                     State.DOCUMENTING,
-                    f"approved; {len(out_of_scope)} out-of-scope ask(s) "
-                    "spawned as follow-ups",
+                    f"approved; {len(still_out_of_scope)} out-of-scope "
+                    "ask(s) spawned as follow-ups",
+                )
+
+            if already_addressed:
+                # Every out-of-scope ask was already addressed by the
+                # implementer — nothing to spawn, nothing in-scope to fix.
+                # Approve directly so the ticket can merge.
+                ctx.service.set_review_rounds(ticket.id, 0)
+                return Outcome(
+                    State.DOCUMENTING,
+                    f"approved; {len(already_addressed)} review gap(s) "
+                    "already addressed in the implementer's commits",
                 )
 
             # REQUEST_CHANGES with no actionable asks — historical behaviour:
