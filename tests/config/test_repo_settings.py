@@ -153,6 +153,37 @@ def test_resolve_none_when_no_language(tmp_path):
     assert resolve_language_instructions(s, repo) == ""
 
 
+def test_resolve_javascript_from_builtin(tmp_path):
+    """When a repo declares languages: [javascript], the built-in
+    javascript.md is resolved."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _write_config(repo, "languages: [javascript]\n")
+    s = _settings_with_builtin(tmp_path)
+    # Seed the temp builtin dir with javascript.md.
+    (s.language_instructions_dir / "javascript.md").write_text(
+        "JS BUILTIN\n## Manifest & lockfile workflow", encoding="utf-8"
+    )
+    out = resolve_language_instructions(s, repo)
+    assert "JS BUILTIN" in out
+    assert "## Manifest & lockfile workflow" in out
+
+
+def test_real_javascript_md_mentions_key_terms():
+    """Sanity-check: the committed javascript.md must mention key
+    lockfile concepts so the convention can't silently regress to an
+    empty/placeholder file."""
+    path = (
+        __import__("pathlib").Path(__file__).resolve().parents[2]
+        / "agent_definitions"
+        / "language_instructions"
+        / "javascript.md"
+    )
+    text = path.read_text(encoding="utf-8")
+    for term in ("package-lock.json", "npm install", "package.json"):
+        assert term in text, f"real javascript.md must mention '{term}'"
+
+
 # --- extra_sandbox_packages ------------------------------------------------
 
 

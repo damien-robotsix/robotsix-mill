@@ -39,9 +39,11 @@ The `uv` Rust binary is available in the sandbox. `uv lock` and
 `uv sync --frozen` work — the sandbox has filtered network access
 (PyPI and GitHub only, via an egress proxy).
 
-The agent **cannot** run `pip install`, `cargo build`, `npm install`,
-or any other command that fetches from the network — only `uv`
-commands can reach the internet (and only to PyPI/GitHub).
+The agent **cannot** run `pip install`, `cargo build`, or most other
+commands that fetch from the network — only `uv` commands can reach
+the internet (and only to PyPI/GitHub). Note: `npm install` is
+separately allowlisted for Node.js repos (see the javascript language
+instructions), but is not available for general Python-repo use.
 
 ### `uv lock` fails with git credential errors
 
