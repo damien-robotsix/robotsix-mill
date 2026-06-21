@@ -2175,3 +2175,234 @@ def test_triage_migrate_note_suffix_parsing_and_anti_bounce(
     assert len(migrate_calls) == 0
     assert out.next_state in (State.READY, State.HUMAN_ISSUE_APPROVAL)
     assert "anti-bounce" in out.note.lower()
+
+
+# ===========================================================================
+# _short_circuit_for_internal_failure
+# ===========================================================================
+
+
+def test_short_circuit_pytest_failure_returns_outcome(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """A draft containing a pytest failure output short-circuits refine:
+    the method returns an Outcome (not None), the full refine agent is NOT
+    invoked, draft-original.md and an empty file_map.json are written,
+    complexity is set to 'simple', and the spec contains the failure excerpt."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    calls = _spy_refine(monkeypatch)
+
+    draft = (
+        "CI run failed.\n\n"
+        "============================= FAILURES =============================\n"
+        "FAILED tests/test_x.py::test_foo - AssertionError: expected 1 got 2\n"
+        "========================= short test summary ========================\n"
+        "FAILED tests/test_x.py::test_foo\n"
+    )
+
+    out = _run_agent(ctx, t, tmp_path, draft=draft)
+
+    # Full refine agent never invoked.
+    assert calls == []
+
+    # An Outcome is returned, not None.
+    assert out is not None
+    assert out.next_state in (State.READY, State.HUMAN_ISSUE_APPROVAL)
+    assert out.note.startswith("short-circuited refine")
+
+    # Artifacts written.
+    ws = ctx.service.workspace(t)
+    assert (ws.artifacts_dir / "draft-original.md").exists()
+    assert (ws.artifacts_dir / "file_map.json").exists()
+    file_map = json.loads(
+        (ws.artifacts_dir / "file_map.json").read_text(encoding="utf-8")
+    )
+    assert file_map == []
+
+    # Complexity recorded "simple".
+    complexity_path = ws.artifacts_dir / "triage_complexity.json"
+    assert complexity_path.exists()
+    complexity_data = json.loads(complexity_path.read_text(encoding="utf-8"))
+    assert complexity_data["complexity"] == "simple"
+
+    # The spec markdown contains the failure excerpt.
+    spec = ws.description_path.read_text(encoding="utf-8")
+    assert "FAILURES" in spec
+    assert "test_foo" in spec
+    assert "internal toolchain failure" in spec.lower()
+
+
+def test_short_circuit_mypy_failure_returns_outcome(ctx_factory, monkeypatch, tmp_path):
+    """A draft containing a mypy error short-circuits refine."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    calls = _spy_refine(monkeypatch)
+
+    draft = (
+        "mypy run failed.\n\n"
+        'src/foo.py:12: error: Argument 1 to "bar" has incompatible type '
+        '"int"; expected "str"  [arg-type]\n'
+    )
+
+    out = _run_agent(ctx, t, tmp_path, draft=draft)
+
+    assert calls == []
+    assert out is not None
+    assert out.next_state in (State.READY, State.HUMAN_ISSUE_APPROVAL)
+    assert out.note.startswith("short-circuited refine")
+
+    ws = ctx.service.workspace(t)
+    spec = ws.description_path.read_text(encoding="utf-8")
+    assert "[arg-type]" in spec
+
+
+def test_short_circuit_ruff_failure_returns_outcome(ctx_factory, monkeypatch, tmp_path):
+    """A draft containing ruff failure output short-circuits refine."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    calls = _spy_refine(monkeypatch)
+
+    draft = "ruff check failed.\n\nF401 imported but unused\n"
+
+    out = _run_agent(ctx, t, tmp_path, draft=draft)
+
+    assert calls == []
+    assert out is not None
+    assert out.next_state in (State.READY, State.HUMAN_ISSUE_APPROVAL)
+    assert out.note.startswith("short-circuited refine")
+
+
+def test_short_circuit_no_failure_markers_falls_through(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """When the draft has no internal toolchain failure markers, the
+    short-circuit returns None and the full refine agent runs."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    calls = _spy_refine(monkeypatch)
+
+    draft = "We should add a new feature to the widget loader. It should handle edge cases better."
+
+    out = _run_agent(ctx, t, tmp_path, draft=draft)
+
+    # Full refine agent ran.
+    assert len(calls) == 1
+    assert out.note.startswith("refined")
+
+
+def test_short_circuit_reviewer_comments_falls_through(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """When reviewer comments are present, the short-circuit is skipped
+    even when the draft contains failure markers — human-flagged changes
+    always get full refinement."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    ctx.service.add_comment(
+        t.id, "Please also handle the edge case with None input.", author="user"
+    )
+    calls = _spy_refine(monkeypatch)
+
+    draft = "CI run failed.\n\nFAILED tests/test_x.py::test_foo - AssertionError\n"
+
+    out = _run_agent(ctx, t, tmp_path, draft=draft)
+
+    # Full refine agent ran despite the failure markers — reviewer comments
+    # take priority.
+    assert len(calls) == 1
+    assert out.note.startswith("refined")
+
+
+def test_short_circuit_empty_draft_falls_through(ctx_factory, monkeypatch, tmp_path):
+    """An empty draft (or whitespace-only) does not short-circuit."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    calls = _spy_refine(monkeypatch)
+
+    _run_agent(ctx, t, tmp_path, draft="   ")
+
+    # Full refine agent ran.
+    assert len(calls) == 1
+
+
+def test_short_circuit_routes_to_implement_not_done_or_maintenance(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """The short-circuited outcome MUST route toward implement
+    (READY / HUMAN_ISSUE_APPROVAL), never to DONE or MAINTENANCE."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    _spy_refine(monkeypatch)
+
+    draft = "CI run failed.\n\nFAILED tests/test_x.py::test_foo - AssertionError\n"
+
+    out = _run_agent(ctx, t, tmp_path, draft=draft)
+
+    assert out.next_state not in (State.DONE, State.MAINTENANCE, State.CLOSED)
+    assert out.next_state in (State.READY, State.HUMAN_ISSUE_APPROVAL)
+
+
+def test_short_circuit_with_evidence_file(ctx_factory, monkeypatch, tmp_path):
+    """When ws.artifacts_dir / 'evidence.txt' exists, its content is
+    embedded in the generated spec."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    _spy_refine(monkeypatch)
+
+    ws = ctx.service.workspace(t)
+    ws.artifacts_dir.mkdir(parents=True, exist_ok=True)
+    (ws.artifacts_dir / "evidence.txt").write_text(
+        "Traceback (most recent call last):\n  File ...\nRuntimeError: boom\n",
+        encoding="utf-8",
+    )
+
+    draft = "CI run failed.\n\nFAILED tests/test_x.py::test_foo - AssertionError\n"
+
+    out = _run_agent(ctx, t, tmp_path, draft=draft)
+
+    assert out is not None
+    ws = ctx.service.workspace(t)
+    spec = ws.description_path.read_text(encoding="utf-8")
+    assert "evidence.txt" in spec
+    assert "RuntimeError: boom" in spec
+
+
+def test_short_circuit_static_method_direct_call(ctx_factory, tmp_path):
+    """Drive _short_circuit_for_internal_failure directly (not through
+    _run_refine_agent) to test the gating logic in isolation."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+    ws.artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    # Case 1: Internal failure draft, no reviewer comments → Outcome returned.
+    draft = "FAILED tests/test_x.py::test_foo - AssertionError\n"
+    outcome = RefineStage._short_circuit_for_internal_failure(
+        ctx, t, draft, ws, ctx.settings, reviewer_comments=None
+    )
+    assert outcome is not None
+    assert outcome.next_state in (State.READY, State.HUMAN_ISSUE_APPROVAL)
+
+    # Case 2: Reviewer comments present → None returned.
+    outcome2 = RefineStage._short_circuit_for_internal_failure(
+        ctx, t, draft, ws, ctx.settings, reviewer_comments="Please fix scope."
+    )
+    assert outcome2 is None
+
+    # Case 3: No failure markers → None returned.
+    outcome3 = RefineStage._short_circuit_for_internal_failure(
+        ctx,
+        t,
+        "Add a new feature to the loader.",
+        ws,
+        ctx.settings,
+        reviewer_comments=None,
+    )
+    assert outcome3 is None
+
+    # Case 4: Empty draft → None returned.
+    outcome4 = RefineStage._short_circuit_for_internal_failure(
+        ctx, t, "", ws, ctx.settings, reviewer_comments=None
+    )
+    assert outcome4 is None

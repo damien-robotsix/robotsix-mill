@@ -283,6 +283,15 @@ class RefineAgentMixin:
             if outcome is not None:
                 return outcome
 
+        # Short-circuit: when the draft already carries CI/test/type/lint
+        # failure logs, skip the expensive refine agent and produce a
+        # minimal spec that points implement at the logged failures.
+        outcome = RefineAgentMixin._short_circuit_for_internal_failure(
+            ctx, ticket, draft, ws, s, reviewer_comments
+        )
+        if outcome is not None:
+            return outcome
+
         outcome, result = RefineAgentMixin._run_and_collect(
             ctx,
             ticket,
@@ -875,6 +884,109 @@ class RefineAgentMixin:
                 exc_info=True,
             )
         return None
+
+    # -- phase: short-circuit internal toolchain failures -------------------
+
+    @staticmethod
+    def _short_circuit_for_internal_failure(
+        ctx: StageContext,
+        ticket: Ticket,
+        draft: str,
+        ws: Workspace,
+        s: Settings,
+        reviewer_comments: str | None,
+    ) -> Outcome | None:
+        """Short-circuit refine to a minimal spec for internal toolchain failures.
+
+        When the draft already carries concrete CI/test/type/lint failure
+        output, there is no need to re-derive root cause via the expensive
+        refine agent — produce a minimal spec that points implement at the
+        logged failures.
+
+        Gate conditions (ALL must hold):
+        - No reviewer sendback (human-flagged changes always get full refinement)
+        - Draft is non-empty
+        - ``is_internal_toolchain_failure(draft)`` is ``True``
+
+        Returns an :class:`Outcome` to short-circuit, or ``None`` to fall
+        through to the full refine agent.
+        """
+        if reviewer_comments:
+            return None
+        if not draft or not draft.strip():
+            return None
+        if not refining.is_internal_toolchain_failure(draft):
+            return None
+
+        log.info(
+            "%s: short-circuiting refine — draft carries internal toolchain "
+            "failure logs; producing minimal spec for implement",
+            ticket.id,
+        )
+
+        # Build a minimal spec that points implement at the logged failures.
+        evidence_note = ""
+        evidence_path = ws.artifacts_dir / "evidence.txt"
+        if evidence_path.exists():
+            try:
+                evidence_text = evidence_path.read_text(encoding="utf-8")[:4000]
+                evidence_note = (
+                    f"\nAdditional evidence from `artifacts/evidence.txt`:\n\n"
+                    f"```\n{evidence_text}\n```\n"
+                )
+            except Exception:
+                log.warning(
+                    "%s: failed to read evidence.txt, skipping",
+                    ticket.id,
+                    exc_info=True,
+                )
+
+        # Truncate the draft body for embedding — keep enough to show the
+        # failure but avoid ballooning the spec.
+        draft_excerpt = draft[:3000]
+        if len(draft) > 3000:
+            draft_excerpt += "\n… [truncated]"
+
+        spec = (
+            "## Problem\n\n"
+            "An internal toolchain failure (CI/type/lint/test) was detected. "
+            "The draft already carries the failing logs — fix locally so the "
+            "check passes.\n\n"
+            "## Scope\n\n"
+            "Fix the failing check. The draft body contains the error details:\n\n"
+            f"```\n{draft_excerpt}\n```\n"
+            f"{evidence_note}"
+            "\n## Acceptance criteria\n\n"
+            "- The failing check passes.\n\n"
+            "## Out of scope / constraints\n\n"
+            "- Do not expand scope beyond fixing this specific toolchain failure.\n"
+            "- This is a local code/config fix — no external investigation needed.\n"
+        )
+
+        # Persist the raw draft if not already preserved.
+        draft_original = ws.artifacts_dir / "draft-original.md"
+        if not draft_original.exists():
+            draft_original.write_text(draft, encoding="utf-8")
+
+        # Write the minimal spec to the workspace description so implement
+        # picks it up (unlike the triage-skip and split-child paths, which
+        # keep the draft as-is, this path produces a new spec).
+        new_hash = ws.write_description(spec)
+        ctx.service.set_content_hash(ticket.id, new_hash)
+
+        # Write an empty file_map so implement treats this as scope-free mode.
+        RefineAgentMixin._write_file_map(ws, [], only_if_absent=True)
+
+        # Record complexity so downstream gates don't re-triage.
+        _write_triage_complexity(ws, "simple")
+
+        return RefineAgentMixin._resolved_outcome(
+            ctx,
+            spec,
+            ticket.id,
+            "short-circuited refine — internal toolchain failure with logs",
+            source=ticket.source,
+        )
 
     # -- phase: run the refine agent + pause detection ----------------------
 
