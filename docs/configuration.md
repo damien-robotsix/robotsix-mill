@@ -494,6 +494,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `forge.gitlab_api_url` | `MILL_GITLAB_API_URL` | `https://gitlab.com/api/v4` | GitLab API base URL (override for self-hosted GitLab) |
 | `forge.github_app_private_key_path` | `GITHUB_APP_PRIVATE_KEY_PATH` | `None` | Host path to GitHub App private-key `.pem` file |
 | `core.enable_repo_creation` | — | `false` | Allow the new-repo meta flow to create repositories via the forge API |
+| `core.repo_visibility_default` | `MILL_REPO_VISIBILITY_DEFAULT` | `public` | Default visibility for newly created repositories. `public` — repos are public unless the caller specifies private=True. `private` — repos are private unless the caller specifies private=False. |
 
 ### 9. Sandbox
 
