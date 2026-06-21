@@ -1282,3 +1282,260 @@ def test_extra_roots_skips_unmatched_ref_gracefully(ctx_factory, monkeypatch):
 
     # No crash; extra_roots is None because the ref couldn't be resolved.
     assert captured["extra_roots"] is None
+
+
+# --- Action ref SHA-pin validation --------------------------------------
+
+
+def _write_workflow_yaml(repo_dir: Path, uses_line: str) -> None:
+    """Write a minimal GitHub Actions workflow YAML with a ``uses:`` step."""
+    (repo_dir / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".github" / "workflows" / "ci.yml").write_text(
+        f"name: CI\n"
+        f"on: push\n"
+        f"jobs:\n"
+        f"  build:\n"
+        f"    runs-on: ubuntu-latest\n"
+        f"    steps:\n"
+        f"      - {uses_line}\n",
+        encoding="utf-8",
+    )
+
+
+def test_action_ref_valid_sha_no_blocking(ctx_factory, monkeypatch):
+    """A valid 40-char hex SHA pin produces no blocking finding; the LLM
+    verdict (APPROVE) is preserved."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    _write_workflow_yaml(
+        repo_dir,
+        "uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2",
+    )
+    _git(repo_dir, "add", "-A")
+    _git(repo_dir, "commit", "-q", "-m", "add workflow with valid SHA")
+
+    def _fake_review(**_kw):
+        return ReviewVerdict(verdict="APPROVE", comments="lgtm")
+
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
+
+    out = ReviewStage().run(t, ctx)
+    # Valid SHA → no forced REQUEST_CHANGES → APPROVE preserved.
+    assert out.next_state is State.DOCUMENTING
+    comments = [c.body for c in ctx.service.list_comments(t.id)]
+    # No blocking comment about SHA-pin validation.
+    assert not any("SHA-pin validation failed" in c for c in comments)
+
+
+def test_action_ref_invalid_tag_blocks_approve(ctx_factory, monkeypatch):
+    """A version tag (``@v4``) triggers a blocking REQUEST_CHANGES even
+    when the LLM reviewer says APPROVE."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    _write_workflow_yaml(repo_dir, "uses: actions/checkout@v4")
+    _git(repo_dir, "add", "-A")
+    _git(repo_dir, "commit", "-q", "-m", "add workflow with version tag")
+
+    def _fake_review(**_kw):
+        return ReviewVerdict(verdict="APPROVE", comments="lgtm")
+
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
+
+    out = ReviewStage().run(t, ctx)
+    # Invalid ref → forced REQUEST_CHANGES → back to READY.
+    assert out.next_state is State.READY
+
+    comments = [c.body for c in ctx.service.list_comments(t.id)]
+    assert any("SHA-pin validation failed" in c for c in comments)
+    # The original LLM comment is preserved.
+    assert any("lgtm" in c for c in comments)
+
+
+def test_action_ref_invalid_branch_blocks(ctx_factory, monkeypatch):
+    """A branch ref (``@main``) triggers a blocking REQUEST_CHANGES."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    _write_workflow_yaml(repo_dir, "uses: actions/checkout@main")
+    _git(repo_dir, "add", "-A")
+    _git(repo_dir, "commit", "-q", "-m", "add workflow with branch ref")
+
+    def _fake_review(**_kw):
+        return ReviewVerdict(verdict="APPROVE", comments="lgtm")
+
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
+
+    out = ReviewStage().run(t, ctx)
+    assert out.next_state is State.READY
+
+    comments = [c.body for c in ctx.service.list_comments(t.id)]
+    assert any("SHA-pin validation failed" in c for c in comments)
+    # The original LLM comment is preserved.
+    assert any("lgtm" in c for c in comments)
+
+
+def test_action_ref_subpath_invalid_tag_blocks(ctx_factory, monkeypatch):
+    """A subpath action with a tag (``github/codeql-action/init@v3.29.2``)
+    triggers a blocking REQUEST_CHANGES."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    _write_workflow_yaml(repo_dir, "uses: github/codeql-action/init@v3.29.2")
+    _git(repo_dir, "add", "-A")
+    _git(repo_dir, "commit", "-q", "-m", "add codeql with tag ref")
+
+    def _fake_review(**_kw):
+        return ReviewVerdict(verdict="APPROVE", comments="lgtm")
+
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
+
+    out = ReviewStage().run(t, ctx)
+    assert out.next_state is State.READY
+
+    comments = [c.body for c in ctx.service.list_comments(t.id)]
+    assert any("SHA-pin validation failed" in c for c in comments)
+    assert any("lgtm" in c for c in comments)
+
+
+def test_action_ref_local_ignored(ctx_factory, monkeypatch):
+    """A local ``./`` action ref is NOT flagged — it passes through."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    _write_workflow_yaml(repo_dir, "uses: ./.github/actions/my-action")
+    _git(repo_dir, "add", "-A")
+    _git(repo_dir, "commit", "-q", "-m", "add local action ref")
+
+    def _fake_review(**_kw):
+        return ReviewVerdict(verdict="APPROVE", comments="lgtm")
+
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
+
+    out = ReviewStage().run(t, ctx)
+    assert out.next_state is State.DOCUMENTING
+
+    comments = [c.body for c in ctx.service.list_comments(t.id)]
+    assert not any("SHA-pin validation failed" in c for c in comments)
+
+
+def test_action_ref_docker_ignored(ctx_factory, monkeypatch):
+    """A ``docker://`` ref is NOT flagged — it passes through."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    _write_workflow_yaml(repo_dir, "uses: docker://alpine:latest")
+    _git(repo_dir, "add", "-A")
+    _git(repo_dir, "commit", "-q", "-m", "add docker ref")
+
+    def _fake_review(**_kw):
+        return ReviewVerdict(verdict="APPROVE", comments="lgtm")
+
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
+
+    out = ReviewStage().run(t, ctx)
+    assert out.next_state is State.DOCUMENTING
+
+    comments = [c.body for c in ctx.service.list_comments(t.id)]
+    assert not any("SHA-pin validation failed" in c for c in comments)
+
+
+def test_action_ref_reusable_workflow_not_double_reported(ctx_factory, monkeypatch):
+    """A reusable-workflow ref (``uses: org/repo/.github/workflows/...``)
+    is NOT flagged by the action-ref validator — it belongs to the
+    ``_workflow_refs_from_diff`` pathway."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    _write_workflow_yaml(
+        repo_dir,
+        "uses: my-org/my-repo/.github/workflows/ci.yml@v1",
+    )
+    _git(repo_dir, "add", "-A")
+    _git(repo_dir, "commit", "-q", "-m", "add reusable workflow ref")
+
+    def _fake_review(**_kw):
+        return ReviewVerdict(verdict="APPROVE", comments="lgtm")
+
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
+
+    out = ReviewStage().run(t, ctx)
+    assert out.next_state is State.DOCUMENTING
+
+    comments = [c.body for c in ctx.service.list_comments(t.id)]
+    assert not any("SHA-pin validation failed" in c for c in comments)
+
+
+def test_action_ref_violations_appended_to_existing_request_changes(
+    ctx_factory,
+    monkeypatch,
+):
+    """When the LLM already returned REQUEST_CHANGES, action-ref violations
+    are prepended to the existing request_changes list."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    _write_workflow_yaml(repo_dir, "uses: actions/checkout@v4")
+    _git(repo_dir, "add", "-A")
+    _git(repo_dir, "commit", "-q", "-m", "add workflow with tag")
+
+    def _fake_review(**_kw):
+        return ReviewVerdict(
+            verdict="REQUEST_CHANGES",
+            comments="fix other things too",
+            request_changes=[
+                ReviewAsk(
+                    description="Fix the bounds check",
+                    files_touched=["feature.txt"],
+                )
+            ],
+        )
+
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
+
+    out = ReviewStage().run(t, ctx)
+    assert out.next_state is State.READY
+
+    comments = [c.body for c in ctx.service.list_comments(t.id)]
+    assert any("SHA-pin validation failed" in c for c in comments)
+    # The original LLM comment is preserved alongside the SHA-pin notice.
+    assert any("fix other things" in c for c in comments)
+
+
+def test_action_ref_no_violations_no_effect_on_verdict(ctx_factory, monkeypatch):
+    """When there are no action-ref violations, the LLM verdict is
+    passed through unchanged (REQUEST_CHANGES stays REQUEST_CHANGES)."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    _write_workflow_yaml(
+        repo_dir,
+        "uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2",
+    )
+    _git(repo_dir, "add", "-A")
+    _git(repo_dir, "commit", "-q", "-m", "add workflow with valid SHA")
+
+    def _fake_review(**_kw):
+        return ReviewVerdict(
+            verdict="REQUEST_CHANGES",
+            comments="fix feature.txt",
+        )
+
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
+
+    out = ReviewStage().run(t, ctx)
+    assert out.next_state is State.READY
+
+    comments = [c.body for c in ctx.service.list_comments(t.id)]
+    assert not any("SHA-pin validation failed" in c for c in comments)
+    assert any("fix feature.txt" in c for c in comments)

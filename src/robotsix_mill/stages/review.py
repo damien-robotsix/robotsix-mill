@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import subprocess
 from pathlib import Path
 
 from ..agents.reviewing import ReviewAsk, ReviewVerdict, run_review_agent
@@ -99,6 +100,169 @@ def _workflow_refs_from_diff(diff: str) -> set[str]:
     for m in _WORKFLOW_RE.finditer(diff):
         refs.add(m.group(1))
     return refs
+
+
+_ACTION_USES_RE = re.compile(
+    r"uses:\s*"
+    r"([a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+(?:/[^@#\s]+)*)"
+    r"@(\S+)"
+    r"(?:\s*#\s*(.*))?",
+)
+
+_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+
+
+def _action_refs_from_diff(diff: str) -> list[tuple[str, str, str, str]]:
+    """Extract action ``uses:`` references from added diff lines.
+
+    Scans ``^\\+`` lines (excluding the ``+++`` header) for ``uses:``
+    directives of the form ``uses: <owner>/<repo>[/<subpath>]@<ref>``.
+    Skips local (``./``), Docker (``docker://``), and reusable-workflow
+    refs (those containing ``/.github/workflows/`` or
+    ``/.github/actions/`` — already handled by
+    :func:`_workflow_refs_from_diff`).
+
+    Returns ``[(file_path, action_slug, ref, comment), ...]`` where
+    *comment* is the trailing ``# <version>`` text (empty string when
+    absent).
+
+    >>> _action_refs_from_diff(
+    ...     '+++ b/.github/workflows/ci.yml\\n'
+    ...     '+    uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\\n'
+    ... )
+    [('.github/workflows/ci.yml', 'actions/checkout', '11bd71901bbe5b1630ceea73d27597364c9af683', 'v4.2.2')]
+
+    >>> _action_refs_from_diff(
+    ...     '+++ b/.github/workflows/ci.yml\\n'
+    ...     '+    uses: actions/checkout@v4\\n'
+    ... )
+    [('.github/workflows/ci.yml', 'actions/checkout', 'v4', '')]
+
+    >>> _action_refs_from_diff(
+    ...     '+++ b/.github/workflows/ci.yml\\n'
+    ...     '+    uses: github/codeql-action/init@6b0550b4a2a7c00e939e5501b0c0b3f654b3d8e4 # v3.29.2\\n'
+    ... )
+    [('.github/workflows/ci.yml', 'github/codeql-action/init', '6b0550b4a2a7c00e939e5501b0c0b3f654b3d8e4', 'v3.29.2')]
+
+    >>> # Local refs are skipped.
+    >>> _action_refs_from_diff(
+    ...     '+++ b/.github/workflows/ci.yml\\n'
+    ...     '+    uses: ./.github/actions/my-action@main\\n'
+    ... )
+    []
+
+    >>> # Docker refs are skipped.
+    >>> _action_refs_from_diff(
+    ...     '+++ b/.github/workflows/ci.yml\\n'
+    ...     '+    uses: docker://ubuntu:latest\\n'
+    ... )
+    []
+
+    >>> # Reusable-workflow refs are skipped (already handled by _WORKFLOW_RE).
+    >>> _action_refs_from_diff(
+    ...     '+++ b/.github/workflows/ci.yml\\n'
+    ...     '+    uses: my-org/my-repo/.github/workflows/ci.yml@v1\\n'
+    ... )
+    []
+
+    >>> # +++ header lines are not scanned.
+    >>> _action_refs_from_diff(
+    ...     '+++ b/.github/workflows/ci.yml\\n'
+    ... )
+    []
+
+    >>> # Deleted lines (^-prefixed) are not scanned.
+    >>> _action_refs_from_diff(
+    ...     '+++ b/.github/workflows/ci.yml\\n'
+    ...     '-    uses: evilcorp/backdoor@v1\\n'
+    ...     '+    uses: actions/checkout@v4\\n'
+    ... )
+    [('.github/workflows/ci.yml', 'actions/checkout', 'v4', '')]
+    """
+    results: list[tuple[str, str, str, str]] = []
+    current_file: str | None = None
+    for line in diff.splitlines():
+        if line.startswith("+++ b/") and not line.startswith("+++ b/dev/null"):
+            current_file = line[6:].strip()
+            continue
+        if not line.startswith("+") or line.startswith("+++"):
+            continue
+        if current_file is None:
+            continue
+        m = _ACTION_USES_RE.search(line)
+        if not m:
+            continue
+        slug, ref, comment = m.group(1), m.group(2), (m.group(3) or "").strip()
+        # Skip local refs.
+        if slug.startswith("./"):
+            continue
+        # Skip Docker refs.
+        if slug.startswith("docker://"):
+            continue
+        # Skip reusable-workflow refs already handled by _workflow_refs_from_diff.
+        if "/.github/workflows/" in slug or "/.github/actions/" in slug:
+            continue
+        results.append((current_file, slug, ref, comment))
+    return results
+
+
+def _verify_action_sha(owner_repo: str, sha: str) -> bool | None:
+    """Best-effort verify *sha* exists in *owner_repo* via ``git ls-remote``.
+
+    Returns True when confirmed, False when the SHA is absent from
+    ``ls-remote`` output, None when the check could not be performed
+    (network error, timeout, non-zero exit, empty output, etc.).
+    """
+    try:
+        url = f"https://github.com/{owner_repo}.git"
+        result = subprocess.run(  # noqa: S603
+            ["git", "ls-remote", url, sha],  # noqa: S607
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if result.returncode != 0:
+            return None  # Could not check
+        if not result.stdout.strip():
+            return None  # No output — could not verify (network filtered?)
+        if sha not in result.stdout:
+            return False  # SHA confirmed absent (ls-remote had other output)
+        return True  # SHA confirmed
+    except Exception:
+        return None  # Any failure → skip existence check
+
+
+def _validate_action_refs(
+    action_refs: list[tuple[str, str, str, str]],
+) -> list[dict[str, str]]:
+    """Check each action ref for a valid 40-char hex SHA (format-only).
+
+    Returns a list of violation dicts with keys: ``file``, ``slug``,
+    ``ref``, ``comment``.  Does NOT perform an existence check — that is
+    done separately (and optionally) by the caller via
+    :func:`_verify_action_sha`.
+
+    >>> _validate_action_refs([])
+    []
+
+    >>> _validate_action_refs([
+    ...     ('.github/workflows/ci.yml', 'actions/checkout',
+    ...      '11bd71901bbe5b1630ceea73d27597364c9af683', 'v4.2.2'),
+    ... ])
+    []
+
+    >>> _validate_action_refs([
+    ...     ('.github/workflows/ci.yml', 'actions/checkout', 'v4', ''),
+    ... ])
+    [{'file': '.github/workflows/ci.yml', 'slug': 'actions/checkout', 'ref': 'v4', 'comment': ''}]
+    """
+    violations: list[dict[str, str]] = []
+    for file_path, slug, ref, comment in action_refs:
+        if not _SHA_RE.match(ref):
+            violations.append(
+                {"file": file_path, "slug": slug, "ref": ref, "comment": comment}
+            )
+    return violations
 
 
 def _load_file_map(ws) -> set[str] | None:
@@ -338,14 +502,15 @@ class ReviewStage(Stage):
             log.info("%s: empty diff — approving without review", ticket.id)
             return Outcome(State.DOCUMENTING, "empty diff (no-op implementation)")
 
-        # Derive modified paths AND workflow refs from the UNTRUNCATED
-        # diff so middle truncation (below) never drops a ``+++ b/<path>``
-        # header or a ``uses:`` line and silently shrinks the preseed file
-        # set or the cross-repo clone set. The agent receives the bounded
-        # diff; the preseed and extra_roots still cover every referenced
-        # file and repo.
+        # Derive modified paths, workflow refs, AND action refs from the
+        # UNTRUNCATED diff so middle truncation (below) never drops a
+        # ``+++ b/<path>`` header or a ``uses:`` line and silently shrinks
+        # the preseed file set, the cross-repo clone set, or the action-ref
+        # validation. The agent receives the bounded diff; the preseed and
+        # extra_roots still cover every referenced file and repo.
         modified_paths = _paths_from_diff(diff)
         workflow_refs = _workflow_refs_from_diff(diff)
+        action_refs = _action_refs_from_diff(diff)
 
         # Bound the combined diff before it reaches the review prompt. The
         # raw ``git diff origin/<target>...HEAD`` can balloon to megabytes
@@ -498,6 +663,72 @@ class ReviewStage(Stage):
                 State.BLOCKED,
                 f"review agent error — resumable: {e}",
             )
+
+        # ── action-ref SHA-pin validation ─────────────────────────────
+        # Deterministic stage-side check: every action ``uses:``
+        # reference in the diff must be pinned to a full 40-char commit
+        # SHA.  The LLM reviewer cannot validate SHAs (no network /
+        # run_command tools), so we enforce this here and inject any
+        # violations as synthetic REQUEST_CHANGES entries.
+        action_violations = _validate_action_refs(action_refs)
+
+        # Optional best-effort existence check for format-valid SHAs:
+        # for each ref that IS a 40-char hex SHA, confirm it exists via
+        # ``git ls-remote``.  Any failure (network error, timeout,
+        # non-zero exit) degrades gracefully — the SHA is not flagged.
+        for file_path, slug, ref, comment in action_refs:
+            if _SHA_RE.match(ref):
+                parts = slug.split("/")
+                if len(parts) >= 2:
+                    owner_repo = f"{parts[0]}/{parts[1]}"
+                    exists = _verify_action_sha(owner_repo, ref)
+                    if exists is False:
+                        action_violations.append(
+                            {
+                                "file": file_path,
+                                "slug": slug,
+                                "ref": ref,
+                                "comment": comment,
+                            }
+                        )
+
+        if action_violations:
+            synthetic_asks: list[ReviewAsk] = []
+            for v in action_violations:
+                comment_part = f" # {v['comment']}" if v["comment"] else ""
+                title = (
+                    f"Pin {v['slug']} to a full 40-char commit SHA in {v['file']}"
+                )[:80]
+                description = (
+                    f"Action `{v['slug']}@{v['ref']}{comment_part}` in "
+                    f"`{v['file']}` is not pinned to a full 40-character "
+                    f"commit SHA. Replace `@{v['ref']}` with a real 40-char "
+                    f"commit SHA and add a `# <version>` comment, e.g. "
+                    f"`uses: {v['slug']}@<full-40-char-sha> # <version>`."
+                )
+                synthetic_asks.append(
+                    ReviewAsk(
+                        title=title,
+                        description=description,
+                        files_touched=[v["file"]],
+                    )
+                )
+
+            # Force REQUEST_CHANGES regardless of LLM verdict.  SHA-pin
+            # format is a hard rule — not a discussion topic.
+            verdict.verdict = "REQUEST_CHANGES"
+            verdict.auto_merge_eligible = False
+            verdict.request_changes = synthetic_asks + list(verdict.request_changes)
+            if verdict.comments:
+                verdict.comments = (
+                    "Action SHA-pin validation failed (see request_changes "
+                    "entries below).\n\n" + verdict.comments
+                )
+            else:
+                verdict.comments = (
+                    "Action SHA-pin validation failed (see request_changes "
+                    "entries below)."
+                )
 
         # Persist review artifact for downstream consumers (e.g. auto-merge).
         ws.artifacts_dir.joinpath("review.md").write_text(
