@@ -1,5 +1,7 @@
 """Tests for the shared langfuse_tools module."""
 
+import asyncio
+
 from robotsix_mill.agents.langfuse_tools import (
     _build_langfuse_tools,
     make_langfuse_inspect_tool,
@@ -218,7 +220,7 @@ def test_langfuse_inspect_trace_degradation_trace_unavailable(tmp_path, monkeypa
         lambda settings, tid: None,
     )
     tool = make_langfuse_inspect_tool(s)
-    output = tool("missing-trace")
+    output = asyncio.run(tool("missing-trace"))
     assert "trace missing-trace unavailable" in output
 
 
@@ -258,7 +260,7 @@ def test_langfuse_inspect_trace_delegates_to_run_trace_inspector(tmp_path, monke
     )
 
     tool = make_langfuse_inspect_tool(s)
-    output = tool("trace-1")
+    output = asyncio.run(tool("trace-1"))
 
     assert "## trace trace-1 inspection" in output
     assert "### Tool Errors" in output
@@ -296,7 +298,7 @@ def test_langfuse_inspect_trace_passes_repo_dir(tmp_path, monkeypatch):
     )
 
     tool = make_langfuse_inspect_tool(s, repo_dir=repo)
-    tool("trace-1")
+    asyncio.run(tool("trace-1"))
 
     assert captured_kwargs["repo_dir"] == repo
 
@@ -324,7 +326,7 @@ def test_langfuse_inspect_trace_no_repo_dir(tmp_path, monkeypatch):
     )
 
     tool = make_langfuse_inspect_tool(s, repo_dir=None)
-    tool("trace-1")
+    asyncio.run(tool("trace-1"))
 
     assert captured_kwargs["repo_dir"] is None
 
@@ -346,7 +348,7 @@ def test_langfuse_inspect_trace_clean_no_issues(tmp_path, monkeypatch):
     )
 
     tool = make_langfuse_inspect_tool(s)
-    output = tool("clean-trace")
+    output = asyncio.run(tool("clean-trace"))
     assert "(no issues found in this trace)" in output
     assert "### Tool Errors" not in output
 
@@ -368,7 +370,7 @@ def test_langfuse_inspect_trace_surfaces_inspector_error(tmp_path, monkeypatch):
     )
 
     tool = make_langfuse_inspect_tool(s)
-    output = tool("trace-1")
+    output = asyncio.run(tool("trace-1"))
     assert "_inspector error: context length exceeded_" in output
 
 
@@ -400,9 +402,77 @@ def test_langfuse_inspect_trace_passes_request_limit_override(tmp_path, monkeypa
     )
 
     tool = make_langfuse_inspect_tool(s)
-    tool("trace-1")
+    asyncio.run(tool("trace-1"))
 
     assert captured_kwargs["request_limit_override"] == 12
+
+
+def test_langfuse_inspect_trace_offloads_blocking_work_from_event_loop(
+    tmp_path, monkeypatch
+):
+    """The tool runs ``run_trace_inspector`` (which calls ``run_sync`` →
+    ``run_until_complete``) on a worker thread via ``asyncio.to_thread``
+    so it never executes on the caller's live event loop."""
+    import inspect
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.fetch_trace_detail",
+        lambda settings, tid: {"id": tid, "name": "test", "observations": []},
+    )
+
+    from robotsix_mill.agents.trace_inspector import (
+        TraceFinding,
+        TraceInspectResult,
+    )
+
+    captured_loop_free = {}
+
+    def fake_run_trace_inspector(**kwargs):
+        # Assert we are NOT on an active event loop — `asyncio.to_thread`
+        # creates a bare worker thread with no loop running.
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            captured_loop_free["no_loop"] = True
+        else:
+            captured_loop_free["no_loop"] = False
+        return TraceInspectResult(
+            findings=[
+                TraceFinding(
+                    category="optimization",
+                    symptom="test finding",
+                    root_cause="",
+                    proposed_solution="test fix",
+                ),
+            ]
+        )
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.trace_inspector.run_trace_inspector",
+        fake_run_trace_inspector,
+    )
+
+    tool = make_langfuse_inspect_tool(s)
+    assert inspect.iscoroutinefunction(tool), "langfuse_inspect_trace must be async"
+
+    async def driver():
+        # We are on a running loop — like the Claude SDK tool callback.
+        return await tool("trace-1")
+
+    output = asyncio.run(driver())
+
+    # The stub must have observed no running loop in its thread.
+    assert captured_loop_free.get("no_loop") is True, (
+        "run_trace_inspector ran on a thread WITH an active event loop — "
+        "asyncio.to_thread did not isolate it"
+    )
+
+    # The tool must return rendered findings, not a raw event-loop error.
+    assert "## trace trace-1 inspection" in output
+    assert "### Optimizations" in output
+    assert "This event loop is already running" not in output
 
 
 # ── make_cost_inspect_tool tests ─────────────────────────────────────
@@ -731,7 +801,7 @@ def test_langfuse_inspect_trace_resolves_repo_credentials(tmp_path, monkeypatch)
     )
 
     tool = make_langfuse_inspect_tool(s, repo_dir=None, repo_config=rc)
-    tool("trace-1")
+    asyncio.run(tool("trace-1"))
 
     assert captured["detail"] is rc
     assert captured["inspector"] is rc
@@ -763,7 +833,7 @@ def test_langfuse_inspect_trace_none_repo_config(tmp_path, monkeypatch):
     )
 
     tool = make_langfuse_inspect_tool(s)
-    tool("trace-1")
+    asyncio.run(tool("trace-1"))
 
     assert captured["detail"] is None
     assert captured["inspector"] is None
