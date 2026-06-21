@@ -111,6 +111,11 @@ _ACTION_USES_RE = re.compile(
 
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
+# owner/repo format expected by _verify_action_sha — must be two
+# dot-joined segments of alphanumeric, dot, underscore, and hyphen
+# characters (e.g. "actions/checkout", "github/codeql-action").
+_OWNER_REPO_RE = re.compile(r"^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$")
+
 
 def _action_refs_from_diff(diff: str) -> list[tuple[str, str, str, str]]:
     """Extract action ``uses:`` references from added diff lines.
@@ -218,6 +223,13 @@ def _verify_action_sha(owner_repo: str, sha: str) -> bool | None:
     the SHA.  Passing the SHA as a positional argument would filter
     refs by that hex string (always producing empty output).
     """
+    # Defence-in-depth: owner_repo must match the expected format before
+    # we construct a URL or pass anything to a subprocess.  A mismatch
+    # means the caller extracted something unexpected from the diff;
+    # bail out gracefully rather than proceeding.
+    if not _OWNER_REPO_RE.match(owner_repo):
+        return None  # Malformed owner/repo — cannot verify
+
     try:
         url = f"https://github.com/{owner_repo}.git"
         result = subprocess.run(  # noqa: S603
