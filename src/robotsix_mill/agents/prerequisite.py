@@ -32,6 +32,7 @@ import logging
 import re
 import subprocess
 import sys
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
@@ -59,6 +60,20 @@ _PREREQ_FENCE_RE = re.compile(
 # Directive grammar (kept deliberately small and conservative).
 _IMPORT_RE = re.compile(r"^import\s+([\w.]+)$")
 _SYMBOL_RE = re.compile(r"^symbol\s+(\w+)\s+from\s+([\w.]+)$")
+
+# Diff-fence extraction for dependency-bump detection.
+# Captures the body inside a ```diff fence (anywhere in the spec — not
+# scoped to a particular section heading).
+_DIFF_FENCE_RE = re.compile(
+    r"```diff[ \t]*\n(.*?)^[ \t]*```",
+    re.MULTILINE | re.DOTALL,
+)
+
+# Recognise a diff that modifies pyproject.toml or uv.lock.
+_PYPROJECT_DIFF_RE = re.compile(
+    r"^[-+]{3}\s+[ab]/(pyproject\.toml|uv\.lock)\s*$",
+    re.MULTILINE,
+)
 
 
 def _top_level_module(dotted: str) -> str:
@@ -286,6 +301,118 @@ def _filter_same_repo(
     return external
 
 
+def _extract_dependency_diffs(spec: str) -> list[str]:
+    """Extract `````diff```` blocks from *spec* that modify
+    ``pyproject.toml`` or ``uv.lock``.
+
+    Returns a list of raw unified-diff strings (one per matching
+    fence).  Returns ``[]`` when no relevant diffs are found — most
+    specs never declare dependency bumps.
+    """
+    diffs: list[str] = []
+    for m in _DIFF_FENCE_RE.finditer(spec):
+        body = m.group(1)
+        if _PYPROJECT_DIFF_RE.search(body):
+            diffs.append(body)
+    return diffs
+
+
+def _apply_patches_and_recheck(
+    external: list[dict[str, str]],
+    repo_dir: Path,
+    settings: Settings,
+    sandbox_image: str | None,
+    diffs: list[str],
+) -> tuple[list[str], str | None]:
+    """Apply dependency diffs from the ticket spec to a copy of the
+    repo, re-run the sandbox batch check, then restore.
+
+    Returns ``(unmet, error)`` — same contract as
+    :func:`_sandbox_batch_check`.  Degrades gracefully: on any patch
+    or sandbox error, returns the *original* unmet list so the gate
+    still blocks — a transient patching fault must not silently pass
+    an unmet prerequisite.
+
+    The patching strategy:
+
+    1. Create a temporary directory alongside *repo_dir* (under the
+       same parent, so the Docker volume-subpath / bind-mount
+       continues to work).
+    2. Copy the whole repo into it (``shutil.copytree``).
+    3. Apply each diff to the copy with ``patch -p1``.
+    4. Run :func:`_sandbox_batch_check` against the patched copy.
+    5. Remove the temporary copy.
+
+    When there are no diffs or the sandbox is unavailable this is a
+    no-op (returns ``([], None)``).
+    """
+    if not diffs:
+        return [], None
+
+    originals: dict[str, str] = {}
+
+    try:
+        # Save originals for the files the diffs touch, then apply
+        # the patches directly to the repo (simpler than a full copy
+        # and avoids Docker volume-subpath issues with temp dirs).
+        for diff_text in diffs:
+            for m in re.finditer(
+                r"^[-+]{3}\s+[ab]/(pyproject\.toml|uv\.lock)\s*$",
+                diff_text,
+                re.MULTILINE,
+            ):
+                fname = m.group(1)
+                fpath = repo_dir / fname
+                if fname not in originals and fpath.is_file():
+                    originals[fname] = fpath.read_text(encoding="utf-8")
+
+        # Write each diff to a temp file and apply with `git apply`.
+        for diff_text in diffs:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".diff",
+                delete=False,
+                encoding="utf-8",
+            ) as tf:
+                tf.write(diff_text)
+                diff_path = tf.name
+            try:
+                subprocess.run(
+                    ["git", "apply", "--quiet", diff_path],  # noqa: S607
+                    cwd=str(repo_dir),
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+            finally:
+                Path(diff_path).unlink(missing_ok=True)
+
+        # Re-run the sandbox check with the patched files.
+        unmet, error = _sandbox_batch_check(external, repo_dir, settings, sandbox_image)
+        return unmet, error
+    except Exception:
+        log.warning(
+            "prerequisite: patching dependencies for re-check failed — "
+            "falling back to original result",
+            exc_info=True,
+        )
+        # Return the original unmet list so the gate still blocks.
+        return [d["directive"] for d in external], None
+    finally:
+        # Restore originals in reverse order so a crash during
+        # restoration is as harmless as possible.
+        for fname, content in originals.items():
+            try:
+                (repo_dir / fname).write_text(content, encoding="utf-8")
+            except Exception:
+                log.warning(
+                    "prerequisite: failed to restore %s after patch re-check",
+                    fname,
+                    exc_info=True,
+                )
+
+
 def _run_individual_checks(
     external: list[dict[str, str]],
     repo_dir: Path,
@@ -307,6 +434,55 @@ def _run_individual_checks(
             continue
         if rc != 0:
             unmet.append(d["directive"])
+    return unmet
+
+
+def _maybe_recheck_with_dep_diffs(
+    spec: str,
+    external: list[dict[str, str]],
+    repo_dir: Path,
+    settings: Settings,
+    sandbox_image: str | None,
+    unmet: list[str],
+) -> list[str]:
+    """When *unmet* is non-empty, check whether the ticket spec itself
+    contains dependency diffs that would resolve the missing symbols.
+
+    Returns updated *unmet* — empty when the re-check passes (the
+    ticket's own dependency bump satisfies the prerequisite).
+    """
+    diffs = _extract_dependency_diffs(spec)
+    if not diffs:
+        return unmet
+
+    log.info(
+        "prerequisite: %d unmet; re-checking with %d "
+        "dependency diff(s) from ticket spec",
+        len(unmet),
+        len(diffs),
+    )
+    patched_unmet, patched_error = _apply_patches_and_recheck(
+        external, repo_dir, settings, sandbox_image, diffs
+    )
+    if patched_error:
+        log.warning(
+            "prerequisite: dependency-patch re-check "
+            "failed (%s) — blocking on original unmet",
+            patched_error,
+        )
+        return unmet
+    if not patched_unmet:
+        log.info(
+            "prerequisite: all unmet symbols satisfied "
+            "after applying ticket's dependency diffs "
+            "— proceeding (ticket itself resolves the "
+            "prerequisites)"
+        )
+        return []
+    log.info(
+        "prerequisite: %d still unmet after dependency-patch re-check",
+        len(patched_unmet),
+    )
     return unmet
 
 
@@ -359,6 +535,10 @@ def run_prerequisite_check(
     # whole batch runs in a single container (one ``pip install .``).
     if runner is _default_runner and settings is not None:
         unmet, error = _sandbox_batch_check(external, repo_dir, settings, sandbox_image)
+        if unmet:
+            unmet = _maybe_recheck_with_dep_diffs(
+                spec, external, repo_dir, settings, sandbox_image, unmet
+            )
         if unmet:
             return {
                 "unmet": unmet,
