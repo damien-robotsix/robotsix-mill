@@ -26,6 +26,7 @@ from ._shared import (
     _AgentRunOutcome,
     _ImplementContext,
     _SinglePassResult,
+    _should_skip_test_gate,
     log,
 )
 
@@ -228,11 +229,18 @@ class ImplementationLogicMixin(_ImplementStageBase):
         target = target_branch_for(settings, ctx.repo_config)
         from robotsix_mill.stages import implement as _facade
 
-        passed, diag = _facade.run_test_agent(
-            settings=settings,
-            repo_dir=repo_dir,
-            repo_config=ctx.repo_config,
+        ticket_summary = (ic.spec or ticket.title or "")[:200]
+        skip, skip_diag = _should_skip_test_gate(
+            repo_dir, target, settings, ticket_summary
         )
+        if skip:
+            passed, diag = True, skip_diag
+        else:
+            passed, diag = _facade.run_test_agent(
+                settings=settings,
+                repo_dir=repo_dir,
+                repo_config=ctx.repo_config,
+            )
         # --- path-scoped smoke gate (runs ONLY after unit tests pass) ---
         # No point smoking a red build; a smoke failure folds into the
         # SAME passed/diag → ValidationResult.decide machinery as a test

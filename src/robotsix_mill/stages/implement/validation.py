@@ -21,6 +21,7 @@ from ._shared import (
     _ScopeGuardrailResult,
     _is_binary_artifact,
     _modules_yaml_added_paths,
+    _should_skip_test_gate,
     log,
 )
 
@@ -643,12 +644,19 @@ class ValidationMixin(_ImplementStageBase):
             # bogus dependency-fix ticket — re-run once before believing it.
             from robotsix_mill.stages import implement as _facade
 
-            passed, diag = _facade.run_test_agent(
-                settings=settings,
-                repo_dir=repo_dir,
-                repo_config=ctx.repo_config,
-                retry_on_failure=True,
+            ticket_summary = (getattr(ticket, "title", "") or "")[:200]
+            skip, skip_diag = _should_skip_test_gate(
+                repo_dir, target, settings, ticket_summary
             )
+            if skip:
+                passed, diag = True, skip_diag
+            else:
+                passed, diag = _facade.run_test_agent(
+                    settings=settings,
+                    repo_dir=repo_dir,
+                    repo_config=ctx.repo_config,
+                    retry_on_failure=True,
+                )
         finally:
             git_ops.checkout(repo_dir, branch)
 

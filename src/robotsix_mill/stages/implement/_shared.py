@@ -20,9 +20,12 @@ import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from ..base import Outcome
+
+if TYPE_CHECKING:
+    from ...config import Settings
 
 log = logging.getLogger("robotsix_mill.stages.implement")
 
@@ -169,6 +172,127 @@ def _modules_yaml_added_paths(repo_dir: Path, target_branch: str) -> set[str]:
         ):
             paths.add(token)
     return paths
+
+
+# ---------------------------------------------------------------------------
+# Config-only change detection (deterministic skip candidate check)
+# ---------------------------------------------------------------------------
+
+CONFIG_ONLY_EXTENSIONS = (
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".md",
+    ".cfg",
+    ".ini",
+    ".json",
+    ".conf",
+)
+
+
+def _is_config_only_change(repo_dir: Path, target_branch: str) -> bool:
+    """True when every changed file (added, copied, modified, renamed)
+    relative to origin/<target_branch> has a config-only extension.
+
+    Fail-closed: returns False on any git error or when there is no diff
+    yet, so the full test gate runs as the safe default.
+    """
+    result = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo_dir),
+            "diff",
+            "--name-only",
+            "--diff-filter=ACMR",
+            f"origin/{target_branch}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return False
+    changed = result.stdout.strip().splitlines()
+    if not changed:
+        return False  # no diff yet — run tests
+    return all(p.lower().endswith(CONFIG_ONLY_EXTENSIONS) for p in changed)
+
+
+def _should_skip_test_gate(
+    repo_dir: Path,
+    target_branch: str,
+    settings: "Settings",
+    ticket_summary: str,
+) -> tuple[bool, str]:
+    """Decide whether the full test gate can be skipped.
+
+    Returns ``(skip, diag)`` where *skip* is ``True`` only when BOTH:
+    1. The cheap deterministic ``_is_config_only_change`` check passes, AND
+    2. The cheap LLM ``run_test_scope_agent`` confirms the diff cannot
+       affect runtime behaviour and returns ``needs_full_suite=False``.
+
+    In every other case — git error, mixed diff, no diff yet, missing API
+    key, or an agent that asks for tests — the full deterministic suite
+    runs and is the final arbiter.  The agent is consulted ONLY when the
+    deterministic check already says config-only, so a real code change
+    runs the full gate without ever paying for the LLM call.
+    """
+    config_only = _is_config_only_change(repo_dir, target_branch)
+    if not config_only:
+        return False, "non-config files in diff — running full test gate"
+
+    # Gather the inputs the agent needs: changed file list and diff stat
+    # (both using the same ``git -C str(repo_dir)`` convention).
+    changed_out = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo_dir),
+            "diff",
+            "--name-only",
+            "--diff-filter=ACMR",
+            f"origin/{target_branch}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    changed_files = (
+        changed_out.stdout.strip().splitlines() if changed_out.returncode == 0 else []
+    )
+
+    stat_out = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo_dir),
+            "diff",
+            "--stat",
+            f"origin/{target_branch}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    diff_stat = stat_out.stdout.strip() if stat_out.returncode == 0 else ""
+
+    from ...agents.test_scope import run_test_scope_agent
+
+    verdict = run_test_scope_agent(
+        settings=settings,
+        changed_files=changed_files,
+        diff_stat=diff_stat,
+        ticket_summary=ticket_summary,
+    )
+
+    if verdict.needs_full_suite:
+        return False, (
+            f"config-only diff but agent assessed the change as behaviour-affecting "
+            f"— running full test gate. Rationale: {verdict.rationale[:200]}"
+        )
+
+    return True, (
+        f"config-only diff confirmed by agent as non-behavioural — "
+        f"skipping full test gate. Rationale: {verdict.rationale[:200]}"
+    )
 
 
 # ---------------------------------------------------------------------------
