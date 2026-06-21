@@ -12,6 +12,7 @@ from pathlib import Path
 from robotsix_mill.agents import prerequisite
 from robotsix_mill.agents.prerequisite import (
     _build_batch_script,
+    _extract_dependency_diffs,
     _sandbox_batch_check,
     parse_prerequisites,
     run_prerequisite_check,
@@ -435,3 +436,259 @@ def test_no_pyproject_does_not_skip(tmp_path):
     result = run_prerequisite_check(spec, repo, runner=_runner_all_fail)
     # Without package name info, the directive is checked normally.
     assert result["unmet"] == ["symbol get_record_by_id from robotsix_auto_mail.db"]
+
+
+# --- dependency-diff re-check ---
+
+
+def test_extract_dependency_diffs_pyproject():
+    """A ```diff fence modifying pyproject.toml is extracted."""
+    spec = (
+        "## Changes\n"
+        "```diff\n"
+        "--- a/pyproject.toml\n"
+        "+++ b/pyproject.toml\n"
+        "@@ -10,7 +10,7 @@\n"
+        "-rev = 'old'\n"
+        "+rev = 'new'\n"
+        "```\n"
+    )
+    diffs = _extract_dependency_diffs(spec)
+    assert len(diffs) == 1
+    assert "pyproject.toml" in diffs[0]
+
+
+def test_extract_dependency_diffs_uv_lock():
+    """A ```diff fence modifying uv.lock is extracted."""
+    spec = "```diff\n--- a/uv.lock\n+++ b/uv.lock\n@@ -1,1 +1,1 @@\n-old\n+new\n```\n"
+    diffs = _extract_dependency_diffs(spec)
+    assert len(diffs) == 1
+    assert "uv.lock" in diffs[0]
+
+
+def test_extract_dependency_diffs_multiple():
+    """Multiple diff fences that touch pyproject.toml/uv.lock are all extracted."""
+    spec = (
+        "```diff\n"
+        "--- a/pyproject.toml\n"
+        "+++ b/pyproject.toml\n"
+        "@@ -1 +1 @@\n"
+        "-a\n"
+        "+b\n"
+        "```\n"
+        "```diff\n"
+        "--- a/uv.lock\n"
+        "+++ b/uv.lock\n"
+        "@@ -1 +1 @@\n"
+        "-c\n"
+        "+d\n"
+        "```\n"
+    )
+    diffs = _extract_dependency_diffs(spec)
+    assert len(diffs) == 2
+
+
+def test_extract_dependency_diffs_ignores_other_files():
+    """Diff fences modifying files other than pyproject.toml/uv.lock are
+    not extracted."""
+    spec = (
+        "```diff\n--- a/src/main.py\n+++ b/src/main.py\n@@ -1 +1 @@\n-old\n+new\n```\n"
+    )
+    diffs = _extract_dependency_diffs(spec)
+    assert diffs == []
+
+
+def test_extract_dependency_diffs_no_diff_blocks():
+    """A spec with no ```diff blocks returns an empty list."""
+    spec = "## Prerequisites\n```prereq\nsymbol Foo from bar\n```\n"
+    assert _extract_dependency_diffs(spec) == []
+
+
+def test_recheck_applies_dep_diff_and_passes(monkeypatch, tmp_path):
+    """When a sandbox check fails but the spec contains a pyproject.toml
+    diff, the gate applies the diff, re-checks, and proceeds if the
+    re-check passes."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text("old\n", encoding="utf-8")
+
+    call_count = 0
+
+    def fake_sandbox(directives, repo_dir, settings, sandbox_image):
+        nonlocal call_count
+        call_count += 1
+        content = (repo_dir / "pyproject.toml").read_text(encoding="utf-8")
+        if "new_sha" in content:
+            # Patched — prerequisites satisfied.
+            return [], None
+        # Original — unmet.
+        return ["symbol Foo from bar"], None
+
+    monkeypatch.setattr(prerequisite, "_sandbox_batch_check", fake_sandbox)
+
+    spec = (
+        "## Prerequisites\n"
+        "```prereq\n"
+        "symbol Foo from bar\n"
+        "```\n"
+        "## Changes\n"
+        "```diff\n"
+        "--- a/pyproject.toml\n"
+        "+++ b/pyproject.toml\n"
+        "@@ -1 +1 @@\n"
+        "-old\n"
+        "+new_sha\n"
+        "```\n"
+    )
+
+    class _S:
+        pass
+
+    result = run_prerequisite_check(spec, repo, settings=_S(), sandbox_image="img:1")
+    assert result["unmet"] == []
+    assert call_count == 2
+    # Verify pyproject.toml was restored.
+    assert (repo / "pyproject.toml").read_text(encoding="utf-8") == "old\n"
+
+
+def test_recheck_still_unmet_blocks(monkeypatch, tmp_path):
+    """When the dep-diff re-check still fails, the gate blocks normally."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text("old\n", encoding="utf-8")
+
+    call_count = 0
+
+    def fake_sandbox(directives, repo_dir, settings, sandbox_image):
+        nonlocal call_count
+        call_count += 1
+        return ["symbol Foo from bar"], None
+
+    monkeypatch.setattr(prerequisite, "_sandbox_batch_check", fake_sandbox)
+
+    spec = (
+        "## Prerequisites\n"
+        "```prereq\n"
+        "symbol Foo from bar\n"
+        "```\n"
+        "```diff\n"
+        "--- a/pyproject.toml\n"
+        "+++ b/pyproject.toml\n"
+        "@@ -1 +1 @@\n"
+        "-old\n"
+        "+new_sha\n"
+        "```\n"
+    )
+
+    class _S:
+        pass
+
+    result = run_prerequisite_check(spec, repo, settings=_S(), sandbox_image="img:1")
+    assert result["unmet"] == ["symbol Foo from bar"]
+    assert call_count == 2
+    assert (repo / "pyproject.toml").read_text(encoding="utf-8") == "old\n"
+
+
+def test_recheck_no_diff_blocks_still_blocks(monkeypatch, tmp_path):
+    """When unmet prereqs exist but no diff blocks are in the spec,
+    the gate blocks without attempting a re-check."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    call_count = 0
+
+    def fake_sandbox(directives, repo_dir, settings, sandbox_image):
+        nonlocal call_count
+        call_count += 1
+        return ["symbol Foo from bar"], None
+
+    monkeypatch.setattr(prerequisite, "_sandbox_batch_check", fake_sandbox)
+
+    spec = "## Prerequisites\n```prereq\nsymbol Foo from bar\n```\n"
+
+    class _S:
+        pass
+
+    result = run_prerequisite_check(spec, repo, settings=_S(), sandbox_image="img:1")
+    assert result["unmet"] == ["symbol Foo from bar"]
+    # Only one call — no re-check when no diffs.
+    assert call_count == 1
+
+
+def test_recheck_restores_even_on_sandbox_error(monkeypatch, tmp_path):
+    """When the sandbox raises during the re-check, originals are still
+    restored and the gate blocks with the original unmet list."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text("old\n", encoding="utf-8")
+
+    call_count = 0
+
+    def fake_sandbox(directives, repo_dir, settings, sandbox_image):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return ["symbol Foo from bar"], None
+        raise SandboxError("no docker")
+
+    monkeypatch.setattr(prerequisite, "_sandbox_batch_check", fake_sandbox)
+
+    spec = (
+        "## Prerequisites\n"
+        "```prereq\n"
+        "symbol Foo from bar\n"
+        "```\n"
+        "```diff\n"
+        "--- a/pyproject.toml\n"
+        "+++ b/pyproject.toml\n"
+        "@@ -1 +1 @@\n"
+        "-old\n"
+        "+new_sha\n"
+        "```\n"
+    )
+
+    class _S:
+        pass
+
+    result = run_prerequisite_check(spec, repo, settings=_S(), sandbox_image="img:1")
+    # Falls back to original unmet list.
+    assert result["unmet"] == ["symbol Foo from bar"]
+    assert (repo / "pyproject.toml").read_text(encoding="utf-8") == "old\n"
+
+
+def test_recheck_preserves_uv_lock(monkeypatch, tmp_path):
+    """A diff modifying uv.lock is applied and restored correctly."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text("old\n", encoding="utf-8")
+    (repo / "uv.lock").write_text("lock_old\n", encoding="utf-8")
+
+    def fake_sandbox(directives, repo_dir, settings, sandbox_image):
+        lock_content = (repo_dir / "uv.lock").read_text(encoding="utf-8")
+        if "lock_new" in lock_content:
+            return [], None
+        return ["symbol Foo from bar"], None
+
+    monkeypatch.setattr(prerequisite, "_sandbox_batch_check", fake_sandbox)
+
+    spec = (
+        "## Prerequisites\n"
+        "```prereq\n"
+        "symbol Foo from bar\n"
+        "```\n"
+        "```diff\n"
+        "--- a/uv.lock\n"
+        "+++ b/uv.lock\n"
+        "@@ -1 +1 @@\n"
+        "-lock_old\n"
+        "+lock_new\n"
+        "```\n"
+    )
+
+    class _S:
+        pass
+
+    result = run_prerequisite_check(spec, repo, settings=_S(), sandbox_image="img:1")
+    assert result["unmet"] == []
+    assert (repo / "uv.lock").read_text(encoding="utf-8") == "lock_old\n"
+    assert (repo / "pyproject.toml").read_text(encoding="utf-8") == "old\n"
