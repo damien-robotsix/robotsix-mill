@@ -43,7 +43,6 @@ src/robotsix_mill/runtime/board_adapter.py:0: note: Error code "misc" not covere
 src/robotsix_mill/core/service/_helpers.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/core/service/_helpers.py:0: error: Item "int" of "int | None" has no attribute "desc"  [union-attr]
 src/robotsix_mill/core/service/_helpers.py:0: error: Item "None" of "int | None" has no attribute "desc"  [union-attr]
-src/robotsix_mill/core/service/_helpers.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/forge/github_ci.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/forge/github_ci.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/forge/github_ci.py:0: error: Need type annotation for "runs" (hint: "runs: list[<type>] = ...")  [var-annotated]

@@ -13,10 +13,18 @@ import json
 import re
 from datetime import datetime, timezone
 
-from sqlmodel import select
+from sqlmodel import Session, select
 
-from ..models import TicketEvent
+from ..models import Ticket, TicketEvent
 from ..states import State
+
+
+def _get_ticket(db_session: Session, ticket_id: str) -> Ticket:
+    """Return the Ticket for *ticket_id*, or raise ``KeyError``."""
+    ticket = db_session.get(Ticket, ticket_id)
+    if ticket is None:
+        raise KeyError(ticket_id)
+    return ticket
 
 
 def _event_hash(
@@ -49,7 +57,7 @@ def _prev_hash_for(db_session, ticket_id: str) -> str | None:
 
 
 def _make_event(
-    db_session,
+    db_session: Session,
     ticket_id: str,
     state: State,
     note: str | None = None,

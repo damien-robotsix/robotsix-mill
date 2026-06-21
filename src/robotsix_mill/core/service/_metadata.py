@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from .. import db
 from ..models import Ticket
 from ._base import _ServiceBase
+from ._helpers import _get_ticket
 
 
 class _MetadataMixin(_ServiceBase):
@@ -32,9 +33,7 @@ class _MetadataMixin(_ServiceBase):
         """
         cleaned = [t for t in dict.fromkeys(target_ids) if t and t != ticket_id]
         with db.session(self.settings, self._board_for(ticket_id)) as s:
-            ticket = s.get(Ticket, ticket_id)
-            if ticket is None:
-                raise KeyError(ticket_id)
+            ticket = _get_ticket(s, ticket_id)
             ticket.unblocks = json.dumps(cleaned) if cleaned else None
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
@@ -51,9 +50,7 @@ class _MetadataMixin(_ServiceBase):
         """
         cleaned: list[str] = list(dict.fromkeys(labels))
         with db.session(self.settings, self._board_for(ticket_id)) as s:
-            ticket = s.get(Ticket, ticket_id)
-            if ticket is None:
-                raise KeyError(ticket_id)
+            ticket = _get_ticket(s, ticket_id)
             ticket.labels = json.dumps(cleaned) if cleaned else None
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
@@ -78,9 +75,7 @@ class _MetadataMixin(_ServiceBase):
         """
         changed: list[str] = []
         with db.session(self.settings, self._board_for(ticket_id)) as s:
-            ticket = s.get(Ticket, ticket_id)
-            if ticket is None:
-                raise KeyError(ticket_id)
+            ticket = _get_ticket(s, ticket_id)
             new_value = bool(priority)
             if ticket.priority != new_value:
                 ticket.priority = new_value
@@ -114,9 +109,7 @@ class _MetadataMixin(_ServiceBase):
         Raises :class:`KeyError` if the ticket does not exist.
         """
         with db.session(self.settings, self._board_for(ticket_id)) as s:
-            ticket = s.get(Ticket, ticket_id)
-            if ticket is None:
-                raise KeyError(ticket_id)
+            ticket = _get_ticket(s, ticket_id)
             ticket.branch = branch
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
@@ -126,9 +119,7 @@ class _MetadataMixin(_ServiceBase):
         """Link a spawned ticket to the ticket it originated from
         (e.g. a retrospect improvement draft -> the reviewed ticket)."""
         with db.session(self.settings, self._board_for(ticket_id)) as s:
-            ticket = s.get(Ticket, ticket_id)
-            if ticket is None:
-                raise KeyError(ticket_id)
+            ticket = _get_ticket(s, ticket_id)
             ticket.parent_id = parent_id
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
@@ -138,9 +129,7 @@ class _MetadataMixin(_ServiceBase):
         """Update the title of a ticket. Raises :class:`KeyError` if
         the ticket does not exist."""
         with db.session(self.settings, self._board_for(ticket_id)) as s:
-            ticket = s.get(Ticket, ticket_id)
-            if ticket is None:
-                raise KeyError(ticket_id)
+            ticket = _get_ticket(s, ticket_id)
             ticket.title = title
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
@@ -150,9 +139,7 @@ class _MetadataMixin(_ServiceBase):
         """Keep the DB pointer in sync after a stage rewrites the
         file-canonical description (so it isn't seen as an external edit)."""
         with db.session(self.settings, self._board_for(ticket_id)) as s:
-            ticket = s.get(Ticket, ticket_id)
-            if ticket is None:
-                raise KeyError(ticket_id)
+            ticket = _get_ticket(s, ticket_id)
             ticket.content_hash = content_hash
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
@@ -170,9 +157,7 @@ class _MetadataMixin(_ServiceBase):
         unknown ids.
         """
         with db.session(self.settings, self._board_for(ticket_id)) as s:
-            ticket = s.get(Ticket, ticket_id)
-            if ticket is None:
-                raise KeyError(ticket_id)
+            ticket = _get_ticket(s, ticket_id)
             if ticket.kind == "epic":
                 return
             ticket.kind = "epic"
@@ -183,9 +168,7 @@ class _MetadataMixin(_ServiceBase):
     def set_review_rounds(self, ticket_id: str, value: int) -> None:
         """Set the ``review_rounds`` counter on *ticket_id*."""
         with db.session(self.settings, self._board_for(ticket_id)) as s:
-            ticket = s.get(Ticket, ticket_id)
-            if ticket is None:
-                raise KeyError(ticket_id)
+            ticket = _get_ticket(s, ticket_id)
             ticket.review_rounds = value
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
@@ -199,9 +182,7 @@ class _MetadataMixin(_ServiceBase):
             raise ValueError(f"Ticket cannot depend on itself: {ticket_id}")
         raw = json.dumps(depends_on_ids) if depends_on_ids else None
         with db.session(self.settings, self._board_for(ticket_id)) as s:
-            ticket = s.get(Ticket, ticket_id)
-            if ticket is None:
-                raise KeyError(ticket_id)
+            ticket = _get_ticket(s, ticket_id)
             ticket.depends_on = raw
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)

@@ -11,7 +11,7 @@ from .. import db
 from ..models import Comment, Ticket
 from ..states import State
 from ._base import _ServiceBase
-from ._helpers import _make_event
+from ._helpers import _get_ticket, _make_event
 
 log = logging.getLogger("robotsix_mill.service")
 
@@ -33,9 +33,7 @@ class _CommentMixin(_ServiceBase):
         exists and belongs to the same ticket, raising ``ValueError``
         otherwise."""
         with db.session(self.settings, self._board_for(ticket_id)) as s:
-            ticket = s.get(Ticket, ticket_id)
-            if ticket is None:
-                raise KeyError(ticket_id)
+            _get_ticket(s, ticket_id)
             if parent_id is not None:
                 parent = s.get(Comment, parent_id)
                 if parent is None:
