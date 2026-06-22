@@ -50,8 +50,10 @@ from .helpers import (
     _load_refine_memory,
     _persist_refine_memory,
     _rationale_claims_external_fix,
+    _AUTO_APPROVE_SOURCES,
     _resolve_next_state,
     _spec_is_degenerate,
+    _summarize_spec_for_auto_approve,
     _verify_cited_fix_at_head,
     log,
 )
@@ -839,9 +841,49 @@ class RefineAgentMixin:
             # enabled.
             if s.auto_approve_enabled and ticket.source not in ("user", "ci"):
                 try:
+                    # --- deterministic short-circuit ---
+                    # Sources in _AUTO_APPROVE_SOURCES are by construction
+                    # no-design-risk: skip the LLM entirely and go straight
+                    # to the existing fast-path exit.  The post-refine gate
+                    # (_resolve_next_state) will return READY via the same
+                    # deterministic rule.
+                    if ticket.source in _AUTO_APPROVE_SOURCES:
+                        (ws.artifacts_dir / "draft-original.md").write_text(
+                            draft if draft else "(title-only ticket, no body provided)",
+                            encoding="utf-8",
+                        )
+                        _PATH_RE = re.compile(r"`([^`]*/[^`]*\.[a-zA-Z]{1,10})`")
+                        extracted = _PATH_RE.findall(draft)
+                        if extracted:
+                            RefineAgentMixin._write_file_map(
+                                ws,
+                                [{"file": p, "note": "from draft"} for p in extracted],
+                                only_if_absent=True,
+                            )
+                        else:
+                            RefineAgentMixin._write_file_map(
+                                ws, [], only_if_absent=True
+                            )
+                        return RefineAgentMixin._resolved_outcome(
+                            ctx,
+                            draft,
+                            ticket.id,
+                            f"mechanical draft fast-path "
+                            f"(deterministic source {ticket.source!r}) "
+                            f"— skipped refine LLM",
+                            source=ticket.source,
+                            triage_note=triage.reason,
+                        )
+
+                    # Remaining non-deterministic-source tickets: run the
+                    # bounded auto-approve classifier.  Match the post-refine
+                    # gate by using _summarize_spec_for_auto_approve instead
+                    # of the full unbounded draft.
                     auto = refining.triage_auto_approve(
                         settings=s,
-                        spec=f"{ticket.title}\n\n{draft}",
+                        spec=_summarize_spec_for_auto_approve(
+                            f"{ticket.title}\n\n{draft}"
+                        ),
                     )
                     if auto.decision == "APPROVE":
                         (ws.artifacts_dir / "draft-original.md").write_text(

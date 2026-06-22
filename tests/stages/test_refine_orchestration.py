@@ -35,7 +35,11 @@ from robotsix_mill.stages import StageContext
 from robotsix_mill.stages import refine as refine_module
 from robotsix_mill.stages.refine import RefineStage
 from robotsix_mill.stages.refine import orchestration as orch_module
-from robotsix_mill.stages.refine.helpers import UNMERGED_BRANCH_PREFIX
+from robotsix_mill.stages.refine.helpers import (
+    UNMERGED_BRANCH_PREFIX,
+    _AUTO_APPROVE_SOURCES,
+    _summarize_spec_for_auto_approve,
+)
 from robotsix_mill.vcs import git_ops
 
 
@@ -1158,7 +1162,7 @@ def test_mechanical_draft_fast_path_falls_through_on_needs_approval(
     """When auto-approve returns NEEDS_APPROVAL, fall through to the full
     refine agent."""
     ctx = ctx_factory(auto_approve_enabled=True)
-    t = _ticket(ctx, source="test_gap")
+    t = _ticket(ctx, source="periodic")
     calls = _spy_refine(
         monkeypatch,
         triage_refine=_mock_triage(decision="REFINE", reason="needs refinement"),
@@ -1190,7 +1194,7 @@ def test_mechanical_draft_fast_path_falls_through_on_auto_approve_error(
 ):
     """When the auto-approve call raises, fall through gracefully."""
     ctx = ctx_factory(auto_approve_enabled=True)
-    t = _ticket(ctx, source="test_gap")
+    t = _ticket(ctx, source="periodic")
     calls = _spy_refine(
         monkeypatch,
         triage_refine=_mock_triage(decision="REFINE", reason="needs refinement"),
@@ -2406,3 +2410,112 @@ def test_short_circuit_static_method_direct_call(ctx_factory, tmp_path):
         ctx, t, "", ws, ctx.settings, reviewer_comments=None
     )
     assert outcome4 is None
+
+
+# ===========================================================================
+# Deterministic-source mechanical fast-path
+# ===========================================================================
+
+
+def test_mechanical_fast_path_deterministic_source_skips_llm(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """A ticket whose source is in _AUTO_APPROVE_SOURCES (e.g. "audit")
+    short-circuits both triage_auto_approve and run_refine_agent, returning
+    READY with a "deterministic source" / "skipped refine LLM" note."""
+    ctx = ctx_factory(auto_approve_enabled=True)
+    t = _ticket(ctx, source="audit")
+    calls = _spy_refine(monkeypatch)
+
+    auto_approve_calls: list[dict] = []
+
+    def _spy_auto_approve(**kw):
+        auto_approve_calls.append(kw)
+        return refining.AutoApproveResult(decision="APPROVE", reason="ok")
+
+    monkeypatch.setattr(refining, "triage_auto_approve", _spy_auto_approve)
+
+    draft = "some draft with file paths like `src/foo.py` and `tests/test_bar.py`"
+    out = _run_agent(ctx, t, tmp_path, draft=draft)
+
+    # triage_auto_approve was never called (deterministic shortcut).
+    assert auto_approve_calls == []
+    # run_refine_agent was never called.
+    assert calls == []
+    # Routed to READY.
+    assert out.next_state == State.READY
+    # The source is in the deterministic set (guard against drift).
+    assert 'audit' in _AUTO_APPROVE_SOURCES
+    # Note carries the expected markers.
+    assert "deterministic source" in out.note
+    assert "skipped refine LLM" in out.note
+
+    # Artifacts written.
+    ws = ctx.service.workspace(t)
+    assert (ws.artifacts_dir / "draft-original.md").exists()
+
+    file_map_path = ws.artifacts_dir / "file_map.json"
+    assert file_map_path.exists()
+    file_map = json.loads(file_map_path.read_text(encoding="utf-8"))
+    assert {"file": "src/foo.py", "note": "from draft"} in file_map
+    assert {"file": "tests/test_bar.py", "note": "from draft"} in file_map
+
+
+def test_mechanical_fast_path_non_deterministic_calls_bounded_triage(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """A non-deterministic-source mill-internal ticket calls triage_auto_approve
+    with the *bounded* summary (truncated via _summarize_spec_for_auto_approve),
+    not the full raw draft."""
+    ctx = ctx_factory(auto_approve_enabled=True)
+    t = _ticket(ctx, source="retrospect")
+    calls = _spy_refine(monkeypatch)
+
+    title = "Test bounded triage spec"
+    # Build a draft long enough that truncation actually occurs (>2000 chars).
+    long_draft = "x" * 2500
+
+    auto_approve_calls: list[dict] = []
+
+    def _spy_auto_approve(**kw):
+        auto_approve_calls.append(kw)
+        return refining.AutoApproveResult(decision="APPROVE", reason="mechanical")
+
+    monkeypatch.setattr(refining, "triage_auto_approve", _spy_auto_approve)
+
+    out = _run_agent(ctx, t, tmp_path, draft=long_draft, title=title)
+
+    # triage_auto_approve was called (at least once from the fast-path;
+    # _resolve_next_state may also call it again for non-deterministic sources).
+    assert len(auto_approve_calls) >= 1
+    # The first call (from the mechanical fast-path) receives the bounded summary.
+    expected_spec = _summarize_spec_for_auto_approve(f"{t.title}\n\n{long_draft}")
+    assert auto_approve_calls[0]["spec"] == expected_spec
+    # Truncation actually happened (the passed spec is shorter than the raw draft).
+    assert len(auto_approve_calls[0]["spec"]) < len(long_draft)
+    # run_refine_agent was never called.
+    assert calls == []
+    # The outcome routes to implement.
+    assert out.next_state == State.READY
+
+
+def test_mechanical_fast_path_exception_falls_through(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """When triage_auto_approve raises inside the mechanical fast-path,
+    the exception is caught and the full refine agent runs (fall-through)."""
+    ctx = ctx_factory(auto_approve_enabled=True)
+    t = _ticket(ctx, source="retrospect")
+
+    def _boom(**kw):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(refining, "triage_auto_approve", _boom)
+
+    calls = _spy_refine(monkeypatch)
+
+    out = _run_agent(ctx, t, tmp_path)
+
+    # Full refine agent ran (fall-through after exception).
+    assert len(calls) == 1
+    assert out.note.startswith("refined")

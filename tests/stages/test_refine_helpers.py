@@ -415,3 +415,44 @@ def test_build_summary_truncates_entry_list(tmp_path):
         (tmp_path / f"f{i:02d}.log").write_text("x\n")
     out = refine_module._build_deployed_log_summary(tmp_path, "/configured/path")
     assert "… and 5 more entries" in out
+
+
+# ---------------------------------------------------------------------------
+# _AUTO_APPROVE_SOURCES — module-level constant and deterministic routing
+# ---------------------------------------------------------------------------
+
+
+def test_auto_approve_sources_is_module_level_constant():
+    """_AUTO_APPROVE_SOURCES is importable from refine_module, is a set,
+    and contains exactly the seven expected source strings."""
+    sources = refine_module._AUTO_APPROVE_SOURCES
+    assert isinstance(sources, set)
+    expected = {
+        "test_gap",
+        "audit",
+        "agent_check",
+        "bc_check",
+        "completeness_check",
+        "module_curator",
+        "copy_paste",
+    }
+    assert sources == expected
+
+
+def test_auto_approve_sources_resolve_next_state_deterministic():
+    """For every source in _AUTO_APPROVE_SOURCES, _resolve_next_state
+    returns State.READY and an APPROVE note when auto_approve_enabled=True
+    and require_approval=True — guarding against accidental value drift."""
+    for source in refine_module._AUTO_APPROVE_SOURCES:
+        state, note = refine_module._resolve_next_state(
+            _ctx(auto_approve_enabled=True),
+            "## Problem\nA genuine, real spec body",
+            "t1",
+            source=source,
+        )
+        assert state is State.READY, (
+            f"source={source!r} unexpected state {state}"
+        )
+        assert note is not None and "APPROVE" in note, (
+            f"source={source!r} note missing APPROVE: {note!r}"
+        )
