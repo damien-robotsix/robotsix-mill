@@ -316,7 +316,7 @@ async def ws_board(websocket: WebSocket) -> None:
     broadcaster = websocket.app.state.broadcaster
 
     show_closed = websocket.query_params.get("show_closed", "").lower() == "true"
-    exclude = set() if show_closed else {State.CLOSED, State.EPIC_CLOSED}
+    exclude = set() if show_closed else {State.CLOSED, State.EPIC_CLOSED, State.ANSWERED}
     tickets = svc.list(exclude_states=exclude)
     initial = [
         enrich_ticket_read(

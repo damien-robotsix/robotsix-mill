@@ -36,6 +36,11 @@ from ...stages.merge import _verify_merge_ancestor
 from ...core.models import Ticket
 from ...core.service import TicketService
 from ...core.states import STAGE_FOR_STATE, State
+
+# Terminal states that are excluded from default listings (CLOSED,
+# EPIC_CLOSED, ANSWERED).  These states have empty transition sets
+# in the state machine and represent completed/archived work.
+_LIST_TERMINAL_STATES: set[State] = {State.CLOSED, State.EPIC_CLOSED, State.ANSWERED}
 from ...forge import get_forge
 from ..worker import Worker
 from ..deps import (
@@ -125,16 +130,23 @@ def list_tickets(
     """List tickets (``GET /tickets``).
 
     Returns the active tickets, optionally filtered by *state* and
-    *repo_id*.  ``include_closed`` **defaults to False** — CLOSED and
-    EPIC_CLOSED are hidden (DONE stays visible, the transient retrospect
-    window).  Closed tickets are the overwhelming majority of rows
-    (>90 % on a mature board) and are not useful for board operation, so
-    loading + enriching them on every poll is the dominant cost behind an
-    unresponsive board; callers that genuinely need them must opt in with
-    ``include_closed=true``.  Enrichment is downgraded for performance —
-    cost is cache-only and PR URLs are skipped — because the board polls
-    this every few seconds.  A background cost-warming task refreshes the
-    rows on each poll so subsequent requests show real values.
+    *repo_id*.  ``include_closed`` **defaults to False** — terminal
+    states (CLOSED, EPIC_CLOSED, ANSWERED) are hidden; DONE stays
+    visible (the transient retrospect window).  Closed/terminal
+    tickets are the overwhelming majority of rows (>90 % on a mature
+    board) and are not useful for board operation, so loading +
+    enriching them on every poll is the dominant cost behind an
+    unresponsive board; callers that genuinely need them must opt in
+    with ``include_closed=true``.  Enrichment is downgraded for
+    performance — cost is cache-only and PR URLs are skipped —
+    because the board polls this every few seconds.  A background
+    cost-warming task refreshes the rows on each poll so subsequent
+    requests show real values.
+
+    An explicit *state* filter (e.g. ``state=closed``) takes
+    precedence over the default exclusion — the terminal state is
+    removed from the exclusion set so the explicit filter works as
+    expected.
     """
     # The board polls this every 5s. Both expensive enrichments are
     # downgraded for the list:
@@ -147,10 +159,10 @@ def list_tickets(
     # Per-ticket detail GETs keep both authoritative — when the user
     # opens the drawer they see real cost and a real PR link.
     #
-    # include_closed=false hides CLOSED and EPIC_CLOSED (the volume
-    # cases) but keeps DONE visible — DONE is the transient
-    # retrospect-in-flight window and we want to watch retrospect work
-    # without toggling.
+    # include_closed=false hides terminal states (CLOSED, EPIC_CLOSED,
+    # ANSWERED — the volume cases) but keeps DONE visible — DONE is
+    # the transient retrospect-in-flight window and we want to watch
+    # retrospect work without toggling.
     # Short-TTL single-flight cache (see _LIST_CACHE). On a fresh hit we
     # return the cached list without touching any DB. On a miss we hold the
     # lock across the compute so a burst of simultaneous pollers triggers
@@ -189,7 +201,16 @@ def _list_tickets_compute(
     a thin, obviously-correct guard around the expensive all-board fanout."""
     exclude = None
     if not include_closed:
-        exclude = {State.CLOSED, State.EPIC_CLOSED}
+        exclude = set(_LIST_TERMINAL_STATES)
+        # When the caller explicitly filters for a terminal state
+        # (e.g. ``state=closed``), remove it from the exclusion set
+        # so the explicit filter takes precedence — otherwise the
+        # WHERE clause would be ``state='closed' AND state NOT IN
+        # ('closed',…)``, which returns nothing.
+        if state is not None and state in exclude:
+            exclude.discard(state)
+        if not exclude:
+            exclude = None
 
     # With per-repo DBs the default svc only sees its own board's
     # tickets. Build a list of services to query: one per repo when
