@@ -713,13 +713,14 @@ def test_verified_state_block_in_memory(tmp_path, monkeypatch):
     RetrospectStage().run(t, ctx)
     assert len(captured_verified) == 1
     verified = captured_verified[0]
-    assert "## Prior proposals — verified state" in verified
-    assert "slow_ci" in verified
-    assert "merged" in verified
+    assert "prior proposal(s) on file" in verified
+    assert "still open" in verified
+    assert "read_ticket" in verified
 
-    # The verified-state header must NOT appear in the memory kwarg —
+    # The verified-state summary must NOT appear in the memory kwarg —
     # that would round-trip into the persisted ledger.
     assert "## Prior proposals — verified state" not in captured_memory[0]
+    assert "prior proposal(s) on file" not in captured_memory[0]
 
 
 def test_retrospect_verified_state_not_persisted_to_memory_file(tmp_path, monkeypatch):
