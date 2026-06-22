@@ -156,6 +156,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         self._diagnostic_task: asyncio.Task[None] | None = None
         self._stale_branch_task: asyncio.Task | None = None
         self._db_maintenance_task: asyncio.Task | None = None
+        self._sandbox_reaper_task: asyncio.Task[None] | None = None
         self._credit_balance_task: asyncio.Task[None] | None = None
         # board_id -> per-repo bespoke supervisor task. The supervisor
         # itself owns each repo's per-bespoke child tasks; cancelling
@@ -665,6 +666,13 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                 self.ctx.settings.max_events_per_ticket,
             ),
         )
+        self._start_poll_loop_pass(
+            "sandbox-reaper",
+            self._sandbox_reaper_loop,
+            "_sandbox_reaper_task",
+            log_msg="Periodic sandbox reaper enabled: interval %ds",
+            log_args=(self.ctx.settings.sandbox_reaper_interval_seconds,),
+        )
 
         # --- Credit balance poll (gated on its own flag, not _periodic) ---
         if (
@@ -755,6 +763,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             "_diagnostic_task",
             "_stale_branch_task",
             "_db_maintenance_task",
+            "_sandbox_reaper_task",
             "_credit_balance_task",
         ):
             t = getattr(self, attr)

@@ -960,3 +960,95 @@ def test_extra_packages_integration_from_config_file(tmp_path, monkeypatch):
     assert "pip install --user" in cmd
     assert "requests" in cmd
     assert cmd.endswith("pytest -q")
+
+
+# --- orphan sandbox reaper -------------------------------------------------
+# Containers leaked by a mill crash/restart mid-run (their timeout is
+# parent-process enforced; --rm only fires on exit) are reaped by
+# reap_orphan_sandboxes. These tests mock the docker CLI (subprocess.run).
+
+
+def _completed(argv, code=0, stdout="", stderr=""):
+    return subprocess.CompletedProcess(argv, code, stdout=stdout, stderr=stderr)
+
+
+def test_reap_orphan_sandboxes_startup_removes_all(monkeypatch):
+    """max_age_seconds=None (startup) removes every matching container
+    without inspecting ages — anything present is an orphan from before
+    this process began."""
+    calls = []
+
+    def fake_run(argv, **kw):
+        calls.append(argv)
+        if argv[:2] == ["docker", "ps"]:
+            return _completed(
+                argv, 0, stdout="abc123\tmill-sbx-aaa\ndef456\tmill-fetch-bbb\n"
+            )
+        if argv[:3] == ["docker", "rm", "-f"]:
+            return _completed(argv, 0)
+        raise AssertionError(f"unexpected argv {argv}")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    assert sandbox.reap_orphan_sandboxes() == 2
+    assert not any(a[:2] == ["docker", "inspect"] for a in calls)
+    removed = {a[3] for a in calls if a[:3] == ["docker", "rm", "-f"]}
+    assert removed == {"abc123", "def456"}
+
+
+def test_reap_orphan_sandboxes_age_gated(monkeypatch):
+    """A positive threshold removes only containers older than it."""
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    starts = {
+        "old1": (now - timedelta(hours=10)).isoformat().replace("+00:00", "Z"),
+        "young1": (now - timedelta(seconds=30)).isoformat().replace("+00:00", "Z"),
+    }
+    removed = []
+
+    def fake_run(argv, **kw):
+        if argv[:2] == ["docker", "ps"]:
+            return _completed(
+                argv, 0, stdout="old1\tmill-sbx-old\nyoung1\tmill-sbx-young\n"
+            )
+        if argv[:2] == ["docker", "inspect"]:
+            return _completed(argv, 0, stdout=starts[argv[-1]] + "\n")
+        if argv[:3] == ["docker", "rm", "-f"]:
+            removed.append(argv[3])
+            return _completed(argv, 0)
+        raise AssertionError(f"unexpected argv {argv}")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    assert sandbox.reap_orphan_sandboxes(max_age_seconds=3600) == 1
+    assert removed == ["old1"]
+
+
+def test_reap_orphan_sandboxes_no_candidates(monkeypatch):
+    def fake_run(argv, **kw):
+        if argv[:2] == ["docker", "ps"]:
+            return _completed(argv, 0, stdout="")
+        raise AssertionError(f"unexpected argv {argv}")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    assert sandbox.reap_orphan_sandboxes() == 0
+
+
+def test_reap_orphan_sandboxes_best_effort_on_missing_docker(monkeypatch):
+    """A missing/erroring docker CLI must never raise — startup and the
+    poll loop both depend on this."""
+
+    def fake_run(argv, **kw):
+        raise FileNotFoundError("docker not found")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    assert sandbox.reap_orphan_sandboxes() == 0
+    assert sandbox.reap_orphan_sandboxes(max_age_seconds=10) == 0
+
+
+def test_parse_docker_started_at():
+    dt = sandbox._parse_docker_started_at("2026-06-18T20:34:45.483641388Z")
+    assert dt is not None and dt.year == 2026 and dt.tzinfo is not None
+    # zero value / blank / junk → None (treated as "leave it alone")
+    assert sandbox._parse_docker_started_at("0001-01-01T00:00:00Z") is None
+    assert sandbox._parse_docker_started_at("") is None
+    assert sandbox._parse_docker_started_at("not-a-date") is None

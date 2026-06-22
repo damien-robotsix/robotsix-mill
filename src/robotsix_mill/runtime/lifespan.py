@@ -177,6 +177,24 @@ def create_lifespan(
         app.state.run_registry = default_registry
         app.state.run_registries = run_registries
         tracing.install_signal_handlers()
+
+        # Reap any sandbox containers orphaned by a previous crash/restart
+        # before doing anything else. At startup no sandbox is running yet,
+        # so every mill-sbx-*/mill-fetch-* present is an orphan from before
+        # this process began — they would otherwise run forever (their
+        # timeout is parent-process enforced, and --rm only fires on exit).
+        # This is the guaranteed backstop complementing the periodic reaper.
+        try:
+            from ..sandbox import reap_orphan_sandboxes
+
+            reaped = await asyncio.to_thread(reap_orphan_sandboxes)
+            if reaped:
+                logging.getLogger(__name__).warning(
+                    "startup: reaped %d orphan sandbox container(s)", reaped
+                )
+        except Exception:
+            logging.getLogger(__name__).exception("startup sandbox reap failed")
+
         worker.start()
         worker.requeue_unfinished()  # resume anything left mid-pipeline
 
