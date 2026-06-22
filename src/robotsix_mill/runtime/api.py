@@ -8,6 +8,7 @@ picks it up immediately and chains it through the pipeline.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -38,16 +39,20 @@ def _patch_prometheus_instrumentator() -> None:
     """
     import prometheus_fastapi_instrumentator.routing as _pfi
 
-    def _get_route_name(scope, routes, route_name=None):
+    def _get_route_name(
+        scope: dict[str, Any],
+        routes: list[Any],
+        route_name: str | None = None,
+    ) -> str | None:
         for route in routes:
             match, child_scope = route.matches(scope)
-            if match == _pfi.Match.FULL:
+            if match == _pfi.Match.FULL:  # type: ignore[attr-defined]
                 child_scope = {**scope, **child_scope}
                 if hasattr(route, "routes") and not hasattr(route, "path"):
                     child_name = _get_route_name(child_scope, route.routes, route_name)
                     return child_name if child_name is not None else route_name
                 route_name = route.path
-                if isinstance(route, _pfi.Mount) and route.routes:
+                if isinstance(route, _pfi.Mount) and route.routes:  # type: ignore[attr-defined]
                     child_route_name = _get_route_name(
                         child_scope, route.routes, route_name
                     )
@@ -56,11 +61,11 @@ def _patch_prometheus_instrumentator() -> None:
                     else:
                         route_name += child_route_name
                 return route_name
-            elif match == _pfi.Match.PARTIAL and route_name is None:
+            elif match == _pfi.Match.PARTIAL and route_name is None:  # type: ignore[attr-defined]
                 route_name = getattr(route, "path", None)
         return None
 
-    _pfi._get_route_name = _get_route_name
+    _pfi._get_route_name = _get_route_name  # type: ignore[assignment]
 
 
 def create_app(
