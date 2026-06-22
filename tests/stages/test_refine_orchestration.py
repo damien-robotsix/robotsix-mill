@@ -2615,6 +2615,16 @@ def test_user_source_excluded_regardless_of_draft(ctx_factory, monkeypatch, tmp_
     t = _ticket(ctx, source="user")
     calls = _spy_refine(monkeypatch)
 
+    # _resolve_next_state will also call triage_auto_approve after the
+    # full refine agent runs — mock it to prevent a real LLM call.
+    monkeypatch.setattr(
+        refining,
+        "triage_auto_approve",
+        lambda **kw: refining.AutoApproveResult(
+            decision="APPROVE", reason="mechanical"
+        ),
+    )
+
     draft = (
         "## Problem\n\nThe widget does not retry on 503.\n\n"
         "## Scope\n\nAdd retry logic to loader.py.\n\n"
