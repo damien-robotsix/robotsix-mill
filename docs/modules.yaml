@@ -24,7 +24,6 @@ modules:
       - config/mill.defaults.yaml
       - config/mill.local.example.yaml
       - config/repos.example.yaml
-      - config/repos.yaml.bak2
       - config/secrets.example.yaml
       - .robotsix-mill/config.yaml
       - .robotsix-mill/periodic/*.yaml
@@ -704,7 +703,6 @@ modules:
       - .secrets.baseline
       - mypy-baseline.txt
       - mypy-baseline-test.txt
-      - mypy-baseline.txt.bak
       - vulture_whitelist.py
       - scripts/**/*
       - dev/**/*
