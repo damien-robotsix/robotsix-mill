@@ -490,7 +490,7 @@ class _StagesSettings(BaseModel):
     # state and the total exceeds this cap, the oldest terminal tickets
     # (by created_at) are purged — unless they are the parent of an
     # active (non-terminal) child.  Set to 0 to disable purging.
-    max_archived_tickets: int = Field(default=100, ge=0)
+    max_archived_tickets: int = Field(default=40, ge=0)
 
     # --- db maintenance (periodic archive purge + per-ticket event cap) ---
     # When True (default), the worker runs a periodic sweep that (a) purges
