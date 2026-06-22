@@ -104,6 +104,21 @@ def test_system_prompt_has_statistical_signal_gate():
     assert "REQUIRES_HUMAN_REVIEW" in prompt
 
 
+def test_system_prompt_has_error_mechanism_gate():
+    """The error-mechanism gate must instruct the inspector to trace failing
+    strings to the raising frame and downgrade unverifiable mechanisms.
+
+    Guards the reference ticket's false-positive class: the inspector must
+    not assert a failure mechanism by blame-the-nearest-call proximity
+    without locating the raiser. The test pins the section title, the
+    worked-example string, and the REQUIRES_HUMAN_REVIEW downgrade token.
+    """
+    prompt = _SYSTEM_PROMPT
+    assert "Verifying error-mechanism hypotheses" in prompt
+    assert "This event loop is already" in prompt
+    assert "REQUIRES_HUMAN_REVIEW" in prompt
+
+
 def _capture_inspector_prompt(monkeypatch, **kwargs) -> str:
     """Run run_trace_inspector with the agent seam stubbed and return the
     user prompt that would have been sent to the model."""
