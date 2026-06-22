@@ -301,6 +301,7 @@ _diagnostic_task
 _stale_branch_task
 _db_maintenance_task
 _sandbox_reaper_task
+_requeue_task
 queue_size
 queue_join
 _run_periodic_pass_per_repo
