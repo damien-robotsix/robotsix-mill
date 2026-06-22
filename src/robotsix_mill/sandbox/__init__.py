@@ -513,7 +513,15 @@ def _list_sandbox_containers() -> list[tuple[str, str]]:
         filters += ["--filter", f"name={prefix}"]
     try:
         listing = subprocess.run(
-            ["docker", "ps", "-a", "--no-trunc", "--format", "{{.ID}}\t{{.Names}}", *filters],
+            [
+                "docker",
+                "ps",
+                "-a",
+                "--no-trunc",
+                "--format",
+                "{{.ID}}\t{{.Names}}",
+                *filters,
+            ],
             capture_output=True,
             text=True,
             timeout=30,
