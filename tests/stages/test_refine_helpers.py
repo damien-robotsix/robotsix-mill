@@ -454,3 +454,88 @@ def test_auto_approve_sources_resolve_next_state_deterministic():
         assert note is not None and "APPROVE" in note, (
             f"source={source!r} note missing APPROVE: {note!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# _draft_has_complete_spec
+# ---------------------------------------------------------------------------
+
+
+def test_draft_has_complete_spec_true_problem_plus_scope():
+    draft = "## Problem\n\nThe widget does not retry on 503.\n\n## Scope\n\nAdd retry logic to loader.py.\n\n## Acceptance criteria\n\n- Retries up to 3 times.\n"
+    assert refine_module._draft_has_complete_spec(draft) is True
+
+
+def test_draft_has_complete_spec_true_problem_plus_acceptance_criteria():
+    draft = "## Problem\n\nThe widget does not retry on 503.\n\n## Acceptance criteria\n\n- Retries up to 3 times.\n"
+    assert refine_module._draft_has_complete_spec(draft) is True
+
+
+def test_draft_has_complete_spec_true_problem_plus_acceptance():
+    draft = "## Problem\n\nThe widget does not retry on 503.\n\n## Acceptance\n\n- Retries up to 3 times.\n"
+    assert refine_module._draft_has_complete_spec(draft) is True
+
+
+def test_draft_has_complete_spec_true_different_heading_levels():
+    draft = "# Problem\n\n## Some detail\n\n### Scope\n\nFix it.\n"
+    assert refine_module._draft_has_complete_spec(draft) is True
+
+
+def test_draft_has_complete_spec_true_leading_whitespace():
+    draft = "  ## Problem\n\n   ## Scope\n\nFix it.\n"
+    assert refine_module._draft_has_complete_spec(draft) is True
+
+
+def test_draft_has_complete_spec_false_only_problem():
+    draft = (
+        "## Problem\n\nThe widget does not retry on 503.\n\nWe should look into this."
+    )
+    assert refine_module._draft_has_complete_spec(draft) is False
+
+
+def test_draft_has_complete_spec_false_raw_error_dump():
+    draft = (
+        "============================= FAILURES =============================\n"
+        "FAILED tests/test_x.py::test_foo - AssertionError: expected 1 got 2\n"
+        "========================= short test summary ========================\n"
+        "FAILED tests/test_x.py::test_foo\n"
+    )
+    assert refine_module._draft_has_complete_spec(draft) is False
+
+
+def test_draft_has_complete_spec_false_empty():
+    assert refine_module._draft_has_complete_spec("") is False
+
+
+def test_draft_has_complete_spec_false_whitespace():
+    assert refine_module._draft_has_complete_spec("   \n\t  ") is False
+
+
+def test_draft_has_complete_spec_false_prose_not_headings():
+    draft = "The problem is that the scope is unclear and the acceptance criteria are not defined."
+    assert refine_module._draft_has_complete_spec(draft) is False
+
+
+def test_draft_has_complete_spec_false_heading_in_code_block():
+    draft = "Here is a code block:\n\n```\n## Problem\n## Scope\n```\n\nBut no real headings."
+    # Headings inside code blocks are NOT real headings in Markdown, but the
+    # heuristic is deliberately simple — line-anchored regex only.  These
+    # would match as headings.  Document the limitation: a CI ticket with
+    # headings inside a fenced code block would be admitted to the fast-path.
+    # This is acceptable: the bounded auto-approve classifier still runs as
+    # a safety gate, and the cost win from skipping the refine LLM
+    # outweighs the false-positive risk from this edge case.
+    assert refine_module._draft_has_complete_spec(draft) is True
+
+
+def test_draft_has_complete_spec_case_insensitive():
+    draft = "## problem\n\n## scope\n\nFix it.\n"
+    assert refine_module._draft_has_complete_spec(draft) is True
+
+
+def test_draft_has_complete_spec_importable_from_refine_module():
+    """_draft_has_complete_spec is re-exported from the refine package."""
+    from robotsix_mill.stages.refine import _draft_has_complete_spec  # noqa: F811
+
+    assert callable(_draft_has_complete_spec)
+    assert _draft_has_complete_spec("## Problem\n\n## Scope\n\nx") is True

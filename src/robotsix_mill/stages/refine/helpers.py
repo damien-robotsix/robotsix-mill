@@ -625,6 +625,37 @@ def _verify_branch_merged(repo_dir: Path | None, ticket: Ticket) -> bool:
     return True
 
 
+def _draft_has_complete_spec(text: str) -> bool:
+    """True when *text* is already a self-contained spec.
+
+    Heuristic: the draft contains a markdown ``## Problem`` heading AND
+    at least one of ``## Scope`` / ``## Acceptance criteria`` (case-
+    insensitive, matched only on markdown heading lines). This guards the
+    CI fast-path: a CI ticket whose draft is a raw error dump with no
+    scope section still routes to the full refine agent.
+    """
+    if not text or not text.strip():
+        return False
+
+    # Match headings only at the start of a line (allow leading whitespace)
+    # with 1-6 `#` characters.
+    def _has_heading(title: str) -> bool:
+        return bool(
+            re.search(
+                r"^\s*#{1,6}\s+" + re.escape(title) + r"\b",
+                text,
+                re.IGNORECASE | re.MULTILINE,
+            )
+        )
+
+    if not _has_heading("Problem"):
+        return False
+    for h in ("Scope", "Acceptance criteria", "Acceptance"):
+        if _has_heading(h):
+            return True
+    return False
+
+
 # Sources whose tickets are deterministically auto-approved because they
 # are proposed by mill's own periodic agents (audit, agent_check, bc_check,
 # …) whose scope is dead-code removal, prompt updates, memory ledger
