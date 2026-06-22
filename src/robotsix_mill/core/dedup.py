@@ -101,6 +101,7 @@ def find_prior_matching_ticket(
     target_concern_tokens: set[str] | None = None,
     concern_min_overlap: int = 1,
     dedup_labels: list[str] | None = None,
+    suppress_title_only_match: bool = False,
 ) -> Ticket | None:
     """Look up recent tickets on *board_id* and return the first one
     that matches the given fix signal.
@@ -142,6 +143,13 @@ def find_prior_matching_ticket(
     *concern_min_overlap* is 1 (the default), the legacy conservative
     rule applies: a path match is suppressed only when both sides have
     concern tokens AND none overlap.
+
+    When *suppress_title_only_match* is ``True``, the final title-fingerprint
+    fallback is skipped: a candidate is never returned solely because its
+    normalized title contains the fingerprint.  Matches driven by
+    *dedup_labels*, shared file paths (with concern-token gating), or a
+    corroborated scope section still proceed.  Defaults to ``False`` so
+    every existing caller's behaviour is preserved byte-for-byte.
 
     Returns ``None`` when no match is found.
     """
@@ -243,7 +251,11 @@ def find_prior_matching_ticket(
                             return ticket
 
             # Fingerprint check (normalized title).
-            if fingerprint and fingerprint in normalize(ticket.title):
+            if (
+                not suppress_title_only_match
+                and fingerprint
+                and fingerprint in normalize(ticket.title)
+            ):
                 return ticket
         return None
     except Exception:  # noqa: BLE001 — best-effort dedup
@@ -496,6 +508,7 @@ def find_inflight_overlap(
             target_concern_tokens=concern_tokens,
             concern_min_overlap=3,
             dedup_labels=dedup_labels,
+            suppress_title_only_match=True,
         )
         if prior is None:
             return None
