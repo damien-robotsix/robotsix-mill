@@ -13,11 +13,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from ...config import Settings
 from ...core.models import Ticket
 from ...core.states import State
-
-# Terminal states excluded from default board listings — matches the
-# set in ``_tickets._LIST_TERMINAL_STATES`` (CLOSED, EPIC_CLOSED,
-# ANSWERED). States with empty transition sets in the state machine.
-_BOARD_LIST_TERMINAL: set[State] = {State.CLOSED, State.EPIC_CLOSED, State.ANSWERED}
 from ..board_adapter import MillBoardAdapter
 from ..deps import (
     enrich_ticket_read,
@@ -26,6 +21,11 @@ from ..deps import (
     get_worker,
     maybe_enqueue,
 )
+
+# Terminal states excluded from default board listings — matches the
+# set in ``_tickets._LIST_TERMINAL_STATES`` (CLOSED, EPIC_CLOSED,
+# ANSWERED). States with empty transition sets in the state machine.
+_BOARD_LIST_TERMINAL: set[State] = {State.CLOSED, State.EPIC_CLOSED, State.ANSWERED}
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["Board"])

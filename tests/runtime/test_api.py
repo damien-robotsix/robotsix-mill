@@ -1303,10 +1303,7 @@ def test_list_tickets_explicit_closed_state_overrides_default_exclusion(
     draft = service.create("Explicit-draft")
 
     # state=closed with no include_closed → must return the closed ticket.
-    ids = {
-        t["id"]
-        for t in client.get(f"/tickets?state=closed").json()
-    }
+    ids = {t["id"] for t in client.get("/tickets?state=closed").json()}
     assert closed.id in ids, "explicit state=closed must override default exclusion"
     assert draft.id not in ids
 

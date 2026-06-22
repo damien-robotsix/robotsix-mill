@@ -36,11 +36,6 @@ from ...stages.merge import _verify_merge_ancestor
 from ...core.models import Ticket
 from ...core.service import TicketService
 from ...core.states import STAGE_FOR_STATE, State
-
-# Terminal states that are excluded from default listings (CLOSED,
-# EPIC_CLOSED, ANSWERED).  These states have empty transition sets
-# in the state machine and represent completed/archived work.
-_LIST_TERMINAL_STATES: set[State] = {State.CLOSED, State.EPIC_CLOSED, State.ANSWERED}
 from ...forge import get_forge
 from ..worker import Worker
 from ..deps import (
@@ -51,6 +46,11 @@ from ..deps import (
     maybe_enqueue,
 )
 from ._repo_helpers import _resolve_board_id
+
+# Terminal states that are excluded from default listings (CLOSED,
+# EPIC_CLOSED, ANSWERED).  These states have empty transition sets
+# in the state machine and represent completed/archived work.
+_LIST_TERMINAL_STATES: set[State] = {State.CLOSED, State.EPIC_CLOSED, State.ANSWERED}
 
 log = logging.getLogger(__name__)
 
