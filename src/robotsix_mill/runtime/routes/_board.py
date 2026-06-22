@@ -22,6 +22,11 @@ from ..deps import (
     maybe_enqueue,
 )
 
+# Terminal states excluded from default board listings — matches the
+# set in ``_tickets._LIST_TERMINAL_STATES`` (CLOSED, EPIC_CLOSED,
+# ANSWERED). States with empty transition sets in the state machine.
+_BOARD_LIST_TERMINAL: set[State] = {State.CLOSED, State.EPIC_CLOSED, State.ANSWERED}
+
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["Board"])
 
@@ -66,12 +71,17 @@ def board_cards(
     request: Request,
     svc=Depends(get_service),
     settings=Depends(get_settings),
+    include_closed: bool = False,
 ) -> list[dict]:
     """Return all tickets as card objects for the board JS hydration.
 
     Mirrors ``GET /tickets`` but returns the flat card shape expected
     by robotsix-board's ``board.js`` instead of the full ``TicketRead``
     model.
+
+    ``include_closed`` **defaults to False** — terminal states
+    (CLOSED, EPIC_CLOSED, ANSWERED) are excluded.  Pass
+    ``include_closed=true`` to retrieve them.
 
     Closed and epic-closed cards are sorted by ``updated_at``
     descending (most recent first); all other cards remain sorted by
@@ -92,11 +102,13 @@ def board_cards(
         ]
         services.append(_TicketService(settings, board_id="meta"))
 
+    exclude = set(_BOARD_LIST_TERMINAL) if not include_closed else None
+
     # Collect all (ticket, settings, svc) tuples first, then sort.
     collected: list[tuple[Ticket, Settings, _TicketService]] = []
     for s in services:
         try:
-            tickets = s.list()
+            tickets = s.list(exclude_states=exclude)
         except Exception:
             log.warning("Failed to list tickets from board service", exc_info=True)
             continue
