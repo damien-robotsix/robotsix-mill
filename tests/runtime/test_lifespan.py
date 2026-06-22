@@ -5,7 +5,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 from fastapi import FastAPI
 
-from robotsix_mill.runtime.lifespan import create_lifespan, setup_logging
+from robotsix_mill.runtime.lifespan import (
+    _export_openrouter_key_to_env,
+    create_lifespan,
+    setup_logging,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -86,6 +90,55 @@ class TestSetupLogging:
         assert fmt_after_first == fmt_after_second, (
             "Formatter should not change on second call"
         )
+
+
+# ---------------------------------------------------------------------------
+# _export_openrouter_key_to_env
+# ---------------------------------------------------------------------------
+
+
+class TestExportOpenRouterKey:
+    def test_exports_key_when_env_unset(self, monkeypatch):
+        """When OPENROUTER_API_KEY is unset, it is populated from secrets."""
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+        monkeypatch.setattr(
+            "robotsix_mill.config.secrets.get_secrets",
+            lambda: MagicMock(openrouter_api_key="sk-secret"),
+        )
+
+        _export_openrouter_key_to_env()
+
+        import os
+
+        assert os.environ["OPENROUTER_API_KEY"] == "sk-secret"
+
+    def test_does_not_override_existing_env(self, monkeypatch):
+        """An externally-provided env var always wins (setdefault)."""
+        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-external")
+        monkeypatch.setattr(
+            "robotsix_mill.config.secrets.get_secrets",
+            lambda: MagicMock(openrouter_api_key="sk-secret"),
+        )
+
+        _export_openrouter_key_to_env()
+
+        import os
+
+        assert os.environ["OPENROUTER_API_KEY"] == "sk-external"
+
+    def test_no_op_when_secret_missing(self, monkeypatch):
+        """No key configured leaves the env untouched (no empty export)."""
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+        monkeypatch.setattr(
+            "robotsix_mill.config.secrets.get_secrets",
+            lambda: MagicMock(openrouter_api_key=None),
+        )
+
+        _export_openrouter_key_to_env()
+
+        import os
+
+        assert "OPENROUTER_API_KEY" not in os.environ
 
 
 # ---------------------------------------------------------------------------
