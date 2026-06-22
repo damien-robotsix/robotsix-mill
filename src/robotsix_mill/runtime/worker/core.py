@@ -158,6 +158,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         self._db_maintenance_task: asyncio.Task | None = None
         self._sandbox_reaper_task: asyncio.Task[None] | None = None
         self._credit_balance_task: asyncio.Task[None] | None = None
+        self._requeue_task: asyncio.Task[None] | None = None
         # board_id -> per-repo bespoke supervisor task. The supervisor
         # itself owns each repo's per-bespoke child tasks; cancelling
         # the supervisor cancels its children.
@@ -785,6 +786,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             "_db_maintenance_task",
             "_sandbox_reaper_task",
             "_credit_balance_task",
+            "_requeue_task",
         ):
             t = getattr(self, attr)
             if t is not None:
@@ -809,9 +811,17 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         """On startup, re-enqueue any ticket left mid-pipeline so a
         restart resumes work (idempotent: stages are re-entrant).
 
-        With per-repo DBs, fan out across every registered repo
-        so nothing is missed.
+        Spawns a background drip-feed task that enqueues matching
+        tickets in batches (with a pause between batches) to avoid
+        saturating the freshly-booted event loop.  Returns immediately
+        so lifespan startup is not blocked.
         """
+        self._requeue_task = asyncio.create_task(self._requeue_unfinished_drip())
+
+    async def _requeue_unfinished_drip(self) -> None:
+        """Background coroutine: enumerate all boards, collect
+        unfinished ticket ids, then enqueue them in rate-limited
+        batches."""
         from ...config import get_repos_config
         from ...core.service import TicketService
 
@@ -822,14 +832,30 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                     boards.append(rc.board_id)
         except Exception:
             pass
+
+        # Collect all matching ticket ids first (the enumeration is
+        # blocking svc.list() — see epic children 1-2 for moving this
+        # off the event loop).
+        to_enqueue: list[str] = []
         for board_id in boards:
             svc = TicketService(self.ctx.settings, board_id=board_id)
             try:
                 for ticket in svc.list():
                     if ticket.state in STAGE_FOR_STATE:
-                        self.enqueue(ticket.id)
+                        to_enqueue.append(ticket.id)
             except Exception:
                 log.exception(
                     "requeue_unfinished: failed to enumerate board %r",
                     board_id or "<default>",
                 )
+
+        # Drip-feed enqueues in batches with a pause between each batch.
+        batch_size = max(1, self.ctx.settings.requeue_batch_size)
+        pause = self.ctx.settings.requeue_batch_pause_seconds
+        for i in range(0, len(to_enqueue), batch_size):
+            batch = to_enqueue[i : i + batch_size]
+            for tid in batch:
+                self.enqueue(tid)
+            # Pause between batches (skip after the last batch).
+            if i + batch_size < len(to_enqueue):
+                await asyncio.sleep(pause)
