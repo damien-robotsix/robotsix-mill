@@ -21,6 +21,7 @@ tools:
   - git_push_with_lease
   - git_branch_ancestry
   - wait_for_ci
+  - fetch_ci_logs
 
 report_issue: true
 output_type: CiFixResult

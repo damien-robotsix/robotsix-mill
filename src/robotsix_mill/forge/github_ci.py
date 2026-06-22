@@ -270,19 +270,22 @@ class GitHubForgeCIMixin:
             head_sha=head_sha,
         )
 
-    def fetch_workflow_job_logs(self, *, run_id: int) -> str:
+    def fetch_workflow_job_logs(self, *, run_id: int, full_log: bool = False) -> str:
         """Return the logs of the failed jobs in workflow run *run_id*.
 
         :param run_id: GitHub Actions workflow-run id whose jobs to fetch.
-        Concatenates (ANSI-stripped, failure-window-capped) logs for up to
-        the first few failed-like jobs of the run into a single string;
-        returns ``""`` when the run has no failed jobs.
+        :param full_log: when ``False`` (default), size-caps and windows
+            the log around the first failure marker; ``True`` returns the
+            complete job logs (still ANSI-stripped and runner-noise-stripped).
+        Concatenates logs for up to the first few failed-like jobs of the run
+        into a single string; returns ``""`` when the run has no failed jobs.
         """
         owner, repo = self._owner_repo  # type: ignore[attr-defined]
         return self._fetch_workflow_job_logs(
             owner=owner,
             repo=repo,
             run_id=run_id,
+            full_log=full_log,
         )
 
     # --- HTTP seams (monkeypatched in tests) ---
@@ -397,6 +400,7 @@ class GitHubForgeCIMixin:
         owner: str,
         repo: str,
         run_id: int,
+        full_log: bool = False,
     ) -> str:
         import time
 
@@ -490,12 +494,13 @@ class GitHubForgeCIMixin:
                 # blind tail-cap) so an ``if: always()`` cascade — where a
                 # downstream always-step re-errors with misleading input —
                 # can't mask the step that actually failed first.
-                clean = _capture_failure_window(
-                    clean,
-                    log_max,
-                    failure_re=_LOG_FAILURE_RE,
-                    tail_context=_LOG_FAILURE_TAIL_CONTEXT,
-                )
+                if not full_log:
+                    clean = _capture_failure_window(
+                        clean,
+                        log_max,
+                        failure_re=_LOG_FAILURE_RE,
+                        tail_context=_LOG_FAILURE_TAIL_CONTEXT,
+                    )
 
                 parts.append(f"### Job: {job_name} (id={job_id})\n")
                 parts.append(clean)

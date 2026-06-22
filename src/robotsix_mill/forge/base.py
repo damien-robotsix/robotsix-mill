@@ -188,12 +188,14 @@ class Forge(ABC):
         """
 
     @abstractmethod
-    def fetch_workflow_job_logs(self, *, run_id: int) -> str:
+    def fetch_workflow_job_logs(self, *, run_id: int, full_log: bool = False) -> str:
         """Fetch the logs of all failed jobs in a workflow run.
 
-        Returns concatenated, ANSI-stripped, size-capped log text with
-        job-name headers.  Returns an empty string when no failed jobs
-        are found.
+        Returns concatenated, ANSI-stripped log text with job-name
+        headers.  When *full_log* is ``False`` (default), the log is
+        size-capped and windowed around the first failure marker;
+        ``True`` returns the complete job logs (still ANSI-stripped).
+        Returns an empty string when no failed jobs are found.
         """
 
     @abstractmethod
