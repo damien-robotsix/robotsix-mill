@@ -708,6 +708,7 @@ modules:
       - dev/**/*
       - tests/__init__.py
       - tests/conftest.py
+      - tests/test_doctests.py
       - tests/script_loader.py
       - tests/dev-tooling/test_docs_nav.py
       - tests/dev-tooling/test_modules_yaml_paths.py

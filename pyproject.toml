@@ -96,7 +96,7 @@ allow-direct-references = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = ["--strict-markers", "--strict-config"]
+addopts = ["--strict-markers", "--strict-config", "--doctest-modules"]
 xfail_strict = true
 markers = [
     "docker: tests that require a running Docker daemon and network access",
