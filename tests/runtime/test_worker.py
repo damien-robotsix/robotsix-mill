@@ -2302,3 +2302,89 @@ async def test_cap_excludes_human_mr_approval_from_count(ctx, service, monkeypat
     assert ready_ticket.id in invoked, (
         "READY ticket should be dispatched — HUMAN_MR_APPROVAL does not count"
     )
+
+
+# --- stage timeout enforcement ------------------------------------------
+
+
+async def test_refine_stage_timeout_blocks_ticket(ctx, service, monkeypatch):
+    """When the refine stage's ``run`` exceeds the per-stage timeout,
+    the worker escalates the ticket to BLOCKED via ``asyncio.TimeoutError``.
+
+    Uses a tiny override (0.05 s) so the test runs fast and a stage
+    ``run`` that sleeps for 0.5 s — well above the timeout."""
+    import time
+
+    ctx.settings.stage_timeout_overrides = {"refine": 1}  # 1 second timeout
+
+    class SlowRefine(Stage):
+        name = "refine"
+        input_state = State.DRAFT
+
+        def run(self, _t, _c):
+            time.sleep(5)  # far exceeds the 1 s override
+            return Outcome(State.READY, "should never reach here")
+
+    monkeypatch.setitem(registry.STAGES, "refine", SlowRefine())
+    t = service.create("timeout")
+    await process_ticket(t.id, ctx)
+    reloaded = service.get(t.id)
+    assert reloaded.state is State.BLOCKED
+    note = service.history(t.id)[-1].note
+    assert "timed out" in note
+    assert "refine" in note
+
+
+async def test_stage_timeout_disabled_when_override_is_zero(ctx, service, monkeypatch):
+    """A per-stage override of 0 disables the timeout for that stage.
+
+    The stage runs to completion even though it sleeps (the sleep is
+    short so the test is fast — the point is it doesn't get timed out)."""
+    import time
+
+    ctx.settings.stage_timeout_overrides = {"refine": 0}  # disabled
+
+    completed = []
+
+    class ShortRefine(Stage):
+        name = "refine"
+        input_state = State.DRAFT
+
+        def run(self, _t, _c):
+            time.sleep(0.01)
+            completed.append(True)
+            return Outcome(State.HUMAN_ISSUE_APPROVAL, "done")
+
+    monkeypatch.setitem(registry.STAGES, "refine", ShortRefine())
+    t = service.create("no-timeout")
+    await process_ticket(t.id, ctx)
+    assert completed, "stage.run must have completed — timeout is disabled"
+    # HUMAN_ISSUE_APPROVAL is a terminal state for the chain —
+    # no further stages run after it (the real implement stage
+    # would fail if it fired).
+    assert service.get(t.id).state is State.HUMAN_ISSUE_APPROVAL
+
+
+async def test_stage_timeout_respects_override_not_global(ctx, service, monkeypatch):
+    """When ``stage_timeout_overrides`` has a "refine" entry, the worker
+    uses that value, NOT the global ``stage_timeout_seconds``."""
+    import time
+
+    # global is huge (2400 s) — only override value matters
+    ctx.settings.stage_timeout_seconds = 2400
+    ctx.settings.stage_timeout_overrides = {"refine": 1}  # 1 second
+
+    class SlowRefine(Stage):
+        name = "refine"
+        input_state = State.DRAFT
+
+        def run(self, _t, _c):
+            time.sleep(5)  # far exceeds 1 s override, but well under 2400
+            return Outcome(State.READY, "should never reach here")
+
+    monkeypatch.setitem(registry.STAGES, "refine", SlowRefine())
+    t = service.create("override")
+    await process_ticket(t.id, ctx)
+    assert service.get(t.id).state is State.BLOCKED
+    note = service.history(t.id)[-1].note
+    assert "timed out" in note
