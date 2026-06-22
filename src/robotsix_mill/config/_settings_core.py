@@ -61,6 +61,13 @@ class _CoreSettings(BaseModel):
     # mirrors the existing parallel_explore concurrency limit and bounds
     # per-run sub-agent cost. Set to 0 to disable exploration entirely.
     max_refine_explore_calls: int = Field(default=4, ge=0)
+    # Hard cap on read_file calls per refine/triage agent run. Calls
+    # beyond this cap are rejected with a clear message. Default 10
+    # matches the documented prompt budget instruction. Set to 0 to
+    # disable the cap entirely (unbounded reads).  None-typed callers
+    # that don't pass read_file_max_calls are unaffected — this cap
+    # is opt-in per build_fs_tools invocation.
+    max_refine_read_file_calls: int = Field(default=10, ge=0)
     # How long a cached web_knowledge .md file is considered fresh
     # (days). A consultation that hits a stale file is allowed to
     # web_search and update the file.

@@ -271,6 +271,7 @@ def build_fs_tools(
     pre_seeded: dict[Path, str] | None = None,
     extra_roots: list[Path] | None = None,
     sandbox_image: str | None = None,
+    read_file_max_calls: int | None = None,
 ) -> list:
     """Build the filesystem + shell tool closures sandboxed to *root*.
 
@@ -296,6 +297,10 @@ def build_fs_tools(
         sandbox_image: Optional per-repo sandbox image override forwarded
             to ``sandbox.run`` for the ``run_command`` tool. ``None`` →
             falls back to ``settings.sandbox_image``.
+        read_file_max_calls: Optional per-run hard cap on ``read_file``
+            calls. When set, the 1+read_file_max_calls th call returns an
+            error string instead of reading the file. Default ``None``
+            (unbounded). The counter is per ``build_fs_tools`` invocation.
 
     Returns:
         A list of the six tool closures, in the order ``read_file``,
@@ -310,6 +315,27 @@ def build_fs_tools(
 
     if pre_seeded:
         _file_cache.update(pre_seeded)
+
+    # Per-invocation counter for read_file hard-cap enforcement.
+    # When read_file_max_calls is set, each read_file call increments
+    # this counter; calls beyond the cap return an error string.
+    _read_file_call_count: list[int] = [0]
+
+    def _check_read_file_cap() -> str | None:
+        """Return an error string if the read_file cap is exceeded,
+        or None if the call should proceed."""
+        if (
+            read_file_max_calls is not None
+            and _read_file_call_count[0] >= read_file_max_calls
+        ):
+            return (
+                f"error: read_file hard cap of {read_file_max_calls} calls "
+                f"reached for this agent run — no further files may be read. "
+                f"Delegate remaining lookups to the explore tool, or "
+                f"synthesise your spec from the content already in context."
+            )
+        _read_file_call_count[0] += 1
+        return None
 
     def _read_cached(p: Path) -> str:
         """Read *p* and cache the result.  *p* is already sandbox-safe
@@ -520,6 +546,10 @@ def build_fs_tools(
         error string.  Scanned PDFs with no text layer return an
         empty string.
         """
+        cap_error = _check_read_file_cap()
+        if cap_error is not None:
+            return cap_error
+
         try:
             p = _safe(root, path, extra_roots=extra_roots)
         except (ValueError, OSError) as e:

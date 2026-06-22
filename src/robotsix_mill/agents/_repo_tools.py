@@ -21,6 +21,7 @@ def _build_repo_tools(
     extra_roots: list[Path] | None = None,
     include_parallel_explore: bool = False,
     include_explore: bool = True,
+    read_file_max_calls: int | None = None,
 ) -> list[Any]:
     """Return repo-scoped tools when *repo_dir* is set, else [].
 
@@ -42,7 +43,12 @@ def _build_repo_tools(
 
     ro = [
         t
-        for t in build_fs_tools(repo_dir, settings, extra_roots=extra_roots)
+        for t in build_fs_tools(
+            repo_dir,
+            settings,
+            extra_roots=extra_roots,
+            read_file_max_calls=read_file_max_calls,
+        )
         if t.__name__ in tool_names
     ]
     explore_kwargs: dict[str, Any] = {"extra_roots": extra_roots} if extra_roots else {}

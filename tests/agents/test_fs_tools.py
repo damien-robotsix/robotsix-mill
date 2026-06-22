@@ -2157,6 +2157,119 @@ class TestReadFileSizeGuard:
         assert "truncated" not in result
 
 
+# ===================================================================
+# read_file — per-run hard cap
+# ===================================================================
+
+
+class TestReadFileCap:
+    """``build_fs_tools(read_file_max_calls=N)`` enforces a per-run
+    hard cap on ``read_file`` calls."""
+
+    def test_cap_hits_after_n_calls(self, tmp_path, settings):
+        """5 valid reads succeed; the 6th returns the hard-stop error string."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        for i in range(10):
+            _make_file(root, f"f{i}.txt", f"content {i}\n")
+        tools = build_fs_tools(root, settings, read_file_max_calls=5)
+        rf = next(t for t in tools if t.__name__ == "read_file")
+
+        # First 5 calls succeed.
+        for i in range(5):
+            result = rf(path=f"f{i}.txt")
+            assert result == f"content {i}\n", f"call {i} failed: {result!r}"
+
+        # 6th call hits the cap.
+        capped = rf(path="f5.txt")
+        assert isinstance(capped, str)
+        assert "hard cap" in capped
+        assert "5 calls" in capped
+        assert "explore" in capped.lower()
+        # Must NOT read the file — content shouldn't appear.
+        assert "content 5" not in capped
+
+    def test_cap_none_is_unbounded(self, tmp_path, settings):
+        """With ``read_file_max_calls=None`` (the default), 6+ calls
+        succeed without hitting any cap."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        for i in range(10):
+            _make_file(root, f"f{i}.txt", f"content {i}\n")
+        tools = build_fs_tools(root, settings, read_file_max_calls=None)
+        rf = next(t for t in tools if t.__name__ == "read_file")
+
+        for i in range(8):
+            result = rf(path=f"f{i}.txt")
+            assert result == f"content {i}\n"
+
+    def test_counter_is_per_invocation(self, tmp_path, settings):
+        """A fresh ``build_fs_tools(...)`` call resets the counter to 0."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "a.txt", "A\n")
+        _make_file(root, "b.txt", "B\n")
+
+        # First invocation: cap at 1.
+        tools1 = build_fs_tools(root, settings, read_file_max_calls=1)
+        rf1 = next(t for t in tools1 if t.__name__ == "read_file")
+        assert rf1(path="a.txt") == "A\n"
+        capped = rf1(path="b.txt")
+        assert "hard cap" in capped
+
+        # Second invocation: fresh counter — should succeed again.
+        tools2 = build_fs_tools(root, settings, read_file_max_calls=1)
+        rf2 = next(t for t in tools2 if t.__name__ == "read_file")
+        assert rf2(path="a.txt") == "A\n"
+
+    def test_cap_never_raises(self, tmp_path, settings):
+        """Cap-hit returns a string — never raises an exception."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "hello\n")
+        tools = build_fs_tools(root, settings, read_file_max_calls=1)
+        rf = next(t for t in tools if t.__name__ == "read_file")
+
+        # First call succeeds.
+        assert rf(path="f.txt") == "hello\n"
+
+        # Second call hits cap — must be a string, not raise.
+        result = rf(path="f.txt")
+        assert isinstance(result, str)
+        assert "hard cap" in result
+
+    def test_cap_still_returns_string_on_error_paths(self, tmp_path, settings):
+        """Even on error paths (nonexistent file), the cap is checked
+        first and an error string is returned — never raises."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = build_fs_tools(root, settings, read_file_max_calls=1)
+        rf = next(t for t in tools if t.__name__ == "read_file")
+
+        # First call: nonexistent file — returns error string (counts against cap).
+        result1 = rf(path="nope.txt")
+        assert isinstance(result1, str)
+        assert "does not exist" in result1
+
+        # Second call: cap hit — must still be a string.
+        result2 = rf(path="nope.txt")
+        assert isinstance(result2, str)
+        assert "hard cap" in result2
+
+    def test_cap_zero_blocks_all_reads(self, tmp_path, settings):
+        """``read_file_max_calls=0`` blocks every read_file call."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "hello\n")
+        tools = build_fs_tools(root, settings, read_file_max_calls=0)
+        rf = next(t for t in tools if t.__name__ == "read_file")
+
+        result = rf(path="f.txt")
+        assert isinstance(result, str)
+        assert "hard cap" in result
+        assert "0 calls" in result
+
+
 # --- trace_stage child-span test for run_command ------------------------
 
 

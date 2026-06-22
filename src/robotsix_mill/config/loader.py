@@ -225,6 +225,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.limits.explore_max_tokens": "explore_max_tokens",
     "core.limits.parallel_explore_max": "parallel_explore_max",
     "core.limits.max_refine_explore_calls": "max_refine_explore_calls",
+    "core.limits.max_refine_read_file_calls": "max_refine_read_file_calls",
     "core.limits.refine_requests": "refine_request_limit",
     "core.limits.coordinator_max_tool_calls": "coordinator_max_tool_calls",
     "core.limits.refine_max_tool_calls": "refine_max_tool_calls",
