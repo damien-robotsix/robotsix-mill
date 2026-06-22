@@ -496,6 +496,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.module_curator.enabled": "module_curator_periodic",
     "periodic.module_curator.interval_seconds": "module_curator_interval_seconds",
     "periodic.module_curator.memory_path": "module_curator_memory_path",
+    "periodic.module_curator.request_limit": "module_curator_request_limit",
     # -- service --
     "service.data_dir": "data_dir",
     "service.default_repo_id": "default_repo_id",
