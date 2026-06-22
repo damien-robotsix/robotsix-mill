@@ -24,14 +24,20 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from ..config import Settings
 from ..config.repo_settings import load_extra_sandbox_packages
 
 _OUT_CAP = 8000
+
+# Name prefixes of the disposable sibling containers this module spawns:
+# ``run()`` uses ``mill-sbx-*`` and ``fetch()`` uses ``mill-fetch-*``.
+_SANDBOX_CONTAINER_PREFIXES = ("mill-sbx-", "mill-fetch-")
 
 log = logging.getLogger("robotsix_mill.sandbox")
 
@@ -464,3 +470,123 @@ def fetch(url: str, *, settings: Settings) -> tuple[int, str]:
     if r.returncode != 0:
         body = f"(curl exit {r.returncode}) {stderr.strip()[:300]}\n{body}"
     return r.returncode, body
+
+
+def _parse_docker_started_at(value: str) -> datetime | None:
+    """Parse Docker's ``State.StartedAt`` into an aware ``datetime``.
+
+    Docker emits RFC3339 with up to 9 fractional digits and a ``Z`` suffix
+    (e.g. ``2026-06-18T20:34:45.483641388Z``).  Returns ``None`` for the
+    zero value (a container that never started) or anything unparseable —
+    callers treat ``None`` as "leave it alone".
+    """
+    value = value.strip()
+    if not value or value.startswith("0001-01-01"):
+        return None
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    # ``datetime.fromisoformat`` accepts at most 6 fractional digits;
+    # Docker emits 9, so truncate the fractional part to microseconds.
+    value = re.sub(r"(\.\d{6})\d+", r"\1", value)
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _list_sandbox_containers() -> list[tuple[str, str]]:
+    """Return ``(id, name)`` for each running ``mill-sbx-*``/``mill-fetch-*``
+    container. Best-effort: an empty list on any Docker CLI failure."""
+    filters: list[str] = []
+    for prefix in _SANDBOX_CONTAINER_PREFIXES:
+        filters += ["--filter", f"name={prefix}"]
+    try:
+        listing = subprocess.run(
+            ["docker", "ps", "--no-trunc", "--format", "{{.ID}}\t{{.Names}}", *filters],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except OSError, subprocess.SubprocessError:
+        return []
+    if listing.returncode != 0:
+        return []
+    out: list[tuple[str, str]] = []
+    for line in listing.stdout.splitlines():
+        cid, _, name = line.partition("\t")
+        cid = cid.strip()
+        if cid:
+            out.append((cid, name.strip() or cid))
+    return out
+
+
+def _container_age_exceeds(cid: str, max_age_seconds: int) -> bool:
+    """True when container ``cid``'s uptime exceeds ``max_age_seconds``.
+
+    Returns ``False`` on any inspect/parse failure so an unreadable
+    container is left alone — the startup reaper (which ignores age) is
+    the guaranteed backstop for those.
+    """
+    try:
+        ins = subprocess.run(
+            ["docker", "inspect", "--format", "{{.State.StartedAt}}", cid],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except OSError, subprocess.SubprocessError:
+        return False
+    if ins.returncode != 0:
+        return False
+    started = _parse_docker_started_at(ins.stdout)
+    if started is None:
+        return False
+    return (datetime.now(timezone.utc) - started).total_seconds() > max_age_seconds
+
+
+def reap_orphan_sandboxes(*, max_age_seconds: int | None = None) -> int:
+    """Force-remove leaked sandbox containers; return the count removed.
+
+    Sandbox containers (``mill-sbx-*`` from :func:`run`, ``mill-fetch-*``
+    from :func:`fetch`) are disposable: they are created with ``--rm`` and
+    their only deadline is the *parent* ``subprocess.run(timeout=...)``.
+    If the mill process dies or is restarted while a sandbox is mid-run,
+    the ``except TimeoutExpired`` cleanup never executes and ``--rm`` never
+    fires (it triggers on container *exit*, which a runaway command never
+    reaches) — leaving the container running forever, potentially pegging a
+    CPU core (observed: a 3.5-day runaway that saturated the API).
+
+    ``max_age_seconds=None`` removes **all** matching containers — correct
+    at process startup, where any present are by definition orphans from
+    before this process began (nothing has launched a sandbox yet).  A
+    positive value removes only containers whose uptime exceeds it — used
+    by the periodic reaper, where a legitimate sandbox never outlives
+    ``command_timeout``.
+
+    Best-effort: never raises.  A missing/slow/erroring Docker CLI must not
+    crash lifespan startup or the worker poll loop, so failures are
+    swallowed and reported as ``0`` reaped.
+    """
+    candidates = _list_sandbox_containers()
+    if max_age_seconds is not None:
+        candidates = [
+            (cid, name)
+            for cid, name in candidates
+            if _container_age_exceeds(cid, max_age_seconds)
+        ]
+
+    reaped = 0
+    for cid, name in candidates:
+        try:
+            rm = subprocess.run(
+                ["docker", "rm", "-f", cid],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except OSError, subprocess.SubprocessError:
+            continue
+        if rm.returncode == 0:
+            reaped += 1
+            log.warning("reaped orphan sandbox container %s", name)
+    return reaped

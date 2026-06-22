@@ -514,6 +514,42 @@ class PeriodicPassesMixin(_WorkerBase):
                     )
             await asyncio.sleep(interval)
 
+    async def _sandbox_reaper_loop(self) -> None:
+        """Periodic orphan-sandbox reaper. Only runs when
+        ``MILL_SANDBOX_REAPER_PERIODIC=true`` (default on).
+
+        Force-removes leaked ``mill-sbx-*``/``mill-fetch-*`` containers
+        whose uptime exceeds twice ``command_timeout`` — provably orphaned,
+        since a live sandbox is bounded by ``command_timeout``. This catches
+        containers orphaned by a mill crash/restart mid-run *without* having
+        to wait for the next restart (the startup reaper handles those). See
+        :func:`robotsix_mill.sandbox.reap_orphan_sandboxes`.
+        """
+        from ...sandbox import reap_orphan_sandboxes
+
+        settings = self.ctx.settings
+        interval = max(300, settings.sandbox_reaper_interval_seconds)
+        threshold = max(settings.command_timeout * 2, 3600)
+        initial = self._initial_delay("sandbox-reaper", interval)
+        await asyncio.sleep(initial)
+        while True:
+            try:
+                reaped = await asyncio.to_thread(
+                    reap_orphan_sandboxes, max_age_seconds=threshold
+                )
+                if reaped:
+                    log.warning(
+                        "sandbox-reaper: force-removed %d orphan container(s) "
+                        "older than %ds",
+                        reaped,
+                        threshold,
+                    )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("sandbox-reaper poll failed")
+            await asyncio.sleep(interval)
+
     async def _trace_health_poll_loop(self) -> None:
         """Periodic trace-health check loop. Only runs when
         ``MILL_TRACE_HEALTH_PERIODIC=true``.

@@ -279,6 +279,11 @@ periodic:
     max_age_days: 30                # branch must be older than this to be eligible
     prefix_only: true               # when true, only delete branches starting with branch_prefix
 
+  # -- sandbox-reaper — force-removes leaked sandbox containers ------------
+  sandbox_reaper:
+    enabled: true                   # reap mill-sbx-*/mill-fetch-* containers orphaned by a crash/restart
+    interval_seconds: 3600          # seconds between passes (min 300 enforced in worker); age threshold = 2× sandbox.command_timeout
+
   # -- health agent — codebase-health across 6 dimensions ------------------
   health:
     enabled: true                   # enable periodic health passes

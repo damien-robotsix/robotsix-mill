@@ -499,6 +499,17 @@ class _StagesSettings(BaseModel):
     # and (c) runs PRAGMA optimize to reclaim freed pages.
     db_maintenance_periodic: bool = Field(default=True)
     db_maintenance_interval_seconds: int = Field(default=86400)
+
+    # --- sandbox reaper (periodic orphan-container cleanup) ---
+    # When True (default), the worker periodically force-removes leaked
+    # mill-sbx-*/mill-fetch-* sandbox containers whose uptime exceeds twice
+    # command_timeout (a live sandbox is bounded by command_timeout, so
+    # anything older is provably orphaned). Defends against containers
+    # orphaned by a mill crash/restart mid-run, which otherwise run forever
+    # (--rm only fires on container exit, and the timeout is parent-process
+    # enforced). The startup reaper in lifespan is the complementary guard.
+    sandbox_reaper_periodic: bool = Field(default=True)
+    sandbox_reaper_interval_seconds: int = Field(default=3600)
     # Maximum TicketEvent rows to retain per non-terminal ticket.
     # Events beyond this cap are pruned (oldest first).  Set to 0 to disable
     # per-ticket event capping entirely (archive purge still runs).

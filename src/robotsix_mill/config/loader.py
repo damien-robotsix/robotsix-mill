@@ -407,6 +407,9 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.stale_branch_cleanup.interval_seconds": "stale_branch_cleanup_interval_seconds",
     "periodic.stale_branch_cleanup.max_age_days": "stale_branch_max_age_days",
     "periodic.stale_branch_cleanup.prefix_only": "stale_branch_cleanup_prefix_only",
+    # -- periodic.sandbox_reaper --
+    "periodic.sandbox_reaper.enabled": "sandbox_reaper_periodic",
+    "periodic.sandbox_reaper.interval_seconds": "sandbox_reaper_interval_seconds",
     # -- periodic.health --
     "periodic.health.enabled": "health_periodic",
     "periodic.health.interval_seconds": "health_interval_seconds",
