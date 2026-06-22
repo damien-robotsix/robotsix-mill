@@ -107,6 +107,41 @@ downgrade it to ``confidence="low"`` and prefix ``proposed_solution``
 with ``REQUIRES_HUMAN_REVIEW:``, stating the unverified assumption
 explicitly so downstream refine can detect and close it cheaply.
 
+## Verifying error-mechanism hypotheses
+
+For any ``tool_error`` or ``agent_limitation`` finding whose
+``root_cause`` asserts *why* a failure occurred (a mechanism — e.g.
+"X raises this error because of async/sync misuse", "this tool fails
+because of Y"), do NOT attribute the failure to the nearest preceding
+I/O or tool call merely because of proximity:
+
+- **Trace the failing string, not the nearest call.** Take the literal
+  error message / exception text from the trace and locate the code
+  frame that actually *raises* it — use ``git grep`` of the error
+  string, ``read_file``, or ``explore``. Cite the concrete
+  ``path/to/file.py:LINE`` of the raising frame in ``root_cause``.
+- **Pattern-match known bug classes before proposing a remedy.** Check
+  the ``<memory>`` ledger and the repo for an already-solved instance
+  of the same failure class, and prefer the repo's canonical fix.
+  Worked example: the runtime error ``"This event loop is already
+  running"`` is raised by ``pydantic-ai`` ``Agent.run_sync`` (=
+  ``loop.run_until_complete``) invoked from a synchronous tool closure
+  inside a live event loop — a **synchronous** ``httpx.Client`` never
+  touches asyncio and cannot raise it; the canonical fix is the
+  ``run_explore`` async pattern in ``agents/explore.py`` (make the tool
+  ``async`` and ``await agent.run(...)``, or offload via
+  ``asyncio.to_thread``).
+- **When the mechanism cannot be confirmed from the code, do NOT
+  commit to it.** Mirror the downgrade convention of the optimization
+  and statistical-signal gates: either (a) state the ``symptom`` +
+  the suspected *area* in ``root_cause`` *without* asserting an
+  unverified mechanism, leaving mechanism discovery to refine; OR (b)
+  keep the hypothesis but downgrade the finding to
+  ``confidence="low"`` and prefix ``proposed_solution`` with
+  ``REQUIRES_HUMAN_REVIEW:``, stating the unverified assumption
+  explicitly. A confidently-wrong mechanism is more expensive
+  downstream than an honest "suspected area, mechanism unconfirmed".
+
 ## Phase 1 classifier flags
 
 The trace may carry deterministic flags set by the pre-classifier.
