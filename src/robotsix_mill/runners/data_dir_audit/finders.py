@@ -234,6 +234,26 @@ def _classify_terminal_clone_files(
     return result
 
 
+def _self_healing_bytes_by_dir(
+    self_healing_files: set[str], file_sizes: dict[str, int]
+) -> dict[str, int]:
+    """Sum self-healing-file bytes onto every ANCESTOR directory in one pass.
+
+    O(files × depth) — replaces a per-directory rescan of every file
+    (O(dirs × files)) that pegged a CPU core on large .data trees.
+    """
+    by_dir: dict[str, int] = defaultdict(int)
+    for rel in self_healing_files:
+        size = file_sizes.get(rel, 0)
+        if not size:
+            continue
+        idx = rel.find("/")
+        while idx != -1:
+            by_dir[rel[:idx]] += size
+            idx = rel.find("/", idx + 1)
+    return by_dir
+
+
 def _self_healing_oversized_paths(
     file_sizes: dict[str, int],
     dir_totals: dict[str, int],
@@ -295,15 +315,22 @@ def _self_healing_oversized_paths(
 
     # Classify directories: suppress when >= _EXPLAINED_SUPPRESS_FRACTION
     # of cumulative bytes come from self-healing files beneath them.
+    #
+    # Aggregate self-healing bytes onto every ANCESTOR directory in ONE pass
+    # over the self-healing files (O(files × depth)), instead of, for each
+    # directory, re-scanning every file (O(dirs × files)). On a large .data
+    # tree (thousands of dirs × tens of thousands of clone files) the
+    # nested-loop form pegged a CPU core for the whole audit pass, holding
+    # the GIL and starving the HTTP event loop — the board went unresponsive
+    # on every audit run.
+    self_healing_by_dir = _self_healing_bytes_by_dir(self_healing_files, file_sizes)
     for dir_key, total_size in dir_totals.items():
         if dir_key in (".", "") or total_size == 0:
             continue
-        self_healing_bytes = sum(
-            size
-            for rel, size in file_sizes.items()
-            if rel in self_healing_files and rel.startswith(dir_key + "/")
-        )
-        if self_healing_bytes / total_size >= _EXPLAINED_SUPPRESS_FRACTION:
+        if (
+            self_healing_by_dir.get(dir_key, 0) / total_size
+            >= _EXPLAINED_SUPPRESS_FRACTION
+        ):
             suppressed.add(dir_key)
 
     _log_oversized_suppressions(
