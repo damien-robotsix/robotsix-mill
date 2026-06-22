@@ -2388,3 +2388,90 @@ async def test_stage_timeout_respects_override_not_global(ctx, service, monkeypa
     assert service.get(t.id).state is State.BLOCKED
     note = service.history(t.id)[-1].note
     assert "timed out" in note
+
+
+async def test_global_concurrency_cap_bounds_concurrent_stages(
+    ctx, service, monkeypatch
+):
+    """With per-board caps summing to 6 (3+3) but a global cap of 3,
+    no more than 3 stages run concurrently across all boards."""
+    import threading
+    import time
+
+    lock = threading.Lock()
+    live = {"now": 0, "max": 0, "done": 0}
+
+    class SlowRefine(Stage):
+        name = "refine"
+        input_state = State.DRAFT
+
+        def run(self, _t, _c):
+            with lock:
+                live["now"] += 1
+                live["max"] = max(live["max"], live["now"])
+            time.sleep(0.15)  # hold so peers overlap if truly parallel
+            with lock:
+                live["now"] -= 1
+                live["done"] += 1
+            return Outcome(State.HUMAN_ISSUE_APPROVAL, "refined")
+
+    monkeypatch.setitem(registry.STAGES, "refine", SlowRefine())
+
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+
+    board_a = ctx.repo_config.board_id if ctx.repo_config else "ba"
+    board_b = "bb"
+    fake_repos = ReposRegistry(
+        repos={
+            "repo-a": RepoConfig(
+                repo_id="repo-a",
+                board_id=board_a,
+                langfuse_project_name="p",
+                langfuse_public_key="pk",
+                langfuse_secret_key="sk",
+                max_concurrency=3,
+            ),
+            "repo-b": RepoConfig(
+                repo_id="repo-b",
+                board_id=board_b,
+                langfuse_project_name="p",
+                langfuse_public_key="pk",
+                langfuse_secret_key="sk",
+                max_concurrency=3,
+            ),
+        }
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.get_repos_config",
+        lambda: fake_repos,
+    )
+
+    # Tight global cap — below the per-board sum
+    ctx.settings.max_global_concurrency = 3
+
+    w = Worker(ctx)
+    w.start()
+    try:
+        # Create tickets across both boards.  The ticket's board_id
+        # determines which queue it lands in.  Some tickets go to
+        # board_a (the service's board), others to board_b.
+        ids_a = [service.create(f"a{i}").id for i in range(3)]
+        # For board_b, we need a ticket with board_id=board_b.
+        # The service fixture creates tickets on its own board; we
+        # can set board_id explicitly on the ticket.
+        ids_b = []
+        for i in range(3):
+            t = service.create(f"b{i}")
+            t.board_id = board_b
+            ids_b.append(t.id)
+
+        for tid in ids_a + ids_b:
+            w.enqueue(tid)
+
+        await asyncio.wait_for(w.queue_join(), timeout=10)
+    finally:
+        await w.stop()
+
+    assert live["done"] == 6  # all processed
+    assert live["max"] <= 3  # never exceeded global cap
+    assert live["max"] >= 2  # at least some concurrency

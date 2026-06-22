@@ -174,6 +174,9 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         self._pending: set[str] = set()
         # ticket_id -> {"stage": str, "started_at": str} while stage.run() is executing
         self._active: dict[str, dict] = {}
+        # Global semaphore capping total concurrently-running stages across
+        # all boards. Created in start() to bind to the running event loop.
+        self._global_semaphore: asyncio.Semaphore | None = None
 
     def queue_size(self) -> int:
         """Aggregate ticket count across all per-repo queues."""
@@ -354,7 +357,21 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                         queue.task_done()
                         continue
 
-                await process_ticket(ticket_id, per_ticket_ctx, active_map=self._active)
+                # --- Global concurrency cap ---
+                if self._global_semaphore is not None:
+                    if self._global_semaphore.locked():
+                        log.debug(
+                            "global concurrency cap (%d) saturated; waiting for slot",
+                            self.ctx.settings.max_global_concurrency,
+                        )
+                    async with self._global_semaphore:
+                        await process_ticket(
+                            ticket_id, per_ticket_ctx, active_map=self._active
+                        )
+                else:
+                    await process_ticket(
+                        ticket_id, per_ticket_ctx, active_map=self._active
+                    )
                 after = board_service.get(ticket_id)
                 self._check_progress(
                     ticket_id,
@@ -573,6 +590,9 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
     def start(self) -> None:
         if not self._tasks:
             repos = get_repos_config()
+            cap = max(1, self.ctx.settings.max_global_concurrency)
+            self._global_semaphore = asyncio.Semaphore(cap)
+            log.info("global concurrency cap: %d", cap)
             pool_sizes = [
                 (rc.board_id, max(1, rc.max_concurrency)) for rc in repos.repos.values()
             ]
