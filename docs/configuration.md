@@ -479,7 +479,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `gates.maintenance_triage_enabled` | `MILL_MAINTENANCE_TRIAGE_ENABLED` | `true` | Cheap triage before a full maintenance pass |
 | `gates.freshness_gate_enabled` | `MILL_FRESHNESS_GATE_ENABLED` | `false` | Pre-refine freshness check: verify cited evidence paths exist on HEAD |
 | `gates.obsolescence_gate_enabled` | `MILL_OBSOLESCENCE_GATE_ENABLED` | `false` | Pre-refine obsolescence check: re-validate spawned-draft gaps (opt-in) |
-| `gates.spec_review_enabled` | `MILL_SPEC_REVIEW_ENABLED` | `false` | Post-refinement spec narrative stripping |
+| `gates.spec_review_enabled` | `MILL_SPEC_REVIEW_ENABLED` | `true` | Post-refinement spec narrative stripping |
 | `gates.scope_triage_enabled` | `MILL_SCOPE_TRIAGE_ENABLED` | `true` | Cheap scope-violation triage before blocking (EXPAND/REJECT/ESCALATE) |
 | `gates.prerequisite_gate_enabled` | `MILL_PREREQUISITE_GATE_ENABLED` | `true` | Pre-implement gate: when enabled, verify that external symbols/imports declared in the spec's `## Prerequisites` block are importable in the cloned repo before invoking the implement agent. When a declared prerequisite is unmet (e.g. an unmerged external port), the ticket is short-circuited to BLOCKED without the expensive coordinator LLM run. This is a no-op for specs without a `## Prerequisites` block and degrades gracefully on checker errors (always proceeds, never blocks on internal errors). |
 | `gates.auto_merge_enabled` | `MILL_AUTO_MERGE_ENABLED` | `false` | Auto-merge PR when CI passes |
