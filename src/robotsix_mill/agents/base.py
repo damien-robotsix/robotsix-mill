@@ -15,15 +15,12 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from ..config import Settings, get_secrets
 from .prompt_tool_consistency import unregistered_call_directives
 from .report_issue import make_report_issue_tool
 from .tool_registry import ToolRegistry
-
-if TYPE_CHECKING:
-    from robotsix_llmio.config.tier import TierConfig
 
 # Defensive char cap on the inlined ``## Module Map`` block so the static
 # prompt can't grow unbounded as ``docs/modules.yaml`` grows. A hardcoded
@@ -79,57 +76,27 @@ def _safe_close(agent: Any) -> None:
 _CLAUDE_SDK_PROVIDER = "claudeSDK"
 
 
-def _default_tier_config() -> "TierConfig":
-    """The default llmio three-level tier config from baked defaults.
-
-    L1 → DeepSeek flash, L2 → DeepSeek pro, L3 → Claude SDK opus. This is the
-    single source of the per-level ``(provider, model)`` binding ("use
-    defaults")."""
-    from robotsix_llmio.config.tier import (
-        LEVEL1_DEFAULT,
-        LEVEL2_DEFAULT,
-        LEVEL3_DEFAULT,
-        TierConfig,
-    )
-
-    return TierConfig(
-        level1=LEVEL1_DEFAULT, level2=LEVEL2_DEFAULT, level3=LEVEL3_DEFAULT
-    )
-
-
-def _resolve_level(level: int) -> tuple[str, str]:
-    """Resolve a capability *level* (1/2/3) to its ``(provider, model)`` via
-    llmio's baked tier defaults.
-
-    ``provider`` is the hyphen-free provider prefix parsed from the tier's
-    combined ``provider-model`` identifier (e.g. ``"claudeSDK"`` /
-    ``"openrouter"``); ``model`` is the bare model name (e.g. ``"opus"`` /
-    ``"deepseek/deepseek-v4-flash"``)."""
-    from robotsix_llmio.core.identifier import parse_model_identifier
-
-    tlc = _default_tier_config().for_level(level)
-    parsed = parse_model_identifier(tlc.model)
-    return parsed.provider, parsed.model_name
-
-
 def level_uses_claude(level: int) -> bool:
     """Whether *level* routes to the Claude SDK provider (L3 by default)."""
-    return _resolve_level(level)[0] == _CLAUDE_SDK_PROVIDER
+    from robotsix_llmio.core.factory import default_tier_config
+
+    tlc = default_tier_config().for_level(level)
+    return tlc.model.startswith(_CLAUDE_SDK_PROVIDER)
 
 
 def new_deepseek_model(model_name: str, level: int):
     """Build a DeepSeek-on-OpenRouter ``(model, http_client)`` via llmio.
 
-    llmio's ``OpenRouterDeepseekProvider`` bakes in cost recording, the DeepSeek
+    llmio's ``get_provider_for_level`` resolves the provider from the baked tier
+    defaults (L1/L2 → OpenRouterDeepseekProvider). Cost recording, the DeepSeek
     provider pin, and the per-level reasoning policy (level 1 → reasoning off,
-    else xhigh). The caller owns closing the returned client (pair with
-    :func:`_aclose_async_client`). Single construction + test seam that replaced
-    the old cost-instrumented model shim."""
+    else xhigh) are all baked into the provider. The caller owns closing the
+    returned client (pair with :func:`_aclose_async_client`)."""
     if not get_secrets().openrouter_api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
-    from robotsix_llmio.openrouter_deepseek.provider import OpenRouterDeepseekProvider
+    from robotsix_llmio import get_provider_for_level
 
-    provider = OpenRouterDeepseekProvider(api_key=get_secrets().openrouter_api_key)
+    provider = get_provider_for_level(level, api_key=get_secrets().openrouter_api_key)
     return provider.new_model(model=model_name, level=level)
 
 
@@ -146,7 +113,9 @@ def build_openrouter_model(level: int | str = 1, *, online: bool = False):
         model_name = level
         level_int = 1
     else:
-        _, model_name = _resolve_level(level)
+        from robotsix_llmio.core.factory import default_tier_config
+
+        model_name = default_tier_config().for_level(level).model_name
         level_int = level
     if online:
         model_name = f"{model_name}:online"
@@ -575,22 +544,23 @@ def build_agent(  # noqa: C901
             f"Prompt contains call directives to unavailable tools: "
             f"{', '.join(sorted(unreg))}"
         )
-    # llmio levels are the single source of provider+model: resolve the
-    # capability `level` (1/2/3) to its baked `(provider, model)` binding.
-    provider, effective_model = _resolve_level(level)
+    # llmio levels are the single source of provider+model: the baked
+    # tier config maps L1 → DeepSeek flash, L2 → DeepSeek pro,
+    # L3 → Claude SDK opus.  The tier config is read from llmio — mill
+    # no longer re-implements it.
+    from robotsix_llmio import get_provider_for_level
+    from robotsix_llmio.core.factory import default_tier_config
 
-    # --- Provider selection (level-driven) -------------------------------
-    # L3 resolves to the Claude SDK provider; L1/L2 to DeepSeek/OpenRouter.
-    # There is no separate backend toggle — the level *is* the choice.
-    if provider == _CLAUDE_SDK_PROVIDER:
+    tlc = default_tier_config().for_level(level)
+
+    if tlc.model.startswith(_CLAUDE_SDK_PROVIDER):
         # Lazy: claude_agent_sdk is only imported when a Claude-transport
         # agent is actually built.
-        from robotsix_llmio.claude_sdk.provider import ClaudeSDKProvider
-
         from .claude_concurrency import bound_claude_handle
 
-        handle = ClaudeSDKProvider().build_agent(
-            model=effective_model,
+        provider = get_provider_for_level(level)
+        handle = provider.build_agent(
+            level=level,
             system_prompt=composed_system,
             tools=all_tools,
             output_type=output_type,
@@ -599,7 +569,7 @@ def build_agent(  # noqa: C901
             # Confine the SDK's built-in Write/Edit tools to the ticket's
             # workspace clone. repo_dir is None for board-less agents → no
             # confinement, unchanged behavior.
-            workspace_root=repo_dir,
+            workspace_root=repo_dir,  # type: ignore[call-arg]  # ClaudeSDKProvider accepts this
         )
         # Bound concurrent CLI-subprocess spawns process-wide so a worker
         # fanning out many runs at startup can't stall on spawn contention.
@@ -608,7 +578,7 @@ def build_agent(  # noqa: C901
     # --- DeepSeek / OpenRouter (L1/L2) -----------------------------------
     return _build_deepseek_handle(
         settings,
-        effective_model=effective_model,
+        effective_model=tlc.model_name,
         level=level,
         composed_system=composed_system,
         all_tools=all_tools,

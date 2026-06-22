@@ -113,26 +113,27 @@ def test_safe_close_swallows_exceptions_from_close():
 
 
 # ---------------------------------------------------------------------------
-# _resolve_level / level_uses_claude — the llmio tier mapping
+# default_tier_config — the llmio tier mapping (replaces _resolve_level)
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_level_maps_to_provider_and_model():
-    """Each capability level resolves to its baked (provider, model) via
-    llmio's tier defaults: the provider is the hyphen-free prefix parsed from
-    the combined identifier and the model is the bare model name.
-    L1/L2 → DeepSeek-on-OpenRouter, L3 → Claude SDK."""
-    from robotsix_mill.agents.base import _resolve_level
+def test_default_tier_config_maps_levels():
+    """Each capability level maps to its baked (provider, model) via
+    llmio's default_tier_config: L1/L2 → DeepSeek-on-OpenRouter, L3 → Claude SDK."""
+    from robotsix_llmio.core.factory import default_tier_config
+    from robotsix_llmio.core.identifier import parse_model_identifier
 
-    assert _resolve_level(1) == (
-        "openrouter",
-        "deepseek/deepseek-v4-flash",
-    )
-    assert _resolve_level(2) == (
-        "openrouter",
-        "deepseek/deepseek-v4-pro",
-    )
-    assert _resolve_level(3) == ("claudeSDK", "opus")
+    parsed1 = parse_model_identifier(default_tier_config().for_level(1).model)
+    assert parsed1.provider == "openrouter"
+    assert parsed1.model_name == "deepseek/deepseek-v4-flash"
+
+    parsed2 = parse_model_identifier(default_tier_config().for_level(2).model)
+    assert parsed2.provider == "openrouter"
+    assert parsed2.model_name == "deepseek/deepseek-v4-pro"
+
+    parsed3 = parse_model_identifier(default_tier_config().for_level(3).model)
+    assert parsed3.provider == "claudeSDK"
+    assert parsed3.model_name == "opus"
 
 
 def test_level_uses_claude_only_for_level_3():
@@ -508,28 +509,29 @@ def test_build_agent_missing_api_key_raises(monkeypatch, settings):
 
 def test_build_agent_claude_sdk_path(monkeypatch):
     """When the resolved transport is the Claude SDK (level 3), build_agent
-    delegates to robotsix-llmio's ClaudeSDKProvider."""
+    delegates to robotsix-llmio's ClaudeSDKProvider via get_provider_for_level."""
     from robotsix_mill.agents import base as bmod
+    from robotsix_llmio.claude_sdk.provider import (
+        ClaudeSDKProvider as RealClaudeSDKProvider,
+    )
 
     s = Settings()
 
     # Mock compose_prompt to avoid yaml/path deps.
     monkeypatch.setattr(bmod, "compose_prompt", lambda *a, **kw: "test prompt")
 
-    # Mock the Claude SDK imports. build_agent uses local imports:
-    #   from robotsix_llmio.claude_sdk.provider import ClaudeSDKProvider
-    #   from .claude_concurrency import bound_claude_handle
+    # Create a mock provider whose build_agent returns a fake handle.
     fake_claude_handle = MagicMock()
-    fake_provider = MagicMock()
+    fake_provider = MagicMock(spec=RealClaudeSDKProvider)
     fake_provider.build_agent.return_value = fake_claude_handle
-    fake_claude_provider_cls = MagicMock(return_value=fake_provider)
 
-    # Patch the source modules so the local imports inside build_agent resolve.
+    # Mock get_provider_for_level so the Claude path receives our fake.
     monkeypatch.setattr(
-        "robotsix_llmio.claude_sdk.provider.ClaudeSDKProvider",
-        fake_claude_provider_cls,
-        raising=False,
+        "robotsix_llmio.core.factory.get_provider_for_level",
+        lambda level, tier_config=None, **kwargs: fake_provider,
     )
+
+    # bound_claude_handle is a pass-through in the test.
     monkeypatch.setattr(
         "robotsix_mill.agents.claude_concurrency.bound_claude_handle",
         lambda handle, max_concurrency: handle,
@@ -545,11 +547,10 @@ def test_build_agent_claude_sdk_path(monkeypatch):
 
     # bound_claude_handle is a pass-through, so result is the raw handle.
     assert result is fake_claude_handle
-    # The provider was constructed.
-    fake_claude_provider_cls.assert_called_once()
-    # build_agent was called on the provider, with the level-3 model (opus).
+    # build_agent was called on the provider with level=3.
     fake_provider.build_agent.assert_called_once()
-    assert fake_provider.build_agent.call_args.kwargs["model"] == "opus"
+    assert fake_provider.build_agent.call_args.kwargs["level"] == 3
+    assert fake_provider.build_agent.call_args.kwargs["system_prompt"] == "test prompt"
 
 
 # ---------------------------------------------------------------------------

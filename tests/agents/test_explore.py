@@ -192,6 +192,7 @@ def _patch_explore_model(monkeypatch, cap):
     """Patch the level-1 model seam (base.build_openrouter_model) so the
     explore sub-agent builds nothing real. Captures the resolved model name."""
     from robotsix_mill.agents import base as bmod
+    from robotsix_llmio.core.factory import default_tier_config
 
     class FakeModel:
         def __init__(self, name):
@@ -200,7 +201,7 @@ def _patch_explore_model(monkeypatch, cap):
     def fake_build_openrouter_model(level=1, *, online=False):
         # explore builds a level-1 (flash) DeepSeek model; resolve it the
         # same way base does so the captured name reflects the real binding.
-        _, model_name = bmod._resolve_level(level)
+        model_name = default_tier_config().for_level(level).model_name
         if online:
             model_name = f"{model_name}:online"
         return FakeModel(model_name), object()
