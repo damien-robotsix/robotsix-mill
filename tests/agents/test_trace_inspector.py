@@ -374,7 +374,9 @@ class TestRunTraceInspector:
             captured_levels.append(level)
             return _orig_build(level, online=online)
 
-        monkeypatch.setattr(base_mod, "build_openrouter_model", fake_build_openrouter_model)
+        monkeypatch.setattr(
+            base_mod, "build_openrouter_model", fake_build_openrouter_model
+        )
 
         # Stub run_agent so the real model is never exercised.
         monkeypatch.setattr(
