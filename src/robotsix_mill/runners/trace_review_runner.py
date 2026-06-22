@@ -594,38 +594,56 @@ def run_trace_review_pass(
         watermark = now - timedelta(
             hours=settings.trace_review_initial_lookback_hours,
         )
+    # Bound the lookback: never scan further back than the configured
+    # lookback window, even when the persisted watermark is stale (e.g. a
+    # prior run was interrupted before advancing it). Without this floor a
+    # days-old watermark makes the fetch below paginate thousands of traces
+    # in one pass, pegging the single-threaded event loop — the root cause
+    # of the periodic unresponsiveness. The older traces are skipped
+    # deliberately: trace-review is a recency-focused quality monitor, so
+    # reviewing 3-day-old traces has little value and is not worth the cost.
+    lookback_floor = now - timedelta(
+        hours=settings.trace_review_initial_lookback_hours,
+    )
+    if watermark < lookback_floor:
+        log.warning(
+            "trace-review: watermark %s is older than the %dh lookback floor "
+            "for %s — clamping to %s and skipping the stale backlog",
+            watermark.isoformat(),
+            settings.trace_review_initial_lookback_hours,
+            repo_config.repo_id,
+            lookback_floor.isoformat(),
+        )
+        watermark = lookback_floor
     window_start = watermark.isoformat()
     window_end = now.isoformat()
 
+    # Fetch only the most recent ``cap`` traces (newest-first, early-stopping
+    # pagination). The previous design fetched the ENTIRE window then drained
+    # the OLDEST N per run, advancing the watermark a little each time — so a
+    # large backlog took many heavy runs to clear AND reviewed stale traces
+    # first. Reviewing the newest N and advancing the watermark to ``now``
+    # (below) keeps each run bounded and focused on current behaviour.
+    cap = settings.trace_review_max_traces_per_run
     traces = list_all_traces_since(
         settings,
         watermark.isoformat(),
         repo_config=repo_config,
+        max_traces=cap if cap > 0 else None,
     )
 
-    # Memory bound: the loop below pre-loads EVERY trace's full detail +
-    # observations into memory at once. An unbounded window (which happens
-    # whenever a prior run was interrupted before it could advance the
-    # watermark at the end) made that grow without limit and exhaust the
-    # host. Cap each run to the OLDEST N traces and advance the watermark to
-    # the last processed trace (below) so the backlog drains incrementally
-    # instead of re-loading an ever-growing set.
-    cap = settings.trace_review_max_traces_per_run
-    capped_watermark: datetime | None = None
     total_in_window = len(traces)
     if cap > 0 and total_in_window > cap:
-        traces.sort(key=lambda t: t.get("timestamp") or "")
+        # Defensive: the fetch already bounds to the newest ``cap``, but if a
+        # backend ignored the limit/ordering, keep only the most recent ``cap``.
+        traces.sort(key=lambda t: t.get("timestamp") or "", reverse=True)
         traces = traces[:cap]
-        capped_watermark = _extract_trace_end_time(traces[-1], None)
-        log.warning(
-            "trace-review: window holds %d traces (> cap %d) for %s — "
-            "processing oldest %d; watermark will advance to %s so the rest "
-            "drain next run",
-            total_in_window,
-            cap,
+    if cap > 0 and len(traces) >= cap:
+        log.info(
+            "trace-review: reviewing the %d most recent traces for %s; "
+            "any older traces beyond the cap are skipped (not queued)",
+            len(traces),
             repo_config.repo_id,
-            cap,
-            capped_watermark.isoformat() if capped_watermark else "(unchanged)",
         )
 
     log.info(
@@ -831,22 +849,12 @@ def run_trace_review_pass(
         if max_drafts > 0 and len(drafts) >= max_drafts:
             break
 
-    # Persist watermark so the next run picks up where this one left off.
-    # Normally advance to ``now`` (not the latest trace's createdAt) so we
-    # don't re-scan if no traces arrived since. But when the window was
-    # capped (more traces than we processed), advance only to the last
-    # PROCESSED trace's timestamp so the unprocessed newer tail is picked up
-    # by the next run — this is what lets a large backlog drain incrementally
-    # with bounded memory instead of re-loading the whole window every run.
-    if capped_watermark is not None:
-        next_watermark = capped_watermark
-    elif cap > 0 and total_in_window > cap:
-        # Capped but the last processed trace had no parseable timestamp:
-        # keep the existing watermark and retry next run rather than jumping
-        # to ``now`` (which would silently skip the unprocessed tail).
-        next_watermark = watermark
-    else:
-        next_watermark = now
+    # Persist the watermark at ``now``. Each run reviews the most recent
+    # traces and intentionally skips any older backlog (see the lookback
+    # clamp and newest-first fetch above), so there is no unprocessed tail to
+    # preserve — advancing to ``now`` ensures the next run only looks at
+    # traces produced since this one, keeping every run bounded.
+    next_watermark = now
     try:
         _save_watermark(settings, source_board_id, next_watermark)
     except Exception:  # noqa: BLE001

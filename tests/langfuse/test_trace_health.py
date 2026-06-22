@@ -577,6 +577,61 @@ def test_list_all_traces_since_pagination(monkeypatch):
     assert get_calls[2][1]["page"] == 3
 
 
+def test_list_all_traces_since_max_traces_stops_early(monkeypatch):
+    """max_traces bounds the fetch: pagination stops once enough traces are
+    collected, and orderBy=timestamp.desc is requested so the bounded result
+    is the most recent N rather than an arbitrary slice."""
+    import httpx
+
+    pages_data = {
+        1: [{"id": "n1"}, {"id": "n2"}],
+        2: [{"id": "n3"}, {"id": "n4"}],
+        3: [{"id": "n5"}],
+    }
+    get_calls = []
+
+    class FakeResponse:
+        def __init__(self, status_code, json_data):
+            self.status_code = status_code
+            self._json = json_data
+
+        def json(self):
+            return self._json
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def get(self, url, *, params, headers):
+            get_calls.append(dict(params))
+            page = params.get("page", 1)
+            return FakeResponse(
+                200,
+                {"data": pages_data.get(page, []), "meta": {"totalPages": 3}},
+            )
+
+    monkeypatch.setattr(httpx, "Client", FakeClient)
+
+    from robotsix_mill.config import Settings
+
+    _enable_tracing_secrets()
+    s = Settings()
+
+    result = list_all_traces_since(s, "2024-01-01T00:00:00Z", max_traces=3)
+
+    # Only the first 3 collected; pagination stopped after page 2 (page 3
+    # never fetched), and traces were requested newest-first.
+    assert [t["id"] for t in result] == ["n1", "n2", "n3"]
+    assert len(get_calls) == 2
+    assert get_calls[0]["orderBy"] == "timestamp.desc"
+
+
 def test_list_all_traces_since_http_error_returns_empty(monkeypatch):
     """HTTP error → returns [], logs warning."""
     import httpx

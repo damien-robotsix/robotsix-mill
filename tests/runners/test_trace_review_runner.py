@@ -1582,7 +1582,7 @@ class TestTraceReviewMemoryCap:
     """The per-run trace cap bounds memory + advances the watermark
     incrementally (regression for the unbounded-window memory explosion)."""
 
-    def test_window_capped_processes_oldest_and_advances_watermark(
+    def test_window_capped_processes_newest_and_advances_to_now(
         self, settings, monkeypatch
     ):
         rc = _test_repo_config()
@@ -1594,7 +1594,8 @@ class TestTraceReviewMemoryCap:
             "robotsix_mill.runners.trace_review_runner.Settings",
             lambda: capped,
         )
-        # 6 traces oldest→newest, supplied newest-first to exercise the sort.
+        # 6 traces t0..t5 (oldest→newest by timestamp), supplied newest-first
+        # to exercise the defensive sort when a backend over-returns.
         traces = [
             _trace(
                 id=f"t{i}",
@@ -1618,15 +1619,18 @@ class TestTraceReviewMemoryCap:
             _detail,
         )
 
+        before = datetime.now(timezone.utc)
         run_trace_review_pass(session_id="sess-cap", repo_config=rc)
 
-        # Only the OLDEST 3 traces had their detail loaded — bounded memory.
-        assert sorted(detail_ids) == ["t0", "t1", "t2"]
-        # Watermark advanced to the last PROCESSED trace (t2), not ``now``,
-        # so the unprocessed tail (t3–t5) drains on the next run.
+        # Only the NEWEST 3 traces had their detail loaded — the older backlog
+        # (t0–t2) is skipped, not queued for a later run.
+        assert sorted(detail_ids) == ["t3", "t4", "t5"]
+        # Watermark advanced to ~now (the older backlog is dropped, not
+        # incrementally drained), so the next run only sees newer traces.
         wm = _load_watermark(capped, rc.board_id)
         assert wm is not None
-        assert wm.isoformat() == "2026-06-19T02:00:00+00:00"
+        assert wm >= before
+        assert wm.isoformat() != "2026-06-19T02:00:00+00:00"
 
     def test_window_under_cap_fetches_all(self, settings, monkeypatch):
         rc = _test_repo_config()
