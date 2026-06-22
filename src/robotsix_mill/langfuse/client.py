@@ -493,10 +493,21 @@ def list_recent_traces(
 
 
 def list_all_traces_since(
-    settings: Settings, from_timestamp: str, repo_config: RepoConfig | None = None
+    settings: Settings,
+    from_timestamp: str,
+    repo_config: RepoConfig | None = None,
+    *,
+    max_traces: int | None = None,
 ) -> list[dict]:
-    """Return every trace created at or after *from_timestamp* by
+    """Return traces created at or after *from_timestamp*, newest-first, by
     paginating the Langfuse public API.
+
+    When *max_traces* is set, pagination stops as soon as that many traces
+    have been collected, bounding the fetch to roughly ``ceil(max_traces/50)``
+    pages instead of the entire backlog. Traces are requested newest-first
+    (``orderBy=timestamp.desc``) so the bounded result is the most RECENT
+    *max_traces*, not an arbitrary slice — without this a stale watermark
+    could pull thousands of traces in one pass and peg the event loop.
 
     Returns an empty list (never crashes) when Langfuse is unconfigured
     or any HTTP / JSON error occurs — the caller must treat ``[]`` as
@@ -509,10 +520,16 @@ def list_all_traces_since(
         all_traces: list[dict] = []
         for page in client.iter_pages(
             "/api/public/traces",
-            params={"fromTimestamp": from_timestamp, "limit": 50},
+            params={
+                "fromTimestamp": from_timestamp,
+                "limit": 50,
+                "orderBy": "timestamp.desc",
+            },
             error_label="trace list",
         ):
             all_traces.extend(page)
+            if max_traces is not None and len(all_traces) >= max_traces:
+                return all_traces[:max_traces]
         return all_traces
     except Exception:  # noqa: BLE001 — never crash the caller
         log.exception("failed to list Langfuse traces since %s", from_timestamp)
