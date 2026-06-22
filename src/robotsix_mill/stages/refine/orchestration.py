@@ -47,6 +47,7 @@ from .helpers import (
     _COMMIT_SHA_RE,
     _TICKET_ID_RE,
     _build_deployed_log_summary,
+    _draft_has_complete_spec,
     _load_refine_memory,
     _persist_refine_memory,
     _rationale_claims_external_fix,
@@ -836,10 +837,17 @@ class RefineAgentMixin:
             # path above, but with the extra safety of the auto-approve
             # gate confirming there are no design decisions.
             #
-            # Only runs for mill-internal automated proposals (not
-            # human-written CI-failure tickets) when auto-approve is
-            # enabled.
-            if s.auto_approve_enabled and ticket.source not in ("user", "ci"):
+            # Runs for mill-internal automated proposals when
+            # auto-approve is enabled.  "user" source is always excluded
+            # (human-written tickets always run the full refine agent).
+            # "ci" source is admitted ONLY when the draft is a complete
+            # self-contained spec (has ## Problem + ## Scope headings)
+            # — raw error dumps with no scope section route to the full
+            # refine agent and are NOT admitted here.
+            if s.auto_approve_enabled and (
+                ticket.source not in ("user", "ci")
+                or (ticket.source == "ci" and _draft_has_complete_spec(draft))
+            ):
                 try:
                     # --- deterministic short-circuit ---
                     # Sources in _AUTO_APPROVE_SOURCES are by construction

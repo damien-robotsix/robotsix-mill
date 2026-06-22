@@ -2519,3 +2519,110 @@ def test_mechanical_fast_path_exception_falls_through(
     # Full refine agent ran (fall-through after exception).
     assert len(calls) == 1
     assert out.note.startswith("refined")
+
+
+# ===========================================================================
+# CI-source mechanical fast-path admission (for complete-spec CI tickets)
+# ===========================================================================
+
+
+def test_ci_source_complete_spec_admitted_to_fast_path(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """A source="ci" ticket whose draft is a complete spec (## Problem +
+    ## Scope) is admitted to the mechanical draft fast-path: the full
+    refine agent is NOT called, and the outcome routes via the bounded
+    auto-approve branch."""
+    ctx = ctx_factory(auto_approve_enabled=True)
+    t = _ticket(ctx, source=SourceKind.CI)
+    calls = _spy_refine(monkeypatch)
+
+    auto_approve_calls: list[dict] = []
+
+    def _spy_auto_approve(**kw):
+        auto_approve_calls.append(kw)
+        return refining.AutoApproveResult(decision="APPROVE", reason="mechanical")
+
+    monkeypatch.setattr(refining, "triage_auto_approve", _spy_auto_approve)
+
+    draft = (
+        "## Problem\n\nThe CI publish workflow fails because the GHCR "
+        "token is missing `packages: write` scope.\n\n"
+        "## Scope\n\nAdd `packages: write` to the `GITHUB_TOKEN` "
+        "permissions block in `.github/workflows/publish.yml`.\n\n"
+        "## Acceptance criteria\n\n- The publish workflow passes on main.\n"
+    )
+
+    out = _run_agent(ctx, t, tmp_path, draft=draft)
+
+    # Full refine agent never invoked.
+    assert calls == []
+
+    # triage_auto_approve was called (the bounded safety gate).
+    assert len(auto_approve_calls) >= 1
+
+    # The outcome is READY (APPROVE from auto-approve).
+    assert out.next_state == State.READY
+
+    # The note reflects the mechanical fast-path.
+    assert "mechanical draft fast-path" in out.note
+    assert "auto-approve APPROVE" in out.note
+
+    # Artifacts written.
+    ws = ctx.service.workspace(t)
+    assert (ws.artifacts_dir / "draft-original.md").exists()
+    assert (ws.artifacts_dir / "file_map.json").exists()
+
+
+def test_ci_source_incomplete_draft_falls_through_to_refine(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """A source="ci" ticket whose draft has no ## Scope heading (and is
+    NOT an internal toolchain failure — so the _short_circuit_for_internal_failure
+    path doesn't intercept it) falls through to the full refine agent."""
+    ctx = ctx_factory(auto_approve_enabled=True)
+    t = _ticket(ctx, source=SourceKind.CI)
+    calls = _spy_refine(monkeypatch)
+
+    auto_approve_calls: list[dict] = []
+
+    def _spy_auto_approve(**kw):
+        auto_approve_calls.append(kw)
+        return refining.AutoApproveResult(decision="APPROVE", reason="mechanical")
+
+    monkeypatch.setattr(refining, "triage_auto_approve", _spy_auto_approve)
+
+    # Vague CI ticket — no ## Problem / ## Scope headings, and no
+    # internal toolchain failure markers (so _short_circuit_for_internal_failure
+    # also returns None).
+    draft = (
+        "The CI pipeline for the publish workflow is broken. "
+        "We need to investigate what changed and fix it."
+    )
+
+    out = _run_agent(ctx, t, tmp_path, draft=draft)
+
+    # Full refine agent was invoked (fell through past both the mechanical
+    # fast-path AND the internal-failure short-circuit).
+    assert len(calls) == 1
+    assert out.note.startswith("refined")
+
+
+def test_user_source_excluded_regardless_of_draft(ctx_factory, monkeypatch, tmp_path):
+    """A source="user" ticket is always excluded from the mechanical
+    fast-path, even when the draft is a complete spec."""
+    ctx = ctx_factory(auto_approve_enabled=True)
+    t = _ticket(ctx, source="user")
+    calls = _spy_refine(monkeypatch)
+
+    draft = (
+        "## Problem\n\nThe widget does not retry on 503.\n\n"
+        "## Scope\n\nAdd retry logic to loader.py.\n\n"
+        "## Acceptance criteria\n\n- Retries up to 3 times.\n"
+    )
+
+    out = _run_agent(ctx, t, tmp_path, draft=draft)
+
+    # Full refine agent was invoked — user always runs refine.
+    assert len(calls) == 1
+    assert out.note.startswith("refined")

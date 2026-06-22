@@ -53,6 +53,7 @@ from .helpers import (
     log,
     _build_candidates_block,
     _build_deployed_log_summary,
+    _draft_has_complete_spec,
     _human_size,
     _rationale_claims_external_fix,
     _resolve_next_state,
@@ -87,6 +88,7 @@ __all__ = [
     "_resolve_remote_url",
     # pure helpers
     "_build_deployed_log_summary",
+    "_draft_has_complete_spec",
     "_human_size",
     "_tail_file",
     "_spec_is_degenerate",
