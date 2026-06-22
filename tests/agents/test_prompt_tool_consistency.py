@@ -187,13 +187,9 @@ def _capture(monkeypatch, output_obj):
     # which would otherwise bypass pydantic_ai.Agent and spawn a real
     # subprocess. Tool injection — what these tests assert — is
     # provider-independent, so this keeps the check meaningful while
-    # staying hermetic. The provider token is the hyphen-free prefix
-    # ("openrouter"); the second element is the bare model name.
-    monkeypatch.setattr(
-        bmod,
-        "_resolve_level",
-        lambda level: ("openrouter", "deepseek/deepseek-v4-flash"),
-    )
+    # staying hermetic.  We monkeypatch the Claude SDK provider prefix
+    # so build_agent never takes the Claude path.
+    monkeypatch.setattr(bmod, "_CLAUDE_SDK_PROVIDER", "__nonexistent__")
     return captured
 
 

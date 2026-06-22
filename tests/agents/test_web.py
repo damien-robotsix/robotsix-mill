@@ -73,9 +73,10 @@ def test_web_research_subagent_uses_cheap_online_model(tmp_path, monkeypatch):
 
     import pydantic_ai
     from robotsix_mill.agents import base as bmod
+    from robotsix_llmio.core.factory import default_tier_config
 
     def fake_build_openrouter_model(level=1, *, online=False):
-        _, model_name = bmod._resolve_level(level)
+        model_name = default_tier_config().for_level(level).model_name
         if online:
             model_name = f"{model_name}:online"
         captured["model"] = model_name

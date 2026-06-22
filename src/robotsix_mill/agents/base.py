@@ -79,25 +79,24 @@ _CLAUDE_SDK_PROVIDER = "claudeSDK"
 def level_uses_claude(level: int) -> bool:
     """Whether *level* routes to the Claude SDK provider (L3 by default)."""
     from robotsix_llmio.core.factory import default_tier_config
-    from robotsix_llmio.core.identifier import parse_model_identifier
 
     tlc = default_tier_config().for_level(level)
-    return parse_model_identifier(tlc.model).provider == _CLAUDE_SDK_PROVIDER
+    return tlc.model.startswith(_CLAUDE_SDK_PROVIDER)
 
 
 def new_deepseek_model(model_name: str, level: int):
     """Build a DeepSeek-on-OpenRouter ``(model, http_client)`` via llmio.
 
-    llmio's ``OpenRouterDeepseekProvider`` bakes in cost recording, the DeepSeek
+    llmio's ``get_provider_for_level`` resolves the provider from the baked tier
+    defaults (L1/L2 → OpenRouterDeepseekProvider). Cost recording, the DeepSeek
     provider pin, and the per-level reasoning policy (level 1 → reasoning off,
-    else xhigh). The caller owns closing the returned client (pair with
-    :func:`_aclose_async_client`). Single construction + test seam that replaced
-    the old cost-instrumented model shim."""
+    else xhigh) are all baked into the provider. The caller owns closing the
+    returned client (pair with :func:`_aclose_async_client`)."""
     if not get_secrets().openrouter_api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
-    from robotsix_llmio.openrouter_deepseek.provider import OpenRouterDeepseekProvider
+    from robotsix_llmio import get_provider_for_level
 
-    provider = OpenRouterDeepseekProvider(api_key=get_secrets().openrouter_api_key)
+    provider = get_provider_for_level(level, api_key=get_secrets().openrouter_api_key)
     return provider.new_model(model=model_name, level=level)
 
 

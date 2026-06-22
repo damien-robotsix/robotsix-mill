@@ -363,18 +363,18 @@ class TestRunTraceInspector:
         s2 = _settings_with_api_key(trace_review_model_level=2)
         assert s2.trace_review_model_level == 2
 
-        # Spy on _resolve_level to assert the level passed through.
+        # Spy on build_openrouter_model to assert the level passed through.
         captured_levels: list[int] = []
 
         from robotsix_mill.agents import base as base_mod
 
-        _orig_resolve = base_mod._resolve_level
+        _orig_build = base_mod.build_openrouter_model
 
-        def fake_resolve(level: int):
+        def fake_build_openrouter_model(level=1, *, online=False):
             captured_levels.append(level)
-            return _orig_resolve(level)
+            return _orig_build(level, online=online)
 
-        monkeypatch.setattr(base_mod, "_resolve_level", fake_resolve)
+        monkeypatch.setattr(base_mod, "build_openrouter_model", fake_build_openrouter_model)
 
         # Stub run_agent so the real model is never exercised.
         monkeypatch.setattr(
