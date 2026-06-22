@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
+from sqlalchemy import event
 from sqlmodel import Session, SQLModel, create_engine
 
 from ..config import Settings
@@ -61,8 +63,17 @@ def get_engine(settings: Settings, board_id: str):
         url = f"sqlite:///{path}"
         engine = create_engine(
             url,
-            connect_args={"check_same_thread": False},
+            connect_args={
+                "check_same_thread": False,
+                "timeout": 5,
+            },
         )
+
+        @event.listens_for(engine, "connect")
+        def _set_wal(dbapi_connection: Any, _: Any) -> None:
+            """Enable WAL mode on each new connection to reduce write contention."""
+            dbapi_connection.execute("PRAGMA journal_mode=WAL")
+
         _engines[board_id] = engine
     return engine
 

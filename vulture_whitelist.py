@@ -170,6 +170,7 @@ _validate_cross_field
 get_field_value
 
 # -- core --------------------------------------------------------------------
+_set_wal  # SQLAlchemy event listener registered via @event.listens_for decorator
 impl
 cache_ok
 process_bind_param
