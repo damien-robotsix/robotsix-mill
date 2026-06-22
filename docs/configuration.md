@@ -582,7 +582,8 @@ Each periodic agent shares this pattern:
 Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_monitor`, `config_sync`, `member_sync`, `bc_check`,
 `completeness_check`, `diagnostic`, `forge_parity`, `module_curator`,
-`copy_paste`, `timeout_escalation`, `langfuse_cleanup`, `data_dir_audit`, `run_health`.
+`copy_paste`, `timeout_escalation`, `langfuse_cleanup`, `data_dir_audit`, `run_health`,
+`state_sync`, `env_doc_sync`.
 
 > ¹ Most agents default to `enabled: true`. Exceptions: `diagnostic`, `stale_branch_cleanup`, and `meta_periodic` default to `false`.
 >
@@ -632,6 +633,14 @@ and as environment variables:
 | `MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS` | `86400` | Seconds between completeness-check passes |
 | `MILL_COMPLETENESS_CHECK_MEMORY_PATH` | `None` | Override path for completeness-check memory; defaults to `<data_dir>/completeness_check_memory.md` |
 | `MILL_COMPLETENESS_CHECK_REQUEST_LIMIT` | `80` | Per-call request cap for the completeness-check agent |
+| `MILL_STATE_SYNC_MODEL` | `deepseek/deepseek-v4-flash` | Model for the state-sync agent (cross-surface `State` enum consistency check) |
+| `MILL_STATE_SYNC_PERIODIC` | `true` | Enable periodic state-sync passes |
+| `MILL_STATE_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between state-sync passes |
+| `MILL_STATE_SYNC_MEMORY_PATH` | `None` | Override path for state-sync memory; defaults to `<data_dir>/state_sync_memory.md` |
+| `MILL_ENV_DOC_SYNC_MODEL` | `deepseek/deepseek-v4-flash` | Model for the env-doc-sync agent (env-var documentation consistency check) |
+| `MILL_ENV_DOC_SYNC_PERIODIC` | `true` | Enable periodic env-doc-sync passes |
+| `MILL_ENV_DOC_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between env-doc-sync passes |
+| `MILL_ENV_DOC_SYNC_MEMORY_PATH` | `None` | Override path for env-doc-sync memory; defaults to `<data_dir>/env_doc_sync_memory.md` |
 
 ### 13. Skills
 
