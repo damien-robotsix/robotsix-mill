@@ -400,6 +400,7 @@ modules:
       - src/robotsix_mill/agents/list_threads.py
       - src/robotsix_mill/agents/ci_patterns.py
       - src/robotsix_mill/agents/ci_wait_tool.py
+      - src/robotsix_mill/agents/ci_log_fetch_tool.py
       - src/robotsix_mill/agents/consult_expert.py
       - src/robotsix_mill/agents/read_ticket.py
       - src/robotsix_mill/agents/list_epic_children.py

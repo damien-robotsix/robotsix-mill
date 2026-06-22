@@ -53,6 +53,7 @@ def run_ci_fix_agent(
     remote_url: str | None = None,
     token: str | None = None,
     ci_status_fn: "Callable[[], tuple[str, str]] | None" = None,
+    ci_log_fetch_fn: "Callable[[int, bool], str] | None" = None,
 ) -> CiFixResult:
     """Run the CI-fix agent, which OWNS the fix→push→verify loop.
 
@@ -66,6 +67,12 @@ def run_ci_fix_agent(
     re-checks — up to ``settings.ci_fix_max_iterations`` waits. This replaces
     the old one-shot-per-cycle model. *ci_status_fn* is the host-side forge
     probe returning ``(conclusion, failing_summary)``.
+
+    When *ci_log_fetch_fn* is provided, the agent also gets the
+    ``fetch_ci_logs`` tool: it can fetch the logs for any workflow run by
+    run id or URL, with an option for full (uncapped) logs.  *ci_log_fetch_fn*
+    is the host-side forge probe returning log text for a given run id and
+    *full_log* flag.
 
     Returns a ``CiFixResult`` with status, summary, and updated memory.
 
@@ -139,6 +146,21 @@ def run_ci_fix_agent(
             max_iterations=settings.ci_fix_max_iterations,
             poll_interval_s=settings.ci_fix_wait_poll_interval_s,
             timeout_s=settings.ci_fix_wait_timeout_s,
+        )
+    )
+
+    # Give the agent a tool to fetch CI logs on demand — the failure summary
+    # includes truncated logs, but the agent may need the full log for a
+    # specific run or a run the summary didn't include.  The tool is always
+    # wired so the prompt's call directive resolves; when ci_log_fetch_fn is
+    # None (multi-repo merge path / tests) it returns
+    # CI_LOG_FETCH_UNAVAILABLE.
+    from .ci_log_fetch_tool import build_ci_log_fetch_tool
+
+    tools.append(
+        build_ci_log_fetch_tool(
+            branch=branch,
+            fetch_fn=ci_log_fetch_fn,
         )
     )
 

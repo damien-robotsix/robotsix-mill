@@ -257,9 +257,11 @@ class GitLabForge(Forge):
             project_path=project_path, branch=branch, head_sha=head_sha
         )
 
-    def fetch_workflow_job_logs(self, *, run_id: int) -> str:
+    def fetch_workflow_job_logs(self, *, run_id: int, full_log: bool = False) -> str:
         project_path = _parse_gitlab_project_path(self._remote_url)
-        return self._fetch_pipeline_job_logs(project_path=project_path, run_id=run_id)
+        return self._fetch_pipeline_job_logs(
+            project_path=project_path, run_id=run_id, full_log=full_log
+        )
 
     def create_repo(
         self, *, name: str, owner: str, private: bool | None = None, description: str
@@ -539,7 +541,9 @@ class GitLabForge(Forge):
             if p.get("status") in terminal
         ]
 
-    def _fetch_pipeline_job_logs(self, *, project_path: str, run_id: int) -> str:
+    def _fetch_pipeline_job_logs(
+        self, *, project_path: str, run_id: int, full_log: bool = False
+    ) -> str:
         """Concatenate ANSI-stripped, size-capped traces of failed jobs in a
         pipeline.  *run_id* is a GitLab pipeline id.  Returns ``""`` when there
         are no failed jobs.
@@ -584,11 +588,12 @@ class GitLabForge(Forge):
 
                 clean = _ANSI_RE.sub("", raw)
                 clean = _strip_runner_noise(clean)
-                clean = _capture_failure_window(
-                    clean,
-                    log_max,
-                    failure_re=_LOG_FAILURE_RE,
-                )
+                if not full_log:
+                    clean = _capture_failure_window(
+                        clean,
+                        log_max,
+                        failure_re=_LOG_FAILURE_RE,
+                    )
 
                 parts.append(f"### Job: {job_name} (id={job_id})\n")
                 parts.append(clean)

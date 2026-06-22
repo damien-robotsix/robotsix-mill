@@ -1066,6 +1066,7 @@ class CIFixStage(Stage):
                     remote_url=remote_url,
                     token=token,
                     ci_status_fn=self._make_ci_status_fn(ticket, ctx, branch),
+                    ci_log_fetch_fn=self._make_ci_log_fetch_fn(ctx, branch),
                 )
                 if result.updated_memory:
                     persist_memory(ci_fix_memory_path, result.updated_memory)
@@ -1115,6 +1116,23 @@ class CIFixStage(Stage):
             return ("pending", "")
 
         return status_fn
+
+    def _make_ci_log_fetch_fn(
+        self, ctx: StageContext, branch: str
+    ) -> "Callable[[int, bool], str]":
+        """Build the host-side forge probe the agent's ``fetch_ci_logs`` tool calls.
+
+        Returns a closure that calls ``forge.fetch_workflow_job_logs()`` for
+        a given run id and *full_log* flag, returning the log text.  Transient
+        forge errors raise through to the tool's error handler.
+        """
+        s = ctx.settings
+
+        def fetch_fn(run_id: int, full_log: bool) -> str:
+            forge = get_forge(s, repo_config=ctx.repo_config)
+            return forge.fetch_workflow_job_logs(run_id=run_id, full_log=full_log)
+
+        return fetch_fn
 
     def _partition_open_alerts(
         self, ctx: StageContext, branch: str

@@ -564,6 +564,7 @@ _VALID_TOOL_NAMES = frozenset(
         "inspect_cost",
         "query_app_logs",
         "create_repo",
+        "fetch_ci_logs",
         "fork_repo",
         "post_findings",
         "git_fetch",
