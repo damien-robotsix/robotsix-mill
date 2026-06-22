@@ -1,6 +1,7 @@
 """The read-only exploration sub-agent."""
 
 import asyncio
+import contextlib
 
 from robotsix_mill.agents import explore
 from robotsix_mill.agents.explore import make_explore_tool
@@ -535,3 +536,62 @@ def test_explore_max_tokens_validator_rejects_zero_or_negative():
     with pytest.raises(ValidationError) as exc_info:
         _settings(Path("."), explore_max_tokens="-1")
     assert "Input should be greater than or equal to 1" in str(exc_info.value)
+
+
+# --- trace_stage child-span tests ---------------------------------------
+
+
+def test_trace_stage_explore_nests_under_parent(tmp_path, monkeypatch):
+    """run_explore opens a child span named 'explore' via trace_stage."""
+    spans: list[str] = []
+
+    @contextlib.contextmanager
+    def fake_trace_stage(name):
+        spans.append(name)
+        yield
+
+    monkeypatch.setattr(explore, "trace_stage", fake_trace_stage)
+    _patch_explore_model(monkeypatch, {})
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            pass
+
+        async def run(self, q, *, usage_limits=None):
+            return type("R", (), {"output": "answer"})()
+
+    import pydantic_ai
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+    (tmp_path / "a.txt").write_text("hi")
+
+    out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="q"))
+    assert out == "answer"
+    assert spans == ["explore"]
+
+
+def test_trace_stage_parallel_explore_nests_under_parent(tmp_path, monkeypatch):
+    """parallel_explore opens a child span named 'parallel_explore' via
+    trace_stage."""
+    spans: list[str] = []
+
+    @contextlib.contextmanager
+    def fake_trace_stage(name):
+        spans.append(name)
+        yield
+
+    monkeypatch.setattr(explore, "trace_stage", fake_trace_stage)
+
+    async def fake_run_explore(*, settings, repo_dir, question, extra_roots=None):
+        return f"ANS:{question}"
+
+    monkeypatch.setattr(explore, "run_explore", fake_run_explore)
+    s = _settings(tmp_path)
+    tool = explore.make_parallel_explore_tool(s, tmp_path)
+    out = asyncio.run(tool(["q1", "q2"]))
+    assert "ANS:q1" in out
+    assert "parallel_explore" in spans
+    # Each scout also opens its own "explore" span via run_explore, but
+    # we've monkeypatched run_explore away for this test — those inner
+    # spans are not recorded here. We only verify the outer wrapper.

@@ -18,6 +18,7 @@ import asyncio
 from pathlib import Path
 
 from ..config import Settings, get_secrets
+from ..runtime.tracing import trace_stage
 
 
 # --------------------------------------------------------------------------
@@ -241,37 +242,40 @@ async def run_explore(
 
         from .retry import acall_with_retry
 
-        try:
-            result = await acall_with_retry(
-                lambda: agent.run(prompt, usage_limits=limits),
-                what="explore",
-            )
-        except UsageLimitExceeded:
-            # Budget exhausted — retry ONCE with a stricter prompt and no tools
-            retry_agent = Agent(
-                model=model,
-                system_prompt=(
-                    "You already exceeded your exploration budget on a "
-                    "previous attempt. Return ONLY your single best answer "
-                    "now — at most 3 file paths with one-line notes. Do "
-                    "NOT call any tools. No speculation, no preamble. If "
-                    "you cannot answer, say 'unable to answer'."
-                ),
-                output_type=str,
-                tools=[],
-                name="explore-retry",
-                model_settings=ModelSettings(max_tokens=settings.explore_max_tokens),
-            )
-            retry_limits = UsageLimits(request_limit=2)
+        with trace_stage("explore"):
             try:
-                retry_result = await retry_agent.run(
-                    prompt,
-                    usage_limits=retry_limits,
+                result = await acall_with_retry(
+                    lambda: agent.run(prompt, usage_limits=limits),
+                    what="explore",
                 )
             except UsageLimitExceeded:
-                mark_explore_budget_exhausted()
-                raise
-            return str(retry_result.output).strip()
+                # Budget exhausted — retry ONCE with a stricter prompt and no tools
+                retry_agent = Agent(
+                    model=model,
+                    system_prompt=(
+                        "You already exceeded your exploration budget on a "
+                        "previous attempt. Return ONLY your single best answer "
+                        "now — at most 3 file paths with one-line notes. Do "
+                        "NOT call any tools. No speculation, no preamble. If "
+                        "you cannot answer, say 'unable to answer'."
+                    ),
+                    output_type=str,
+                    tools=[],
+                    name="explore-retry",
+                    model_settings=ModelSettings(
+                        max_tokens=settings.explore_max_tokens
+                    ),
+                )
+                retry_limits = UsageLimits(request_limit=2)
+                try:
+                    retry_result = await retry_agent.run(
+                        prompt,
+                        usage_limits=retry_limits,
+                    )
+                except UsageLimitExceeded:
+                    mark_explore_budget_exhausted()
+                    raise
+                return str(retry_result.output).strip()
 
         # Detect truncation (finish_reason == 'length') and auto-continue
         # with a single follow-up call so the caller gets a complete answer.
@@ -465,7 +469,10 @@ def make_parallel_explore_tool(
                     ans = f"(explore failed: {e})"
             return f"### [{idx + 1}] {q}\n{ans}"
 
-        results = await asyncio.gather(*(_one(i, q) for i, q in enumerate(questions)))
+        with trace_stage("parallel_explore"):
+            results = await asyncio.gather(
+                *(_one(i, q) for i, q in enumerate(questions))
+            )
         return "\n\n".join(results)
 
     from .tool_registry import ToolInfo, ToolRegistry
