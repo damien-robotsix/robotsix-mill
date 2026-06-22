@@ -52,6 +52,7 @@ from .helpers import (
     _rationale_claims_external_fix,
     _resolve_next_state,
     _spec_is_degenerate,
+    _summarize_spec_for_auto_approve,
     _verify_cited_fix_at_head,
     log,
 )
@@ -841,7 +842,9 @@ class RefineAgentMixin:
                 try:
                     auto = refining.triage_auto_approve(
                         settings=s,
-                        spec=f"{ticket.title}\n\n{draft}",
+                        spec=_summarize_spec_for_auto_approve(
+                            f"{ticket.title}\n\n{draft}"
+                        ),
                     )
                     if auto.decision == "APPROVE":
                         (ws.artifacts_dir / "draft-original.md").write_text(
