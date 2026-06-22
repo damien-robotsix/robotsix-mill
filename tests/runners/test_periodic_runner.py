@@ -86,6 +86,98 @@ def test_clone_token_returns_none_on_runtime_error(monkeypatch):
     assert result is None
 
 
+def _gitlab_repo_config():
+    """RepoConfig whose remote is on gitlab.com."""
+    from robotsix_mill.config import RepoConfig
+
+    return RepoConfig(
+        repo_id="gl-repo",
+        board_id="test-board",
+        langfuse_project_name="test-project",
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",
+        forge_remote_url="https://gitlab.com/damien_six_tii/robotsix-mill-gitlab",
+    )
+
+
+def _github_repo_config():
+    """RepoConfig whose remote is on github.com."""
+    from robotsix_mill.config import RepoConfig
+
+    return RepoConfig(
+        repo_id="gh-repo",
+        board_id="test-board",
+        langfuse_project_name="test-project",
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",
+        forge_remote_url="https://github.com/owner/repo.git",
+    )
+
+
+def test_clone_token_uses_gitlab_token_for_gitlab_repo(monkeypatch):
+    """A gitlab.com repo_config mints the GitLab PAT, not a GitHub token,
+    even when the global forge_kind is github."""
+
+    def fake_gitlab_token():
+        return "glpat_fake"
+
+    def boom_github_token(settings, repo_config=None):
+        raise AssertionError("github_token must not be called for a gitlab repo")
+
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.gitlab_token", fake_gitlab_token
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.github_token", boom_github_token
+    )
+
+    s = Settings(
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL="https://github.com/owner/repo.git",
+    )
+    assert _clone_token(s, _gitlab_repo_config()) == "glpat_fake"
+
+
+def test_clone_token_uses_github_token_for_github_repo(monkeypatch):
+    """A github.com repo_config still mints the GitHub token."""
+
+    def fake_github_token(settings, repo_config=None):
+        return "ghp_fake"
+
+    def boom_gitlab_token():
+        raise AssertionError("gitlab_token must not be called for a github repo")
+
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.github_token", fake_github_token
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.gitlab_token", boom_gitlab_token
+    )
+
+    s = Settings(
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL="https://github.com/owner/repo.git",
+    )
+    assert _clone_token(s, _github_repo_config()) == "ghp_fake"
+
+
+def test_clone_token_gitlab_missing_token_returns_none(monkeypatch):
+    """When gitlab_token() raises (no PAT), _clone_token returns None."""
+
+    def raising_gitlab_token():
+        raise RuntimeError("FORGE_TOKEN not set")
+
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.gitlab_token", raising_gitlab_token
+    )
+
+    s = Settings(
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL="https://github.com/owner/repo.git",
+    )
+    assert _clone_token(s, _gitlab_repo_config()) is None
+
+
 # ------------------------------------------------------------------ _forge_token
 
 
