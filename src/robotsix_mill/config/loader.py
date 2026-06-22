@@ -260,6 +260,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.limits.stage_retry_max_delay": "stage_retry_max_delay",
     "core.limits.network_probe_host": "network_probe_host",
     "core.limits.network_outage_retry_seconds": "network_outage_retry_seconds",
+    "core.limits.max_global_concurrency": "MILL_MAX_GLOBAL_CONCURRENCY",
     # -- core: credit-balance warning --
     "core.low_credit_threshold_usd": "low_credit_threshold_usd",
     "core.low_credit_poll_enabled": "low_credit_poll_enabled",

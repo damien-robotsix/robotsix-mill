@@ -75,6 +75,7 @@ core:
     stage_retry_max_delay: 60.0        # max seconds between stage-retry attempts
     network_probe_host: "github.com"   # probe host for global-outage detection
     network_outage_retry_seconds: 120  # re-poll interval when probe fails
+    max_global_concurrency: 12         # host-level cap on total concurrently-running stages across all boards (on top of per-board max_concurrency)
 
   # -- memory ledgers, reference files, and dedup lookback (7 fields) ------
   memory:

@@ -34,6 +34,14 @@ class _CoreSettings(BaseModel):
     claude_max_concurrency: int = Field(
         default=4, alias="MILL_CLAUDE_MAX_CONCURRENCY", ge=1
     )
+    # Host-level cap on total concurrently-running stages across ALL boards,
+    # applied on top of each board's own ``max_concurrency``.  Default 12 sits
+    # modestly below the ~18 slots a typical multi-board setup would open with
+    # per-board caps summed (2+1+...+1), providing a genuine backstop without
+    # throttling normal operation.
+    max_global_concurrency: int = Field(
+        default=12, alias="MILL_MAX_GLOBAL_CONCURRENCY", ge=1
+    )
     # Capability gate for inline-image (vision) input on the Claude SDK
     # transport. Default False: the installed robotsix-llmio claude_sdk
     # bridge silently mishandles ``BinaryContent`` image parts (it
