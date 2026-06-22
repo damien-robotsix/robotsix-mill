@@ -128,6 +128,16 @@ class _CoreSettings(BaseModel):
     # Seconds between proactive credit-balance polls (default 1 hour).
     low_credit_poll_interval_seconds: int = Field(default=3600, ge=60)
 
+    # Short-TTL cache for the board-poll GET /tickets endpoint (seconds).
+    # The board UI + board-manager poll it every few seconds; each call is a
+    # full all-board query + enrichment that, under load, stalls the shared
+    # event loop. Repeated identical polls within this window return a cached
+    # snapshot (≤ this many seconds stale). 0.0 disables the cache.
+    # Field default is 0.0 (disabled) so unit tests that construct Settings()
+    # directly see immediate list consistency (create-then-list); the live
+    # mill enables it via config/mill.defaults.yaml (3.0s).
+    board_list_cache_ttl_seconds: float = Field(default=0.0, ge=0.0)
+
     transient_retries: int = Field(default=4, ge=0)
     transient_backoff_base: float = Field(default=2.0, gt=0)
     transient_backoff_cap: float = Field(default=30.0, gt=0)

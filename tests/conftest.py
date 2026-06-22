@@ -84,6 +84,17 @@ def _no_dotenv(monkeypatch):
     monkeypatch.setenv("MILL_CONFIG_FILE", "")
     monkeypatch.setenv("MILL_SECRETS_FILE", "")
     monkeypatch.setenv("MILL_REPOS_FILE", "")
+    # Disable the board-poll list cache by default in tests so GET /tickets
+    # is always immediately consistent (create-then-list). The committed
+    # mill.defaults.yaml enables it (3.0s) in real deployments; env beats
+    # YAML, so this override is inert in production. Tests that exercise the
+    # cache opt in explicitly via Settings(board_list_cache_ttl_seconds=…)
+    # (a kwarg, which beats env). Also clear the module-global cache so no
+    # entry leaks across tests.
+    monkeypatch.setenv("MILL_BOARD_LIST_CACHE_TTL_SECONDS", "0")
+    from robotsix_mill.runtime.routes import _tickets as _tickets_routes
+
+    _tickets_routes._LIST_CACHE.clear()
     # Patch _LOCAL_FILE to a nonexistent path so no local overlay
     # leaks into any test, even when Settings.__init__ calls
     # load_yaml_config directly.

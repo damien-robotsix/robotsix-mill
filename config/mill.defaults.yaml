@@ -90,6 +90,7 @@ core:
   low_credit_threshold_usd: 5.0         # OpenRouter balance below this → board warning banner
   low_credit_poll_enabled: true         # enable proactive GET /api/v1/credits hourly poll
   low_credit_poll_interval_seconds: 3600  # seconds between credit-balance checks
+  board_list_cache_ttl_seconds: 3.0     # short-TTL cache for board-poll GET /tickets (0.0 disables); collapses repeated polls so they don't stall the API
   enable_repo_creation: false           # allow the new-repo meta flow to create repositories
   repo_visibility_default: public      # "public" | "private" — default visibility for new repos
   lint_on_edit: true                    # run ruff after each agent file edit

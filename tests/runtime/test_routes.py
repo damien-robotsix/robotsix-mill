@@ -1480,3 +1480,65 @@ def test_metrics_endpoint_returns_valid_prometheus_format(client):
     assert r.headers["content-type"] == "text/plain; version=1.0.0; charset=utf-8"
     assert "http_requests_total" in r.text
     assert "http_request_duration_seconds" in r.text
+
+
+# -- GET /tickets board-poll cache (board_list_cache_ttl_seconds) -------
+
+
+def test_board_list_cache_serves_snapshot_within_ttl(tmp_path, repos_registry):
+    """With the cache enabled, repeated GET /tickets within the TTL serve a
+    snapshot — a ticket created after the first poll is not visible until the
+    cache expires/clears. (Field default is 0.0/off; production enables it.)"""
+    from robotsix_mill.config import Settings
+    from robotsix_mill.core import db
+    from robotsix_mill.core.service import TicketService
+    from robotsix_mill.runtime.routes import _tickets as tickets_routes
+
+    db.reset_engine()
+    s = Settings(
+        data_dir=str(tmp_path),
+        require_approval="false",
+        board_list_cache_ttl_seconds=60.0,
+    )
+    db.init_db(s, board_id="test-board")
+    svc = TicketService(s, board_id="test-board")
+    tickets_routes._LIST_CACHE.clear()
+    try:
+        with TestClient(create_app(repos_registry, s, single_repo_id="test-repo")) as c:
+            before_ids = {t["id"] for t in c.get("/tickets").json()}
+            t = svc.create("cache probe")
+            assert t.id not in before_ids
+            # Within the TTL the cached snapshot is served — new ticket hidden.
+            cached_ids = {x["id"] for x in c.get("/tickets").json()}
+            assert t.id not in cached_ids
+            # Clearing the cache forces a recompute — new ticket now visible.
+            tickets_routes._LIST_CACHE.clear()
+            fresh_ids = {x["id"] for x in c.get("/tickets").json()}
+            assert t.id in fresh_ids
+    finally:
+        tickets_routes._LIST_CACHE.clear()
+        db.reset_engine()
+
+
+def test_board_list_cache_disabled_by_default(tmp_path, repos_registry):
+    """With the default (ttl=0.0) the list is always fresh: a ticket created
+    after the first poll appears immediately on the next poll."""
+    from robotsix_mill.config import Settings
+    from robotsix_mill.core import db
+    from robotsix_mill.core.service import TicketService
+    from robotsix_mill.runtime.routes import _tickets as tickets_routes
+
+    db.reset_engine()
+    s = Settings(data_dir=str(tmp_path), require_approval="false")
+    assert s.board_list_cache_ttl_seconds == 0.0
+    db.init_db(s, board_id="test-board")
+    svc = TicketService(s, board_id="test-board")
+    tickets_routes._LIST_CACHE.clear()
+    try:
+        with TestClient(create_app(repos_registry, s, single_repo_id="test-repo")) as c:
+            c.get("/tickets")
+            t = svc.create("fresh probe")
+            ids = {x["id"] for x in c.get("/tickets").json()}
+            assert t.id in ids
+    finally:
+        db.reset_engine()

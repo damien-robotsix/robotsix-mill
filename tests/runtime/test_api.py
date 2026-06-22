@@ -1264,8 +1264,9 @@ def test_list_tickets_include_closed_hides_closed_and_epic_closed_keeps_done(
     service.transition(done.id, State.DONE)
     service.transition(epic.id, State.EPIC_CLOSED)
 
-    # include_closed=true → everything visible.
-    ids_all = {t["id"] for t in client.get("/tickets").json()}
+    # include_closed=true → everything visible (must be explicit now that
+    # the endpoint defaults to include_closed=false).
+    ids_all = {t["id"] for t in client.get("/tickets?include_closed=true").json()}
     assert {closed.id, done.id, draft.id, epic.id} <= ids_all
 
     # include_closed=false → CLOSED + EPIC_CLOSED hidden, DONE + DRAFT still visible.
@@ -1274,6 +1275,13 @@ def test_list_tickets_include_closed_hides_closed_and_epic_closed_keeps_done(
     assert draft.id in ids
     assert closed.id not in ids, "CLOSED must be hidden by the toggle"
     assert epic.id not in ids, "EPIC_CLOSED must be hidden by the toggle"
+
+    # default (no param) now excludes closed too — loading the closed
+    # majority on every poll was the dominant board-stall cost.
+    ids_default = {t["id"] for t in client.get("/tickets").json()}
+    assert closed.id not in ids_default
+    assert epic.id not in ids_default
+    assert done.id in ids_default and draft.id in ids_default
 
 
 def test_get_retrospect_returns_artifact_or_empty(client, service, tmp_path):
