@@ -637,7 +637,16 @@ def _prune_oversized_memory_ledgers(settings: Settings) -> int:
     target_chars = max(1, settings.max_memory_chars - _NOTE_OVERHEAD)
     truncated = 0
 
-    for mem_file in sorted(data_dir.rglob("*_memory.md")):
+    # Memory ledgers live at <data_dir>/<board>/<name>_memory.md (and the
+    # legacy board-less <data_dir>/<name>_memory.md). Glob only those two
+    # depths instead of rglob("**"), which would recurse into every ticket
+    # workspace and git clone under the data dir — tens of thousands of files
+    # walked just to find a handful of board-level ledgers, on every audit
+    # pass. (Same motivation as the O(files×depth) finders fix.)
+    mem_files = sorted(
+        set(data_dir.glob("*_memory.md")) | set(data_dir.glob("*/*_memory.md"))
+    )
+    for mem_file in mem_files:
         if not mem_file.is_file():
             continue
         try:
