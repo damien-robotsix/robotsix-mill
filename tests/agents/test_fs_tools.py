@@ -2295,3 +2295,125 @@ def test_trace_stage_run_command_nests_under_parent(
     result = tools["run_command"]("echo hello")
     assert result == "exit=0\nhello\n"
     assert spans == ["run_command"]
+
+
+def test_trace_stage_read_file_emits_span(
+    tmp_path, settings, fake_sandbox, monkeypatch
+):
+    """read_file opens a child span named 'read_file' via trace_stage."""
+    import contextlib
+
+    from robotsix_mill.agents import fs_tools
+
+    spans: list[str] = []
+
+    @contextlib.contextmanager
+    def fake_trace_stage(name):
+        spans.append(name)
+        yield
+
+    monkeypatch.setattr(fs_tools, "trace_stage", fake_trace_stage)
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "hello.txt").write_text("hello world")
+    tools = {t.__name__: t for t in build_fs_tools(root, settings)}
+    result = tools["read_file"](path="hello.txt")
+    assert "hello world" in result
+    assert spans == ["read_file"]
+
+
+def test_trace_stage_write_file_emits_span(
+    tmp_path, settings, fake_sandbox, monkeypatch
+):
+    """write_file opens a child span named 'write_file' via trace_stage."""
+    import contextlib
+
+    from robotsix_mill.agents import fs_tools
+
+    spans: list[str] = []
+
+    @contextlib.contextmanager
+    def fake_trace_stage(name):
+        spans.append(name)
+        yield
+
+    monkeypatch.setattr(fs_tools, "trace_stage", fake_trace_stage)
+    root = tmp_path / "repo"
+    root.mkdir()
+    tools = {t.__name__: t for t in build_fs_tools(root, settings)}
+    result = tools["write_file"]("hello.txt", "hello world")
+    assert "wrote" in result
+    assert spans == ["write_file"]
+
+
+def test_trace_stage_edit_file_emits_span(
+    tmp_path, settings, fake_sandbox, monkeypatch
+):
+    """edit_file opens a child span named 'edit_file' via trace_stage."""
+    import contextlib
+
+    from robotsix_mill.agents import fs_tools
+
+    spans: list[str] = []
+
+    @contextlib.contextmanager
+    def fake_trace_stage(name):
+        spans.append(name)
+        yield
+
+    monkeypatch.setattr(fs_tools, "trace_stage", fake_trace_stage)
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "hello.txt").write_text("hello world")
+    tools = {t.__name__: t for t in build_fs_tools(root, settings)}
+    result = tools["edit_file"]("hello.txt", "hello", "goodbye")
+    assert "replaced" in result
+    assert spans == ["edit_file"]
+
+
+def test_trace_stage_delete_file_emits_span(
+    tmp_path, settings, fake_sandbox, monkeypatch
+):
+    """delete_file opens a child span named 'delete_file' via trace_stage."""
+    import contextlib
+
+    from robotsix_mill.agents import fs_tools
+
+    spans: list[str] = []
+
+    @contextlib.contextmanager
+    def fake_trace_stage(name):
+        spans.append(name)
+        yield
+
+    monkeypatch.setattr(fs_tools, "trace_stage", fake_trace_stage)
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "hello.txt").write_text("hello world")
+    tools = {t.__name__: t for t in build_fs_tools(root, settings)}
+    result = tools["delete_file"]("hello.txt")
+    assert "deleted" in result
+    assert spans == ["delete_file"]
+
+
+def test_trace_stage_list_dir_emits_span(tmp_path, settings, fake_sandbox, monkeypatch):
+    """list_dir opens a child span named 'list_dir' via trace_stage."""
+    import contextlib
+
+    from robotsix_mill.agents import fs_tools
+
+    spans: list[str] = []
+
+    @contextlib.contextmanager
+    def fake_trace_stage(name):
+        spans.append(name)
+        yield
+
+    monkeypatch.setattr(fs_tools, "trace_stage", fake_trace_stage)
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "a.txt").write_text("a")
+    tools = {t.__name__: t for t in build_fs_tools(root, settings)}
+    result = tools["list_dir"](".")
+    assert "a.txt" in result
+    assert spans == ["list_dir"]

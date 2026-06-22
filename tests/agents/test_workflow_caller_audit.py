@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 
 from robotsix_mill.agents.tool_registry import ToolRegistry
+from robotsix_mill.agents import workflow_caller_audit
 from robotsix_mill.agents.workflow_caller_audit import (
     CANONICAL_ORG,
     MISSING_PERMISSION,
@@ -211,3 +213,22 @@ def test_tool_returns_findings_text(tmp_path):
 def test_tool_clean_repo_text(tmp_path):
     tool = make_workflow_caller_audit_tool(tmp_path)
     assert "no broken reusable-workflow callers" in tool()
+
+
+# ── trace_stage child-span test ────────────────────────────────────────
+
+
+def test_trace_stage_audit_workflow_callers_emits_span(tmp_path, monkeypatch):
+    """audit_workflow_callers opens a child span named 'audit_workflow_callers' via trace_stage."""
+    spans: list[str] = []
+
+    @contextlib.contextmanager
+    def fake_trace_stage(name):
+        spans.append(name)
+        yield
+
+    monkeypatch.setattr(workflow_caller_audit, "trace_stage", fake_trace_stage)
+    tool = make_workflow_caller_audit_tool(tmp_path)
+    result = tool()
+    assert "no broken reusable-workflow callers" in result
+    assert spans == ["audit_workflow_callers"]

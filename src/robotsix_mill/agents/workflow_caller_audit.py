@@ -29,6 +29,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..runtime.tracing import trace_stage
+
 # Offense kinds.
 WRONG_ORG = "WRONG_ORG"
 MISSING_PERMISSION = "MISSING_PERMISSION"
@@ -301,7 +303,8 @@ def make_workflow_caller_audit_tool(repo_dir: Path) -> Callable[[], str]:
         callers that use the wrong org or omit the required per-job
         permissions, returning each finding with file, line, and the exact
         correct form."""
-        return _render_findings(audit_workflow_callers(repo_dir))
+        with trace_stage("audit_workflow_callers"):
+            return _render_findings(audit_workflow_callers(repo_dir))
 
     from .tool_registry import ToolInfo, ToolRegistry
 

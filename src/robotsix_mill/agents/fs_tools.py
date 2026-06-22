@@ -619,7 +619,8 @@ def build_fs_tools(
 
         # Read (or refresh) via _read_cached, then slice.
         try:
-            text = _read_cached(p)
+            with trace_stage("read_file"):
+                text = _read_cached(p)
         except (ValueError, OSError) as e:
             return f"error: {e}"
 
@@ -674,9 +675,10 @@ def build_fs_tools(
         if syntax_error is not None:
             return syntax_error
         try:
-            p = _safe(root, path, extra_roots=extra_roots)
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(content, encoding="utf-8")
+            with trace_stage("write_file"):
+                p = _safe(root, path, extra_roots=extra_roots)
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(content, encoding="utf-8")
         except (ValueError, OSError) as e:
             return f"error: {e}"
         _file_cache.pop(p.resolve(), None)
@@ -689,8 +691,9 @@ def build_fs_tools(
         Returns a short result string — prefer this for surgical edits
         over ``write_file``."""
         try:
-            p = _safe(root, path, extra_roots=extra_roots)
-            content = _read_cached(p)
+            with trace_stage("edit_file"):
+                p = _safe(root, path, extra_roots=extra_roots)
+                content = _read_cached(p)
             occurrences = content.count(old_string)
             if occurrences == 0:
                 return (
@@ -722,8 +725,9 @@ def build_fs_tools(
     def delete_file(path: str) -> str:
         """Delete a file from the repository. Returns a short status string."""
         try:
-            p = _safe(root, path, extra_roots=extra_roots)
-            p.unlink()
+            with trace_stage("delete_file"):
+                p = _safe(root, path, extra_roots=extra_roots)
+                p.unlink()
         except (ValueError, OSError) as e:
             return f"error: {e}"
         _file_cache.pop(p.resolve(), None)
@@ -732,10 +736,11 @@ def build_fs_tools(
     def list_dir(path: str = ".") -> str:
         """List entries of a directory in the repository (dirs end '/')."""
         try:
-            d = _safe(root, path, extra_roots=extra_roots)
-            return "\n".join(
-                sorted(f"{e.name}/" if e.is_dir() else e.name for e in d.iterdir())
-            )
+            with trace_stage("list_dir"):
+                d = _safe(root, path, extra_roots=extra_roots)
+                return "\n".join(
+                    sorted(f"{e.name}/" if e.is_dir() else e.name for e in d.iterdir())
+                )
         except (ValueError, OSError) as e:
             return f"error: {e}"
 

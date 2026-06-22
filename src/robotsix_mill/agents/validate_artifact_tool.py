@@ -14,6 +14,8 @@ from __future__ import annotations
 from pathlib import Path
 from collections.abc import Callable
 
+from ..runtime.tracing import trace_stage
+
 
 def validate_artifact_path(repo_dir: Path, path: str) -> str:
     """Report whether *path* exists inside *repo_dir*.
@@ -61,7 +63,8 @@ def make_validate_artifact_tool(repo_dir: Path) -> Callable[[str], str]:
         ``EXISTS: <path> (directory)``, or ``MISSING: <path> ...``. Use
         this to confirm an artifact's path before filing a draft about
         it; never resolves outside the clone."""
-        return validate_artifact_path(repo_dir, path)
+        with trace_stage("validate_artifact"):
+            return validate_artifact_path(repo_dir, path)
 
     from .tool_registry import ToolInfo, ToolRegistry
 

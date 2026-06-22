@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import subprocess
 from pathlib import Path
@@ -272,7 +273,28 @@ def test_make_jscpd_tool_no_double_registration(tmp_path, monkeypatch):
     assert len(matches) == 1
 
 
-# ── smoke test (real jscpd) ────────────────────────────────────────────
+# ── trace_stage child-span test ────────────────────────────────────────
+
+
+def test_trace_stage_detect_duplication_emits_span(tmp_path, monkeypatch):
+    """detect_duplication opens a child span named 'detect_duplication' via trace_stage."""
+    spans: list[str] = []
+
+    @contextlib.contextmanager
+    def fake_trace_stage(name):
+        spans.append(name)
+        yield
+
+    monkeypatch.setattr(jscpd_tool, "trace_stage", fake_trace_stage)
+    monkeypatch.setattr(
+        jscpd_tool.subprocess,
+        "run",
+        _fake_run_writing_report(report_obj={"duplicates": []}),
+    )
+    tool = jscpd_tool.make_jscpd_tool(tmp_path)
+    result = tool()
+    assert "no clone pairs detected" in result
+    assert spans == ["detect_duplication"]
 
 
 def _jscpd_runnable() -> bool:
