@@ -64,7 +64,7 @@ def get_engine(settings: Settings, board_id: str):
             url,
             connect_args={
                 "check_same_thread": False,
-                "timeout": 5000,
+                "timeout": 5,
             },
         )
 
