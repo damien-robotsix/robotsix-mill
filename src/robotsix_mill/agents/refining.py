@@ -431,7 +431,12 @@ def triage_refine(
         # deterministically verify a cited path exists before concluding
         # it's absent — instead of over-defaulting to REFINE when the
         # explore scout errors or returns a truncated/empty result.
-        all_fs = build_fs_tools(repo_dir, settings, extra_roots=extra_roots)
+        all_fs = build_fs_tools(
+            repo_dir,
+            settings,
+            extra_roots=extra_roots,
+            read_file_max_calls=settings.max_refine_read_file_calls,
+        )
         read_file_tool = next(t for t in all_fs if t.__name__ == "read_file")
         tools.append(read_file_tool)
 
@@ -903,6 +908,7 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
         extra_roots=extra_roots,
         include_parallel_explore=include_parallel_explore,
         include_explore=include_explore,
+        read_file_max_calls=settings.max_refine_read_file_calls,
     )
 
     # Wrap explore / parallel_explore tools with a cap-enforcing counter
