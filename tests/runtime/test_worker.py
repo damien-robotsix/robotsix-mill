@@ -2475,3 +2475,225 @@ async def test_global_concurrency_cap_bounds_concurrent_stages(
     assert live["done"] == 6  # all processed
     assert live["max"] <= 3  # never exceeded global cap
     assert live["max"] >= 2  # at least some concurrency
+
+
+# ---------------------------------------------------------------------------
+# startup re-queue drip-feed
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_requeue_drip_feed_enqueues_in_batches(ctx, repo_config, monkeypatch):
+    """requeue_unfinished() returns immediately; the background drip
+    task enqueues all matching tickets in batches with pauses."""
+    from robotsix_mill.config import ReposRegistry
+    from robotsix_mill.core.states import STAGE_FOR_STATE
+    from robotsix_mill.runtime.worker.core import Worker
+
+    # Pick a batch size < total tickets so we exercise batching.
+    ctx.settings.requeue_batch_size = 3
+    ctx.settings.requeue_batch_pause_seconds = 0.5
+
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.get_repos_config",
+        lambda: ReposRegistry(repos={repo_config.repo_id: repo_config}),
+    )
+
+    # Create 8 fake ticket IDs. We mock TicketService.list() to
+    # return stub objects whose .state is in STAGE_FOR_STATE.
+    ticket_ids = [f"req-drip-{i}" for i in range(8)]
+    workable_state = next(iter(STAGE_FOR_STATE))
+
+    class _StubTicket:
+        def __init__(self, tid):
+            self.id = tid
+            self.state = workable_state
+
+    stub_tickets = [_StubTicket(tid) for tid in ticket_ids]
+
+    class _FakeTicketService:
+        def __init__(self, settings, board_id=None):
+            pass
+
+        def list(self):
+            return stub_tickets
+
+    monkeypatch.setattr(
+        "robotsix_mill.core.service.TicketService",
+        _FakeTicketService,
+    )
+
+    sleep_durations: list[float] = []
+    _real_sleep = asyncio.sleep
+
+    async def recording_sleep(duration: float) -> None:
+        sleep_durations.append(duration)
+        await _real_sleep(0)
+
+    monkeypatch.setattr(asyncio, "sleep", recording_sleep)
+
+    w = Worker(ctx)
+
+    # Call requeue_unfinished — must return immediately.
+    w.requeue_unfinished()
+    assert w._requeue_task is not None
+
+    # Right after the call, nothing or at most one batch enqueued
+    # (the task is scheduled but hasn't run yet — _pending may be 0
+    # or at most batch_size if the task ran synchronously).
+
+    # Drain the drip task.
+    await w._requeue_task
+
+    # After draining, all 8 tickets should be in _pending.
+    assert len(w._pending) == 8, (
+        f"expected all 8 tickets in _pending, got {len(w._pending)}"
+    )
+    for tid in ticket_ids:
+        assert tid in w._pending
+
+    # 8 tickets, batch_size=3 → ceil(8/3)=3 batches → 2 pauses.
+    expected_pauses = (
+        8 + ctx.settings.requeue_batch_size - 1
+    ) // ctx.settings.requeue_batch_size - 1
+    assert len(sleep_durations) == expected_pauses, (
+        f"expected {expected_pauses} sleep calls, got {len(sleep_durations)}"
+    )
+    for d in sleep_durations:
+        assert d == ctx.settings.requeue_batch_pause_seconds
+
+
+@pytest.mark.asyncio
+async def test_requeue_drip_is_cancelled_on_stop(ctx, repo_config, monkeypatch):
+    """A pending drip task is cancelled cleanly by stop()."""
+    from robotsix_mill.config import ReposRegistry
+    from robotsix_mill.core.states import STAGE_FOR_STATE
+
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.get_repos_config",
+        lambda: ReposRegistry(repos={repo_config.repo_id: repo_config}),
+    )
+
+    # Return tickets so the drip task hits the sleep between batches.
+    workable_state = next(iter(STAGE_FOR_STATE))
+    ticket_ids = [f"cancel-{i}" for i in range(10)]
+
+    class _StubTicket:
+        def __init__(self, tid):
+            self.id = tid
+            self.state = workable_state
+
+    stub_tickets = [_StubTicket(tid) for tid in ticket_ids]
+
+    class _FakeTicketService:
+        def __init__(self, settings, board_id=None):
+            pass
+
+        def list(self):
+            return stub_tickets
+
+    monkeypatch.setattr(
+        "robotsix_mill.core.service.TicketService",
+        _FakeTicketService,
+    )
+
+    # Let the drip sleep normally (fast) so it completes quickly.
+    # The point of this test is that stop() handles an in-flight or
+    # just-completed _requeue_task without raising.
+    w = Worker(ctx)
+    w.requeue_unfinished()
+    assert w._requeue_task is not None
+
+    # Let the drip task run to completion (or at least past the first batch).
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+
+    # stop() must handle the _requeue_task without raising,
+    # whether it's still running or already done.
+    await w.stop()
+    assert w._requeue_task is None  # cleared by stop()
+
+
+# ---------------------------------------------------------------------------
+# per-repo first-tick jitter
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_periodic_pass_per_repo_first_tick_jittered(ctx, monkeypatch):
+    """_run_periodic_pass_per_repo's first sleep is jittered within
+    [1.0, 1.0 + startup_jitter_seconds]; subsequent ticks sleep
+    _PERIODIC_POLL_TICK_SECONDS unchanged."""
+    from robotsix_mill.config import ReposRegistry
+    from robotsix_mill.runtime.worker import Worker
+
+    ctx.settings.startup_jitter_seconds = 15
+
+    # Pin random.uniform so we get a deterministic jitter value.
+    monkeypatch.setattr("random.uniform", lambda lo, hi: 7.0)
+
+    sleep_durations: list[float] = []
+    _real_sleep = asyncio.sleep
+
+    tick = 0
+
+    async def counting_sleep(duration: float) -> None:
+        nonlocal tick
+        tick += 1
+        sleep_durations.append(duration)
+        if tick >= 3:  # first tick + one body iteration
+            raise asyncio.CancelledError
+        await _real_sleep(0)
+
+    monkeypatch.setattr(asyncio, "sleep", counting_sleep)
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.periodic_passes.get_repos_config",
+        lambda: ReposRegistry(repos={}),
+    )
+
+    w = Worker(ctx)
+
+    def fake_runner(session_id=None, repo_config=None):
+        from robotsix_mill.runners.audit_runner import AuditPassResult
+
+        return AuditPassResult(
+            updated_memory="",
+            drafts_created=[],
+            session_id=session_id or "",
+        )
+
+    with pytest.raises(asyncio.CancelledError):
+        await w._run_periodic_pass_per_repo(
+            "audit",
+            fake_runner,
+            settings_interval_attr="audit_interval_seconds",
+        )
+
+    assert len(sleep_durations) >= 2, (
+        f"expected at least 2 sleep calls, got {len(sleep_durations)}"
+    )
+    # First tick: 1.0 + random.uniform(0, startup_jitter_seconds)
+    # with uniform → 7.0 → expected 8.0
+    assert sleep_durations[0] == 8.0, (
+        f"first tick should be 1.0 + 7.0 = 8.0, got {sleep_durations[0]}"
+    )
+    # Subsequent ticks: _PERIODIC_POLL_TICK_SECONDS
+    for d in sleep_durations[1:]:
+        assert d == w._PERIODIC_POLL_TICK_SECONDS, (
+            f"subsequent ticks should be {w._PERIODIC_POLL_TICK_SECONDS}, got {d}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# config defaults
+# ---------------------------------------------------------------------------
+
+
+def test_requeue_config_defaults():
+    """The new startup drip-feed settings have correct defaults."""
+    from robotsix_mill.config import Settings
+
+    s = Settings()
+    assert s.requeue_batch_size == 5
+    assert s.requeue_batch_pause_seconds == 2.0
+    assert s.startup_jitter_seconds == 30

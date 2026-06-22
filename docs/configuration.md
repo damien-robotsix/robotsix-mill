@@ -428,6 +428,9 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.low_credit_threshold_usd` | — | `5.0` | OpenRouter credit balance below this value triggers the board warning banner |
 | `core.low_credit_poll_enabled` | — | `true` | Enable the proactive OpenRouter credit-balance poll (hourly via `GET /api/v1/credits`) |
 | `core.low_credit_poll_interval_seconds` | — | `3600` | Seconds between proactive credit-balance checks |
+| `core.requeue_batch_size` | — | `5` | Tickets enqueued per batch in the startup re-queue drip feed |
+| `core.requeue_batch_pause_seconds` | — | `2.0` | Pause (seconds) between startup re-queue batches |
+| `core.startup_jitter_seconds` | — | `30` | Max random jitter (seconds) added to the per-repo periodic pass first-tick delay |
 
 ### 4. Memory
 

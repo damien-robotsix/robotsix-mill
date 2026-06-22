@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import random  # noqa: S311 — only used for startup jitter, not security-critical
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -123,11 +124,16 @@ class PeriodicPassesMixin(_WorkerBase):
         first_tick = True
         while True:
             # Sleep before checking. The first tick uses a short
-            # settling delay so an "overdue" repo fires within a
-            # second of startup (matches the legacy ``_initial_delay``
-            # behaviour for overdue passes). Subsequent ticks use the
-            # poll cadence.
-            await asyncio.sleep(1.0 if first_tick else self._PERIODIC_POLL_TICK_SECONDS)
+            # settling delay plus a bounded random jitter so the
+            # per-repo pass batch doesn't land exactly on the ~1s
+            # boot spike (post-restart thundering herd). Subsequent
+            # ticks use the poll cadence.
+            first_delay = 1.0 + random.uniform(  # noqa: S311
+                0, self.ctx.settings.startup_jitter_seconds
+            )
+            await asyncio.sleep(
+                first_delay if first_tick else self._PERIODIC_POLL_TICK_SECONDS
+            )
             first_tick = False
             try:
                 repos = get_repos_config()

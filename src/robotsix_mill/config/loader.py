@@ -265,6 +265,9 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.low_credit_threshold_usd": "low_credit_threshold_usd",
     "core.low_credit_poll_enabled": "low_credit_poll_enabled",
     "core.low_credit_poll_interval_seconds": "low_credit_poll_interval_seconds",
+    "core.requeue_batch_size": "requeue_batch_size",
+    "core.requeue_batch_pause_seconds": "requeue_batch_pause_seconds",
+    "core.startup_jitter_seconds": "startup_jitter_seconds",
     "core.board_list_cache_ttl_seconds": "board_list_cache_ttl_seconds",
     # -- core.memory --
     "core.memory.max_memory_chars": "max_memory_chars",

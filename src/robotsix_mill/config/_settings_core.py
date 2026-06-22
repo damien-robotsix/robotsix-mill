@@ -136,6 +136,16 @@ class _CoreSettings(BaseModel):
     # Seconds between proactive credit-balance polls (default 1 hour).
     low_credit_poll_interval_seconds: int = Field(default=3600, ge=60)
 
+    # --- startup re-queue & periodic first-tick jitter ---
+    # Tickets enqueued per batch in the startup re-queue drip feed.
+    requeue_batch_size: int = Field(default=5, ge=1)
+    # Pause (seconds) between batches in the startup re-queue drip feed.
+    requeue_batch_pause_seconds: float = Field(default=2.0, ge=0.0)
+    # Max random spread (seconds) added to the per-repo periodic pass
+    # first-tick delay, spreading the initial fire across a window so
+    # the post-boot thundering herd is diluted.
+    startup_jitter_seconds: int = Field(default=30, ge=0)
+
     # Short-TTL cache for the board-poll GET /tickets endpoint (seconds).
     # The board UI + board-manager poll it every few seconds; each call is a
     # full all-board query + enrichment that, under load, stalls the shared
