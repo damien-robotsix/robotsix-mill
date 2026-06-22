@@ -596,3 +596,157 @@ def test_trace_stage_parallel_explore_nests_under_parent(tmp_path, monkeypatch):
     # Each scout also opens its own "explore" span via run_explore, but
     # we've monkeypatched run_explore away for this test — those inner
     # spans are not recorded here. We only verify the outer wrapper.
+
+
+# --- finish_reason == 'length' continuation tests ------------------------
+
+
+def test_continuation_passes_message_history_on_length(tmp_path, monkeypatch):
+    """When finish_reason == 'length', the continuation agent.run receives
+    message_history=result.all_messages() and the final output is the
+    concatenation of both runs joined by a newline."""
+    (tmp_path / "a.txt").write_text("hi")
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+
+    cap: dict = {}
+
+    # Pre-construct the fake message list that all_messages() will return
+    fake_messages = [{"role": "user", "content": "the original prompt"}]
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            self._name = kw.get("name", "")
+            cap.setdefault("agent_names", []).append(self._name)
+
+        async def run(self, q, *, usage_limits=None, message_history=None):
+            if self._name != "explore-retry":
+                cap.setdefault("runs", []).append(
+                    {"prompt": q, "message_history": message_history}
+                )
+            if len(cap.get("runs", [])) == 1:
+                # First run: return truncated output with finish_reason == 'length'
+                r = type("R", (), {})()
+                r.output = "first truncated"
+                r.response = type("Resp", (), {"finish_reason": "length"})()
+                r.all_messages = lambda: fake_messages
+                return r
+            else:
+                # Continuation run
+                r = type("R", (), {})()
+                r.output = "continuation answer"
+                r.response = type("Resp", (), {"finish_reason": "stop"})()
+                return r
+
+    import pydantic_ai
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    _patch_explore_model(monkeypatch, {})
+
+    out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="q"))
+    assert out == "first truncated\ncontinuation answer"
+    assert len(cap["runs"]) == 2
+    # The continuation call must have received message_history
+    assert cap["runs"][1]["message_history"] is not None
+    assert cap["runs"][1]["message_history"] == fake_messages
+
+
+def test_continuation_falls_back_when_all_messages_unavailable(tmp_path, monkeypatch):
+    """When result.all_messages() raises AttributeError, the continuation
+    still runs but without message_history (graceful degradation)."""
+    (tmp_path / "a.txt").write_text("hi")
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+
+    cap: dict = {}
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            self._name = kw.get("name", "")
+
+        async def run(self, q, *, usage_limits=None, message_history=None):
+            if self._name != "explore-retry":
+                cap.setdefault("runs", []).append(
+                    {"prompt": q, "message_history": message_history}
+                )
+            if len(cap.get("runs", [])) == 1:
+                # First run: result with NO all_messages()
+                r = type("R", (), {})()
+                r.output = "first truncated"
+                r.response = type("Resp", (), {"finish_reason": "length"})()
+                # no all_messages — will raise AttributeError
+                return r
+            else:
+                r = type("R", (), {})()
+                r.output = "continuation answer"
+                return r
+
+    import pydantic_ai
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    _patch_explore_model(monkeypatch, {})
+
+    out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="q"))
+    assert out == "first truncated\ncontinuation answer"
+    assert len(cap["runs"]) == 2
+    # The continuation call must NOT have received message_history (graceful fallback)
+    assert cap["runs"][1]["message_history"] is None
+
+
+def test_no_continuation_when_finish_reason_is_not_length(tmp_path, monkeypatch):
+    """When finish_reason is 'stop', no continuation call is made and the
+    single output is returned unchanged.  No AttributeError either."""
+    (tmp_path / "a.txt").write_text("hi")
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+
+    cap: dict = {}
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            self._name = kw.get("name", "")
+
+        async def run(self, q, *, usage_limits=None, message_history=None):
+            if self._name != "explore-retry":
+                cap.setdefault("runs", []).append(q)
+            r = type("R", (), {})()
+            r.output = "complete answer"
+            r.response = type("Resp", (), {"finish_reason": "stop"})()
+            return r
+
+    import pydantic_ai
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    _patch_explore_model(monkeypatch, {})
+
+    out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="q"))
+    assert out == "complete answer"
+    # Only one run — no continuation
+    assert len(cap["runs"]) == 1
+
+
+def test_no_continuation_when_response_is_none(tmp_path, monkeypatch):
+    """When result.response is None (missing), no continuation is made and
+    the output is returned as-is without raising AttributeError."""
+    (tmp_path / "a.txt").write_text("hi")
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+
+    cap: dict = {}
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            self._name = kw.get("name", "")
+
+        async def run(self, q, *, usage_limits=None, message_history=None):
+            if self._name != "explore-retry":
+                cap.setdefault("runs", []).append(q)
+            r = type("R", (), {})()
+            r.output = "answer without response"
+            # no .response at all
+            return r
+
+    import pydantic_ai
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    _patch_explore_model(monkeypatch, {})
+
+    out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="q"))
+    assert out == "answer without response"
+    assert len(cap["runs"]) == 1
