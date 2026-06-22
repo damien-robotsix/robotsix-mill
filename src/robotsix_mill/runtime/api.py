@@ -25,6 +25,44 @@ from .middleware import RequestIDMiddleware
 from . import routes
 
 
+def _patch_prometheus_instrumentator() -> None:
+    """Patch prometheus_fastapi_instrumentator to tolerate FastAPI 0.138+.
+
+    FastAPI 0.138+ wraps included routers in _IncludedRouter objects that
+    carry ``.routes`` but no ``.path``.  prometheus_fastapi_instrumentator
+    8.0.0's ``_get_route_name`` assumes every route has ``.path`` and
+    raises ``AttributeError`` when it encounters an _IncludedRouter.
+
+    This replaces ``_get_route_name`` with a version that recurses into
+    any route that matches but lacks a ``.path`` attribute.
+    """
+    import prometheus_fastapi_instrumentator.routing as _pfi
+
+    def _get_route_name(scope, routes, route_name=None):
+        for route in routes:
+            match, child_scope = route.matches(scope)
+            if match == _pfi.Match.FULL:
+                child_scope = {**scope, **child_scope}
+                if hasattr(route, "routes") and not hasattr(route, "path"):
+                    child_name = _get_route_name(child_scope, route.routes, route_name)
+                    return child_name if child_name is not None else route_name
+                route_name = route.path
+                if isinstance(route, _pfi.Mount) and route.routes:
+                    child_route_name = _get_route_name(
+                        child_scope, route.routes, route_name
+                    )
+                    if child_route_name is None:
+                        route_name = None
+                    else:
+                        route_name += child_route_name
+                return route_name
+            elif match == _pfi.Match.PARTIAL and route_name is None:
+                route_name = getattr(route, "path", None)
+        return None
+
+    _pfi._get_route_name = _get_route_name
+
+
 def create_app(
     repos: ReposRegistry,
     settings: Settings | None = None,
@@ -98,6 +136,7 @@ def create_app(
         from prometheus_fastapi_instrumentator import Instrumentator
 
         Instrumentator().instrument(app).expose(app)
+        _patch_prometheus_instrumentator()
     except ImportError:
         import logging
 
