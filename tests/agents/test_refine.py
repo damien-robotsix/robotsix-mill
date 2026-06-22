@@ -4850,6 +4850,19 @@ class TestIsInternalToolchainFailure:
             "Add a ruff config and a bandit + vulture pass to the dev tooling."
         )
 
+    def test_prose_failed_word_negative(self):
+        """Lowercase 'failed'/'failure' in prose must NOT match the pytest
+        ``FAILED `` marker (it is case-sensitive)."""
+        assert not refining.is_internal_toolchain_failure(
+            "On a failed connection, retry; cover the success and failure paths."
+        )
+
+    def test_pytest_uppercase_failed_positive(self):
+        """Real pytest ``FAILED `` output (uppercase) still matches."""
+        assert refining.is_internal_toolchain_failure(
+            "FAILED tests/test_x.py::test_y - AssertionError: nope"
+        )
+
 
 class TestRefineTraceWebBudgetDefaults:
     """The refine stage reuses the proven per-trace web budget helpers

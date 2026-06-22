@@ -707,7 +707,6 @@ _INTERNAL_FAILURE_MARKERS: tuple[str, ...] = (
     # Python traceback
     "Traceback (most recent call last)",
     # pytest failure summary lines
-    "FAILED ",
     "= FAILURES =",
     "short test summary",
     # mypy error lines: ``error: … [code]`` (e.g. ``[arg-type]``)
@@ -739,6 +738,13 @@ _INTERNAL_FAILURE_MARKERS: tuple[str, ...] = (
     "exit=1",
 )
 
+# Case-SENSITIVE markers. pytest emits ``FAILED `` in uppercase; matching it
+# case-insensitively (against ``draft.lower()``) flagged ordinary prose —
+# "on failed connection", "the success and failure paths", "retry on failed
+# requests" — as a toolchain failure, re-triggering the short-circuit on
+# feature specs. Require the literal uppercase token instead.
+_INTERNAL_FAILURE_MARKERS_CASE_SENSITIVE: tuple[str, ...] = ("FAILED ",)
+
 
 def is_internal_toolchain_failure(draft: str) -> bool:
     """Return ``True`` when *draft* text carries concrete internal
@@ -759,7 +765,9 @@ def is_internal_toolchain_failure(draft: str) -> bool:
     the real spec with a generic "fix the failing check" template.
     """
     lowered = draft.lower()
-    return any(marker.lower() in lowered for marker in _INTERNAL_FAILURE_MARKERS)
+    if any(marker.lower() in lowered for marker in _INTERNAL_FAILURE_MARKERS):
+        return True
+    return any(m in draft for m in _INTERNAL_FAILURE_MARKERS_CASE_SENSITIVE)
 
 
 def _coerce_refine_output(output: object) -> "RefineResult":
