@@ -63,6 +63,11 @@ jobs:
           uv run robotsix-modules validate docs/modules.yaml
           uv run python scripts/validate_module_paths.py
 
+      - name: Check file registration
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+        run: uv run robotsix-modules check-registration docs/modules.yaml --root .
+
       - name: Vulture (dead code)
         env:
           UV_PROJECT_ENVIRONMENT: system

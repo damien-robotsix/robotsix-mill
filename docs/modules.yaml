@@ -308,6 +308,7 @@ modules:
       - tests/stages/test_implement_file_operations.py
       - tests/stages/test_implement_phase_coordinator.py
       - tests/stages/test_implement_package_dag.py
+      - tests/stages/implement/test_shared.py
       - tests/stages/test_maintenance.py
       - tests/stages/test_deliver.py
       - tests/stages/test_document.py
@@ -447,6 +448,7 @@ modules:
       and retrospect.
     paths:
       - src/robotsix_mill/agents/_repo_tools.py
+      - src/robotsix_mill/agents/_ticket_context.py
       - src/robotsix_mill/agents/coordinating.py
       - src/robotsix_mill/agents/coding.py
       - src/robotsix_mill/agents/testing.py
@@ -475,6 +477,7 @@ modules:
       - src/robotsix_mill/agents/retrospecting.py
       - src/robotsix_mill/agents/trace_inspector.py
       - src/robotsix_mill/agents/test_gap.py
+      - src/robotsix_mill/agents/test_scope.py
       - src/robotsix_mill/agents/bespoke.py
       - src/robotsix_mill/agents/bespoke_loader.py
       - src/robotsix_mill/agents/maintenance.py
@@ -516,6 +519,7 @@ modules:
       - tests/agents/test_trace_inspector.py
       - tests/agents/test_test_gap.py
       - tests/agents/test_testing.py
+      - tests/agents/test_test_scope.py
       - tests/agents/test_timeout_escalation.py
       - tests/agents/test_cost.py
       - tests/agents/test_bespoke_loader.py
