@@ -638,6 +638,66 @@ def test_capture_failure_window_tailcaps_without_marker():
     assert out == "x" * 65536  # plain tail, no anchor prefix
 
 
+def test_strip_runner_noise_removes_boilerplate():
+    """Runner preamble (OS version, runner image, git config) is stripped."""
+    from robotsix_mill.forge._log_utils import _strip_runner_noise
+
+    log = (
+        "Current runner version: '2.317.0'\n"
+        "##[group]Operating System\n"
+        "Ubuntu\n22.04.4\nLTS\n"
+        "##[endgroup]\n"
+        "##[group]Runner Image\n"
+        "Image: ubuntu-22.04\n"
+        "##[endgroup]\n"
+        "##[group]GITHUB_TOKEN Permissions\n"
+        "Secrets: read\n"
+        "##[endgroup]\n"
+        "Secret source: Actions\n"
+        "Prepare workflow directory\n"
+        "Prepare all required actions\n"
+        "Getting action download info\n"
+        "Downloading actions/checkout@v4...\n"
+        "##[group]Run pip install -e .\n"
+        "Successfully installed foo\n"
+        "##[endgroup]\n"
+        "##[group]Run pytest\n"
+        "FAILED tests/test_x.py::test_y - assert 1 == 2\n"
+        "##[error]Process completed with exit code 1.\n"
+        "##[endgroup]\n"
+        "Post job cleanup.\n"
+    )
+    out = _strip_runner_noise(log)
+    # Boilerplate removed.
+    assert "Current runner version" not in out
+    assert "Operating System" not in out
+    assert "Runner Image" not in out
+    assert "GITHUB_TOKEN Permissions" not in out
+    assert "Secret source" not in out
+    assert "Prepare workflow directory" not in out
+    assert "Prepare all required actions" not in out
+    assert "Getting action download info" not in out
+    assert "Downloading actions" not in out
+    assert "Post job cleanup" not in out
+    # Error lines and step output preserved.
+    assert "FAILED tests/test_x.py::test_y" in out
+    assert "##[error]Process completed with exit code 1." in out
+    assert "Successfully installed foo" in out
+    # Group markers kept for step-context.
+    assert "##[group]Run pip install -e ." in out
+
+
+def test_strip_runner_noise_noop_on_clean_log():
+    """A log without runner boilerplate is returned unchanged (modulo
+    whitespace normalisation)."""
+    from robotsix_mill.forge._log_utils import _strip_runner_noise
+
+    log = "Step output line 1\nStep output line 2\n##[error]oops\n"
+    out = _strip_runner_noise(log)
+    assert "Step output line 1" in out
+    assert "##[error]oops" in out
+
+
 def test_fetch_workflow_job_logs_capped(tmp_path, monkeypatch):
     """Log exceeds MILL_CI_LOG_MAX_BYTES → only last N bytes kept."""
     # Create a log longer than the default 65536 cap.

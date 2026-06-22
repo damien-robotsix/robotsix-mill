@@ -11,7 +11,7 @@ from typing import Any
 
 import httpx
 
-from ._log_utils import _capture_failure_window
+from ._log_utils import _capture_failure_window, _strip_runner_noise
 
 # Regex for stripping ANSI escape sequences (CSI / SGR).
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]{0,30}[a-zA-Z]")
@@ -482,6 +482,10 @@ class GitHubForgeCIMixin:
 
                 # Strip ANSI.
                 clean = _ANSI_RE.sub("", raw)
+                # Strip runner preamble boilerplate (OS version, runner
+                # image, git config, etc.) — pure token saving with zero
+                # diagnostic loss.
+                clean = _strip_runner_noise(clean)
                 # Capture the window around the FIRST failure marker (not a
                 # blind tail-cap) so an ``if: always()`` cascade — where a
                 # downstream always-step re-errors with misleading input —

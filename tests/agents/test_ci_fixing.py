@@ -252,7 +252,7 @@ def test_agent_prompt_forbids_push_and_branch_switching(tmp_path, monkeypatch):
 
 
 def test_patterns_injected_into_prompt(tmp_path, monkeypatch):
-    """Patterns from ci_patterns appear in the system prompt."""
+    """Patterns from ci_patterns appear in the user prompt (not system prompt)."""
     s = _s(tmp_path)
     captured_prompt = {}
 
@@ -260,7 +260,8 @@ def test_patterns_injected_into_prompt(tmp_path, monkeypatch):
         def __init__(self, **kw):
             captured_prompt["system_prompt"] = kw.get("system_prompt", "")
 
-        def run_sync(self, *a, **k):
+        def run_sync(self, prompt, *a, **k):
+            captured_prompt["user_prompt"] = prompt
             return type("R", (), {"output": CiFixResult(status="DONE", summary="ok")})()
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
@@ -301,14 +302,17 @@ def test_patterns_injected_into_prompt(tmp_path, monkeypatch):
         failing_summary="E501 line too long",
         ticket_id="test-1",
     )
-    prompt = captured_prompt["system_prompt"]
-    assert "[SUCCESS, 1 attempt(s)]" in prompt
-    assert "E501 line too long" in prompt
-    assert "used edit_file to wrap line" in prompt
+    # Patterns block lives in the user prompt now, not system prompt.
+    user = captured_prompt["user_prompt"]
+    assert "[SUCCESS, 1 attempt(s)]" in user
+    assert "E501 line too long" in user
+    assert "used edit_file to wrap line" in user
+    # Patterns section must NOT be in system prompt.
+    assert "(no prior patterns" not in captured_prompt["system_prompt"]
 
 
 def test_no_patterns_shows_placeholder(tmp_path, monkeypatch):
-    """When no patterns match, the '(no prior patterns)' placeholder appears."""
+    """When no patterns match, no patterns section is injected."""
     s = _s(tmp_path)
     captured_prompt = {}
 
@@ -316,7 +320,8 @@ def test_no_patterns_shows_placeholder(tmp_path, monkeypatch):
         def __init__(self, **kw):
             captured_prompt["system_prompt"] = kw.get("system_prompt", "")
 
-        def run_sync(self, *a, **k):
+        def run_sync(self, prompt, *a, **k):
+            captured_prompt["user_prompt"] = prompt
             return type("R", (), {"output": CiFixResult(status="DONE", summary="ok")})()
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
@@ -343,8 +348,11 @@ def test_no_patterns_shows_placeholder(tmp_path, monkeypatch):
         failing_summary="some failure",
         ticket_id="test-2",
     )
-    prompt = captured_prompt["system_prompt"]
-    assert "(no prior patterns for this failure)" in prompt
+    # When no patterns match, the patterns section is NOT injected at all.
+    user = captured_prompt["user_prompt"]
+    assert "(no prior patterns" not in user
+    assert "Prior fix attempts" not in user
+    assert "(no prior patterns" not in captured_prompt["system_prompt"]
 
 
 def test_pattern_saved_after_fix(tmp_path, monkeypatch):

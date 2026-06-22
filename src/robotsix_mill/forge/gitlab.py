@@ -11,7 +11,7 @@ from typing import Any
 import httpx
 
 from ._http import _ApiClient
-from ._log_utils import _capture_failure_window
+from ._log_utils import _capture_failure_window, _strip_runner_noise
 from .auth import gitlab_token
 from .base import BranchInfo, Forge, NotConfiguredError, RepoInfo
 from .github import _parse_iso_utc
@@ -404,7 +404,7 @@ class GitLabForge(Forge):
                     raw = ""
 
                 clean = _capture_failure_window(
-                    _ANSI_RE.sub("", raw),
+                    _strip_runner_noise(_ANSI_RE.sub("", raw)),
                     log_max,
                     failure_re=_LOG_FAILURE_RE,
                 )
@@ -583,6 +583,7 @@ class GitLabForge(Forge):
                         raw = f"[log fetch returned empty body for job {job_id}]"
 
                 clean = _ANSI_RE.sub("", raw)
+                clean = _strip_runner_noise(clean)
                 clean = _capture_failure_window(
                     clean,
                     log_max,
