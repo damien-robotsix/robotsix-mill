@@ -75,12 +75,8 @@ def test_audit_prompt_covers_codebase_health_and_tooling():
         )
 
     # Post-explore re-verification guardrails (compact checklist).
-    assert "re-verification cap" in p, (
-        "audit prompt missing re-verification cap bullet"
-    )
-    assert "≤ 3 total" in p, (
-        "audit prompt missing re-verification cap (≤ 3 total)"
-    )
+    assert "re-verification cap" in p, "audit prompt missing re-verification cap bullet"
+    assert "≤ 3 total" in p, "audit prompt missing re-verification cap (≤ 3 total)"
 
     # parallel_explore fan-out guidance is now covered by the compact
     # tool-selection checklist (batch sub-questions; cap at 4).

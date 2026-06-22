@@ -122,9 +122,7 @@ def _render_verified_summary(verified: dict[str, dict]) -> str:
     if not verified:
         return ""
     total = len(verified)
-    open_count = sum(
-        1 for v in verified.values() if v.get("resolution") == "in-flight"
-    )
+    open_count = sum(1 for v in verified.values() if v.get("resolution") == "in-flight")
     return (
         f"{total} prior proposal(s) on file; {open_count} still open. "
         f"Use `read_ticket` to fetch full details when needed."
@@ -248,9 +246,7 @@ def _strip_unverified_filed_annotations(
     return "\n".join(cleaned)
 
 
-def _format_recent_proposals(
-    tickets: list[Ticket], max_age_days: float = 7.0
-) -> str:
+def _format_recent_proposals(tickets: list[Ticket], max_age_days: float = 7.0) -> str:
     """Format a ``<recent_proposals>`` block for agent prompt injection.
 
     One line per ticket: ``[STATE] id | title``, most recent first.

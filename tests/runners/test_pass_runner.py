@@ -1092,8 +1092,12 @@ def test_format_recent_proposals_empty():
 
 def test_format_recent_proposals_single():
     """Single ticket renders one line with the FULL [STATE] id | title."""
-    t = _FakeTicket("abc123def456", State.DRAFT, "Fix bug in thing",
-                    created_at=datetime.now(timezone.utc))
+    t = _FakeTicket(
+        "abc123def456",
+        State.DRAFT,
+        "Fix bug in thing",
+        created_at=datetime.now(timezone.utc),
+    )
     result = _format_recent_proposals([t])
     lines = result.split("\n")
     assert lines[0] == "<recent_proposals>"
@@ -1103,10 +1107,12 @@ def test_format_recent_proposals_single():
 
 def test_format_recent_proposals_multiple():
     """Multiple tickets render multiple lines, order preserved, full ids."""
-    t1 = _FakeTicket("11111112222222", State.DRAFT, "First",
-                     created_at=datetime.now(timezone.utc))
-    t2 = _FakeTicket("22222223333333", State.CLOSED, "Second",
-                     created_at=datetime.now(timezone.utc))
+    t1 = _FakeTicket(
+        "11111112222222", State.DRAFT, "First", created_at=datetime.now(timezone.utc)
+    )
+    t2 = _FakeTicket(
+        "22222223333333", State.CLOSED, "Second", created_at=datetime.now(timezone.utc)
+    )
     result = _format_recent_proposals([t1, t2])
     lines = result.split("\n")
     assert lines[0] == "<recent_proposals>"
@@ -1123,8 +1129,12 @@ def test_format_recent_proposals_full_id_roundtrips_read_ticket_regex():
 
     canonical = "20250331T142315Z-add-billing-endpoint-3a1f"
     assert _TICKET_ID_RE.match(canonical) is not None
-    t = _FakeTicket(canonical, State.DRAFT, "Add billing endpoint",
-                    created_at=datetime.now(timezone.utc))
+    t = _FakeTicket(
+        canonical,
+        State.DRAFT,
+        "Add billing endpoint",
+        created_at=datetime.now(timezone.utc),
+    )
     result = _format_recent_proposals([t])
     assert canonical in result
     # The rendered id (between "[draft] " and " | ") must still match.
@@ -1135,12 +1145,15 @@ def test_format_recent_proposals_full_id_roundtrips_read_ticket_regex():
 
 def test_format_recent_proposals_states_roundtrip():
     """All common states render their .value correctly."""
-    t_draft = _FakeTicket("aaa", State.DRAFT, "draft",
-                          created_at=datetime.now(timezone.utc))
-    t_closed = _FakeTicket("bbb", State.CLOSED, "closed",
-                           created_at=datetime.now(timezone.utc))
-    t_done = _FakeTicket("ccc", State.DONE, "done",
-                         created_at=datetime.now(timezone.utc))
+    t_draft = _FakeTicket(
+        "aaa", State.DRAFT, "draft", created_at=datetime.now(timezone.utc)
+    )
+    t_closed = _FakeTicket(
+        "bbb", State.CLOSED, "closed", created_at=datetime.now(timezone.utc)
+    )
+    t_done = _FakeTicket(
+        "ccc", State.DONE, "done", created_at=datetime.now(timezone.utc)
+    )
     result_draft = _format_recent_proposals([t_draft])
     result_closed = _format_recent_proposals([t_closed])
     result_done = _format_recent_proposals([t_done])
@@ -1152,7 +1165,9 @@ def test_format_recent_proposals_states_roundtrip():
 def test_format_recent_proposals_filters_old_tickets():
     """Tickets with created_at older than 7 days are excluded."""
     old = _FakeTicket(
-        "old1", State.DRAFT, "Old draft",
+        "old1",
+        State.DRAFT,
+        "Old draft",
         created_at=datetime.now(timezone.utc) - timedelta(days=10),
     )
     result = _format_recent_proposals([old])
@@ -1162,7 +1177,9 @@ def test_format_recent_proposals_filters_old_tickets():
 def test_format_recent_proposals_max_age_days_none():
     """When max_age_days is None, no filtering occurs."""
     old = _FakeTicket(
-        "old1", State.DRAFT, "Old draft",
+        "old1",
+        State.DRAFT,
+        "Old draft",
         created_at=datetime.now(timezone.utc) - timedelta(days=10),
     )
     result = _format_recent_proposals([old], max_age_days=None)
@@ -1172,11 +1189,15 @@ def test_format_recent_proposals_max_age_days_none():
 def test_format_recent_proposals_mixed_ages():
     """Only recent tickets included when some are old."""
     recent = _FakeTicket(
-        "recent1", State.DRAFT, "Recent",
+        "recent1",
+        State.DRAFT,
+        "Recent",
         created_at=datetime.now(timezone.utc),
     )
     old = _FakeTicket(
-        "old1", State.CLOSED, "Old",
+        "old1",
+        State.CLOSED,
+        "Old",
         created_at=datetime.now(timezone.utc) - timedelta(days=10),
     )
     result = _format_recent_proposals([recent, old])
@@ -1195,11 +1216,15 @@ def test_format_recent_proposals_none_created_at():
 def test_format_recent_proposals_all_old():
     """All tickets older than 7 days → placeholder."""
     old1 = _FakeTicket(
-        "old1", State.DRAFT, "Old 1",
+        "old1",
+        State.DRAFT,
+        "Old 1",
         created_at=datetime.now(timezone.utc) - timedelta(days=8),
     )
     old2 = _FakeTicket(
-        "old2", State.CLOSED, "Old 2",
+        "old2",
+        State.CLOSED,
+        "Old 2",
         created_at=datetime.now(timezone.utc) - timedelta(days=15),
     )
     result = _format_recent_proposals([old1, old2])
