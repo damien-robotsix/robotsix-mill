@@ -19,7 +19,7 @@ dependencies = [
     "robotsix-llmio[openrouter_deepseek,claude_sdk] @ git+https://github.com/damien-robotsix/robotsix-llmio.git@28b23a848003",
     # Shared YAML config-cascade library, consumed via git like robotsix-llmio.
     # Imported by config_loader.py in the follow-on integration ticket.
-    "robotsix-yaml-config @ git+https://github.com/damien-robotsix/robotsix-yaml-config.git@main",
+    "robotsix-yaml-config @ git+https://github.com/damien-robotsix/robotsix-yaml-config.git@d302ee4ada88905efa48333894ed19519f9f7920",
     # Agent-comm board agent: exposes the mill board's full ticket lifecycle
     # over agent-comm structured ops, so other agents can drive a board
     # programmatically (query, file, comment, transition, approve, merge,
