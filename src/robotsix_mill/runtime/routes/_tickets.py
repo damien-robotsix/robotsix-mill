@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import logging
 import mimetypes
+import threading
+import time
 from datetime import datetime, timezone
 
 from fastapi import (
@@ -48,6 +50,17 @@ from ._repo_helpers import _resolve_board_id
 log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Tickets"])
+
+# Short-TTL single-flight cache for the board-poll list endpoint. The board
+# UI polls GET /tickets every ~5s and the board-manager agent polls it too;
+# each call fans out an all-board query + enrichment, which under load piles
+# up in the threadpool, contends on the GIL, and stalls every other request
+# (the "API unresponsive while busy" failure). Collapsing repeated identical
+# polls within a few seconds into one computation keeps the API responsive.
+# Keyed by (state, include_closed, repo_id); guarded by a single lock so a
+# burst of cache-miss pollers triggers ONE compute, not N concurrent ones.
+_LIST_CACHE: dict[tuple[str | None, bool, str], tuple[float, list[TicketRead]]] = {}
+_LIST_CACHE_LOCK = threading.Lock()
 
 
 def _repo_config_for_ticket(ticket: Ticket, repos: ReposRegistry) -> RepoConfig | None:
@@ -103,7 +116,7 @@ def create_ticket(
 def list_tickets(
     background: BackgroundTasks,
     state: State | None = None,
-    include_closed: bool = True,
+    include_closed: bool = False,
     repo_id: str | None = None,
     request: Request = None,
     svc=Depends(get_service),
@@ -111,13 +124,17 @@ def list_tickets(
 ) -> list[TicketRead]:
     """List tickets (``GET /tickets``).
 
-    Returns all tickets, optionally filtered by *state* and *repo_id*.
-    ``include_closed=False`` hides CLOSED and EPIC_CLOSED but keeps
-    DONE visible (the transient retrospect window).  Enrichment is
-    downgraded for performance — cost is cache-only and PR URLs are
-    skipped — because the board polls this every 5 s.  A background
-    cost-warming task refreshes the rows on each poll so subsequent
-    requests show real values.
+    Returns the active tickets, optionally filtered by *state* and
+    *repo_id*.  ``include_closed`` **defaults to False** — CLOSED and
+    EPIC_CLOSED are hidden (DONE stays visible, the transient retrospect
+    window).  Closed tickets are the overwhelming majority of rows
+    (>90 % on a mature board) and are not useful for board operation, so
+    loading + enriching them on every poll is the dominant cost behind an
+    unresponsive board; callers that genuinely need them must opt in with
+    ``include_closed=true``.  Enrichment is downgraded for performance —
+    cost is cache-only and PR URLs are skipped — because the board polls
+    this every few seconds.  A background cost-warming task refreshes the
+    rows on each poll so subsequent requests show real values.
     """
     # The board polls this every 5s. Both expensive enrichments are
     # downgraded for the list:
@@ -134,6 +151,42 @@ def list_tickets(
     # cases) but keeps DONE visible — DONE is the transient
     # retrospect-in-flight window and we want to watch retrospect work
     # without toggling.
+    # Short-TTL single-flight cache (see _LIST_CACHE). On a fresh hit we
+    # return the cached list without touching any DB. On a miss we hold the
+    # lock across the compute so a burst of simultaneous pollers triggers
+    # exactly one all-board query instead of one per request.
+    ttl = settings.board_list_cache_ttl_seconds
+    cache_key = (state.value if state else None, include_closed, repo_id or "all")
+    if ttl and ttl > 0.0:
+        hit = _LIST_CACHE.get(cache_key)
+        if hit is not None and (time.monotonic() - hit[0]) < ttl:
+            return hit[1]
+        with _LIST_CACHE_LOCK:
+            hit = _LIST_CACHE.get(cache_key)
+            if hit is not None and (time.monotonic() - hit[0]) < ttl:
+                return hit[1]
+            result = _list_tickets_compute(
+                background, state, include_closed, repo_id, request, svc, settings
+            )
+            _LIST_CACHE[cache_key] = (time.monotonic(), result)
+            return result
+    return _list_tickets_compute(
+        background, state, include_closed, repo_id, request, svc, settings
+    )
+
+
+def _list_tickets_compute(
+    background: BackgroundTasks,
+    state: State | None,
+    include_closed: bool,
+    repo_id: str | None,
+    request: Request,
+    svc: TicketService,
+    settings: Settings,
+) -> list[TicketRead]:
+    """Build the enriched ticket list for :func:`list_tickets` (the cache
+    miss / cache-disabled path). Kept separate so the cache wrapper stays
+    a thin, obviously-correct guard around the expensive all-board fanout."""
     exclude = None
     if not include_closed:
         exclude = {State.CLOSED, State.EPIC_CLOSED}
@@ -156,7 +209,7 @@ def list_tickets(
         # extraction proposals are never silently hidden.
         services.append(_TicketService(settings, board_id="meta"))
 
-    tickets: list = []
+    tickets: list[Ticket] = []
     for s in services:
         try:
             tickets.extend(s.list(state=state, exclude_states=exclude))
