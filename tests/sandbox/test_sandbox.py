@@ -993,6 +993,10 @@ def test_reap_orphan_sandboxes_startup_removes_all(monkeypatch):
     assert not any(a[:2] == ["docker", "inspect"] for a in calls)
     removed = {a[3] for a in calls if a[:3] == ["docker", "rm", "-f"]}
     assert removed == {"abc123", "def456"}
+    # The listing must use `docker ps -a` so Created/Exited restart-orphans
+    # (invisible to a running-only `docker ps`) are swept at startup.
+    ps_calls = [a for a in calls if a[:2] == ["docker", "ps"]]
+    assert ps_calls and "-a" in ps_calls[0]
 
 
 def test_reap_orphan_sandboxes_age_gated(monkeypatch):
