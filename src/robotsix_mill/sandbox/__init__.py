@@ -495,14 +495,33 @@ def _parse_docker_started_at(value: str) -> datetime | None:
 
 
 def _list_sandbox_containers() -> list[tuple[str, str]]:
-    """Return ``(id, name)`` for each running ``mill-sbx-*``/``mill-fetch-*``
-    container. Best-effort: an empty list on any Docker CLI failure."""
+    """Return ``(id, name)`` for every ``mill-sbx-*``/``mill-fetch-*``
+    container in ANY state (``docker ps -a``), not just running ones.
+
+    Restarting the mill mid-run kills its in-flight ``docker run`` children,
+    leaving their containers stuck in the ``Created`` state (never started).
+    Those are invisible to a plain ``docker ps`` (running only), so a
+    running-only reaper left them to accumulate and (when the worker blocked
+    on the hung ``docker run``) stall the pipeline. Listing all states lets
+    the startup reaper (which removes everything, since nothing is legitimately
+    running at boot) sweep these leftovers. The age-gated periodic reaper
+    still skips ``Created`` containers (they have no StartedAt → treated as
+    "leave alone"), so it can't race a sandbox the worker just created.
+    Best-effort: an empty list on any Docker CLI failure."""
     filters: list[str] = []
     for prefix in _SANDBOX_CONTAINER_PREFIXES:
         filters += ["--filter", f"name={prefix}"]
     try:
         listing = subprocess.run(
-            ["docker", "ps", "--no-trunc", "--format", "{{.ID}}\t{{.Names}}", *filters],
+            [
+                "docker",
+                "ps",
+                "-a",
+                "--no-trunc",
+                "--format",
+                "{{.ID}}\t{{.Names}}",
+                *filters,
+            ],
             capture_output=True,
             text=True,
             timeout=30,
