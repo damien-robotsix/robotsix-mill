@@ -73,6 +73,8 @@ core:
     stage_retry_max_attempts: 5        # max re-attempts for stage-level transient failures
     stage_retry_base_delay: 2.0        # base seconds for stage-retry exponential backoff
     stage_retry_max_delay: 60.0        # max seconds between stage-retry attempts
+    network_probe_host: "github.com"   # probe host for global-outage detection
+    network_outage_retry_seconds: 120  # re-poll interval when probe fails
 
   # -- memory ledgers, reference files, and dedup lookback (7 fields) ------
   memory:
