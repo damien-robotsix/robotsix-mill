@@ -389,6 +389,47 @@ def test_annotate_child_body_custom_source_desc():
     assert "epic-decomposition" not in out
 
 
+def test_find_prior_suppress_title_only_match_true_returns_none(settings):
+    """When suppress_title_only_match=True, a candidate whose title contains
+    the fingerprint but shares no file path is NOT returned."""
+    _seed(
+        settings,
+        title="CI failure: CI on main (liveness probe timeout)",
+        body="body that names no code locus at all",
+    )
+    match = find_prior_matching_ticket(
+        _svc(settings),
+        _BOARD,
+        [],
+        "CI failure: CI on main — liveness probe timeout",
+        settings,
+        _now(),
+        suppress_title_only_match=True,
+    )
+    assert match is None
+
+
+def test_find_prior_suppress_title_only_match_false_returns_candidate(settings):
+    """When suppress_title_only_match=False (default), a title-only match
+    still returns the candidate — existing behaviour preserved."""
+    svc, ticket = _seed(
+        settings,
+        title="CI failure: CI on main (liveness probe timeout)",
+        body="body that names no code locus at all",
+    )
+    match = find_prior_matching_ticket(
+        _svc(settings),
+        _BOARD,
+        [],
+        "CI failure: CI on main — liveness probe timeout",
+        settings,
+        _now(),
+        suppress_title_only_match=False,
+    )
+    assert match is not None
+    assert match.id == ticket.id
+
+
 # ---------------------------------------------------------------------------
 # find_inflight_overlap (draft-intake pre-refine dedup)
 # ---------------------------------------------------------------------------
@@ -766,6 +807,35 @@ def test_inflight_overlap_unflagged_on_single_segment_no_concern_tokens(settings
         "NEW-DRAFT",
         "fix the login form validation",
         "## Scope\n\nedits server.py for validation",
+        settings,
+        _now(),
+    )
+    assert note is None
+
+
+def test_inflight_overlap_unflagged_on_title_only_no_path_overlap(settings):
+    """Regression test for the langfuse-vs-6116 incident: a draft whose
+    normalized title fingerprint overlaps a recent ticket's title but
+    that shares no file path and no concern symbol MUST NOT be flagged
+    by the draft-intake pre-refine dedup advisory.
+
+    The candidate (like ticket 6116) mentions ``runtime/worker.py`` while
+    the draft names ``src/robotsix_mill/langfuse/client.py`` — no shared
+    paths, no shared concern tokens.  The title fingerprint alone
+    (``langfuse_inspect_trace async bug`` vs ``...liveness probe...``)
+    must not trigger the advisory."""
+    svc, prior = _seed(
+        settings,
+        title="add Kubernetes liveness/readiness probe endpoints",
+        body="## Scope\n\nAdd liveness/readiness probes in runtime/worker.py.",
+    )
+    svc.transition(prior.id, State.READY, note="refined")
+
+    note = find_inflight_overlap(
+        _svc(settings),
+        "NEW-DRAFT",
+        "langfuse_inspect_trace async bug",
+        "## Scope\n\nFix async handling in src/robotsix_mill/langfuse/client.py.",
         settings,
         _now(),
     )
