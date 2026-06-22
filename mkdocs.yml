@@ -52,6 +52,7 @@ nav:
   - Design:
       - Cost indicators: design/cost-indicators.md
       - Forge architecture: design/forge-architecture.md
+      - Worker Process Split (ADR): design/worker-process-split.md
   - Guides:
       - Adding a New Agent: guides/adding-a-new-agent.md
   - API Reference:
