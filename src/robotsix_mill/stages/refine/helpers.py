@@ -625,6 +625,23 @@ def _verify_branch_merged(repo_dir: Path | None, ticket: Ticket) -> bool:
     return True
 
 
+# Sources whose tickets are deterministically auto-approved because they
+# are proposed by mill's own periodic agents (audit, agent_check, bc_check,
+# …) whose scope is dead-code removal, prompt updates, memory ledger
+# structure, config cleanup, docstring additions — no behavioural risk a
+# human reviewer can meaningfully veto.  ``test_gap`` joins the same family.
+# Used by both ``_resolve_next_state`` and the pre-refine mechanical
+# fast-path in ``orchestration.py``.
+_AUTO_APPROVE_SOURCES: set[str] = {
+    "test_gap",
+    "audit",
+    "agent_check",
+    "bc_check",
+    "completeness_check",
+    "module_curator",
+    "copy_paste",
+}
+
 # Substrings (lowercased) in a triage note that signal a draft should NOT be
 # auto-approved — even for _AUTO_APPROVE_SOURCES.  When any pattern matches,
 # _resolve_next_state returns HUMAN_ISSUE_APPROVAL instead of READY so a human
@@ -735,15 +752,6 @@ def _resolve_next_state(
                     f"auto-approve: REJECTED — triage note contains "
                     f"rejection signal matching '{pattern}'"
                 )
-    _AUTO_APPROVE_SOURCES = {
-        "test_gap",
-        "audit",
-        "agent_check",
-        "bc_check",
-        "completeness_check",
-        "module_curator",
-        "copy_paste",
-    }
     if source in _AUTO_APPROVE_SOURCES:
         return State.READY, (
             f"auto-approve: APPROVE — {source} (deterministic rule: "
