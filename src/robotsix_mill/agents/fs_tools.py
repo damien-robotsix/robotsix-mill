@@ -694,31 +694,31 @@ def build_fs_tools(
             with trace_stage("edit_file"):
                 p = _safe(root, path, extra_roots=extra_roots)
                 content = _read_cached(p)
-            occurrences = content.count(old_string)
-            if occurrences == 0:
-                return (
-                    f"edit_file: old_string not found in {path} "
-                    f"— read the file and retry, or use write_file"
-                )
-            if count == 1 and occurrences > 1 and old_string != "":
-                return (
-                    f"edit_file: old_string appears {occurrences} times "
-                    f"in {path} — pass count={occurrences} to replace all, "
-                    f"or a smaller count to replace fewer"
-                )
-            if occurrences < count:
-                return (
-                    f"edit_file: old_string appears {occurrences} time(s) "
-                    f"in {path}, but {count} replacement(s) were requested "
-                    f"— read the file and retry, or use write_file"
-                )
-            new_content = content.replace(old_string, new_string, count)
-            syntax_error = _check_python_syntax(path, new_content)
-            if syntax_error is not None:
-                return syntax_error
-            p.write_text(new_content, encoding="utf-8")
-            _file_cache.pop(p.resolve(), None)
-            return f"edit_file: replaced {count} occurrence(s) in {path}"
+                occurrences = content.count(old_string)
+                if occurrences == 0:
+                    return (
+                        f"edit_file: old_string not found in {path} "
+                        f"— read the file and retry, or use write_file"
+                    )
+                if count == 1 and occurrences > 1 and old_string != "":
+                    return (
+                        f"edit_file: old_string appears {occurrences} times "
+                        f"in {path} — pass count={occurrences} to replace all, "
+                        f"or a smaller count to replace fewer"
+                    )
+                if occurrences < count:
+                    return (
+                        f"edit_file: old_string appears {occurrences} time(s) "
+                        f"in {path}, but {count} replacement(s) were requested "
+                        f"— read the file and retry, or use write_file"
+                    )
+                new_content = content.replace(old_string, new_string, count)
+                syntax_error = _check_python_syntax(path, new_content)
+                if syntax_error is not None:
+                    return syntax_error
+                p.write_text(new_content, encoding="utf-8")
+                _file_cache.pop(p.resolve(), None)
+                return f"edit_file: replaced {count} occurrence(s) in {path}"
         except (ValueError, OSError) as e:
             return f"error: {e}"
 
