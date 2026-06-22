@@ -2445,7 +2445,7 @@ def test_mechanical_fast_path_deterministic_source_skips_llm(
     # Routed to READY.
     assert out.next_state == State.READY
     # The source is in the deterministic set (guard against drift).
-    assert 'audit' in _AUTO_APPROVE_SOURCES
+    assert "audit" in _AUTO_APPROVE_SOURCES
     # Note carries the expected markers.
     assert "deterministic source" in out.note
     assert "skipped refine LLM" in out.note

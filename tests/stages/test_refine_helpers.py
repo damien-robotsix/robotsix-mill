@@ -450,9 +450,7 @@ def test_auto_approve_sources_resolve_next_state_deterministic():
             "t1",
             source=source,
         )
-        assert state is State.READY, (
-            f"source={source!r} unexpected state {state}"
-        )
+        assert state is State.READY, f"source={source!r} unexpected state {state}"
         assert note is not None and "APPROVE" in note, (
             f"source={source!r} note missing APPROVE: {note!r}"
         )
