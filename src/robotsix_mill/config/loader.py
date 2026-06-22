@@ -432,6 +432,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.survey.enabled": "survey_periodic",
     "periodic.survey.interval_seconds": "survey_interval_seconds",
     "periodic.survey.memory_path": "survey_memory_path",
+    "periodic.survey.request_limit": "survey_request_limit",
     "periodic.survey.web_fetch_max_calls": "survey_web_fetch_max_calls",
     "periodic.survey.web_fetch_max_total_bytes": "survey_web_fetch_max_total_bytes",
     "periodic.survey.web_search_max_calls": "survey_web_search_max_calls",
