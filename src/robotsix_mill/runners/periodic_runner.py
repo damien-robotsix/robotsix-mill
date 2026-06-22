@@ -20,7 +20,7 @@ from typing import Any, Callable
 from ..config import RepoConfig, get_secrets, target_branch_for
 from ..core.models import SourceKind
 from ..core.service import TicketService
-from ..forge.auth import github_token
+from ..forge.auth import github_token, gitlab_token
 from .pass_runner import run_agent_pass
 
 log = logging.getLogger("robotsix_mill.periodic_runner")
@@ -68,8 +68,31 @@ TestGapPassResult.__test__ = False  # type: ignore[attr-defined]
 
 
 def _clone_token(settings, repo_config) -> str | None:
-    """Resolve a clone token via ``github_token``; return ``None`` when
-    no credentials are configured (clone will fail and be handled)."""
+    """Resolve a clone token for *repo_config*'s forge; return ``None``
+    when no credentials are configured (clone will fail and be handled).
+
+    The forge kind is detected from the repo's ``forge_remote_url`` so a
+    GitLab-hosted repo gets a GitLab PAT instead of a GitHub App token
+    (a GitHub token against ``gitlab.com`` makes ``git clone`` fail with
+    an auth error / exit 128).  An ambiguous/custom domain falls back to
+    the global ``settings.forge_kind``.
+    """
+    from ..forge.base import _detect_forge_kind
+
+    kind = settings.forge_kind
+    per_repo_url = repo_config.forge_remote_url if repo_config is not None else None
+    if per_repo_url:
+        try:
+            kind = _detect_forge_kind(per_repo_url)
+        except RuntimeError:
+            kind = settings.forge_kind
+
+    if kind == "gitlab":
+        try:
+            return gitlab_token()
+        except RuntimeError:
+            return None
+
     try:
         return github_token(settings, repo_config=repo_config)
     except RuntimeError:

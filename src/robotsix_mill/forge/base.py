@@ -10,6 +10,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Literal
 
 from ..config import RepoConfig, Settings
 
@@ -278,7 +279,7 @@ class Forge(ABC):
         return set()
 
 
-def _detect_forge_kind(remote_url: str) -> str:
+def _detect_forge_kind(remote_url: str) -> Literal["github", "gitlab"]:
     """Inspect a remote URL and return ``"github"`` or ``"gitlab"``.
 
     Heuristics:
@@ -331,17 +332,31 @@ def get_forge(settings: Settings, repo_config: RepoConfig | None = None) -> Forg
     correct repository.  The adapter itself receives the repo_config
     for token minting and remote resolution.
 
+    Forge selection is per-repo: when *repo_config* carries a
+    ``forge_remote_url``, the forge kind is detected from THAT url and
+    overrides the global ``settings.forge_kind``.  This lets a single
+    multi-repo deployment whose global ``forge_kind`` is ``"github"``
+    still route a GitLab-hosted repo to :class:`GitLabForge` (and vice
+    versa) based on its own remote.  If the per-repo URL is on a
+    custom/ambiguous domain (``_detect_forge_kind`` raises), we fall
+    back to the global kind instead of crashing.
+
     When ``forge_kind == "auto"``, the effective forge kind is detected
     from the remote URL (per-repo ``forge_remote_url`` if provided,
     else the global ``settings.forge_remote_url``).
     """
     kind = settings.forge_kind
+    per_repo_url = repo_config.forge_remote_url if repo_config is not None else None
+    if per_repo_url:
+        try:
+            # The per-repo remote URL is authoritative — it wins over the
+            # global forge_kind so mixed-forge fleets route correctly.
+            kind = _detect_forge_kind(per_repo_url)
+        except RuntimeError:
+            # Ambiguous/custom domain — keep the global kind (no new crash).
+            kind = settings.forge_kind
     if kind == "auto":
-        remote_url = (
-            (repo_config.forge_remote_url if repo_config is not None else None)
-            or settings.forge_remote_url
-            or ""
-        )
+        remote_url = per_repo_url or settings.forge_remote_url or ""
         kind = _detect_forge_kind(remote_url)
     if kind == "github":
         from .github import GitHubForge
