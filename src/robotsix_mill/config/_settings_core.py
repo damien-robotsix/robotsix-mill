@@ -186,7 +186,7 @@ class _CoreSettings(BaseModel):
     # coordinator uses when it needs domain-specific advice.
     consult_request_limit: int = Field(default=15, ge=1)
     explore_request_limit: int = Field(default=100, ge=1)
-    explore_max_tokens: int = Field(default=2048, ge=1)
+    explore_max_tokens: int = Field(default=4096, ge=1)
     # Per-call cap for the refine agent's tool loop. The refine agent
     # delegates deep search to the cheap ``explore`` sub-agent (which
     # has its own 100-call budget), so the top-level refine loop should

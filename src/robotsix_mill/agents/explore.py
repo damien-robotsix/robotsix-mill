@@ -284,12 +284,31 @@ async def run_explore(
             getattr(result, "response", None), "finish_reason", None
         )
         if finish_reason == "length":
-            continuation_result = await agent.run(
-                "Continue exactly from where you were cut off. "
-                "Do not repeat anything already said. "
-                "Start from the last incomplete sentence.",
-                usage_limits=limits,
-            )
+            # Defensive: when the result object has all_messages(), pass the
+            # full history so the continuation call genuinely continues from
+            # the truncated output (not from an empty conversation).  Falls
+            # back to the old single-prompt behaviour when all_messages() is
+            # unavailable (e.g. a stubbed result in tests).
+            all_msgs = getattr(result, "all_messages", None)
+            try:
+                history = all_msgs() if all_msgs is not None else None
+            except TypeError:
+                history = None
+            if history is not None:
+                continuation_result = await agent.run(
+                    "Continue exactly from where you were cut off. "
+                    "Do not repeat anything already said. "
+                    "Start from the last incomplete sentence.",
+                    message_history=history,
+                    usage_limits=limits,
+                )
+            else:
+                continuation_result = await agent.run(
+                    "Continue exactly from where you were cut off. "
+                    "Do not repeat anything already said. "
+                    "Start from the last incomplete sentence.",
+                    usage_limits=limits,
+                )
             output += "\n" + str(continuation_result.output).strip()
 
         return output
