@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import event
 from sqlmodel import Session, SQLModel, create_engine
@@ -69,7 +70,7 @@ def get_engine(settings: Settings, board_id: str):
         )
 
         @event.listens_for(engine, "connect")
-        def _set_wal(dbapi_connection, connection_record):
+        def _set_wal(dbapi_connection: Any, _: Any) -> None:
             """Enable WAL mode on each new connection to reduce write contention."""
             dbapi_connection.execute("PRAGMA journal_mode=WAL")
 
