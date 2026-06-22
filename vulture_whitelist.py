@@ -135,6 +135,7 @@ run_health_memory_path
 diagnostic_periodic
 stale_branch_cleanup_periodic
 db_maintenance_periodic
+sandbox_reaper_periodic
 scope_triage_request_limit
 already_done_request_limit
 langfuse_cleanup_periodic
@@ -299,6 +300,7 @@ _run_health_task
 _diagnostic_task
 _stale_branch_task
 _db_maintenance_task
+_sandbox_reaper_task
 queue_size
 queue_join
 _run_periodic_pass_per_repo
