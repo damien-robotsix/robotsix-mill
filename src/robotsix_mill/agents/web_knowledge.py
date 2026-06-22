@@ -49,6 +49,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..config import Settings, get_secrets
+from ..runtime.tracing import trace_stage
 
 log = logging.getLogger(__name__)
 
@@ -394,10 +395,11 @@ async def run_web_knowledge(
 
     limits = UsageLimits(request_limit=settings.web_knowledge_request_limit)
     try:
-        result = await acall_with_retry(
-            lambda: agent.run(question, usage_limits=limits),
-            what="web_knowledge",
-        )
+        with trace_stage("ask_web_knowledge"):
+            result = await acall_with_retry(
+                lambda: agent.run(question, usage_limits=limits),
+                what="web_knowledge",
+            )
         return str(result.output)
     except Exception as e:  # noqa: BLE001 — degrade
         log.warning("web_knowledge failed: %s", e)

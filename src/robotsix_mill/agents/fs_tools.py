@@ -16,6 +16,7 @@ from pydantic_ai import RunContext
 
 from ..config import Settings
 from .. import sandbox
+from ..runtime.tracing import trace_stage
 
 log = logging.getLogger(__name__)
 
@@ -732,12 +733,13 @@ def build_fs_tools(
                 "the repository has not been cloned yet"
             )
         try:
-            rc, out = sandbox.run(
-                command,
-                repo_dir=root,
-                settings=settings,
-                sandbox_image=sandbox_image,
-            )
+            with trace_stage("run_command"):
+                rc, out = sandbox.run(
+                    command,
+                    repo_dir=root,
+                    settings=settings,
+                    sandbox_image=sandbox_image,
+                )
         except sandbox.SandboxError as e:
             return f"sandbox error: {e}"
         if not out.strip():

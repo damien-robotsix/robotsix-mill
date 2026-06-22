@@ -2155,3 +2155,30 @@ class TestReadFileSizeGuard:
         result = tools["read_file"](path="big.txt")
         assert result == body
         assert "truncated" not in result
+
+
+# --- trace_stage child-span test for run_command ------------------------
+
+
+def test_trace_stage_run_command_nests_under_parent(
+    tmp_path, settings, fake_sandbox, monkeypatch
+):
+    """run_command opens a child span named 'run_command' via trace_stage."""
+    import contextlib
+
+    from robotsix_mill.agents import fs_tools
+
+    spans: list[str] = []
+
+    @contextlib.contextmanager
+    def fake_trace_stage(name):
+        spans.append(name)
+        yield
+
+    monkeypatch.setattr(fs_tools, "trace_stage", fake_trace_stage)
+    root = tmp_path / "repo"
+    root.mkdir()
+    tools = {t.__name__: t for t in build_fs_tools(root, settings)}
+    result = tools["run_command"]("echo hello")
+    assert result == "exit=0\nhello\n"
+    assert spans == ["run_command"]

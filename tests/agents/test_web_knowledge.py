@@ -593,3 +593,29 @@ class TestTraceWebSearchBudget:
         for i in range(10):
             r = asyncio.run(web_search(f"query {i}"))
             assert f"ok: query {i}" == r
+
+
+# --- trace_stage child-span tests ---------------------------------------
+
+
+def test_trace_stage_ask_web_knowledge_nests_under_parent(
+    tmp_path, secrets_set, monkeypatch
+):
+    """run_web_knowledge opens a child span named 'ask_web_knowledge'
+    via trace_stage."""
+    import contextlib
+
+    spans: list[str] = []
+
+    @contextlib.contextmanager
+    def fake_trace_stage(name):
+        spans.append(name)
+        yield
+
+    monkeypatch.setattr(web_knowledge, "trace_stage", fake_trace_stage)
+    secrets_set(openrouter_api_key="k")
+    _patch_agent_chain(monkeypatch)
+    s = _settings(tmp_path)
+    out = asyncio.run(run_web_knowledge(settings=s, question="q"))
+    assert out == "the answer"
+    assert spans == ["ask_web_knowledge"]
