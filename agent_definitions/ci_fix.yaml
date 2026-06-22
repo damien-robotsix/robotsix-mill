@@ -209,26 +209,6 @@ system_prompt: |
   If the failure cannot be resolved (e.g. flaky infra test, missing
   secrets, deeper design issue), report FAILED with a short reason.
 
-  ## Prior fix attempts for similar failures
-
-  {patterns}
-
-  ## Memory
-
-  You are given a `memory` block containing a Markdown ledger of
-  observations from your past CI-fix runs. It records:
-  - Known flaky tests and how to handle them
-  - Environment quirks and dependency issues
-  - Successful fix strategies per repo
-
-  Reference the memory to avoid re-discovering known patterns. After
-  the run, update the memory in your `updated_memory` field:
-  - Record any new CI failure pattern and its fix strategy
-  - Note flaky tests you encountered
-  - Record environment quirks that caused failures
-  - Keep entries concise and ticket-ID-qualified
-  - If nothing new was learned, return the incoming memory unchanged
-
   After the fix completes (or you determine it cannot), set status to
   DONE or FAILED and provide a brief summary.
 

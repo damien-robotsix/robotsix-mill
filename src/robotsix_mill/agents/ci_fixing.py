@@ -142,14 +142,19 @@ def run_ci_fix_agent(
         )
     )
 
-    user_prompt = (
+    user_prompt_parts = [
         f"CI is failing on branch '{branch}' in {repo_dir}. "
         + "Here is the failing check summary:\n\n"
-        + f"```\n{failing_summary}\n```\n\n"
-        + section("memory", memory or "(empty — start a new ledger)")
-        + "\n\n"
-        + "Follow the system prompt exactly."
-    )
+        + f"```\n{failing_summary}\n```",
+    ]
+    if patterns_text != "(no prior patterns for this failure)":
+        user_prompt_parts.append(
+            "## Prior fix attempts for similar failures\n\n" + patterns_text
+        )
+    if memory:
+        user_prompt_parts.append(section("memory", memory))
+    user_prompt_parts.append("Follow the system prompt exactly.")
+    user_prompt = "\n\n".join(user_prompt_parts)
 
     result = load_and_run_agent(
         settings=settings,
@@ -163,7 +168,6 @@ def run_ci_fix_agent(
             "repo_dir": repo_dir,
             "branch": branch,
             "target": target,
-            "patterns": patterns_text,
         },
         run_kwargs={
             "usage_limits": UsageLimits(request_limit=settings.ci_fix_request_limit)

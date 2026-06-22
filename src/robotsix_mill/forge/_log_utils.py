@@ -10,6 +10,58 @@ from __future__ import annotations
 
 import re
 
+# Regex patterns for stripping CI runner preamble/setup boilerplate.
+# These lines carry no diagnostic value for the ci-fix agent and
+# collectively account for hundreds of tokens per job log.
+_RUNNER_PREAMBLE_RES: list[re.Pattern[str]] = [
+    re.compile(r"^Current runner version:.*$", re.MULTILINE),
+    re.compile(
+        r"^##\[group\]Operating System\n.*?\n##\[endgroup\]", re.MULTILINE | re.DOTALL
+    ),
+    re.compile(
+        r"^##\[group\]Runner Image\n.*?\n##\[endgroup\]", re.MULTILINE | re.DOTALL
+    ),
+    re.compile(
+        r"^##\[group\]Runner Image Provisioner\n.*?\n##\[endgroup\]",
+        re.MULTILINE | re.DOTALL,
+    ),
+    re.compile(
+        r"^##\[group\]GITHUB_TOKEN Permissions\n.*?\n##\[endgroup\]",
+        re.MULTILINE | re.DOTALL,
+    ),
+    re.compile(r"^Secret source:.*$\n?", re.MULTILINE),
+    re.compile(r"^Prepare workflow directory\n?", re.MULTILINE),
+    re.compile(
+        r"^Prepare all required actions\n.*?(?=\n##\[group\])", re.MULTILINE | re.DOTALL
+    ),
+    re.compile(
+        r"^Getting action download info\n.*?(?=\n##\[group\]|\Z)",
+        re.MULTILINE | re.DOTALL,
+    ),
+    re.compile(r"^Post job cleanup\.\n?", re.MULTILINE),
+    # Collapse consecutive blank lines (3+) into at most 1 blank line.
+    re.compile(r"\n{3,}", re.MULTILINE),
+]
+
+
+def _strip_runner_noise(clean_log: str) -> str:
+    """Remove CI runner boilerplate from a cleaned (ANSI-stripped) job log.
+
+    Strips known GitHub Actions runner preamble blocks, then collapses
+    consecutive blank lines.  Returns *clean_log* unchanged when no
+    patterns match.  This is a pure token-saver — it never removes error
+    lines, step output, or anything with diagnostic value.
+
+    ``##[group]`` / ``##[endgroup]`` markers are left intact: they are a
+    few bytes each and provide step-boundary context the ci-fix agent
+    uses to identify which step failed.
+    """
+    for pat in _RUNNER_PREAMBLE_RES:
+        clean_log = pat.sub("", clean_log)
+    # Collapse resulting blank-line runs.
+    clean_log = re.sub(r"\n{3,}", "\n\n", clean_log)
+    return clean_log.strip()
+
 
 def _capture_failure_window(
     clean_log: str,
