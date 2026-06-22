@@ -84,6 +84,46 @@ def test_default_coordinator_max_tool_calls():
     assert s.coordinator_max_tool_calls == 300
 
 
+def test_default_stage_timeout_overrides_refine():
+    """The shipped default ``stage_timeout_overrides`` contains a
+    ``{"refine": 900}`` entry (not empty).  900 s (15 min) leaves
+    headroom above the sampled 736 s legitimate Opus refine while
+    still catching multi-hour runaways.
+
+    Also verifies ``default_factory`` isolates instances — mutating
+    one instance's dict must not leak into another.
+
+    Checks BOTH the raw ``_CoreSettings`` model (Field default) AND
+    the full ``Settings`` class (YAML cascade) — the YAML defaults
+    file must echo the same value so it doesn't shadow the Field
+    default with an empty dict."""
+    from robotsix_mill.config._settings_core import _CoreSettings
+
+    # Field default on the raw model (no YAML cascade).
+    s1 = _CoreSettings()
+    assert s1.stage_timeout_overrides == {"refine": 900}
+
+    # Full Settings class (YAML cascade must NOT shadow the Field default).
+    from robotsix_mill.config import Settings
+
+    s_full = Settings()
+    assert s_full.stage_timeout_overrides == {"refine": 900}, (
+        "Settings().stage_timeout_overrides must also be {refine: 900}; "
+        "if this fails, config/mill.defaults.yaml still has stage_timeout_overrides: {} "
+        "which shadows the Field default with an empty dict."
+    )
+
+    # Instance isolation: default_factory, not a shared mutable literal.
+    s2 = _CoreSettings()
+    s2.stage_timeout_overrides["refine"] = 600
+    s2.stage_timeout_overrides["merge"] = 0
+    s3 = _CoreSettings()
+    assert s3.stage_timeout_overrides == {"refine": 900}, (
+        "mutating one instance must not leak into another — "
+        "default_factory must create a fresh dict each time"
+    )
+
+
 def test_default_board_agent_disabled():
     """Board agent is opt-in — off by default, pointed at this mill's own
     board API, with writes enabled and no broker configured."""

@@ -367,11 +367,21 @@ class _CoreSettings(BaseModel):
     # shell-command runs while still catching a true hang.
     stage_timeout_seconds: int = Field(default=2400)
     # Per-stage timeout overrides (JSON dict via env var, e.g.
-    # MILL_STAGE_TIMEOUT_OVERRIDES='{"merge":0,"deliver":0}').
+    # MILL_STAGE_TIMEOUT_OVERRIDES='{"merge":0,"refine":1200}').
     # Keys are stage names; values are seconds.  Falls back to
     # stage_timeout_seconds when a stage isn't listed.  A value of 0
     # disables the timeout for that stage.
-    stage_timeout_overrides: dict[str, int] = Field(default_factory=dict)
+    #
+    # Built-in default: refine caps at 900 s (15 min).  A sampled
+    # legitimate refine run on model_level 3 (Claude SDK / Opus)
+    # clocked 736 s (~12 min); 900 s leaves headroom while still
+    # catching multi-hour runaway refine traces.  Operators can
+    # override or disable (value 0) via the env var / YAML key.
+    # Supplying your own dict REPLACES the built-in — re-include
+    # a "refine" entry if you still want a cap.
+    stage_timeout_overrides: dict[str, int] = Field(
+        default_factory=lambda: {"refine": 900}
+    )
     # Maximum seconds to wait for in-flight periodic-agent passes
     # (survey, audit, health, …) to finish before tearing the worker
     # down on container shutdown. The mill's docker-compose ships a

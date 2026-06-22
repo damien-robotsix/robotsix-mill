@@ -68,7 +68,15 @@ _SECRETS_EXAMPLE_YAML = _REPO_ROOT / "config" / "secrets.example.yaml"
 # ``_YAML_PATH_TO_ALIAS`` (invariant 2). Each entry documents where the
 # value is actually consumed — it is NOT routed through the YAML→alias
 # flatten flow.
-_DEFAULTS_KEYS_NOT_IN_ALIAS: frozenset[str] = frozenset()
+_DEFAULTS_KEYS_NOT_IN_ALIAS: frozenset[str] = frozenset(
+    {
+        # ``stage_timeout_overrides`` is a dict; its children that
+        # ship built-in defaults are not individual top-level
+        # settings — the whole dict is mapped via
+        # ``core.limits.stage_timeout_overrides``.
+        "core.limits.stage_timeout_overrides.refine",
+    }
+)
 
 # Settings model fields intentionally absent from
 # ``_YAML_PATH_TO_ALIAS`` values (invariant 5). Each field documents
@@ -211,14 +219,25 @@ def build_valid_settings_names(model: type) -> set[str]:
 def check_map_keys_in_defaults(
     alias_map: dict[str, str], defaults_leaves: list[str]
 ) -> list[str]:
-    """Invariant 1: every map key must be a defaults-YAML leaf path."""
+    """Invariant 1: every map key must be a defaults-YAML leaf path.
+
+    Also accepts keys that are *prefixes* of leaf paths — e.g.
+    ``core.limits.stage_timeout_overrides`` is a valid (non-scalar)
+    YAML key even when the flattener recursed into its children
+    (``core.limits.stage_timeout_overrides.refine``).
+    """
 
     leaf_set = set(defaults_leaves)
-    return [
-        f"map key not found as a leaf in mill.defaults.yaml: {key}"
-        for key in alias_map
-        if key not in leaf_set
-    ]
+    drift: list[str] = []
+    for key in alias_map:
+        if key in leaf_set:
+            continue
+        # Accept keys that are prefixes of a leaf (the key itself
+        # is a non-scalar dict node in the YAML tree).
+        if any(leaf.startswith(key + ".") for leaf in leaf_set):
+            continue
+        drift.append(f"map key not found as a leaf in mill.defaults.yaml: {key}")
+    return drift
 
 
 def check_defaults_leaves_in_map(

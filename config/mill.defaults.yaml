@@ -64,7 +64,7 @@ core:
     max_stuck_cycles: 3                # re-entries to same stage without progress before BLOCK
     max_spend_usd_per_ticket: 20.0     # dollar cap per ticket — universal runaway-loop backstop (0.0 = disabled)
     stage_timeout_seconds: 2400        # per-stage wall-clock timeout before BLOCK (0 = disabled)
-    stage_timeout_overrides: {}        # per-stage timeout overrides as JSON dict, e.g. {"merge": 300}
+    stage_timeout_overrides: {refine: 900}  # per-stage timeout overrides; refine caps at 900s (15 min), operators can override/disable (0) via MILL_STAGE_TIMEOUT_OVERRIDES / core.limits.stage_timeout_overrides
     transient_retries: 4               # max retries for transient network/model failures
     transient_backoff_base: 2.0        # base seconds for exponential backoff (jittered)
     transient_backoff_cap: 30.0        # max seconds between transient retries
