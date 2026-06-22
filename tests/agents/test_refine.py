@@ -4825,6 +4825,31 @@ class TestIsInternalToolchainFailure:
             "TRACEBACK (most recent call last):"
         )
 
+    # -- bare tool NAMES must NOT trip the predicate (false-positive fix) --
+    # A normal feature spec routinely mentions tooling; matching the bare
+    # tool name replaced the real spec with a generic "fix the failing
+    # check" template across many tickets.
+
+    def test_feature_spec_mentioning_pytest_negative(self):
+        """A feature spec that says it will ship pytest tests → False."""
+        assert not refining.is_internal_toolchain_failure(
+            "Implement the runner and ship pytest async tests for both the "
+            "success and failure paths."
+        )
+
+    def test_feature_spec_mentioning_mypy_hook_negative(self):
+        """A spec about fixing a mypy pre-commit hook → False (no output)."""
+        assert not refining.is_internal_toolchain_failure(
+            "Fix the pre-commit mypy hook: use a local system hook so it runs "
+            "against the project environment."
+        )
+
+    def test_feature_spec_mentioning_ruff_config_negative(self):
+        """A spec about adding ruff/vulture/bandit config → False."""
+        assert not refining.is_internal_toolchain_failure(
+            "Add a ruff config and a bandit + vulture pass to the dev tooling."
+        )
+
 
 class TestRefineTraceWebBudgetDefaults:
     """The refine stage reuses the proven per-trace web budget helpers

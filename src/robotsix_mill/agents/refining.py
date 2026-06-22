@@ -723,9 +723,13 @@ _INTERNAL_FAILURE_MARKERS: tuple[str, ...] = (
     "[union-attr]",
     "[valid-type]",
     "[var-annotated]",
-    # ruff / lint codes (bare codes are too noisy — require the
-    # tool name or a recognisable code pattern)
-    "ruff",
+    # ruff / lint codes — specific enough to indicate actual lint OUTPUT,
+    # not a prose mention. Bare tool NAMES are deliberately NOT markers:
+    # a normal feature spec routinely says "ship pytest tests", "fix the
+    # mypy hook", "add a ruff config" — matching the tool name there
+    # mis-fired the refine short-circuit and replaced the real spec with a
+    # generic "fix the failing check" template (observed across many
+    # tickets). Markers must be FAILURE-OUTPUT signatures, never tool names.
     "E501",
     "F401",
     "F811",
@@ -733,13 +737,6 @@ _INTERNAL_FAILURE_MARKERS: tuple[str, ...] = (
     # Generic tool exit codes (require a named tool, not just "exit")
     "exit code",
     "exit=1",
-    # Explicitly named tools
-    "mypy",
-    "pytest",
-    "pyright",
-    "bandit",
-    "vulture",
-    "deptry",
 )
 
 
@@ -754,8 +751,12 @@ def is_internal_toolchain_failure(draft: str) -> bool:
     minimal spec.
 
     The predicate is conservative — it requires at least one
-    recognisable tool/failure token (see ``_INTERNAL_FAILURE_MARKERS``)
-    and does NOT match on the bare word "test" alone.
+    FAILURE-OUTPUT signature (traceback, pytest ``FAILED``/summary, mypy
+    error codes, lint codes, exit codes; see ``_INTERNAL_FAILURE_MARKERS``).
+    It deliberately does NOT match bare tool names (pytest/mypy/ruff/…):
+    a normal feature spec routinely mentions those (e.g. "ship pytest
+    tests"), and matching them mis-fired the refine short-circuit, replacing
+    the real spec with a generic "fix the failing check" template.
     """
     lowered = draft.lower()
     return any(marker.lower() in lowered for marker in _INTERNAL_FAILURE_MARKERS)
