@@ -159,6 +159,8 @@ gates:
   pr_summary_enabled: false               # generate structured PR body from diff via cheap LLM (opt-in)
   refine_triage_enabled: true              # cheap triage before full refine (skip if precise)
   max_re_refine_cycles_before_cheap: 2     # force cheap model after this many "changes requested" send-backs; 0 = never
+  refine_trivial_routing_enabled: true     # route trivial-scope tickets to cheap model instead of Opus
+  refine_trivial_model_level: 1            # model level for trivial-scope refines (1=DeepSeek flash)
   reviewer_agreement_gate_enabled: true     # pre-Opus guard: skip refine when reviewer agrees with draft's no-change conclusion
   maintenance_triage_enabled: true         # cheap triage before a full maintenance pass
   spec_review_enabled: true                # post-refinement spec narrative stripping
@@ -250,8 +252,17 @@ periodic:
     cost_multiplier: 3.0            # outlier threshold multiplier for cost (cost > median * N → flagged)
     obs_multiplier: 3.0             # outlier threshold multiplier for observation count (obs > median * N → flagged)
     max_repeated_tool: 50           # absolute cap on repeated tool calls before flagging
+    per_obs_cost_threshold: 0.001   # minimum per-observation cost to consider a trace for review
     max_drafts_per_run: 5           # cap on drafted findings per pass (prevents board flooding)
     max_traces_per_run: 300         # cap on traces detail-loaded per pass; watermark advances incrementally so a backlog drains with bounded memory (0 disables)
+    max_tool_calls: 100             # hard cap on tool calls per trace inspector invocation
+    max_errors: 20                  # hard cap on tool-call errors before auto-terminating the trace inspector
+    model_level: 1                  # model tier for the trace inspector (1=DeepSeek flash, 2=DeepSeek pro, 3=Claude Opus)
+    tool_request_limit: 15          # request budget for the interactive langfuse_inspect_trace tool path
+    max_inspections_per_run: 5      # hard cap on LLM inspector calls per trace-review run (0 disables)
+    initial_lookback_hours: 24      # first-run lookback window (hours) when no watermark exists
+    restart_correlation_window_seconds: 60  # window for correlating incomplete trace with process restart
+    dedup_lookback_days: 7          # recency window (days) for pre-filing duplicate check
     inspector_min_requests: 20         # floor for tools-on request budget (even tiny traces get enough)
     inspector_max_requests: 80         # ceiling for tools-on request budget
     inspector_requests_per_obs: 0.1    # requests granted per observation (before min/max clamp)
