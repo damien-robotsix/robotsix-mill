@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import AsyncContextManager, Callable
@@ -79,6 +80,26 @@ setup_logging()
 _process_started_at: datetime | None = None
 
 
+def _export_openrouter_key_to_env() -> None:
+    """Surface the configured OpenRouter key into ``OPENROUTER_API_KEY``.
+
+    The mill stores the key in ``secrets.yaml`` and passes it *explicitly*
+    to its own provider, so it is never exported to the process env. But
+    in-process llmio consumers that go through ``build_agent_for_level``
+    construct ``OpenRouterDeepseekProvider()`` with no key, so the provider
+    falls back to reading ``OPENROUTER_API_KEY`` from the environment. Without
+    this export those consumers (e.g. the board-manager's recall agent) fail
+    with "OpenRouter API key missing".
+
+    Uses ``setdefault`` so an externally-provided env var always wins.
+    """
+    from ..config.secrets import get_secrets
+
+    or_key = get_secrets().openrouter_api_key
+    if or_key:
+        os.environ.setdefault("OPENROUTER_API_KEY", or_key)
+
+
 def create_lifespan(
     settings: Settings,
     repos: ReposRegistry,
@@ -96,6 +117,12 @@ def create_lifespan(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        # Surface the OpenRouter key into the process env *before* any
+        # in-process llmio consumer starts, so ``build_agent_for_level``'s
+        # OpenRouter provider (which reads only ``OPENROUTER_API_KEY``) can
+        # authenticate process-wide — not just when the board-manager runs.
+        _export_openrouter_key_to_env()
+
         # Initialize each registered repo's DB so per-board services
         # have schema available without lazy-init races.
         # Every ticket lives in a per-repo DB.
