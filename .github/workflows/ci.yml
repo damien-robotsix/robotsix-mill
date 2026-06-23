@@ -66,7 +66,36 @@ jobs:
       - name: Check file registration
         env:
           UV_PROJECT_ENVIRONMENT: system
-        run: uv run robotsix-modules check-registration docs/modules.yaml --root .
+        run: |
+          uv run python -c "
+          import subprocess, sys
+          from pathlib import Path
+          from robotsix_modules.validation.registration import check_registration
+          from robotsix_yaml_config import read_yaml_file
+
+          taxonomy = read_yaml_file(Path('docs/modules.yaml'))
+          result = subprocess.run(['git', 'ls-files', '-s'],
+                                  capture_output=True, text=True)
+          if result.returncode != 0:
+              print('git ls-files failed', file=sys.stderr)
+              sys.exit(2)
+          tracked = []
+          for line in result.stdout.splitlines():
+              if not line.strip():
+                  continue
+              mode = line[:6]
+              path = line.split('\t', 1)[1] if '\t' in line else ''
+              if mode != '160000' and path:
+                  tracked.append(path)
+
+          findings = check_registration(taxonomy, Path('.'),
+                                        tracked_files=tracked)
+          if findings:
+              for f in findings:
+                  print(f.message, file=sys.stderr)
+              sys.exit(1)
+          print('All tracked files are properly registered.')
+          "
 
       - name: Vulture (dead code)
         env:

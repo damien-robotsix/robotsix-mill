@@ -733,4 +733,5 @@ modules:
       - SECURITY.md
       - AGENT.md
       - .gitignore
+      - .gitmodules
     dependencies: []
