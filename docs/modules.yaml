@@ -527,8 +527,10 @@ modules:
       - tests/agents/test_bespoke.py
       - tests/agents/test_epic_status.py
       - src/robotsix_mill/agents/env_doc_syncing.py
+      - src/robotsix_mill/agents/frontend_syncing.py
       - src/robotsix_mill/agents/state_syncing.py
       - tests/agents/test_env_doc_syncing.py
+      - tests/agents/test_frontend_syncing.py
       - tests/agents/test_state_syncing.py
     dependencies: [config, core, agent-infra, agent-tools, forge, vcs, runners, langfuse, sandbox]
 
