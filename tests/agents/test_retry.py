@@ -62,23 +62,20 @@ def test_is_transient_jsondecode_wrapped():
 
 def test_is_transient_claude_sdk_degenerate_success():
     """The degenerate ``is_error=True`` + ``subtype='success'`` result from
-    the Claude SDK is *not* transient — it is a structural misconfiguration
-    that will fail identically on every retry.  It must be recognised (the
-    ``_is_claude_sdk_degenerate_result`` detector still matches it) but it
-    must NOT trigger local retry, so the fallback mechanism can react
-    immediately."""
+    the Claude SDK is transient in practice — observed behaviour shows that a
+    fresh run on the same input succeeds normally.  Retrying is cheaper than
+    blocking and re-running the whole stage."""
     assert (
-        is_transient(Exception("Claude Code returned an error result: success"))
-        is False
+        is_transient(Exception("Claude Code returned an error result: success")) is True
     )
     inner = Exception("Claude Code returned an error result: success")
     wrapped = RuntimeError("agent run failed")
     wrapped.__cause__ = inner
-    assert is_transient(wrapped) is False
+    assert is_transient(wrapped) is True
 
     ctx_wrapped = RuntimeError("agent run failed")
     ctx_wrapped.__context__ = Exception("Claude Code returned an error result: success")
-    assert is_transient(ctx_wrapped) is False
+    assert is_transient(ctx_wrapped) is True
 
 
 def test_is_transient_claude_sdk_genuine_error_not_transient():
