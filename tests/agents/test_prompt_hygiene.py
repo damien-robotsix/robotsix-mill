@@ -258,3 +258,29 @@ def test_periodic_prompts_prohibit_per_ticket_memory_writes(
                     f"Match: {m.group()!r}\n"
                     f"Context: …{prompt[max(0, m.start() - 40) : m.end() + 40]}…"
                 )
+
+
+_SHARED_ACTION_TAG_MARKER = "resolve a GitHub Action tag to its commit SHA"
+
+
+@pytest.mark.parametrize(
+    "agent_name,yaml_path",
+    [
+        ("ci_fix", "ci_fix.yaml"),
+        ("implement", "implement.yaml"),
+        ("refine", "refine.yaml"),
+    ],
+)
+def test_action_tag_resolution_instruction_present(
+    agent_name: str, yaml_path: str
+) -> None:
+    """All three pipeline agent prompts must contain the action-tag
+    resolution instruction with the shared marker phrase."""
+    definition = load_agent_definition(
+        Path(__file__).parent.parent.parent / "agent_definitions" / yaml_path
+    )
+    prompt = definition.system_prompt
+    assert _SHARED_ACTION_TAG_MARKER in prompt, (
+        f"{agent_name} prompt ({yaml_path}) is missing the shared "
+        f"marker phrase: {_SHARED_ACTION_TAG_MARKER!r}"
+    )
