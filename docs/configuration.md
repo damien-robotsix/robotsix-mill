@@ -376,7 +376,7 @@ the `claude` CLI in the container). These knobs govern that path:
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| — (env-var only) | `MILL_CLAUDE_MAX_CONCURRENCY` | `4` | Process-wide cap on concurrent Claude SDK runs (each spawns a `claude` CLI subprocess) |
+| `core.claude_max_concurrency` | `MILL_CLAUDE_MAX_CONCURRENCY` | `4` | Process-wide cap on concurrent Claude SDK runs (each spawns a `claude` CLI subprocess) |
 | `core.claude_sdk_vision_enabled` | — | `false` | Allow inline image (screenshot/vision) input on the Claude SDK path. **Default off**: the installed llmio bridge cannot consume `BinaryContent` image parts — it stringifies them into a useless repr that hangs the `claude` CLI until the 1200s per-call cap fires. While off, the refine/review screenshot paths degrade to a text note. Flip to `true` (a one-line change) once the bridge gains real image-input support |
 | `core.investigation_workspace` | `MILL_INVESTIGATION_WORKSPACE` | `None` | Path to a directory containing clones of registered repos for cross-repo investigation by the maintenance agent. When set, the agent's read-only tools are scoped to this directory. When None, falls back to the ticket's own workspace repo_dir. |
 

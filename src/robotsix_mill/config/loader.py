@@ -202,6 +202,7 @@ def load_repos_yaml(file_path: str | None = None) -> dict:
 _YAML_PATH_TO_ALIAS: dict[str, str] = {
     # -- core: Claude SDK vision gate (level-3 agents) --
     "core.claude_sdk_vision_enabled": "claude_sdk_vision_enabled",
+    "core.claude_max_concurrency": "MILL_CLAUDE_MAX_CONCURRENCY",
     "core.enable_repo_creation": "enable_repo_creation",
     "core.repo_visibility_default": "repo_visibility_default",
     # Cross-repo meta-agent pass (surveys all repos for extraction/alignment).
