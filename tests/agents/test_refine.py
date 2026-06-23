@@ -5527,6 +5527,117 @@ def test_triage_result_trivial_scope_false_by_default():
     assert _read_triage_trivial(FakeWS()) is False  # type: ignore[arg-type]
 
 
+def test_triage_result_exploration_findings_default():
+    """TriageResult.exploration_findings defaults to None when not provided."""
+    from robotsix_mill.agents.refining import TriageResult
+
+    r = TriageResult(decision="REFINE", reason="test")
+    assert r.exploration_findings is None
+
+
+def test_triage_result_exploration_findings_roundtrip():
+    """TriageResult.exploration_findings preserves a non-empty string
+    through model_validate round-trip."""
+    from robotsix_mill.agents.refining import TriageResult
+
+    findings = (
+        "- Verified `src/foo/bar.py` exists (342 lines)\n"
+        "- Confirmed `Frobnicator.run()` at line 89\n"
+    )
+    r = TriageResult.model_validate(
+        {
+            "decision": "REFINE",
+            "reason": "multi-file",
+            "complexity": "needs-exploration",
+            "exploration_findings": findings,
+        }
+    )
+    assert r.exploration_findings == findings
+
+    # Empty string is preserved (not coerced to None).
+    r2 = TriageResult.model_validate(
+        {
+            "decision": "REFINE",
+            "reason": "test",
+            "exploration_findings": "",
+        }
+    )
+    assert r2.exploration_findings == ""
+
+
+def test_triage_findings_artifact_write_read():
+    """_write_triage_complexity with findings writes triage_findings.json;
+    _read_triage_findings returns it; absent file returns None."""
+    import json
+    import tempfile
+    from pathlib import Path
+
+    from robotsix_mill.stages.refine.orchestration import (
+        _write_triage_complexity,
+        _read_triage_findings,
+    )
+
+    tmp = Path(tempfile.mkdtemp())
+    artifacts = tmp / "artifacts"
+    artifacts.mkdir()
+
+    class FakeWS:
+        artifacts_dir = artifacts
+
+    ws = FakeWS()
+
+    # No file yet → None
+    assert _read_triage_findings(ws) is None  # type: ignore[arg-type]
+
+    # Write with findings
+    _write_triage_complexity(
+        ws,  # type: ignore[arg-type]
+        "needs-exploration",
+        findings="- Verified `src/a.py` exists\n",
+    )
+
+    # Now the findings file exists
+    findings = _read_triage_findings(ws)  # type: ignore[arg-type]
+    assert findings == "- Verified `src/a.py` exists\n"
+
+    # Complexity file still written
+    data = json.loads(
+        (artifacts / "triage_complexity.json").read_text(encoding="utf-8")
+    )
+    assert data["complexity"] == "needs-exploration"
+
+    # Write without findings — findings file should NOT be created/overwritten
+    # if it didn't exist before (but existing one stays).
+    # Test fresh workspace: no findings
+    tmp2 = Path(tempfile.mkdtemp())
+    art2 = tmp2 / "artifacts"
+    art2.mkdir()
+
+    class FakeWS2:
+        artifacts_dir = art2
+
+    _write_triage_complexity(FakeWS2(), "simple")  # type: ignore[arg-type]
+    assert not (art2 / "triage_findings.json").exists()
+
+    # findings=None should not create the file
+    _write_triage_complexity(FakeWS2(), "needs-exploration", findings=None)  # type: ignore[arg-type]
+    assert not (art2 / "triage_findings.json").exists()
+
+    # Empty findings should not create the file
+    _write_triage_complexity(FakeWS2(), "needs-exploration", findings="")  # type: ignore[arg-type]
+    assert not (art2 / "triage_findings.json").exists()
+
+    # Corrupt JSON → None
+    (artifacts / "triage_findings.json").write_text("{bad json", encoding="utf-8")
+    assert _read_triage_findings(ws) is None  # type: ignore[arg-type]
+
+    # Missing key → None
+    (artifacts / "triage_findings.json").write_text(
+        json.dumps({"other": "value"}), encoding="utf-8"
+    )
+    assert _read_triage_findings(ws) is None  # type: ignore[arg-type]
+
+
 def test_run_refine_agent_passes_refine_level_to_build_agent(
     monkeypatch, settings, tmp_path
 ):

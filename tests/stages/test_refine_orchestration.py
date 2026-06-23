@@ -1646,6 +1646,68 @@ def test_trivial_scope_true_persisted_to_artifact(ctx_factory, monkeypatch, tmp_
     assert _read_triage_trivial(ws) is True
 
 
+def test_triage_findings_forwarded_to_run_refine_agent(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """When triage returns exploration_findings, the value reaches
+    run_refine_agent via the triage_findings keyword argument."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+
+    refine_kwargs: dict = {}
+
+    def _run(**kw):
+        refine_kwargs.update(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    _apply_default_mocks(
+        monkeypatch,
+        triage_refine=lambda **kw: TriageResult(
+            decision="REFINE",
+            reason="multi-file",
+            complexity="needs-exploration",
+            exploration_findings="- Verified `src/foo.py` exists (342 lines)\n",
+        ),
+        run_refine_agent=_run,
+    )
+
+    _run_agent(ctx, t, tmp_path)
+
+    assert refine_kwargs.get("triage_findings") == (
+        "- Verified `src/foo.py` exists (342 lines)\n"
+    )
+
+
+def test_triage_findings_none_not_forwarded_to_run_refine_agent(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """When triage does not populate exploration_findings (None),
+    run_refine_agent receives triage_findings=None."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+
+    refine_kwargs: dict = {}
+
+    def _run(**kw):
+        refine_kwargs.update(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    _apply_default_mocks(
+        monkeypatch,
+        triage_refine=lambda **kw: TriageResult(
+            decision="REFINE",
+            reason="simple change",
+            complexity="simple",
+            exploration_findings=None,
+        ),
+        run_refine_agent=_run,
+    )
+
+    _run_agent(ctx, t, tmp_path)
+
+    assert refine_kwargs.get("triage_findings") is None
+
+
 # ===========================================================================
 # Re-refine round counter → force cheap model after threshold
 # ===========================================================================
