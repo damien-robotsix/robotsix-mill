@@ -18,6 +18,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from ..runtime.tracing import trace_stage
 from ..vcs import git_ops
 
 
@@ -49,21 +50,22 @@ def build_bridged_git_tools(  # noqa: C901 — four inner closures, each ~20 lin
 
         Guardrailed: only the ticket's configured target branch is
         accepted — arbitrary branches are rejected."""
-        if target_branch != target:
-            return (
-                f"error: git_fetch is guardrailed to target branch "
-                f"'{target}' — '{target_branch}' rejected"
-            )
-        try:
-            git_ops.fetch(
-                repo_dir,
-                remote_url=remote_url,
-                token=token,
-                branch=target_branch,
-            )
-        except subprocess.CalledProcessError as e:
-            return f"error: git_fetch failed: {git_ops.redact_credentials(str(e))}"
-        return f"fetched origin/{target_branch}"
+        with trace_stage("git_fetch"):
+            if target_branch != target:
+                return (
+                    f"error: git_fetch is guardrailed to target branch "
+                    f"'{target}' — '{target_branch}' rejected"
+                )
+            try:
+                git_ops.fetch(
+                    repo_dir,
+                    remote_url=remote_url,
+                    token=token,
+                    branch=target_branch,
+                )
+            except subprocess.CalledProcessError as e:
+                return f"error: git_fetch failed: {git_ops.redact_credentials(str(e))}"
+            return f"fetched origin/{target_branch}"
 
     def git_remote_sha(branch_name: str) -> str:
         """Return the current remote SHA of the PR branch.
@@ -71,24 +73,25 @@ def build_bridged_git_tools(  # noqa: C901 — four inner closures, each ~20 lin
         Fetches the remote branch first so the returned SHA is fresh
         (not the stale local tracking ref).  Guardrailed: only the
         ticket's own branch is accepted."""
-        if branch_name != branch:
-            return (
-                f"error: git_remote_sha is guardrailed to ticket branch "
-                f"'{branch}' — '{branch_name}' rejected"
-            )
-        try:
-            git_ops.fetch(
-                repo_dir,
-                remote_url=remote_url,
-                token=token,
-                branch=branch_name,
-            )
-        except subprocess.CalledProcessError as e:
-            return f"error: fetch before remote_sha failed: {git_ops.redact_credentials(str(e))}"
-        sha = git_ops.remote_branch_sha(repo_dir, branch_name)
-        if sha is None:
-            return "error: no remote branch (branch may not exist yet)"
-        return sha
+        with trace_stage("git_remote_sha"):
+            if branch_name != branch:
+                return (
+                    f"error: git_remote_sha is guardrailed to ticket branch "
+                    f"'{branch}' — '{branch_name}' rejected"
+                )
+            try:
+                git_ops.fetch(
+                    repo_dir,
+                    remote_url=remote_url,
+                    token=token,
+                    branch=branch_name,
+                )
+            except subprocess.CalledProcessError as e:
+                return f"error: fetch before remote_sha failed: {git_ops.redact_credentials(str(e))}"
+            sha = git_ops.remote_branch_sha(repo_dir, branch_name)
+            if sha is None:
+                return "error: no remote branch (branch may not exist yet)"
+            return sha
 
     def git_push_with_lease(branch_name: str) -> str:
         """Push the ticket branch with a FRESH compare-and-swap lease.
@@ -104,34 +107,35 @@ def build_bridged_git_tools(  # noqa: C901 — four inner closures, each ~20 lin
         - ``PUSH_ERROR: ...`` — some other error (network, auth, etc.).
 
         Guardrailed: only the ticket's own branch is accepted."""
-        if branch_name != branch:
-            return (
-                f"error: git_push_with_lease is guardrailed to ticket branch "
-                f"'{branch}' — '{branch_name}' rejected"
-            )
-        # Fresh lease: fetch the remote branch so the tracking ref is
-        # current at call time.
-        try:
-            git_ops.fetch(
-                repo_dir,
-                remote_url=remote_url,
-                token=token,
-                branch=branch_name,
-            )
-        except subprocess.CalledProcessError as e:
-            return f"PUSH_ERROR: fetch before push failed: {git_ops.redact_credentials(str(e))}"
-        try:
-            git_ops.push_with_lease(repo_dir, branch_name, remote_url, token)
-            return "PUSH_OK"
-        except subprocess.CalledProcessError as e:
-            stderr = (
-                e.stderr.decode("utf-8", errors="replace")
-                if isinstance(e.stderr, bytes)
-                else str(e.stderr or "")
-            )
-            if "stale" in stderr.lower() or "[rejected]" in stderr.lower():
-                return f"LEASE_REJECTED: {git_ops.redact_credentials(stderr)}"
-            return f"PUSH_ERROR: {git_ops.redact_credentials(str(e))}"
+        with trace_stage("git_push_with_lease"):
+            if branch_name != branch:
+                return (
+                    f"error: git_push_with_lease is guardrailed to ticket branch "
+                    f"'{branch}' — '{branch_name}' rejected"
+                )
+            # Fresh lease: fetch the remote branch so the tracking ref is
+            # current at call time.
+            try:
+                git_ops.fetch(
+                    repo_dir,
+                    remote_url=remote_url,
+                    token=token,
+                    branch=branch_name,
+                )
+            except subprocess.CalledProcessError as e:
+                return f"PUSH_ERROR: fetch before push failed: {git_ops.redact_credentials(str(e))}"
+            try:
+                git_ops.push_with_lease(repo_dir, branch_name, remote_url, token)
+                return "PUSH_OK"
+            except subprocess.CalledProcessError as e:
+                stderr = (
+                    e.stderr.decode("utf-8", errors="replace")
+                    if isinstance(e.stderr, bytes)
+                    else str(e.stderr or "")
+                )
+                if "stale" in stderr.lower() or "[rejected]" in stderr.lower():
+                    return f"LEASE_REJECTED: {git_ops.redact_credentials(stderr)}"
+                return f"PUSH_ERROR: {git_ops.redact_credentials(str(e))}"
 
     def git_branch_ancestry(branch_name: str, target_branch: str) -> str:
         """Return the commits the remote PR branch carries ahead of
@@ -144,35 +148,36 @@ def build_bridged_git_tools(  # noqa: C901 — four inner closures, each ~20 lin
         pushed and the mill must NOT clobber it.
 
         Guardrailed: only the ticket's own branch and target are accepted."""
-        if branch_name != branch:
-            return (
-                f"error: git_branch_ancestry is guardrailed to ticket branch "
-                f"'{branch}' — '{branch_name}' rejected"
-            )
-        if target_branch != target:
-            return (
-                f"error: git_branch_ancestry is guardrailed to target branch "
-                f"'{target}' — '{target_branch}' rejected"
-            )
-        try:
-            git_ops.fetch(
-                repo_dir,
-                remote_url=remote_url,
-                token=token,
-                branch=branch_name,
-            )
-            git_ops.fetch(
-                repo_dir,
-                remote_url=remote_url,
-                token=token,
-                branch=target_branch,
-            )
-        except subprocess.CalledProcessError as e:
-            return f"error: fetch before ancestry failed: {git_ops.redact_credentials(str(e))}"
-        commits = git_ops.branch_ancestry(repo_dir, branch_name, target_branch)
-        if not commits:
-            return "(no commits ahead of target — branches are identical)"
-        return json.dumps(commits, indent=2)
+        with trace_stage("git_branch_ancestry"):
+            if branch_name != branch:
+                return (
+                    f"error: git_branch_ancestry is guardrailed to ticket branch "
+                    f"'{branch}' — '{branch_name}' rejected"
+                )
+            if target_branch != target:
+                return (
+                    f"error: git_branch_ancestry is guardrailed to target branch "
+                    f"'{target}' — '{target_branch}' rejected"
+                )
+            try:
+                git_ops.fetch(
+                    repo_dir,
+                    remote_url=remote_url,
+                    token=token,
+                    branch=branch_name,
+                )
+                git_ops.fetch(
+                    repo_dir,
+                    remote_url=remote_url,
+                    token=token,
+                    branch=target_branch,
+                )
+            except subprocess.CalledProcessError as e:
+                return f"error: fetch before ancestry failed: {git_ops.redact_credentials(str(e))}"
+            commits = git_ops.branch_ancestry(repo_dir, branch_name, target_branch)
+            if not commits:
+                return "(no commits ahead of target — branches are identical)"
+            return json.dumps(commits, indent=2)
 
     return [git_fetch, git_remote_sha, git_push_with_lease, git_branch_ancestry]
 

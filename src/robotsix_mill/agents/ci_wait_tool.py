@@ -20,6 +20,8 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from ..runtime.tracing import trace_stage
+
 # A ci_status_fn returns ``(conclusion, failing_summary)`` where conclusion is
 # one of:
 #   "success" — every check is green (failing_summary unused, "")
@@ -79,49 +81,52 @@ def build_ci_wait_tool(
         - ``CI_GONE`` — the PR/branch vanished from the forge. Report FAILED.
 
         Guardrailed: only the ticket's own branch is accepted."""
-        if branch_name != branch:
-            return (
-                f"error: wait_for_ci is guardrailed to ticket branch "
-                f"'{branch}' — '{branch_name}' rejected"
-            )
-
-        if ci_status_fn is None:
-            return (
-                "CI_VERIFICATION_UNAVAILABLE: CI verification is not wired in "
-                "this context. Push your fix (git_push_with_lease) and report "
-                "DONE — the orchestrator will re-check CI."
-            )
-
-        state["calls"] += 1
-        if state["calls"] > max_iterations:
-            return (
-                f"CI_ITERATION_CAP_REACHED: you have used all {max_iterations} "
-                f"CI verification attempt(s) for this ticket. Stop fixing and "
-                f"report FAILED with a brief summary of what is still broken."
-            )
-
-        attempt = state["calls"]
-        deadline = monotonic() + timeout_s
-        while True:
-            conclusion, summary = ci_status_fn()
-            if conclusion == "success":
-                return "CI_PASSED: all checks are green — report DONE."
-            if conclusion == "failure":
-                return f"CI_FAILING (attempt {attempt}/{max_iterations}):\n\n{summary}"
-            if conclusion == "gone":
+        with trace_stage("wait_for_ci"):
+            if branch_name != branch:
                 return (
-                    "CI_GONE: the PR/branch is no longer visible on the forge "
-                    "— report FAILED."
+                    f"error: wait_for_ci is guardrailed to ticket branch "
+                    f"'{branch}' — '{branch_name}' rejected"
                 )
-            # conclusion == "pending" (or anything unexpected) — keep waiting.
-            if monotonic() >= deadline:
+
+            if ci_status_fn is None:
                 return (
-                    f"CI_STILL_PENDING: checks have not finished after "
-                    f"{int(timeout_s)}s (attempt {attempt}/{max_iterations}). "
-                    f"Call wait_for_ci again to keep waiting, or report FAILED "
-                    f"if CI appears stuck."
+                    "CI_VERIFICATION_UNAVAILABLE: CI verification is not wired in "
+                    "this context. Push your fix (git_push_with_lease) and report "
+                    "DONE — the orchestrator will re-check CI."
                 )
-            sleep(poll_interval_s)
+
+            state["calls"] += 1
+            if state["calls"] > max_iterations:
+                return (
+                    f"CI_ITERATION_CAP_REACHED: you have used all {max_iterations} "
+                    f"CI verification attempt(s) for this ticket. Stop fixing and "
+                    f"report FAILED with a brief summary of what is still broken."
+                )
+
+            attempt = state["calls"]
+            deadline = monotonic() + timeout_s
+            while True:
+                conclusion, summary = ci_status_fn()
+                if conclusion == "success":
+                    return "CI_PASSED: all checks are green — report DONE."
+                if conclusion == "failure":
+                    return (
+                        f"CI_FAILING (attempt {attempt}/{max_iterations}):\n\n{summary}"
+                    )
+                if conclusion == "gone":
+                    return (
+                        "CI_GONE: the PR/branch is no longer visible on the forge "
+                        "— report FAILED."
+                    )
+                # conclusion == "pending" (or anything unexpected) — keep waiting.
+                if monotonic() >= deadline:
+                    return (
+                        f"CI_STILL_PENDING: checks have not finished after "
+                        f"{int(timeout_s)}s (attempt {attempt}/{max_iterations}). "
+                        f"Call wait_for_ci again to keep waiting, or report FAILED "
+                        f"if CI appears stuck."
+                    )
+                sleep(poll_interval_s)
 
     return wait_for_ci
 

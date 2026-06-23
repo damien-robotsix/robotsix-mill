@@ -1,5 +1,7 @@
 """Tests for build_ci_wait_tool — the wait_for_ci agent tool."""
 
+import contextlib
+
 from robotsix_mill.agents.ci_wait_tool import build_ci_wait_tool
 
 
@@ -104,3 +106,28 @@ def test_pending_then_success_is_passed():
         sleep=_no_sleep,
     )
     assert tool("mill/x").startswith("CI_PASSED")
+
+
+# --- trace_stage child-span test ----------------------------------------
+
+
+def test_wait_for_ci_emits_span(monkeypatch):
+    """wait_for_ci opens a child span named 'wait_for_ci' via trace_stage."""
+    import robotsix_mill.agents.ci_wait_tool as cwt
+
+    spans: list[str] = []
+
+    @contextlib.contextmanager
+    def fake_trace_stage(name):
+        spans.append(name)
+        yield
+
+    monkeypatch.setattr(cwt, "trace_stage", fake_trace_stage)
+    tool = build_ci_wait_tool(
+        branch="mill/x",
+        ci_status_fn=lambda: ("success", ""),
+        sleep=lambda _: None,
+    )
+    result = tool("mill/x")
+    assert result.startswith("CI_PASSED")
+    assert spans == ["wait_for_ci"]

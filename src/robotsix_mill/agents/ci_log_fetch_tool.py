@@ -17,6 +17,8 @@ import re
 from collections.abc import Callable
 from typing import Any
 
+from ..runtime.tracing import trace_stage
+
 # A fetch_fn returns the log text for a given run_id.  When full_log is
 # False, the forge returns size-capped, failure-window-anchored logs;
 # True returns the complete (still ANSI-stripped) job logs.
@@ -70,47 +72,48 @@ def build_ci_log_fetch_tool(
         Guardrailed branch: {branch}
         """.format(branch=branch)
 
-        if fetch_fn is None:
-            return (
-                "CI_LOG_FETCH_UNAVAILABLE: log fetching is not wired in this "
-                "context. The failure summary already includes a truncated log "
-                "tail — use that to diagnose the failure."
-            )
+        with trace_stage("fetch_ci_logs"):
+            if fetch_fn is None:
+                return (
+                    "CI_LOG_FETCH_UNAVAILABLE: log fetching is not wired in this "
+                    "context. The failure summary already includes a truncated log "
+                    "tail — use that to diagnose the failure."
+                )
 
-        # Resolve run id: explicit run_id takes precedence; fall back to
-        # parsing a run URL.
-        resolved: int | None = None
-        if run_id:
-            resolved = run_id
-        elif run_url:
-            m = _RUN_URL_RE.search(run_url)
-            if m:
-                resolved = int(m.group(1))
+            # Resolve run id: explicit run_id takes precedence; fall back to
+            # parsing a run URL.
+            resolved: int | None = None
+            if run_id:
+                resolved = run_id
+            elif run_url:
+                m = _RUN_URL_RE.search(run_url)
+                if m:
+                    resolved = int(m.group(1))
 
-        if resolved is None:
-            return (
-                "error: fetch_ci_logs requires either a run_id (int) or a "
-                "run_url (str) containing a /runs/<id> path segment."
-            )
+            if resolved is None:
+                return (
+                    "error: fetch_ci_logs requires either a run_id (int) or a "
+                    "run_url (str) containing a /runs/<id> path segment."
+                )
 
-        if resolved <= 0:
-            return f"error: invalid run_id={resolved}"
+            if resolved <= 0:
+                return f"error: invalid run_id={resolved}"
 
-        try:
-            logs = fetch_fn(resolved, full_log)
-        except Exception as exc:
-            return (
-                f"error: log fetch failed for run {resolved}: "
-                f"{type(exc).__name__}: {exc}"
-            )
+            try:
+                logs = fetch_fn(resolved, full_log)
+            except Exception as exc:
+                return (
+                    f"error: log fetch failed for run {resolved}: "
+                    f"{type(exc).__name__}: {exc}"
+                )
 
-        if not logs:
-            return (
-                f"(run {resolved} has no failed jobs — all jobs in this run "
-                f"passed or the run was cancelled before any job ran)"
-            )
+            if not logs:
+                return (
+                    f"(run {resolved} has no failed jobs — all jobs in this run "
+                    f"passed or the run was cancelled before any job ran)"
+                )
 
-        return logs
+            return logs
 
     return fetch_ci_logs
 
