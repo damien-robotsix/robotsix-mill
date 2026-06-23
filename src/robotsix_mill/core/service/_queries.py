@@ -345,7 +345,7 @@ class _QueryMixin(_ServiceBase):
                     Comment.body.startswith(ASK_USER_MARKER),
                     Comment.closed_at == None,  # noqa: E711
                 )
-                .order_by(Comment.created_at.desc())
+                .order_by(Comment.created_at.desc())  # type: ignore[attr-defined]
                 .limit(1)
             )
             result = s.exec(stmt).first()
