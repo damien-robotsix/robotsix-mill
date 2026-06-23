@@ -7,6 +7,7 @@ on the rejection path.  This keeps the tests fast and offline.
 
 from __future__ import annotations
 
+import contextlib
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
@@ -237,3 +238,118 @@ class TestTokenNeverLeaked:
         assert "ghs_" not in result
         assert "***" in result
         assert result.startswith("error: fetch before ancestry failed:")
+
+
+# --- trace_stage child-span tests ----------------------------------------
+
+
+class TestTraceStageSpans:
+    """Each bridged git tool opens a child span via trace_stage with the
+    tool's registered name."""
+
+    def test_git_fetch_emits_span(self, tmp_path, monkeypatch):
+        import robotsix_mill.agents.bridged_git_tools as bgt
+
+        spans: list[str] = []
+
+        @contextlib.contextmanager
+        def fake_trace_stage(name):
+            spans.append(name)
+            yield
+
+        monkeypatch.setattr(bgt, "trace_stage", fake_trace_stage)
+        git_fetch, _, _, _ = build_bridged_git_tools(
+            repo_dir=tmp_path,
+            branch="mill/x",
+            target="main",
+            remote_url="https://github.com/o/r.git",
+            token=None,
+        )
+        with patch("robotsix_mill.agents.bridged_git_tools.git_ops.fetch"):
+            result = git_fetch("main")
+        assert result == "fetched origin/main"
+        assert spans == ["git_fetch"]
+
+    def test_git_remote_sha_emits_span(self, tmp_path, monkeypatch):
+        import robotsix_mill.agents.bridged_git_tools as bgt
+
+        spans: list[str] = []
+
+        @contextlib.contextmanager
+        def fake_trace_stage(name):
+            spans.append(name)
+            yield
+
+        monkeypatch.setattr(bgt, "trace_stage", fake_trace_stage)
+        _, git_remote_sha, _, _ = build_bridged_git_tools(
+            repo_dir=tmp_path,
+            branch="mill/x",
+            target="main",
+            remote_url="https://github.com/o/r.git",
+            token=None,
+        )
+        with (
+            patch("robotsix_mill.agents.bridged_git_tools.git_ops.fetch"),
+            patch(
+                "robotsix_mill.agents.bridged_git_tools.git_ops.remote_branch_sha",
+                return_value="abc1234",
+            ),
+        ):
+            result = git_remote_sha("mill/x")
+        assert result == "abc1234"
+        assert spans == ["git_remote_sha"]
+
+    def test_git_push_with_lease_emits_span(self, tmp_path, monkeypatch):
+        import robotsix_mill.agents.bridged_git_tools as bgt
+
+        spans: list[str] = []
+
+        @contextlib.contextmanager
+        def fake_trace_stage(name):
+            spans.append(name)
+            yield
+
+        monkeypatch.setattr(bgt, "trace_stage", fake_trace_stage)
+        _, _, git_push_with_lease, _ = build_bridged_git_tools(
+            repo_dir=tmp_path,
+            branch="mill/x",
+            target="main",
+            remote_url="https://github.com/o/r.git",
+            token=None,
+        )
+        with (
+            patch("robotsix_mill.agents.bridged_git_tools.git_ops.fetch"),
+            patch("robotsix_mill.agents.bridged_git_tools.git_ops.push_with_lease"),
+        ):
+            result = git_push_with_lease("mill/x")
+        assert result == "PUSH_OK"
+        assert spans == ["git_push_with_lease"]
+
+    def test_git_branch_ancestry_emits_span(self, tmp_path, monkeypatch):
+        import robotsix_mill.agents.bridged_git_tools as bgt
+
+        spans: list[str] = []
+
+        @contextlib.contextmanager
+        def fake_trace_stage(name):
+            spans.append(name)
+            yield
+
+        monkeypatch.setattr(bgt, "trace_stage", fake_trace_stage)
+        _, _, _, git_branch_ancestry = build_bridged_git_tools(
+            repo_dir=tmp_path,
+            branch="mill/x",
+            target="main",
+            remote_url="https://github.com/o/r.git",
+            token=None,
+        )
+        with (
+            patch("robotsix_mill.agents.bridged_git_tools.git_ops.fetch"),
+            patch(
+                "robotsix_mill.agents.bridged_git_tools.git_ops.branch_ancestry",
+                return_value=[],
+            ),
+        ):
+            result = git_branch_ancestry("mill/x", "main")
+        assert result == "(no commits ahead of target — branches are identical)"
+        assert spans == ["git_branch_ancestry"]
