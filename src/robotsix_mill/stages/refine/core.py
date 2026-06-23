@@ -176,9 +176,17 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
         draft = verified
 
         # Phase 4: refine agent + result handling
-        return RefineStage._run_refine_agent(
+        outcome = RefineStage._run_refine_agent(
             ctx, ticket, draft, repo_dir, epic_ctx, title, ws, s, extra_roots
         )
+        # Clear the error-recovery checkpoint on any outcome other than
+        # BLOCKED or AWAITING_USER_REPLY — those are the only states
+        # where the checkpoint is still needed for a future resume.
+        if outcome.next_state not in (State.BLOCKED, State.AWAITING_USER_REPLY):
+            from .orchestration import RefineAgentMixin
+
+            RefineAgentMixin._clear_refine_checkpoint(ws)
+        return outcome
 
     @staticmethod
     def _clone_or_resume(

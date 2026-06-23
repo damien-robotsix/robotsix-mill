@@ -1040,6 +1040,123 @@ class RefineAgentMixin:
 
     # -- phase: run the refine agent + pause detection ----------------------
 
+    # -- error-recovery checkpoint helpers ---------------------------------
+
+    @staticmethod
+    def _save_refine_checkpoint(
+        ws: Workspace,
+        result: refining.RefineResult,
+    ) -> None:
+        """Persist essential ``RefineResult`` fields so a resume-from-BLOCKED
+        can skip re-running the expensive refine agent.
+
+        The conversation state is already saved separately by
+        :func:`save_conversation_state` for the pause mechanism; this
+        checkpoint captures the structured output fields needed to
+        reconstruct a ``RefineResult`` without calling the agent again.
+        """
+        import base64
+
+        children_data = None
+        if result.children:
+            children_data = [
+                {
+                    "title": c.title,
+                    "spec_markdown": c.spec_markdown,
+                    "depends_on": c.depends_on,
+                }
+                for c in result.children
+            ]
+        file_map_data = None
+        if result.file_map:
+            file_map_data = [{"file": e.file, "note": e.note} for e in result.file_map]
+        data: dict[str, Any] = {
+            "spec_markdown": result.spec_markdown,
+            "split": result.split,
+            "children": children_data,
+            "promote_to_epic": result.promote_to_epic,
+            "epic_body": result.epic_body,
+            "updated_memory": result.updated_memory,
+            "file_map": file_map_data,
+            "title": result.title,
+            "reference_files": result.reference_files or [],
+            "conversation_state_b64": (
+                base64.b64encode(result.conversation_state).decode("ascii")
+                if result.conversation_state
+                else None
+            ),
+        }
+        (ws.artifacts_dir / "refine_checkpoint.json").write_text(
+            json.dumps(data), encoding="utf-8"
+        )
+
+    @staticmethod
+    def _load_refine_checkpoint(
+        ws: Workspace,
+    ) -> tuple[refining.RefineResult | None, bytes | None]:
+        """Load a saved refine error-recovery checkpoint.
+
+        Returns ``(RefineResult, conversation_state_bytes)`` or
+        ``(None, None)`` when no checkpoint exists.
+        """
+        import base64
+
+        path = ws.artifacts_dir / "refine_checkpoint.json"
+        if not path.exists():
+            return None, None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError, KeyError:
+            log.warning("refine checkpoint corrupt — ignoring")
+            return None, None
+
+        conv_state: bytes | None = None
+        if data.get("conversation_state_b64"):
+            try:
+                conv_state = base64.b64decode(data["conversation_state_b64"])
+            except Exception:
+                conv_state = None
+
+        children = None
+        if data.get("children"):
+            children = [
+                refining.ChildSpec(
+                    title=c["title"],
+                    spec_markdown=c["spec_markdown"],
+                    depends_on=c.get("depends_on", []),
+                )
+                for c in data["children"]
+            ]
+        file_map = None
+        if data.get("file_map"):
+            file_map = [
+                refining.FileMapEntry(file=e["file"], note=e["note"])
+                for e in data["file_map"]
+            ]
+
+        result = refining.RefineResult(
+            spec_markdown=data.get("spec_markdown"),
+            split=data.get("split", False),
+            children=children,
+            promote_to_epic=data.get("promote_to_epic", False),
+            epic_body=data.get("epic_body"),
+            updated_memory=data.get("updated_memory", ""),
+            file_map=file_map,
+            title=data.get("title"),
+            reference_files=data.get("reference_files", []),
+            conversation_state=conv_state,
+        )
+        return result, conv_state
+
+    @staticmethod
+    def _clear_refine_checkpoint(ws: Workspace) -> None:
+        """Remove the error-recovery checkpoint when refine completes."""
+        path = ws.artifacts_dir / "refine_checkpoint.json"
+        if path.exists():
+            path.unlink()
+
+    # -- phase: run the refine agent + pause detection ----------------------
+
     @staticmethod
     def _run_and_collect(
         ctx: StageContext,
@@ -1098,6 +1215,21 @@ class RefineAgentMixin:
                     ticket.id,
                     len(saved_state),
                 )
+
+        # --- error-recovery checkpoint: skip the agent if a prior run
+        # produced a usable result before being interrupted ---
+        if saved_state is None:
+            # Not resuming from a pause — check for a refine checkpoint
+            # saved from a prior run that was interrupted after the agent
+            # call succeeded but before post-processing completed.
+            checkpoint_result, _ = RefineAgentMixin._load_refine_checkpoint(ws)
+            if checkpoint_result is not None:
+                log.info(
+                    "%s: resuming refine from error-recovery checkpoint — "
+                    "skipping agent call",
+                    ticket.id,
+                )
+                return None, checkpoint_result
 
         from ...config.repo_settings import (
             resolve_language_instructions,
@@ -1232,6 +1364,12 @@ class RefineAgentMixin:
 
             reraise_if_transient(e)
             return Outcome(State.BLOCKED, str(e)), None
+
+        # --- save error-recovery checkpoint ---
+        # Persist the refine result so a resume-from-BLOCKED can skip
+        # re-running the expensive agent call.  The checkpoint is cleared
+        # when the stage completes successfully (see ``run()``).
+        RefineAgentMixin._save_refine_checkpoint(ws, result)
 
         # --- pause detection ---
         # check_for_pause looks at THIS run's new messages so an old

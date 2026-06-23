@@ -309,6 +309,8 @@ def classify_stage_error(exc: BaseException) -> str:
     levels.  Any matching transient pattern anywhere in the chain
     makes the whole error transient.
     """
+    from robotsix_mill.agents.retry import _is_claude_sdk_degenerate_result
+
     seen: set[int] = set()
     current: BaseException | None = exc
     for _ in range(_MAX_CHAIN_WALK):
@@ -321,6 +323,8 @@ def classify_stage_error(exc: BaseException) -> str:
         if _is_transient_openai(current):
             return "transient"
         if _is_transient_called_process_error(current):
+            return "transient"
+        if _is_claude_sdk_degenerate_result(current):
             return "transient"
         # NOTE: the DeepSeek thinking-mode reasoning round-trip 400 detector
         # was removed — OpenRouter no longer raises that 400 when reasoning is

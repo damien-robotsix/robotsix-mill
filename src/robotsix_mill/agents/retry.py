@@ -75,16 +75,17 @@ def is_transient(exc: BaseException) -> bool:
     CLI hiccup or query timeout skipped local retry entirely.
 
     The degenerate Claude SDK ``success`` result (``is_error=True`` with
-    ``subtype='success'``) is checked first as a fast-fail: it is a structural
-    misconfiguration, not a transient network issue. Retrying it burns calls
-    that all fail identically; instead it must fail fast so the fallback
-    mechanism (or caller) can react immediately."""
+    ``subtype='success'``) was historically treated as a structural
+    misconfiguration and fast-failed, but observed behaviour shows it is
+    transient — a fresh run on the same input succeeds normally at similar
+    cost, so retrying it is cheaper than blocking and re-running the whole
+    stage."""
     if _is_claude_sdk_degenerate_result(exc):
         log.warning(
-            "fast-fail: Claude SDK degenerate 'success' result detected — "
-            "not retrying (structural, not transient)"
+            "Claude SDK degenerate 'success' result detected — "
+            "retrying (transient in practice)"
         )
-        return False
+        return True
     return _is_openrouter_transient(exc) or _is_claude_sdk_transient(exc)
 
 

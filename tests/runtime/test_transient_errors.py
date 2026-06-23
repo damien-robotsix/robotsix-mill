@@ -357,6 +357,22 @@ def test_classify_fatal_plain_400():
     assert classify_stage_error(plain) == "fatal"
 
 
+def test_classify_claude_sdk_degenerate_success_is_transient():
+    """The ``error result: success`` message is transient at the stage level."""
+    assert (
+        classify_stage_error(Exception("Claude Code returned an error result: success"))
+        == "transient"
+    )
+
+
+def test_classify_claude_sdk_degenerate_success_in_cause_chain():
+    """The degenerate result in a cause chain is still transient."""
+    inner = Exception("Claude Code returned an error result: success")
+    outer = RuntimeError("agent run failed")
+    outer.__cause__ = inner
+    assert classify_stage_error(outer) == "transient"
+
+
 # ---------------------------------------------------------------------------
 # reraise_if_transient — LLM stages (review/refine/retrospect) call this so a
 # transient model error gets the worker's stage-retry instead of a hard BLOCK.
