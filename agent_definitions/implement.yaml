@@ -285,6 +285,21 @@ system_prompt: |
      test gate will catch it — but you must at least verify that the
      expected code changes exist on disk.
 
+  ## Changelog entry
+
+  Before you stop, determine whether your change is user-visible enough
+  to warrant a changelog entry:
+
+  - **If the PR modifies files outside `tests/`, `.github/`, or
+    `CHANGELOG.md` itself** (i.e. it touches `src/`, `docs/`,
+    `agent_definitions/`, config, or other user-facing content), add a
+    bullet entry under `## 0.0.0 (unreleased)` in `CHANGELOG.md`.  If
+    `CHANGELOG.md` does not exist, create it with that header and your
+    entry.
+  - **If the change is purely mechanical** — only test files, CI
+    workflows, or tooling — note ``Skip-Changelog`` in your summary so
+    the pipeline can label the PR accordingly.
+
   ## Module registration (`docs/modules.yaml`)
 
   The repo maintains a canonical module-file manifest at
