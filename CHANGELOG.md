@@ -5,3 +5,4 @@
 - Wire `pipeline.ci_fix_wait_poll_interval_s` and `pipeline.ci_fix_wait_timeout_s` to YAML config so operators can tune CI-fix wait timing without code changes.
 - Fixed `docs/configuration.md`: corrected the documented default of `stage_timeout_overrides` from `{}` to `{"refine": 900}` to match the Pydantic model default, and added a note explaining the built-in refine-stage cap.
 - Update `MillBoardAdapter` docstring to remove outdated fallback language now that `robotsix_board` is a required dependency.
+- Added `core.investigation_workspace` YAML path mapping (`_YAML_PATH_TO_ALIAS`) and `config/mill.defaults.yaml` leaf so the `investigation_workspace` field is configurable via YAML in addition to the `MILL_INVESTIGATION_WORKSPACE` env var.)

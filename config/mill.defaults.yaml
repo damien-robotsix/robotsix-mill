@@ -99,6 +99,7 @@ core:
   board_list_cache_ttl_seconds: 3.0     # short-TTL cache for board-poll GET /tickets (0.0 disables); collapses repeated polls so they don't stall the API
   enable_repo_creation: false           # allow the new-repo meta flow to create repositories
   repo_visibility_default: public      # "public" | "private" — default visibility for new repos
+  investigation_workspace: null        # host path to a directory of cloned repos for cross-repo investigation (null → uses ticket's repo_dir)
   lint_on_edit: true                    # run ruff after each agent file edit
   read_file_max_chars: 50000            # cap on implicit full read_file payload (0 disables); ranged reads never truncated
   meta_periodic: false                  # enable the cross-repo meta-agent pass

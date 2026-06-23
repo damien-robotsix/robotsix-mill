@@ -205,6 +205,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.claude_max_concurrency": "MILL_CLAUDE_MAX_CONCURRENCY",
     "core.enable_repo_creation": "enable_repo_creation",
     "core.repo_visibility_default": "repo_visibility_default",
+    "core.investigation_workspace": "MILL_INVESTIGATION_WORKSPACE",
     # Cross-repo meta-agent pass (surveys all repos for extraction/alignment).
     "core.meta_periodic": "meta_periodic",
     "core.meta_interval_seconds": "meta_interval_seconds",
