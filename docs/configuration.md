@@ -415,7 +415,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.limits.max_stuck_cycles` | `MILL_MAX_STUCK_CYCLES` | `3` | Re-entries to same stage without progress before BLOCK |
 | `core.limits.max_spend_usd_per_ticket` | `MILL_MAX_SPEND_USD_PER_TICKET` | `20.0` | Dollar cap per ticket (0.0 = disabled) |
 | `core.limits.stage_timeout_seconds` | `MILL_STAGE_TIMEOUT_SECONDS` | `2400` | Per-stage wall-clock timeout in seconds; stage that exceeds it is escalated to BLOCKED (≤ 0 disables) |
-| `core.limits.stage_timeout_overrides` | `MILL_STAGE_TIMEOUT_OVERRIDES` | `{}` | Per-stage overrides as a JSON dict (e.g. `{"merge":0,"deliver":0}`); keys are stage names, values are seconds; 0 disables timeout for that stage |
+| `core.limits.stage_timeout_overrides` | `MILL_STAGE_TIMEOUT_OVERRIDES` | `{"refine": 900}` | Per-stage overrides as a JSON dict (e.g. `{"merge":0,"deliver":0}`); keys are stage names, values are seconds; 0 disables timeout for that stage. The built-in default caps the **refine** stage at 900 seconds — add `"refine": 0` to disable this cap, or override it with a different value. |
 | `core.limits.max_global_concurrency` | `MILL_MAX_GLOBAL_CONCURRENCY` | `12` | Host-level cap on total concurrently-running stages across ALL boards, applied on top of each board's own `max_concurrency`. Default 12 provides a genuine backstop without throttling normal operation |
 | `core.limits.transient_retries` | `MILL_TRANSIENT_RETRIES` | `4` | Max retries for transient LLM-call failures (429, 5xx, timeouts) |
 | `core.limits.transient_backoff_base` | `MILL_TRANSIENT_BACKOFF_BASE` | `2.0` | Base seconds for exponential backoff at LLM-call level (jittered) |
