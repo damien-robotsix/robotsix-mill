@@ -704,7 +704,7 @@ class RefineGatesMixin:
         ticket: Ticket,
         draft: str,
         repo_dir: Path | None,
-        s,
+        s: Settings,
     ) -> Outcome | None:
         """Run the LLM-based obsolescence gate (best-effort).
 
