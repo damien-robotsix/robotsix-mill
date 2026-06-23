@@ -157,6 +157,15 @@ class _StagesSettings(BaseModel):
     # investigate) and route them directly to the MAINTENANCE state,
     # bypassing the full refine→implement pipeline.
     maintenance_triage_enabled: bool = Field(default=True)
+    # When True (default), the cheap advisory-dedup-verification gate runs
+    # after the inflight-advisory phase and before the expensive refine
+    # agent. It resolves any carried ``Possible duplicate of <id>`` advisory
+    # with a single cheapest-tier ``run_dedup_check`` against only the named
+    # candidate. On a confirmed valid duplicate, the ticket is short-circuited
+    # to DONE; otherwise the advisory is cleared and refine proceeds.
+    # Set False to disable the gate entirely (advisories are left intact and
+    # the full refine agent runs).
+    refine_advisory_dedup_enabled: bool = Field(default=True)
     # When True, a deterministic pre-refine gate verifies that file paths
     # and line ranges cited in the ticket draft still exist on the
     # working branch's HEAD.  When the cited evidence has gone stale

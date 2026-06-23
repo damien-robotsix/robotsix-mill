@@ -31,6 +31,7 @@ from robotsix_mill.core.models import SourceKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
+from robotsix_mill.stages.base import Outcome
 from robotsix_mill.stages.refine import RefineStage
 from robotsix_mill.stages.refine.helpers import (
     DEDUP_ALREADY_DONE_PREFIX,
@@ -1105,3 +1106,283 @@ def test_mill_misroute_gate_mill_paths_exist_in_checkout_returns_none(
     out = RefineStage._run_mill_misroute_gate(ctx, t, _DEDUP_DRAFT, None, ctx.settings)
 
     assert out is None
+
+
+# ===========================================================================
+# 8. _verify_advisory_dedup
+# ===========================================================================
+
+_ADVISORY = (
+    "> [!warning] Possible duplicate of {cand_id} "
+    "('Some ticket title') — matched on file path `src/foo.py`\n"
+    ">\n"
+    "> _Advisory flag from draft-intake pre-refine dedup; "
+    "verify and close as duplicate during refine if confirmed._\n"
+    "\n"
+)
+_BODY = "## Problem\n\nThe real draft body.\n"
+_DRAFT_WITH_ADVISORY = _ADVISORY + _BODY
+
+
+def test_advisory_dedup_disabled_returns_draft_unchanged(ctx_factory):
+    ctx = ctx_factory()
+    ctx.settings.refine_advisory_dedup_enabled = False
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+
+    out = RefineStage._verify_advisory_dedup(
+        ctx, t, _DRAFT_WITH_ADVISORY.format(cand_id="x"), None, ws, ctx.settings
+    )
+    assert out == _DRAFT_WITH_ADVISORY.format(cand_id="x")
+
+
+def test_advisory_dedup_no_advisory_returns_unchanged(ctx_factory, monkeypatch):
+    ctx = ctx_factory()
+    ctx.settings.refine_advisory_dedup_enabled = True
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+
+    calls: list = []
+    monkeypatch.setattr(agents_dedup, "run_dedup_check", lambda **kw: calls.append(1))
+
+    out = RefineStage._verify_advisory_dedup(ctx, t, _BODY, None, ws, ctx.settings)
+    assert out == _BODY
+    assert calls == []  # No LLM call when no advisory
+
+
+def test_advisory_dedup_candidate_not_found_strips_advisory(ctx_factory):
+    ctx = ctx_factory()
+    ctx.settings.refine_advisory_dedup_enabled = True
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+
+    out = RefineStage._verify_advisory_dedup(
+        ctx,
+        t,
+        _DRAFT_WITH_ADVISORY.format(cand_id="nonexistent-id"),
+        None,
+        ws,
+        ctx.settings,
+    )
+    # Advisory stripped, body returned.
+    assert "Possible duplicate of" not in out
+    assert _BODY in out
+    # Workspace description was updated with the cleaned draft.
+    assert "Possible duplicate of" not in ws.read_description()
+    assert _BODY in ws.read_description()
+
+
+def test_advisory_dedup_unrefined_draft_target_strips_advisory(
+    ctx_factory, monkeypatch
+):
+    """When the candidate is an un-refined DRAFT (invalid dedup target),
+    the advisory is stripped and refine proceeds."""
+    ctx = ctx_factory()
+    ctx.settings.refine_advisory_dedup_enabled = True
+    t = _ticket(ctx)
+    # Candidate is an un-refined DRAFT — valid dedup target check fails.
+    cand = _ticket(ctx, title="Some candidate", body=_BODY)
+    ws = ctx.service.workspace(t)
+
+    monkeypatch.setattr(
+        agents_dedup,
+        "run_dedup_check",
+        _mock_dedup(duplicate_of=cand.id, already_done=None, reason="same idea"),
+    )
+
+    out = RefineStage._verify_advisory_dedup(
+        ctx,
+        t,
+        _DRAFT_WITH_ADVISORY.format(cand_id=cand.id),
+        None,
+        ws,
+        ctx.settings,
+    )
+    # Should strip advisory, not be an Outcome.
+    assert not isinstance(out, Outcome)
+    assert "Possible duplicate of" not in out
+    assert _BODY in out
+
+
+def test_advisory_dedup_confirmed_duplicate_short_circuits(ctx_factory, monkeypatch):
+    """When the cheap check returns duplicate_of a valid target,
+    the gate returns Outcome(State.DONE, ...)."""
+    ctx = ctx_factory()
+    ctx.settings.refine_advisory_dedup_enabled = True
+    t = _ticket(ctx)
+    # Candidate: a DONE ticket with a merged branch (valid target).
+    cand = _ticket(ctx, title="Already shipped", body=_BODY)
+    ctx.service.set_branch(cand.id, "feature/already-shipped")
+    ctx.service.transition(cand.id, State.DONE, note="implemented the thing")
+    cand = ctx.service.get(cand.id)
+    ws = ctx.service.workspace(t)
+
+    monkeypatch.setattr(
+        agents_dedup,
+        "run_dedup_check",
+        _mock_dedup(duplicate_of=cand.id, already_done=None, reason="same idea"),
+    )
+    monkeypatch.setattr(
+        refine_module, "_verify_branch_merged", lambda repo_dir, ticket: True
+    )
+
+    out = RefineStage._verify_advisory_dedup(
+        ctx,
+        t,
+        _DRAFT_WITH_ADVISORY.format(cand_id=cand.id),
+        None,
+        ws,
+        ctx.settings,
+    )
+    assert isinstance(out, Outcome)
+    assert out.next_state is State.DONE
+    assert out.note.startswith(DEDUP_DUPLICATE_PREFIX)
+    assert cand.id in out.note
+
+
+def test_advisory_dedup_confirmed_already_done_short_circuits(ctx_factory, monkeypatch):
+    """When the cheap check returns already_done for a valid target,
+    the gate returns Outcome(State.DONE, ...)."""
+    ctx = ctx_factory()
+    ctx.settings.refine_advisory_dedup_enabled = True
+    t = _ticket(ctx)
+    cand = _ticket(ctx, title="Already done", body=_BODY)
+    ctx.service.set_branch(cand.id, "feature/already-done")
+    ctx.service.transition(cand.id, State.DONE, note="implemented the thing")
+    cand = ctx.service.get(cand.id)
+    ws = ctx.service.workspace(t)
+
+    monkeypatch.setattr(
+        agents_dedup,
+        "run_dedup_check",
+        _mock_dedup(duplicate_of=None, already_done=cand.id, reason="commit found"),
+    )
+    monkeypatch.setattr(
+        refine_module, "_verify_branch_merged", lambda repo_dir, ticket: True
+    )
+
+    out = RefineStage._verify_advisory_dedup(
+        ctx,
+        t,
+        _DRAFT_WITH_ADVISORY.format(cand_id=cand.id),
+        None,
+        ws,
+        ctx.settings,
+    )
+    assert isinstance(out, Outcome)
+    assert out.next_state is State.DONE
+    assert out.note.startswith(DEDUP_ALREADY_DONE_PREFIX)
+    assert cand.id in out.note
+
+
+def test_advisory_dedup_no_match_strips_advisory(ctx_factory, monkeypatch):
+    """When the cheap check returns no duplicate_of/already_done,
+    the advisory is stripped and refine proceeds."""
+    ctx = ctx_factory()
+    ctx.settings.refine_advisory_dedup_enabled = True
+    t = _ticket(ctx)
+    cand = _ticket(ctx, title="Other thing", body="Something else entirely")
+    ws = ctx.service.workspace(t)
+
+    monkeypatch.setattr(
+        agents_dedup,
+        "run_dedup_check",
+        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"),
+    )
+
+    out = RefineStage._verify_advisory_dedup(
+        ctx,
+        t,
+        _DRAFT_WITH_ADVISORY.format(cand_id=cand.id),
+        None,
+        ws,
+        ctx.settings,
+    )
+    assert not isinstance(out, Outcome)
+    assert "Possible duplicate of" not in out
+    assert _BODY in out
+    # Workspace was persisted.
+    assert "Possible duplicate of" not in ws.read_description()
+
+
+def test_advisory_dedup_check_raises_strips_advisory(ctx_factory, monkeypatch):
+    """When run_dedup_check raises, the advisory is stripped and refine proceeds."""
+    ctx = ctx_factory()
+    ctx.settings.refine_advisory_dedup_enabled = True
+    t = _ticket(ctx)
+    cand = _ticket(ctx, title="Some candidate", body=_BODY)
+    ws = ctx.service.workspace(t)
+
+    def _boom(**kw):
+        raise RuntimeError("dedup boom")
+
+    monkeypatch.setattr(agents_dedup, "run_dedup_check", _boom)
+
+    out = RefineStage._verify_advisory_dedup(
+        ctx,
+        t,
+        _DRAFT_WITH_ADVISORY.format(cand_id=cand.id),
+        None,
+        ws,
+        ctx.settings,
+    )
+    assert not isinstance(out, Outcome)
+    assert "Possible duplicate of" not in out
+    assert _BODY in out
+
+
+def test_advisory_dedup_outer_exception_returns_draft_unchanged(
+    ctx_factory, monkeypatch
+):
+    """When something else raises (e.g. ctx.service.get raises),
+    the gate returns the draft unchanged so refine always proceeds."""
+    ctx = ctx_factory()
+    ctx.settings.refine_advisory_dedup_enabled = True
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+
+    draft = _DRAFT_WITH_ADVISORY.format(cand_id="will-boom")
+
+    def _boom_get(tid):
+        raise RuntimeError("service boom")
+
+    monkeypatch.setattr(ctx.service, "get", _boom_get)
+
+    out = RefineStage._verify_advisory_dedup(ctx, t, draft, None, ws, ctx.settings)
+    # Best-effort: returns draft unchanged.
+    assert out == draft
+
+
+def test_advisory_dedup_draft_without_leading_blank_line_after_block(
+    ctx_factory, monkeypatch
+):
+    """The advisory strip handles the case where there's no blank line
+    between the blockquote and the body."""
+    ctx = ctx_factory()
+    ctx.settings.refine_advisory_dedup_enabled = True
+    t = _ticket(ctx)
+    cand = _ticket(ctx, title="Other thing", body="Something else entirely")
+    ws = ctx.service.workspace(t)
+
+    # No blank line between blockquote and body.
+    draft_no_blank = (
+        "> [!warning] Possible duplicate of {cand_id} "
+        "('Some ticket title') — matched on file path `src/foo.py`\n"
+        ">\n"
+        "> _Advisory flag from draft-intake pre-refine dedup; "
+        "verify and close as duplicate during refine if confirmed._\n"
+        "## Problem\n\nThe real draft body.\n"
+    ).format(cand_id=cand.id)
+
+    monkeypatch.setattr(
+        agents_dedup,
+        "run_dedup_check",
+        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"),
+    )
+
+    out = RefineStage._verify_advisory_dedup(
+        ctx, t, draft_no_blank, None, ws, ctx.settings
+    )
+    assert not isinstance(out, Outcome)
+    assert "Possible duplicate of" not in out
+    assert "The real draft body" in out

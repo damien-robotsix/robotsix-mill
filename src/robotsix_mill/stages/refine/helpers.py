@@ -812,6 +812,79 @@ def _resolve_next_state(
     )
 
 
+# ---------------------------------------------------------------------------
+# Advisory dedup helpers
+# ---------------------------------------------------------------------------
+
+_ADVISORY_RE = re.compile(r"Possible duplicate of (\S+)")
+
+
+def _advisory_candidate_id(text: str) -> str | None:
+    """Extract the candidate ticket id from a dedup-advisory blockquote.
+
+    Matches the exact format emitted by :func:`annotate_child_body` /
+    :func:`find_inflight_overlap`::
+
+        > [!warning] Possible duplicate of 20260622T...-92d0 (…)
+
+    Returns the captured id (``group(1)``) or ``None`` when no advisory
+    block is present.
+    """
+    m = _ADVISORY_RE.search(text)
+    return m.group(1) if m else None
+
+
+def _strip_advisory_block(text: str) -> str:
+    """Remove the leading ``> [!warning] Possible duplicate of …`` blockquote
+    produced by :func:`annotate_child_body`.
+
+    Strips the **contiguous leading block** of lines starting with ``>``
+    (the advisory) plus the single blank line that separates it from the
+    original body.  Only fires when the block contains the ``Possible
+    duplicate of`` anchor — unrelated ``> [!warning]`` blocks are left
+    intact.  Returns *text* unchanged when no such block is present.
+
+    The operation is idempotent: stripping a body that has already been
+    stripped is a no-op.
+    """
+    if not text:
+        return text
+
+    # Must contain the anchor text — otherwise it's not an advisory.
+    if "Possible duplicate of" not in text:
+        return text
+
+    # Find the span of the leading blockquote by tracking character
+    # positions so we preserve exact trailing newlines.
+    pos = 0
+    for line in text.splitlines(keepends=True):
+        if line.lstrip(" \t").startswith(">"):
+            pos += len(line)
+        else:
+            break
+    else:
+        # All lines are blockquote lines — the entire text is an advisory?
+        # This shouldn't happen in practice, but return empty.
+        return ""
+
+    if pos == 0:
+        return text  # no leading blockquote
+
+    # Verify the anchor text is within the leading block.
+    leading_block = text[:pos]
+    if "Possible duplicate of" not in leading_block:
+        return text
+
+    # Skip the blank separator line that follows the blockquote.
+    remaining = text[pos:]
+    if remaining.startswith("\n"):
+        pos += 1
+    elif remaining.startswith("\r\n"):
+        pos += 2
+
+    return text[pos:]
+
+
 def _build_candidates_block(candidates: list[Ticket], ctx: StageContext) -> str:
     """Render candidates for the dedup check as one Markdown section
     per ticket.

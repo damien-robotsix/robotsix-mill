@@ -477,6 +477,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `gates.review_max_rounds` | `MILL_REVIEW_MAX_ROUNDS` | `3` | Max CODE_REVIEW round-trips before escalate |
 | `gates.refine_triage_enabled` | `MILL_REFINE_TRIAGE_ENABLED` | `true` | Cheap triage before full refine (skip if precise) |
 | `gates.maintenance_triage_enabled` | `MILL_MAINTENANCE_TRIAGE_ENABLED` | `true` | Cheap triage before a full maintenance pass |
+| `gates.refine_advisory_dedup_enabled` | `MILL_REFINE_ADVISORY_DEDUP_ENABLED` | `true` | Cheap advisory-dedup-verification gate: resolves carried `Possible duplicate of <id>` advisory with a single cheapest-tier `run_dedup_check` |
 | `gates.freshness_gate_enabled` | `MILL_FRESHNESS_GATE_ENABLED` | `false` | Pre-refine freshness check: verify cited evidence paths exist on HEAD |
 | `gates.obsolescence_gate_enabled` | `MILL_OBSOLESCENCE_GATE_ENABLED` | `false` | Pre-refine obsolescence check: re-validate spawned-draft gaps (opt-in) |
 | `gates.spec_review_enabled` | `MILL_SPEC_REVIEW_ENABLED` | `true` | Post-refinement spec narrative stripping |

@@ -171,6 +171,7 @@ gates:
   refine_trivial_model_level: 1            # model level for trivial-scope refines (1=DeepSeek flash)
   reviewer_agreement_gate_enabled: true     # pre-Opus guard: skip refine when reviewer agrees with draft's no-change conclusion
   maintenance_triage_enabled: true         # cheap triage before a full maintenance pass
+  refine_advisory_dedup_enabled: true      # cheap advisory-dedup-verification gate after inflight-advisory phase (resolves carried ``Possible duplicate of <id>`` with a single cheapest-tier call)
   spec_review_enabled: true                # post-refinement spec narrative stripping
   scope_triage_enabled: true               # cheap scope-violation triage (EXPAND/REJECT/ESCALATE)
   obsolescence_gate_enabled: false        # pre-refine obsolescence re-validation (opt-in)

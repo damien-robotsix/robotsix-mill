@@ -33,8 +33,10 @@ from .helpers import (
     OPERATOR_SENDBACK_PREFIX,
     REFINE_MILL_MISROUTE_PREFIX,
     REFINE_PROGRESS_STATES,
+    _advisory_candidate_id,
     _build_candidates_block,
     _rationale_claims_external_fix,
+    _strip_advisory_block,
     log,
 )
 
@@ -522,6 +524,114 @@ class RefineGatesMixin:
         return annotated
 
     @staticmethod
+    def _verify_advisory_dedup(
+        ctx: StageContext,
+        ticket: Ticket,
+        draft: str,
+        repo_dir: Path | None,
+        ws,
+        s,
+    ) -> Outcome | str:
+        """Cheap dedup-verification gate that resolves a carried advisory.
+
+        Runs after ``_run_inflight_advisory`` and before the expensive
+        refine agent.  Resolves the ``Possible duplicate of <id>`` advisory
+        (if any) with a single cheapest-tier ``run_dedup_check`` against
+        ONLY the named candidate — never the full candidate set.
+
+        1. No advisory → return *draft* unchanged (no LLM call).
+        2. Candidate cannot be resolved → strip advisory, return cleaned.
+        3. Cheap check returns ``duplicate_of`` / ``already_done`` AND
+           ``_is_valid_dedup_target`` passes → return ``Outcome(DONE, …)``.
+        4. Otherwise (not a duplicate / invalid target) → strip advisory,
+           persist the cleaned body, and return it so refine proceeds.
+
+        Entirely best-effort — any exception logs and returns *draft*
+        unchanged.
+        """
+        try:
+            if not s.refine_advisory_dedup_enabled:
+                return draft
+
+            cand_id = _advisory_candidate_id(draft)
+            if cand_id is None:
+                return draft  # no advisory — no-op, no LLM call
+
+            resolved = ctx.service.get(cand_id)
+            if resolved is None:
+                # Candidate doesn't exist — clear the advisory and proceed.
+                log.debug(
+                    "%s: advisory candidate %s not found — stripping advisory",
+                    ticket.id,
+                    cand_id,
+                )
+                cleaned = _strip_advisory_block(draft)
+                new_hash = ws.write_description(cleaned)
+                ctx.service.set_content_hash(ticket.id, new_hash)
+                return cleaned
+
+            # Run the cheap dedup check against the SINGLE named candidate.
+            candidates_json = _build_candidates_block([resolved], ctx)
+            try:
+                verdict = dedup.run_dedup_check(
+                    settings=s,
+                    draft_title=ticket.title,
+                    draft_body=_strip_advisory_block(draft),
+                    candidates_json=candidates_json,
+                    repo_dir=repo_dir,
+                )
+            except Exception:
+                log.warning(
+                    "%s: advisory dedup check failed for %s — "
+                    "stripping advisory and proceeding",
+                    ticket.id,
+                    cand_id,
+                    exc_info=True,
+                )
+                cleaned = _strip_advisory_block(draft)
+                new_hash = ws.write_description(cleaned)
+                ctx.service.set_content_hash(ticket.id, new_hash)
+                return cleaned
+
+            # Check duplicate_of verdict.
+            dup_id = verdict.get("duplicate_of")
+            if dup_id and RefineGatesMixin._is_valid_dedup_target(
+                ctx, ticket, dup_id, repo_dir, draft=_strip_advisory_block(draft)
+            ):
+                return Outcome(
+                    State.DONE,
+                    f"{DEDUP_DUPLICATE_PREFIX}{dup_id}: {verdict.get('reason', 'no reason')}",
+                )
+
+            # Check already_done verdict.
+            done_id = verdict.get("already_done")
+            if done_id and RefineGatesMixin._is_valid_dedup_target(
+                ctx, ticket, done_id, repo_dir, draft=_strip_advisory_block(draft)
+            ):
+                return Outcome(
+                    State.DONE,
+                    f"{DEDUP_ALREADY_DONE_PREFIX}{done_id}: {verdict.get('reason', 'no reason')}",
+                )
+
+            # Not a valid duplicate — clear the advisory so refine doesn't
+            # re-litigate the dedup question.
+            log.debug(
+                "%s: advisory dedup verdict not confirmed — stripping advisory",
+                ticket.id,
+            )
+            cleaned = _strip_advisory_block(draft)
+            new_hash = ws.write_description(cleaned)
+            ctx.service.set_content_hash(ticket.id, new_hash)
+            return cleaned
+        except Exception:
+            log.warning(
+                "%s: advisory dedup verification failed — proceeding with refine",
+                ticket.id,
+                exc_info=True,
+            )
+            return draft
+
+    @staticmethod
     def _run_freshness_gate(
         ctx: StageContext,
         ticket: Ticket,
@@ -594,7 +704,7 @@ class RefineGatesMixin:
         ticket: Ticket,
         draft: str,
         repo_dir: Path | None,
-        s,
+        s: Settings,
     ) -> Outcome | None:
         """Run the LLM-based obsolescence gate (best-effort).
 
