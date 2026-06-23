@@ -16,7 +16,7 @@ from sqlmodel import select as _select
 
 from robotsix_mill.config import Settings, _reset_secrets
 from robotsix_mill.core.db import session as db_session
-from robotsix_mill.core.models import SourceKind, Ticket
+from robotsix_mill.core.models import SourceKind, Ticket, TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.core.workspace import Workspace
@@ -354,7 +354,7 @@ def test_child_overlaps_excludes_epic_and_existing_children(settings):
     """The epic and its already-existing children must not self-match the
     recent-ticket check."""
     svc = _svc(settings)
-    epic = svc.create(title="The epic", description="", kind="epic")
+    epic = svc.create(title="The epic", description="", kind=TicketKind.EPIC)
     existing = svc.create(
         title="existing child",
         description="edits .github/workflows/ci.yml already",
@@ -876,7 +876,7 @@ def test_reprocess_flags_but_still_creates_children(settings, monkeypatch):
     from robotsix_mill.runtime.worker import _run_epic_reprocess
 
     svc = _svc(settings)
-    epic = svc.create(title="parent epic", description="", kind="epic")
+    epic = svc.create(title="parent epic", description="", kind=TicketKind.EPIC)
 
     fake = EpicBreakdownResult(
         child_titles=["First Trivy child", "Second Trivy child"],

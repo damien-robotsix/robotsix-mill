@@ -15,6 +15,7 @@ from ..models import (
     SourceKind,
     Ticket,
     TicketEvent,
+    TicketKind,
 )
 from ..states import State
 from ._base import _ServiceBase
@@ -261,7 +262,7 @@ class _QueryMixin(_ServiceBase):
         if ticket.parent_id is None:
             return ""
         parent = self.get(ticket.parent_id)
-        if parent is None or parent.kind != "epic":
+        if parent is None or parent.kind != TicketKind.EPIC:
             return ""
         desc = self.workspace(parent).read_description()
         if not desc:

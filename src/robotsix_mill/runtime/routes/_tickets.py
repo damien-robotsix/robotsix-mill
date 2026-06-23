@@ -26,6 +26,7 @@ from ...core.models import (
     SourceKind,
     TicketCreate,
     TicketEvent,
+    TicketKind,
     TicketMigrate,
     TicketRead,
     TicketTransition,
@@ -505,7 +506,7 @@ def convert_to_task(
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
-    if ticket.kind != "inquiry":
+    if ticket.kind != TicketKind.INQUIRY:
         raise HTTPException(409, "only inquiry tickets can be converted to tasks")
 
     comment = str(body.get("comment", "") or "")
@@ -535,7 +536,7 @@ def convert_to_task(
         result.title,
         result.description,
         source=SourceKind.USER,
-        kind="task",
+        kind=TicketKind.TASK,
         board_id=ticket.board_id or None,
     )
     maybe_enqueue(new_ticket, worker)
@@ -656,7 +657,7 @@ def approve_ticket(
     try:
         if ticket.parent_id:
             parent = svc.get(ticket.parent_id)
-            if parent is not None and parent.kind == "epic":
+            if parent is not None and parent.kind == TicketKind.EPIC:
                 artifact = svc.workspace(ticket).artifacts_dir / "epic-body-proposed.md"
                 if artifact.exists():
                     epic_body = artifact.read_text(encoding="utf-8").strip()

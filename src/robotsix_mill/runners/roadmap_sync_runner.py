@@ -33,7 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..config import RepoConfig, Settings, target_branch_for
-from ..core.models import SourceKind, Ticket
+from ..core.models import SourceKind, Ticket, TicketKind
 from ..core.service import TicketService
 from ..forge import get_forge
 from ..forge.auth import _resolve_remote_url, github_token
@@ -149,7 +149,7 @@ class RoadmapSyncPassResult:
 
 def _list_existing_epics(service: TicketService) -> dict[str, Ticket]:
     """Return ``{epic_id: Ticket}`` for every epic on the service's board."""
-    return {t.id: t for t in service.list() if t.kind == "epic"}
+    return {t.id: t for t in service.list() if t.kind == TicketKind.EPIC}
 
 
 def _read_body(service: TicketService, ticket: Ticket) -> str:
@@ -223,7 +223,7 @@ def _create_or_update_epics(
                 title=section.title,
                 description=section.body,
                 source=SourceKind.ROADMAP_SYNC,
-                kind="epic",
+                kind=TicketKind.EPIC,
             )
             created.append({"id": t.id, "title": t.title})
             new_ids[idx] = t.id

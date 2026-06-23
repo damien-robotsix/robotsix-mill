@@ -8,6 +8,7 @@ from ...config import RepoConfig, get_repos_config
 from ...langfuse.client import effective_cost, session_cost
 from ...stages import StageContext, get_stage
 from ...core.states import STAGE_FOR_STATE, State
+from ...core.models import TicketKind
 from ...notify import send_notification
 
 if TYPE_CHECKING:
@@ -566,7 +567,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                         # orphaned in EPIC_OPEN forever — epics are NOT in
                         # STAGE_FOR_STATE, so the requeue sweep below skips them.
                         # Catch it here.
-                        if t.kind == "epic" and t.state == State.EPIC_OPEN:
+                        if t.kind == TicketKind.EPIC and t.state == State.EPIC_OPEN:
                             self._maybe_sweep_orphaned_epic(t, svc)
                             continue
                         if t.state == State.AWAITING_USER_REPLY:

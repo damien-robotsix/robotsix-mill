@@ -20,6 +20,7 @@ from robotsix_mill.core.models import (
     Ticket,
     TicketCreate,
     TicketEvent,
+    TicketKind,
     TicketRead,
     TicketTransition,
     _now,
@@ -100,7 +101,7 @@ def test_ticket_defaults():
     """Ticket fields carry correct defaults when constructed with minimum kwargs."""
     ticket = Ticket(id="t-1", title="Test Ticket", workspace_path="/tmp/t-1")
     assert ticket.state == State.DRAFT
-    assert ticket.kind == "task"
+    assert ticket.kind == TicketKind.TASK
     assert ticket.source == SourceKind.USER
     assert ticket.content_hash == ""
     assert ticket.cost_usd == 0.0
@@ -137,11 +138,11 @@ def test_ticket_source_is_enum_member_not_string():
 def test_ticket_kind_accepts_task_inquiry_epic():
     """kind is free-form string; defaults to 'task'."""
     ticket = Ticket(id="t-4", title="T", workspace_path="/tmp/t-4")
-    assert ticket.kind == "task"
-    ticket.kind = "inquiry"
-    assert ticket.kind == "inquiry"
-    ticket.kind = "epic"
-    assert ticket.kind == "epic"
+    assert ticket.kind == TicketKind.TASK
+    ticket.kind = TicketKind.INQUIRY
+    assert ticket.kind == TicketKind.INQUIRY
+    ticket.kind = TicketKind.EPIC
+    assert ticket.kind == TicketKind.EPIC
 
 
 def test_ticket_created_at_and_updated_at_are_aware_utc():
@@ -166,7 +167,7 @@ def test_ticket_model_dump_and_validate_roundtrip():
         id="t-roundtrip",
         title="Round Trip",
         workspace_path="/tmp/t-roundtrip",
-        kind="epic",
+        kind=TicketKind.EPIC,
         source=SourceKind.AGENT,
         priority=True,
         board_id="board-1",
@@ -191,7 +192,7 @@ def test_ticket_all_fields_in_roundtrip():
         id="t-full",
         title="Full Ticket",
         workspace_path="/tmp/full",
-        kind="inquiry",
+        kind=TicketKind.INQUIRY,
         source=SourceKind.CI,
         branch="feature/foo",
         parent_id="t-parent",
@@ -336,7 +337,7 @@ def test_ticket_create_minimal():
     assert tc.title == "Hello"
     assert tc.description == ""
     assert tc.source == SourceKind.USER
-    assert tc.kind == "task"
+    assert tc.kind == TicketKind.TASK
     assert tc.depends_on is None
     assert tc.parent_id is None
     assert tc.repo_id is None
@@ -366,7 +367,7 @@ def test_ticket_create_model_dump_and_validate_roundtrip():
         description="desc",
         depends_on='["t-1"]',
         source=SourceKind.AUDIT,
-        kind="epic",
+        kind=TicketKind.EPIC,
         parent_id="t-parent",
         repo_id="repo-1",
     )
@@ -532,7 +533,7 @@ def test_ticket_read_roundtrip():
         id="t-rt",
         title="RT",
         state=State.READY,
-        kind="task",
+        kind=TicketKind.TASK,
         branch="br/rt",
         parent_id=None,
         parent_title="Parent",

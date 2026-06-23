@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import logging
 
-from ..core.models import SourceKind, Ticket
+from ..core.models import SourceKind, Ticket, TicketKind
 from ..core.states import State
 from .base import Outcome, StageContext
 
@@ -80,7 +80,7 @@ def _create_fix(
         title=title,
         description=description,
         source=source_kind,
-        kind="task",
+        kind=TicketKind.TASK,
         board_id=board_id,
         priority=priority,
     )

@@ -51,6 +51,14 @@ class SourceKind(StrEnum):
     IMPLEMENT_BASELINE_DEPENDENCY = "implement_baseline_dependency"
 
 
+class TicketKind(StrEnum):
+    """Enumeration of ticket kinds — canonical source of truth for ``kind`` values."""
+
+    TASK = "task"
+    INQUIRY = "inquiry"
+    EPIC = "epic"
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -61,7 +69,7 @@ class Ticket(SQLModel, table=True):
     id: str = Field(primary_key=True)
     title: str
     state: State = Field(default=State.DRAFT, index=True)
-    kind: str = Field(default="task")  # "task", "inquiry", or "epic"
+    kind: TicketKind = Field(default=TicketKind.TASK)
     # pointer into the work plane (file-canonical body)
     workspace_path: str
     content_hash: str = ""
@@ -176,7 +184,7 @@ class TicketCreate(SQLModel):
     # completes. Accepts a JSON array of IDs.
     unblocks: list[str] | None = None
     source: str = SourceKind.USER
-    kind: str = "task"  # "task", "inquiry", or "epic"
+    kind: TicketKind = TicketKind.TASK
     parent_id: str | None = None
     repo_id: str | None = None
 
