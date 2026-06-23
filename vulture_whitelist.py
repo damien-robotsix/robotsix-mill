@@ -39,12 +39,14 @@ best_k
 failure_summary
 iterations_used
 run_copy_paste_agent
+run_frontend_sync_agent
 # Result-type aliases (PeriodicAgentResult) — consumed by tests
 AuditResult
 BcCheckResult
 CompletenessCheckResult
 CopyPasteResult
 ForgeParityResult
+FrontendSyncResult
 HealthResult
 EnvDocSyncResult
 StateSyncResult
