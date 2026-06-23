@@ -789,17 +789,17 @@ class RetrospectStage(Stage):
         # Verify prior proposals and prepend verified-state table.
         from ..runners.pass_runner import (
             _verify_prior_proposals,
-            _render_verified_table,
+            _render_verified_summary,
             _format_recent_proposals,
         )
 
-        # Render the verified-state table as an EPHEMERAL kwarg passed to
-        # the agent separately from memory. Concatenating it into
-        # memory_text would round-trip through ``updated_memory`` and bake
-        # the DB-derived table into the persisted ledger — see the
+        # Render a one-line verified-state summary as an EPHEMERAL kwarg
+        # passed to the agent separately from memory. Concatenating it
+        # into memory_text would round-trip through ``updated_memory`` and
+        # bake the DB-derived data into the persisted ledger — see the
         # matching note in ``pass_runner.run_agent_pass``.
         verified = _verify_prior_proposals(ctx.service, s, SourceKind.RETROSPECT)
-        verified_block = _render_verified_table(verified) if verified else ""
+        verified_block = _render_verified_summary(verified) if verified else ""
 
         # Build recent-proposals block for prompt injection.
         recent = ctx.service.recent_proposals_for(SourceKind.RETROSPECT, limit=100)

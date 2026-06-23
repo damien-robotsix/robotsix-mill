@@ -1,5 +1,6 @@
 """Tests for the shared agent-pass runner."""
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from robotsix_mill.runners.pass_runner import (
@@ -9,7 +10,7 @@ from robotsix_mill.runners.pass_runner import (
     load_memory,
     persist_memory,
     _format_recent_proposals,
-    _render_verified_table,
+    _render_verified_summary,
     _test_file_exists_for_gap,
     _source_module_exists_for_gap,
     _module_curator_premise_check,
@@ -315,7 +316,7 @@ def test_memory_write_ioerror_swallowed(tmp_path, monkeypatch):
 
 
 # 7. Hermetic verification — synthesised memory + ticket DB
-def test_verified_state_table_in_agent_prompt(tmp_path):
+def test_verified_summary_in_agent_prompt(tmp_path):
     settings = _make_settings(tmp_path)
     db.reset_engine()
     db.init_db(settings, board_id="test-board")
@@ -391,20 +392,12 @@ def test_verified_state_table_in_agent_prompt(tmp_path):
         settings=settings,
     )
 
-    # The verified-state context arrives in its own ephemeral kwarg,
-    # NOT concatenated onto memory — otherwise the agent's
-    # ``updated_memory`` echo would round-trip it into the persisted
-    # ledger (see ``test_verified_state_not_persisted_to_memory_file``).
+    # The verified-state context arrives as a one-line summary (not a
+    # Markdown table) via the ephemeral ``verified_proposals`` kwarg.
     verified = captured_verified[0]
-    assert "## Prior proposals — verified state" in verified
-    assert "gap_alpha" in verified
-    assert "gap_beta" in verified
-    assert "gap_gamma" in verified
-    assert "merged (via DONE)" in verified
-    assert "declined (closed directly)" in verified
-    assert "in-flight" in verified
-    assert "CLOSED" in verified
-    assert "HUMAN_MR_APPROVAL" in verified
+    assert "prior proposal(s) on file" in verified
+    assert "still open" in verified
+    assert "read_ticket" in verified
 
     # And it must NOT have been mixed into the memory the agent sees.
     memory_seen = captured_memory[0]
@@ -413,14 +406,14 @@ def test_verified_state_table_in_agent_prompt(tmp_path):
     db.reset_engine()
 
 
-# 7b. Regression — verified-state table is NEVER persisted to memory file
+# 7b. Regression — verified-state summary is NEVER persisted to memory file
 def test_verified_state_not_persisted_to_memory_file(tmp_path):
-    """The verified-state table is an ephemeral DB-derived input that
-    must not leak into the persisted memory ledger.  This is the bug
-    fixed by passing the table as a separate kwarg (and not concatenating
-    it onto ``memory_text``): when the agent echoes memory back via
-    ``updated_memory``, the runner persists *only* the agent's own
-    observations — never the runner-injected table.
+    """The verified-state summary is an ephemeral DB-derived input that
+    must not leak into the persisted memory ledger.  The summary is
+    passed as a separate kwarg (not concatenated onto ``memory_text``):
+    when the agent echoes memory back via ``updated_memory``, the runner
+    persists *only* the agent's own observations — never the
+    runner-injected summary.
     """
     settings = _make_settings(tmp_path)
     db.reset_engine()
@@ -428,7 +421,7 @@ def test_verified_state_not_persisted_to_memory_file(tmp_path):
     service = TicketService(settings, board_id="test-board")
 
     # Create one ticket with a gap-id marker so the runner has
-    # something to render in the verified-state table.
+    # something to render in the verified-state summary.
     t = service.create(
         "Some gap",
         "body\n\n<!-- audit-gap-id: some_gap -->",
@@ -442,7 +435,7 @@ def test_verified_state_not_persisted_to_memory_file(tmp_path):
 
     memory_file = tmp_path / "audit_memory.md"
     memory_file.write_text(
-        "## My own observations\n- never seen the verified table here.\n",
+        "## My own observations\n- never seen the verified summary here.\n",
         encoding="utf-8",
     )
 
@@ -464,10 +457,12 @@ def test_verified_state_not_persisted_to_memory_file(tmp_path):
         settings=settings,
     )
 
-    # The header must not have been baked into the persisted file —
+    # The summary must not have been baked into the persisted file —
     # neither on this tick nor (by induction) on any future tick.
     persisted = memory_file.read_text(encoding="utf-8")
     assert "## Prior proposals — verified state" not in persisted
+    assert "prior proposal(s) on file" not in persisted
+    assert "still open" not in persisted
 
     db.reset_engine()
 
@@ -1080,12 +1075,13 @@ def test_persist_memory_oserror_swallowed(tmp_path, monkeypatch, caplog):
 
 class _FakeTicket:
     """Minimal stub matching the Ticket interface used by
-    _format_recent_proposals: .id, .state, .title."""
+    _format_recent_proposals: .id, .state, .title, .created_at."""
 
-    def __init__(self, id, state, title):
+    def __init__(self, id, state, title, created_at=None):
         self.id = id
         self.state = state
         self.title = title
+        self.created_at = created_at
 
 
 def test_format_recent_proposals_empty():
@@ -1096,7 +1092,12 @@ def test_format_recent_proposals_empty():
 
 def test_format_recent_proposals_single():
     """Single ticket renders one line with the FULL [STATE] id | title."""
-    t = _FakeTicket("abc123def456", State.DRAFT, "Fix bug in thing")
+    t = _FakeTicket(
+        "abc123def456",
+        State.DRAFT,
+        "Fix bug in thing",
+        created_at=datetime.now(timezone.utc),
+    )
     result = _format_recent_proposals([t])
     lines = result.split("\n")
     assert lines[0] == "<recent_proposals>"
@@ -1106,8 +1107,12 @@ def test_format_recent_proposals_single():
 
 def test_format_recent_proposals_multiple():
     """Multiple tickets render multiple lines, order preserved, full ids."""
-    t1 = _FakeTicket("11111112222222", State.DRAFT, "First")
-    t2 = _FakeTicket("22222223333333", State.CLOSED, "Second")
+    t1 = _FakeTicket(
+        "11111112222222", State.DRAFT, "First", created_at=datetime.now(timezone.utc)
+    )
+    t2 = _FakeTicket(
+        "22222223333333", State.CLOSED, "Second", created_at=datetime.now(timezone.utc)
+    )
     result = _format_recent_proposals([t1, t2])
     lines = result.split("\n")
     assert lines[0] == "<recent_proposals>"
@@ -1124,7 +1129,12 @@ def test_format_recent_proposals_full_id_roundtrips_read_ticket_regex():
 
     canonical = "20250331T142315Z-add-billing-endpoint-3a1f"
     assert _TICKET_ID_RE.match(canonical) is not None
-    t = _FakeTicket(canonical, State.DRAFT, "Add billing endpoint")
+    t = _FakeTicket(
+        canonical,
+        State.DRAFT,
+        "Add billing endpoint",
+        created_at=datetime.now(timezone.utc),
+    )
     result = _format_recent_proposals([t])
     assert canonical in result
     # The rendered id (between "[draft] " and " | ") must still match.
@@ -1135,9 +1145,15 @@ def test_format_recent_proposals_full_id_roundtrips_read_ticket_regex():
 
 def test_format_recent_proposals_states_roundtrip():
     """All common states render their .value correctly."""
-    t_draft = _FakeTicket("aaa", State.DRAFT, "draft")
-    t_closed = _FakeTicket("bbb", State.CLOSED, "closed")
-    t_done = _FakeTicket("ccc", State.DONE, "done")
+    t_draft = _FakeTicket(
+        "aaa", State.DRAFT, "draft", created_at=datetime.now(timezone.utc)
+    )
+    t_closed = _FakeTicket(
+        "bbb", State.CLOSED, "closed", created_at=datetime.now(timezone.utc)
+    )
+    t_done = _FakeTicket(
+        "ccc", State.DONE, "done", created_at=datetime.now(timezone.utc)
+    )
     result_draft = _format_recent_proposals([t_draft])
     result_closed = _format_recent_proposals([t_closed])
     result_done = _format_recent_proposals([t_done])
@@ -1146,62 +1162,141 @@ def test_format_recent_proposals_states_roundtrip():
     assert "[done]" in result_done
 
 
-# ------------------------------------------------------------------ _render_verified_table direct tests
+def test_format_recent_proposals_filters_old_tickets():
+    """Tickets with created_at older than 7 days are excluded."""
+    old = _FakeTicket(
+        "old1",
+        State.DRAFT,
+        "Old draft",
+        created_at=datetime.now(timezone.utc) - timedelta(days=10),
+    )
+    result = _format_recent_proposals([old])
+    assert result == "<recent_proposals>\n(no recent proposals)\n</recent_proposals>"
 
 
-def test_render_verified_table_empty():
-    """Empty dict returns header-only table (no data rows)."""
-    result = _render_verified_table({})
-    lines = result.split("\n")
-    assert "## Prior proposals — verified state" in lines[0]
-    assert "| gap_id | ticket_id | state | resolution |" in lines[2]
-    assert "|--------|-----------|-------|------------|" in lines[3]
-    # No data rows
-    assert len(lines) == 4
+def test_format_recent_proposals_max_age_days_none():
+    """When max_age_days is None, no filtering occurs."""
+    old = _FakeTicket(
+        "old1",
+        State.DRAFT,
+        "Old draft",
+        created_at=datetime.now(timezone.utc) - timedelta(days=10),
+    )
+    result = _format_recent_proposals([old], max_age_days=None)
+    assert "[draft] old1" in result
 
 
-def test_render_verified_table_merged_resolution():
-    """Entry with resolution='merged' shows 'merged (via DONE)'."""
+def test_format_recent_proposals_mixed_ages():
+    """Only recent tickets included when some are old."""
+    recent = _FakeTicket(
+        "recent1",
+        State.DRAFT,
+        "Recent",
+        created_at=datetime.now(timezone.utc),
+    )
+    old = _FakeTicket(
+        "old1",
+        State.CLOSED,
+        "Old",
+        created_at=datetime.now(timezone.utc) - timedelta(days=10),
+    )
+    result = _format_recent_proposals([recent, old])
+    assert "[draft] recent1" in result
+    assert "old1" not in result
+    assert "(no recent proposals)" not in result
+
+
+def test_format_recent_proposals_none_created_at():
+    """Ticket with created_at=None is excluded (safety guard)."""
+    t = _FakeTicket("id1", State.DRAFT, "No date", created_at=None)
+    result = _format_recent_proposals([t])
+    assert result == "<recent_proposals>\n(no recent proposals)\n</recent_proposals>"
+
+
+def test_format_recent_proposals_all_old():
+    """All tickets older than 7 days → placeholder."""
+    old1 = _FakeTicket(
+        "old1",
+        State.DRAFT,
+        "Old 1",
+        created_at=datetime.now(timezone.utc) - timedelta(days=8),
+    )
+    old2 = _FakeTicket(
+        "old2",
+        State.CLOSED,
+        "Old 2",
+        created_at=datetime.now(timezone.utc) - timedelta(days=15),
+    )
+    result = _format_recent_proposals([old1, old2])
+    assert result == "<recent_proposals>\n(no recent proposals)\n</recent_proposals>"
+
+
+def test_format_recent_proposals_empty_list_with_filter():
+    """Empty list still returns placeholder even with max_age_days set."""
+    result = _format_recent_proposals([], max_age_days=7.0)
+    assert result == "<recent_proposals>\n(no recent proposals)\n</recent_proposals>"
+
+
+# ------------------------------------------------------------------ _render_verified_summary direct tests
+
+
+def test_render_verified_summary_empty():
+    """Empty dict returns empty string."""
+    result = _render_verified_summary({})
+    assert result == ""
+
+
+def test_render_verified_summary_counts():
+    """Summary counts total and open proposals correctly."""
     verified = {
         "gap_1": {
             "ticket_id": "T-123",
             "state": "CLOSED",
             "resolution": "merged",
             "branch": None,
-        }
-    }
-    result = _render_verified_table(verified)
-    assert "merged (via DONE)" in result
-    assert "T-123" in result
-
-
-def test_render_verified_table_declined_resolution():
-    """Entry with resolution='declined' shows 'declined (closed directly)'."""
-    verified = {
+        },
         "gap_2": {
             "ticket_id": "T-456",
+            "state": "HUMAN_MR_APPROVAL",
+            "resolution": "in-flight",
+            "branch": None,
+        },
+    }
+    result = _render_verified_summary(verified)
+    assert "2 prior proposal(s) on file" in result
+    assert "1 still open" in result
+    assert "read_ticket" in result
+
+
+def test_render_verified_summary_declined_not_open():
+    """Declined proposals are not counted as open."""
+    verified = {
+        "gap_1": {
+            "ticket_id": "T-789",
             "state": "CLOSED",
             "resolution": "declined",
             "branch": None,
-        }
+        },
     }
-    result = _render_verified_table(verified)
-    assert "declined (closed directly)" in result
-    assert "T-456" in result
+    result = _render_verified_summary(verified)
+    assert "1 prior proposal(s) on file" in result
+    assert "0 still open" in result
 
 
-def test_render_verified_table_with_branch():
-    """Entry with a branch appends ' (branch: ...)' to the ticket_id cell."""
+def test_render_verified_summary_branch_ignored():
+    """Branch info is not in the summary (trimmed for context)."""
     verified = {
-        "gap_3": {
-            "ticket_id": "T-789",
+        "gap_1": {
+            "ticket_id": "T-999",
             "state": "DRAFT",
             "resolution": "in-flight",
             "branch": "feature/xyz",
-        }
+        },
     }
-    result = _render_verified_table(verified)
-    assert "T-789 (branch: feature/xyz)" in result
+    result = _render_verified_summary(verified)
+    assert "feature/xyz" not in result
+    assert "1 prior proposal(s) on file" in result
+    assert "1 still open" in result
 
 
 # ------------------------------------------------------------------ _test_file_exists_for_gap direct tests
@@ -2165,7 +2260,7 @@ def test_agent_summary_threads_to_pass_result(tmp_path):
 
 
 def test_combined_verified_only_prior_proposals(tmp_path):
-    """The prior-proposals verified-state table is passed to the agent via
+    """The prior-proposals verified-state summary is passed to the agent via
     verified_proposals."""
     settings = _make_settings(tmp_path)
     db.reset_engine()
@@ -2201,7 +2296,8 @@ def test_combined_verified_only_prior_proposals(tmp_path):
     )
 
     combined = captured_verified[0]
-    assert "## Prior proposals — verified state" in combined
+    assert "prior proposal(s) on file" in combined
+    assert "still open" in combined
 
     db.reset_engine()
 
@@ -2213,7 +2309,7 @@ def test_combined_verified_only_prior_proposals(tmp_path):
 
 
 def test_verified_proposals_still_works_with_module_curator_style(tmp_path):
-    """The module_curator agent receives the verified-state table via
+    """The module_curator agent receives the verified-state summary via
     verified_proposals kwarg — same interface as before."""
     settings = _make_settings(tmp_path)
     db.reset_engine()
@@ -2249,7 +2345,7 @@ def test_verified_proposals_still_works_with_module_curator_style(tmp_path):
     )
 
     vp = captured[0]
-    assert "## Prior proposals — verified state" in vp
+    assert "prior proposal(s) on file" in vp
 
     db.reset_engine()
 

@@ -93,94 +93,17 @@ system_prompt: |
   inspect the ACTUAL repository using the tools in the guidance below.
   (With no clone, reason from the forge_remote_url + memory.)
 
-  - **Choose the right investigation tool:**
-    * **Match the tool to the question's complexity.** For a
-      **single, already-known file path** — its content, or its
-      first/last N lines — call `read_file` directly. For a
-      **path-existence check** ("does path X exist?"), call
-      `list_dir` directly. Do NOT spin up `explore` for these
-      trivial lookups. Delegate to `explore` / `parallel_explore`
-      **only** for genuinely multi-step investigation: traversing
-      the directory tree, cross-referencing multiple files, locating
-      a symbol by name when its path/offset is unknown, or running a
-      repo-wide `grep`.  For that complex work `explore` is preferred
-      because the sub-agent has its own 100-call budget outside your
-      audit request cap, so every delegation saves a top-level
-      request.  When you need to investigate several facets of the
-      repo (e.g. which files are the largest, what licence headers
-      are missing, how test coverage varies across modules), batch
-      them into a SINGLE `explore` call as distinct bullet
-      sub-questions.  Serial single-facet `explore` calls re-read the
-      same large files each time, wasting context and cost.
-    * **Conclusions-only invariant — but context still consumed:**
-      a scout returns only its concise conclusions (paths / symbols /
-      line-ranges) to you, never its full conversation.  However,
-      **each returned conclusion still consumes context that is then
-      carried into every later turn of this pass**.
-    * **Prefer 2–3 focused `explore` calls (or a single broader
-      `explore`) over a `parallel_explore` with many questions.**
-      Reserve `parallel_explore` for genuinely long, splittable work
-      across independent slices (e.g. partitioning the test suite or
-      scanning separate directories concurrently) — do NOT split one
-      broad question into many parallel scouts.
-    * **`parallel_explore` cap:** pass **at most
-      `parallel_explore_max` (default 4) genuinely-independent
-      questions** to a single `parallel_explore`; if you find
-      yourself writing more, consolidate into fewer broader
-      questions instead.
-    * **Trust definitive explore answers — do NOT re-verify.** When
-      an `explore` or `parallel_explore` answer provides concrete
-      counts ("17 sites"), specific file paths, and line references,
-      treat it as authoritative.  Do not waste your request budget
-      re-confirming the same fact with `grep`, `read_file`, Python
-      one-liners, or another `explore` call.  Only re-check when the
-      explore agent's answer is vague ("some files", "a few
-      places"), incomplete (truncated mid-sentence), or explicitly
-      uncertain ("I'm not sure", "this may be incomplete").
-      Re-verifying a fact already confirmed by explore costs ~$0.0003 and
-      5 seconds per round-trip. Each unnecessary model turn adds ~$0.01 in
-      total generation cost. A claim the explore scout has already answered
-      with concrete paths, counts, and line ranges is considered grounded —
-      do NOT re-verify it with additional `run_command` or `read_file` calls.
-    * **WARNING — filesystem-modifying `run_command` calls:** if you issue
-      `run_command` with `mkdir`, `rm`, `touch`, `mv`, `cp`, `chmod`, or
-      any other command that creates, deletes, or modifies files, those
-      modifications persist in the sandbox and will confuse subsequent
-      tool calls — subsequent `git status`, `ls`, or `test -f` queries
-      reflect YOUR OWN changes, not the real repo state.  Prefer
-      `test -d` or `test -f` for existence checks; never create
-      directories or files to "test" whether a tool works.
-    * **RE-VERIFICATION BUDGET — after your initial `parallel_explore`
-      (or last `explore`) call returns, you are capped at ≤ 3 total
-      standalone `read_file` + `run_command` calls for the rest of the
-      pass.** If you have already consumed those 3 calls and still want
-      a fact confirmed, either (a) accept the explore scout's answer as
-      authoritative, or (b) drop the finding.  This cap does NOT apply
-      to `read_ticket` (for consulting prior proposals), `list_dir` (for
-      path-existence checks), or the `detect_duplication` tool.
-    * **Use direct tools for the lookups they're best at:**
-      - `read_file` — the FIRST choice for a single, already-known
-        file path (its content or first/last N lines).  When you need
-        a symbol whose offset you do NOT know, ask `explore` to locate
-        it first.  Never guess line numbers; ask `explore` to find a
-        symbol by name first (e.g. "which file defines `Settings` and
-        at what line?"), then read with the confirmed offset.  Cap
-        total `read_file` calls at ≤ 5 per pass.  Avoid reading a
-        whole directory of files just to "build context" — that's
-        `explore`'s job.
-      - `list_dir` — the FIRST choice for trivial existence checks
-        ("does path X exist?") and top-level layout assessment.
-      - `run_command` — only for targeted one-liners on
-        already-pinned-down symbols or files (e.g. running a linter,
-        scanner, or dependency checker whose scope is already known).
-      - `detect_duplication` — call ONCE per pass; its output feeds
-        into lens-A analysis.  Do not re-run it.
+  ## Tool-selection checklist
 
-  ## Tool-use discipline
-
-  - **`run_command` always executes from the repository root** — do
-    NOT prefix commands with an absolute `cd` path. The tool docstring
-    warns about this; follow it.
+  - Known path → `read_file`; existence check → `list_dir`; multi-step
+    investigation → single `explore`/`parallel_explore` (batch sub-questions;
+    cap at 4). Trust definitive explore answers — do NOT re-verify.
+  - Re-verification cap: ≤ 3 total `read_file` + `run_command` after initial
+    explore (excludes `read_ticket`, `list_dir`, `detect_duplication`).
+  - `run_command` from repo root; never create/modify files. For targeted
+    one-liners only.
+  - `detect_duplication` once per pass; `ask_web_knowledge` for external
+    best-practices only.
 
   CONSULTING PRIOR PROPOSALS:
 
@@ -197,22 +120,6 @@ system_prompt: |
   - Use the `read_ticket` tool to fetch a prior proposal's full
     description, history, and comments when the one-line summary in
     `recent-proposals` is not enough to decide.
-
-  MEMORY USAGE:
-
-  You are given an agent memory ledger for **general observations and
-  patterns only** — architectural smells, recurring tool failures,
-  model-behaviour notes, codebase health trends.  It is NOT a per-ticket
-  diary.
-
-  DO NOT record in memory:
-  - Ticket IDs or ticket states
-  - Per-proposal notes or per-finding diaries
-  - Anything that is a record of "what you proposed"
-
-  Ticket history lives in the DB and is surfaced to you via
-  `recent-proposals`.  Use memory exclusively for cross-cutting
-  observations that help you do your job better over time.
 
   Your task:
   1. **BEFORE proposing new gaps**, consult the `recent-proposals` block
@@ -232,9 +139,8 @@ system_prompt: |
      specific gap (missing CI step, outdated dependency, etc.) for
      lens-B items.
   6. Update the memory ledger with general observations and patterns
-     only (see MEMORY USAGE above).  Do NOT record ticket IDs,
-     per-proposal notes, or per-gap diaries — ticket history lives in
-     the DB.
+     only.  Do NOT record ticket IDs, per-proposal notes, or per-gap
+     diaries — ticket history lives in the DB.
   7. Return the updated memory ledger verbatim in `updated_memory`.
 
   For each gap you decide to propose as a draft ticket, provide:

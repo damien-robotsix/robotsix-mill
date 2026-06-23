@@ -74,35 +74,12 @@ def test_audit_prompt_covers_codebase_health_and_tooling():
             "shipped audit YAML — move it to mill's overlay file."
         )
 
-    # Post-explore re-verification guardrails (cost signals + budget cap).
-    assert "re-verification budget" in p, (
-        "audit prompt missing re-verification budget bullet"
-    )
-    assert "~$0.01" in p, "audit prompt missing cost signal (~$0.01)"
-    assert "capped at ≤ 3" in p, (
-        "audit prompt missing re-verification budget cap (capped at ≤ 3)"
-    )
+    # Post-explore re-verification guardrails (compact checklist).
+    assert "re-verification cap" in p, "audit prompt missing re-verification cap bullet"
+    assert "≤ 3 total" in p, "audit prompt missing re-verification cap (≤ 3 total)"
 
-    # parallel_explore fan-out guidance — conclusions-only invariant
-    # + explicit cap to prevent scout proliferation.
-    fan_out_cues = [
-        (
-            "conclusions-only invariant",
-            "audit prompt missing conclusions-only invariant label",
-        ),
-        (
-            "never its full conversation",
-            "audit prompt missing 'never its full conversation' invariant",
-        ),
-        (
-            "each returned conclusion still consumes context",
-            "audit prompt missing context-consumption warning",
-        ),
-        ("prefer 2", "audit prompt missing 'prefer 2–3 focused explore' guidance"),
-        ("at most", "audit prompt missing 'at most' fan-out cap cue"),
-    ]
-    for cue, msg in fan_out_cues:
-        assert cue in p, f"{msg}: {cue}"
+    # parallel_explore fan-out guidance is now covered by the compact
+    # tool-selection checklist (batch sub-questions; cap at 4).
 
 
 def test_mill_ships_an_audit_overlay():

@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePath
 from typing import Any, Callable
 
@@ -113,27 +113,20 @@ def _verify_prior_proposals(
     return result
 
 
-def _render_verified_table(verified: dict[str, dict]) -> str:
-    """Render a Markdown table from the verified mapping for agent input."""
-    lines = [
-        "## Prior proposals — verified state",
-        "",
-        "| gap_id | ticket_id | state | resolution |",
-        "|--------|-----------|-------|------------|",
-    ]
-    for gap_id, info in verified.items():
-        tid = info["ticket_id"]
-        if info.get("branch"):
-            tid = f"{tid} (branch: {info['branch']})"
-        resolution = info["resolution"]
-        if resolution == "merged":
-            resolution_str = "merged (via DONE)"
-        elif resolution == "declined":
-            resolution_str = "declined (closed directly)"
-        else:
-            resolution_str = "in-flight"
-        lines.append(f"| {gap_id} | {tid} | {info['state']} | {resolution_str} |")
-    return "\n".join(lines)
+def _render_verified_summary(verified: dict[str, dict]) -> str:
+    """Render a one-line summary of prior proposals for agent input.
+
+    The agent has ``read_ticket`` for on-demand lookup — no need to
+    burn context on a full Markdown table every turn.
+    """
+    if not verified:
+        return ""
+    total = len(verified)
+    open_count = sum(1 for v in verified.values() if v.get("resolution") == "in-flight")
+    return (
+        f"{total} prior proposal(s) on file; {open_count} still open. "
+        f"Use `read_ticket` to fetch full details when needed."
+    )
 
 
 # The verified-state table (above) is injected fresh into the agent prompt every
@@ -253,13 +246,17 @@ def _strip_unverified_filed_annotations(
     return "\n".join(cleaned)
 
 
-def _format_recent_proposals(tickets: list[Ticket]) -> str:
+def _format_recent_proposals(tickets: list[Ticket], max_age_days: float = 7.0) -> str:
     """Format a ``<recent_proposals>`` block for agent prompt injection.
 
     One line per ticket: ``[STATE] id | title``, most recent first.
-    The full ``t.id`` is emitted so the agent can pass it straight to
-    ``read_ticket`` (which rejects truncated IDs).
+    Only tickets whose ``created_at`` is within *max_age_days* are
+    included.  The full ``t.id`` is emitted so the agent can pass it
+    straight to ``read_ticket`` (which rejects truncated IDs).
     """
+    if max_age_days is not None and max_age_days > 0 and tickets:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+        tickets = [t for t in tickets if t.created_at and t.created_at >= cutoff]
     if not tickets:
         return "<recent_proposals>\n(no recent proposals)\n</recent_proposals>"
     lines = ["<recent_proposals>"]
@@ -584,7 +581,7 @@ def run_agent_pass(
     #    runner persists it, the next tick re-prepends a fresh table on
     #    top, …).
     verified = _verify_prior_proposals(service, settings, source_label)
-    combined_verified = _render_verified_table(verified) if verified else ""
+    combined_verified = _render_verified_summary(verified) if verified else ""
 
     # 3. Build the recent-proposals block for prompt injection.
     recent = service.recent_proposals_for(source_label, limit=100)
