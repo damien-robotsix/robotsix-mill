@@ -732,6 +732,7 @@ modules:
       - LICENSE
       - SECURITY.md
       - AGENT.md
+      - CHANGELOG.md
       - .gitignore
       - .gitmodules
     dependencies: []
