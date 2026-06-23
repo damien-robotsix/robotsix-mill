@@ -6055,3 +6055,91 @@ def test_triage_prompt_graceful_on_repos_config_failure():
     assert len(captured_prompts) == 1
     prompt = captured_prompts[0]
     assert "# Registered boards" not in prompt
+
+
+# ---------------------------------------------------------------------------
+# Language gating regression tests
+# ---------------------------------------------------------------------------
+
+
+def test_language_gating_javascript_only_no_python_markers(tmp_path):
+    """A repo declaring only JavaScript must produce NO Python-convention
+    text in the composed refine system prompt (markers pytest/mypy/ruff/
+    uv lock must all be absent).
+
+    This locks in the already-working language gating
+    (resolve_language_instructions / load_repo_languages) so the
+    non-Python-leakage guarantee cannot silently break."""
+    import yaml as _yaml
+
+    # Create a minimal repo with a .robotsix-mill/config.yaml declaring
+    # only JavaScript.
+    repo_dir = tmp_path / "js_repo"
+    repo_dir.mkdir()
+    config_dir = repo_dir / ".robotsix-mill"
+    config_dir.mkdir()
+    config = {"languages": ["javascript"]}
+    (config_dir / "config.yaml").write_text(_yaml.dump(config), encoding="utf-8")
+
+    from robotsix_mill.config import Settings as S
+    from robotsix_mill.config.repo_settings import resolve_language_instructions
+
+    settings = S(data_dir=str(tmp_path))
+    lang_block = resolve_language_instructions(settings, repo_dir)
+
+    # Must produce some output (the javascript.md snippet exists).
+    assert lang_block, "Expected non-empty language block for JavaScript repo"
+
+    # Must NOT contain any Python-convention markers.
+    python_markers = ["pytest", "mypy", "ruff", "uv lock"]
+    for marker in python_markers:
+        assert marker not in lang_block, (
+            f"Python marker {marker!r} leaked into JavaScript-only "
+            f"language instructions"
+        )
+
+
+def test_language_gating_empty_config_no_python_markers(tmp_path):
+    """A repo with NO language declaration must produce an empty language
+    block (no spurious Python injection)."""
+    import yaml as _yaml
+
+    repo_dir = tmp_path / "no_lang_repo"
+    repo_dir.mkdir()
+    config_dir = repo_dir / ".robotsix-mill"
+    config_dir.mkdir()
+    config = {}  # No languages key at all
+    (config_dir / "config.yaml").write_text(_yaml.dump(config), encoding="utf-8")
+
+    from robotsix_mill.config import Settings as S
+    from robotsix_mill.config.repo_settings import resolve_language_instructions
+
+    settings = S(data_dir=str(tmp_path))
+    lang_block = resolve_language_instructions(settings, repo_dir)
+
+    assert lang_block == "", (
+        f"Expected empty language block for repo with no languages, got: {lang_block!r}"
+    )
+
+
+def test_language_gating_python_repo_includes_markers(tmp_path):
+    """A Python-declaring repo MUST include the Python-convention markers —
+    this ensures the gating works in both directions."""
+    import yaml as _yaml
+
+    repo_dir = tmp_path / "py_repo"
+    repo_dir.mkdir()
+    config_dir = repo_dir / ".robotsix-mill"
+    config_dir.mkdir()
+    config = {"languages": ["python"]}
+    (config_dir / "config.yaml").write_text(_yaml.dump(config), encoding="utf-8")
+
+    from robotsix_mill.config import Settings as S
+    from robotsix_mill.config.repo_settings import resolve_language_instructions
+
+    settings = S(data_dir=str(tmp_path))
+    lang_block = resolve_language_instructions(settings, repo_dir)
+
+    assert lang_block, "Expected non-empty language block for Python repo"
+    # At least one Python marker should be present.
+    assert "pytest" in lang_block, "Python repo must include pytest marker"
