@@ -117,7 +117,6 @@ class RetrospectResult(BaseModel):
     agented_md_proposals: list[dict] | None = None
 
 
-
 def _is_structural_quote_end(text: str, quote_idx: int) -> bool:
     """Return True if the double-quote at *quote_idx* is followed by a
     JSON structural terminator (``}`` or ``,`` then ``"`` or ``}``)
