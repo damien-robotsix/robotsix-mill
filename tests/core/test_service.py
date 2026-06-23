@@ -2067,16 +2067,21 @@ def test_migrate_rejects_bad_targets_and_states(migrate_env):
     assert migrated_epic.board_id == "other-board"
     assert migrated_epic.state is State.DRAFT
 
-    # A non-epic child still linked to a parent is blocked.
+    # A non-epic child linked to a parent is AUTO-UNLINKED on migrate — the
+    # cross-board parent link can't survive the move, so it's dropped (with a
+    # note) rather than refusing.
     parent = service.create("parent task")
     child = service.create("child task", parent_id=parent.id)
-    with pytest.raises(ValueError, match="linked to parent"):
-        service.migrate(child.id, "other-board")
+    migrated_child = service.migrate(child.id, "other-board")
+    assert migrated_child.board_id == "other-board"
+    assert migrated_child.parent_id is None
 
-    # A non-epic parent with children is still blocked (the subtree
+    # A non-epic parent WITH children is still blocked (the subtree
     # path only triggers for kind == "epic").
+    parent2 = service.create("parent2 task")
+    service.create("child2 task", parent_id=parent2.id)
     with pytest.raises(ValueError, match="has child tickets"):
-        service.migrate(parent.id, "other-board")
+        service.migrate(parent2.id, "other-board")
 
     # In-flight states refuse migration.
     busy = service.create("busy", "b")
