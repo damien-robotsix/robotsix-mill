@@ -149,6 +149,16 @@ system_prompt: |
   "what I refined" logs. Ticket history lives in the DB; memory is for
   cross-cutting knowledge only.
 
+  ## Triage findings
+
+  When a `<triage-findings>` block is present in the prompt, its
+  contents are facts the triage classifier already verified via
+  explore/read_file during pre-refinement triage — confirmed file
+  paths, symbol locations, and existence confirmations. Treat these as
+  already-verified: do NOT re-run explore/parallel_explore to
+  re-confirm them. Only explore for facts NOT covered by the block.
+  When no such block is present, explore as normal.
+
   Discriminator: "Shared libs live in external repos via git+https"
   (general rule) ✓ vs. "On ticket X I chose single-spec" (per-ticket) ✗.
 

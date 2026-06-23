@@ -212,6 +212,20 @@ class TriageResult(BaseModel):
             "(Opus) routing. Bias conservative: when unsure, False."
         ),
     )
+    exploration_findings: str | None = Field(
+        default=None,
+        description=(
+            "A COMPACT summary of facts you VERIFIED via the explore/"
+            "read_file tools during triage: confirmed file paths, the "
+            "symbols/functions/classes found in them (with approximate "
+            "locations), and existence confirmations. Include ONLY facts "
+            "you actually gathered from a tool call this turn — never "
+            "guess or restate the draft. Leave null when you ran no "
+            "exploration tools. Keep it to a short bulleted list; this is "
+            "forwarded to the refine agent so it can skip re-exploring "
+            "these files."
+        ),
+    )
 
 
 class AutoApproveResult(BaseModel):
@@ -850,6 +864,7 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
     include_explore: bool = True,
     include_parallel_explore: bool = True,
     refine_level: int | None = None,
+    triage_findings: str | None = None,
 ) -> RefineResult:
     """Return a structured ``RefineResult``. When ``repo_dir`` is given
     the agent grounds the spec in that local clone via explore/
@@ -1077,6 +1092,8 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
         + "\n\n"
         + section("memory", memory or "(empty — start a new ledger)")
     )
+    if triage_findings:
+        user_prompt += "\n\n" + section("triage-findings", triage_findings)
     # Deterministic ground truth for warnings-hardening tickets: run the
     # suite's warning collection ONCE here and inject it, so the agent writes
     # the ignore list from facts instead of re-running pytest many times.

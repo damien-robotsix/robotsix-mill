@@ -61,16 +61,23 @@ from .helpers import (
 
 
 def _write_triage_complexity(
-    ws, complexity: str, trivial_scope: bool | None = None
+    ws,
+    complexity: str,
+    trivial_scope: bool | None = None,
+    findings: str | None = None,
 ) -> None:
     """Persist the triage complexity verdict (and optionally the trivial-scope
-    flag) for downstream consumption."""
+    flag and exploration findings) for downstream consumption."""
     data: dict = {"complexity": complexity}
     if trivial_scope is not None:
         data["trivial_scope"] = trivial_scope
     (ws.artifacts_dir / "triage_complexity.json").write_text(
         json.dumps(data), encoding="utf-8"
     )
+    if findings:
+        (ws.artifacts_dir / "triage_findings.json").write_text(
+            json.dumps({"findings": findings}), encoding="utf-8"
+        )
 
 
 def _read_triage_complexity(ws: Workspace) -> str:
@@ -84,6 +91,20 @@ def _read_triage_complexity(ws: Workspace) -> str:
         return cast(str, data.get("complexity", "needs-exploration"))
     except json.JSONDecodeError, KeyError:
         return "needs-exploration"
+
+
+def _read_triage_findings(ws: Workspace) -> str | None:
+    """Read the triage exploration findings; returns ``None`` when the
+    artifact is absent or unparseable (conservative default — no block)."""
+    path = ws.artifacts_dir / "triage_findings.json"
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        findings = data.get("findings")
+        return cast(str | None, findings) if findings else None
+    except json.JSONDecodeError, KeyError:
+        return None
 
 
 def _read_triage_trivial(ws: Workspace) -> bool:
@@ -578,7 +599,12 @@ class RefineAgentMixin:
             if complexity is None:
                 # Default: needs-exploration for backward compat / safety.
                 complexity = "needs-exploration"
-            _write_triage_complexity(ws, complexity, trivial_scope=triage.trivial_scope)
+            _write_triage_complexity(
+                ws,
+                complexity,
+                trivial_scope=triage.trivial_scope,
+                findings=triage.exploration_findings,
+            )
 
             if (
                 triage.decision == "MAINTENANCE"
@@ -1287,6 +1313,11 @@ class RefineAgentMixin:
             triage_complexity = _read_triage_complexity(ws)
             _explore_simple = triage_complexity == "simple"
 
+            # Read the triage exploration findings so the refine agent
+            # can skip re-exploring files/symbols the classifier already
+            # verified.
+            triage_findings = _read_triage_findings(ws)
+
             # Read the trivial-scope verdict to route the refine model level.
             # Because `ws.artifacts_dir` persists across refine rounds (the
             # workspace is keyed on `ticket.id` and never wiped), this file
@@ -1353,6 +1384,7 @@ class RefineAgentMixin:
                 include_explore=not _explore_simple and not _sendback,
                 include_parallel_explore=not _explore_simple and not _sendback,
                 refine_level=refine_level,
+                triage_findings=triage_findings,
             )
         except RuntimeError as e:  # e.g. OPENROUTER_API_KEY not set
             # ModelHTTPError subclasses RuntimeError, so a transient model

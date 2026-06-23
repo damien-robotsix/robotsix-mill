@@ -284,3 +284,40 @@ def test_action_tag_resolution_instruction_present(
         f"{agent_name} prompt ({yaml_path}) is missing the shared "
         f"marker phrase: {_SHARED_ACTION_TAG_MARKER!r}"
     )
+
+
+def test_triage_prompt_exploration_findings_guidance():
+    """The triage prompt must instruct the classifier to populate
+    exploration_findings from tools it actually used."""
+    definition = load_agent_definition(
+        Path(__file__).parent.parent.parent / "agent_definitions" / "triage.yaml"
+    )
+    prompt = definition.system_prompt
+    # The prompt must mention the exploration_findings output field.
+    assert "exploration_findings" in prompt, (
+        "triage prompt must mention exploration_findings output field"
+    )
+    # Must instruct to populate from tool calls, not guess.
+    assert "populate the" in prompt.lower() or "fill" in prompt.lower()
+    # Must instruct to leave null when no tools used.
+    assert "leave" in prompt.lower() and "null" in prompt.lower()
+    # Must NOT restate tool signatures.
+    _assert_no_tool_signatures(prompt, "triage")
+
+
+def test_refine_prompt_triage_findings_guidance():
+    """The refine prompt must instruct the agent to trust the
+    <triage-findings> block when present."""
+    from robotsix_mill.agents import refining
+
+    prompt = refining.SYSTEM_PROMPT
+    # Must mention the triage-findings block.
+    assert "triage-findings" in prompt.lower(), (
+        "refine prompt must mention triage-findings block"
+    )
+    # Must instruct to treat as already-verified.
+    assert "already-verified" in prompt or "already verified" in prompt
+    # Must instruct to skip re-exploring those files.
+    assert "skip" in prompt.lower()
+    # Must NOT restate tool signatures.
+    _assert_no_tool_signatures(prompt, "refine")
