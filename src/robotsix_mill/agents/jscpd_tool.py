@@ -16,6 +16,8 @@ from pathlib import Path
 from collections.abc import Callable
 from typing import Any
 
+from ..runtime.tracing import trace_stage
+
 
 def run_jscpd(repo_dir: Path) -> str:
     """Run jscpd and return a structured summary of clone pairs.
@@ -172,7 +174,8 @@ def make_jscpd_tool(repo_dir: Path) -> Callable[[], str]:
         """Run jscpd to detect copy-paste duplication across the repository,
         returning clone pairs with file paths, line ranges, and duplication
         metrics."""
-        return run_jscpd(repo_dir)
+        with trace_stage("detect_duplication"):
+            return run_jscpd(repo_dir)
 
     from .tool_registry import ToolInfo, ToolRegistry
 

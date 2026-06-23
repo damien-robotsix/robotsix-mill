@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+
 from robotsix_mill.agents import validate_artifact_tool
 from robotsix_mill.agents.tool_registry import ToolRegistry
 
@@ -68,3 +70,23 @@ def test_make_validate_artifact_tool_registers_once(tmp_path):
     info = matches[0]
     assert info.category == "exploration"
     assert info.parameters == {"path": "str"}
+
+
+# ── trace_stage child-span test ────────────────────────────────────────
+
+
+def test_trace_stage_validate_artifact_emits_span(tmp_path, monkeypatch):
+    """validate_artifact opens a child span named 'validate_artifact' via trace_stage."""
+    spans: list[str] = []
+
+    @contextlib.contextmanager
+    def fake_trace_stage(name):
+        spans.append(name)
+        yield
+
+    monkeypatch.setattr(validate_artifact_tool, "trace_stage", fake_trace_stage)
+    (tmp_path / "f.py").write_text("x = 1")
+    tool = validate_artifact_tool.make_validate_artifact_tool(tmp_path)
+    result = tool("f.py")
+    assert result == "EXISTS: f.py (file)"
+    assert spans == ["validate_artifact"]
