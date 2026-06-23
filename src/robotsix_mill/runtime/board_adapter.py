@@ -7,9 +7,12 @@ drive the mill kanban board.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from robotsix_board import RenderMode
 
-from ..core.models import TicketRead
+if TYPE_CHECKING:
+    from ..core.models import TicketRead
 
 from ..core.states import State
 
@@ -44,9 +47,7 @@ _COLUMNS: list[tuple[str, str]] = [
 class MillBoardAdapter:
     """BoardAdapter for mill's ``TicketRead`` objects.
 
-    Implements the ``BoardAdapter`` Protocol when ``robotsix_board`` is
-    installed.  When the library is absent, the class is still
-    importable but ``render_mode()`` raises ``RuntimeError``.
+    Implements the ``robotsix_board.BoardAdapter`` Protocol.
     """
 
     BLOCKED_WAITING = "⛔ waiting on ticket"
