@@ -1083,11 +1083,11 @@ class _LifecycleMixin(_ServiceBase):
             ticket = _get_ticket(s, ticket_id)
             if ticket.kind == "epic":
                 return self._migrate_epic_subtree(s, ticket, src_board, dst_board, note)
-            if ticket.parent_id:
-                raise ValueError(
-                    f"migrate: {ticket_id} is linked to parent "
-                    f"{ticket.parent_id!r} on board {src_board!r} — unlink first"
-                )
+            # A non-epic ticket's parent stays on the source board, so a
+            # cross-board parent link can't survive the move. Auto-unlink it
+            # (recorded in the migration note below) instead of refusing the
+            # migration.
+            unlinked_parent = ticket.parent_id or None
             if (
                 s.exec(
                     select(Ticket).where(Ticket.parent_id == ticket_id).limit(1)
@@ -1143,6 +1143,8 @@ class _LifecycleMixin(_ServiceBase):
         migration_note = f"migrated from board {src_board!r} to {dst_board!r}"
         if state is not State.DRAFT:
             migration_note += f" (was {state.value})"
+        if unlinked_parent:
+            migration_note += f" (auto-unlinked from parent {unlinked_parent!r})"
         if note:
             migration_note += f": {note}"
 
@@ -1153,6 +1155,7 @@ class _LifecycleMixin(_ServiceBase):
                     state=State.DRAFT,
                     board_id=dst_board,
                     workspace_path=str(dst_ws),
+                    parent_id=None,  # cross-board link can't follow; auto-unlinked
                     branch=None,
                     blocked_from=None,
                     paused_from=None,
