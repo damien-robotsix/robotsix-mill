@@ -16,7 +16,7 @@ from sqlmodel import select
 from ..core.db import session
 from ..core.models import Ticket
 from ..core.service import TicketService
-from ..core.states import State
+from ..core.states import ASK_USER_MARKER, State
 from ..notify import send_notification
 
 if TYPE_CHECKING:
@@ -116,7 +116,8 @@ def run_timeout_escalation(settings: Settings) -> dict:
                 ask_threads = [
                     c
                     for c in comments
-                    if c.parent_id is None and (c.body or "").startswith("[ASK_USER]")
+                    if c.parent_id is None
+                    and (c.body or "").startswith(ASK_USER_MARKER)
                 ]
                 if ask_threads:
                     # Collect all top-level ask-thread IDs.

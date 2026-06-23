@@ -238,6 +238,9 @@ class TicketRead(SQLModel):
     board_id: str = ""
     created_at: datetime
     updated_at: datetime
+    # verbatim clarifying question from the latest open [ASK_USER]
+    # comment when paused; None otherwise
+    pending_question: str | None = None
 
 
 class CommentCreate(SQLModel):

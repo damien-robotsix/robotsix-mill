@@ -63,6 +63,7 @@ def _ticket_to_card(ticket, settings, svc):
         "badges": _adapter.card_badges(read),
         "timestamps": _adapter.card_timestamps(read),
         "source_badge": read.source if read.source and read.source != "user" else "",
+        "pending_question": read.pending_question,
     }
 
 

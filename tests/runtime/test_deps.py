@@ -481,6 +481,80 @@ def test_enrich_ticket_read_blocking_cost_passed_through(monkeypatch):
     assert captured["blocking"] is True
 
 
+# --- pending_question enrichment ---------------------------------------
+
+
+def test_enrich_ticket_read_pending_question_when_paused(monkeypatch):
+    """When the ticket is in AWAITING_USER_REPLY, pending_question is
+    populated from service.pending_question."""
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.deps.with_cost",
+        lambda ticket, settings, *, blocking, repo_config: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.deps._origin_session_url", lambda *a, **kw: None
+    )
+    monkeypatch.setattr("robotsix_mill.runtime.deps._pr_url", lambda *a, **kw: None)
+
+    ticket = _make_ticket(state=State.AWAITING_USER_REPLY)
+    settings = MagicMock()
+    service = MagicMock()
+    service.list_children.return_value = []
+    service.unmet_dependencies.return_value = []
+    service.pending_question.return_value = "What color?"
+
+    result = enrich_ticket_read(ticket, settings, service)
+    assert result.pending_question == "What color?"
+    service.pending_question.assert_called_once_with(ticket.id)
+
+
+def test_enrich_ticket_read_pending_question_none_when_not_paused(monkeypatch):
+    """When the ticket is NOT in AWAITING_USER_REPLY, pending_question
+    is None and service.pending_question is NOT called."""
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.deps.with_cost",
+        lambda ticket, settings, *, blocking, repo_config: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.deps._origin_session_url", lambda *a, **kw: None
+    )
+    monkeypatch.setattr("robotsix_mill.runtime.deps._pr_url", lambda *a, **kw: None)
+
+    ticket = _make_ticket(state=State.DRAFT)
+    settings = MagicMock()
+    service = MagicMock()
+    service.list_children.return_value = []
+    service.unmet_dependencies.return_value = []
+    service.pending_question = MagicMock()
+
+    result = enrich_ticket_read(ticket, settings, service)
+    assert result.pending_question is None
+    # pending_question should NOT be called for non-paused tickets
+    service.pending_question.assert_not_called()
+
+
+def test_enrich_ticket_read_pending_question_none_when_no_open_ask(monkeypatch):
+    """When paused but no open [ASK_USER] thread, pending_question is None."""
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.deps.with_cost",
+        lambda ticket, settings, *, blocking, repo_config: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.deps._origin_session_url", lambda *a, **kw: None
+    )
+    monkeypatch.setattr("robotsix_mill.runtime.deps._pr_url", lambda *a, **kw: None)
+
+    ticket = _make_ticket(state=State.AWAITING_USER_REPLY)
+    settings = MagicMock()
+    service = MagicMock()
+    service.list_children.return_value = []
+    service.unmet_dependencies.return_value = []
+    service.pending_question.return_value = None
+
+    result = enrich_ticket_read(ticket, settings, service)
+    assert result.pending_question is None
+
+
 # ---------------------------------------------------------------------------
 # get_broadcaster / get_repos_registry
 # ---------------------------------------------------------------------------

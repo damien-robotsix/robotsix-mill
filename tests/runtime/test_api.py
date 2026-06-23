@@ -378,6 +378,73 @@ def test_get_tickets_list_is_cache_only_for_cost(client, service, monkeypatch):
     assert t.id in called
 
 
+def test_get_ticket_includes_pending_question_when_paused(client, service):
+    """GET /tickets/{id} returns pending_question for a ticket in
+    AWAITING_USER_REPLY with an open [ASK_USER] comment."""
+    t = service.create("Paused with question")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+    service.add_comment(
+        t.id, "[ASK_USER]\n\nShould we use red or blue?", author="refine"
+    )
+
+    r = client.get(f"/tickets/{t.id}").json()
+    assert r["pending_question"] == "Should we use red or blue?"
+
+
+def test_get_ticket_pending_question_none_when_not_paused(client, service):
+    """GET /tickets/{id} returns pending_question=None for a ticket not
+    in AWAITING_USER_REPLY."""
+    t = service.create("Not paused")
+
+    r = client.get(f"/tickets/{t.id}").json()
+    assert r["pending_question"] is None
+
+
+def test_get_ticket_pending_question_none_after_thread_closed(client, service):
+    """GET /tickets/{id} returns pending_question=None once the
+    [ASK_USER] thread is closed (the question was answered)."""
+    t = service.create("Answered question")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+    c = service.add_comment(t.id, "[ASK_USER]\n\nWhat's the answer?", author="refine")
+
+    # Before closing — field is populated.
+    r = client.get(f"/tickets/{t.id}").json()
+    assert r["pending_question"] == "What's the answer?"
+
+    # Close the thread (auto-resumes the ticket).
+    service.close_thread(c.id)
+
+    # After closing — field is None because thread is closed.
+    # (Ticket may have auto-resumed so the gate also returns None.)
+    r = client.get(f"/tickets/{t.id}").json()
+    assert r["pending_question"] is None
+
+
+def test_board_cards_includes_pending_question_key(client, service):
+    """GET /board/cards returns a pending_question key in each card dict."""
+    t = service.create("Board card test")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+    service.add_comment(t.id, "[ASK_USER]\n\nBoard question text?", author="refine")
+
+    cards = client.get("/board/cards").json()
+    found = [c for c in cards if c["id"] == t.id]
+    assert len(found) == 1
+    assert found[0]["pending_question"] == "Board question text?"
+
+
+def test_board_cards_pending_question_null_for_non_paused(client, service):
+    """GET /board/cards returns pending_question=None for non-paused cards."""
+    t = service.create("Non-paused card")
+
+    cards = client.get("/board/cards").json()
+    found = [c for c in cards if c["id"] == t.id]
+    assert len(found) == 1
+    assert found[0]["pending_question"] is None
+
+
 def test_board_renders_source_badge(client):
     """The mill-specific overlay CSS includes source badge styling classes,
     and the HTML shell references both the shared and mill CSS files."""

@@ -50,6 +50,10 @@ from __future__ import annotations
 
 from enum import StrEnum
 
+#: Marker prefix that agents use for [ASK_USER] comments so the
+#: system can detect clarifying-question threads vs. normal comments.
+ASK_USER_MARKER: str = "[ASK_USER]"
+
 
 class State(StrEnum):
     DRAFT = "draft"  # raw idea, awaiting refinement

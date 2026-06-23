@@ -17,7 +17,7 @@ from ..models import (
     TicketEvent,
     TicketKind,
 )
-from ..states import State
+from ..states import ASK_USER_MARKER, State
 from ._base import _ServiceBase
 from ._helpers import _get_ticket, _parse_depends_on_str
 
@@ -330,3 +330,30 @@ class _QueryMixin(_ServiceBase):
                 .order_by(Comment.created_at)
             )
             return list(s.exec(stmt).all())
+
+    def pending_question(self, ticket_id: str) -> str | None:
+        """Return the verbatim clarifying-question text of the most recent
+        OPEN top-level ``[ASK_USER]`` comment on *ticket_id*, or ``None`` if
+        there is no open question.  The ``[ASK_USER]`` marker prefix is
+        stripped.
+        """
+        with db.session(self.settings, self._board_for(ticket_id)) as s:
+            stmt = (
+                select(Comment)
+                .where(
+                    Comment.ticket_id == ticket_id,
+                    Comment.parent_id == None,  # noqa: E711
+                    Comment.body.startswith(ASK_USER_MARKER),
+                    Comment.closed_at == None,  # noqa: E711
+                )
+                .order_by(Comment.created_at.desc())  # type: ignore[attr-defined]
+                .limit(1)
+            )
+            result = s.exec(stmt).first()
+            if result is None:
+                return None
+            # Strip the marker prefix: f"{ASK_USER_MARKER}\n\n{question}"
+            text = result.body
+            if text.startswith(ASK_USER_MARKER):
+                text = text[len(ASK_USER_MARKER) :]
+            return text.lstrip("\n").strip()

@@ -378,4 +378,9 @@ def enrich_ticket_read(
         board_id=getattr(ticket, "board_id", "") or "",
         created_at=ticket.created_at,
         updated_at=ticket.updated_at,
+        pending_question=(
+            service.pending_question(ticket.id)
+            if ticket.state is State.AWAITING_USER_REPLY
+            else None
+        ),
     )

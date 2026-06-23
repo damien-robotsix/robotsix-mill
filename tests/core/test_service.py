@@ -1692,6 +1692,86 @@ def test_collect_ask_user_replies_no_answered_threads(service, settings):
     assert result == "(no operator reply found)"
 
 
+# --- pending_question ---------------------------------------------------
+
+
+def test_pending_question_returns_verbatim_question_text(service):
+    """pending_question returns the question text from the latest open
+    [ASK_USER] comment, with the marker stripped."""
+    t = service.create("Pending question test")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+
+    service.add_comment(
+        t.id, "[ASK_USER]\n\nWhat color should the button be?", author="refine"
+    )
+
+    result = service.pending_question(t.id)
+    assert result == "What color should the button be?"
+
+
+def test_pending_question_none_when_no_open_ask_user(service):
+    """pending_question returns None when there are no [ASK_USER] comments."""
+    t = service.create("No ask user")
+    assert service.pending_question(t.id) is None
+
+
+def test_pending_question_none_when_thread_closed(service):
+    """pending_question returns None when the only [ASK_USER] thread is closed."""
+    t = service.create("Closed ask")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+
+    c = service.add_comment(
+        t.id, "[ASK_USER]\n\nWhat is your favorite color?", author="refine"
+    )
+    service.close_thread(c.id)
+
+    # After closing the thread, pending_question should be None
+    # (the ticket also auto-resumes, but the field is computed at read time)
+    assert service.pending_question(t.id) is None
+
+
+def test_pending_question_latest_of_many_open_threads(service):
+    """When multiple open [ASK_USER] threads exist, the most recent is returned."""
+    t = service.create("Multi ask")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+
+    service.add_comment(t.id, "[ASK_USER]\n\nFirst question?", author="refine")
+    service.add_comment(
+        t.id, "[ASK_USER]\n\nSecond newer question?", author="implement"
+    )
+
+    result = service.pending_question(t.id)
+    assert result == "Second newer question?"
+
+
+def test_pending_question_skips_non_ask_user_threads(service):
+    """pending_question only considers threads whose body starts with [ASK_USER]."""
+    t = service.create("Mixed threads")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+
+    service.add_comment(t.id, "Just a normal thread", author="alice")
+    service.add_comment(t.id, "[ASK_USER]\n\nThis is the question", author="refine")
+
+    result = service.pending_question(t.id)
+    assert result == "This is the question"
+
+
+def test_pending_question_handles_marker_only_body(service):
+    """pending_question handles a body that is just the marker with no newline."""
+    t = service.create("Marker only")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+
+    service.add_comment(t.id, "[ASK_USER]", author="refine")
+
+    result = service.pending_question(t.id)
+    assert result == ""
+
+
 # ---------------------------------------------------------------------------
 # hash-chain helpers (_event_hash, _prev_hash_for, _make_event)
 # ---------------------------------------------------------------------------

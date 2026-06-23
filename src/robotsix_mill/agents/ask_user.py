@@ -12,6 +12,7 @@ so a retrying agent can't spam duplicate comments.
 from __future__ import annotations
 
 from ..config import Settings
+from ..core.states import ASK_USER_MARKER
 
 
 def make_ask_user_tool(settings: Settings, agent_name: str):
@@ -81,7 +82,7 @@ def make_ask_user_tool(settings: Settings, agent_name: str):
         try:
             svc.add_comment(
                 ticket_id,
-                f"[ASK_USER]\n\n{question}",
+                f"{ASK_USER_MARKER}\n\n{question}",
                 author=agent_name,
             )
             return "__ASK_USER_PAUSE__"
