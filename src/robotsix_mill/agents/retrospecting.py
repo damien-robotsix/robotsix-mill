@@ -11,7 +11,7 @@ import logging
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel
 
 from ..config import Settings
 from .prompt_blocks import section
@@ -115,45 +115,6 @@ class RetrospectResult(BaseModel):
     # describe a mill-internal gap the retrospect surfaced.
     follow_up_target: Literal["current", "mill"] = "current"
     agented_md_proposals: list[dict] | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def _absorb_findings_list_shape(cls, data):
-        """The retrospect agent sometimes emits the trace-inspector's
-        list-of-TraceFinding shape for ``findings`` instead of the
-        single string this schema requires. Symptom seen on trace
-        ``1db69cc322c07f77`` (2026-05-21 22:28): the model returned
-        ``{findings: [{category, symptom, root_cause, proposed_solution,
-        confidence}, ...]}`` mirroring TraceInspectResult, pydantic-ai
-        rejected it because ``findings: str`` required a string, output
-        retries exhausted, the retrospect cost ($0.16) was wasted with
-        no artifact written.
-
-        Render the list back into a single string (one line per
-        finding, prefixed by category + confidence) so the canonical
-        ``findings: str`` field carries the same information. Canonical
-        string input passes straight through.
-        """
-        if not isinstance(data, dict):
-            return data
-        f = data.get("findings")
-        if isinstance(f, list):
-            lines: list[str] = []
-            for item in f:
-                if isinstance(item, dict):
-                    cat = item.get("category", "")
-                    conf = item.get("confidence", "")
-                    sym = item.get("symptom", "")
-                    sol = item.get("proposed_solution", "")
-                    prefix = f"[{cat}/{conf}] " if cat else ""
-                    line = f"{prefix}{sym}"
-                    if sol:
-                        line += f"  (fix: {sol})"
-                    lines.append(line)
-                else:
-                    lines.append(str(item))
-            data["findings"] = "\n".join(lines) if lines else ""
-        return data
 
 
 def _is_structural_quote_end(text: str, quote_idx: int) -> bool:
