@@ -201,7 +201,6 @@ MARKERS
 # -- repo_scaffold -----------------------------------------------------------
 
 # -- runners -----------------------------------------------------------------
-BoardCleanupPassResult
 run_agent_check_pass
 run_audit_pass
 run_bc_check_pass

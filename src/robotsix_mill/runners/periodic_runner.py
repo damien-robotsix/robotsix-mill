@@ -56,8 +56,6 @@ ConfigSyncPassResult = PeriodicPassResult
 HealthPassResult = PeriodicPassResult
 ModuleCuratorPassResult = PeriodicPassResult
 TestGapPassResult = PeriodicPassResult
-BoardCleanupPassResult = PeriodicPassResult
-
 # Prevent pytest from collecting ``TestGapPassResult`` as a test class.
 TestGapPassResult.__test__ = False  # type: ignore[attr-defined]
 
