@@ -2411,6 +2411,20 @@ def test_short_circuit_static_method_direct_call(ctx_factory, tmp_path):
     )
     assert outcome4 is None
 
+    # Case 5: an AUTHORED spec (## Scope / ## Acceptance) that merely QUOTES a
+    # failure line is NOT a raw CI-failure draft → None (the f55c guard). The
+    # real spec must survive instead of being replaced by the generic template.
+    authored = (
+        "## Problem\n\nRefine re-runs on resume, double-paying.\n\n"
+        "## Evidence\n\nFAILED tests/test_x.py::test_foo - AssertionError\n\n"
+        "## Scope / proposed fix\n\nCache the refine result.\n\n"
+        "## Acceptance criteria\n\n- No duplicate refine call on resume.\n"
+    )
+    outcome5 = RefineStage._short_circuit_for_internal_failure(
+        ctx, t, authored, ws, ctx.settings, reviewer_comments=None
+    )
+    assert outcome5 is None
+
 
 # ===========================================================================
 # Deterministic-source mechanical fast-path

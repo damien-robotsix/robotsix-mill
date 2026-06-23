@@ -59,6 +59,15 @@ from .helpers import (
     log,
 )
 
+# An authored spec carries ``## Scope`` / ``## Acceptance`` sections; raw
+# CI/toolchain-failure drafts (the refine short-circuit's intended target)
+# never do. Their presence means a human or refine already wrote a real
+# spec that merely QUOTES failure output as evidence — so the short-circuit
+# must NOT replace it with the generic "fix the failing check" template
+# (the f55c false-positive: a real "eliminate duplicate refine" spec that
+# happened to quote a pytest ``FAILED`` line).
+_AUTHORED_SPEC_HEADING_RE = re.compile(r"(?im)^#{2,}\s+(scope|acceptance)\b")
+
 
 def _write_triage_complexity(
     ws, complexity: str, trivial_scope: bool | None = None
@@ -957,6 +966,9 @@ class RefineAgentMixin:
         - No reviewer sendback (human-flagged changes always get full refinement)
         - Draft is non-empty
         - ``is_internal_toolchain_failure(draft)`` is ``True``
+        - Draft has NO authored-spec sections (``## Scope`` / ``## Acceptance``):
+          a structured spec that merely quotes failure output is not a raw
+          CI-failure draft and must keep its real content.
 
         Returns an :class:`Outcome` to short-circuit, or ``None`` to fall
         through to the full refine agent.
@@ -966,6 +978,15 @@ class RefineAgentMixin:
         if not draft or not draft.strip():
             return None
         if not refining.is_internal_toolchain_failure(draft):
+            return None
+        if _AUTHORED_SPEC_HEADING_RE.search(draft):
+            # Authored spec that merely quotes failure output — short-circuiting
+            # would bury the real ask under the generic template (f55c).
+            log.info(
+                "%s: draft matches a failure marker but carries authored-spec "
+                "sections (## Scope/## Acceptance) — NOT short-circuiting refine",
+                ticket.id,
+            )
             return None
 
         log.info(
