@@ -9,7 +9,7 @@ from sqlmodel import select
 
 from .. import db
 from ..models import Comment, Ticket
-from ..states import State
+from ..states import ASK_USER_MARKER, State
 from ._base import _ServiceBase
 from ._helpers import _get_ticket, _make_event
 
@@ -188,7 +188,7 @@ class _CommentMixin(_ServiceBase):
             stmt = select(Comment).where(
                 Comment.ticket_id == ticket_id,
                 Comment.parent_id == None,  # noqa: E711 (SQLAlchemy needs == None for SQL IS NULL)
-                Comment.body.startswith("[ASK_USER]"),
+                Comment.body.startswith(ASK_USER_MARKER),
             )
             ask_threads = list(s.exec(stmt).all())
 

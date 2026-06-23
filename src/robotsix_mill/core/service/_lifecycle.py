@@ -21,7 +21,7 @@ from ..models import (
     Ticket,
     TicketEvent,
 )
-from ..states import State, can_transition
+from ..states import ASK_USER_MARKER, State, can_transition
 from ..workspace import Workspace, prune_clone
 from ._base import _ServiceBase
 from ._helpers import (
@@ -342,7 +342,7 @@ class _LifecycleMixin(_ServiceBase):
         stmt = select(Comment).where(
             Comment.ticket_id == ticket_id,
             Comment.parent_id == None,  # noqa: E711 (SQLAlchemy IS NULL)
-            Comment.body.startswith("[ASK_USER]"),
+            Comment.body.startswith(ASK_USER_MARKER),
             Comment.closed_at == None,  # noqa: E711
         )
         return list(session.exec(stmt).all())
