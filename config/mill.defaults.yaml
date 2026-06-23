@@ -210,6 +210,8 @@ pipeline:
   ci_fix_max_attempts: 2                             # multi-repo merge ci-fix only: max CI-fix LLM invocations before BLOCK
   ci_fix_max_cycles: 3                             # multi-repo merge ci-fix only: hard ceiling on total ci-fix cycles per repo
   ci_fix_max_identical_failures: 2                 # max consecutive identical CI failures before escalating to BLOCKED
+  ci_fix_wait_poll_interval_s: 30.0             # seconds between CI-status polls inside wait_for_ci
+  ci_fix_wait_timeout_s: 1500.0                # max seconds a single wait_for_ci call blocks before returning pending
   auto_fix_max_cycles: 6                           # cross-stage ceiling on REBASING + FIXING_CI dispatches before BLOCK
   ping_pong_max_alternations: 3                    # max rebase↔ci_fix alternations before BLOCK
   review_revision_max_attempts: 2                    # max review-revision LLM invocations before BLOCK
