@@ -82,7 +82,7 @@ def _read_triage_complexity(ws: Workspace) -> str:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         return cast(str, data.get("complexity", "needs-exploration"))
-    except (json.JSONDecodeError, KeyError):
+    except json.JSONDecodeError, KeyError:
         return "needs-exploration"
 
 
@@ -95,7 +95,7 @@ def _read_triage_trivial(ws: Workspace) -> bool:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         return cast(bool, data.get("trivial_scope", False))
-    except (json.JSONDecodeError, KeyError):
+    except json.JSONDecodeError, KeyError:
         return False
 
 
@@ -1106,7 +1106,7 @@ class RefineAgentMixin:
             return None, None
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, KeyError):
+        except json.JSONDecodeError, KeyError:
             log.warning("refine checkpoint corrupt — ignoring")
             return None, None
 
