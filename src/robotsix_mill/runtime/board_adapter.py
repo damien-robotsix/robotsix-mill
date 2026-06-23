@@ -7,16 +7,9 @@ drive the mill kanban board.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from robotsix_board import RenderMode
 
-try:
-    from robotsix_board import BoardAdapter, RenderMode
-except ImportError:  # pragma: no cover — robotsix-board is a required dependency
-    BoardAdapter = object  # type: ignore[assignment,misc]
-    RenderMode = None  # type: ignore[assignment]
-
-if TYPE_CHECKING:
-    from ..core.models import TicketRead
+from ..core.models import TicketRead
 
 from ..core.states import State
 
@@ -109,8 +102,6 @@ class MillBoardAdapter:
 
     def render_mode(self) -> RenderMode:
         """Mill uses JSON_HYDRATION (FastAPI + board.js)."""
-        if RenderMode is None:
-            raise RuntimeError("robotsix-board is not installed")
         return RenderMode.JSON_HYDRATION
 
 

@@ -38,8 +38,6 @@ src/robotsix_mill/runtime/broadcaster.py:0: error: Missing type arguments for ge
 src/robotsix_mill/runtime/broadcaster.py:0: error: Missing type arguments for generic type "Queue"  [type-arg]
 src/robotsix_mill/runtime/broadcaster.py:0: error: Missing type arguments for generic type "Queue"  [type-arg]
 src/robotsix_mill/runtime/broadcaster.py:0: error: Missing type arguments for generic type "Queue"  [type-arg]
-src/robotsix_mill/runtime/board_adapter.py:0: error: Cannot assign to a type  [misc]
-src/robotsix_mill/runtime/board_adapter.py:0: note: Error code "misc" not covered by "type: ignore[assignment]" comment
 src/robotsix_mill/core/service/_helpers.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/core/service/_helpers.py:0: error: Item "int" of "int | None" has no attribute "desc"  [union-attr]
 src/robotsix_mill/core/service/_helpers.py:0: error: Item "None" of "int | None" has no attribute "desc"  [union-attr]
@@ -758,4 +756,3 @@ src/robotsix_mill/runtime/routes/_epics.py:0: error: Function is missing a type 
 src/robotsix_mill/runtime/routes/_epics.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/runtime/api.py:0: error: Argument 2 to "add_exception_handler" of "Starlette" has incompatible type "Callable[[Request[State], TransitionError], Coroutine[Any, Any, JSONResponse]]"; expected "Callable[[Request[State], Exception], Response | Awaitable[Response]] | Callable[[WebSocket[State], Exception], Awaitable[None]]"  [arg-type]
 src/robotsix_mill/runtime/api.py:0: error: Argument 2 to "add_exception_handler" of "Starlette" has incompatible type "Callable[[Request[State], NotConfiguredError], Coroutine[Any, Any, JSONResponse]]"; expected "Callable[[Request[State], Exception], Response | Awaitable[Response]] | Callable[[WebSocket[State], Exception], Awaitable[None]]"  [arg-type]
-src/robotsix_mill/runtime/api.py:0: error: Incompatible types in assignment (expression has type "None", variable has type "Callable[[], Path]")  [assignment]

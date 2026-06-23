@@ -66,28 +66,14 @@ def create_app(
 
     # robotsix-board ships the shared board.js / board.css.  Mount its
     # static directory at /static so the board HTML links resolve to
-    # the shared library's assets.  When robotsix-board is not yet
-    # installed, fall back to the bundled legacy static files.
-    try:
-        from robotsix_board import static_dir as board_static_dir
-    except ImportError:
-        board_static_dir = None
+    # the shared library's assets.
+    from robotsix_board import static_dir as board_static_dir
 
-    if board_static_dir is not None:
-        app.mount(
-            "/static",
-            StaticFiles(directory=str(board_static_dir())),
-            name="board-static",
-        )
-    else:
-        # Fallback: serve the legacy bundled board.js / board.css from
-        # mill's own static directory until robotsix-board is installed.
-        legacy_static = Path(__file__).parent / "static"
-        app.mount(
-            "/static",
-            StaticFiles(directory=str(legacy_static)),
-            name="legacy-static",
-        )
+    app.mount(
+        "/static",
+        StaticFiles(directory=str(board_static_dir())),
+        name="board-static",
+    )
 
     app.include_router(routes.router)
 

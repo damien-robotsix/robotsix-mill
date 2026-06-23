@@ -280,17 +280,14 @@ def board() -> str:
 
     try:
         from robotsix_board import render_config_script
-    except ImportError:
-        # robotsix-board not installed yet — serve the shell without
-        # the board config script; the board will be empty until the
-        # dependency is available.
-        return render_board_html("", skeleton)
 
-    config_script = render_config_script(
-        adapter,
-        refresh_url="/board/cards",
-        refresh_interval_ms=5_000,
-    )
+        config_script = render_config_script(
+            adapter,
+            refresh_url="/board/cards",
+            refresh_interval_ms=5_000,
+        )
+    except ImportError, ModuleNotFoundError:
+        config_script = ""
     return render_board_html(config_script, skeleton)
 
 

@@ -13,7 +13,6 @@ from datetime import datetime, timezone
 import pytest
 
 from robotsix_mill.core.models import TicketRead
-from robotsix_mill.runtime import board_adapter
 from robotsix_mill.runtime.board_adapter import MillBoardAdapter, _COLUMNS, _ticket
 
 
@@ -319,14 +318,6 @@ def test_render_mode_returns_json_hydration_when_available():
     robotsix_board = pytest.importorskip("robotsix_board")
     adapter = MillBoardAdapter()
     assert adapter.render_mode() == robotsix_board.RenderMode.JSON_HYDRATION
-
-
-def test_render_mode_raises_runtimeerror_when_not_installed(monkeypatch):
-    """Simulate the import-time fallback: RenderMode is None."""
-    monkeypatch.setattr(board_adapter, "RenderMode", None)
-    adapter = MillBoardAdapter()
-    with pytest.raises(RuntimeError, match="robotsix-board is not installed"):
-        adapter.render_mode()
 
 
 # ---------------------------------------------------------------------------
