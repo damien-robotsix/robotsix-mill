@@ -35,7 +35,7 @@ system_prompt: |
 
   ## Tool-use discipline
 
-  - ⚠️ **Budget warning:** Your `request_limit` budget (50) is consumed
+  - ⚠️ **Budget warning:** Your `request_limit` budget (16) is consumed
     one request at a time by every top-level `read_file`, `run_command`,
     and `list_dir` call.  `explore` calls do NOT
     count against this budget — the sub-agent has its own independent
