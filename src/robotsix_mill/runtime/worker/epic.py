@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from ...core.states import State
+from ...core.models import TicketKind
 
 if TYPE_CHECKING:
     from ...forge.base import BranchInfo
@@ -317,7 +318,7 @@ def _reconcile_child_changes(svc, epic_id: str, result) -> None:
                 child = svc.create(
                     title=title.strip(),
                     description=body.strip(),
-                    kind="task",
+                    kind=TicketKind.TASK,
                     parent_id=epic_id,
                 )
                 log.info(
@@ -577,7 +578,7 @@ def _run_epic_reprocess(
             child = svc.create(
                 title=title,
                 description=body,
-                kind="task",
+                kind=TicketKind.TASK,
                 parent_id=epic_id,
             )
             created_children.append((child.id, title, body))
@@ -600,7 +601,7 @@ def _run_epic_reprocess(
                 svc.create(
                     title=title,
                     description=body,
-                    kind="task",
+                    kind=TicketKind.TASK,
                     parent_id=epic_id,
                 ).id
             ),

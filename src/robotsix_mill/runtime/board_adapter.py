@@ -14,6 +14,7 @@ from robotsix_board import RenderMode
 if TYPE_CHECKING:
     from ..core.models import TicketRead
 
+from ..core.models import TicketKind
 from ..core.states import State
 
 # Ordered column definitions for the board (left → right).
@@ -71,7 +72,7 @@ class MillBoardAdapter:
         badges: list[str] = []
         if t.priority:
             badges.append("★ priority")
-        if t.kind not in ("task", ""):
+        if t.kind not in (TicketKind.TASK, ""):
             badges.append(t.kind)
         # Source badge
         if t.source and t.source != "user":

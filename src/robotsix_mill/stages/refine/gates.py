@@ -19,7 +19,7 @@ from ...agents import dedup, freshness, obsolescence
 from ...config import Settings
 from ...core.datetime_utils import _as_utc
 from ...core.draft_target import referenced_mill_paths_absent, resolve_mill_service
-from ...core.models import SourceKind, Ticket
+from ...core.models import SourceKind, Ticket, TicketKind
 from ...core.states import State
 from ..base import Outcome, StageContext
 from ...core.dedup import _extract_paths, _scope_paths
@@ -129,7 +129,9 @@ class RefineGatesMixin:
         # Epics are never duplicates of task/inquiry tickets.
         # Keep the parent epic (already handled above) but drop all others.
         candidates = [
-            t for t in candidates if t.kind != "epic" or t.id == ticket.parent_id
+            t
+            for t in candidates
+            if t.kind != TicketKind.EPIC or t.id == ticket.parent_id
         ]
 
         # Similarity-based pre-filter: keep only the top-N most relevant
@@ -470,7 +472,7 @@ class RefineGatesMixin:
         children/epics are skipped.  Trivial drafts (< 100 chars) skip the
         check, matching the dedup guard's threshold.
         """
-        if ticket.parent_id is not None or ticket.kind == "epic":
+        if ticket.parent_id is not None or ticket.kind == TicketKind.EPIC:
             return draft
         if len(draft) < 100:
             return draft

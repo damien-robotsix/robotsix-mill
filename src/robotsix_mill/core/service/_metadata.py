@@ -17,7 +17,7 @@ import json
 from datetime import datetime, timezone
 
 from .. import db
-from ..models import Ticket
+from ..models import Ticket, TicketKind
 from ._base import _ServiceBase
 from ._helpers import _get_ticket
 
@@ -158,9 +158,9 @@ class _MetadataMixin(_ServiceBase):
         """
         with db.session(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
-            if ticket.kind == "epic":
+            if ticket.kind == TicketKind.EPIC:
                 return
-            ticket.kind = "epic"
+            ticket.kind = TicketKind.EPIC
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
             s.commit()

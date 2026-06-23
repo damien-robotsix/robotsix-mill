@@ -7,7 +7,7 @@ import threading
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ...core.models import Comment, CommentCreate
+from ...core.models import Comment, CommentCreate, TicketKind
 from ..deps import get_service, get_settings
 
 log = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ def add_comment(
 
     # Fire-and-forget: re-process the epic in a daemon thread.
     ticket = svc.get(ticket_id)
-    if ticket is not None and ticket.kind == "epic":
+    if ticket is not None and ticket.kind == TicketKind.EPIC:
         from ...runtime.worker import _run_epic_reprocess
 
         threading.Thread(

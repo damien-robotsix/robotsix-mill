@@ -7,7 +7,7 @@ import threading
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from ...core.models import TicketRead
+from ...core.models import TicketKind, TicketRead
 from ..deps import (
     enrich_ticket_read,
     get_run_registry,
@@ -71,7 +71,7 @@ def create_epic(
         ticket = svc.create(
             title=title,
             description=description,
-            kind="epic",
+            kind=TicketKind.EPIC,
             board_id=board_id or None,
         )
     except ValueError as e:
@@ -125,7 +125,7 @@ def generate_children(
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
-    if ticket.kind != "epic":
+    if ticket.kind != TicketKind.EPIC:
         raise HTTPException(400, "ticket is not an epic")
 
     # In multi-repo mode the default svc is bound to the first repo's
@@ -214,7 +214,7 @@ def generate_children(
                     child = epic_svc.create(
                         title=title,
                         description=body,
-                        kind="task",
+                        kind=TicketKind.TASK,
                         parent_id=ticket_id,
                     )
                     created_children.append((child.id, title, body))
@@ -237,7 +237,7 @@ def generate_children(
                         epic_svc.create(
                             title=title,
                             description=body,
-                            kind="task",
+                            kind=TicketKind.TASK,
                             parent_id=ticket_id,
                         ).id
                     ),

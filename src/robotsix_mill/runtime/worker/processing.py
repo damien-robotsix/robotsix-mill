@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from ...stages import StageContext, get_stage
 from ...core.states import STAGE_FOR_STATE, State
+from ...core.models import TicketKind
 from ...core.service._helpers import TransitionError
 from ...core.service._lifecycle import _TERMINAL_STATES
 from ...notify import send_notification, _TRIGGER_STATES
@@ -200,7 +201,7 @@ def _maybe_reevaluate_epic(
         ticket = ctx.service.get(ticket_id)
         if ticket is not None and ticket.parent_id is not None:
             parent = ctx.service.get(ticket.parent_id)
-            if parent is not None and parent.kind == "epic":
+            if parent is not None and parent.kind == TicketKind.EPIC:
                 _spawn_epic_reeval(parent.id, ctx)
 
 

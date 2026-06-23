@@ -17,7 +17,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from ..core.models import SourceKind
+from ..core.models import SourceKind, TicketKind
 from ..core.service import TicketService
 from .diagnostic_checks import (
     DiagnosticCheckContext,
@@ -111,7 +111,7 @@ class ErroredRunsCheck:
                     title,
                     body,
                     source=SourceKind.AGENT,
-                    kind="task",
+                    kind=TicketKind.TASK,
                 )
                 log.info("errored_runs: created ticket %s — %r", ticket.id, title)
                 drafts_created.append({"id": ticket.id, "title": title})

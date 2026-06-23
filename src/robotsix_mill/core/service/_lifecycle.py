@@ -20,6 +20,7 @@ from ..models import (
     SourceKind,
     Ticket,
     TicketEvent,
+    TicketKind,
 )
 from ..states import State, can_transition
 from ..workspace import Workspace, prune_clone
@@ -157,7 +158,7 @@ class _LifecycleMixin(_ServiceBase):
         origin_session: str | None = None,
         depends_on: str | None = None,
         unblocks: str | None = None,
-        kind: str = "task",
+        kind: TicketKind = TicketKind.TASK,
         parent_id: str | None = None,
         board_id: str | None = None,
         priority: bool = False,
@@ -191,7 +192,7 @@ class _LifecycleMixin(_ServiceBase):
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         ticket_id = f"{stamp}-{_slug(title)}-{token_hex(2)}"
 
-        if kind in ("inquiry", "epic") and depends_on:
+        if kind in (TicketKind.INQUIRY, TicketKind.EPIC) and depends_on:
             raise ValueError(f"{kind}s do not support depends_on — they are standalone")
 
         # Reject self-dependency before persisting.
@@ -200,9 +201,9 @@ class _LifecycleMixin(_ServiceBase):
             if ticket_id in dep_ids:
                 raise ValueError(f"Ticket cannot depend on itself: {ticket_id}")
 
-        if kind == "epic":
+        if kind == TicketKind.EPIC:
             initial_state = State.EPIC_OPEN
-        elif kind == "inquiry":
+        elif kind == TicketKind.INQUIRY:
             initial_state = State.ASKED
         else:
             initial_state = State.DRAFT
@@ -872,7 +873,7 @@ class _LifecycleMixin(_ServiceBase):
         blockers: list[str] = []
         for t in subtree:
             state = State(t.state)
-            if t.kind == "epic":
+            if t.kind == TicketKind.EPIC:
                 if state not in self._MIGRATABLE_EPIC_STATES:
                     blockers.append(f"  {t.id}: epic in state {state.value!r}")
             else:
@@ -1081,7 +1082,7 @@ class _LifecycleMixin(_ServiceBase):
         # --- snapshot everything from the source DB (no mutation yet) ---
         with db.session(self.settings, src_board) as s:
             ticket = _get_ticket(s, ticket_id)
-            if ticket.kind == "epic":
+            if ticket.kind == TicketKind.EPIC:
                 return self._migrate_epic_subtree(s, ticket, src_board, dst_board, note)
             # A non-epic ticket's parent stays on the source board, so a
             # cross-board parent link can't survive the move. Auto-unlink it

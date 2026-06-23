@@ -1,6 +1,19 @@
 (function() {
   "use strict";
 
+  // ---------------------------------------------------------------------------
+  // The canonical source of truth for ticket ``kind`` values is the Python
+  // ``TicketKind`` StrEnum in ``src/robotsix_mill/core/models.py``:
+  //
+  //   class TicketKind(StrEnum):
+  //       TASK = "task"
+  //       INQUIRY = "inquiry"
+  //       EPIC = "epic"
+  //
+  // The string literals "task", "inquiry", "epic" used throughout this file
+  // MUST stay in sync with that enum.
+  // ---------------------------------------------------------------------------
+
   // =========================================================================
   // State variables
   // =========================================================================

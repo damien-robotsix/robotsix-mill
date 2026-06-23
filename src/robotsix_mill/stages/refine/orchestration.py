@@ -26,7 +26,7 @@ from typing import Any, cast
 
 from ...agents import refining
 from ...config.settings import Settings
-from ...core.models import SourceKind, Ticket
+from ...core.models import SourceKind, Ticket, TicketKind
 from ...core.states import State
 from ...core.workspace import Workspace
 from ...runtime.tracing import set_current_span_attribute
@@ -1464,7 +1464,7 @@ class RefineAgentMixin:
         # later application on approval.
         if result.epic_body and result.epic_body.strip() and epic_ctx:
             parent = ctx.service.get(ticket.parent_id)
-            if parent is not None and parent.kind == "epic":
+            if parent is not None and parent.kind == TicketKind.EPIC:
                 if not ctx.settings.require_approval:
                     new_hash = ctx.service.workspace(parent).write_description(
                         result.epic_body.strip()
@@ -1720,7 +1720,7 @@ class RefineAgentMixin:
                 child = ctx.service.create(
                     title=child_title,
                     description=child_body,
-                    kind="task",
+                    kind=TicketKind.TASK,
                     parent_id=ticket.id,
                 )
                 created_children.append((child.id, child_title, child_body))
@@ -1743,7 +1743,7 @@ class RefineAgentMixin:
                     ctx.service.create(
                         title=title,
                         description=body,
-                        kind="task",
+                        kind=TicketKind.TASK,
                         parent_id=ticket.id,
                     ).id
                 ),
@@ -1942,7 +1942,10 @@ class RefineAgentMixin:
         existing_epic_id: str | None = None
         if ticket.parent_id is not None:
             parent_candidate = ctx.service.get(ticket.parent_id)
-            if parent_candidate is not None and parent_candidate.kind == "epic":
+            if (
+                parent_candidate is not None
+                and parent_candidate.kind == TicketKind.EPIC
+            ):
                 existing_epic_id = ticket.parent_id
                 for cid in child_ids:
                     ctx.service.set_parent(cid, existing_epic_id)
@@ -1952,7 +1955,7 @@ class RefineAgentMixin:
             epic = ctx.service.create(
                 title=epic_title,
                 description=epic_desc,
-                kind="epic",
+                kind=TicketKind.EPIC,
                 source=ticket.source,
             )
             for cid in child_ids:
@@ -1986,7 +1989,7 @@ class RefineAgentMixin:
         # is no single approval event to gate on.
         if result.epic_body and result.epic_body.strip() and epic_ctx:
             parent = ctx.service.get(ticket.parent_id)
-            if parent is not None and parent.kind == "epic":
+            if parent is not None and parent.kind == TicketKind.EPIC:
                 new_hash = ctx.service.workspace(parent).write_description(
                     result.epic_body.strip()
                 )

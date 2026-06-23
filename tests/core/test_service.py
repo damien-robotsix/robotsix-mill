@@ -10,7 +10,7 @@ from robotsix_mill.core.service import (
     _slug,
 )
 from robotsix_mill.core.states import State, can_transition
-from robotsix_mill.core.models import SourceKind
+from robotsix_mill.core.models import SourceKind, TicketKind
 
 
 def test_slug_strips_dash_exposed_at_truncation_boundary():
@@ -783,15 +783,15 @@ def test_unmet_dependencies_no_deps_returns_empty(service):
 
 def test_create_epic(service):
     """Creating with kind='epic' sets state to EPIC_OPEN."""
-    t = service.create("My Epic", "Big picture", kind="epic")
+    t = service.create("My Epic", "Big picture", kind=TicketKind.EPIC)
     assert t.state == State.EPIC_OPEN
-    assert t.kind == "epic"
+    assert t.kind == TicketKind.EPIC
 
 
 def test_create_child_with_parent_id(service):
     """Creating a child with parent_id links it to the epic."""
-    epic = service.create("Epic", "Overview", kind="epic")
-    child = service.create("Child", "Detail", kind="task", parent_id=epic.id)
+    epic = service.create("Epic", "Overview", kind=TicketKind.EPIC)
+    child = service.create("Child", "Detail", kind=TicketKind.TASK, parent_id=epic.id)
     assert child.parent_id == epic.id
     # Verify persisted
     reloaded = service.get(child.id)
@@ -806,8 +806,8 @@ def test_create_child_nonexistent_parent(service):
 
 def test_get_epic_context_returns_description(service):
     """get_epic_context returns the parent epic description wrapped in tags."""
-    epic = service.create("Epic", "Big picture description", kind="epic")
-    child = service.create("Child", "detail", kind="task", parent_id=epic.id)
+    epic = service.create("Epic", "Big picture description", kind=TicketKind.EPIC)
+    child = service.create("Child", "detail", kind=TicketKind.TASK, parent_id=epic.id)
     ctx = service.get_epic_context(child)
     assert (
         ctx == "````epic-context\nBig picture description\n````\n<!-- /epic-context -->"
@@ -822,17 +822,17 @@ def test_get_epic_context_no_parent(service):
 
 def test_get_epic_context_parent_not_epic(service):
     """get_epic_context returns '' when parent is not an epic."""
-    parent = service.create("Regular parent", kind="task")
-    child = service.create("Child", "desc", kind="task", parent_id=parent.id)
+    parent = service.create("Regular parent", kind=TicketKind.TASK)
+    child = service.create("Child", "desc", kind=TicketKind.TASK, parent_id=parent.id)
     assert service.get_epic_context(child) == ""
 
 
 def test_list_children(service):
     """list_children returns all tickets with the given parent_id."""
-    epic = service.create("Epic", "Overview", kind="epic")
-    c1 = service.create("Child 1", kind="task", parent_id=epic.id)
-    c2 = service.create("Child 2", kind="task", parent_id=epic.id)
-    c3 = service.create("Child 3", kind="task", parent_id=epic.id)
+    epic = service.create("Epic", "Overview", kind=TicketKind.EPIC)
+    c1 = service.create("Child 1", kind=TicketKind.TASK, parent_id=epic.id)
+    c2 = service.create("Child 2", kind=TicketKind.TASK, parent_id=epic.id)
+    c3 = service.create("Child 3", kind=TicketKind.TASK, parent_id=epic.id)
     children = service.list_children(epic.id)
     assert len(children) == 3
     child_ids = {c.id for c in children}
@@ -924,7 +924,7 @@ class TestArchivedPurge:
         settings.max_archived_tickets = 2
         inquiries = []
         for i in range(3):
-            t = service.create(f"inquiry {i}", kind="inquiry")
+            t = service.create(f"inquiry {i}", kind=TicketKind.INQUIRY)
             _answer_ticket(service, t)
             inquiries.append(t)
 
@@ -939,7 +939,7 @@ class TestArchivedPurge:
         settings.max_archived_tickets = 2
         epics = []
         for i in range(3):
-            t = service.create(f"epic {i}", kind="epic")
+            t = service.create(f"epic {i}", kind=TicketKind.EPIC)
             _close_epic(service, t)
             epics.append(t)
 
@@ -1029,9 +1029,13 @@ def test_all_descendants_is_cycle_safe(service):
     from robotsix_mill.core.models import Ticket
 
     with db.session(service.settings, service.board_id) as s:
-        ta = Ticket(id="cyc-A", title="A", kind="task", workspace_path="")
+        ta = Ticket(id="cyc-A", title="A", kind=TicketKind.TASK, workspace_path="")
         tb = Ticket(
-            id="cyc-B", title="B", kind="task", parent_id="cyc-A", workspace_path=""
+            id="cyc-B",
+            title="B",
+            kind=TicketKind.TASK,
+            parent_id="cyc-A",
+            workspace_path="",
         )
         s.add_all([ta, tb])
         s.commit()
@@ -1119,7 +1123,7 @@ def test_mark_done_rejects_already_done(service):
 
 def test_mark_done_rejects_epic_open(service):
     """mark_done raises TransitionError for EPIC_OPEN tickets."""
-    t = service.create("epic open", kind="epic")
+    t = service.create("epic open", kind=TicketKind.EPIC)
     assert t.state is State.EPIC_OPEN
     with pytest.raises(TransitionError):
         service.mark_done(t.id)
@@ -1284,7 +1288,7 @@ def test_set_priority_propagates_to_existing_children(service):
     """When an epic is flagged priority, every existing descendant
     inherits the flag — and set_priority returns the IDs that changed
     so the route can re-enqueue each one."""
-    epic = service.create("an epic", kind="epic")
+    epic = service.create("an epic", kind=TicketKind.EPIC)
     a = service.create("child a", parent_id=epic.id)
     b = service.create("child b", parent_id=epic.id)
     grand = service.create("grand", parent_id=a.id)
@@ -1297,7 +1301,7 @@ def test_set_priority_propagates_to_existing_children(service):
 
 def test_set_priority_false_clears_descendants(service):
     """Flipping an epic back to non-priority clears the same set."""
-    epic = service.create("an epic", kind="epic")
+    epic = service.create("an epic", kind=TicketKind.EPIC)
     a = service.create("child a", parent_id=epic.id)
     service.set_priority(epic.id, True)
     assert service.get(a.id).priority is True
@@ -1310,7 +1314,7 @@ def test_set_priority_false_clears_descendants(service):
 def test_set_priority_returns_only_actually_changed(service):
     """If a descendant already has the target value, it's not in the
     returned list (no needless re-enqueue)."""
-    epic = service.create("an epic", kind="epic")
+    epic = service.create("an epic", kind=TicketKind.EPIC)
     a = service.create("child a", parent_id=epic.id)
     service.set_priority(a.id, True)  # child already priority
     changed = service.set_priority(epic.id, True)
@@ -1324,7 +1328,7 @@ def test_set_priority_broadcasts_each_changed_ticket(service):
     UI updates live over the WebSocket without a manual refresh."""
     from robotsix_mill.core.models import Ticket
 
-    epic = service.create("an epic", kind="epic")
+    epic = service.create("an epic", kind=TicketKind.EPIC)
     a = service.create("child a", parent_id=epic.id)
     service.create("child b", parent_id=epic.id)
     service.create("grand", parent_id=a.id)
@@ -1364,7 +1368,7 @@ def test_child_created_after_epic_priority_inherits(service):
     epic inherits the flag at create time — the key case for
     multi-stage breakdowns that arrive after the operator marks the
     epic priority."""
-    epic = service.create("an epic", kind="epic")
+    epic = service.create("an epic", kind=TicketKind.EPIC)
     service.set_priority(epic.id, True)
 
     late_child = service.create("created after", parent_id=epic.id)
@@ -1373,7 +1377,7 @@ def test_child_created_after_epic_priority_inherits(service):
 
 def test_inheritance_walks_full_parent_chain(service):
     """Grandchild of a priority epic inherits via transitive walk."""
-    epic = service.create("an epic", kind="epic")
+    epic = service.create("an epic", kind=TicketKind.EPIC)
     service.set_priority(epic.id, True)
     child = service.create("child", parent_id=epic.id)
     grand = service.create("grand", parent_id=child.id)
@@ -1383,7 +1387,7 @@ def test_inheritance_walks_full_parent_chain(service):
 def test_no_inheritance_when_no_priority_ancestor(service):
     """When the parent chain has no priority flag, the new ticket
     defaults to non-priority."""
-    epic = service.create("an epic", kind="epic")  # not priority
+    epic = service.create("an epic", kind=TicketKind.EPIC)  # not priority
     child = service.create("child", parent_id=epic.id)
     assert child.priority is False
 
@@ -1395,7 +1399,7 @@ def test_explicit_priority_at_create(service):
 
 def test_explicit_priority_composes_with_inheritance(service):
     """Explicit priority=True on a child of a priority epic still yields True."""
-    epic = service.create("an epic", kind="epic")
+    epic = service.create("an epic", kind=TicketKind.EPIC)
     service.set_priority(epic.id, True)
     child = service.create("child", parent_id=epic.id, priority=True)
     assert child.priority is True
@@ -2062,7 +2066,7 @@ def test_migrate_rejects_bad_targets_and_states(migrate_env):
 
     # Leaf epic (no children) CAN be migrated — the old hard-block is
     # lifted so that mis-filed epics can be moved.
-    epic = service.create("an epic", kind="epic")
+    epic = service.create("an epic", kind=TicketKind.EPIC)
     migrated_epic = service.migrate(epic.id, "other-board")
     assert migrated_epic.board_id == "other-board"
     assert migrated_epic.state is State.DRAFT
@@ -2104,7 +2108,7 @@ def test_migrate_epic_subtree_moves_all_tickets(settings, migrate_env):
 
     # Build a 3-level tree: epic → child_a → grandchild
     #                           epic → child_b
-    epic = service.create("Epic", kind="epic")
+    epic = service.create("Epic", kind=TicketKind.EPIC)
     child_a = service.create("Child A", parent_id=epic.id)
     child_b = service.create("Child B", parent_id=epic.id)
     grandchild = service.create("Grandchild", parent_id=child_a.id)
@@ -2180,7 +2184,7 @@ def test_migrate_epic_subtree_rejects_non_migratable_child(migrate_env):
     migration with a clear error naming the offending ticket."""
     service, _ = migrate_env
 
-    epic = service.create("Epic", kind="epic")
+    epic = service.create("Epic", kind=TicketKind.EPIC)
     child_ok = service.create("OK child", parent_id=epic.id)
     child_bad = service.create("Bad child", parent_id=epic.id)
     # Transition child_bad to DELIVERABLE — not in _MIGRATABLE_STATES.
@@ -2205,7 +2209,7 @@ def test_migrate_epic_subtree_rolls_back_on_db_failure(settings, migrate_env):
     rolled back to the source board and the source DB is untouched."""
     service, other = migrate_env
 
-    epic = service.create("Epic", kind="epic")
+    epic = service.create("Epic", kind=TicketKind.EPIC)
     child = service.create("Child", parent_id=epic.id)
 
     # Create workspace dirs with marker files.
