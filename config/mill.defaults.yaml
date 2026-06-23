@@ -89,6 +89,7 @@ core:
 
   # -- direct core.* engine toggles (defaults mirror the Settings fields) ---
   claude_sdk_vision_enabled: false      # allow image input on Claude-SDK-routed agents
+  claude_max_concurrency: 4            # max concurrent Claude SDK calls (semaphore cap)
   low_credit_threshold_usd: 5.0         # OpenRouter balance below this → board warning banner
   low_credit_poll_enabled: true         # enable proactive GET /api/v1/credits hourly poll
   low_credit_poll_interval_seconds: 3600  # seconds between credit-balance checks
