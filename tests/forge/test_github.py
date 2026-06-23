@@ -657,7 +657,8 @@ def test_strip_runner_noise_removes_boilerplate():
         "Prepare workflow directory\n"
         "Prepare all required actions\n"
         "Getting action download info\n"
-        "Downloading actions/checkout@v4...\n"
+        "Download action repository 'actions/checkout@v4' (SHA:abc123)\n"
+        "Download action repository 'actions/setup-python@v5' (SHA:def456)\n"
         "##[group]Run pip install -e .\n"
         "Successfully installed foo\n"
         "##[endgroup]\n"
@@ -677,7 +678,7 @@ def test_strip_runner_noise_removes_boilerplate():
     assert "Prepare workflow directory" not in out
     assert "Prepare all required actions" not in out
     assert "Getting action download info" not in out
-    assert "Downloading actions" not in out
+    assert "Download action repository" not in out
     assert "Post job cleanup" not in out
     # Error lines and step output preserved.
     assert "FAILED tests/test_x.py::test_y" in out
@@ -685,6 +686,26 @@ def test_strip_runner_noise_removes_boilerplate():
     assert "Successfully installed foo" in out
     # Group markers kept for step-context.
     assert "##[group]Run pip install -e ." in out
+
+
+def test_strip_runner_noise_download_action_without_group():
+    """Download action repository lines are stripped even when the
+    Prepare block closes without a ##[group] marker.  The short
+    preamble headings themselves (Prepare all required actions,
+    Getting action download info) may survive — they are only a
+    few tokens — but the bulk download lines are stripped."""
+    from robotsix_mill.forge._log_utils import _strip_runner_noise
+
+    log = (
+        "Prepare all required actions\n"
+        "Getting action download info\n"
+        "Download action repository 'actions/checkout@v4' (SHA:abc123)\n"
+        "Download action repository 'actions/setup-python@v5' (SHA:def456)\n"
+        "##[error]Process completed with exit code 1.\n"
+    )
+    out = _strip_runner_noise(log)
+    assert "Download action repository" not in out
+    assert "##[error]Process completed with exit code 1." in out
 
 
 def test_strip_runner_noise_noop_on_clean_log():

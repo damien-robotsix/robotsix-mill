@@ -35,9 +35,14 @@ _RUNNER_PREAMBLE_RES: list[re.Pattern[str]] = [
         r"^Prepare all required actions\n.*?(?=\n##\[group\])", re.MULTILINE | re.DOTALL
     ),
     re.compile(
-        r"^Getting action download info\n.*?(?=\n##\[group\]|\Z)",
+        r"^Getting action download info\n.*?(?=\n##\[group\])",
         re.MULTILINE | re.DOTALL,
     ),
+    # Standalone "Download action repository '…'" lines — these appear
+    # when the "Prepare all required actions" / "Getting action download
+    # info" blocks end without a ##[group] marker (the lookahead above
+    # misses them).
+    re.compile(r"^Download action repository '.*$", re.MULTILINE),
     re.compile(r"^Post job cleanup\.\n?", re.MULTILINE),
     # Collapse consecutive blank lines (3+) into at most 1 blank line.
     re.compile(r"\n{3,}", re.MULTILINE),
