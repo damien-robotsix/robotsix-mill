@@ -236,6 +236,7 @@ branch_is_behind_main
 # -- runtime -----------------------------------------------------------------
 Instrumentator
 BoardAdapter
+instance
 move_endpoint
 move_endpoint_template
 render_mode
