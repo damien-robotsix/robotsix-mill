@@ -577,7 +577,11 @@ def test_inflight_advisory_flags_concurrent_ready_draft(ctx_factory, monkeypatch
     never DONE) is annotated with a ``[!warning]`` advisory naming that
     ticket and still proceeds to refine — never auto-closed.  The dedup
     guard alone cannot catch this (it only closes against DONE)."""
-    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
+    ctx = ctx_factory(
+        require_approval="false",
+        refine_triage_enabled="false",
+        refine_advisory_dedup_enabled=False,
+    )
 
     prior = ctx.service.create(
         "rework login validation",

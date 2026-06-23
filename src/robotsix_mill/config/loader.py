@@ -334,6 +334,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "gates.refine_trivial_routing_enabled": "refine_trivial_routing_enabled",
     "gates.refine_trivial_model_level": "refine_trivial_model_level",
     "gates.maintenance_triage_enabled": "maintenance_triage_enabled",
+    "gates.refine_advisory_dedup_enabled": "refine_advisory_dedup_enabled",
     "gates.spec_review_enabled": "spec_review_enabled",
     "gates.scope_triage_enabled": "scope_triage_enabled",
     "gates.pr_summary_enabled": "pr_summary_enabled",

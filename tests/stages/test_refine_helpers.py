@@ -24,6 +24,10 @@ from robotsix_mill.agents import refining
 from robotsix_mill.agents.refining import AutoApproveResult
 from robotsix_mill.core.states import State
 from robotsix_mill.stages import refine as refine_module
+from robotsix_mill.stages.refine.helpers import (
+    _advisory_candidate_id,
+    _strip_advisory_block,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -539,3 +543,95 @@ def test_draft_has_complete_spec_importable_from_refine_module():
 
     assert callable(_draft_has_complete_spec)
     assert _draft_has_complete_spec("## Problem\n\n## Scope\n\nx") is True
+
+
+# ---------------------------------------------------------------------------
+# _advisory_candidate_id / _strip_advisory_block
+# ---------------------------------------------------------------------------
+
+
+def test_advisory_candidate_id_extracts_candidate_id():
+    text = (
+        "> [!warning] Possible duplicate of 20260622T151555Z-foo-bar-d95e "
+        "('Some ticket title') — matched on file path `src/foo.py`\n"
+        ">\n"
+        "> _Advisory flag from draft-intake pre-refine dedup; "
+        "verify and close as duplicate during refine if confirmed._\n"
+        "\n"
+        "## Problem\n\nThe real draft body starts here.\n"
+    )
+    assert _advisory_candidate_id(text) == "20260622T151555Z-foo-bar-d95e"
+
+
+def test_advisory_candidate_id_no_advisory_returns_none():
+    assert _advisory_candidate_id("## Problem\nJust a normal draft body.") is None
+
+
+def test_advisory_candidate_id_empty_text_returns_none():
+    assert _advisory_candidate_id("") is None
+
+
+def test_advisory_candidate_id_non_dedup_warning_block():
+    """A [!warning] block without 'Possible duplicate of' returns None."""
+    text = (
+        "> [!warning] This is some other warning\n"
+        ">\n"
+        "> Just a warning, not a dedup advisory.\n"
+        "\n"
+        "## Problem\nReal body.\n"
+    )
+    assert _advisory_candidate_id(text) is None
+
+
+def test_strip_advisory_block_removes_advisory():
+    body = "## Problem\n\nThe real draft body.\n"
+    text = (
+        "> [!warning] Possible duplicate of 20260622T151555Z-foo-bar-d95e "
+        "('Some ticket title') — matched on file path `src/foo.py`\n"
+        ">\n"
+        "> _Advisory flag from draft-intake pre-refine dedup; "
+        "verify and close as duplicate during refine if confirmed._\n"
+        "\n"
+    ) + body
+    assert _strip_advisory_block(text) == body
+
+
+def test_strip_advisory_block_no_advisory_noop():
+    text = "## Problem\nJust a normal draft body."
+    assert _strip_advisory_block(text) == text
+
+
+def test_strip_advisory_block_empty_text():
+    assert _strip_advisory_block("") == ""
+
+
+def test_strip_advisory_block_non_dedup_warning_left_intact():
+    """A [!warning] block without 'Possible duplicate of' is NOT stripped."""
+    text = (
+        "> [!warning] This is some other warning\n"
+        ">\n"
+        "> Just a warning.\n"
+        "\n"
+        "## Problem\nReal body.\n"
+    )
+    assert _strip_advisory_block(text) == text
+
+
+def test_strip_advisory_block_anchor_not_in_leading_block():
+    """'Possible duplicate of' appears later in the body but not in the
+    leading blockquote — the advisory strip is a no-op."""
+    text = (
+        "> [!warning] Some unrelated warning block\n"
+        ">\n"
+        "> This is not a dedup advisory.\n"
+        "\n"
+        "Now the phrase Possible duplicate of 20260622T... appears in prose.\n"
+    )
+    assert _strip_advisory_block(text) == text
+
+
+def test_strip_advisory_block_idempotent():
+    """Stripping an already-stripped body is a no-op."""
+    body = "## Problem\nThe real body.\n"
+    assert _strip_advisory_block(body) == body
+    assert _strip_advisory_block(_strip_advisory_block(body)) == body

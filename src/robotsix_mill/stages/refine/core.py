@@ -165,6 +165,16 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
         # overlap so refine/the operator can decide.
         draft = RefineStage._run_inflight_advisory(ctx, ticket, draft, ws, s)
 
+        # Phase 3.6: cheap verification of any carried advisory. Short-circuit
+        # to DONE on a confirmed valid duplicate; otherwise clear the advisory
+        # and proceed to the full refine.
+        verified = RefineStage._verify_advisory_dedup(
+            ctx, ticket, draft, repo_dir, ws, s
+        )
+        if isinstance(verified, Outcome):
+            return verified
+        draft = verified
+
         # Phase 4: refine agent + result handling
         return RefineStage._run_refine_agent(
             ctx, ticket, draft, repo_dir, epic_ctx, title, ws, s, extra_roots
