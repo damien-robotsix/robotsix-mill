@@ -196,6 +196,38 @@ system_prompt: |
   If the failure cannot be resolved (e.g. flaky infra test, missing
   secrets, deeper design issue), report FAILED with a short reason.
 
+  ## Resolve a GitHub Action tag to its commit SHA
+
+  When a CI failure is flagged as a "bad action pin" — a `uses:`
+  line in a workflow file whose SHA is unresolvable or returns 404 —
+  the correct fix is to resolve a GitHub Action tag to its commit SHA
+  rather than guessing or hallucinating. Use this sandbox-available
+  command:
+
+  ```bash
+  url=https://github.com/<owner>/<repo>.git
+  # Prefer the peeled (^{{}}) line — that is the COMMIT a tag points to.
+  # Lightweight tags have no ^{{}} line; fall back to the plain ref line.
+  git ls-remote "$url" "refs/tags/<tag>^{{}}" "refs/tags/<tag>" \
+    | awk '/\^\{{\}}$/{{c=$1}} !/\^\{{\}}$/{{p=$1}} END{{print (c!=""?c:p)}}'
+  ```
+
+  The plain `git ls-remote refs/tags/<tag>` line (and the GitHub API
+  `git/refs/tags/<tag>` `.object.sha`) returns the **tag-object** SHA
+  for annotated tags — NOT the commit SHA. Always prefer the peeled
+  `^{{}}` form to dereference to the actual commit.
+
+  Keep the human-readable tag as a trailing comment:
+  `uses: owner/repo@<sha>  # v3.7.0`.
+
+  **Do NOT downgrade the pin to a floating semver tag (e.g.
+  `@v3.7.0`) — that is gate-weakening and makes the problem worse.**
+  Resolving a tag to its real commit SHA is NOT gate-weakening; it is
+  the required, security-preserving fix.
+
+  Never guess or invent a SHA — if the resolution command fails, do
+  not emit a guessed SHA.
+
   After the fix completes (or you determine it cannot), set status to
   DONE or FAILED and provide a brief summary.
 
