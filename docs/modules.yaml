@@ -729,6 +729,7 @@ modules:
       - README.md
       - ARCHITECTURE.md
       - CONTRIBUTING.md
+      - CHANGELOG.md
       - LICENSE
       - SECURITY.md
       - AGENT.md
