@@ -63,9 +63,17 @@ default feature set: `deliver` + merge gate + CI monitor):
 | Checks | Read-only | merge gate reads PR check-runs to decide mergeability |
 | Commit statuses | Read-only | fallback for legacy CI that uses commit statuses instead of check-runs |
 | Actions | Read-only | CI monitor lists workflow runs and fetches job logs to file CI-failure tickets |
+| Code scanning alerts | Read-only | `ci_fix` reads CodeQL alerts (rule, path, line) so it can fix the *actual* findings instead of blind-suppressing |
 | Metadata | Read-only *(auto)* | required by GitHub for any App |
 
 Leave everything else **No access**. Click **Create GitHub App**.
+
+> Without `Code scanning alerts: Read`, the GitHub code-scanning API returns
+> `403` and mill cannot see CodeQL alert details. A CodeQL-failing PR then has
+> no findings to work from, so `ci_fix` may add wrong/blind suppression
+> comments that don't clear the check. Grant this whenever CodeQL runs on a
+> managed repo. (Granting a new permission to an existing App also requires
+> approving the permission update on each installation.)
 
 > If you intentionally disable the CI monitor (set `ci_monitor.enabled: false`
 > per-repo in `config/repos.yaml` and never call `POST /ci-fix`), you can drop **Actions** to *No access*.
