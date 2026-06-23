@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 
 from ..config import ReposRegistry, Settings
@@ -18,6 +19,7 @@ from ..forge.base import NotConfiguredError
 from .exception_handlers import (
     catchall_handler,
     not_configured_error_handler,
+    request_validation_error_handler,
     transition_error_handler,
 )
 from .lifespan import create_lifespan, setup_logging  # noqa: F401 — re-exported
@@ -50,6 +52,7 @@ def create_app(
     # only sees genuinely unexpected errors.
     app.add_exception_handler(TransitionError, transition_error_handler)
     app.add_exception_handler(NotConfiguredError, not_configured_error_handler)
+    app.add_exception_handler(RequestValidationError, request_validation_error_handler)
     app.add_exception_handler(Exception, catchall_handler)
 
     app.add_middleware(RequestIDMiddleware)
