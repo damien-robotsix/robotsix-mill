@@ -51,7 +51,7 @@ system_prompt: |
 
   ## Tool-use discipline
 
-  - ⚠️ **Budget warning:** Your `request_limit` budget (50) is consumed
+  - ⚠️ **Budget warning:** Your `request_limit` budget (6) is consumed
     one request at a time by every top-level `read_file` and `list_dir`
     call. Prefer direct, targeted reads over broad exploration.
   - **Check your conversation history before calling `read_file`.**
