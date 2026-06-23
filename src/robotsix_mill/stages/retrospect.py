@@ -276,10 +276,8 @@ def _apply_memory_edits(
 
 # No-op detection (markers + logic) lives in core.text_noop — a single
 # source of truth shared with the report_issue tool so the two can't
-# drift. Kept as a thin title-only shim here (the spawn guard and the
-# existing test call it as _is_noop_draft(title, body); body is and was
-# ignored — title-only by design, no length heuristics).
-def _is_noop_draft(title: str | None, body: str | None = None) -> bool:
+# drift.
+def _is_noop_draft(title: str | None) -> bool:
     """The retrospect model sometimes sets propose_draft=true with a
     "No notable issues - clean run" title — noise, not a ticket. Defers
     to the shared :func:`is_noop_report` (title-only)."""
@@ -317,7 +315,7 @@ class RetrospectStage(Stage):
             return None
 
         # Second guard — model proposed a no-op / clean-run draft.
-        if _is_noop_draft(res.draft_title, res.draft_body):
+        if _is_noop_draft(res.draft_title):
             log.info(
                 "%s: retrospect proposed a no-op draft %r — skipped",
                 ticket.id,

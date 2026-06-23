@@ -412,17 +412,14 @@ def test_noop_draft_is_not_spawned(tmp_path, monkeypatch):
 def test_is_noop_draft_helper():
     from robotsix_mill.stages.retrospect import _is_noop_draft
 
-    real_body = "Problem: X retries 5x. Fix: cap at 2 in retry.py."
-    assert _is_noop_draft("No notable issues - clean run", real_body)
-    assert _is_noop_draft("Clean ticket, no issues to flag", real_body)
-    assert _is_noop_draft("Nothing to report", real_body)
-    assert _is_noop_draft("", real_body)  # empty title
-    assert _is_noop_draft(None, real_body)
-    # Title-only: legitimately terse tickets are NOT flagged.
-    assert not _is_noop_draft("Cut retry tokens", "do the thing")
-    assert not _is_noop_draft(
-        "Cap transient retries at 2 in agents/retry.py", real_body
-    )
+    assert _is_noop_draft("No notable issues - clean run")
+    assert _is_noop_draft("Clean ticket, no issues to flag")
+    assert _is_noop_draft("Nothing to report")
+    assert _is_noop_draft("")  # empty title
+    assert _is_noop_draft(None)
+    # Title-only: legitimately terse titles are NOT flagged.
+    assert not _is_noop_draft("Cut retry tokens")
+    assert not _is_noop_draft("Cap transient retries at 2 in agents/retry.py")
 
 
 # --- truncate_at_boundary tests ---
