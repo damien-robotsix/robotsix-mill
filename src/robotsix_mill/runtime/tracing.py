@@ -303,6 +303,25 @@ def set_current_span_attribute(key: str, value) -> None:
     span.set_attribute(key, value)
 
 
+def get_current_trace_id() -> str | None:
+    """Return the active OTel trace id as a 32-char hex string, or None.
+
+    No-op-safe: returns None when opentelemetry is not installed, no span
+    is recording, or the span context is invalid (trace_id == 0).
+    """
+    try:
+        from opentelemetry import trace
+    except ImportError:
+        return None
+    span = trace.get_current_span()
+    if span is None or not span.is_recording():
+        return None
+    ctx = span.get_span_context()
+    if not ctx or ctx.trace_id == 0:
+        return None
+    return format(ctx.trace_id, "032x")
+
+
 def flush_tracing(timeout: int = 10_000) -> None:
     """Force-flush any pending spans.  Call at worker shutdown.
 
