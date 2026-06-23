@@ -70,7 +70,6 @@ _interval_xor
 _prompt_xor
 _name_slug
 _absorb_spec_markdown_typos
-_absorb_findings_list_shape
 output_context
 run_survey_agent
 run_test_gap_agent
