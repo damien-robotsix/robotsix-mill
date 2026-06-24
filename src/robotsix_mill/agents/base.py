@@ -429,6 +429,7 @@ def build_agent(  # noqa: C901
     list_threads: bool = True,
     ask_user: bool = True,
     level: int = 2,
+    model: str | None = None,
     name: str | None = None,
     retries: int = 2,
     max_tokens: int | None = None,

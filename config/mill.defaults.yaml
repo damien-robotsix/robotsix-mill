@@ -179,6 +179,7 @@ gates:
   freshness_gate_enabled: false          # deterministic pre-refine gate: stale ticket evidence (opt-in)
   prerequisite_gate_enabled: true        # verify external symbol/import prerequisites in spec before refine
   refine_mill_misroute_gate_enabled: true  # deterministic pre-refine gate: misroute to mill board when source paths absent from checkout
+  refine_claude_model: sonnet               # override model for level-3 refine ("sonnet" = claude-sonnet-4-20250514)
   auto_merge_main_debt_detection_enabled: true  # detect pre-existing main-branch CI debt before auto-merge
 
 # ---------------------------------------------------------------------------
