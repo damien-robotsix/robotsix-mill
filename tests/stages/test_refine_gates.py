@@ -38,6 +38,7 @@ from robotsix_mill.stages.refine.helpers import (
     DEDUP_DUPLICATE_PREFIX,
     FRESHNESS_STALE_PREFIX,
     OBSOLESCENCE_GAP_PREFIX,
+    REFINE_MILL_CONSUMER_FOLLOWUP_PREFIX,
     REFINE_MILL_MISROUTE_PREFIX,
 )
 
@@ -970,6 +971,10 @@ def test_mill_misroute_gate_mill_board_unconfigured_returns_none(
         lambda *a, **k: ["src/robotsix_mill/foo.py"],
     )
     monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_local_deliverable_paths",
+        lambda *a, **k: [],
+    )
+    monkeypatch.setattr(
         "robotsix_mill.stages.refine.gates.resolve_mill_service",
         lambda *a, **k: None,
     )
@@ -998,6 +1003,10 @@ def test_mill_misroute_gate_already_on_mill_board_returns_none(
         "robotsix_mill.stages.refine.gates.referenced_mill_paths_absent",
         lambda *a, **k: ["src/robotsix_mill/foo.py"],
     )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_local_deliverable_paths",
+        lambda *a, **k: [],
+    )
     mock_svc = MagicMock()
     mock_svc.board_id = ctx.service.board_id
     monkeypatch.setattr(
@@ -1023,6 +1032,10 @@ def test_mill_misroute_gate_success_redirects_and_returns_done(
     monkeypatch.setattr(
         "robotsix_mill.stages.refine.gates.referenced_mill_paths_absent",
         lambda *a, **k: ["src/robotsix_mill/foo.py"],
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_local_deliverable_paths",
+        lambda *a, **k: [],
     )
     mock_svc = MagicMock()
     mock_svc.board_id = "mill-board"
@@ -1054,6 +1067,10 @@ def test_mill_misroute_gate_resolve_service_raises_returns_none(
         lambda *a, **k: ["src/robotsix_mill/foo.py"],
     )
     monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_local_deliverable_paths",
+        lambda *a, **k: [],
+    )
+    monkeypatch.setattr(
         "robotsix_mill.stages.refine.gates.resolve_mill_service",
         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("mill resolve boom")),
     )
@@ -1076,6 +1093,10 @@ def test_mill_misroute_gate_create_raises_returns_none(
     monkeypatch.setattr(
         "robotsix_mill.stages.refine.gates.referenced_mill_paths_absent",
         lambda *a, **k: ["src/robotsix_mill/foo.py"],
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_local_deliverable_paths",
+        lambda *a, **k: [],
     )
     mock_svc = MagicMock()
     mock_svc.board_id = "mill-board"
@@ -1106,6 +1127,244 @@ def test_mill_misroute_gate_mill_paths_exist_in_checkout_returns_none(
     out = RefineStage._run_mill_misroute_gate(ctx, t, _DEDUP_DRAFT, None, ctx.settings)
 
     assert out is None
+
+
+# ---------------------------------------------------------------------------
+# 7b. _run_mill_misroute_gate — split behavior (local deliverable)
+# ---------------------------------------------------------------------------
+
+
+def test_mill_misroute_gate_local_deliverable_no_redirect_no_followup(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """Draft has an out-of-scope mill path → absent=[], gate returns None
+    early.  (Out-of-scope variant — mirrors verification ticket
+    20260624T051045Z.)"""
+    ctx = ctx_factory()
+    ctx.settings.refine_mill_misroute_gate_enabled = True
+    t = _ticket(ctx)
+
+    # referenced_mill_paths_absent returns [] because the mill path is
+    # under an out-of-scope marker (handled by paths_excluding_out_of_scope).
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_mill_paths_absent",
+        lambda *a, **k: [],
+    )
+
+    out = RefineStage._run_mill_misroute_gate(ctx, t, _DEDUP_DRAFT, None, ctx.settings)
+
+    assert out is None
+
+
+def test_mill_misroute_gate_mixed_in_scope_local_deliverable_keeps_ticket(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """Draft creates a current-board file AND lists an in-scope absent
+    mill consumer path → gate returns None; follow-up created on mill board."""
+    from unittest.mock import MagicMock
+
+    ctx = ctx_factory()
+    ctx.settings.refine_mill_misroute_gate_enabled = True
+    t = _ticket(ctx)
+
+    absent_paths = ["src/robotsix_mill/core/db.py"]
+    local_paths = ["src/robotsix_llmio/core/sqlite_utils.py"]
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_mill_paths_absent",
+        lambda *a, **k: absent_paths,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_local_deliverable_paths",
+        lambda *a, **k: local_paths,
+    )
+    mock_mill_svc = MagicMock()
+    mock_mill_svc.board_id = "mill-board"
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.resolve_mill_service",
+        lambda *a, **k: mock_mill_svc,
+    )
+
+    out = RefineStage._run_mill_misroute_gate(ctx, t, _DEDUP_DRAFT, None, ctx.settings)
+
+    # Gate proceeds (no redirect).
+    assert out is None
+    # Follow-up ticket was created on the mill board.
+    mock_mill_svc.create.assert_called_once()
+    call_args = mock_mill_svc.create.call_args
+    assert call_args[0][0].startswith("Consumer migration for:")
+    assert "src/robotsix_mill/core/db.py" in call_args[0][1]
+    assert REFINE_MILL_CONSUMER_FOLLOWUP_PREFIX in call_args[0][1]
+
+
+def test_mill_misroute_gate_local_deliverable_mill_board_unresolvable_no_followup(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """When the mill board cannot be resolved, the follow-up is skipped
+    but the gate still returns None (no redirect)."""
+    ctx = ctx_factory()
+    ctx.settings.refine_mill_misroute_gate_enabled = True
+    t = _ticket(ctx)
+
+    absent_paths = ["src/robotsix_mill/core/db.py"]
+    local_paths = ["src/robotsix_llmio/core/sqlite_utils.py"]
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_mill_paths_absent",
+        lambda *a, **k: absent_paths,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_local_deliverable_paths",
+        lambda *a, **k: local_paths,
+    )
+    # resolve_mill_service returns None → can't file follow-up.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.resolve_mill_service",
+        lambda *a, **k: None,
+    )
+
+    out = RefineStage._run_mill_misroute_gate(ctx, t, _DEDUP_DRAFT, None, ctx.settings)
+
+    # Gate still proceeds (no redirect, no crash).
+    assert out is None
+
+
+def test_mill_misroute_gate_local_deliverable_resolve_raises_no_followup(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """When resolve_mill_service raises, the follow-up is skipped but
+    the gate still returns None."""
+    ctx = ctx_factory()
+    ctx.settings.refine_mill_misroute_gate_enabled = True
+    t = _ticket(ctx)
+
+    absent_paths = ["src/robotsix_mill/core/db.py"]
+    local_paths = ["src/robotsix_llmio/core/sqlite_utils.py"]
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_mill_paths_absent",
+        lambda *a, **k: absent_paths,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_local_deliverable_paths",
+        lambda *a, **k: local_paths,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.resolve_mill_service",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+
+    out = RefineStage._run_mill_misroute_gate(ctx, t, _DEDUP_DRAFT, None, ctx.settings)
+
+    assert out is None
+
+
+def test_mill_misroute_gate_local_deliverable_mill_create_raises_no_redirect(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """When mill_svc.create raises, the gate still returns None (no redirect)."""
+    from unittest.mock import MagicMock
+
+    ctx = ctx_factory()
+    ctx.settings.refine_mill_misroute_gate_enabled = True
+    t = _ticket(ctx)
+
+    absent_paths = ["src/robotsix_mill/core/db.py"]
+    local_paths = ["src/robotsix_llmio/core/sqlite_utils.py"]
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_mill_paths_absent",
+        lambda *a, **k: absent_paths,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_local_deliverable_paths",
+        lambda *a, **k: local_paths,
+    )
+    mock_mill_svc = MagicMock()
+    mock_mill_svc.board_id = "mill-board"
+    mock_mill_svc.create.side_effect = RuntimeError("create boom")
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.resolve_mill_service",
+        lambda *a, **k: mock_mill_svc,
+    )
+
+    out = RefineStage._run_mill_misroute_gate(ctx, t, _DEDUP_DRAFT, None, ctx.settings)
+
+    assert out is None
+
+
+def test_mill_misroute_gate_local_deliverable_same_board_skips_followup(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """When the resolved mill board is the same as current board,
+    follow-up is skipped (no self-filing)."""
+    from unittest.mock import MagicMock
+
+    ctx = ctx_factory()
+    ctx.settings.refine_mill_misroute_gate_enabled = True
+    t = _ticket(ctx)
+
+    absent_paths = ["src/robotsix_mill/core/db.py"]
+    local_paths = ["src/robotsix_llmio/core/sqlite_utils.py"]
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_mill_paths_absent",
+        lambda *a, **k: absent_paths,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_local_deliverable_paths",
+        lambda *a, **k: local_paths,
+    )
+    mock_mill_svc = MagicMock()
+    mock_mill_svc.board_id = ctx.service.board_id  # same board
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.resolve_mill_service",
+        lambda *a, **k: mock_mill_svc,
+    )
+
+    out = RefineStage._run_mill_misroute_gate(ctx, t, _DEDUP_DRAFT, None, ctx.settings)
+
+    assert out is None
+    mock_mill_svc.create.assert_not_called()
+
+
+def test_mill_misroute_gate_pure_mill_no_local_still_redirects(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """No local deliverable + absent mill paths → existing redirect
+    behavior preserved: returns Outcome(State.DONE)."""
+    from unittest.mock import MagicMock
+
+    ctx = ctx_factory()
+    ctx.settings.refine_mill_misroute_gate_enabled = True
+    t = _ticket(ctx)
+
+    absent_paths = ["src/robotsix_mill/core/db.py"]
+    local_paths: list[str] = []
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_mill_paths_absent",
+        lambda *a, **k: absent_paths,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_local_deliverable_paths",
+        lambda *a, **k: local_paths,
+    )
+    mock_mill_svc = MagicMock()
+    mock_mill_svc.board_id = "mill-board"
+    mock_mill_svc.create.return_value = MagicMock(id="mill-draft-123")
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.resolve_mill_service",
+        lambda *a, **k: mock_mill_svc,
+    )
+
+    out = RefineStage._run_mill_misroute_gate(ctx, t, _DEDUP_DRAFT, None, ctx.settings)
+
+    assert out is not None
+    assert out.next_state is State.DONE
+    assert REFINE_MILL_MISROUTE_PREFIX in out.note
+    assert "mill-draft-123" in out.note
+    mock_mill_svc.create.assert_called_once()
 
 
 # ===========================================================================
