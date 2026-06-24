@@ -7,7 +7,7 @@ merge stage takes over).
 ## Spec approval (after refine)
 
 By default (`MILL_REQUIRE_APPROVAL=true`), the refine stage transitions
-tickets to `awaiting_approval` instead of `ready`. The pipeline pauses
+tickets to `human_issue_approval` instead of `ready`. The pipeline pauses
 until a human approves, giving you a chance to review the refined spec
 before the implement stage starts. Approve via:
 

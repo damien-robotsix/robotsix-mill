@@ -71,7 +71,7 @@ periodic:
   chooses targeted scopes dynamically based on web research and repo
   analysis.
 - All repo-side output is draft tickets that must go through the
-  approval gate (`awaiting_approval` → `ready` → `implement`).
+  approval gate (`human_issue_approval` → `ready` → `implement`).
 - In multi-repo mode, the audit agent runs independently for each
   registered repo — each with its own board, memory file, and Langfuse
   project.
