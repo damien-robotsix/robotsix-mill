@@ -3,6 +3,9 @@
 Covers every class and function exported from models.py: SourceKind,
 _now(), Ticket, TicketEvent, Comment, TicketCreate, TicketTransition,
 TicketRead, CommentCreate, CommentRead.
+
+Also includes DB-backed regression tests that require the ``service``
+and ``settings`` fixtures (via ``conftest.py``).
 """
 
 from __future__ import annotations
@@ -11,8 +14,9 @@ from datetime import datetime, timezone
 
 import pytest
 from pydantic import ValidationError
-
+from robotsix_mill.core import db
 from robotsix_mill.core.models import (
+    CaseTolerantEnum,
     Comment,
     CommentCreate,
     CommentRead,
@@ -672,3 +676,229 @@ def test_comment_read_model_dump_and_validate_roundtrip():
     assert restored.parent_id == cr.parent_id
     assert restored.closed_at == cr.closed_at
     assert restored.created_at == cr.created_at
+
+
+# ---------------------------------------------------------------------------
+# CaseTolerantEnum unit tests (no database)
+# ---------------------------------------------------------------------------
+
+
+def test_case_tolerant_enum_bind_none():
+    """None passes through process_bind_param unchanged."""
+    ct = CaseTolerantEnum(TicketKind)
+    assert ct.process_bind_param(None, None) is None
+
+
+def test_case_tolerant_enum_result_none():
+    """None passes through process_result_value unchanged."""
+    ct = CaseTolerantEnum(TicketKind)
+    assert ct.process_result_value(None, None) is None
+
+
+def test_case_tolerant_enum_bind_enum_member():
+    """Bind with a TicketKind member returns the uppercase member name."""
+    ct = CaseTolerantEnum(TicketKind)
+    assert ct.process_bind_param(TicketKind.TASK, None) == "TASK"
+    assert ct.process_bind_param(TicketKind.INQUIRY, None) == "INQUIRY"
+    assert ct.process_bind_param(TicketKind.EPIC, None) == "EPIC"
+
+
+def test_case_tolerant_enum_bind_lowercase_string():
+    """Bind with a lowercase string resolves to the canonical uppercase name."""
+    ct = CaseTolerantEnum(TicketKind)
+    assert ct.process_bind_param("task", None) == "TASK"
+    assert ct.process_bind_param("inquiry", None) == "INQUIRY"
+    assert ct.process_bind_param("epic", None) == "EPIC"
+
+
+def test_case_tolerant_enum_bind_mixed_case_string():
+    """Bind with mixed-case string still resolves to uppercase name."""
+    ct = CaseTolerantEnum(TicketKind)
+    assert ct.process_bind_param("Task", None) == "TASK"
+    assert ct.process_bind_param("InQuIrY", None) == "INQUIRY"
+
+
+def test_case_tolerant_enum_bind_uppercase_string():
+    """Bind with uppercase string resolves to uppercase name."""
+    ct = CaseTolerantEnum(TicketKind)
+    assert ct.process_bind_param("TASK", None) == "TASK"
+
+
+def test_case_tolerant_enum_bind_invalid_string_raises():
+    """Bind with an invalid value raises ValueError."""
+    ct = CaseTolerantEnum(TicketKind)
+    with pytest.raises(ValueError, match="not a valid TicketKind"):
+        ct.process_bind_param("garbage", None)
+
+
+def test_case_tolerant_enum_result_lowercase_string():
+    """Read a lowercase DB string → TicketKind member."""
+    ct = CaseTolerantEnum(TicketKind)
+    result = ct.process_result_value("task", None)
+    assert result == TicketKind.TASK
+    assert isinstance(result, TicketKind)
+
+
+def test_case_tolerant_enum_result_uppercase_string():
+    """Read an uppercase DB string → TicketKind member."""
+    ct = CaseTolerantEnum(TicketKind)
+    result = ct.process_result_value("TASK", None)
+    assert result == TicketKind.TASK
+
+
+def test_case_tolerant_enum_result_invalid_string_raises():
+    """Read an invalid DB string raises ValueError."""
+    ct = CaseTolerantEnum(TicketKind)
+    with pytest.raises(ValueError, match="not a valid TicketKind"):
+        ct.process_result_value("bogus", None)
+
+
+# ---------------------------------------------------------------------------
+# DB-backed regression tests — CaseTolerantEnum on Ticket.kind
+# ---------------------------------------------------------------------------
+
+
+def _raw_insert_ticket(settings, board_id: str, ticket_id: str, kind: str) -> None:
+    """Insert a minimal ticket row via raw SQL with an explicit *kind*."""
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+    engine = db.get_engine(settings, board_id)
+    with engine.begin() as conn:
+        conn.exec_driver_sql(
+            f"""
+            INSERT INTO ticket (id, title, state, kind, workspace_path, content_hash,
+                                source, cost_usd, pre_redraft_cost_usd, review_rounds,
+                                retry_attempt, board_id, priority, created_at, updated_at)
+            VALUES ('{ticket_id}', 'Test title', 'DRAFT', '{kind}', '/tmp/{ticket_id}', '',
+                    'user', 0.0, 0.0, 0, 0, '', 0, '{now}', '{now}')
+            """
+        )
+
+
+def test_raw_sql_lowercase_kind_round_trip(service):
+    """Insert a row with kind='task' (lowercase) via raw SQL;
+    read it back with TicketService and assert correct TicketKind."""
+    _raw_insert_ticket(service.settings, service.board_id, "t-lower-raw", "task")
+
+    ticket = service.get("t-lower-raw")
+    assert ticket is not None
+    assert ticket.kind == TicketKind.TASK
+    assert isinstance(ticket.kind, TicketKind)
+
+    all_tickets = service.list()
+    match = [t for t in all_tickets if t.id == "t-lower-raw"]
+    assert len(match) == 1
+    assert match[0].kind == TicketKind.TASK
+
+
+def test_raw_sql_mixed_case_kind_round_trip(service):
+    """Insert a row with kind='InQuIrY' (mixed case) via raw SQL;
+    read it back cleanly."""
+    _raw_insert_ticket(service.settings, service.board_id, "t-mixed-raw", "InQuIrY")
+
+    ticket = service.get("t-mixed-raw")
+    assert ticket is not None
+    assert ticket.kind == TicketKind.INQUIRY
+    assert isinstance(ticket.kind, TicketKind)
+
+
+def test_raw_sql_uppercase_kind_round_trip(service):
+    """Insert a row with kind='EPIC' (uppercase) via raw SQL;
+    read it back cleanly (canonical case)."""
+    _raw_insert_ticket(service.settings, service.board_id, "t-upper-raw", "EPIC")
+
+    ticket = service.get("t-upper-raw")
+    assert ticket is not None
+    assert ticket.kind == TicketKind.EPIC
+    assert isinstance(ticket.kind, TicketKind)
+
+
+def test_create_with_lowercase_string_kind(service):
+    """Create a ticket by passing kind='task' (lowercase str);
+    assert it reads back as TicketKind.TASK."""
+    # Use the internal create path — TicketCreate → _lifecycle → Ticket(kind=...)
+    from robotsix_mill.core.models import TicketCreate
+
+    tc = TicketCreate(title="Lower Create", kind=TicketKind("task"))
+    t = service.create(title=tc.title, description=tc.description, kind=tc.kind)
+    assert t.kind == TicketKind.TASK
+
+    # Also verify directly using TicketCreate.model_validate kind="task"
+    tc2 = TicketCreate(title="Lower Create 2", kind="task")  # type: ignore[arg-type]
+    t2 = service.create(title=tc2.title, description=tc2.description, kind=tc2.kind)
+    assert t2.kind == TicketKind.TASK
+
+
+def test_create_with_enum_member_kind(service):
+    """Create a ticket by passing kind=TicketKind.TASK (enum member);
+    assert it reads back as TicketKind.TASK."""
+    t = service.create(title="Enum Create", kind=TicketKind.TASK)
+    assert t.kind == TicketKind.TASK
+
+
+def test_kind_persisted_string_is_canonical_uppercase(service):
+    """After creating a ticket with kind='task', the raw DB string is 'TASK'."""
+    t = service.create(title="Canonical")
+    # Verify raw DB value
+    engine = db.get_engine(service.settings, service.board_id)
+    with engine.connect() as conn:
+        row = conn.exec_driver_sql(
+            f"SELECT kind FROM ticket WHERE id = '{t.id}'"
+        ).first()
+    assert row is not None
+    assert row[0] == "TASK"
+
+
+def test_kind_persisted_string_uppercase_from_enum(service):
+    """After creating a ticket with TicketKind.EPIC, the raw DB string is 'EPIC'."""
+    t = service.create(title="Epic-enum", kind=TicketKind.EPIC)
+    engine = db.get_engine(service.settings, service.board_id)
+    with engine.connect() as conn:
+        row = conn.exec_driver_sql(
+            f"SELECT kind FROM ticket WHERE id = '{t.id}'"
+        ).first()
+    assert row is not None
+    assert row[0] == "EPIC"
+
+
+def test_init_db_migration_uppercases_lowercase_row(service, settings):
+    """Insert a lowercase 'task' row, call init_db, assert it becomes 'TASK'."""
+    _raw_insert_ticket(settings, service.board_id, "t-migrate", "task")
+
+    # Verify lowercase before migration
+    engine = db.get_engine(settings, service.board_id)
+    with engine.connect() as conn:
+        before = conn.exec_driver_sql(
+            "SELECT kind FROM ticket WHERE id = 't-migrate'"
+        ).first()
+    assert before is not None and before[0] == "task"
+
+    # Run init_db — this should trigger the UPDATE ticket SET kind = upper(kind)
+    db.init_db(settings, service.board_id)
+
+    with engine.connect() as conn:
+        after = conn.exec_driver_sql(
+            "SELECT kind FROM ticket WHERE id = 't-migrate'"
+        ).first()
+    assert after is not None and after[0] == "TASK"
+
+
+def test_init_db_migration_is_idempotent(service, settings):
+    """Calling init_db twice after inserting a lowercase row is safe (no error)."""
+    _raw_insert_ticket(settings, service.board_id, "t-idem-mig", "inquiry")
+
+    # First migration: lowercase → uppercase
+    db.init_db(settings, service.board_id)
+    engine = db.get_engine(settings, service.board_id)
+    with engine.connect() as conn:
+        first = conn.exec_driver_sql(
+            "SELECT kind FROM ticket WHERE id = 't-idem-mig'"
+        ).first()
+    assert first is not None and first[0] == "INQUIRY"
+
+    # Second migration: no-op (already uppercase)
+    db.init_db(settings, service.board_id)
+    with engine.connect() as conn:
+        second = conn.exec_driver_sql(
+            "SELECT kind FROM ticket WHERE id = 't-idem-mig'"
+        ).first()
+    assert second is not None and second[0] == "INQUIRY"

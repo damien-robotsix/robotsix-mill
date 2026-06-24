@@ -12,6 +12,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy import Column
+from sqlalchemy import String as SAString
+from sqlalchemy import TypeDecorator
 from sqlmodel import Field, SQLModel
 
 from enum import StrEnum
@@ -52,11 +54,65 @@ class SourceKind(StrEnum):
 
 
 class TicketKind(StrEnum):
-    """Enumeration of ticket kinds — canonical source of truth for ``kind`` values."""
+    """Enumeration of ticket kinds — canonical source of truth for ``kind`` values.
+
+    Persisted as the canonical UPPERCASE member *name* via
+    ``CaseTolerantEnum`` (below).  ``State`` is the other name-mapped
+    StrEnum and is intentionally left with its auto-generated ``Enum``
+    column — not in scope for this ticket.
+    """
 
     TASK = "task"
     INQUIRY = "inquiry"
     EPIC = "epic"
+
+
+class CaseTolerantEnum(TypeDecorator[str]):
+    """Stores a StrEnum by its canonical UPPERCASE member name and
+    tolerates any-case DB strings on read (legacy lowercase rows resolve
+    cleanly).
+
+    WRITE
+        Accept a ``TicketKind`` member or a ``str`` of any case →
+        store the canonical uppercase member name.
+    READ
+        Upper-case the DB string before the enum NAME lookup so a
+        legacy lowercase ``'task'`` resolves to ``TicketKind.TASK``.
+    """
+
+    impl = SAString
+    cache_ok = True
+
+    def __init__(self, enum_cls: type[StrEnum], **kw: object) -> None:
+        self.enum_cls = enum_cls
+        super().__init__(**kw)
+
+    def process_bind_param(
+        self, value: StrEnum | str | None, dialect: object
+    ) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, self.enum_cls):
+            return value.name  # canonical uppercase, e.g. 'TASK'
+        # Accept any-case str and resolve to canonical member name.
+        try:
+            return self.enum_cls[str(value).upper()].name
+        except KeyError as exc:
+            raise ValueError(
+                f"{str(value)!r} is not a valid {self.enum_cls.__name__} value"
+            ) from exc
+
+    def process_result_value(
+        self, value: str | None, dialect: object
+    ) -> StrEnum | None:
+        if value is None:
+            return None
+        try:
+            return self.enum_cls[str(value).upper()]
+        except KeyError as exc:
+            raise ValueError(
+                f"{str(value)!r} is not a valid {self.enum_cls.__name__} member name"
+            ) from exc
 
 
 def _now() -> datetime:
@@ -69,7 +125,10 @@ class Ticket(SQLModel, table=True):
     id: str = Field(primary_key=True)
     title: str
     state: State = Field(default=State.DRAFT, index=True)
-    kind: TicketKind = Field(default=TicketKind.TASK)
+    kind: TicketKind = Field(
+        default=TicketKind.TASK,
+        sa_column=Column(CaseTolerantEnum(TicketKind), nullable=False),
+    )
     # pointer into the work plane (file-canonical body)
     workspace_path: str
     content_hash: str = ""
