@@ -7,6 +7,15 @@ Split from ``github.py``.  Defines ``GitHubForgeCodeScanningMixin`` that
 from __future__ import annotations
 
 
+class CodeScanningAlertsUnavailable(Exception):
+    """Raised when the code-scanning alerts API returns 403.
+
+    This means the App/token lacks the ``security-events`` /
+    Code-scanning-alerts read permission — alerts exist but are
+    unreadable, which is NOT the same as "no alerts".
+    """
+
+
 class GitHubForgeCodeScanningMixin:
     """Code-scanning (CodeQL) alert operations — mixed into ``GitHubForge``.
 
@@ -18,21 +27,28 @@ class GitHubForgeCodeScanningMixin:
     def _fetch_alerts_for_ref(self, *, owner: str, repo: str, ref: str) -> list[dict]:
         """Fetch raw open code-scanning alerts for a single *ref* (best-effort).
 
-        Degrades to ``[]`` on 403/404 (code-scanning off / token lacks the
-        security-events scope) or any other error — never fatal.
+        Returns ``[]`` on 404 (code-scanning not enabled) or any other
+        non-403 error.  Raises :exc:`CodeScanningAlertsUnavailable` on 403
+        (token lacks the ``security-events`` / Code-scanning-alerts read
+        permission) — alerts exist but are unreadable.
         """
         try:
             r = self._http.get(  # type: ignore[attr-defined]
                 f"/repos/{owner}/{repo}/code-scanning/alerts",
                 params={"ref": ref, "state": "open", "per_page": 50},
             )
-            # 404 = code-scanning not enabled / no alerts endpoint; 403 =
-            # token lacks the security-events scope. Either way: no signal,
-            # not an error — degrade to "no alerts".
-            if r.status_code in (403, 404):
+            if r.status_code == 403:
+                raise CodeScanningAlertsUnavailable(
+                    f"Code-scanning alerts API returned 403 for ref {ref} — "
+                    "the token lacks the 'security-events' / Code-scanning "
+                    "alerts read permission."
+                )
+            if r.status_code == 404:
                 return []
             r.raise_for_status()
             raw = r.json()
+        except CodeScanningAlertsUnavailable:
+            raise
         except Exception:  # noqa: BLE001 — best-effort enrichment, never fatal
             return []
         return raw if isinstance(raw, list) else []
@@ -49,7 +65,8 @@ class GitHubForgeCodeScanningMixin:
         window) and re-queries alerts once an analysis is visible.
 
         Returns the raw alert list (may be empty when still unavailable
-        after the backoff window).
+        after the backoff window).  Raises :exc:`CodeScanningAlertsUnavailable`
+        on 403 at either endpoint.
         """
         import time
 
@@ -59,11 +76,19 @@ class GitHubForgeCodeScanningMixin:
                 f"/repos/{owner}/{repo}/code-scanning/analyses",
                 params={"ref": pr_ref, "per_page": 1},
             )
-            if r.status_code in (403, 404):
+            if r.status_code == 403:
+                raise CodeScanningAlertsUnavailable(
+                    f"Code-scanning analyses API returned 403 for ref {pr_ref} — "
+                    "the token lacks the 'security-events' / Code-scanning "
+                    "alerts read permission."
+                )
+            if r.status_code == 404:
                 return []
             r.raise_for_status()
             raw_analyses = r.json()
             analyses = raw_analyses if isinstance(raw_analyses, list) else []
+        except CodeScanningAlertsUnavailable:
+            raise
         except Exception:  # noqa: BLE001 — best-effort
             return []
 
@@ -79,12 +104,20 @@ class GitHubForgeCodeScanningMixin:
                     f"/repos/{owner}/{repo}/code-scanning/alerts",
                     params={"ref": pr_ref, "state": "open", "per_page": 50},
                 )
-                if r2.status_code in (403, 404):
+                if r2.status_code == 403:
+                    raise CodeScanningAlertsUnavailable(
+                        f"Code-scanning alerts API returned 403 for ref {pr_ref} — "
+                        "the token lacks the 'security-events' / Code-scanning "
+                        "alerts read permission."
+                    )
+                if r2.status_code == 404:
                     return []
                 r2.raise_for_status()
                 raw_alerts = r2.json()
                 if isinstance(raw_alerts, list) and raw_alerts:
                     return raw_alerts
+            except CodeScanningAlertsUnavailable:
+                raise
             except Exception:  # noqa: BLE001 — best-effort
                 pass
 
@@ -98,8 +131,11 @@ class GitHubForgeCodeScanningMixin:
         results (de-duped on the raw alert number) so both CodeQL workflow
         shapes are covered. Each entry is a ``dict`` with ``rule``,
         ``severity``, ``path``, ``line``, ``message``, and ``url``.
-        Best-effort: degrades to ``[]`` when code-scanning is off or the
-        token lacks the security-events scope.
+
+        Degrades to ``[]`` when code-scanning is off (404) or any other
+        non-403 error occurs.  Raises :exc:`CodeScanningAlertsUnavailable`
+        on 403 — the token lacks the ``security-events`` / Code-scanning
+        alerts read permission; alerts exist but are unreadable.
 
         When the merge-ref query returns empty but a PR exists and a recent
         analysis is visible on the analyses endpoint, the method polls with
