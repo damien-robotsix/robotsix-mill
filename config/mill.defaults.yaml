@@ -102,6 +102,7 @@ core:
   repo_visibility_default: public      # "public" | "private" — default visibility for new repos
   lint_on_edit: true                    # run ruff after each agent file edit
   read_file_max_chars: 50000            # cap on implicit full read_file payload (0 disables); ranged reads never truncated
+  language_instructions_dir: agent_definitions/language_instructions  # directory of per-language instruction snippets injected into implement agent prompt
   meta_periodic: false                  # enable the cross-repo meta-agent pass
   meta_interval_seconds: 86400          # seconds between meta-agent passes
 

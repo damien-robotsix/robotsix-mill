@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Wire `language_instructions_dir` to YAML config: add alias mapping in `_YAML_PATH_TO_ALIAS` (`core.language_instructions_dir`), default leaf in `config/mill.defaults.yaml`, and documentation row in `docs/configuration.md`.
 - Fix merge-gate stall on clean mergeable PRs: accept `mergeable_state == "unstable"` as promotable in `_ci_truly_green` (required gates passed, only non-required status non-green); add `pending` check-name list to `check_status`/`_derive_check_conclusion` return dicts; log precise blocking reason (conclusion + mergeable_state + pending checks) when re-polling `IMPLEMENT_COMPLETE`.
 
 - Fix deptry dependency issues: add `opentelemetry-api` to the `tracing` extra (we import `opentelemetry.trace` directly) and add `opentelemetry-sdk`/`opentelemetry-exporter-otlp-proto-http` to the deptry DEP002 ignore list (they are needed transitively by `robotsix_llmio`).
