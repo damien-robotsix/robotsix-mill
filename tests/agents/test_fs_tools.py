@@ -330,10 +330,11 @@ class TestReadFileOffsetLimit:
     def test_zero_offset_normalized_to_1(self, tmp_path, settings):
         root = tmp_path / "repo"
         root.mkdir()
-        _make_file(root, "f.txt", "line1\nline2\nline3\n")
+        _make_file(root, "a.txt", "line1\nline2\nline3\n")
+        _make_file(root, "b.txt", "line1\nline2\nline3\n")
         tools = _build(root, settings)
-        a = tools["read_file"](path="f.txt", offset=0, limit=1)
-        b = tools["read_file"](path="f.txt", offset=1, limit=1)
+        a = tools["read_file"](path="a.txt", offset=0, limit=1)
+        b = tools["read_file"](path="b.txt", offset=1, limit=1)
         assert a == b == "line1\n"
 
     def test_negative_offset_normalized_to_1(self, tmp_path, settings):
@@ -390,11 +391,13 @@ class TestReadFileOffsetLimit:
         root = tmp_path / "repo"
         root.mkdir()
         _make_file(root, "f.txt", "line1\nline2\nline3\n")
+        _make_file(root, "g.txt", "line1\nline2\nline3\n")
         tools = _build(root, settings)
         # default: byte-identical
         assert tools["read_file"](path="f.txt") == "line1\nline2\nline3\n"
-        # offset/limit preserves line endings
-        assert tools["read_file"](path="f.txt", offset=2, limit=1) == "line2\n"
+        # offset/limit preserves line endings — use separate file to avoid
+        # the closure-scoped dedup guard.
+        assert tools["read_file"](path="g.txt", offset=2, limit=1) == "line2\n"
 
 
 # ===================================================================
@@ -955,8 +958,10 @@ class TestFileReadCache:
         assert second == "original\n"
 
     def test_offset_limit_still_hits_cache(self, tmp_path, settings):
-        """A full read populates the cache; a subsequent offset/limit
-        read hits the cache and slices correctly."""
+        """A full read populates the cache; a subsequent full read
+        after disk mutation returns the cached (stale) content.
+        Full reads never trigger the closure-scoped dedup guard
+        (which only applies to partial slices on the ctx=None path)."""
         root = tmp_path / "repo"
         root.mkdir()
         _make_file(root, "f.txt", "line1\nline2\nline3\n")
@@ -968,9 +973,10 @@ class TestFileReadCache:
         # Mutate on disk.
         (root / "f.txt").write_text("x\ny\nz\n", encoding="utf-8")
 
-        # Offset/limit read should still return cached original.
-        result = tools["read_file"](path="f.txt", offset=2, limit=1)
-        assert result == "line2\n"
+        # Full read should still return cached original (not the mutated
+        # disk content).  is_full_read=True → dedup guard not consulted.
+        result = tools["read_file"](path="f.txt")
+        assert result == "line1\nline2\nline3\n"
 
     def test_write_file_invalidates(self, tmp_path, settings):
         """After write_file, a subsequent read_file sees the new content."""
@@ -1122,18 +1128,22 @@ class TestFileReadCache:
         assert second == "hello\n"
 
     def test_offset_limit_read_not_stubbed(self, tmp_path, settings):
-        """Full read populates cache; offset/limit read still returns
-        the actual slice, not a stub."""
+        """A partial read of a file that has NOT been previously read
+        returns the actual slice, not a stub."""
         root = tmp_path / "repo"
         root.mkdir()
         _make_file(root, "f.txt", "line1\nline2\nline3\n")
+        _make_file(root, "g.txt", "line1\nline2\nline3\n")
         tools = _build(root, settings)
 
-        # Populate cache with full read.
+        # Full read of f.txt populates cache but records a served range;
+        # the dedup guard would block any subsequent partial read of f.txt.
         tools["read_file"](path="f.txt")
 
-        # Offset/limit read returns slice from cache.
-        result = tools["read_file"](path="f.txt", offset=2, limit=1)
+        # Offset/limit read of g.txt (never read before) returns slice
+        # from disk — no prior served range, so the dedup guard lets it
+        # through.
+        result = tools["read_file"](path="g.txt", offset=2, limit=1)
         assert result == "line2\n"
 
     def test_after_edit_subsequent_read_returns_content(self, tmp_path, settings):
@@ -1702,6 +1712,113 @@ class TestPartialSliceDedup:
 
 
 # ===================================================================
+# read_file — closure-scoped dedup (ctx=None / Claude-SDK path)
+# ===================================================================
+
+
+class TestClosureScopedDedup:
+    """``read_file`` dedup on the Claude-SDK path (ctx=None) uses a
+    per-build accumulator of served ranges keyed by resolved path.
+    Coverage semantics mirror ``_find_covering_read``.
+
+    All tests call ``read_file`` WITHOUT a ``RunContext`` (``ctx=None``,
+    the unit-test default), exercising the closure-scoped dedup guard.
+    """
+
+    def test_narrow_reread_refused(self, tmp_path, settings):
+        """A partial slice covering the same lines as a prior partial
+        read is refused."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "l1\nl2\nl3\nl4\nl5\n")
+        tools = _build(root, settings)
+
+        # First read: offset=2, limit=2 → serves lines 2–3, records (2,2).
+        first = tools["read_file"](path="f.txt", offset=2, limit=2)
+        assert first == "l2\nl3\n"
+
+        # Second read: same range → refused.
+        second = tools["read_file"](path="f.txt", offset=2, limit=2)
+        assert second.startswith("refused:")
+        assert "f.txt" in second
+        assert "2" in second  # names the covering range
+
+    def test_slice_of_full_read_refused(self, tmp_path, settings):
+        """After a full read, any partial slice of the same file is
+        refused (full read covers all lines)."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "l1\nl2\nl3\nl4\n")
+        tools = _build(root, settings)
+
+        # Full read → records (1, None).
+        tools["read_file"](path="f.txt")
+
+        # Partial slice → refused.
+        refused = tools["read_file"](path="f.txt", offset=3, limit=1)
+        assert refused.startswith("refused:")
+        assert "already loaded in full" in refused
+
+    def test_first_read_is_served(self, tmp_path, settings):
+        """The first read of any region (full or partial) is always
+        served — the accumulator starts empty."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "l1\nl2\nl3\n")
+        tools = _build(root, settings)
+
+        result = tools["read_file"](path="f.txt", offset=2, limit=1)
+        assert result == "l2\n"
+
+    def test_non_overlapping_partial_served(self, tmp_path, settings):
+        """A partial read of a non-overlapping region after a prior
+        partial read is served normally."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "l1\nl2\nl3\nl4\nl5\nl6\n")
+        tools = _build(root, settings)
+
+        # First read: lines 2–3.
+        tools["read_file"](path="f.txt", offset=2, limit=2)
+
+        # Second read: lines 5–6 — non-overlapping → served.
+        result = tools["read_file"](path="f.txt", offset=5, limit=2)
+        assert result == "l5\nl6\n"
+
+    def test_offset_to_eof_coverage(self, tmp_path, settings):
+        """A prior read with offset>1 and limit=None (to EOF) covers
+        any later slice that starts at or after that offset."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "l1\nl2\nl3\nl4\nl5\n")
+        tools = _build(root, settings)
+
+        # Read offset=3, limit=None → lines 3–5, records (3, None).
+        tools["read_file"](path="f.txt", offset=3)
+
+        # Narrower slice inside that range → refused.
+        refused = tools["read_file"](path="f.txt", offset=4, limit=1)
+        assert refused.startswith("refused:")
+        assert "lines 3 onward" in refused
+
+    def test_prior_offset_to_eof_covers_later_slice(self, tmp_path, settings):
+        """A prior read with offset=2, limit=None covers any later
+        slice that starts at line 2 or beyond and extends through EOF."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "l1\nl2\nl3\nl4\nl5\n")
+        tools = _build(root, settings)
+
+        # Read offset=2, limit=None → records (2, None), covers lines 2–EOF.
+        tools["read_file"](path="f.txt", offset=2)
+
+        # Later read offset=2, limit=2 is fully inside → refused.
+        refused = tools["read_file"](path="f.txt", offset=2, limit=2)
+        assert refused.startswith("refused:")
+        assert "lines 2 onward" in refused
+
+
+# ===================================================================
 # read_file — PDF support
 # ===================================================================
 
@@ -1881,9 +1998,15 @@ class TestReadFilePDF:
         lines, just like a text file."""
         root = tmp_path / "repo"
         root.mkdir()
-        # Create a multi-page PDF — each page draws one distinct line.
+        # Create two identical multi-page PDFs so the offset/limit
+        # read can target a separate file and avoid the closure-scoped
+        # dedup guard.
         _make_multipage_text_pdf(
             str(root / "multi.pdf"),
+            ["First page text", "Second page text", "Third page text"],
+        )
+        _make_multipage_text_pdf(
+            str(root / "multi2.pdf"),
             ["First page text", "Second page text", "Third page text"],
         )
         tools = _build(root, settings)
@@ -1894,8 +2017,8 @@ class TestReadFilePDF:
         assert "Second page text" in full
         assert "Third page text" in full
 
-        # offset=2, limit=1 → only the second line.
-        sliced = tools["read_file"](path="multi.pdf", offset=2, limit=1)
+        # offset=2, limit=1 on a different PDF → only the second line.
+        sliced = tools["read_file"](path="multi2.pdf", offset=2, limit=1)
         lines = sliced.strip().split("\n")
         assert len(lines) == 1
         assert "Second page text" in sliced

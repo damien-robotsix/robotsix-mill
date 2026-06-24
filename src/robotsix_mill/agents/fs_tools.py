@@ -321,6 +321,13 @@ def build_fs_tools(
     # this counter; calls beyond the cap return an error string.
     _read_file_call_count: list[int] = [0]
 
+    # Per-build accumulator of served read ranges for the closure-scoped
+    # dedup guard on the Claude-SDK (ctx=None) path.  Keyed by resolved
+    # path string (str(p.resolve())).  Each entry is a list of
+    # (offset, limit) tuples recording every successfully-served range
+    # for that path during this agent run.
+    _served_reads: dict[str, list[tuple[int, int | None]]] = {}
+
     def _check_read_file_cap() -> str | None:
         """Return an error string if the read_file cap is exceeded,
         or None if the call should proceed."""
@@ -336,6 +343,10 @@ def build_fs_tools(
             )
         _read_file_call_count[0] += 1
         return None
+
+    def _record_served_read(resolved_path: str, offset: int, limit: int | None) -> None:
+        """Record a successfully served (offset, limit) for *resolved_path*."""
+        _served_reads.setdefault(resolved_path, []).append((offset, limit))
 
     def _read_cached(p: Path) -> str:
         """Read *p* and cache the result.  *p* is already sandbox-safe
@@ -617,6 +628,42 @@ def build_fs_tools(
                         f"already in context."
                     )
 
+        # Closure-scoped dedup for the Claude-SDK path (ctx is None).
+        # The pydantic-ai path above scans message history; this path
+        # consults the per-build accumulator of previously served ranges.
+        # Coverage semantics match _find_covering_read.
+        elif ctx is None and not is_full_read:
+            key = str(p.resolve())
+            records = _served_reads.get(key, [])
+            if records:
+                req_end = _offset + limit if limit is not None else float("inf")
+                for stored_offset, stored_limit in records:
+                    cov_end = (
+                        stored_offset + stored_limit
+                        if stored_limit is not None
+                        else float("inf")
+                    )
+                    if _offset >= stored_offset and req_end <= cov_end:
+                        if stored_offset == 1 and stored_limit is None:
+                            return (
+                                f"refused: {path} is already loaded in full "
+                                f"earlier in this conversation — scroll back "
+                                f"to find it. Do not re-read a slice of a "
+                                f"file you already have in full."
+                            )
+                        else:
+                            if stored_limit is None:
+                                cov_range = f"lines {stored_offset} onward"
+                            else:
+                                cov_end_line = stored_offset + stored_limit - 1
+                                cov_range = f"lines {stored_offset}–{cov_end_line}"
+                            return (
+                                f"refused: {path} {cov_range} already loaded "
+                                f"earlier in this conversation — scroll back "
+                                f"to find them. Do not re-read a range that "
+                                f"is already in context."
+                            )
+
         # Read (or refresh) via _read_cached, then slice.
         try:
             with trace_stage("read_file"):
@@ -638,6 +685,7 @@ def build_fs_tools(
         # reads (offset > 1 or limit set) are never truncated here —
         # that escape hatch always retrieves any specific region.
         if is_full_read:
+            _record_served_read(str(p.resolve()), _offset, limit)
             return _bound_full_read(text, settings.read_file_max_chars)
 
         lines = text.splitlines(keepends=True)
@@ -645,7 +693,9 @@ def build_fs_tools(
             return f"(file has {len(lines)} lines; offset {offset} is beyond end)"
         start = _offset - 1
         end = start + limit if limit is not None else None
-        return "".join(lines[start:end])
+        result = "".join(lines[start:end])
+        _record_served_read(str(p.resolve()), _offset, limit)
+        return result
 
     def _check_python_syntax(path: str, content: str) -> str | None:
         """Return a short error string if *path* is .py and *content* has
