@@ -349,6 +349,7 @@ periodic:
     enabled: true                   # enable periodic completeness-check passes
     interval_seconds: 86400         # seconds between checks (min 60 enforced in worker)
     memory_path: null               # defaults to <data_dir>/completeness_check_memory.md
+    request_limit: 80               # per-call request cap
 
   # -- copy-paste agent — deterministic clone detection and triage --------
   copy_paste:

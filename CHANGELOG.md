@@ -1,5 +1,7 @@
 ## 0.0.0 (unreleased)
 
+- Wire `completeness_check_request_limit` to YAML config: add alias mapping in `_YAML_PATH_TO_ALIAS` (`periodic.completeness_check.request_limit`) and default leaf in `config/mill.defaults.yaml`.
+
 - Add per-ticket circuit breaker: `max_traces_per_ticket` (trace-count guard, default 15) and `max_openrouter_marginal_usd_per_ticket` (OpenRouter spend guard, default $3.00), wired through settings, YAML config aliases, and `config/mill.defaults.yaml`; integrated into `Worker._check_progress` with Langfuse `session_traces()` to block runaway loops that the dollar cap may miss.
 - Increase document stage `request_limit` from 8 to 16 to prevent `UsageLimitExceeded` errors on feature-sized tickets that need multiple file reads and edits.
 
