@@ -315,6 +315,8 @@ modules:
       - src/robotsix_mill/stages/merge/rebase.py
       - src/robotsix_mill/stages/merge/review_revision.py
       - src/robotsix_mill/stages/ci_fix.py
+      - src/robotsix_mill/stages/ci_fix_helpers.py
+      - src/robotsix_mill/stages/ci_fix_codeql.py
       - src/robotsix_mill/stages/pause.py
       - src/robotsix_mill/stages/retrospect.py
       - src/robotsix_mill/stages/short_circuit_verify.py

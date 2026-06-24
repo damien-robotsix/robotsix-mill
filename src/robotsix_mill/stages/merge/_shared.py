@@ -121,7 +121,7 @@ def _build_failing_summary(
     own diff and labelled in-scope / out-of-scope, mirroring the single-repo
     ``ci_fix._build_failure_detail`` path.
     """
-    from ..ci_fix import _build_failing_summary as _ci_fix_summary
+    from ..ci_fix_helpers import _build_failing_summary as _ci_fix_summary
 
     return _ci_fix_summary(failing, log_text, alerts, changed_paths)
 

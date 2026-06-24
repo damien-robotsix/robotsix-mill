@@ -8,9 +8,9 @@ from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.forge import github
 from robotsix_mill.stages import StageContext
-from robotsix_mill.stages.ci_fix import (
-    CIFixStage,
-    _eligible_for_triage,
+from robotsix_mill.stages.ci_fix import CIFixStage
+from robotsix_mill.stages.ci_fix_codeql import _eligible_for_triage
+from robotsix_mill.stages.ci_fix_helpers import (
     _only_codeql_failing,
     _read_counter,
     _write_counter,
