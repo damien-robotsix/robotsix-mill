@@ -506,7 +506,7 @@ the `claude` CLI in the container). These knobs govern that path:
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `sandbox.image` | `MILL_SANDBOX_IMAGE` | `robotsix/mill-sandbox:latest` | Docker image for disposable sandbox containers. **Bakes in** Playwright + headless Chromium for the Tier-2 browser smoke gate (`scripts/board_browser_check.py`). Chromium + its shared libraries add roughly ~300 MB to that image — **under** the ~500 MB threshold, so the browser is baked into the single dedicated sandbox image and no opt-in variant is required. Do **not** override this to the app image `robotsix/mill:dev`: it has no Playwright, so the browser gate silently SKIPs instead of running the real rendered-columns / console-error assertions. |
+| `sandbox.image` | `MILL_SANDBOX_IMAGE` | `python:3.14-slim` | Docker image for disposable sandbox containers. Must contain the Python toolchain your `MILL_TEST_COMMAND` requires. `python:3.14-slim` is a minimal, widely-available base; customize this to a pre-built image that includes any additional tooling (e.g. formatters, linters) your test command needs. |
 | `sandbox.memory` | `MILL_SANDBOX_MEMORY` | `2g` | Memory limit for sandbox containers |
 | `sandbox.pids_limit` | `MILL_SANDBOX_PIDS_LIMIT` | `512` | PID limit for sandbox containers |
 | `sandbox.readonly` | `MILL_SANDBOX_READONLY` | `true` | Mount sandbox rootfs read-only (except tmpfs `/tmp`) |
