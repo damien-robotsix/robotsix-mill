@@ -117,6 +117,50 @@ def _env_error_diag(rc: int, out: str) -> str | None:
     )
 
 
+def is_network_dependent_failure(out: str) -> bool:
+    """Return ``True`` when *out* (raw test log or diag) shows a
+    sandbox-hostile network signature — no real assertion failure.
+
+    Matches: connection refused/reset, DNS/name-resolution failures,
+    and the empty-response ``JSONDecodeError`` (``char 0`` form only).
+
+    Conservative: a normal ``AssertionError`` or a ``JSONDecodeError``
+    on malformed (non-empty) data never matches.
+    """
+    # Connection refused / reset — httpx/requests/aiohttp signatures.
+    if re.search(
+        r"(?:ConnectError|ConnectionError|ConnectionRefused|"
+        r"RemoteDisconnected|Max retries exceeded)",
+        out,
+        re.IGNORECASE,
+    ):
+        return True
+
+    # DNS / name-resolution failures (system-level + requests).
+    if re.search(
+        r"(?:Name or service not known|nodename nor servname|"
+        r"getaddrinfo|Temporary failure in name resolution|"
+        r"Failed to resolve)",
+        out,
+        re.IGNORECASE,
+    ):
+        return True
+
+    # Empty-response JSONDecodeError: the hallmark of an HTTP call that
+    # received an empty body in the sandbox (network blocked / proxy
+    # returning empty).  The "char 0" form means s == '' (empty string);
+    # a JSONDecodeError on non-empty malformed data (e.g. a fixture
+    # with a stray brace) has a non-zero column — we do NOT match those.
+    if re.search(
+        r"JSONDecodeError[^)]*Expecting value: line 1 column 1 \(char 0\)",
+        out,
+        re.IGNORECASE,
+    ):
+        return True
+
+    return False
+
+
 def _load_file_map(repo_dir: Path) -> list[str] | None:
     """Load the file_map from ``artifacts/file_map.json``, or ``None``."""
     fm_path = repo_dir.parent / "artifacts" / "file_map.json"

@@ -61,6 +61,8 @@ src/robotsix_mill/forge/github_ci.py:0: error: Missing type arguments for generi
 src/robotsix_mill/forge/github_ci.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/forge/github_ci.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/forge/github_ci.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
+src/robotsix_mill/forge/github_ci.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
+src/robotsix_mill/forge/base.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/forge/base.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/forge/base.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/forge/base.py:0: error: Missing type arguments for generic type "dict"  [type-arg]

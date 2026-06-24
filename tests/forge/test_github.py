@@ -2652,3 +2652,201 @@ def test_derive_conclusion_superseded_cancelled_same_name_uses_success():
     assert out["conclusion"] == "success"
     assert out["failing"] == []
     assert out["pending"] == []
+
+
+# ---------------------------------------------------------------------------
+# commit_ci_conclusion — SHA-based CI lookup (no PR)
+# ---------------------------------------------------------------------------
+
+
+def test_commit_ci_conclusion_green_sha(tmp_path, monkeypatch):
+    """commit_ci_conclusion returns success for a green commit SHA."""
+    check_runs_resp = {
+        "check_runs": [
+            {
+                "id": 201,
+                "name": "CI / test (3.11)",
+                "status": "completed",
+                "conclusion": "success",
+                "output": {"summary": "All green", "text": None, "annotations": []},
+            }
+        ]
+    }
+    get_map = {
+        "commits/abc123/check-runs": _make_response(200, check_runs_resp),
+        "commits/abc123/status": _make_response(200, {"statuses": []}),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.commit_ci_conclusion(sha="abc123")
+    assert result is not None
+    assert result["conclusion"] == "success"
+    assert result["failing"] == []
+
+
+def test_commit_ci_conclusion_failing_sha(tmp_path, monkeypatch):
+    """commit_ci_conclusion returns failure for a red commit SHA."""
+    check_runs_resp = {
+        "check_runs": [
+            {
+                "id": 301,
+                "name": "CI / test",
+                "status": "completed",
+                "conclusion": "failure",
+                "output": {"summary": "1 test failed", "text": None, "annotations": []},
+            }
+        ]
+    }
+    get_map = {
+        "commits/def456/check-runs": _make_response(200, check_runs_resp),
+        "commits/def456/status": _make_response(200, {"statuses": []}),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.commit_ci_conclusion(sha="def456")
+    assert result is not None
+    assert result["conclusion"] == "failure"
+    assert len(result["failing"]) == 1
+    assert result["failing"][0]["name"] == "CI / test"
+
+
+def test_commit_ci_conclusion_no_ci_configured(tmp_path, monkeypatch):
+    """Empty check-runs + empty statuses → success (repo with no CI)."""
+    get_map = {
+        "commits/abc123/check-runs": _make_response(200, {"check_runs": []}),
+        "commits/abc123/status": _make_response(200, {"statuses": []}),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.commit_ci_conclusion(sha="abc123")
+    assert result is not None
+    assert result["conclusion"] == "success"
+
+
+def test_commit_ci_conclusion_transport_error_returns_none(tmp_path, monkeypatch):
+    """When the HTTP client raises (transport error), return None gracefully."""
+    # Cause httpx.Client to raise on any call.
+    import httpx as real_httpx
+
+    class BrokenClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            raise real_httpx.ConnectError("connection refused")
+
+        def post(self, url, headers=None, json=None, **kwargs):
+            raise real_httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(real_httpx, "Client", BrokenClient)
+
+    forge = _forge(tmp_path)
+    result = forge.commit_ci_conclusion(sha="abc123")
+    assert result is None
+
+
+def test_commit_ci_conclusion_401_retry_invalidates_token(tmp_path, monkeypatch):
+    """A 401 on first try invalidates the token and retries."""
+    call_count = [0]
+
+    class RetryClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:  # first call (check-runs, retry=0) → 401
+                return _make_response(401, {"message": "Bad credentials"})
+            # After retry cycle, succeed.
+            if "check-runs" in url:
+                return _make_response(
+                    200,
+                    {
+                        "check_runs": [
+                            {
+                                "id": 1,
+                                "name": "CI",
+                                "status": "completed",
+                                "conclusion": "success",
+                                "output": {
+                                    "summary": None,
+                                    "text": None,
+                                    "annotations": [],
+                                },
+                            }
+                        ]
+                    },
+                )
+            return _make_response(200, {"statuses": []})
+
+        def post(self, url, headers=None, json=None, **kwargs):
+            return _make_response(500, {}, "")
+
+    monkeypatch.setattr(real_httpx, "Client", RetryClient)
+
+    # Track invalidate calls.
+    import robotsix_mill.forge.auth as auth_mod
+
+    invalidate_calls = []
+    monkeypatch.setattr(
+        auth_mod,
+        "invalidate_github_token",
+        lambda settings, repo_config: invalidate_calls.append(1),
+    )
+
+    forge = _forge(tmp_path)
+    result = forge.commit_ci_conclusion(sha="abc123")
+    # Should succeed after retry.
+    assert result is not None
+    assert result["conclusion"] == "success"
+    # invalidate_github_token should have been called.
+    assert len(invalidate_calls) >= 1
+
+
+def test_commit_ci_conclusion_does_not_call_get_pr(tmp_path, monkeypatch):
+    """commit_ci_conclusion must NOT call _get_pr — it's SHA-based."""
+    check_runs_resp = {
+        "check_runs": [
+            {
+                "id": 1,
+                "name": "CI",
+                "status": "completed",
+                "conclusion": "success",
+                "output": {"summary": None, "text": None, "annotations": []},
+            }
+        ]
+    }
+    get_map = {
+        "commits/abc123/check-runs": _make_response(200, check_runs_resp),
+        "commits/abc123/status": _make_response(200, {"statuses": []}),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    # Patch _get_pr to blow up if called.
+    monkeypatch.setattr(
+        GitHubForge,
+        "_get_pr",
+        lambda self, owner, repo, head: (_ for _ in ()).throw(
+            AssertionError("_get_pr must not be called by commit_ci_conclusion")
+        ),
+    )
+
+    forge = _forge(tmp_path)
+    result = forge.commit_ci_conclusion(sha="abc123")
+    assert result is not None
+    assert result["conclusion"] == "success"

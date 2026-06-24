@@ -253,6 +253,19 @@ class GitHubForgeCIMixin:
         owner, repo = self._owner_repo  # type: ignore[attr-defined]
         return self._check_status(owner=owner, repo=repo, head=source_branch)
 
+    def commit_ci_conclusion(self, *, sha: str) -> dict | None:
+        """Aggregate CI conclusion for an arbitrary commit SHA (no PR).
+
+        Same return shape as check_status: {"conclusion": "success"|"failure"|
+        "pending"|None, "failing": [...], "pending": [...]} or None when the
+        status cannot be determined (auth/permission/transport error).
+        """
+        try:
+            owner, repo = self._owner_repo  # type: ignore[attr-defined]
+            return self._check_status(owner=owner, repo=repo, head="", sha=sha)
+        except Exception:
+            return None
+
     def list_workflow_runs(
         self, *, branch: str | None = None, head_sha: str | None = None
     ) -> list[dict]:
@@ -292,18 +305,21 @@ class GitHubForgeCIMixin:
 
     # --- HTTP seams (monkeypatched in tests) ---
 
-    def _check_status(self, *, owner: str, repo: str, head: str) -> dict | None:
+    def _check_status(
+        self, *, owner: str, repo: str, head: str, sha: str | None = None
+    ) -> dict | None:
         import time
 
         from .auth import invalidate_github_token  # lazy: avoid import cycle
 
-        pr = self._get_pr(owner=owner, repo=repo, head=head)  # type: ignore[attr-defined]
-        if pr is None:
-            return None
+        if sha is None:
+            pr = self._get_pr(owner=owner, repo=repo, head=head)  # type: ignore[attr-defined]
+            if pr is None:
+                return None
 
-        sha = pr.get("sha", "")
-        if not sha:
-            return None
+            sha = pr.get("sha", "")
+            if not sha:
+                return None
 
         for retry in range(2):
             with self._http.client() as (c, api, headers):  # type: ignore[attr-defined]
