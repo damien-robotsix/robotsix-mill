@@ -31,7 +31,6 @@ class TestPackageImport:
 
     def test_import_init_clean(self):
         """Importing the package does not import robotsix_agent_comm."""
-        import importlib
         import sys
 
         # Ensure the SDK is not already cached in sys.modules for this test.
@@ -47,7 +46,8 @@ class TestPackageImport:
             pkg = "robotsix_mill.component_agent"
             if pkg in sys.modules:
                 del sys.modules[pkg]
-            import robotsix_mill.component_agent  # noqa: F811
+            import robotsix_mill.component_agent  # noqa: F401, F811
+
             assert sdk_name not in sys.modules, (
                 "component_agent.__init__ must not import robotsix_agent_comm"
             )
@@ -72,6 +72,7 @@ class TestPackageImport:
             if module in sys.modules:
                 del sys.modules[module]
             import robotsix_mill.component_agent.config_contract  # noqa: F401, F811
+
             assert sdk_name not in sys.modules, (
                 "config_contract must not import robotsix_agent_comm"
             )
