@@ -118,6 +118,7 @@ relative_files = true
 [tool.coverage.report]
 precision = 2
 show_missing = true
+fail_under = 80
 
 [tool.bandit]
 # Run with: pre-commit run bandit --all-files
