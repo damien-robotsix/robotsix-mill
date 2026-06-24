@@ -1,7 +1,7 @@
 # Notifications
 
 When a ticket enters a human-attention state — `human_issue_approval`,
-`in_review`, `blocked`, or `errored` — the worker fires a best-effort
+`human_mr_approval`, `blocked`, or `errored` — the worker fires a best-effort
 push notification via [ntfy.sh](https://ntfy.sh) so you know to
 intervene without watching the board.
 

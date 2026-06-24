@@ -126,7 +126,7 @@ cost for the current attempt.
   ever advancing — e.g. a run repeatedly killed before any checkpoint —
   the worker escalates it to `blocked` (resumable) and notifies, rather
   than silently re-billing the LLM on every requeue. Poll stages
-  (`in_review` waiting on an open PR) are exempt.
+  (`human_mr_approval` waiting on an open PR) are exempt.
 
 - **Stage timeout.** If a single stage invocation runs longer than
   `MILL_STAGE_TIMEOUT_SECONDS` (default 1800 s = 30 min), the worker
