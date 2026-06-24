@@ -22,7 +22,7 @@ it directly); the DB row only holds the pointer + a content hash.
   audit_memory.md              # audit agent's gap ledger
 
 emit ticket ─▶ API inserts row + enqueues ─▶ worker chains stages
-  draft ─refine▶ awaiting_approval ─approve▶ ready ─implement▶ deliverable
+  draft ─refine▶ human_issue_approval ─approve▶ ready ─implement▶ deliverable
         ─deliver▶ in_review ─(PR merged; merge-poll)▶ done ─retrospect▶ closed
   in_review = PR open (the PR is the review); merge poll flips it.
   retrospect audits the run + Langfuse and may spawn an improvement draft.
@@ -35,7 +35,7 @@ emit ticket ─▶ API inserts row + enqueues ─▶ worker chains stages
     BLOCKED ─resume-blocked▶ <blocked_from>   (re-run only the failed stage)
     BLOCKED → READY | DRAFT                    (manual override: full re-run)
     retrying ticket → resume-blocked           (clears retry state, re-enqueues)
-  awaiting_approval is a human gate (configurable via MILL_REQUIRE_APPROVAL).
+  human_issue_approval is a human gate (configurable via MILL_REQUIRE_APPROVAL).
 ```
 
 - **Engine:** `pydantic-ai` over OpenRouter.
