@@ -40,6 +40,7 @@ core:
     max_refine_explore_calls: 4            # hard cap on explore/parallel_explore sub-agent calls per refine run (0 disables)
     max_refine_read_file_calls: 10         # hard cap on read_file calls per refine/triage agent run (0 disables)
     refine_requests: 80                # per-call request cap for the refine agent
+    refine_requests_simple: 40            # per-call request cap for simple/sonnet refine runs (lower because explore tools are gated off)
     refine_max_tool_calls: 120         # hard cap on total tool calls per refine trace (runaway-loop backstop)
     refine_max_errors: 20              # max tool-call errors before aborting a refine trace
     refine_web_fetch_max_calls: 5      # per-refine-run cap on web_fetch calls (across all ask_web_knowledge consults)
@@ -170,6 +171,9 @@ gates:
   max_re_refine_cycles_before_cheap: 2     # force cheap model after this many "changes requested" send-backs; 0 = never
   refine_trivial_routing_enabled: true     # route trivial-scope tickets to cheap model instead of Opus
   refine_trivial_model_level: 1            # model level for trivial-scope refines (1=DeepSeek flash)
+  refine_subscription_tier_routing_enabled: true  # complexity-gated Claude alias routing for level-3 refines (False = Opus-always rollback)
+  refine_subscription_model_default: sonnet  # Claude alias for simple level-3 refines (non-escalated)
+  refine_subscription_model_complex: opus    # Claude alias for needs-exploration level-3 refines (escalated)
   reviewer_agreement_gate_enabled: true     # pre-Opus guard: skip refine when reviewer agrees with draft's no-change conclusion
   maintenance_triage_enabled: true         # cheap triage before a full maintenance pass
   refine_advisory_dedup_enabled: true      # cheap advisory-dedup-verification gate after inflight-advisory phase (resolves carried ``Possible duplicate of <id>`` with a single cheapest-tier call)
@@ -179,7 +183,6 @@ gates:
   freshness_gate_enabled: false          # deterministic pre-refine gate: stale ticket evidence (opt-in)
   prerequisite_gate_enabled: true        # verify external symbol/import prerequisites in spec before refine
   refine_mill_misroute_gate_enabled: true  # deterministic pre-refine gate: misroute to mill board when source paths absent from checkout
-  refine_claude_model: sonnet               # override model for level-3 refine ("sonnet" = claude-sonnet-4-20250514)
   auto_merge_main_debt_detection_enabled: true  # detect pre-existing main-branch CI debt before auto-merge
 
 # ---------------------------------------------------------------------------

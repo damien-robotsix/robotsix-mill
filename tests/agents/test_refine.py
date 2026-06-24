@@ -5715,12 +5715,12 @@ def test_run_refine_agent_no_refine_level_leaves_level_unchanged(
     )
 
 
-# ── refine_claude_model / model override ─────────────────────────────
+# ── refine_model alias / model override ─────────────────────────────
 
 
-def test_run_refine_agent_default_model_sonnet(monkeypatch, settings, tmp_path):
-    """With default settings (refine_claude_model='sonnet'), a non-downgraded
-    refine build passes model='sonnet' to build_agent_from_definition."""
+def test_run_refine_agent_passes_refine_model_sonnet(monkeypatch, settings, tmp_path):
+    """When refine_model='sonnet' is passed, a non-downgraded refine build
+    forwards model='sonnet' to build_agent_from_definition."""
     import robotsix_mill.agents.base as base_module
     import robotsix_mill.agents.retry as retry_module
 
@@ -5745,18 +5745,18 @@ def test_run_refine_agent_default_model_sonnet(monkeypatch, settings, tmp_path):
         title="Test",
         draft="test draft",
         repo_dir=repo_dir,
-        # refine_level not passed → resolved level = 3 (YAML default)
+        refine_model="sonnet",
     )
 
     assert len(captured_overrides) == 1
     assert captured_overrides[0].get("model") == "sonnet", (
-        f"Expected model='sonnet' in overrides (default refine_claude_model), "
-        f"got {captured_overrides[0]}"
+        f"Expected model='sonnet' in overrides, got {captured_overrides[0]}"
     )
 
 
-def test_run_refine_agent_opus_model_configured(monkeypatch, settings, tmp_path):
-    """Setting refine_claude_model='opus' restores model='opus' in overrides."""
+def test_run_refine_agent_passes_refine_model_opus(monkeypatch, settings, tmp_path):
+    """When refine_model='opus' is passed, build_agent_from_definition receives
+    model='opus' in overrides."""
     import robotsix_mill.agents.base as base_module
     import robotsix_mill.agents.retry as retry_module
 
@@ -5773,8 +5773,6 @@ def test_run_refine_agent_opus_model_configured(monkeypatch, settings, tmp_path)
         lambda agent, make_run, *, what="model call", sleep=None: make_run(agent),
     )
 
-    settings.refine_claude_model = "opus"
-
     repo_dir = tmp_path / "repo"
     repo_dir.mkdir()
 
@@ -5783,19 +5781,20 @@ def test_run_refine_agent_opus_model_configured(monkeypatch, settings, tmp_path)
         title="Test",
         draft="test draft",
         repo_dir=repo_dir,
+        refine_model="opus",
     )
 
     assert len(captured_overrides) == 1
     assert captured_overrides[0].get("model") == "opus", (
-        f"Expected model='opus' in overrides (refine_claude_model='opus'), "
-        f"got {captured_overrides[0]}"
+        f"Expected model='opus' in overrides, got {captured_overrides[0]}"
     )
 
 
 def test_run_refine_agent_downgrade_skips_model_override(
     monkeypatch, settings, tmp_path
 ):
-    """When refine_level=1 (DeepSeek downgrade), no model override is applied."""
+    """When refine_level=1 (DeepSeek downgrade), model override is NOT applied
+    even when refine_model is passed."""
     import robotsix_mill.agents.base as base_module
     import robotsix_mill.agents.retry as retry_module
 
@@ -5821,6 +5820,7 @@ def test_run_refine_agent_downgrade_skips_model_override(
         draft="test draft",
         repo_dir=repo_dir,
         refine_level=1,
+        refine_model="sonnet",
     )
 
     assert len(captured_overrides) == 1
@@ -5832,6 +5832,129 @@ def test_run_refine_agent_downgrade_skips_model_override(
     assert captured_overrides[0].get("level") == 1, (
         f"Expected level=1 override still present, got {captured_overrides[0]}"
     )
+
+
+def test_run_refine_agent_no_refine_model_no_override(monkeypatch, settings, tmp_path):
+    """When refine_model is None/not passed, no model override is injected
+    — build_agent_from_definition uses its own default (Opus for level 3)."""
+    import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
+
+    captured_overrides: list[dict] = []
+
+    def fake_build_agent(*a, **kw):
+        captured_overrides.append(kw)
+        return _simple_agent()
+
+    monkeypatch.setattr(base_module, "build_agent_from_definition", fake_build_agent)
+    monkeypatch.setattr(
+        retry_module,
+        "run_agent",
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(agent),
+    )
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+
+    refining.run_refine_agent(
+        settings=settings,
+        title="Test",
+        draft="test draft",
+        repo_dir=repo_dir,
+        # refine_model not passed → None → no model in overrides
+    )
+
+    assert len(captured_overrides) == 1
+    assert "model" not in captured_overrides[0], (
+        f"Expected no 'model' in overrides when refine_model not passed, "
+        f"got {captured_overrides[0]}"
+    )
+
+
+# ── request_limit_override / per-tier turn cap ──────────────────────
+
+
+def test_run_refine_agent_uses_request_limit_override(monkeypatch, settings):
+    """When request_limit_override is passed, UsageLimits uses it instead
+    of settings.refine_request_limit."""
+    import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
+
+    captured: dict = {}
+
+    class _MockAgent:
+        def run_sync(self, user_prompt, *, message_history=None, usage_limits=None):
+            captured["usage_limits"] = usage_limits
+            return _FakeRunResult(
+                output=RefineResult(split=False, spec_markdown="## Problem\nok\n"),
+                finish_reason="stop",
+                all_messages=[],
+            )
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        base_module, "build_agent_from_definition", lambda *a, **kw: _MockAgent()
+    )
+    monkeypatch.setattr(
+        retry_module,
+        "run_agent",
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(agent),
+    )
+
+    refining.run_refine_agent(
+        settings=settings,
+        title="t",
+        draft="d",
+        request_limit_override=40,
+    )
+
+    assert captured["usage_limits"] is not None
+    assert captured["usage_limits"].request_limit == 40
+
+
+def test_run_refine_agent_no_request_limit_override_uses_default(
+    monkeypatch,
+    settings,
+):
+    """When request_limit_override is not passed, settings.refine_request_limit
+    is used (the existing behaviour preserved)."""
+    import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
+
+    captured: dict = {}
+
+    class _MockAgent:
+        def run_sync(self, user_prompt, *, message_history=None, usage_limits=None):
+            captured["usage_limits"] = usage_limits
+            return _FakeRunResult(
+                output=RefineResult(split=False, spec_markdown="## Problem\nok\n"),
+                finish_reason="stop",
+                all_messages=[],
+            )
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        base_module, "build_agent_from_definition", lambda *a, **kw: _MockAgent()
+    )
+    monkeypatch.setattr(
+        retry_module,
+        "run_agent",
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(agent),
+    )
+
+    monkeypatch.setattr(settings, "refine_request_limit", 77)
+    refining.run_refine_agent(
+        settings=settings,
+        title="t",
+        draft="d",
+    )
+
+    assert captured["usage_limits"] is not None
+    assert captured["usage_limits"].request_limit == 77
 
 
 def test_split_child_fast_path_sets_simple_complexity(ctx, service, monkeypatch):

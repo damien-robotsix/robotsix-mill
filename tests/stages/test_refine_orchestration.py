@@ -2475,6 +2475,170 @@ def test_short_circuit_static_method_direct_call(ctx_factory, tmp_path):
 
 
 # ===========================================================================
+# Complexity-gated Claude alias routing (subscription tier routing)
+# ===========================================================================
+
+
+def test_subscription_tier_routing_simple_uses_sonnet(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """With refine_subscription_tier_routing_enabled=True and
+    complexity='simple', run_refine_agent receives refine_model='sonnet'
+    and request_limit_override=40."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+
+    refine_kwargs: dict = {}
+
+    def _run(**kw):
+        refine_kwargs.update(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    _apply_default_mocks(
+        monkeypatch,
+        triage_refine=lambda **kw: TriageResult(
+            decision="REFINE",
+            reason="simple one-liner",
+            complexity="simple",
+            trivial_scope=False,
+        ),
+        run_refine_agent=_run,
+    )
+
+    _run_agent(ctx, t, tmp_path)
+
+    assert refine_kwargs.get("refine_model") == "sonnet", (
+        f"Expected refine_model='sonnet' for simple complexity, "
+        f"got {refine_kwargs.get('refine_model')!r}"
+    )
+    assert refine_kwargs.get("refine_level") is None, (
+        "Expected no refine_level downgrade for non-trivial ticket"
+    )
+    assert refine_kwargs.get("request_limit_override") == 40, (
+        f"Expected request_limit_override=40 for simple path, "
+        f"got {refine_kwargs.get('request_limit_override')!r}"
+    )
+
+
+def test_subscription_tier_routing_needs_exploration_uses_opus(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """With refine_subscription_tier_routing_enabled=True and
+    complexity='needs-exploration', run_refine_agent receives
+    refine_model='opus' and no request_limit_override."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+
+    refine_kwargs: dict = {}
+
+    def _run(**kw):
+        refine_kwargs.update(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    _apply_default_mocks(
+        monkeypatch,
+        triage_refine=lambda **kw: TriageResult(
+            decision="REFINE",
+            reason="multi-file change needs deep exploration",
+            complexity="needs-exploration",
+            trivial_scope=False,
+        ),
+        run_refine_agent=_run,
+    )
+
+    _run_agent(ctx, t, tmp_path)
+
+    assert refine_kwargs.get("refine_model") == "opus", (
+        f"Expected refine_model='opus' for needs-exploration, "
+        f"got {refine_kwargs.get('refine_model')!r}"
+    )
+    assert refine_kwargs.get("refine_level") is None, (
+        "Expected no refine_level downgrade for non-trivial ticket"
+    )
+    assert refine_kwargs.get("request_limit_override") is None, (
+        "Expected no request_limit_override for needs-exploration path"
+    )
+
+
+def test_subscription_tier_routing_disabled_no_alias(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """With refine_subscription_tier_routing_enabled=False,
+    run_refine_agent receives refine_model=None (Opus-always,
+    today's behaviour)."""
+    ctx = ctx_factory()
+    # Disable the feature flag.
+    ctx.settings.refine_subscription_tier_routing_enabled = False
+    t = _ticket(ctx)
+
+    refine_kwargs: dict = {}
+
+    def _run(**kw):
+        refine_kwargs.update(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    _apply_default_mocks(
+        monkeypatch,
+        triage_refine=lambda **kw: TriageResult(
+            decision="REFINE",
+            reason="simple change",
+            complexity="simple",
+            trivial_scope=False,
+        ),
+        run_refine_agent=_run,
+    )
+
+    _run_agent(ctx, t, tmp_path)
+
+    assert refine_kwargs.get("refine_model") is None, (
+        f"Expected refine_model=None when feature flag is off, "
+        f"got {refine_kwargs.get('refine_model')!r}"
+    )
+    assert refine_kwargs.get("request_limit_override") is None, (
+        "Expected no request_limit_override when feature flag is off"
+    )
+
+
+def test_trivial_scope_unchanged_by_tier_routing(ctx_factory, monkeypatch, tmp_path):
+    """trivial_scope=True still routes to refine_trivial_model_level (level 1)
+    and does NOT receive a refine_model alias — unchanged behaviour."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+
+    refine_kwargs: dict = {}
+
+    def _run(**kw):
+        refine_kwargs.update(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    _apply_default_mocks(
+        monkeypatch,
+        triage_refine=lambda **kw: TriageResult(
+            decision="REFINE",
+            reason="single-line mechanical change",
+            complexity="simple",
+            trivial_scope=True,
+        ),
+        run_refine_agent=_run,
+    )
+
+    _run_agent(ctx, t, tmp_path)
+
+    # Trivial → level 1 (DeepSeek flash)
+    assert (
+        refine_kwargs.get("refine_level") == ctx.settings.refine_trivial_model_level
+    ), (
+        f"Expected refine_level=1 for trivial ticket, "
+        f"got {refine_kwargs.get('refine_level')!r}"
+    )
+    # No model alias on the DeepSeek path (DeepSeek ignores model anyway)
+    assert refine_kwargs.get("refine_model") is None, (
+        f"Expected refine_model=None for trivial (DeepSeek path), "
+        f"got {refine_kwargs.get('refine_model')!r}"
+    )
+
+
+# ===========================================================================
 # Deterministic-source mechanical fast-path
 # ===========================================================================
 

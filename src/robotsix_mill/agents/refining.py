@@ -864,6 +864,8 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
     include_explore: bool = True,
     include_parallel_explore: bool = True,
     refine_level: int | None = None,
+    refine_model: str | None = None,
+    request_limit_override: int | None = None,
     triage_findings: str | None = None,
 ) -> RefineResult:
     """Return a structured ``RefineResult``. When ``repo_dir`` is given
@@ -1051,8 +1053,8 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
     # Right-size the level-3 Claude model (subscription transport unchanged).
     # Skip when downgraded to a DeepSeek level (1/2), which ignores `model`.
     resolved_level = refine_level if refine_level is not None else 3
-    if resolved_level == 3 and settings.refine_claude_model:
-        overrides["model"] = settings.refine_claude_model
+    if resolved_level == 3 and refine_model is not None:
+        overrides["model"] = refine_model
 
     # When exploration sub-agents are gated off (triage ruled the ticket
     # "simple"), strip the now-dangling `explore`/`parallel_explore` call
@@ -1160,7 +1162,9 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
     )
 
     limits = UsageLimits(
-        request_limit=settings.refine_request_limit,
+        request_limit=request_limit_override
+        if request_limit_override is not None
+        else settings.refine_request_limit,
         tool_calls_limit=settings.refine_max_tool_calls,
     )
 

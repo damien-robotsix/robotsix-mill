@@ -1399,6 +1399,21 @@ class RefineAgentMixin:
             )
             set_current_span_attribute("refine.routed_trivial", _trivial)
 
+            # Compute the Claude model alias for level-3 non-trivial refines.
+            # Gate: feature flag ON, not already downgraded to DeepSeek.
+            refine_model: str | None = None
+            request_limit_override: int | None = None
+            if refine_level is None and s.refine_subscription_tier_routing_enabled:
+                if triage_complexity == "simple":
+                    refine_model = s.refine_subscription_model_default
+                    request_limit_override = s.refine_request_limit_simple
+                else:
+                    refine_model = s.refine_subscription_model_complex
+
+            set_current_span_attribute(
+                "refine.model_alias", refine_model if refine_model else "opus"
+            )
+
             # When reviewer comments are present (sendback path), disable
             # exploration sub-agents — the agent's only job is text-level
             # spec revision against the reviewer's feedback.
@@ -1423,6 +1438,8 @@ class RefineAgentMixin:
                 include_explore=not _explore_simple and not _sendback,
                 include_parallel_explore=not _explore_simple and not _sendback,
                 refine_level=refine_level,
+                refine_model=refine_model,
+                request_limit_override=request_limit_override,
                 triage_findings=triage_findings,
             )
         except RuntimeError as e:  # e.g. OPENROUTER_API_KEY not set

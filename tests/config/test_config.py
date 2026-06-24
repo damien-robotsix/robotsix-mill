@@ -684,6 +684,19 @@ class TestYamlLoading:
         assert "service" in config
         assert config["service"]["data_dir"] == ".data"
 
+    def test_load_yaml_config_subscription_tier_defaults(self):
+        """Defaults YAML carries the subscription-tier routing settings
+        with the documented defaults."""
+        from robotsix_mill.config.loader import load_yaml_config
+
+        config = load_yaml_config()
+        gates = config.get("gates", {})
+        assert gates.get("refine_subscription_tier_routing_enabled") is True
+        assert gates.get("refine_subscription_model_default") == "sonnet"
+        assert gates.get("refine_subscription_model_complex") == "opus"
+        limits = config.get("core", {}).get("limits", {})
+        assert limits.get("refine_requests_simple") == 40
+
     def test_load_yaml_config_deep_merges_local_overlay(self, tmp_path, monkeypatch):
         """``load_yaml_config()`` deep-merges a local overlay YAML over
         defaults."""
@@ -836,6 +849,35 @@ class TestYamlLoading:
         # Production override (50) is applied; local override (99) is skipped.
         # The real defaults value is 8.
         assert config["core"]["limits"]["max_fix_iterations"] == 50
+
+    def test_load_yaml_config_subscription_tier_override(self, tmp_path, monkeypatch):
+        """A YAML override for the subscription-tier routing settings
+        is correctly mapped through the loader aliases."""
+        from robotsix_mill.config.loader import load_yaml_config
+        import robotsix_mill.config.loader as cl
+        import shutil
+
+        local_dir = tmp_path / "config"
+        local_dir.mkdir()
+        defaults = local_dir / "mill.defaults.yaml"
+        shutil.copy("config/mill.defaults.yaml", defaults)
+        local = local_dir / "mill.local.yaml"
+        local.write_text(
+            "gates:\n"
+            "  refine_subscription_tier_routing_enabled: false\n"
+            "  refine_subscription_model_default: haiku\n"
+            "  refine_subscription_model_complex: sonnet\n"
+            "core:\n"
+            "  limits:\n"
+            "    refine_requests_simple: 25\n"
+        )
+        monkeypatch.setattr(cl, "_DEFAULTS_FILE", defaults)
+        monkeypatch.setattr(cl, "_LOCAL_FILE", local)
+        config = load_yaml_config()
+        assert config["gates"]["refine_subscription_tier_routing_enabled"] is False
+        assert config["gates"]["refine_subscription_model_default"] == "haiku"
+        assert config["gates"]["refine_subscription_model_complex"] == "sonnet"
+        assert config["core"]["limits"]["refine_requests_simple"] == 25
 
     # -- load_secrets_yaml edge cases ----------------------------------
 
@@ -1701,6 +1743,35 @@ class TestValidationInvalid:
             ValidationError, match="Input should be greater than or equal to 1"
         ):
             Settings(refine_request_limit=0)
+
+    def test_refine_request_limit_simple_zero_raises(self):
+        """``refine_request_limit_simple=0`` raises ValidationError."""
+        with pytest.raises(
+            ValidationError, match="Input should be greater than or equal to 1"
+        ):
+            Settings(refine_request_limit_simple=0)
+
+    def test_refine_subscription_settings_defaults(self):
+        """Default values for the subscription-tier routing settings."""
+        s = Settings(data_dir="/tmp")
+        assert s.refine_subscription_tier_routing_enabled is True
+        assert s.refine_subscription_model_default == "sonnet"
+        assert s.refine_subscription_model_complex == "opus"
+        assert s.refine_request_limit_simple == 40
+
+    def test_refine_subscription_settings_custom_values(self):
+        """Subscription-tier routing settings accept custom values."""
+        s = Settings(
+            data_dir="/tmp",
+            refine_subscription_tier_routing_enabled=False,
+            refine_subscription_model_default="haiku",
+            refine_subscription_model_complex="sonnet",
+            refine_request_limit_simple=25,
+        )
+        assert s.refine_subscription_tier_routing_enabled is False
+        assert s.refine_subscription_model_default == "haiku"
+        assert s.refine_subscription_model_complex == "sonnet"
+        assert s.refine_request_limit_simple == 25
 
 
 # ---------------------------------------------------------------------------
