@@ -9,12 +9,15 @@ Returns a structured ``DocResult`` with ``user_facing`` and ``summary``.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from ..config import Settings
+
+log = logging.getLogger(__name__)
 
 
 class DocClassifierResult(BaseModel):
@@ -168,11 +171,15 @@ def run_doc_agent(
     )
 
     # Load the doc memory ledger (empty string if unset / missing /
-    # unreadable — first run starts a fresh ledger).
-    doc_memory_path = settings.memory_file_for("doc", board_id)
-    memory_text = load_memory(
-        doc_memory_path,
-        max_chars=settings.max_memory_chars,
+    # unreadable — first run starts a fresh ledger).  When board_id
+    # is empty we skip the ledger entirely and emit a warning.
+    doc_memory_path = settings.memory_file_for("doc", board_id) if board_id else None
+    if doc_memory_path is None:
+        log.warning("doc agent running without memory ledger: empty board_id")
+    memory_text = (
+        load_memory(doc_memory_path, max_chars=settings.max_memory_chars)
+        if doc_memory_path is not None
+        else ""
     )
 
     fs = build_fs_tools(repo_dir, settings, extra_roots=extra_roots)
@@ -247,8 +254,9 @@ def run_doc_agent(
         )
         output: DocResult = result.output
         # Persist the agent's updated ledger; empty string = keep
-        # existing memory unchanged.
-        if output.updated_memory:
+        # existing memory unchanged.  Respect the board_id guard —
+        # only persist when we actually have a ledger path.
+        if output.updated_memory and doc_memory_path is not None:
             persist_memory(doc_memory_path, output.updated_memory)
         return output
     finally:
