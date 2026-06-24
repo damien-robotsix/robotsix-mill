@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- explore sub-agent prompt: add "CONFIRM PATHS" grep guard and "NO GREP CHASING" rule to prevent wasteful grep calls on non-existent paths.
 - Fix Dependabot `uv` ecosystem graph-submission failure: remove the redundant `[tool.uv.sources]` table from `pyproject.toml` (the `robotsix-llmio` git source is already declared via PEP 508 `@ git+https://` in `[project.dependencies]`); extend `_has_uv_sources()` in the sandbox to also detect PEP 508 `git+https://` direct references so the sandbox continues to prefer `uv sync` over `pip install` for projects with git dependencies.
 - Remove stale `run_command` mention from `completeness_check` budget-warning boilerplate — the agent doesn't have `run_command` at runtime.
 - Replace stale `awaiting_approval` state references with canonical `human_issue_approval` in docs (`approval-gate.md`, `audit-agent.md`, `configuration.md`, `docker-architecture.md`, `notifications.md`).
