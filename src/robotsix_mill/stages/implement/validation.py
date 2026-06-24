@@ -22,6 +22,7 @@ from ._shared import (
     _is_binary_artifact,
     _modules_yaml_added_paths,
     _should_skip_test_gate,
+    _vendored_dep_roots,
     log,
 )
 
@@ -194,6 +195,46 @@ class ValidationMixin(_ImplementStageBase):
             )
 
         out_of_scope = text_out_of_scope
+
+        # --- vendored-dep install-directory auto-exclusion ---
+        # Pip/uv/npm vendored-dependency install dirs (`.pip-packages/`,
+        # `local-deps/`, `.deps/`, …) are UNtracked, have no durable
+        # name, and repeatedly flood the out-of-scope set with
+        # `*.dist-info/METADATA`-style files. Detect them by CONTENT
+        # SIGNATURE (distinct dist-info / egg-info / node_modules
+        # markers among path components), gate on UNtracked status so
+        # real source dirs with vendored-looking fixture trees are never
+        # excluded, and log every auto-ignored dir non-silently.
+        vendored_roots = _vendored_dep_roots(repo_dir, out_of_scope, target)
+        if vendored_roots:
+            excluded: dict[str, int] = {}
+            for root in vendored_roots:
+                excluded[root] = sum(
+                    1 for f in out_of_scope if f.startswith(root + "/")
+                )
+            filtered = [
+                f for f in out_of_scope if f.split("/", 1)[0] not in vendored_roots
+            ]
+            for root, count in sorted(excluded.items()):
+                msg = (
+                    f"scope-triage auto-ignored vendored-dep dir by content "
+                    f"signature: `{root}/` ({count} files) — untracked "
+                    f"install target, not scope creep"
+                )
+                log.info("%s: %s", ticket.id, msg)
+                ctx.service.add_step_event(ticket.id, msg)
+            if not filtered:
+                log.info(
+                    "%s: all out-of-scope files were in vendored-dep dirs — "
+                    "skipping scope-triage LLM call",
+                    ticket.id,
+                )
+                return _ScopeGuardrailResult(
+                    action="skip_iteration",
+                    file_map=file_map,
+                    feedback=current_feedback,
+                )
+            out_of_scope = filtered
 
         # --- flood guard (deterministic prompt-size cap) ---
         # When an implement pass leaves an abnormally large out-of-scope

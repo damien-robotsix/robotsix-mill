@@ -56,6 +56,12 @@ BINARY_ARTIFACT_EXTENSIONS: frozenset[str] = frozenset(
 # note readable when an artifact flood leaves hundreds of files.
 _FLOOD_SAMPLE_SIZE = 20
 
+# Minimum number of distinct marker entries (``*.dist-info``,
+# ``*.egg-info``, ``node_modules``) required to classify a repo-root
+# directory as a vendored-dep install target — unless ``node_modules``
+# is present alone, which is always a strong marker (npm convention).
+_VENDORED_DEP_MIN_MARKERS = 2
+
 
 def _is_binary_artifact(repo_dir: Path, path: str, target_branch: str) -> bool:
     """Return True if *path* is a binary artifact.
@@ -118,6 +124,102 @@ def _is_binary_artifact(repo_dir: Path, path: str, target_branch: str) -> bool:
         pass
 
     return False
+
+
+# --- vendored-dep install-directory detection -----------------------------
+
+
+def _vendored_dep_roots(
+    repo_dir: Path,
+    paths: list[str],
+    target_branch: str,
+) -> set[str]:
+    """Return the set of repo-root directory names among *paths* that
+    look like pip/uv/npm vendored-dependency install targets by CONTENT
+    SIGNATURE (regardless of the dir's name) AND are NOT git-tracked.
+
+    Every file under a returned root should be excluded from scope.
+    """
+    # 1. Group paths by first path component (repo-root directory).
+    dir_files: dict[str, list[str]] = {}
+    for p in paths:
+        if "/" not in p:
+            continue  # top-level files are never vendored roots
+        root = p.split("/", 1)[0]
+        dir_files.setdefault(root, []).append(p)
+
+    vendored: set[str] = set()
+
+    for root, member_paths in dir_files.items():
+        # 2. Count distinct marker entries among path components.
+        distinct_dist_info: set[str] = set()
+        distinct_egg_info: set[str] = set()
+        has_node_modules = False
+
+        for p in member_paths:
+            parts = p.split("/")
+            for part in parts:
+                if part == "node_modules":
+                    has_node_modules = True
+                elif part.endswith(".dist-info"):
+                    distinct_dist_info.add(part)
+                elif part.endswith(".egg-info"):
+                    distinct_egg_info.add(part)
+
+        marker_count = len(distinct_dist_info) + len(distinct_egg_info)
+        if has_node_modules:
+            marker_count += 1
+
+        # 3. Classify: either node_modules is present (strong marker)
+        #    or the distinct-marker count meets the threshold.
+        if not has_node_modules and marker_count < _VENDORED_DEP_MIN_MARKERS:
+            continue
+
+        # 4. Tracked-ness gate: only auto-ignore if NO tracked files
+        #    under this root directory. Fail-closed: any git error →
+        #    treat as tracked (do not exclude).
+        try:
+            ls = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(repo_dir),
+                    "ls-files",
+                    "--",
+                    root,
+                ],
+                capture_output=True,
+                text=True,
+            )
+            if ls.returncode != 0:
+                log.debug(
+                    "_vendored_dep_roots: git ls-files failed for %s — "
+                    "treating as tracked (fail-closed)",
+                    root,
+                    exc_info=True,
+                )
+                continue
+            if ls.stdout.strip():
+                # At least one tracked file → this dir is real source,
+                # not a vendored-dep install target.
+                log.debug(
+                    "_vendored_dep_roots: %s has tracked files — "
+                    "skipping (real source dir)",
+                    root,
+                )
+                continue
+        except subprocess.CalledProcessError:
+            log.debug(
+                "_vendored_dep_roots: git ls-files error for %s — "
+                "treating as tracked (fail-closed)",
+                root,
+                exc_info=True,
+            )
+            continue
+
+        vendored.add(root)
+
+    return vendored
 
 
 # --- docs/modules.yaml re-path auto-detection ------------------------------

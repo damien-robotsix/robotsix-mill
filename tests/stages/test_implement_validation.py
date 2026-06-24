@@ -625,3 +625,347 @@ def test_baseline_check_passes_retry_on_failure(tmp_path, monkeypatch):
     seams = _install_baseline_seams(monkeypatch, test_result=(True, "ok"))
     _call_baseline(_baseline_ctx(tmp_path))
     assert seams.agent_calls[0]["retry_on_failure"] is True
+
+
+# ---------------------------------------------------------------------------
+# _vendored_dep_roots — helper-level (real git repo via tmp_path)
+# ---------------------------------------------------------------------------
+
+
+def _git_init(repo: Path) -> None:
+    """``git init`` + minimal config in *repo*."""
+    import subprocess as sp
+
+    sp.run(["git", "-C", str(repo), "init", "-b", "main"], check=True)
+    sp.run(
+        ["git", "-C", str(repo), "config", "user.email", "test@test"],
+        check=True,
+    )
+    sp.run(
+        ["git", "-C", str(repo), "config", "user.name", "Tester"],
+        check=True,
+    )
+
+
+def _make_files(root: Path, files: list[str]) -> None:
+    """Create each file (and its parent dirs) relative to *root*."""
+    for f in files:
+        fp = root / f
+        fp.parent.mkdir(parents=True, exist_ok=True)
+        fp.write_text(f"content of {f}", encoding="utf-8")
+
+
+def _commit_all(repo: Path) -> None:
+    """Stage everything and commit."""
+    import subprocess as sp
+
+    sp.run(["git", "-C", str(repo), "add", "."], check=True)
+    sp.run(
+        ["git", "-C", str(repo), "commit", "-m", "init"],
+        check=True,
+    )
+
+
+def test_vendored_dep_roots_untracked_dist_info_signature(tmp_path):
+    """Untracked dir with >=2 distinct .dist-info markers → returned."""
+    _git_init(tmp_path)
+    _make_files(
+        tmp_path,
+        [
+            ".pkgs/anyio-4.0.dist-info/METADATA",
+            ".pkgs/idna-3.0.dist-info/RECORD",
+            ".pkgs/idna/__init__.py",
+        ],
+    )
+    # Commit ONLY tracked.txt so .pkgs/ stays untracked.
+    (tmp_path / "tracked.txt").write_text("tracked")
+    import subprocess as sp
+
+    sp.run(["git", "-C", str(tmp_path), "add", "tracked.txt"], check=True)
+    sp.run(["git", "-C", str(tmp_path), "commit", "-m", "tracked only"], check=True)
+
+    result = validation_mod._vendored_dep_roots(
+        tmp_path,
+        [
+            ".pkgs/anyio-4.0.dist-info/METADATA",
+            ".pkgs/idna-3.0.dist-info/RECORD",
+            ".pkgs/idna/__init__.py",
+        ],
+        "main",
+    )
+    assert result == {".pkgs"}
+
+
+def test_vendored_dep_roots_tracked_dir_not_returned(tmp_path):
+    """Git-tracked dir with same vendored signature → NOT returned."""
+    _git_init(tmp_path)
+    _make_files(
+        tmp_path,
+        [
+            ".pkgs/anyio-4.0.dist-info/METADATA",
+            ".pkgs/idna-3.0.dist-info/RECORD",
+            ".pkgs/idna/__init__.py",
+        ],
+    )
+    _commit_all(tmp_path)
+
+    result = validation_mod._vendored_dep_roots(
+        tmp_path,
+        [
+            ".pkgs/anyio-4.0.dist-info/METADATA",
+            ".pkgs/idna-3.0.dist-info/RECORD",
+            ".pkgs/idna/__init__.py",
+        ],
+        "main",
+    )
+    assert result == set()
+
+
+def test_vendored_dep_roots_normal_dir_no_markers(tmp_path):
+    """Normal dir with .py files and no markers → NOT returned."""
+    _git_init(tmp_path)
+    _make_files(
+        tmp_path,
+        [
+            "mypkg/module.py",
+            "mypkg/utils.py",
+        ],
+    )
+    # Commit ONLY tracked.txt so mypkg/ stays untracked.
+    (tmp_path / "tracked.txt").write_text("tracked")
+    import subprocess as sp
+
+    sp.run(["git", "-C", str(tmp_path), "add", "tracked.txt"], check=True)
+    sp.run(["git", "-C", str(tmp_path), "commit", "-m", "tracked only"], check=True)
+
+    result = validation_mod._vendored_dep_roots(
+        tmp_path,
+        ["mypkg/module.py", "mypkg/utils.py"],
+        "main",
+    )
+    assert result == set()
+
+
+def test_vendored_dep_roots_top_level_files_skipped(tmp_path):
+    """Top-level files (no '/') are never vendored roots."""
+    _git_init(tmp_path)
+    (tmp_path / "README.md").write_text("readme")
+    _commit_all(tmp_path)
+
+    result = validation_mod._vendored_dep_roots(
+        tmp_path,
+        ["README.md"],
+        "main",
+    )
+    assert result == set()
+
+
+def test_vendored_dep_roots_node_modules_is_strong_marker(tmp_path):
+    """A single `node_modules` alone is sufficient (strong marker)."""
+    _git_init(tmp_path)
+    _make_files(
+        tmp_path,
+        [
+            "frontend/node_modules/.package-lock.json",
+            "frontend/node_modules/react/index.js",
+            "frontend/src/app.tsx",
+        ],
+    )
+    # Commit ONLY tracked.txt so frontend/ stays untracked.
+    (tmp_path / "tracked.txt").write_text("tracked")
+    import subprocess as sp
+
+    sp.run(["git", "-C", str(tmp_path), "add", "tracked.txt"], check=True)
+    sp.run(["git", "-C", str(tmp_path), "commit", "-m", "tracked only"], check=True)
+
+    result = validation_mod._vendored_dep_roots(
+        tmp_path,
+        [
+            "frontend/node_modules/.package-lock.json",
+            "frontend/node_modules/react/index.js",
+            "frontend/src/app.tsx",
+        ],
+        "main",
+    )
+    assert result == {"frontend"}
+
+
+def test_vendored_dep_roots_single_dist_info_not_enough(tmp_path):
+    """One .dist-info alone is insufficient (K=2 threshold)."""
+    _git_init(tmp_path)
+    _make_files(
+        tmp_path,
+        [
+            ".deps/six-1.16.0.dist-info/METADATA",
+            ".deps/six.py",
+        ],
+    )
+    # Commit ONLY tracked.txt so .deps/ stays untracked.
+    (tmp_path / "tracked.txt").write_text("tracked")
+    import subprocess as sp
+
+    sp.run(["git", "-C", str(tmp_path), "add", "tracked.txt"], check=True)
+    sp.run(["git", "-C", str(tmp_path), "commit", "-m", "tracked only"], check=True)
+
+    result = validation_mod._vendored_dep_roots(
+        tmp_path,
+        [
+            ".deps/six-1.16.0.dist-info/METADATA",
+            ".deps/six.py",
+        ],
+        "main",
+    )
+    assert result == set()
+
+
+# ---------------------------------------------------------------------------
+# _run_scope_guardrail — vendored-dep filtering (guardrail-level)
+# ---------------------------------------------------------------------------
+
+
+def test_scope_guardrail_vendored_dep_flood_skips_guard(monkeypatch):
+    """60 vendored files + low cap → skip_iteration, LLM never called."""
+    monkeypatch.setattr(validation_mod, "target_branch_for", lambda *a: "main")
+
+    # 60 files under `.local-packages/` — dist-info markers → vendored.
+    flood = []
+    for i in range(30):
+        flood.append(f".local-packages/pkg{i}-{i}.0.dist-info/METADATA")
+        flood.append(f".local-packages/pkg{i}-{i}.0.dist-info/RECORD")
+    monkeypatch.setattr(validation_mod.git_ops, "introduced_files", lambda *a: flood)
+    monkeypatch.setattr(validation_mod, "_is_binary_artifact", lambda *a: False)
+
+    # Monkeypatch _vendored_dep_roots to avoid needing a real git repo.
+    monkeypatch.setattr(
+        validation_mod,
+        "_vendored_dep_roots",
+        lambda repo_dir, paths, target: {".local-packages"},
+    )
+
+    def _no_triage(*a, **kw):
+        raise AssertionError("vendored-dep flood must skip the scope-triage LLM")
+
+    from robotsix_mill.agents import scope_triage as st
+
+    monkeypatch.setattr(st, "run_scope_triage_agent", _no_triage)
+
+    res = ValidationMixin._run_scope_guardrail(
+        SimpleNamespace(
+            repo_config=SimpleNamespace(),
+            service=SimpleNamespace(add_step_event=lambda *a, **kw: None),
+        ),
+        SimpleNamespace(id="T-1"),
+        Path("/repo"),
+        "branch",
+        "summary",
+        None,
+        {"in_scope.py"},
+        SimpleNamespace(scope_triage_enabled=True, scope_triage_max_files=2),
+        "spec",
+        None,
+    )
+    assert res.action == "skip_iteration"
+    assert res.outcome is None
+
+
+def test_scope_guardrail_genuine_flood_still_blocks(monkeypatch):
+    """60 real source files (non-vendored) → flood guard fires, BLOCKED."""
+    monkeypatch.setattr(validation_mod, "target_branch_for", lambda *a: "main")
+
+    flood = [f"gen/file_{i}.py" for i in range(60)]
+    monkeypatch.setattr(validation_mod.git_ops, "introduced_files", lambda *a: flood)
+    monkeypatch.setattr(validation_mod, "_is_binary_artifact", lambda *a: False)
+
+    # _vendored_dep_roots returns empty → these are genuine files.
+    monkeypatch.setattr(
+        validation_mod,
+        "_vendored_dep_roots",
+        lambda repo_dir, paths, target: set(),
+    )
+
+    monkeypatch.setattr(
+        ValidationMixin,
+        "_finalize",
+        classmethod(lambda cls, *a, **kw: None),
+        raising=False,
+    )
+
+    def _no_triage(*a, **kw):
+        raise AssertionError("flood guard must skip the scope-triage LLM")
+
+    from robotsix_mill.agents import scope_triage as st
+
+    monkeypatch.setattr(st, "run_scope_triage_agent", _no_triage)
+
+    res = ValidationMixin._run_scope_guardrail(
+        SimpleNamespace(
+            repo_config=SimpleNamespace(),
+            service=SimpleNamespace(add_step_event=lambda *a, **kw: None),
+        ),
+        SimpleNamespace(id="T-1"),
+        Path("/repo"),
+        "branch",
+        "summary",
+        None,
+        {"in_scope.py"},
+        SimpleNamespace(scope_triage_enabled=True, scope_triage_max_files=10),
+        "spec",
+        None,
+    )
+    assert res.action == "return"
+    assert res.outcome.next_state is State.BLOCKED
+    assert "flood guard" in res.outcome.note
+
+
+def test_scope_guardrail_vendored_dirs_logged(monkeypatch, caplog):
+    """Vendored dirs are logged via log.info AND add_step_event."""
+    import logging
+
+    caplog.set_level(logging.INFO, logger="robotsix_mill.stages.implement")
+    monkeypatch.setattr(validation_mod, "target_branch_for", lambda *a: "main")
+
+    flood = [
+        ".pip-packages/anyio-4.0.dist-info/METADATA",
+        ".pip-packages/idna-3.0.dist-info/RECORD",
+        ".pip-packages/idna/__init__.py",
+    ]
+    monkeypatch.setattr(validation_mod.git_ops, "introduced_files", lambda *a: flood)
+    monkeypatch.setattr(validation_mod, "_is_binary_artifact", lambda *a: False)
+    monkeypatch.setattr(
+        validation_mod,
+        "_vendored_dep_roots",
+        lambda repo_dir, paths, target: {".pip-packages"},
+    )
+
+    step_events: list[tuple] = []
+
+    res = ValidationMixin._run_scope_guardrail(
+        SimpleNamespace(
+            repo_config=SimpleNamespace(),
+            service=SimpleNamespace(
+                add_step_event=lambda tid, msg: step_events.append((tid, msg))
+            ),
+        ),
+        SimpleNamespace(id="T-vendored"),
+        Path("/repo"),
+        "branch",
+        "summary",
+        None,
+        {"in_scope.py"},
+        SimpleNamespace(scope_triage_enabled=True, scope_triage_max_files=0),
+        "spec",
+        None,
+    )
+    # All vendored files removed → skip_iteration (empty out_of_scope).
+    assert res.action == "skip_iteration"
+
+    # Check caplog.
+    log_msgs = [r.message for r in caplog.records if r.levelname == "INFO"]
+    assert any("auto-ignored vendored-dep dir" in m for m in log_msgs)
+    assert any(".pip-packages" in m for m in log_msgs)
+    assert any("T-vendored" in m for m in log_msgs)
+
+    # Check step events.
+    assert len(step_events) == 1
+    assert "auto-ignored vendored-dep dir" in step_events[0][1]
+    assert ".pip-packages" in step_events[0][1]
