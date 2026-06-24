@@ -22,6 +22,7 @@ from ._shared import (
     _PING_PONG_COUNT,
     _REBASE_COUNTER,
     _ci_truly_green,
+    _duplicate_changelog_fragments,
     _is_pr_check_run,
     _latest_failing_workflows,
     _read_counter,
@@ -202,6 +203,24 @@ class CIPollMixin(_MergeStageBase):
             # below instead of promoting. "unstable" is accepted because it
             # means mergeable with all required gates passed and only a
             # non-required status non-green (e.g. a cancelled duplicate).
+
+            # --- Changelog duplicate-fragment gate ---
+            repo_dir = str(ctx.service.workspace(ticket).dir / "repo")
+            target = target_branch_for(s, ctx.repo_config)
+            dups = _duplicate_changelog_fragments(repo_dir, target)
+            if dups:
+                log.warning(
+                    "%s: duplicate changelog fragments %s → BLOCKED",
+                    ticket.id,
+                    sorted(dups),
+                )
+                return Outcome(
+                    State.BLOCKED,
+                    f"Duplicate changelog fragments detected for ticket(s): "
+                    f"{', '.join(sorted(dups))}. Each ticket id must have exactly one "
+                    f"changelog fragment — remove the extra fragment(s) and re-run. Resumable.",
+                )
+
             artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
             _write_counter(artifacts_dir / "ci_fix_cycles.txt", 0)
             _write_counter(artifacts_dir / _AUTO_FIX_CYCLES, 0)
