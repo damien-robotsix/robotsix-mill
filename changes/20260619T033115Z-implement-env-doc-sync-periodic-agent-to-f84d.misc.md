@@ -1,1 +1,0 @@
-Added ``env_doc_sync`` periodic LLM agent that cross-references every env-var declared across the Pydantic Settings mixins and ``secrets.py`` against ``docs/configuration.md``, and files draft tickets for documentation discrepancies (missing-from-docs, stale-in-docs, alias-mismatch, default-mismatch, secrets-gap).

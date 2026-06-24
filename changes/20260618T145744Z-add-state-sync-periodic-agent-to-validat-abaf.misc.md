@@ -1,1 +1,0 @@
-Added ``state_sync`` periodic LLM agent that cross-references the canonical ``State`` enum against every string-literal reference site in the codebase and files draft tickets for stale, typo, and missing-reference inconsistencies.
