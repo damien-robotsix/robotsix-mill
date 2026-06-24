@@ -568,7 +568,12 @@ def build_agent(  # noqa: C901
             output_type=output_type,
             name=name,
             retries=retries,
-            max_tokens=max_tokens,
+            # NOTE: max_tokens is intentionally NOT forwarded here. The llmio
+            # ClaudeSDKProvider.build_agent signature does not accept it (the
+            # Claude CLI manages its own output budget), and passing it raised
+            # TypeError, crashing every L3/claude_sdk agent build. The
+            # DeepSeek/OpenRouter path below still applies max_tokens via
+            # ModelSettings.
             # Confine the SDK's built-in Write/Edit tools to the ticket's
             # workspace clone. repo_dir is None for board-less agents → no
             # confinement, unchanged behavior.
