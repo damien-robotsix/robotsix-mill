@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from ...config import RepoConfig, get_repos_config
@@ -47,10 +48,45 @@ _IN_FLIGHT_PR_STATES: frozenset[State] = frozenset(
 _CAP_GATED_STATES: frozenset[State] = frozenset({State.READY, State.DRAFT})
 
 
+# An in-flight-state ticket whose state has not advanced in this long is
+# stuck — its PR is conflicting, was merged/closed without the ticket
+# advancing, or the ticket lost its pr_url. It is no longer an *active*
+# PR slot, so it must NOT keep counting toward the cap (that would freeze
+# the board's fresh drafts/ready behind a phantom PR). The in-flight states
+# are all AUTOMATED pipeline states that normally advance within one CI
+# cycle (~minutes); 3 h of no movement means genuinely stuck. (Human-wait
+# states like HUMAN_MR_APPROVAL are NOT in _IN_FLIGHT_PR_STATES, so a slow
+# human review never trips this.)
+_INFLIGHT_PR_STALE_SECONDS = 3 * 60 * 60
+
+
 def _count_inflight_prs(service: "TicketService") -> int:
-    """Return the number of tickets in :data:`_IN_FLIGHT_PR_STATES`
-    for the board bound to *service*."""
-    return sum(1 for t in service.list() if t.state in _IN_FLIGHT_PR_STATES)
+    """Count tickets ACTIVELY holding an in-flight PR slot on this board.
+
+    A ticket counts only if it is in an :data:`_IN_FLIGHT_PR_STATES` state
+    AND has advanced within :data:`_INFLIGHT_PR_STALE_SECONDS`. Tickets
+    wedged in an in-flight state far longer than that are stuck (conflicting
+    PR, merged-but-not-advanced, lost pr_url) — they are phantom slots, and
+    counting them by raw state inflates the cap and freezes the board's
+    fresh work indefinitely (observed live: the chat board froze at 4/3,
+    one of the four stuck ~6 h with a conflicting PR, another with its
+    pr_url lost). Fail-safe: a ticket whose ``updated_at`` is missing or
+    unreadable is COUNTED, so a parsing edge case can never silently
+    disable the cap."""
+    now = datetime.now(timezone.utc)
+    n = 0
+    for t in service.list():
+        if t.state not in _IN_FLIGHT_PR_STATES:
+            continue
+        updated = getattr(t, "updated_at", None)
+        if updated is not None:
+            if updated.tzinfo is None:
+                updated = updated.replace(tzinfo=timezone.utc)
+            if (now - updated).total_seconds() > _INFLIGHT_PR_STALE_SECONDS:
+                # stuck/stale → not an active slot; skip (don't gate fresh work)
+                continue
+        n += 1
+    return n
 
 
 class Worker(PeriodicPassesMixin, PollLoopsMixin):
