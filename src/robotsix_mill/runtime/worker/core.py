@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ...config import RepoConfig, get_repos_config
 from ...langfuse.client import effective_cost, session_cost
@@ -226,7 +226,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
 
         await _asyncio.gather(*(q.join() for q in self.queues.values()))
 
-    def snapshot(self) -> dict:
+    def snapshot(self) -> dict[str, Any]:
         """Return a read-only telemetry snapshot of the worker.
 
         ZERO side effects — no start/stop/cancel/requeue. Safe for the

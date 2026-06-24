@@ -193,7 +193,6 @@ modules:
       - src/robotsix_mill/component_agent/__init__.py
       - src/robotsix_mill/component_agent/responder.py
       - src/robotsix_mill/component_agent/config_contract.py
-      - src/robotsix_mill/config/_settings_component_agent.py
       - tests/runtime/test_component_agent.py
     dependencies: [config, runtime]
 
