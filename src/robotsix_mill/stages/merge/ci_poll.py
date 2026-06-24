@@ -195,10 +195,13 @@ class CIPollMixin(_MergeStageBase):
             # Also reset the cross-stage auto-fix cycle counter and ping-pong
             # detector files — CI green is the ONLY genuine forward-progress
             # signal.
-            # NOTE: _ci_truly_green requires mergeable_state == "clean" on
-            # GitHub, so a premature green (fast checks done, slow gate not
-            # yet started → mergeable_state "blocked"/"behind") falls through
-            # to the re-poll below instead of promoting.
+            # NOTE: _ci_truly_green requires mergeable_state in
+            # (None, "clean", "unstable") on GitHub, so a premature green
+            # (fast checks done, slow gate not yet started → mergeable_state
+            # "blocked"/"behind"/"unknown") falls through to the re-poll
+            # below instead of promoting. "unstable" is accepted because it
+            # means mergeable with all required gates passed and only a
+            # non-required status non-green (e.g. a cancelled duplicate).
             artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
             _write_counter(artifacts_dir / "ci_fix_cycles.txt", 0)
             _write_counter(artifacts_dir / _AUTO_FIX_CYCLES, 0)
@@ -215,7 +218,18 @@ class CIPollMixin(_MergeStageBase):
             )
 
         # pending, None, or a premature success (conclusion success but
-        # mergeable_state not yet "clean") — keep waiting.
+        # mergeable_state not yet promotable) — keep waiting. Log the precise
+        # blocking reason so future stalls are diagnosable.
+        ms = pr.get("mergeable_state")
+        pending_checks = ci_status.get("pending", [])
+        pending_detail = f", pending checks: {pending_checks}" if pending_checks else ""
+        log.info(
+            "%s: re-polling IMPLEMENT_COMPLETE — conclusion=%s mergeable_state=%s%s",
+            ticket.id,
+            conclusion,
+            ms,
+            pending_detail,
+        )
         return Outcome(State.IMPLEMENT_COMPLETE)
 
     def _check_ping_pong(

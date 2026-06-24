@@ -150,7 +150,7 @@ class GitLabForge(Forge):
 
             pipeline = self._get_latest_pipeline(project_path, mr["iid"])
             if pipeline is None:
-                return {"conclusion": None, "failing": []}
+                return {"conclusion": None, "failing": [], "pending": []}
 
             status = pipeline.get("status", "")
             conclusion = _map_pipeline_status(status)
@@ -159,7 +159,7 @@ class GitLabForge(Forge):
             if conclusion == "failure":
                 failing = self._get_failed_jobs(project_path, pipeline["id"])
 
-            return {"conclusion": conclusion, "failing": failing}
+            return {"conclusion": conclusion, "failing": failing, "pending": []}
         except Exception:
             return None
 

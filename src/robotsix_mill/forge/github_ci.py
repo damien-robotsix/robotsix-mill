@@ -205,9 +205,9 @@ def _derive_check_conclusion(
     headers: dict,
     check_runs: list[dict],
 ) -> dict:
-    """Derive the overall conclusion and build the failing list."""
+    """Derive the overall conclusion and build the failing/pending lists."""
     if not check_runs:
-        return {"conclusion": None, "failing": []}
+        return {"conclusion": None, "failing": [], "pending": []}
 
     # Collapse same-name reruns so a superseded ``cancelled`` run doesn't
     # mask the authoritative ``success`` and pin the PR at pending forever.
@@ -216,20 +216,22 @@ def _derive_check_conclusion(
     has_pending = False
     has_failure = False
     failing: list[dict[str, Any]] = []
+    pending: list[str] = []
 
     for cr in check_runs:
         cat = _conclusion_for_check(cr)
         if cat == "pending":
             has_pending = True
+            pending.append(cr.get("name", "unknown"))
         elif cat == "failure":
             has_failure = True
             failing.append(_extract_annotations(client, api, owner, repo, headers, cr))
 
     if has_failure:
-        return {"conclusion": "failure", "failing": failing}
+        return {"conclusion": "failure", "failing": failing, "pending": pending}
     if has_pending:
-        return {"conclusion": "pending", "failing": []}
-    return {"conclusion": "success", "failing": []}
+        return {"conclusion": "pending", "failing": [], "pending": pending}
+    return {"conclusion": "success", "failing": [], "pending": []}
 
 
 class GitHubForgeCIMixin:
@@ -354,7 +356,7 @@ class GitHubForgeCIMixin:
                 # is nothing meaningful to gate on. Treat as success so
                 # the merge stage doesn't loop forever.
                 if not check_runs and not status_runs:
-                    return {"conclusion": "success", "failing": []}
+                    return {"conclusion": "success", "failing": [], "pending": []}
 
                 return _derive_check_conclusion(
                     c, api, owner, repo, headers, check_runs

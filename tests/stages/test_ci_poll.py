@@ -611,17 +611,21 @@ def _ci_premature_green(monkeypatch, mergeable_state="blocked"):
 
 
 def test_ci_truly_green_helper():
-    """_ci_truly_green requires success AND a clean (or absent) mergeable_state."""
+    """_ci_truly_green requires success AND a promotable mergeable_state."""
     from robotsix_mill.stages.merge._shared import _ci_truly_green
 
+    # Promotable states: clean, unstable, or absent (non-GitHub forge).
     assert _ci_truly_green("success", {"mergeable_state": "clean"}) is True
+    assert _ci_truly_green("success", {"mergeable_state": "unstable"}) is True
     # Absent (non-GitHub forge) → trust the conclusion.
     assert _ci_truly_green("success", {}) is True
     assert _ci_truly_green("success", {"mergeable_state": None}) is True
-    # Premature / incomplete combined states → not green.
+    # Premature / incomplete / genuinely blocked states → not green.
     assert _ci_truly_green("success", {"mergeable_state": "blocked"}) is False
     assert _ci_truly_green("success", {"mergeable_state": "behind"}) is False
     assert _ci_truly_green("success", {"mergeable_state": "unknown"}) is False
+    assert _ci_truly_green("success", {"mergeable_state": "dirty"}) is False
+    assert _ci_truly_green("success", {"mergeable_state": "draft"}) is False
     # Non-success conclusions are never green.
     assert _ci_truly_green("failure", {"mergeable_state": "clean"}) is False
     assert _ci_truly_green("pending", {"mergeable_state": "clean"}) is False
@@ -647,6 +651,72 @@ def test_clean_green_still_promotes(tmp_path, monkeypatch):
     t = _implement_complete(ctx)
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.HUMAN_MR_APPROVAL
+
+
+def test_unstable_green_promotes(tmp_path, monkeypatch):
+    """mergeable_state=unstable but conclusion=success promotes to HUMAN_MR_APPROVAL.
+
+    "unstable" means all required checks passed but a non-required status is
+    non-green — the PR IS mergeable.  Regression: PRs like mill #1828-1831
+    were CLEAN yet sat in implement_complete because _ci_truly_green rejected
+    "unstable" states.
+    """
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "mergeable_state": "unstable",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "success",
+            "failing": [],
+            "pending": [],
+        },
+    )
+
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+
+
+def test_blocked_behind_unknown_still_wait(tmp_path, monkeypatch):
+    """mergeable_state in (blocked, behind, unknown) with success conclusion
+    still waits — premature-green guard remains intact."""
+    for ms in ("blocked", "behind", "unknown"):
+        ctx = _gh(tmp_path)
+        monkeypatch.setattr(
+            github.GitHubForge,
+            "pr_status",
+            lambda self, *, source_branch, ms=ms: {
+                "merged": False,
+                "state": "open",
+                "url": "u",
+                "mergeable": True,
+                "mergeable_state": ms,
+            },
+        )
+        monkeypatch.setattr(
+            github.GitHubForge,
+            "check_status",
+            lambda self, *, source_branch: {
+                "conclusion": "success",
+                "failing": [],
+                "pending": [],
+            },
+        )
+
+        t = _implement_complete(ctx)
+        out = MergeStage().run(t, ctx)
+        assert out.next_state is State.IMPLEMENT_COMPLETE, f"state={ms} should wait"
 
 
 # === skip_ci toggle =======================================================
