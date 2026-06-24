@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from ...config import ConfigError, RepoConfig, get_repo_config
+from ...vcs import git_ops
 
 log = logging.getLogger("robotsix_mill.stages.merge")
 
@@ -243,6 +244,78 @@ def _verify_merge_ancestor(
         sha[:8],
     )
     return True
+
+
+def _duplicate_changelog_fragments(
+    repo_dir: str | None, target_branch: str
+) -> set[str]:
+    """Return the set of towncrier issue keys (ticket ids) that have MORE
+    THAN ONE changelog fragment added by the PR branch vs origin/<target>.
+
+    Empty set ⇒ no duplicates (allow merge). Best-effort: on any tooling
+    error or when the repo has no ``[tool.towncrier]`` config, return
+    ``set()``.
+
+    Towncrier fragment files are named ``<issue>.<category>[.<counter>].md``
+    and reside directly in the directory configured by
+    ``[tool.towncrier].directory`` (default ``changes``). The dedup key is
+    everything before the **first** dot — ``Path(name).name.split('.', 1)[0]``.
+    """
+    if repo_dir is None:
+        return set()
+
+    repo_path = Path(repo_dir)
+
+    # -- resolve fragment directory from pyproject.toml -------------------
+    pp = repo_path / "pyproject.toml"
+    if not pp.is_file():
+        return set()
+
+    try:
+        import tomllib
+
+        data = tomllib.loads(pp.read_text(encoding="utf-8"))
+    except Exception:
+        log.warning(
+            "towncrier gate: failed to parse pyproject.toml — allowing merge (best-effort)"
+        )
+        return set()
+
+    tc = (data.get("tool", {}) or {}).get("towncrier")
+    if not tc:
+        return set()
+
+    directory = str(tc.get("directory") or "changes").rstrip("/")
+
+    # -- collect added paths from the PR branch ---------------------------
+    try:
+        added = git_ops.added_files(repo_path, target_branch)
+    except Exception:
+        log.warning(
+            "towncrier gate: git added_files failed — allowing merge (best-effort)"
+        )
+        return set()
+
+    # -- count fragment issue keys ----------------------------------------
+    counts: dict[str, int] = {}
+    for path_str in added:
+        p = Path(path_str)
+        if str(p.parent) != directory:
+            continue
+        name = p.name
+        # Must match towncrier fragment naming: >=2 dot-separated segments,
+        # ends with .md, does not start with . or _ (excludes .gitkeep,
+        # _template.md).
+        if not name.endswith(".md"):
+            continue
+        if name.startswith(".") or name.startswith("_"):
+            continue
+        if "." not in name:
+            continue
+        key = name.split(".", 1)[0]  # everything before the first dot
+        counts[key] = counts.get(key, 0) + 1
+
+    return {k for k, v in counts.items() if v > 1}
 
 
 def _latest_failing_workflows(runs: list[dict[str, Any]]) -> set[str]:

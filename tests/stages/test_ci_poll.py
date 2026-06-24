@@ -896,3 +896,382 @@ def test_skip_ci_false_human_mr_approval_still_falls_back_on_failing_ci(
     out = MergeStage().run(t, ctx)
     # Failing CI → fallback to IMPLEMENT_COMPLETE.
     assert out.next_state is State.IMPLEMENT_COMPLETE
+
+
+# === Changelog duplicate-fragment gate =====================================
+
+
+def test_duplicate_fragments_same_ticket_blocks(tmp_path, monkeypatch):
+    """Two fragments sharing the same issue key → BLOCKED with ticket id in note."""
+    from robotsix_mill.stages.merge import ci_poll as ci_poll_mod
+
+    ctx = _gh(tmp_path)
+    _ci_green_mergeable(monkeypatch)
+
+    # Simulate duplicate fragments for ticket "ticket-abc".
+    monkeypatch.setattr(
+        ci_poll_mod,
+        "_duplicate_changelog_fragments",
+        lambda repo_dir, target_branch: {"ticket-abc"},
+    )
+
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "Duplicate changelog fragments" in out.note
+    assert "ticket-abc" in out.note
+    assert "Resumable" in out.note
+
+
+def test_single_fragment_promotes_normally(tmp_path, monkeypatch):
+    """One fragment per ticket → promotes to HUMAN_MR_APPROVAL as before."""
+    from robotsix_mill.stages.merge import ci_poll as ci_poll_mod
+
+    ctx = _gh(tmp_path)
+    _ci_green_mergeable(monkeypatch)
+
+    # No duplicates — empty set.
+    monkeypatch.setattr(
+        ci_poll_mod,
+        "_duplicate_changelog_fragments",
+        lambda repo_dir, target_branch: set(),
+    )
+
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+
+
+def test_two_fragments_different_tickets_allowed(tmp_path, monkeypatch):
+    """Two fragments for DIFFERENT tickets → allowed (each ticket has exactly one)."""
+    from robotsix_mill.stages.merge import ci_poll as ci_poll_mod
+
+    ctx = _gh(tmp_path)
+    _ci_green_mergeable(monkeypatch)
+
+    # Each ticket has exactly one fragment — no duplicates.
+    monkeypatch.setattr(
+        ci_poll_mod,
+        "_duplicate_changelog_fragments",
+        lambda repo_dir, target_branch: set(),
+    )
+
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+
+
+def test_no_towncrier_config_allows_merge(tmp_path, monkeypatch):
+    """Repo without [tool.towncrier] → gate is no-op, merge allowed."""
+    from robotsix_mill.stages.merge import ci_poll as ci_poll_mod
+
+    ctx = _gh(tmp_path)
+    _ci_green_mergeable(monkeypatch)
+
+    # No towncrier → empty set (best-effort allow).
+    monkeypatch.setattr(
+        ci_poll_mod,
+        "_duplicate_changelog_fragments",
+        lambda repo_dir, target_branch: set(),
+    )
+
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+
+
+def test_timestamp_named_fragments_no_false_positive(tmp_path, monkeypatch):
+    """Timestamp-named fragments each yield a unique key → allowed."""
+    from robotsix_mill.stages.merge import ci_poll as ci_poll_mod
+
+    ctx = _gh(tmp_path)
+    _ci_green_mergeable(monkeypatch)
+
+    # Timestamp fragments have unique keys — no duplicates.
+    monkeypatch.setattr(
+        ci_poll_mod,
+        "_duplicate_changelog_fragments",
+        lambda repo_dir, target_branch: set(),
+    )
+
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+
+
+def test_duplicate_fragments_git_error_best_effort_allow(tmp_path, monkeypatch):
+    """Git/tooling error → best-effort allow (empty set), merge proceeds."""
+    from robotsix_mill.stages.merge import ci_poll as ci_poll_mod
+
+    ctx = _gh(tmp_path)
+    _ci_green_mergeable(monkeypatch)
+
+    # Simulate git error → empty set.
+    monkeypatch.setattr(
+        ci_poll_mod,
+        "_duplicate_changelog_fragments",
+        lambda repo_dir, target_branch: set(),
+    )
+
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+
+
+def test_duplicate_fragments_multiple_tickets_in_message(tmp_path, monkeypatch):
+    """When multiple tickets have duplicates, all are named in the BLOCKED note."""
+    from robotsix_mill.stages.merge import ci_poll as ci_poll_mod
+
+    ctx = _gh(tmp_path)
+    _ci_green_mergeable(monkeypatch)
+
+    monkeypatch.setattr(
+        ci_poll_mod,
+        "_duplicate_changelog_fragments",
+        lambda repo_dir, target_branch: {"ticket-1", "ticket-2"},
+    )
+
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "ticket-1" in out.note
+    assert "ticket-2" in out.note
+
+
+# === _duplicate_changelog_fragments function tests =========================
+
+
+def test_duplicate_fragments_func_no_repo_dir(tmp_path):
+    """None repo_dir → empty set."""
+    from robotsix_mill.stages.merge._shared import _duplicate_changelog_fragments
+
+    result = _duplicate_changelog_fragments(None, "main")
+    assert result == set()
+
+
+def test_duplicate_fragments_func_missing_pyproject(tmp_path):
+    """Missing pyproject.toml → empty set."""
+    from robotsix_mill.stages.merge._shared import _duplicate_changelog_fragments
+
+    result = _duplicate_changelog_fragments(str(tmp_path), "main")
+    assert result == set()
+
+
+def test_duplicate_fragments_func_no_towncrier_config(tmp_path):
+    """pyproject.toml without [tool.towncrier] → empty set."""
+    from robotsix_mill.stages.merge._shared import _duplicate_changelog_fragments
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text("[tool.something]\nkey = 'val'\n")
+    (repo / ".git").mkdir()
+
+    result = _duplicate_changelog_fragments(str(repo), "main")
+    assert result == set()
+
+
+def test_duplicate_fragments_func_real_duplicates(tmp_path, monkeypatch):
+    """Two fragments with the same issue key → that key is returned."""
+    from robotsix_mill.stages.merge import _shared as shared_mod
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text("[tool.towncrier]\ndirectory = 'changes'\n")
+    (repo / ".git").mkdir()
+    (repo / "changes").mkdir()
+
+    # Simulate added_files returning two fragments with the same issue key.
+    monkeypatch.setattr(
+        shared_mod.git_ops,
+        "added_files",
+        lambda repo, target_branch: [
+            "changes/ticket-abc.feature.md",
+            "changes/ticket-abc.misc.md",
+        ],
+    )
+
+    result = shared_mod._duplicate_changelog_fragments(str(repo), "main")
+    assert result == {"ticket-abc"}
+
+
+def test_duplicate_fragments_func_different_tickets_allowed(tmp_path, monkeypatch):
+    """Two fragments for different issue keys → no duplicates."""
+    from robotsix_mill.stages.merge import _shared as shared_mod
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text("[tool.towncrier]\ndirectory = 'changes'\n")
+    (repo / ".git").mkdir()
+    (repo / "changes").mkdir()
+
+    monkeypatch.setattr(
+        shared_mod.git_ops,
+        "added_files",
+        lambda repo, target_branch: [
+            "changes/ticket-abc.feature.md",
+            "changes/ticket-xyz.bugfix.md",
+        ],
+    )
+
+    result = shared_mod._duplicate_changelog_fragments(str(repo), "main")
+    assert result == set()
+
+
+def test_duplicate_fragments_func_timestamp_named_unique(tmp_path, monkeypatch):
+    """Timestamp-named fragments each have a unique key → no false positives."""
+    from robotsix_mill.stages.merge import _shared as shared_mod
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text("[tool.towncrier]\ndirectory = 'changes'\n")
+    (repo / ".git").mkdir()
+    (repo / "changes").mkdir()
+
+    monkeypatch.setattr(
+        shared_mod.git_ops,
+        "added_files",
+        lambda repo, target_branch: [
+            "changes/20260618T145744Z-fix-auth-abaf.misc.md",
+            "changes/20260619T120000Z-add-feature-cd12.feature.md",
+        ],
+    )
+
+    result = shared_mod._duplicate_changelog_fragments(str(repo), "main")
+    assert result == set()
+
+
+def test_duplicate_fragments_func_single_fragment_no_duplicate(tmp_path, monkeypatch):
+    """A single fragment → no duplicates."""
+    from robotsix_mill.stages.merge import _shared as shared_mod
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text("[tool.towncrier]\ndirectory = 'changes'\n")
+    (repo / ".git").mkdir()
+    (repo / "changes").mkdir()
+
+    monkeypatch.setattr(
+        shared_mod.git_ops,
+        "added_files",
+        lambda repo, target_branch: ["changes/ticket-abc.feature.md"],
+    )
+
+    result = shared_mod._duplicate_changelog_fragments(str(repo), "main")
+    assert result == set()
+
+
+def test_duplicate_fragments_func_excludes_dotfiles_and_underscore(
+    tmp_path, monkeypatch
+):
+    """Files starting with . or _ are excluded (e.g. .gitkeep, _template.md)."""
+    from robotsix_mill.stages.merge import _shared as shared_mod
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text("[tool.towncrier]\ndirectory = 'changes'\n")
+    (repo / ".git").mkdir()
+    (repo / "changes").mkdir()
+
+    monkeypatch.setattr(
+        shared_mod.git_ops,
+        "added_files",
+        lambda repo, target_branch: [
+            "changes/.gitkeep",
+            "changes/_template.md",
+            "changes/ticket-abc.feature.md",
+        ],
+    )
+
+    result = shared_mod._duplicate_changelog_fragments(str(repo), "main")
+    assert result == set()
+
+
+def test_duplicate_fragments_func_excludes_non_md(tmp_path, monkeypatch):
+    """Non-.md files in the fragment directory are ignored."""
+    from robotsix_mill.stages.merge import _shared as shared_mod
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text("[tool.towncrier]\ndirectory = 'changes'\n")
+    (repo / ".git").mkdir()
+    (repo / "changes").mkdir()
+
+    monkeypatch.setattr(
+        shared_mod.git_ops,
+        "added_files",
+        lambda repo, target_branch: [
+            "changes/ticket-abc.feature.md",
+            "changes/readme.txt",
+            "changes/ticket-abc.misc.md",
+        ],
+    )
+
+    result = shared_mod._duplicate_changelog_fragments(str(repo), "main")
+    assert result == {"ticket-abc"}
+
+
+def test_duplicate_fragments_func_custom_directory(tmp_path, monkeypatch):
+    """The fragment directory is read from [tool.towncrier].directory."""
+    from robotsix_mill.stages.merge import _shared as shared_mod
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text(
+        "[tool.towncrier]\ndirectory = 'changelog.d'\n"
+    )
+    (repo / ".git").mkdir()
+    (repo / "changelog.d").mkdir()
+
+    monkeypatch.setattr(
+        shared_mod.git_ops,
+        "added_files",
+        lambda repo, target_branch: [
+            "changelog.d/ticket-abc.feature.md",
+            "changelog.d/ticket-abc.misc.md",
+        ],
+    )
+
+    result = shared_mod._duplicate_changelog_fragments(str(repo), "main")
+    assert result == {"ticket-abc"}
+
+
+def test_duplicate_fragments_func_git_error_best_effort(tmp_path, monkeypatch):
+    """When added_files raises, the function returns empty set (best-effort)."""
+    from robotsix_mill.stages.merge import _shared as shared_mod
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text("[tool.towncrier]\ndirectory = 'changes'\n")
+    (repo / ".git").mkdir()
+
+    monkeypatch.setattr(
+        shared_mod.git_ops,
+        "added_files",
+        lambda repo, target_branch: (_ for _ in ()).throw(OSError("git failed")),
+    )
+
+    result = shared_mod._duplicate_changelog_fragments(str(repo), "main")
+    assert result == set()
+
+
+def test_duplicate_fragments_func_ignores_subdirectory_files(tmp_path, monkeypatch):
+    """Files in subdirectories of the fragment directory are ignored."""
+    from robotsix_mill.stages.merge import _shared as shared_mod
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text("[tool.towncrier]\ndirectory = 'changes'\n")
+    (repo / ".git").mkdir()
+    (repo / "changes").mkdir()
+
+    monkeypatch.setattr(
+        shared_mod.git_ops,
+        "added_files",
+        lambda repo, target_branch: [
+            "changes/ticket-abc.feature.md",
+            "changes/subdir/ticket-abc.misc.md",  # subdirectory — ignored
+        ],
+    )
+
+    result = shared_mod._duplicate_changelog_fragments(str(repo), "main")
+    assert result == set()
