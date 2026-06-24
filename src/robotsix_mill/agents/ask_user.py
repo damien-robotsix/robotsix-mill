@@ -28,6 +28,19 @@ def make_ask_user_tool(settings: Settings, agent_name: str):
     def ask_user(question: str) -> str:
         """Pause the current ticket and ask the operator a clarifying question.
 
+        Use this ONLY for a genuine blocker you cannot resolve yourself:
+        a mis-routed ticket (the spec targets code/paths that do not exist
+        in this repo), a missing prerequisite, or genuinely ambiguous scope
+        with no safe default.
+
+        Do NOT use it to ask for permission or confirmation to PROCEED. If
+        your implementation is complete and the tests pass, just finish —
+        emit your structured output and stop. The pipeline reviews,
+        documents, and delivers automatically; you never need sign-off to
+        continue. Asking things like "the fix is done, ready for review,
+        shall I proceed?" only pauses the ticket in awaiting_user_reply and
+        stalls delivery until a human happens to reply.
+
         Returns a sentinel that stops the agent — the ticket will resume
         when the operator replies.
 
