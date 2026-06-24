@@ -23,8 +23,8 @@ it directly); the DB row only holds the pointer + a content hash.
 
 emit ticket ─▶ API inserts row + enqueues ─▶ worker chains stages
   draft ─refine▶ human_issue_approval ─approve▶ ready ─implement▶ deliverable
-        ─deliver▶ in_review ─(PR merged; merge-poll)▶ done ─retrospect▶ closed
-  in_review = PR open (the PR is the review); merge poll flips it.
+        ─deliver▶ human_mr_approval ─(PR merged; merge-poll)▶ done ─retrospect▶ closed
+  human_mr_approval = PR open (the PR is the review); merge poll flips it.
   retrospect audits the run + Langfuse and may spawn an improvement draft.
   closed = terminal. errored = worker-level crash (rare); blocked = needs a human.
   Transient stage failures (git outage, provider 5xx) are retried automatically
