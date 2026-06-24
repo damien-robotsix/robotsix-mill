@@ -245,6 +245,8 @@ pipeline:
 periodic:
 
   # -- bespoke-agent supervisor reconciliation interval ------------------
+  # Master toggle for the per-repo bespoke periodic agent supervisor.
+  bespoke_periodic: true
   # How often (seconds) the bespoke supervisor refreshes its clone
   # and reconciles which YAMLs are scheduled.
   bespoke_discovery_interval_seconds: 600

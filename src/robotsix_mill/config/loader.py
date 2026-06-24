@@ -386,6 +386,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "pipeline.delete_branch_on_merge": "delete_branch_on_merge",
     "pipeline.review_revision_memory_path": "review_revision_memory_path",
     # -- periodic.bespoke --
+    "periodic.bespoke_periodic": "bespoke_periodic",
     "periodic.bespoke_discovery_interval_seconds": "bespoke_discovery_interval_seconds",
     # -- periodic.audit --
     "periodic.audit.enabled": "audit_periodic",
