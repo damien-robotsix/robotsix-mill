@@ -1,5 +1,7 @@
 ## 0.0.0 (unreleased)
 
+- Fix deptry dependency issues: add `opentelemetry-api` to the `tracing` extra (we import `opentelemetry.trace` directly) and add `opentelemetry-sdk`/`opentelemetry-exporter-otlp-proto-http` to the deptry DEP002 ignore list (they are needed transitively by `robotsix_llmio`).
+- Fix `_ensure_tracing` to catch `ImportError` from `setup_langfuse_tracing()` so missing `opentelemetry` dependencies degrade gracefully instead of crashing ticket processing.
 - Fix `ci_fix_request_limit` config drift: add YAML alias in `_YAML_PATH_TO_ALIAS` and default leaf `ci_fix_request_limit: 120` in `config/mill.defaults.yaml` so the setting is configurable via YAML (matching every other pipeline-level limit).
 - Wire `bespoke_discovery_interval_seconds` to YAML config: add alias mapping in `_YAML_PATH_TO_ALIAS`, default leaf in `config/mill.defaults.yaml`, and documentation row in `docs/configuration.md`.
 - Wire `bespoke_periodic` to YAML config: add alias mapping in `_YAML_PATH_TO_ALIAS`, default leaf in `config/mill.defaults.yaml`, and documentation row in `docs/configuration.md`.
