@@ -259,8 +259,8 @@ class GitHubForgeCIMixin:
         :param branch: when set, filter runs to this branch.
         :param head_sha: when set, filter runs to this head commit SHA.
         Returns a ``list[dict]`` (one per run) with ``id``, ``name``,
-        ``workflow_id``, ``head_sha``, ``conclusion``, ``html_url``, and
-        ``created_at``.
+        ``workflow_id``, ``head_sha``, ``conclusion``, ``html_url``,
+        ``created_at``, ``event``, and ``head_branch``.
         """
         owner, repo = self._owner_repo  # type: ignore[attr-defined]
         return self._list_workflow_runs(
@@ -390,6 +390,8 @@ class GitHubForgeCIMixin:
                 "conclusion": run.get("conclusion"),
                 "html_url": run.get("html_url", ""),
                 "created_at": run.get("created_at", ""),
+                "event": run.get("event", ""),
+                "head_branch": run.get("head_branch"),
             }
             for run in raw
         ]

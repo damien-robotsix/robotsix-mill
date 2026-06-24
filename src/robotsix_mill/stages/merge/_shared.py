@@ -270,3 +270,23 @@ def _latest_failing_workflows(runs: list[dict[str, Any]]) -> set[str]:
         for r in latest.values()
         if r.get("conclusion") == "failure" and (r.get("name") or "").strip()
     }
+
+
+def _is_pr_check_run(run: dict[str, Any]) -> bool:
+    """True iff this workflow run is the kind that appears as a check ON the PR.
+
+    Excludes release/tag-only (``on: push: <tags>``), ``workflow_dispatch``-only,
+    and scheduled workflows, which never produce a PR check and must not count
+    as target-branch debt. A run whose ``event`` key is absent (legacy/test
+    data) is treated as a PR check to preserve prior behaviour.
+    """
+    event = run.get("event")
+    if event is None:  # provenance unknown — preserve old behaviour
+        return True
+    event = event.strip()
+    if event in {"pull_request", "pull_request_target", "merge_group"}:
+        return True
+    if event == "push":
+        # Branch push (head_branch set) = PR check; tag push (head_branch null) = release.
+        return bool((run.get("head_branch") or "").strip())
+    return False  # release, schedule, workflow_dispatch, …

@@ -490,6 +490,8 @@ def test_list_workflow_runs_by_branch(tmp_path, monkeypatch):
                 "conclusion": "failure",
                 "html_url": "http://x",
                 "created_at": "2025-01-01T00:00:00Z",
+                "event": "push",
+                "head_branch": "main",
             }
         ]
     }
@@ -502,6 +504,8 @@ def test_list_workflow_runs_by_branch(tmp_path, monkeypatch):
     assert result[0]["id"] == 1
     assert result[0]["conclusion"] == "failure"
     assert result[0]["head_sha"] == "abc"
+    assert result[0]["event"] == "push"
+    assert result[0]["head_branch"] == "main"
 
 
 def test_list_workflow_runs_by_head_sha(tmp_path, monkeypatch):
@@ -542,6 +546,32 @@ def test_list_workflow_runs_empty(tmp_path, monkeypatch):
 
     forge = _forge(tmp_path)
     assert forge.list_workflow_runs(branch="main") == []
+
+
+def test_list_workflow_runs_missing_event_and_head_branch(tmp_path, monkeypatch):
+    """When the API omits event and head_branch, the mapped dict uses
+    defaults (empty string and None respectively)."""
+    runs_data = {
+        "workflow_runs": [
+            {
+                "id": 2,
+                "name": "tag-release",
+                "workflow_id": 200,
+                "head_sha": "def",
+                "conclusion": "failure",
+                "html_url": "http://y",
+                "created_at": "2025-01-02T00:00:00Z",
+            }
+        ]
+    }
+    get_map = {"actions/runs": _make_response(200, runs_data)}
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.list_workflow_runs(branch="main")
+    assert len(result) == 1
+    assert result[0]["event"] == ""
+    assert result[0]["head_branch"] is None
 
 
 # ---------------------------------------------------------------------------

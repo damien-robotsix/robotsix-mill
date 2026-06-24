@@ -4323,7 +4323,15 @@ def test_waiting_auto_merge_no_repo_proceeds_to_done(tmp_path, monkeypatch):
 # ============================================================
 
 
-def _run(workflow_id, name, conclusion, created_at, head_sha="abc"):
+def _run(
+    workflow_id,
+    name,
+    conclusion,
+    created_at,
+    head_sha="abc",
+    event="push",
+    head_branch="feature",
+):
     """Build a workflow-run dict as list_workflow_runs returns them."""
     return {
         "id": f"{workflow_id}-{created_at}",
@@ -4333,6 +4341,8 @@ def _run(workflow_id, name, conclusion, created_at, head_sha="abc"):
         "conclusion": conclusion,
         "html_url": "https://example/run",
         "created_at": created_at,
+        "event": event,
+        "head_branch": head_branch,
     }
 
 
@@ -4541,6 +4551,155 @@ def test_implement_complete_main_debt_detection_disabled(tmp_path, monkeypatch):
     )
     out = MergeStage().run(_implement_complete(ctx), ctx)
     assert out.next_state is State.FIXING_CI
+
+
+# ---------------------------------------------------------------------------
+# _is_pr_check_run unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_is_pr_check_run_classification():
+    """Verify _is_pr_check_run correctly classifies each trigger event."""
+    from robotsix_mill.stages.merge import _is_pr_check_run
+
+    # PR-check events → True.
+    assert _is_pr_check_run({"event": "pull_request", "head_branch": "feature"}) is True
+    assert (
+        _is_pr_check_run({"event": "pull_request_target", "head_branch": "feat"})
+        is True
+    )
+    assert _is_pr_check_run({"event": "merge_group", "head_branch": None}) is True
+
+    # Branch push with non-empty head_branch → True.
+    assert _is_pr_check_run({"event": "push", "head_branch": "main"}) is True
+    assert _is_pr_check_run({"event": "push", "head_branch": "feature/x"}) is True
+
+    # Tag push (head_branch is None or empty) → False.
+    assert _is_pr_check_run({"event": "push", "head_branch": None}) is False
+    assert _is_pr_check_run({"event": "push", "head_branch": ""}) is False
+    assert _is_pr_check_run({"event": "push", "head_branch": "  "}) is False
+
+    # Non-PR-check events → False.
+    assert _is_pr_check_run({"event": "release"}) is False
+    assert _is_pr_check_run({"event": "schedule"}) is False
+    assert _is_pr_check_run({"event": "workflow_dispatch"}) is False
+
+    # Missing event key → True (back-compat).
+    assert _is_pr_check_run({"head_branch": "main"}) is True
+    assert _is_pr_check_run({}) is True
+
+
+def test_implement_complete_tag_release_not_blocked(tmp_path, monkeypatch):
+    """Target only has a failing tag/release workflow (event=push, head_branch=None)
+    → NOT blocked (the release run is excluded; debt set empty)."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    _patch_failing_pr(monkeypatch)
+    _patch_workflow_runs(
+        monkeypatch,
+        pr_runs=[
+            _run(
+                1,
+                "publish",
+                "failure",
+                "2026-06-11T11:00:00Z",
+                event="push",
+                head_branch=None,
+            )
+        ],
+        main_runs=[
+            _run(
+                1,
+                "publish",
+                "failure",
+                "2026-06-11T11:00:00Z",
+                event="push",
+                head_branch=None,
+            )
+        ],
+    )
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": False,
+    )
+    out = MergeStage().run(_implement_complete(ctx), ctx)
+    assert out.next_state is State.FIXING_CI  # falls through to normal CI path
+
+
+def test_implement_complete_pr_check_debt_still_blocks(tmp_path, monkeypatch):
+    """Failing PR-check workflows (push with branch, or pull_request) that also
+    fail on main still block as before."""
+    ctx = _gh(tmp_path)
+    _patch_failing_pr(monkeypatch)
+    _patch_workflow_runs(
+        monkeypatch,
+        pr_runs=[
+            _run(
+                1,
+                "lint",
+                "failure",
+                "2026-06-11T11:00:00Z",
+                event="push",
+                head_branch="feature",
+            )
+        ],
+        main_runs=[
+            _run(
+                1,
+                "lint",
+                "failure",
+                "2026-06-11T11:00:00Z",
+                event="push",
+                head_branch="main",
+            )
+        ],
+    )
+    out = MergeStage().run(_implement_complete(ctx), ctx)
+    assert out.next_state is State.BLOCKED
+    assert "lint" in out.note
+
+
+def test_implement_complete_schedule_workflow_not_blocked(tmp_path, monkeypatch):
+    """A schedule-triggered workflow failure on both PR and main is excluded
+    → not blocked."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    _patch_failing_pr(monkeypatch)
+    _patch_workflow_runs(
+        monkeypatch,
+        pr_runs=[
+            _run(
+                1,
+                "nightly",
+                "failure",
+                "2026-06-11T11:00:00Z",
+                event="schedule",
+                head_branch=None,
+            )
+        ],
+        main_runs=[
+            _run(
+                1,
+                "nightly",
+                "failure",
+                "2026-06-11T11:00:00Z",
+                event="schedule",
+                head_branch=None,
+            )
+        ],
+    )
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": False,
+    )
+    out = MergeStage().run(_implement_complete(ctx), ctx)
+    assert out.next_state is State.FIXING_CI  # falls through to normal CI path
 
 
 # ============================================================
