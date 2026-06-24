@@ -184,7 +184,7 @@ class Forge(ABC):
 
         Returns a list of dicts, each with keys:
         ``id``, ``name``, ``workflow_id``, ``head_sha``, ``conclusion``,
-        ``html_url``, ``created_at``.
+        ``html_url``, ``created_at``, ``event``, ``head_branch``.
         """
 
     @abstractmethod

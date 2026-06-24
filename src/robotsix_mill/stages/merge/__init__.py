@@ -71,6 +71,7 @@ from ._shared import (
     _REBASE_COUNTER,
     _REV_REV_COUNTER,
     _build_failing_summary,
+    _is_pr_check_run,
     _latest_failing_workflows,
     _load_pr_urls,
     _read_counter,
@@ -113,4 +114,5 @@ __all__ = [
     "_workspace_repo_dir",
     "_verify_merge_ancestor",
     "_latest_failing_workflows",
+    "_is_pr_check_run",
 ]

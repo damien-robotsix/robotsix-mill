@@ -22,6 +22,7 @@ from ._shared import (
     _PING_PONG_COUNT,
     _REBASE_COUNTER,
     _ci_truly_green,
+    _is_pr_check_run,
     _latest_failing_workflows,
     _read_counter,
     _verify_merge_ancestor,
@@ -653,14 +654,20 @@ class CIPollMixin(_MergeStageBase):
             head_sha = (pr or {}).get("sha", "")
             if not head_sha:
                 return set()
-            pr_failing = _latest_failing_workflows(
-                forge.list_workflow_runs(head_sha=head_sha)
-            )
+            pr_runs = [
+                r
+                for r in forge.list_workflow_runs(head_sha=head_sha)
+                if _is_pr_check_run(r)
+            ]
+            pr_failing = _latest_failing_workflows(pr_runs)
             if not pr_failing:
                 return set()
-            main_failing = _latest_failing_workflows(
-                forge.list_workflow_runs(branch=target_branch)
-            )
+            main_runs = [
+                r
+                for r in forge.list_workflow_runs(branch=target_branch)
+                if _is_pr_check_run(r)
+            ]
+            main_failing = _latest_failing_workflows(main_runs)
             # Pre-existing debt iff EVERY workflow failing on the PR is also
             # failing on main.
             if main_failing and pr_failing <= main_failing:
