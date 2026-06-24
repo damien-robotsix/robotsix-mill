@@ -260,7 +260,7 @@ class _CoreSettings(BaseModel):
     # test_gap/trace_inspector default; a healthy refine has near-zero
     # tool errors.
     refine_max_errors: int = Field(default=20, ge=0)
-    doc_request_limit: int = Field(default=8)
+    doc_request_limit: int = Field(default=16)
     doc_classifier_request_limit: int = Field(default=3)
     # Caps the git diff fed to the cheap doc-classifier gate. Truncation
     # is safe here: the classifier is conservatively biased toward
