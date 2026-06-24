@@ -178,3 +178,52 @@ def test_referenced_mill_paths_absent_config_mill_prefix(tmp_path):
         repo_dir=tmp_path,
     )
     assert result == ["config/mill.settings.yaml"]
+
+
+# ---------------------------------------------------------------------------
+# src/-aware regression tests (resolve_under_src wired in)
+# ---------------------------------------------------------------------------
+
+
+def test_referenced_mill_paths_absent_src_fallback_present(tmp_path):
+    """A mill-prefixed token that exists only under src/ is reported
+    **present** (not absent) — the resolve_under_src fallback kicks in
+    and finds it."""
+    # ``agent_definitions/`` is a MILL_PATH_PREFIXES entry.
+    (tmp_path / "src" / "agent_definitions" / "lang_instructions").mkdir(parents=True)
+    (
+        tmp_path / "src" / "agent_definitions" / "lang_instructions" / "python.md"
+    ).write_text("")
+
+    result = referenced_mill_paths_absent(
+        title="agent_definitions/lang_instructions/python.md needs updating",
+        body="",
+        repo_dir=tmp_path,
+    )
+    # Must be empty — the path exists under src/.
+    assert result == []
+
+
+def test_referenced_mill_paths_absent_src_fallback_genuinely_absent(tmp_path):
+    """A truly-absent mill-prefixed token is still reported absent
+    even with src/ fallback — no regression on the absent detection."""
+    result = referenced_mill_paths_absent(
+        title="src/robotsix_mill/core/nonexistent_module.py",
+        body="",
+        repo_dir=tmp_path,
+    )
+    assert result == ["src/robotsix_mill/core/nonexistent_module.py"]
+
+
+def test_referenced_mill_paths_absent_root_present_still_present(tmp_path):
+    """A mill-prefixed token that exists at repo root (literal candidate)
+    is still reported present — literal-first ordering preserved."""
+    (tmp_path / "src" / "robotsix_mill" / "core").mkdir(parents=True)
+    (tmp_path / "src" / "robotsix_mill" / "core" / "real_module.py").write_text("")
+
+    result = referenced_mill_paths_absent(
+        title="src/robotsix_mill/core/real_module.py",
+        body="",
+        repo_dir=tmp_path,
+    )
+    assert result == []

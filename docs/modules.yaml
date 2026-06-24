@@ -56,6 +56,7 @@ modules:
       - src/robotsix_mill/core/duration.py
       - src/robotsix_mill/core/dedup.py
       - src/robotsix_mill/core/draft_target.py
+      - src/robotsix_mill/core/repo_layout.py
       - tests/core/test_core_dedup.py
       - tests/core/test_db.py
       - tests/core/test_models.py
@@ -70,6 +71,7 @@ modules:
       - tests/core/test_workspace.py
       - tests/core/test_workspace_screenshots.py
       - tests/core/test_draft_target.py
+      - tests/core/test_repo_layout.py
     dependencies: [config]
 
   # -------------------------------------------------------------------

@@ -2540,3 +2540,177 @@ def test_trace_stage_list_dir_emits_span(tmp_path, settings, fake_sandbox, monke
     result = tools["list_dir"](".")
     assert "a.txt" in result
     assert spans == ["list_dir"]
+
+
+# ===================================================================
+# read_file — src/ fallback
+# ===================================================================
+
+
+class TestReadFileSrcFallback:
+    """``read_file`` transparently resolves paths under ``src/`` when
+    the literal spelling does not exist at the repo root."""
+
+    def test_file_only_under_src_resolves_with_note(self, tmp_path, settings):
+        """A path like ``robotsix_llmio/core/models.py`` that exists
+        only at ``src/robotsix_llmio/core/models.py`` returns the file
+        content with a resolution note prepended."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "src/robotsix_llmio/core/models.py", "x = 1\n")
+        tools = _build(root, settings)
+
+        result = tools["read_file"](path="robotsix_llmio/core/models.py")
+        assert "x = 1" in result
+        assert "(resolved" in result
+        assert "robotsix_llmio/core/models.py" in result
+        assert "src/robotsix_llmio/core/models.py" in result
+        assert "package paths live under the src/ namespace" in result
+        # Note is before the content.
+        assert result.index("(resolved") < result.index("x = 1")
+
+    def test_already_src_prefixed_unaffected(self, tmp_path, settings):
+        """A path that already starts with ``src/`` is NOT double-prefixed
+        and returns content unchanged (no note prepended)."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "src/robotsix_mill/core/models.py", "y = 2\n")
+        tools = _build(root, settings)
+
+        result = tools["read_file"](path="src/robotsix_mill/core/models.py")
+        assert result == "y = 2\n"
+        assert "(resolved" not in result
+
+    def test_file_neither_root_nor_src_returns_error(self, tmp_path, settings):
+        """A path that exists at neither root nor src/ returns the
+        standard "does not exist" error."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+
+        result = tools["read_file"](path="nonexistent/module.py")
+        assert "does not exist" in result
+        assert "(resolved" not in result
+
+    def test_file_exists_at_root_not_rewritten(self, tmp_path, settings):
+        """A file that exists at repo root (literal spelling) is returned
+        without any src/ note — root path takes priority."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "README.md", "hello\n")
+        # Also create a src/ version to prove root wins.
+        _make_file(root, "src/README.md", "src copy\n")
+        tools = _build(root, settings)
+
+        result = tools["read_file"](path="README.md")
+        assert result == "hello\n"
+        assert "(resolved" not in result
+
+    def test_src_fallback_with_offset_limit(self, tmp_path, settings):
+        """Offset/limit works correctly through the src/ fallback."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "src/pkg/mod.py", "line1\nline2\nline3\nline4\n")
+        tools = _build(root, settings)
+
+        result = tools["read_file"](path="pkg/mod.py", offset=2, limit=2)
+        assert "line2\nline3\n" in result
+        assert "(resolved" in result
+        # Note should come before the sliced content.
+        assert result.index("(resolved") < result.index("line2")
+
+    def test_src_fallback_directory_returns_error(self, tmp_path, settings):
+        """When the src/ candidate is a directory, not a file, the
+        function still returns an error (same as when literal path is
+        a directory)."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        (root / "src" / "pkg").mkdir(parents=True)
+        tools = _build(root, settings)
+
+        result = tools["read_file"](path="pkg")
+        # The literal path doesn't exist; src/pkg exists but is a dir.
+        # The fallback loop checks is_file() → False, loop ends, falls
+        # through to standard error.
+        assert "does not exist" in result
+
+
+# ===================================================================
+# list_dir — src/ fallback
+# ===================================================================
+
+
+class TestListDirSrcFallback:
+    """``list_dir`` transparently resolves directories under ``src/``
+    when the literal spelling does not exist at the repo root."""
+
+    def test_dir_only_under_src_resolves_with_note(self, tmp_path, settings):
+        """A directory that exists only at ``src/<path>`` is listed
+        with a resolution note prepended."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        (root / "src" / "robotsix_llmio" / "core").mkdir(parents=True)
+        (root / "src" / "robotsix_llmio" / "core" / "models.py").write_text("")
+        (root / "src" / "robotsix_llmio" / "core" / "util.py").write_text("")
+        tools = _build(root, settings)
+
+        result = tools["list_dir"]("robotsix_llmio/core")
+        assert "(resolved" in result
+        assert "robotsix_llmio/core" in result
+        assert "src/robotsix_llmio/core" in result
+        assert "package paths live under the src/ namespace" in result
+        assert "models.py" in result
+        assert "util.py" in result
+        # Note before listing.
+        assert result.index("(resolved") < result.index("models.py")
+
+    def test_dir_already_src_prefixed_unaffected(self, tmp_path, settings):
+        """A directory already under ``src/`` is listed without a note."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        (root / "src" / "robotsix_mill" / "core").mkdir(parents=True)
+        (root / "src" / "robotsix_mill" / "core" / "__init__.py").write_text("")
+        tools = _build(root, settings)
+
+        result = tools["list_dir"]("src/robotsix_mill/core")
+        assert "__init__.py" in result
+        assert "(resolved" not in result
+
+    def test_dir_neither_root_nor_src_returns_error(self, tmp_path, settings):
+        """A directory that exists at neither root nor src/ returns
+        an error string."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+
+        result = tools["list_dir"]("nonexistent_dir")
+        assert "error" in result.lower()
+        assert "(resolved" not in result
+
+    def test_dir_exists_at_root_no_rewrite(self, tmp_path, settings):
+        """A directory that exists at repo root is listed without a note
+        — root path takes priority."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        (root / "config").mkdir()
+        (root / "config" / "settings.yaml").write_text("")
+        # Also create a src/config to prove root wins.
+        (root / "src" / "config").mkdir(parents=True)
+        (root / "src" / "config" / "other.yaml").write_text("")
+        tools = _build(root, settings)
+
+        result = tools["list_dir"]("config")
+        assert "settings.yaml" in result
+        assert "other.yaml" not in result  # src/config not used
+        assert "(resolved" not in result
+
+    def test_src_fallback_file_not_dir_returns_error(self, tmp_path, settings):
+        """When the src/ candidate is a file, not a directory, the
+        function returns an error (iterdir() raises on a file)."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "src/pkg", "content")
+        tools = _build(root, settings)
+
+        result = tools["list_dir"]("pkg")
+        assert "error" in result.lower()

@@ -16,6 +16,27 @@ enterprise process. These are hard rules, learned the hard way.
 - Match the style, comment density, and idioms of the surrounding
   code. Don't restate what the code or git history already says.
 
+## Repository layout
+
+First-party packages live under the `src/<pkg>/` namespace:
+
+- `src/robotsix_mill/` — the mill pipeline itself (agents, stages,
+  core, runtime, config).
+- `src/robotsix_llmio/` — the LLM I/O library (core utilities,
+  config, sqlite helpers).
+- Other first-party packages follow the same `src/<pkg>/` convention.
+
+**Agents must probe `src/<pkg>/` before concluding a path is absent.**
+The repo root is NOT a flat namespace — packages like `robotsix_llmio`
+and `config` live under `src/`, so a bare existence check on e.g.
+`robotsix_llmio/core` or `config/` at the repo root will miss. Always
+try the `src/`-prefixed form when a literal file/directory probe
+returns "not found". The `read_file` and `list_dir` tools already
+apply this fallback transparently, but agents performing their own
+existence reasoning (e.g. scope analysis, draft-routing checks) must
+apply the same rule — never assume only `src/robotsix_mill/` exists
+under `src/`.
+
 ## The test gate is sacred and must stay hermetic
 
 - The implement stage gates on the **full pytest suite running inside

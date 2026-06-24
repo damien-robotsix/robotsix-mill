@@ -15,6 +15,7 @@ from pathlib import Path
 from pydantic_ai import RunContext
 
 from ..config import Settings
+from ..core.repo_layout import src_path_candidates
 from .. import sandbox
 from ..runtime.tracing import trace_stage
 
@@ -561,6 +562,7 @@ def build_fs_tools(
         if cap_error is not None:
             return cap_error
 
+        resolved_note = ""
         try:
             p = _safe(root, path, extra_roots=extra_roots)
         except (ValueError, OSError) as e:
@@ -570,17 +572,36 @@ def build_fs_tools(
             if p.exists():
                 # Path exists but is a directory.
                 return f"error: {path!r} is a directory, not a file"
-            # Path does not exist at all.
-            parent = p.parent
-            try:
-                parent_hint = str(parent.relative_to(root))
-            except ValueError:
-                parent_hint = str(parent)
-            return (
-                f"error: {path!r} does not exist — "
-                f"try list_dir('{parent_hint}') "
-                f"to find the correct path"
-            )
+            # Path does not exist at all — try src/ fallback before
+            # returning the "does not exist" error.  This catches the
+            # common agent mistake of probing e.g. "robotsix_llmio/core"
+            # when the package actually lives under src/robotsix_llmio/core/.
+            candidates = src_path_candidates(path)
+            # Candidate 0 is the literal path — already tried above.
+            for cand in candidates[1:]:
+                try:
+                    alt = _safe(root, cand, extra_roots=extra_roots)
+                except ValueError, OSError:
+                    continue
+                if alt.is_file():
+                    p = alt
+                    resolved_note = (
+                        f"(resolved {path!r} → {cand!r}: "
+                        f"package paths live under the src/ namespace)\n"
+                    )
+                    break
+            else:
+                # No fallback candidate exists either — standard error.
+                parent = p.parent
+                try:
+                    parent_hint = str(parent.relative_to(root))
+                except ValueError:
+                    parent_hint = str(parent)
+                return (
+                    f"error: {path!r} does not exist — "
+                    f"try list_dir('{parent_hint}') "
+                    f"to find the correct path"
+                )
 
         # Normalize offset (offset ≤ 0 is treated as 1).
         _offset = offset if offset >= 1 else 1
@@ -686,16 +707,19 @@ def build_fs_tools(
         # that escape hatch always retrieves any specific region.
         if is_full_read:
             _record_served_read(str(p.resolve()), _offset, limit)
-            return _bound_full_read(text, settings.read_file_max_chars)
+            return resolved_note + _bound_full_read(text, settings.read_file_max_chars)
 
         lines = text.splitlines(keepends=True)
         if _offset > len(lines) and _offset > 1:
-            return f"(file has {len(lines)} lines; offset {offset} is beyond end)"
+            return (
+                resolved_note
+                + f"(file has {len(lines)} lines; offset {offset} is beyond end)"
+            )
         start = _offset - 1
         end = start + limit if limit is not None else None
         result = "".join(lines[start:end])
         _record_served_read(str(p.resolve()), _offset, limit)
-        return result
+        return resolved_note + result
 
     def _check_python_syntax(path: str, content: str) -> str | None:
         """Return a short error string if *path* is .py and *content* has
@@ -788,6 +812,31 @@ def build_fs_tools(
         try:
             with trace_stage("list_dir"):
                 d = _safe(root, path, extra_roots=extra_roots)
+                if not d.exists():
+                    # Path does not exist — try src/ fallback before
+                    # letting iterdir() raise FileNotFoundError.  Same
+                    # root-cause as the read_file fallback: agents probe
+                    # e.g. "robotsix_llmio/core" when the package lives
+                    # under src/robotsix_llmio/core/.
+                    candidates = src_path_candidates(path)
+                    for cand in candidates[1:]:
+                        try:
+                            alt = _safe(root, cand, extra_roots=extra_roots)
+                        except ValueError, OSError:
+                            continue
+                        if alt.is_dir():
+                            listing = "\n".join(
+                                sorted(
+                                    f"{e.name}/" if e.is_dir() else e.name
+                                    for e in alt.iterdir()
+                                )
+                            )
+                            return (
+                                f"(resolved {path!r} → {cand!r}: "
+                                f"package paths live under the src/ namespace)\n"
+                                f"{listing}"
+                            )
+                    # No fallback found — let iterdir() raise.
                 return "\n".join(
                     sorted(f"{e.name}/" if e.is_dir() else e.name for e in d.iterdir())
                 )
