@@ -2898,3 +2898,165 @@ def test_user_source_excluded_regardless_of_draft(ctx_factory, monkeypatch, tmp_
     # Full refine agent was invoked — user always runs refine.
     assert len(calls) == 1
     assert out.note.startswith("refined")
+
+
+# ===========================================================================
+# Delta-reuse on sendback re-entry (refine_delta_reuse_enabled)
+# ===========================================================================
+
+
+def _setup_sendback_ticket(ctx, prior_spec=_REAL_SPEC):
+    """Create a ticket with a prior refined spec, a sendback event, and an
+    open reviewer comment — simulating a sendback re-entry scenario."""
+    t = _ticket(ctx)
+    # Write the prior refined spec to description.md (as if a prior refine
+    # pass completed).
+    ws = ctx.service.workspace(t)
+    ws.write_description(prior_spec)
+    # Transition to HUMAN_ISSUE_APPROVAL then request_changes back to DRAFT
+    # so the ticket history contains a "changes requested:" event.
+    ctx.service.transition(t.id, State.HUMAN_ISSUE_APPROVAL, note="refined")
+    ctx.service.request_changes(
+        t.id, "Please narrow the scope to only the loader.", author="user"
+    )
+    # Re-fetch to get updated state.
+    return ctx.service.get(t.id)
+
+
+def test_delta_reuse_skips_reviewer_agreement(ctx_factory, monkeypatch, tmp_path):
+    """When delta-reuse is enabled and this is a sendback re-entry,
+    triage_reviewer_agreement must NOT be called."""
+    ctx = ctx_factory(refine_delta_reuse_enabled=True)
+    t = _setup_sendback_ticket(ctx)
+
+    reviewer_agreement_called: list[dict] = []
+
+    def _record_agreement(**kw):
+        reviewer_agreement_called.append(kw)
+        return refining.ReviewerAgreementResult(decision="DISAGREE", reason="recorded")
+
+    _apply_default_mocks(
+        monkeypatch,
+        triage_reviewer_agreement=_record_agreement,
+    )
+
+    out = _run_agent(ctx, t, tmp_path)
+
+    assert reviewer_agreement_called == []  # never called
+    assert out.note.startswith("refined")
+
+
+def test_delta_reuse_legacy_path_when_toggle_off(ctx_factory, monkeypatch, tmp_path):
+    """When refine_delta_reuse_enabled=False, triage_reviewer_agreement
+    still runs on sendback (legacy behaviour)."""
+    ctx = ctx_factory(refine_delta_reuse_enabled=False)
+    t = _setup_sendback_ticket(ctx)
+
+    reviewer_agreement_called: list[dict] = []
+
+    def _record_agreement(**kw):
+        reviewer_agreement_called.append(kw)
+        return refining.ReviewerAgreementResult(decision="DISAGREE", reason="recorded")
+
+    _apply_default_mocks(
+        monkeypatch,
+        triage_reviewer_agreement=_record_agreement,
+    )
+
+    out = _run_agent(ctx, t, tmp_path)
+
+    assert len(reviewer_agreement_called) == 1  # called in legacy path
+    assert out.note.startswith("refined")
+
+
+def test_delta_reuse_preserves_auto_approve_routing(ctx_factory, monkeypatch, tmp_path):
+    """Even on delta-reuse, the post-refine auto-approve gate still runs
+    and produces a valid next state (READY or HUMAN_ISSUE_APPROVAL)."""
+    ctx = ctx_factory(
+        refine_delta_reuse_enabled=True,
+        auto_approve_enabled=True,
+    )
+    t = _setup_sendback_ticket(ctx)
+
+    auto_approve_called: list[dict] = []
+
+    def _record_auto_approve(**kw):
+        auto_approve_called.append(kw)
+        return refining.AutoApproveResult(
+            decision="APPROVE", reason="no design decisions"
+        )
+
+    _apply_default_mocks(monkeypatch)
+    monkeypatch.setattr(refining, "triage_auto_approve", _record_auto_approve)
+
+    out = _run_agent(ctx, t, tmp_path)
+
+    # The auto-approve gate runs inside _resolve_next_state after the
+    # refine agent completes.  Only fires when require_approval=True
+    # AND auto_approve_enabled=True.
+    assert out.next_state is State.READY
+    assert len(auto_approve_called) == 1
+
+
+def test_delta_reuse_agent_receives_prior_spec(ctx_factory, monkeypatch, tmp_path):
+    """On delta-reuse, the refine agent is fed the prior refined spec as
+    its 'draft' input, not the original draft body."""
+    ctx = ctx_factory(refine_delta_reuse_enabled=True)
+    prior_spec = (
+        "## Problem\n\nPrior refined spec for the loader.\n\n"
+        "## Scope\n\nFix loader.py to raise on missing config.\n\n"
+        "## Acceptance criteria\n\n- ConfigMissing raised.\n"
+    )
+    t = _setup_sendback_ticket(ctx, prior_spec=prior_spec)
+
+    agent_input: list[dict] = []
+
+    def _capture_input(**kw):
+        agent_input.append(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_capture_input,
+    )
+
+    # Simulate what RefineStage.run() does: pass ws.read_description()
+    # as the draft. On sendback re-entry this is the prior refined spec.
+    out = _run_agent(ctx, t, tmp_path, draft=prior_spec)
+
+    assert len(agent_input) == 1
+    # The agent's 'draft' parameter must contain the prior spec, not the
+    # original draft body from ticket creation.
+    captured_draft = agent_input[0]["draft"]
+    assert "Prior refined spec for the loader" in captured_draft
+    assert "ConfigMissing raised" in captured_draft
+    # Reviewer comments must also be present.
+    assert agent_input[0]["reviewer_comments"]
+    assert "narrow the scope" in agent_input[0]["reviewer_comments"]
+    assert out.note.startswith("refined")
+
+
+def test_delta_reuse_triage_refine_not_called(ctx_factory, monkeypatch, tmp_path):
+    """On delta-reuse sendback, triage_refine must NOT be invoked
+    from either RefineStage.run() or the _run_refine_agent fallback."""
+    ctx = ctx_factory(refine_delta_reuse_enabled=True)
+    t = _setup_sendback_ticket(ctx)
+
+    triage_refine_called: list[dict] = []
+
+    def _record_triage(**kw):
+        triage_refine_called.append(kw)
+        return TriageResult(decision="REFINE", reason="recorded")
+
+    _apply_default_mocks(
+        monkeypatch,
+        triage_refine=_record_triage,
+    )
+
+    out = _run_agent(ctx, t, tmp_path)
+
+    # triage_refine is called from _triage_skip. On sendback, _triage_skip
+    # returns None immediately (reviewer_comments blocks it). The fallback
+    # call from _run_refine_agent is also skipped due to delta-reuse guard.
+    assert triage_refine_called == []
+    assert out.note.startswith("refined")

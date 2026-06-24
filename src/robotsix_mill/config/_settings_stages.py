@@ -394,6 +394,12 @@ class _StagesSettings(BaseModel):
     # the counter-forced downgrade entirely — every sendback runs at full
     # Opus unless already caught by trivial-scope routing.
     max_re_refine_cycles_before_cheap: int = Field(default=2, ge=0)
+    # When True, a refine run re-entered after an operator sendback
+    # ("changes requested:") reuses the prior refined description.md as the
+    # agent's starting point and applies only the operator's delta, instead of
+    # re-deriving the spec from the original draft. Set False to always refine
+    # from scratch.
+    refine_delta_reuse_enabled: bool = Field(default=True)
     # ---------- trace inspector dynamic budget ----------
     # Floor for the tools-on request budget.  Even a tiny trace gets
     # enough requests to read at least one code locus and emit a

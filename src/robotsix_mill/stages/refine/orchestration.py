@@ -233,6 +233,20 @@ def _persist_triage_complexity(
     )
 
 
+def _is_sendback_reentry(service: TicketService, ticket_id: str) -> bool:
+    """Return ``True`` when this refine run follows an operator "changes requested"
+    sendback — i.e. a prior ``DRAFT`` event whose note starts with
+    ``OPERATOR_SENDBACK_PREFIX``."""
+    for ev in service.history(ticket_id):
+        if (
+            ev.state == State.DRAFT
+            and ev.note
+            and ev.note.startswith(OPERATOR_SENDBACK_PREFIX)
+        ):
+            return True
+    return False
+
+
 class RefineAgentMixin:
     """Refine-agent pipeline staticmethods mixed into :class:`RefineStage`."""
 
@@ -391,11 +405,22 @@ class RefineAgentMixin:
             RefineAgentMixin._collect_reviewer_comments(ctx, ticket)
         )
 
-        outcome = RefineAgentMixin._reviewer_agreement_guard(
-            ctx, ticket, draft, ws, s, reviewer_comments
+        # Delta-reuse short-circuit: when enabled and this is a sendback
+        # re-entry, skip the pre-agent triage gates whose classification
+        # was already decided in the prior round — the operator has
+        # explicitly asked for refinement.
+        _is_delta_reuse = (
+            s.refine_delta_reuse_enabled
+            and bool(reviewer_comments)
+            and _is_sendback_reentry(ctx.service, ticket.id)
         )
-        if outcome is not None:
-            return outcome
+
+        if not _is_delta_reuse:
+            outcome = RefineAgentMixin._reviewer_agreement_guard(
+                ctx, ticket, draft, ws, s, reviewer_comments
+            )
+            if outcome is not None:
+                return outcome
 
         outcome = RefineAgentMixin._split_child_fast_path(
             ctx, ticket, draft, ws, reviewer_comments
@@ -405,7 +430,12 @@ class RefineAgentMixin:
 
         # Triage already ran in RefineStage.run() (Phase 2.2) — skip
         # the duplicate call when the complexity artifact exists.
-        if not (ws.artifacts_dir / "triage_complexity.json").exists():
+        # Also skip on delta-reuse: the triage classification was
+        # already done in the prior refine round.
+        if (
+            not _is_delta_reuse
+            and not (ws.artifacts_dir / "triage_complexity.json").exists()
+        ):
             outcome = RefineAgentMixin._triage_skip(
                 ctx,
                 ticket,

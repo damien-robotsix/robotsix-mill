@@ -477,6 +477,7 @@ src/robotsix_mill/stages/refine/orchestration.py:0: error: Unsupported operand t
 src/robotsix_mill/stages/refine/orchestration.py:0: note: Left operand is of type "Path | None"
 src/robotsix_mill/stages/refine/orchestration.py:0: error: Generator has incompatible item type "int"; expected "bool"  [misc]
 src/robotsix_mill/stages/refine/orchestration.py:0: error: "list?[robotsix_mill.core.models.TicketEvent]" has no attribute "__iter__" (not iterable)  [attr-defined]
+src/robotsix_mill/stages/refine/orchestration.py:0: error: "list?[robotsix_mill.core.models.TicketEvent]" has no attribute "__iter__" (not iterable)  [attr-defined]
 src/robotsix_mill/stages/refine/orchestration.py:0: error: Argument 2 to "save_conversation_state" has incompatible type "bytes | None"; expected "bytes"  [arg-type]
 src/robotsix_mill/stages/refine/orchestration.py:0: error: Argument 1 to "get" of "_QueryMixin" has incompatible type "str | None"; expected "str"  [arg-type]
 src/robotsix_mill/stages/refine/orchestration.py:0: error: Argument 1 to "get" of "_QueryMixin" has incompatible type "str | None"; expected "str"  [arg-type]

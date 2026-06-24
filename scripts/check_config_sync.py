@@ -130,6 +130,7 @@ _MODEL_FIELDS_NOT_IN_ALIAS: frozenset[str] = frozenset(
         # refine trivial-scope routing (model-level override)
         "refine_trivial_routing_enabled",
         "refine_trivial_model_level",
+        "refine_delta_reuse_enabled",
         "trace_review_max_inspections_per_run",
         "trace_review_initial_lookback_hours",
         "trace_review_restart_correlation_window_seconds",
