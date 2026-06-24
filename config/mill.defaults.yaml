@@ -211,6 +211,7 @@ pipeline:
   merge_poll_seconds: 120                            # poll interval for PR merge/CI status
   rebase_max_attempts: 3                             # max rebase LLM invocations before BLOCK
   ci_fix_max_iterations: 5                           # single-repo ci-fix: max wait_for_ci push-and-recheck iterations before BLOCK
+  ci_fix_request_limit: 120                          # LLM request budget for a single ci-fix sandbox agent
   ci_fix_max_attempts: 2                             # multi-repo merge ci-fix only: max CI-fix LLM invocations before BLOCK
   ci_fix_max_cycles: 3                             # multi-repo merge ci-fix only: hard ceiling on total ci-fix cycles per repo
   ci_fix_max_identical_failures: 2                 # max consecutive identical CI failures before escalating to BLOCKED
