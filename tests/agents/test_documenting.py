@@ -1022,6 +1022,53 @@ class TestRunDocAgent:
         assert len(persist_paths) == 1
         assert persist_paths[0] == expected_path
 
+    def test_empty_board_id_skips_memory_operations(
+        self, settings, repo_dir, monkeypatch
+    ):
+        """With an empty board_id, memory_file_for is NOT called (no
+        ValueError), load_memory is NOT called, persist_memory is NOT
+        called, and the agent still runs and returns a result."""
+        load_calls: list = []
+        persist_calls: list = []
+
+        fake_agent = _FakeAgent(
+            DocResult(
+                user_facing=True,
+                summary="docs updated",
+                updated_memory="new layout",  # non-empty to exercise guard
+            )
+        )
+        self._patch_dependencies(monkeypatch, fake_agent)
+
+        # Spy on memory operations AFTER _patch_dependencies so the
+        # recording lambdas aren't overwritten by the common no-op.
+        monkeypatch.setattr(
+            "robotsix_mill.runners.pass_runner.load_memory",
+            lambda path, max_chars=None: load_calls.append(path) or "",
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.runners.pass_runner.persist_memory",
+            lambda path, text: persist_calls.append(path),
+        )
+
+        result = run_doc_agent(
+            settings=settings,
+            repo_dir=repo_dir,
+            diff=self.DIFF,
+            spec=self.SPEC,
+            board_id="",  # empty — must not raise ValueError
+        )
+
+        assert isinstance(result, DocResult)
+        assert result.user_facing is True
+        assert result.summary == "docs updated"
+
+        # load_memory must NOT have been called.
+        assert len(load_calls) == 0
+        # persist_memory must NOT have been called, even though
+        # updated_memory is non-empty.
+        assert len(persist_calls) == 0
+
     # -- persist_memory -------------------------------------------------
 
     def test_persist_memory_called_when_updated_memory_non_empty(

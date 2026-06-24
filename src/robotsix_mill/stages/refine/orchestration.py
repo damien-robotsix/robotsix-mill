@@ -2020,6 +2020,7 @@ class RefineAgentMixin:
                 title=child["title"],
                 description=child["spec_markdown"],
                 source=ticket.source,
+                board_id=ticket.board_id,
             )
             child_ids.append(child_ticket.id)
 
@@ -2045,6 +2046,7 @@ class RefineAgentMixin:
                 description=epic_desc,
                 kind=TicketKind.EPIC,
                 source=ticket.source,
+                board_id=ticket.board_id,
             )
             for cid in child_ids:
                 ctx.service.set_parent(cid, epic.id)

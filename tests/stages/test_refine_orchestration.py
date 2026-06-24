@@ -1446,6 +1446,42 @@ def test_multi_scope_no_valid_children_blocks(ctx_factory, monkeypatch, tmp_path
     assert out.note == "refiner produced no valid split children"
 
 
+def test_split_children_inherit_parent_board_id(ctx_factory, monkeypatch, tmp_path):
+    """When a ticket is split, children are stamped with the parent's
+    ``board_id`` — not the service's bound board_id."""
+    ctx = ctx_factory()
+    t = _ticket(ctx, board_id="parent-board")
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_returns(
+            RefineResult(
+                split=True,
+                children=[
+                    ChildSpec(title="Child A", spec_markdown=_REAL_SPEC),
+                    ChildSpec(title="Child B", spec_markdown=_REAL_SPEC),
+                ],
+            )
+        ),
+    )
+
+    out = _run_agent(ctx, t, tmp_path)
+
+    assert out.next_state is State.CLOSED
+    child_ids = out.note.removeprefix("split into ").split(", ")
+    assert len(child_ids) == 2
+    for cid in child_ids:
+        assert ctx.service.get(cid).board_id == "parent-board"
+
+    # The umbrella epic should also carry the parent's board_id.
+    # list() is bound to "test-board", so find the epic via the
+    # child's parent_id instead.
+    child = ctx.service.get(child_ids[0])
+    assert child.parent_id is not None
+    epic = ctx.service.get(child.parent_id)
+    assert epic.kind == "epic"
+    assert epic.board_id == "parent-board"
+
+
 # ===========================================================================
 # _ack_threads / reviewer-comment suppression of the conciseness review
 # ===========================================================================
