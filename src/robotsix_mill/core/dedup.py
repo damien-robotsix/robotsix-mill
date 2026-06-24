@@ -351,7 +351,7 @@ def paths_excluding_out_of_scope(text: str) -> list[str]:
             is_heading = stripped.startswith("#")
 
             if is_heading:
-                title = stripped.lstrip("#").strip().casefold()
+                title = stripped.lstrip("#*- ").strip().casefold()
                 if title.startswith("out of scope") or title.startswith(
                     "explicitly out of scope"
                 ):

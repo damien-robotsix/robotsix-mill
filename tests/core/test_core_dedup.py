@@ -1614,6 +1614,24 @@ def test_paths_excluding_out_of_scope_bullet_out_of_scope_marker():
     assert "src/robotsix_mill/core/db.py" not in result
 
 
+def test_paths_excluding_out_of_scope_bold_in_heading_exclusion():
+    """A heading with bold formatting like ``## **Out of scope**`` is
+    recognised as an exclusion marker (the heading-branch stripping
+    mirrors the inline branch's ``lstrip("#*- ")``)."""
+    body = (
+        "## Scope\n\n"
+        "src/robotsix_llmio/core/sqlite_utils.py\n\n"
+        "## **Out of scope**\n\n"
+        "src/robotsix_mill/core/db.py\n\n"
+        "## Acceptance criteria\n\n"
+        "src/robotsix_llmio/tests/test_sqlite_utils.py\n"
+    )
+    result = paths_excluding_out_of_scope(body)
+    assert "src/robotsix_llmio/core/sqlite_utils.py" in result
+    assert "src/robotsix_llmio/tests/test_sqlite_utils.py" in result
+    assert "src/robotsix_mill/core/db.py" not in result
+
+
 def test_paths_excluding_out_of_scope_empty_text_returns_empty():
     """Empty or None text returns an empty list."""
     assert paths_excluding_out_of_scope("") == []
