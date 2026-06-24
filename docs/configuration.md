@@ -649,11 +649,12 @@ and as environment variables:
 | `MILL_ENV_DOC_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between env-doc-sync passes |
 | `MILL_ENV_DOC_SYNC_MEMORY_PATH` | `None` | Override path for env-doc-sync memory; defaults to `<data_dir>/env_doc_sync_memory.md` |
 
-### 13. Skills
+### 13. Skills & language instructions
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `sandbox.skills_dir` | `MILL_SKILLS_DIR` | `skills` | Directory of skill docs injected into agent system prompts |
+| `core.language_instructions_dir` | `MILL_LANGUAGE_INSTRUCTIONS_DIR` | `agent_definitions/language_instructions` | Directory of per-language instruction Markdown snippets injected into the implement agent's system prompt |
 
 ### 14. Board agent & board manager
 

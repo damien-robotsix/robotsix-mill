@@ -323,6 +323,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.limits.refine_web_search_max_calls": "refine_web_search_max_calls",
     "core.lint_on_edit": "lint_on_edit",
     "core.read_file_max_chars": "read_file_max_chars",
+    "core.language_instructions_dir": "language_instructions_dir",
     # -- gates --
     "gates.require_approval": "require_approval",
     "gates.auto_approve_enabled": "auto_approve_enabled",
