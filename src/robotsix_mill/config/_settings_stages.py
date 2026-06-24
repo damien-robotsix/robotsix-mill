@@ -377,13 +377,17 @@ class _StagesSettings(BaseModel):
     # flash (~1/100th the cost of Opus).  Bump to 2 (DeepSeek pro) if
     # quality regresses on trivial tickets.
     refine_trivial_model_level: int = Field(default=1, ge=1, le=3)
-    # Claude-SDK model alias used for level-3 (non-downgraded) refines.
-    # Default 'sonnet' right-sizes the refine stage off Opus while staying
-    # on the SAME Claude-SDK subscription transport (level 3 unchanged) —
-    # zero added pay-per-token cost. Set to 'opus' to restore the previous
-    # behaviour, or 'haiku' for maximum savings. Only the Claude-SDK
-    # branch (level 3) consumes this; DeepSeek levels 1/2 ignore it.
-    refine_claude_model: str = Field(default="sonnet")
+    # When True (default), non-trivial level-3 refines route to a cheaper
+    # Claude alias (sonnet) for "simple" tickets and keep Opus only for
+    # "needs-exploration" tickets — all on the same claudeSDK subscription
+    # transport.  Set False for a clean rollback to Opus-always.
+    refine_subscription_tier_routing_enabled: bool = Field(default=True)
+    # Claude model alias for non-escalated level-3 refines (complexity="simple").
+    # Only the Claude-SDK branch (level 3) consumes this; DeepSeek levels 1/2 ignore it.
+    refine_subscription_model_default: str = Field(default="sonnet")
+    # Claude model alias for escalated level-3 refines (complexity="needs-exploration").
+    # Only the Claude-SDK branch (level 3) consumes this; DeepSeek levels 1/2 ignore it.
+    refine_subscription_model_complex: str = Field(default="opus")
     # Maximum number of "changes requested" re-refine rounds before the
     # refine agent is forced to the cheap model (``refine_trivial_model_level``)
     # regardless of the persisted triage verdict.  A value of 0 disables

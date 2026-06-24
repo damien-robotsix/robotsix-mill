@@ -209,6 +209,10 @@ class _CoreSettings(BaseModel):
     # no explore sub-agent and was saturating on test-heavy diffs; see its
     # field comment and ticket bc6d).
     refine_request_limit: int = Field(default=80, ge=1)
+    # Per-call cap for non-escalated (simple/sonnet) refine runs.
+    # Lower than the main cap (80) because simple tickets need fewer
+    # tool calls — the explore/parallel_explore sub-agents are gated off.
+    refine_request_limit_simple: int = Field(default=40, ge=1)
     # Per-call cap for the maintenance agent's tool loop. Maintenance
     # tickets are operational one-offs (clone + inspect + post
     # findings); like refine, deep search is delegated to explore. An
