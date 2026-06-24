@@ -637,7 +637,13 @@ def test_periodic_pass_configs_requires_repo():
     assert PERIODIC_PASS_CONFIGS["env_doc_sync"].requires_repo is True
     assert PERIODIC_PASS_CONFIGS["frontend_sync"].requires_repo is True
     for key, cfg in PERIODIC_PASS_CONFIGS.items():
-        if key in ("module_curator", "test_gap", "state_sync", "env_doc_sync", "frontend_sync"):
+        if key in (
+            "module_curator",
+            "test_gap",
+            "state_sync",
+            "env_doc_sync",
+            "frontend_sync",
+        ):
             continue
         assert cfg.requires_repo is False, f"{key}.requires_repo should be False"
 
