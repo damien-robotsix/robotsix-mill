@@ -5715,6 +5715,125 @@ def test_run_refine_agent_no_refine_level_leaves_level_unchanged(
     )
 
 
+# ── refine_claude_model / model override ─────────────────────────────
+
+
+def test_run_refine_agent_default_model_sonnet(monkeypatch, settings, tmp_path):
+    """With default settings (refine_claude_model='sonnet'), a non-downgraded
+    refine build passes model='sonnet' to build_agent_from_definition."""
+    import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
+
+    captured_overrides: list[dict] = []
+
+    def fake_build_agent(*a, **kw):
+        captured_overrides.append(kw)
+        return _simple_agent()
+
+    monkeypatch.setattr(base_module, "build_agent_from_definition", fake_build_agent)
+    monkeypatch.setattr(
+        retry_module,
+        "run_agent",
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(agent),
+    )
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+
+    refining.run_refine_agent(
+        settings=settings,
+        title="Test",
+        draft="test draft",
+        repo_dir=repo_dir,
+        # refine_level not passed → resolved level = 3 (YAML default)
+    )
+
+    assert len(captured_overrides) == 1
+    assert captured_overrides[0].get("model") == "sonnet", (
+        f"Expected model='sonnet' in overrides (default refine_claude_model), "
+        f"got {captured_overrides[0]}"
+    )
+
+
+def test_run_refine_agent_opus_model_configured(monkeypatch, settings, tmp_path):
+    """Setting refine_claude_model='opus' restores model='opus' in overrides."""
+    import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
+
+    captured_overrides: list[dict] = []
+
+    def fake_build_agent(*a, **kw):
+        captured_overrides.append(kw)
+        return _simple_agent()
+
+    monkeypatch.setattr(base_module, "build_agent_from_definition", fake_build_agent)
+    monkeypatch.setattr(
+        retry_module,
+        "run_agent",
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(agent),
+    )
+
+    settings.refine_claude_model = "opus"
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+
+    refining.run_refine_agent(
+        settings=settings,
+        title="Test",
+        draft="test draft",
+        repo_dir=repo_dir,
+    )
+
+    assert len(captured_overrides) == 1
+    assert captured_overrides[0].get("model") == "opus", (
+        f"Expected model='opus' in overrides (refine_claude_model='opus'), "
+        f"got {captured_overrides[0]}"
+    )
+
+
+def test_run_refine_agent_downgrade_skips_model_override(
+    monkeypatch, settings, tmp_path
+):
+    """When refine_level=1 (DeepSeek downgrade), no model override is applied."""
+    import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
+
+    captured_overrides: list[dict] = []
+
+    def fake_build_agent(*a, **kw):
+        captured_overrides.append(kw)
+        return _simple_agent()
+
+    monkeypatch.setattr(base_module, "build_agent_from_definition", fake_build_agent)
+    monkeypatch.setattr(
+        retry_module,
+        "run_agent",
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(agent),
+    )
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+
+    refining.run_refine_agent(
+        settings=settings,
+        title="Test",
+        draft="test draft",
+        repo_dir=repo_dir,
+        refine_level=1,
+    )
+
+    assert len(captured_overrides) == 1
+    assert "model" not in captured_overrides[0], (
+        f"Expected no 'model' in overrides when refine_level=1 (DeepSeek path), "
+        f"got {captured_overrides[0]}"
+    )
+    # level override still applies for DeepSeek routing
+    assert captured_overrides[0].get("level") == 1, (
+        f"Expected level=1 override still present, got {captured_overrides[0]}"
+    )
+
+
 def test_split_child_fast_path_sets_simple_complexity(ctx, service, monkeypatch):
     """Split-child fast path writes triage_complexity.json as 'simple',
     suppressing exploration on the already-refined child."""

@@ -1048,6 +1048,12 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
     if refine_level is not None:
         overrides["level"] = refine_level
 
+    # Right-size the level-3 Claude model (subscription transport unchanged).
+    # Skip when downgraded to a DeepSeek level (1/2), which ignores `model`.
+    resolved_level = refine_level if refine_level is not None else 3
+    if resolved_level == 3 and settings.refine_claude_model:
+        overrides["model"] = settings.refine_claude_model
+
     # When exploration sub-agents are gated off (triage ruled the ticket
     # "simple"), strip the now-dangling `explore`/`parallel_explore` call
     # directives from the system prompt so the build-time prompt/tool

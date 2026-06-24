@@ -377,6 +377,13 @@ class _StagesSettings(BaseModel):
     # flash (~1/100th the cost of Opus).  Bump to 2 (DeepSeek pro) if
     # quality regresses on trivial tickets.
     refine_trivial_model_level: int = Field(default=1, ge=1, le=3)
+    # Claude-SDK model alias used for level-3 (non-downgraded) refines.
+    # Default 'sonnet' right-sizes the refine stage off Opus while staying
+    # on the SAME Claude-SDK subscription transport (level 3 unchanged) —
+    # zero added pay-per-token cost. Set to 'opus' to restore the previous
+    # behaviour, or 'haiku' for maximum savings. Only the Claude-SDK
+    # branch (level 3) consumes this; DeepSeek levels 1/2 ignore it.
+    refine_claude_model: str = Field(default="sonnet")
     # Maximum number of "changes requested" re-refine rounds before the
     # refine agent is forced to the cheap model (``refine_trivial_model_level``)
     # regardless of the persisted triage verdict.  A value of 0 disables
