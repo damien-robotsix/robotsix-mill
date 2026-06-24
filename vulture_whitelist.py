@@ -182,7 +182,6 @@ default_service
 format_duration
 MEMBER_SYNC
 workspace_path
-failure_reason
 origin_session_url
 unmet_deps
 CommentRead
