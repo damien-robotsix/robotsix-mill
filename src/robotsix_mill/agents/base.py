@@ -566,6 +566,7 @@ def build_agent(  # noqa: C901
             output_type=output_type,
             name=name,
             retries=retries,
+            max_tokens=max_tokens,
             # Confine the SDK's built-in Write/Edit tools to the ticket's
             # workspace clone. repo_dir is None for board-less agents → no
             # confinement, unchanged behavior.
