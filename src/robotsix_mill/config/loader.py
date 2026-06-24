@@ -366,6 +366,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "pipeline.ci_fix_max_identical_failures": "ci_fix_max_identical_failures",
     "pipeline.ci_fix_wait_poll_interval_s": "ci_fix_wait_poll_interval_s",
     "pipeline.ci_fix_wait_timeout_s": "ci_fix_wait_timeout_s",
+    "pipeline.ci_fix_request_limit": "ci_fix_request_limit",
     "pipeline.auto_fix_max_cycles": "auto_fix_max_cycles",
     "pipeline.ping_pong_max_alternations": "ping_pong_max_alternations",
     "pipeline.review_revision_max_attempts": "review_revision_max_attempts",
