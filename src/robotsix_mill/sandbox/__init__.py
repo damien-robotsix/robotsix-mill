@@ -106,7 +106,14 @@ def _repo_mount(repo_dir: Path, settings: Settings) -> list[str]:
 
 
 def _has_uv_sources(repo_dir: Path) -> bool:
-    """Return True when pyproject.toml declares a ``[tool.uv.sources]`` table.
+    """Return True when pyproject.toml declares dependencies that require
+    ``uv sync`` rather than ``pip install``.
+
+    Two signals:
+
+    * ``[tool.uv.sources]`` table (explicit uv source config).
+    * PEP 508 ``@ git+https://`` direct references in dependency strings
+      (pip cannot resolve git-sourced dependencies declared this way).
 
     Uses ``tomllib`` (the same pattern as ``prerequisite.py``) and is
     guarded against missing/malformed files — returns ``False`` on any
@@ -117,8 +124,16 @@ def _has_uv_sources(repo_dir: Path) -> bool:
         data = pp.read_text(encoding="utf-8")
     except OSError:
         return False
-    # Fast path: check for the section header as a substring before
-    # paying the parse cost.  Covers the 99 % case in one string scan.
+
+    # Fast path: PEP 508 git direct references.  A bare string scan
+    # for "git+https://" catches every ``@ git+https://`` dependency
+    # line without a TOML parse.  False positives (e.g. in comments)
+    # are harmless — they just cause uv sync to be used instead of
+    # pip install, which is always valid for uv-managed projects.
+    if "git+https://" in data:
+        return True
+
+    # Check for an explicit [tool.uv.sources] table.
     if "[tool.uv.sources]" not in data:
         return False
     import tomllib

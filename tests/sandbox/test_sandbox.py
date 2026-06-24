@@ -807,6 +807,31 @@ def test_has_uv_sources_empty_table(tmp_path):
     assert sandbox._has_uv_sources(repo) is False
 
 
+def test_has_uv_sources_pep508_git_dep_no_sources_table(tmp_path):
+    """PEP 508 ``@ git+https://`` direct reference but no
+    [tool.uv.sources] → True (pip can't resolve git deps)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text(
+        "[project]\nname = 'x'\ndependencies = [\n"
+        '  "some-pkg @ git+https://github.com/org/x.git@main",\n'
+        "]\n",
+        encoding="utf-8",
+    )
+    assert sandbox._has_uv_sources(repo) is True
+
+
+def test_has_uv_sources_no_git_deps_no_sources_table(tmp_path):
+    """No git deps and no [tool.uv.sources] → False."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text(
+        "[project]\nname = 'x'\ndependencies = ['requests>=2']\n",
+        encoding="utf-8",
+    )
+    assert sandbox._has_uv_sources(repo) is False
+
+
 def test_has_uv_sources_no_pyproject(tmp_path):
     """No pyproject.toml at all → False."""
     repo = tmp_path / "repo"
@@ -834,6 +859,33 @@ def test_maybe_install_prefix_uv_path(tmp_path):
     (repo / "pyproject.toml").write_text(
         "[project]\nname = 'x'\n[tool.uv.sources]\n"
         "x = { git = 'https://github.com/org/x' }\n",
+        encoding="utf-8",
+    )
+    (repo / "uv.lock").write_text("", encoding="utf-8")
+
+    s = _settings(
+        tmp_path,
+        data_dir=str(tmp_path),
+        sandbox_data_mount=str(tmp_path),
+        sandbox_proxy_url="http://sandbox-proxy:8888",
+    )
+
+    prefix = sandbox._maybe_install_prefix("pytest -q", repo, s)
+    assert "uv sync --frozen --no-dev --quiet" in prefix
+    assert "command -v uv" in prefix
+    assert "WARNING: uv not found, falling back to pip" in prefix
+    assert prefix.endswith(" && pytest -q")
+
+
+def test_maybe_install_prefix_pep508_git_dep(tmp_path):
+    """PEP 508 ``@ git+https://`` (no [tool.uv.sources]) + uv.lock →
+    emits uv sync --frozen --no-dev."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text(
+        "[project]\nname = 'x'\ndependencies = [\n"
+        '  "some-pkg @ git+https://github.com/org/x.git@main",\n'
+        "]\n",
         encoding="utf-8",
     )
     (repo / "uv.lock").write_text("", encoding="utf-8")

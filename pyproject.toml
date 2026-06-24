@@ -79,9 +79,6 @@ docs = ["mkdocs-material>=9", "mkdocstrings[python]>=0.27"]
 # an explicit `--group dev` on every sync.
 default-groups = ["dev"]
 
-[tool.uv.sources]
-robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "28b23a848003" }
-
 [project.scripts]
 robotsix-mill = "robotsix_mill.cli:main"
 robotsix-autoupdate = "robotsix_mill.autoupdate:main"
