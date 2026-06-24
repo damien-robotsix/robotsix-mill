@@ -261,14 +261,17 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
     except ImportError:
         return
 
-    ok = _llmio_tracing.setup_langfuse_tracing(
-        public_key=public_key,
-        secret_key=secret_key,
-        base_url=base_url,
-        project_id=project_name or None,
-        service_name="robotsix-mill",
-        on_export_result=_on_export_result,
-    )
+    try:
+        ok = _llmio_tracing.setup_langfuse_tracing(
+            public_key=public_key,
+            secret_key=secret_key,
+            base_url=base_url,
+            project_id=project_name or None,
+            service_name="robotsix-mill",
+            on_export_result=_on_export_result,
+        )
+    except ImportError:
+        return
     _registered_keys.add(public_key)
     if ok:
         _provider_ready = True
