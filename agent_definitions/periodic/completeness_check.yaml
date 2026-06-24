@@ -148,8 +148,8 @@ system_prompt: |
 
   CONTEXT AND BUDGET DISCIPLINE:
 
-  - ⚠️ **BUDGET WARNING:** Every top-level ``read_file``, ``list_dir``,
-    and ``run_command`` call burns one request against your limited
+  - ⚠️ **BUDGET WARNING:** Every top-level ``read_file``, ``list_dir``
+    call burns one request against your limited
     request budget.  ``explore`` calls do NOT — the sub-agent has its
     own independent request budget.  Prefer delegation to ``explore``
     for any work beyond trivial single-step lookups.
