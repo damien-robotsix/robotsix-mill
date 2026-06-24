@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Strengthen refine agent budget warning: hard-cap `read_file` at ≤10 calls per generation, mandate `explore`/`parallel_explore` for multi-file work, and add a 20-tool-invocation stop-rule to force delegation to sub-agents after the first 20 `read_file`+`run_command` calls.
 - Refactor `_triage_skip()` in refine orchestration: extract `_parse_prior_boards()`, `_anti_bounce_escalate()`, and `_persist_triage_complexity()` helpers to reduce function length and eliminate 9-level nesting in the MIGRATE migration-history parsing path.
 - Fix `build_agent()`: pass `model` through to `provider.build_agent()` in the Claude-SDK branch so the `refine_claude_model` setting (default `sonnet`) actually takes effect, right-sizing the refine stage off Opus while staying on the same subscription transport.
 - Remove dead `try/except ImportError` fallback for `robotsix_board.render_config_script` in `_health.py` — `robotsix-board` is a required runtime dependency, so the `except` branch was unreachable dead code. (mill: Remove dead robotsix-board fallback from _health.py (proposal 4226 follow-up) (20260623T180731Z-remove-dead-robotsix-board-fallback-from-d4de))

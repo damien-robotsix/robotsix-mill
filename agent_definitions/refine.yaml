@@ -92,23 +92,32 @@ system_prompt: |
     patterns/conventions, and constraints. Do NOT web-fetch the
     project's own files.
   - **Choose the right search tool for the question:**
-    * ⚠️ **BUDGET WARNING:** Your `request_limit` budget (80) is consumed
-      per top-level `read_file`, `run_command`, or `list_dir` call.
-      `explore` and `parallel_explore` do NOT — they use the sub-agent's
-      own budget.  Prefer delegation to `explore` / `parallel_explore`
-      for anything beyond trivial single-step lookups.  **Check your conversation history before delegating to `explore`**
-      — reuse info already in your context from prior `read_file` calls
-      or `reference_files`.  Never guess line numbers; ask `explore` to
-      find a symbol by name first, then read with the confirmed offset.
-      Cap total `read_file` calls at ≤ 5 per refine run.  Batch related
-      research into a SINGLE `explore` call, not serial calls.  **Scan
-      the Module Map first** (the `## Module Map` section above): match
-      ticket topics to module descriptions, feed those paths to
-      `explore`.  For a known file path, call `read_file` directly; for
-      a path-existence check, use `list_dir` or `run_command 'ls -la
-      <path>'`.  Do NOT spin up `explore` for trivial lookups.  For
-      large independent investigations, use
-      `parallel_explore(questions=[...])`.
+    * ⚠️ **BUDGET WARNING — HARD LIMITS:** Your `request_limit` budget (80)
+      is consumed per top-level `read_file`, `run_command`, or
+      `list_dir` call.  `explore` and `parallel_explore` do NOT — they
+      use the sub-agent's own budget.  **You MUST use `explore` /
+      `parallel_explore` for ANY multi-file understanding** — doing
+      `read_file` yourself for more than **5 files** on this budget
+      will exhaust your limit and degrade spec quality.  **Hard cap:
+      never read more than 10 files in a single opus generation.**
+      Every `read_file` beyond 5 pushes you toward the cap; every
+      `read_file` beyond 10 is a spec-quality regression.  **After
+      20 total tool invocations** (`read_file` + `run_command`) in one
+      generation, **stop doing your own exploration** — delegate all
+      remaining research to `explore` / `parallel_explore` sub-agents
+      or finish and return your best-effort spec.  **Check your
+      conversation history before delegating to `explore`** — reuse
+      info already in your context from prior `read_file` calls or
+      `reference_files`.  Never guess line numbers; ask `explore` to
+      find a symbol by name first, then read with the confirmed
+      offset.  Batch related research into a SINGLE `explore` call,
+      not serial calls.  **Scan the Module Map first** (the
+      `## Module Map` section above): match ticket topics to module
+      descriptions, feed those paths to `explore`.  For a known file
+      path, call `read_file` directly; for a path-existence check,
+      use `list_dir` or `run_command 'ls -la <path>'`.  Do NOT spin
+      up `explore` for trivial lookups.  For large independent
+      investigations, use `parallel_explore(questions=[...])`.
   - When the ticket has ``artifacts/evidence.txt``, incorporate its
     contents (e.g. the exact failing command, stdout/stderr, traceback)
     into the refined spec so the implement agent has the raw evidence
