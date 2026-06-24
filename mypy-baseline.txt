@@ -220,6 +220,8 @@ src/robotsix_mill/core/service/_queries.py:0: error: Function "robotsix_mill.cor
 src/robotsix_mill/core/service/_queries.py:0: note: Perhaps you need "Callable[...]" or a callback protocol?
 src/robotsix_mill/core/service/_queries.py:0: error: Function "robotsix_mill.core.service._queries._QueryMixin.list" is not valid as a type  [valid-type]
 src/robotsix_mill/core/service/_queries.py:0: note: Perhaps you need "Callable[...]" or a callback protocol?
+src/robotsix_mill/core/service/_queries.py:0: error: Function "robotsix_mill.core.service._queries._QueryMixin.list" is not valid as a type  [valid-type]
+src/robotsix_mill/core/service/_queries.py:0: note: Perhaps you need "Callable[...]" or a callback protocol?
 src/robotsix_mill/core/service/_queries.py:0: error: "list?[str]" has no attribute "__iter__" (not iterable)  [attr-defined]
 src/robotsix_mill/core/service/_queries.py:0: error: "list?[str]" has no attribute "__iter__" (not iterable)  [attr-defined]
 src/robotsix_mill/core/service/_queries.py:0: error: Argument 1 to "order_by" of "GenerativeSelect" has incompatible type "datetime"; expected "Literal[_NoArg.NO_ARG] | str | ColumnElement[Any] | _HasClauseElement[Any] | SQLCoreOperations[Any] | ExpressionElementRole[Any] | TypedColumnsClauseRole[Any] | Callable[[], ColumnElement[Any]] | LambdaElement | None"  [arg-type]
