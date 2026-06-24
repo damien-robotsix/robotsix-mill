@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+from collections import Counter
 from datetime import datetime, timezone
 
 from ...stages import StageContext, get_stage
@@ -231,6 +232,7 @@ def _root_output_summary(outcome, ticket) -> dict:
 async def _process_ticket_inner(
     ticket_id: str, ctx: StageContext, active_map: dict | None = None
 ) -> None:
+    dispatch_counts: Counter[str] = Counter()
     while True:
         ticket = ctx.service.get(ticket_id)
         if ticket is None:
@@ -276,6 +278,20 @@ async def _process_ticket_inner(
         # stages (merge, deliver) would otherwise emit an empty "ticket"
         # trace into the Langfuse session on every poll.
         traced = getattr(stage, "traced", True)
+        limit = ctx.settings.ticket_state_cycle_limit
+        if traced and limit > 0:
+            dispatch_counts[stage_name] += 1
+            if dispatch_counts[stage_name] > limit:
+                note = (
+                    f"Cycle ceiling: '{stage_name}' re-ran "
+                    f"{dispatch_counts[stage_name]} times this pass "
+                    f"(limit {limit}) — pausing for human review to "
+                    f"avoid an unbounded implement/review/ci_fix re-run "
+                    f"loop."
+                )[:200]
+                log.warning("%s: %s — %s", stage_name, ticket_id, note)
+                await _block_ticket_and_notify(ticket_id, ctx, stage_name, note, None)
+                return
         trace_id = None
         try:
             with contextlib.ExitStack() as es:

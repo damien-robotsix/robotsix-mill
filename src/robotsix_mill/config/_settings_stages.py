@@ -593,6 +593,16 @@ class _StagesSettings(BaseModel):
     # triggers the fallback model (if configured).  Set to 0 to disable.
     ci_fix_request_limit: int = Field(default=120, ge=0)
 
+    # Per-ticket ceiling on how many times the worker may re-dispatch the
+    # SAME LLM-bearing pipeline stage within a single processing pass before
+    # pausing the ticket to BLOCKED for human review. Guards against an
+    # unbounded implement↔review / implement↔ci_fix re-run loop (one ticket
+    # spinning the model agent dozens of times and burning subscription
+    # quota). A healthy linear pipeline dispatches each stage once, so this
+    # only trips on genuine bounce-loops. Default 3 allows the initial run
+    # plus 2 re-runs (~2 re-implement cycles). Set to 0 to disable.
+    ticket_state_cycle_limit: int = Field(default=3, ge=0)
+
     # When True (default), ci_fix may invoke a conservative codeql_fp_triage
     # sub-agent at the hard cycle ceiling when the ONLY remaining red check
     # is CodeQL code-scanning.  The sub-agent evaluates alerts and may dismiss
