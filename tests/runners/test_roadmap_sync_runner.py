@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 
 from robotsix_mill.config import Settings, _reset_secrets
-from robotsix_mill.core.models import State, SourceKind
+from robotsix_mill.core.models import State, SourceKind, TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.runners.roadmap_sync_runner import (
     EpicSection,
@@ -179,7 +179,7 @@ class TestCreateOrUpdateEpics:
         assert len(skipped) == 0
         assert set(new_ids.keys()) == {0, 1}
         # Epics actually exist on the board.
-        all_epics = [t for t in service.list() if t.kind == "epic"]
+        all_epics = [t for t in service.list() if t.kind == TicketKind.EPIC]
         assert {t.title for t in all_epics} == {"A", "B"}
         # Source is correctly stamped.
         for t in all_epics:
@@ -212,7 +212,7 @@ class TestCreateOrUpdateEpics:
             title="Old Title",
             description="Old body",
             source=SourceKind.ROADMAP_SYNC,
-            kind="epic",
+            kind=TicketKind.EPIC,
         )
         sections = [
             EpicSection(
@@ -240,7 +240,7 @@ class TestCreateOrUpdateEpics:
             title="Same",
             description="Same body",
             source=SourceKind.ROADMAP_SYNC,
-            kind="epic",
+            kind=TicketKind.EPIC,
         )
         sections = [
             EpicSection(
@@ -263,7 +263,7 @@ class TestCreateOrUpdateEpics:
             title="Old",
             description="body unchanged",
             source=SourceKind.ROADMAP_SYNC,
-            kind="epic",
+            kind=TicketKind.EPIC,
         )
         sections = [
             EpicSection(

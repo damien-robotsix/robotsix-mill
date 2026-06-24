@@ -27,7 +27,7 @@ import robotsix_mill.agents.obsolescence as obsolescence_mod
 import robotsix_mill.core.dedup as dedup_top
 import robotsix_mill.stages.refine as refine_module
 from robotsix_mill.core import db
-from robotsix_mill.core.models import SourceKind
+from robotsix_mill.core.models import SourceKind, TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
@@ -444,7 +444,7 @@ def test_valid_target_unknown_candidate_ancestry_git_error_is_true(
 
 def test_inflight_advisory_epic_returns_draft_unchanged(ctx_factory, monkeypatch):
     ctx = ctx_factory()
-    epic = ctx.service.create("Epic", "Epic body", kind="epic")
+    epic = ctx.service.create("Epic", "Epic body", kind=TicketKind.EPIC)
     ws = ctx.service.workspace(epic)
 
     calls: list = []
@@ -460,7 +460,7 @@ def test_inflight_advisory_epic_returns_draft_unchanged(ctx_factory, monkeypatch
 
 def test_inflight_advisory_child_returns_draft_unchanged(ctx_factory, monkeypatch):
     ctx = ctx_factory()
-    parent = ctx.service.create("Parent", "Parent body", kind="epic")
+    parent = ctx.service.create("Parent", "Parent body", kind=TicketKind.EPIC)
     child = ctx.service.create("Child", "Child body", parent_id=parent.id)
     ws = ctx.service.workspace(child)
 

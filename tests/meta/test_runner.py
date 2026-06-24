@@ -8,7 +8,7 @@ from pathlib import Path
 from robotsix_mill.meta.agent import DraftProposal, MetaAgentResult
 from robotsix_mill.config import RepoConfig, ReposRegistry, Settings
 from robotsix_mill.core import db
-from robotsix_mill.core.models import SourceKind
+from robotsix_mill.core.models import SourceKind, TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.workspace import Workspace
 from robotsix_mill.meta.runner import run_meta_pass, MetaPassResult
@@ -589,7 +589,7 @@ class TestRunMetaPass:
             source=SourceKind.USER,
             origin_session=None,
             depends_on=None,
-            kind="task",
+            kind=TicketKind.TASK,
             parent_id=None,
             board_id=None,
         ):

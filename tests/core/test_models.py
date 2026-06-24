@@ -432,7 +432,7 @@ def test_ticket_read_minimal_validation():
         "id": "t-1",
         "title": "Test",
         "state": "draft",
-        "kind": "task",
+        "kind": TicketKind.TASK,
         "branch": None,
         "parent_id": None,
         "source": "user",
@@ -463,7 +463,7 @@ def test_ticket_read_unmet_deps_defaults_to_empty_list():
         "id": "t-1",
         "title": "Test",
         "state": "draft",
-        "kind": "task",
+        "kind": TicketKind.TASK,
         "branch": None,
         "parent_id": None,
         "source": "user",
@@ -489,7 +489,7 @@ def test_ticket_read_with_unmet_deps_populated():
         "id": "t-1",
         "title": "Test",
         "state": "draft",
-        "kind": "task",
+        "kind": TicketKind.TASK,
         "branch": None,
         "parent_id": None,
         "source": "user",
@@ -514,7 +514,7 @@ def test_ticket_read_missing_unmet_deps_raises():
         "id": "t-1",
         "title": "Test",
         "state": "draft",
-        "kind": "task",
+        "kind": TicketKind.TASK,
         "branch": None,
         "parent_id": None,
         "source": "user",
@@ -823,8 +823,8 @@ def test_create_with_lowercase_string_kind(service):
     t = service.create(title=tc.title, description=tc.description, kind=tc.kind)
     assert t.kind == TicketKind.TASK
 
-    # Also verify directly using TicketCreate.model_validate kind="task"
-    tc2 = TicketCreate(title="Lower Create 2", kind="task")  # type: ignore[arg-type]
+    # Also verify directly using TicketCreate.model_validate kind=TicketKind.TASK
+    tc2 = TicketCreate(title="Lower Create 2", kind=TicketKind.TASK)  # type: ignore[arg-type]
     t2 = service.create(title=tc2.title, description=tc2.description, kind=tc2.kind)
     assert t2.kind == TicketKind.TASK
 

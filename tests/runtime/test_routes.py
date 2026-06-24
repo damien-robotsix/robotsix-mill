@@ -21,6 +21,7 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
+from robotsix_mill.core.models import TicketKind
 from robotsix_mill.core.states import State
 from robotsix_mill.runtime.api import create_app
 
@@ -923,7 +924,7 @@ def test_convert_to_task_404(client):
 
 def test_convert_to_task_409_non_inquiry(client, service):
     """A non-inquiry ticket cannot be converted -> 409."""
-    t = service.create("A regular task", kind="task")
+    t = service.create("A regular task", kind=TicketKind.TASK)
     r = client.post(f"/tickets/{t.id}/convert-to-task", json={"comment": "x"})
     assert r.status_code == 409
 
@@ -935,7 +936,7 @@ def test_convert_to_task_happy_path(client, service, monkeypatch):
     from robotsix_mill.agents.ask_to_ticket import AskToTicketResult
     from robotsix_mill.runtime.routes import _tickets as tmod
 
-    inquiry = service.create("How do I X?", kind="inquiry")
+    inquiry = service.create("How do I X?", kind=TicketKind.INQUIRY)
 
     captured = {}
 
@@ -953,7 +954,7 @@ def test_convert_to_task_happy_path(client, service, monkeypatch):
     assert r.status_code == 201
     data = r.json()
     assert data["title"] == "Implement X"
-    assert data["kind"] == "task"
+    assert data["kind"] == TicketKind.TASK
     assert data["board_id"] == inquiry.board_id
     assert data["id"] != inquiry.id
 
@@ -978,7 +979,7 @@ def test_convert_to_task_comment_failure_does_not_fail_request(
     from robotsix_mill.agents.ask_to_ticket import AskToTicketResult
     from robotsix_mill.runtime.routes import _tickets as tmod
 
-    inquiry = service.create("How do I Y?", kind="inquiry")
+    inquiry = service.create("How do I Y?", kind=TicketKind.INQUIRY)
 
     monkeypatch.setattr(
         tmod,
@@ -1004,7 +1005,7 @@ def test_convert_to_task_503_when_agent_unavailable(client, service, monkeypatch
     does not create a new task ticket."""
     from robotsix_mill.runtime.routes import _tickets as tmod
 
-    inquiry = service.create("How do I X?", kind="inquiry")
+    inquiry = service.create("How do I X?", kind=TicketKind.INQUIRY)
     ticket_count_before = len(service.list())
 
     def broken_agent(*, settings, question, answer, comment, repo_dir=None):
@@ -1029,7 +1030,7 @@ def test_convert_to_task_reads_question_artifact(client, service, monkeypatch):
     from robotsix_mill.agents.ask_to_ticket import AskToTicketResult
     from robotsix_mill.runtime.routes import _tickets as tmod
 
-    inquiry = service.create("Fallback title", kind="inquiry")
+    inquiry = service.create("Fallback title", kind=TicketKind.INQUIRY)
     ws = service.workspace(inquiry)
     ws.write_description("The answer body.")
     (ws.artifacts_dir / "question-original.md").write_text(
@@ -1060,7 +1061,7 @@ def test_convert_to_task_leaves_inquiry_unchanged(client, service, monkeypatch):
     from robotsix_mill.agents.ask_to_ticket import AskToTicketResult
     from robotsix_mill.runtime.routes import _tickets as tmod
 
-    inquiry = service.create("An inquiry", kind="inquiry")
+    inquiry = service.create("An inquiry", kind=TicketKind.INQUIRY)
     ws = service.workspace(inquiry)
     ws.write_description("Answer text.")
 
@@ -1165,7 +1166,7 @@ def test_migrate_ticket_404(migrate_client):
 def test_migrate_epic_via_route(migrate_client, service):
     """POST /tickets/{epic_id}/migrate moves an epic (and its subtree)
     to the target board and returns the root as a DRAFT there."""
-    epic = service.create("Epic on wrong board", kind="epic")
+    epic = service.create("Epic on wrong board", kind=TicketKind.EPIC)
     child = service.create("Epic child", parent_id=epic.id)
 
     r = migrate_client.post(

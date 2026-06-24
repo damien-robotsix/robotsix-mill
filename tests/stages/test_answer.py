@@ -5,6 +5,7 @@ import subprocess
 import pytest
 
 from robotsix_mill.core import db
+from robotsix_mill.core.models import TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
@@ -43,7 +44,7 @@ def ctx_factory(tmp_path):
 
 def _ticket(ctx, title="What is the meaning of life?", body="The question"):
     """Create an inquiry ticket (starts in ASKED state)."""
-    return ctx.service.create(title, body, kind="inquiry")
+    return ctx.service.create(title, body, kind=TicketKind.INQUIRY)
 
 
 # --- happy path with clone --------------------------------------------
@@ -311,7 +312,7 @@ def test_whitespace_only_answer_blocks(ctx_factory, monkeypatch):
 def test_epic_context_enrichment(ctx_factory, monkeypatch):
     ctx = ctx_factory()
     # Create an epic with a description.
-    epic = ctx.service.create("Epic", "This is the epic context.", kind="epic")
+    epic = ctx.service.create("Epic", "This is the epic context.", kind=TicketKind.EPIC)
 
     # Create a child ticket.
     t = _ticket(ctx, title="Child question", body="Child body")

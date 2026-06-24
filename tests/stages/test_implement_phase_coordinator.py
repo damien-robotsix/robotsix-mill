@@ -22,6 +22,7 @@ import pytest
 
 from robotsix_mill.agents.testing import ENV_ERROR_PREFIX
 from robotsix_mill.core import db
+from robotsix_mill.core.models import TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
@@ -418,7 +419,9 @@ def test_load_context_previous_summary_absent(ctx_factory, monkeypatch):
 
 def test_load_context_epic_prepended(ctx_factory, monkeypatch):
     ctx = ctx_factory()
-    epic = ctx.service.create("Global Epic", "High-level goal: unify UX", kind="epic")
+    epic = ctx.service.create(
+        "Global Epic", "High-level goal: unify UX", kind=TicketKind.EPIC
+    )
     child = ctx.service.create("Add dark mode", "child body", parent_id=epic.id)
     ctx.service.transition(child.id, State.READY)
     child = ctx.service.get(child.id)

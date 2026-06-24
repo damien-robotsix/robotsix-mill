@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from robotsix_mill.core.models import TicketRead
+from robotsix_mill.core.models import TicketKind, TicketRead
 from robotsix_mill.runtime.board_adapter import MillBoardAdapter, _COLUMNS, _ticket
 
 
@@ -36,7 +36,7 @@ def _make_ticket(**overrides) -> TicketRead:
         id=data.pop("id", "t-1"),
         title=data.pop("title", "Test ticket"),
         state=data.pop("state", "draft"),
-        kind=data.pop("kind", "task"),
+        kind=data.pop("kind", TicketKind.TASK),
         branch=data.pop("branch", None),
         parent_id=data.pop("parent_id", None),
         source=data.pop("source", "user"),
@@ -128,19 +128,19 @@ def test_card_title_raises_typeerror_for_non_ticket():
 def test_card_badges_no_priority_no_kind_no_source():
     """priority=False, kind='task', source='user' → no badges at all."""
     adapter = MillBoardAdapter()
-    ticket = _make_ticket(priority=False, kind="task", source="user")
+    ticket = _make_ticket(priority=False, kind=TicketKind.TASK, source="user")
     assert adapter.card_badges(ticket) == []
 
 
 def test_card_badges_priority_star():
     adapter = MillBoardAdapter()
-    ticket = _make_ticket(priority=True, kind="task", source="user")
+    ticket = _make_ticket(priority=True, kind=TicketKind.TASK, source="user")
     assert adapter.card_badges(ticket) == ["★ priority"]
 
 
 def test_card_badges_kind_not_task():
     adapter = MillBoardAdapter()
-    ticket = _make_ticket(priority=False, kind="epic", source="user")
+    ticket = _make_ticket(priority=False, kind=TicketKind.EPIC, source="user")
     assert adapter.card_badges(ticket) == ["epic"]
 
 
@@ -152,20 +152,20 @@ def test_card_badges_kind_empty_string_suppressed():
 
 def test_card_badges_source_not_user():
     adapter = MillBoardAdapter()
-    ticket = _make_ticket(priority=False, kind="task", source="api")
+    ticket = _make_ticket(priority=False, kind=TicketKind.TASK, source="api")
     assert adapter.card_badges(ticket) == ["api"]
 
 
 def test_card_badges_source_empty_string():
     """source='' is falsy → no source badge (same as 'user' suppression)."""
     adapter = MillBoardAdapter()
-    ticket = _make_ticket(priority=False, kind="task", source="")
+    ticket = _make_ticket(priority=False, kind=TicketKind.TASK, source="")
     assert adapter.card_badges(ticket) == []
 
 
 def test_card_badges_all_three():
     adapter = MillBoardAdapter()
-    ticket = _make_ticket(priority=True, kind="epic", source="api")
+    ticket = _make_ticket(priority=True, kind=TicketKind.EPIC, source="api")
     assert adapter.card_badges(ticket) == ["★ priority", "epic", "api"]
 
 
@@ -203,7 +203,7 @@ def test_card_badges_blocked_combined_with_existing_badges():
     adapter = MillBoardAdapter()
     ticket = _make_ticket(
         priority=True,
-        kind="epic",
+        kind=TicketKind.EPIC,
         source="api",
         state="blocked",
         unmet_deps=["t-2"],
@@ -231,7 +231,7 @@ def test_card_badges_non_blocked_with_unmet_deps():
     adapter = MillBoardAdapter()
     ticket = _make_ticket(
         state="ready",
-        kind="task",
+        kind=TicketKind.TASK,
         unmet_deps=["t-2"],
     )
     badges = adapter.card_badges(ticket)

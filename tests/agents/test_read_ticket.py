@@ -13,7 +13,7 @@ Covers all acceptance criteria from the ticket spec:
 from datetime import datetime, timezone
 
 from robotsix_mill.agents.read_ticket import make_read_ticket_tool
-from robotsix_mill.core.models import TicketEvent
+from robotsix_mill.core.models import TicketEvent, TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 
@@ -187,7 +187,7 @@ def test_no_write_paths_reachable(settings, monkeypatch):
         id="20250331T142315Z-test-ticket-3a1f",
         title="Test Ticket",
         state=State.DRAFT,
-        kind="task",
+        kind=TicketKind.TASK,
         source="agent",
     )
     mock_workspace = MagicMock()
