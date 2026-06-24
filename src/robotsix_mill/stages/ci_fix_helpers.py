@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Any, NamedTuple
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, NamedTuple
+
+if TYPE_CHECKING:
+    from ..core.models import Ticket
+    from .base import StageContext
 
 from ..forge.base import Forge
 
@@ -15,24 +20,24 @@ _CI_IDENTICAL_FAILURE_COUNT = "ci_identical_failure_count.txt"
 _CODQL_CHECK_NAMES = frozenset({"codeql", "code-scanning", "code scanning"})
 
 
-def _read_counter(path) -> int:
+def _read_counter(path: Path) -> int:
     try:
         return int(path.read_text(encoding="utf-8").strip())
     except FileNotFoundError, ValueError:
         return 0
 
 
-def _write_counter(path, value: int) -> None:
+def _write_counter(path: Path, value: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(str(value), encoding="utf-8")
 
 
-def _write_text(path, content: str) -> None:
+def _write_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
 
 
-def _workspace_repo_dir(ctx, ticket) -> str | None:
+def _workspace_repo_dir(ctx: StageContext, ticket: Ticket) -> str | None:
     """Return the ticket's workspace clone dir, or None if missing."""
     ws = ctx.service.workspace(ticket)
     repo = ws.dir / "repo"
@@ -41,7 +46,7 @@ def _workspace_repo_dir(ctx, ticket) -> str | None:
     return str(repo)
 
 
-def _format_code_scanning_alerts(alerts: list[dict]) -> str:
+def _format_code_scanning_alerts(alerts: list[dict[str, Any]]) -> str:
     """Render open code-scanning (CodeQL) alerts as a markdown block. These
     come from the security/code-scanning API, NOT the workflow job logs, so
     without them the agent can't see what a CodeQL check actually flagged."""
@@ -58,8 +63,8 @@ def _format_code_scanning_alerts(alerts: list[dict]) -> str:
 
 
 def _partition_alerts_by_diff(
-    alerts: list[dict], changed_paths: set[str]
-) -> tuple[list[dict], list[dict]]:
+    alerts: list[dict[str, Any]], changed_paths: set[str]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Split open code-scanning alerts into (in_scope, out_of_scope).
 
     An alert is IN SCOPE when its repo-relative ``path`` is among the PR's
@@ -67,8 +72,8 @@ def _partition_alerts_by_diff(
     empty/missing ``path`` are treated as out-of-scope (cannot prove they are
     in the diff).
     """
-    in_scope: list[dict] = []
-    out_of_scope: list[dict] = []
+    in_scope: list[dict[str, Any]] = []
+    out_of_scope: list[dict[str, Any]] = []
     for a in alerts:
         path = a.get("path", "")
         if path and path in changed_paths:
@@ -88,20 +93,22 @@ def _pr_changed_paths(forge: Forge, branch: str) -> set[str]:
         return set()
 
 
-def _alert_loc(a: dict) -> str:
+def _alert_loc(a: dict[str, Any]) -> str:
     """Return the ``path`` or ``path:line`` location string for an alert."""
-    loc = a.get("path", "")
+    loc: str = a.get("path", "")
     if a.get("line"):
         loc += f":{a['line']}"
     return loc
 
 
-def _format_alert_refs(alerts: list[dict]) -> str:
+def _format_alert_refs(alerts: list[dict[str, Any]]) -> str:
     """Render alerts as a compact ``rule @ path:line`` semicolon list."""
     return "; ".join(f"{a.get('rule', '')} @ {_alert_loc(a)}" for a in alerts)
 
 
-def _format_labelled_alerts(in_scope: list[dict], out_of_scope: list[dict]) -> str:
+def _format_labelled_alerts(
+    in_scope: list[dict[str, Any]], out_of_scope: list[dict[str, Any]]
+) -> str:
     """Render code-scanning alerts split into in-diff / untouched sections.
 
     Each alert is explicitly marked so the agent (and any downstream fixer)
@@ -163,9 +170,9 @@ def _format_alert_summary_block(
 
 
 def _build_failing_summary(
-    failing: list[dict],
+    failing: list[dict[str, Any]],
     log_text: str = "",
-    alerts: list[dict] | None = None,
+    alerts: list[dict[str, Any]] | None = None,
     changed_paths: set[str] | None = None,
 ) -> str:
     """Build a markdown summary from the failing check list.
