@@ -286,7 +286,7 @@ def board() -> str:
             refresh_url="/board/cards",
             refresh_interval_ms=5_000,
         )
-    except ImportError, ModuleNotFoundError:
+    except ImportError:
         config_script = ""
     return render_board_html(config_script, skeleton)
 
