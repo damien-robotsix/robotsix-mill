@@ -494,8 +494,12 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         (keyed on child count), so a healthy epic isn't re-billed every poll.
         Re-evaluates again only when the child count changes (e.g. epic_status
         spawned new children). The epic_status agent itself decides whether to
-        actually close — this just ensures it gets the chance."""
-        children = svc.list_children(epic.id)
+        actually close — this just ensures it gets the chance.
+
+        Uses :meth:`~.TicketService.list_children_across_boards` so children
+        on other boards (cross-repo epic) are visible to the orphan sweep.
+        """
+        children = svc.list_children_across_boards(epic.id)
         if not children:
             return
         if not all(c.state in _EPIC_CHILD_TERMINAL for c in children):

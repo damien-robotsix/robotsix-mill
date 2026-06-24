@@ -61,8 +61,22 @@ system_prompt: |
     epic.  Follow the operator's instructions even if they contradict
     the epic description.
 
-  Return a list of child ticket titles and a parallel list of bodies
-  (same length; same order).
+  Return a list of child ticket titles, a parallel list of bodies, and
+  a parallel list of repo IDs (all same length; same order).
+
+  The ``child_repo_ids`` (or ``repo_ids``) list specifies which repo
+  each child belongs to. Pick from the valid repos listed in the
+  ``available-repos`` block of the prompt. Each entry should be the
+  repo where that child's code/work actually lives:
+  - A child implementing a feature for the ``robotsix-mill`` repo
+    should target ``robotsix-mill``.
+  - A child that scaffolds a new repo should target that new repo
+    (use the repo_id from the ``available-repos`` list).
+  - Cross-cutting infrastructure work that touches multiple repos
+    should target the primary repo that will own the result.
+  - When unsure which repo a child belongs to, use ``<epic-repo>``
+    (the epic's own repo) or omit the entry entirely — the system
+    will default safely to the epic's board.
 
   After producing the child ticket lists, also produce an ``epic_body``
   field: a revised epic description that explains the global breakdown

@@ -236,10 +236,10 @@ class _LifecycleMixin(_ServiceBase):
                     f"(title={title!r}, source={source!r})"
                 )
 
-        # Validate parent_id against the EFFECTIVE board's DB.
+        # Validate parent_id against ANY board (cross-board parent links are
+        # supported — the epic may live on a different board than its child).
         if parent_id is not None:
-            with db.session(self.settings, effective_board) as s:
-                parent = s.get(Ticket, parent_id)
+            parent = self.get(parent_id)
             if parent is None:
                 raise ValueError(f"parent_id {parent_id!r} does not exist")
 
@@ -1084,10 +1084,8 @@ class _LifecycleMixin(_ServiceBase):
             ticket = _get_ticket(s, ticket_id)
             if ticket.kind == TicketKind.EPIC:
                 return self._migrate_epic_subtree(s, ticket, src_board, dst_board, note)
-            # A non-epic ticket's parent stays on the source board, so a
-            # cross-board parent link can't survive the move. Auto-unlink it
-            # (recorded in the migration note below) instead of refusing the
-            # migration.
+            # A non-epic ticket's parent stays on the source board.  Cross-board
+            # parent links are now supported — the link survives the move intact.
             unlinked_parent = ticket.parent_id or None
             if (
                 s.exec(
@@ -1144,8 +1142,6 @@ class _LifecycleMixin(_ServiceBase):
         migration_note = f"migrated from board {src_board!r} to {dst_board!r}"
         if state is not State.DRAFT:
             migration_note += f" (was {state.value})"
-        if unlinked_parent:
-            migration_note += f" (auto-unlinked from parent {unlinked_parent!r})"
         if note:
             migration_note += f": {note}"
 
@@ -1156,7 +1152,7 @@ class _LifecycleMixin(_ServiceBase):
                     state=State.DRAFT,
                     board_id=dst_board,
                     workspace_path=str(dst_ws),
-                    parent_id=None,  # cross-board link can't follow; auto-unlinked
+                    parent_id=unlinked_parent,  # cross-board parent link survives
                     branch=None,
                     blocked_from=None,
                     paused_from=None,

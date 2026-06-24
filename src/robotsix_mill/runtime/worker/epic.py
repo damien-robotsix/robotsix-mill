@@ -171,11 +171,14 @@ def _build_child_summaries(svc, epic_id: str) -> list[dict]:
     ``"\\n...(truncated)"`` suffix); the summary carries ``id``,
     ``title``, ``state``, ``description``, ``depends_on`` and
     ``delivery`` (a delivery-evidence label from :func:`_resolve_delivery`).
+
+    Uses :meth:`list_children_across_boards` so children on other
+    boards (cross-repo epic) are visible to the epic-status agent.
     """
     from ...core.service import TicketService
 
     child_summaries: list[dict] = []
-    for child in svc.list_children(epic_id):
+    for child in svc.list_children_across_boards(epic_id):
         child_desc = svc.workspace(child).read_description()
         if len(child_desc) > 500:
             child_desc = child_desc[:500] + "\n...(truncated)"
@@ -481,6 +484,8 @@ def _run_epic_reprocess(
         plan_child_dependencies,
         run_epic_breakdown_agent,
     )
+    from ...config import get_repos_config
+    from ...config.repos import resolve_child_board_id
 
     # Discover the epic's board via fanout, then bind the service to
     # it so subsequent writes go to the right per-repo DB.
@@ -519,25 +524,54 @@ def _run_epic_reprocess(
                 comment_lines.append(f"[{ts}]   ↳ {c.author}: {c.body}")
         comments_prompt = "\n".join(comment_lines)
 
+        # Build the available-repos list for the agent prompt.
+        available_repos: list[tuple[str, str]] = []
+        epic_repo_id = ""
+        try:
+            repos = get_repos_config()
+            for rid, rc in repos.repos.items():
+                available_repos.append((rid, rc.board_id))
+                if rc.board_id == board_id:
+                    epic_repo_id = rid
+        except Exception:
+            repos = None
+            log.debug("epic %s: repos config unavailable for re-process", epic_id)
+
         result = run_epic_breakdown_agent(
             settings=settings,
             epic_title=epic.title,
             epic_description=epic_desc,
             comments=comments_prompt,
+            available_repos=available_repos or None,
+            epic_repo_id=epic_repo_id,
         )
 
-        # Reconcile: compare proposed titles against existing children.
-        existing = svc.list_children(epic_id)
+        # Reconcile: compare proposed titles against existing children
+        # across ALL boards (cross-board epic children may live on
+        # different boards).
+        existing = svc.list_children_across_boards(epic_id)
         existing_titles_lower = {child.title.strip().lower() for child in existing}
 
         new_titles: list[str] = []
         new_bodies: list[str] = []
-        for title, body in zip(result.child_titles, result.child_bodies, strict=True):
+        new_repo_ids: list[str] = []
+        child_repo_ids = list(result.child_repo_ids)
+        # Tolerate short repo_ids list.
+        if len(child_repo_ids) < len(result.child_titles):
+            child_repo_ids.extend(
+                [""] * (len(result.child_titles) - len(child_repo_ids))
+            )
+        child_repo_ids = child_repo_ids[: len(result.child_titles)]
+
+        for title, body, repo_id in zip(
+            result.child_titles, result.child_bodies, child_repo_ids, strict=True
+        ):
             if title.strip().lower() in existing_titles_lower:
                 log.debug("epic %s: skipping duplicate child '%s'", epic_id, title)
                 continue
             new_titles.append(title)
             new_bodies.append(body)
+            new_repo_ids.append(repo_id)
 
         if not new_titles:
             log.info(
@@ -563,9 +597,13 @@ def _run_epic_reprocess(
             datetime.now(timezone.utc),
         )
 
+        # Cache TicketService per board to avoid rebuilding.
+        per_board_svc: dict[str, Any] = {}
+        epic_board_id = board_id
+
         created_children: list[tuple[str, str, str]] = []
-        for title, body, dup_note in zip(
-            new_titles, new_bodies, overlap_notes, strict=True
+        for title, body, dup_note, repo_id in zip(
+            new_titles, new_bodies, overlap_notes, new_repo_ids, strict=True
         ):
             if dup_note:
                 log.warning(
@@ -575,7 +613,16 @@ def _run_epic_reprocess(
                     dup_note,
                 )
                 body = annotate_child_body(body, dup_note)
-            child = svc.create(
+
+            # Resolve the child's target board.
+            child_board = resolve_child_board_id(repo_id, epic_board_id, epic_id, repos)
+            if child_board not in per_board_svc:
+                per_board_svc[child_board] = TicketService(
+                    settings, board_id=child_board
+                )
+            child_svc = per_board_svc[child_board]
+
+            child = child_svc.create(
                 title=title,
                 description=body,
                 kind=TicketKind.TASK,
@@ -591,12 +638,18 @@ def _run_epic_reprocess(
         # producer→consumer edges and bump-child synthesis are also
         # applied when children target different repos.
         predecessor_id = existing[-1].id if existing else None
+
+        # Fan-out service for cross-board child lookups.
+        fanout_svc = TicketService(settings)
+
+        def _child_board_id(cid: str) -> str:
+            t = fanout_svc.get(cid)
+            return t.board_id if t is not None else board_id
+
         for child_id, deps in plan_child_dependencies(
             created_children,
             predecessor_id=predecessor_id,
-            child_board_id=lambda cid: (
-                _t.board_id if (_t := svc.get(cid)) is not None else svc.board_id
-            ),
+            child_board_id=_child_board_id,
             create_child=lambda title, body: (
                 svc.create(
                     title=title,

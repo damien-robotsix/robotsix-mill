@@ -601,3 +601,118 @@ def test_comments_parameter_appended_to_prompt(monkeypatch):
     assert captured_prompt.index("````epic-description") < captured_prompt.index(
         "````operator-comments"
     )
+
+
+# -- child_repo_ids field tests --------------------------------------------
+
+
+def test_epic_breakdown_result_parses_repo_ids_alias():
+    """The model may emit ``repo_ids`` instead of ``child_repo_ids``."""
+    result = EpicBreakdownResult.model_validate(
+        {
+            "child_titles": ["A", "B"],
+            "child_bodies": ["Body A", "Body B"],
+            "repo_ids": ["repo-a", "repo-b"],
+        }
+    )
+    assert result.child_repo_ids == ["repo-a", "repo-b"]
+
+
+def test_epic_breakdown_result_parses_child_repo_ids():
+    """The canonical ``child_repo_ids`` key parses correctly."""
+    result = EpicBreakdownResult.model_validate(
+        {
+            "child_titles": ["A"],
+            "child_bodies": ["Body A"],
+            "child_repo_ids": ["robotsix-mill"],
+        }
+    )
+    assert result.child_repo_ids == ["robotsix-mill"]
+
+
+def test_epic_breakdown_result_tolerates_missing_repo_ids():
+    """A result with no ``child_repo_ids`` / ``repo_ids`` field yields an
+    empty list (all-fallback)."""
+    result = EpicBreakdownResult.model_validate(
+        {"child_titles": ["A"], "child_bodies": ["Body A"]}
+    )
+    assert result.child_repo_ids == []
+
+
+def test_epic_breakdown_result_tolerates_empty_repo_ids():
+    """An explicit empty ``repo_ids`` list parses to empty list."""
+    result = EpicBreakdownResult.model_validate(
+        {
+            "child_titles": ["A"],
+            "child_bodies": ["Body A"],
+            "repo_ids": [],
+        }
+    )
+    assert result.child_repo_ids == []
+
+
+def test_epic_breakdown_result_defaults_to_empty_list():
+    """Construction without any repo_ids field defaults to empty list."""
+    result = EpicBreakdownResult(
+        child_titles=["A"],
+        child_bodies=["Body A"],
+    )
+    assert result.child_repo_ids == []
+
+
+def test_run_epic_breakdown_agent_injects_available_repos(monkeypatch):
+    """When *available_repos* is provided, an ``available-repos`` section
+    is injected into the prompt listing the valid repo IDs."""
+    captured_prompt: str | None = None
+
+    class FakeAgent:
+        def run_sync(self, prompt):
+            nonlocal captured_prompt
+            captured_prompt = prompt
+            return type("R", (), {"output": EpicBreakdownResult()})()
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.base.build_agent",
+        lambda *args, **kw: FakeAgent(),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.agents.retry.run_agent",
+        lambda agent, make_run, **kw: make_run(agent),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.agents.base._safe_close",
+        lambda agent: None,
+    )
+
+    from robotsix_mill.config import Settings
+
+    settings = Settings()
+
+    # Without available_repos — no available-repos block.
+    run_epic_breakdown_agent(
+        settings=settings,
+        epic_title="Test Epic",
+        epic_description="Build the thing.",
+    )
+    assert "````available-repos" not in captured_prompt
+
+    # With available_repos — block present with listed repo IDs.
+    run_epic_breakdown_agent(
+        settings=settings,
+        epic_title="Test Epic",
+        epic_description="Build the thing.",
+        available_repos=[
+            ("robotsix-mill", "board-mill"),
+            ("robotsix-auto-mail", "board-auto-mail"),
+        ],
+        epic_repo_id="robotsix-mill",
+    )
+    assert "````available-repos" in captured_prompt
+    assert "``robotsix-mill``" in captured_prompt
+    assert "``robotsix-auto-mail``" in captured_prompt
+    # The epic's repo is named.
+    assert "robotsix-mill" in captured_prompt
+    # Must appear after the epic-description block.
+    assert captured_prompt.index("````epic-description") < captured_prompt.index(
+        "````available-repos"
+    )

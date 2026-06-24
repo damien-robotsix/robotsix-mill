@@ -414,9 +414,10 @@ def plan_child_dependencies(
 class EpicBreakdownResult(BaseModel):
     """Structured result of breaking an epic into child tickets.
 
-    Holds parallel ``child_titles`` and ``child_bodies`` lists (one
-    entry per proposed child ticket) plus an optional ``epic_body``
-    carrying a revised epic description when the agent reworked it.
+    Holds parallel ``child_titles``, ``child_bodies``, and
+    ``child_repo_ids`` lists (one entry per proposed child ticket)
+    plus an optional ``epic_body`` carrying a revised epic description
+    when the agent reworked it.
 
     ``PromptedOutput`` describes the schema in the prompt but does not
     enforce it, and models (haiku AND opus alike, observed live) reliably
@@ -439,6 +440,10 @@ class EpicBreakdownResult(BaseModel):
         default_factory=list,
         validation_alias=AliasChoices("child_bodies", "bodies"),
     )
+    child_repo_ids: list[str] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("child_repo_ids", "repo_ids"),
+    )
     epic_body: str | None = None
 
 
@@ -448,17 +453,26 @@ def run_epic_breakdown_agent(
     epic_title: str,
     epic_description: str,
     comments: str = "",
+    available_repos: list[tuple[str, str]] | None = None,
+    epic_repo_id: str = "",
 ) -> EpicBreakdownResult:
     """Break an epic into well-scoped child tickets.
 
     The agent receives only the epic title + description — no
     filesystem access.  Returns a structured ``EpicBreakdownResult``
-    with parallel ``child_titles`` and ``child_bodies`` lists, and
-    an optional ``epic_body`` field with a revised epic description.
+    with parallel ``child_titles``, ``child_bodies``, and
+    ``child_repo_ids`` lists, and an optional ``epic_body`` field
+    with a revised epic description.
 
     When *comments* is non-empty, the operator's comment history is
     appended to the prompt in an ``<operator_comments>`` block so the
     agent can follow the operator's explicit direction.
+
+    When *available_repos* is provided (a list of ``(repo_id, board_id)``
+    tuples), a section listing valid repo IDs is injected into the prompt
+    so the agent can assign each child to the correct repo. *epic_repo_id*
+    names the epic's own repo (the safe default for any child whose repo
+    is unspecified).
 
     The agent is constructed via :func:`~.base.build_agent` with
     ``PromptedOutput(EpicBreakdownResult)``, ``web=False``,
@@ -480,6 +494,17 @@ def run_epic_breakdown_agent(
         + "\n\n"
         + section("epic-description", epic_description)
     )
+    if available_repos:
+        repo_lines = [f"- ``{repo_id}``" for repo_id, _board_id in available_repos]
+        repo_list = "\n".join(repo_lines)
+        prompt += "\n\n" + section(
+            "available-repos",
+            f"The epic lives in ``{epic_repo_id or 'default'}``. "
+            f"Valid target repos:\n{repo_list}\n\n"
+            "Assign each child to the repo where its code/work "
+            "actually lives. When unsure, use the epic's own repo "
+            "(or omit the entry — it defaults safely).",
+        )
     if comments:
         prompt += "\n\n" + section("operator-comments", comments)
     prompt += "\n\nBreak this epic into well-scoped child tickets."

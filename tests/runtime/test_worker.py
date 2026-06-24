@@ -1378,6 +1378,10 @@ class _FakeEpicService:
         self.calls.append(("list_children", epic_id))
         return self.children
 
+    def list_children_across_boards(self, epic_id):
+        self.calls.append(("list_children_across_boards", epic_id))
+        return self.children
+
     def get(self, ticket_id):
         return self.tickets.get(ticket_id)
 
@@ -1422,7 +1426,7 @@ def test_build_child_summaries_truncates_and_shapes():
 
     summaries = _build_child_summaries(svc, "E1")
 
-    assert ("list_children", "E1") in svc.calls
+    assert ("list_children_across_boards", "E1") in svc.calls
     assert [s["id"] for s in summaries] == ["C1", "C2"]
     assert summaries[0]["title"] == "Child one"
     assert summaries[0]["state"] == "ready"

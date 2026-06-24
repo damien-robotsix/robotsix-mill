@@ -1529,13 +1529,21 @@ def test_generate_children_202_fire_and_forget(client, service, monkeypatch):
     ran = threading.Event()
     release = threading.Event()
 
-    def slow_agent(*, settings, epic_title, epic_description):
+    def slow_agent(
+        *,
+        settings,
+        epic_title,
+        epic_description,
+        available_repos=None,
+        epic_repo_id="",
+        **kwargs,
+    ):
         ran.set()
         release.wait(5)
         return type(
             "FakeResult",
             (),
-            {"child_titles": [], "child_bodies": []},
+            {"child_titles": [], "child_bodies": [], "child_repo_ids": []},
         )()
 
     monkeypatch.setattr(
@@ -2472,3 +2480,270 @@ def test_x_request_id_non_http_scope_not_affected():
 
     asyncio.run(middleware({"type": "lifespan"}, _async_nop, _noop_send))
     assert recorded == ["lifespan"]
+
+
+# -- Cross-board epic children tests ----------------------------------------
+
+
+class TestCrossBoardChildren:
+    """Integration tests for cross-board epic children.
+
+    Verifies that children created on other boards are visible via
+    ``list_children_across_boards``, that the orphan sweep sees them,
+    and that migration preserves the parent link.
+    """
+
+    def test_list_children_across_boards_finds_children_on_other_boards(
+        self, tmp_path, monkeypatch
+    ):
+        """Children on board B are found from a service bound to board A."""
+        from robotsix_mill.config import RepoConfig, ReposRegistry, Settings
+        from robotsix_mill.core import db
+        from robotsix_mill.core.service import TicketService
+
+        # Set up two repos with distinct boards.
+        repos = ReposRegistry(
+            repos={
+                "repo-a": RepoConfig(
+                    repo_id="repo-a",
+                    board_id="board-a",
+                    langfuse_project_name="a",
+                    langfuse_public_key="pk-a",
+                    langfuse_secret_key="sk-a",
+                ),
+                "repo-b": RepoConfig(
+                    repo_id="repo-b",
+                    board_id="board-b",
+                    langfuse_project_name="b",
+                    langfuse_public_key="pk-b",
+                    langfuse_secret_key="sk-b",
+                ),
+            }
+        )
+        import robotsix_mill.config as _cfg
+
+        _cfg._repos_config = repos
+        try:
+            settings = Settings(data_dir=str(tmp_path))
+            db.init_db(settings, board_id="board-a")
+            db.init_db(settings, board_id="board-b")
+
+            svc_a = TicketService(settings, board_id="board-a")
+            svc_b = TicketService(settings, board_id="board-b")
+
+            # Create an epic on board-a.
+            epic = svc_a.create("Cross-board epic", kind="task")
+            # Create a child on board-b (cross-board parent link).
+            child_b = svc_b.create("Child on B", parent_id=epic.id, board_id="board-b")
+            # Create a child on board-a (same-board).
+            child_a = svc_a.create("Child on A", parent_id=epic.id, board_id="board-a")
+
+            # list_children_across_boards from svc_a should find both.
+            all_children = svc_a.list_children_across_boards(epic.id)
+            child_ids = {c.id for c in all_children}
+            assert child_b.id in child_ids
+            assert child_a.id in child_ids
+            assert len(all_children) == 2
+        finally:
+            _cfg._repos_config = None
+            db.reset_engine()
+
+    def test_migrate_preserves_parent_id(self, tmp_path, monkeypatch):
+        """Migrating a child to another board keeps its parent_id intact."""
+        from robotsix_mill.config import RepoConfig, ReposRegistry, Settings
+        from robotsix_mill.core import db
+        from robotsix_mill.core.service import TicketService
+
+        repos = ReposRegistry(
+            repos={
+                "repo-a": RepoConfig(
+                    repo_id="repo-a",
+                    board_id="board-a",
+                    langfuse_project_name="a",
+                    langfuse_public_key="pk-a",
+                    langfuse_secret_key="sk-a",
+                ),
+                "repo-b": RepoConfig(
+                    repo_id="repo-b",
+                    board_id="board-b",
+                    langfuse_project_name="b",
+                    langfuse_public_key="pk-b",
+                    langfuse_secret_key="sk-b",
+                ),
+            }
+        )
+        import robotsix_mill.config as _cfg
+
+        _cfg._repos_config = repos
+        try:
+            settings = Settings(data_dir=str(tmp_path))
+            db.init_db(settings, board_id="board-a")
+            db.init_db(settings, board_id="board-b")
+
+            svc_a = TicketService(settings, board_id="board-a")
+
+            parent = svc_a.create("Parent task")
+            child = svc_a.create("Child task", parent_id=parent.id)
+            assert child.parent_id == parent.id
+
+            # Migrate child to board-b.
+            migrated = svc_a.migrate(child.id, "board-b")
+            assert migrated.board_id == "board-b"
+            assert migrated.parent_id == parent.id, (
+                f"parent_id should survive migration: {migrated.parent_id} != {parent.id}"
+            )
+        finally:
+            _cfg._repos_config = None
+            db.reset_engine()
+
+    def test_migrate_epic_with_children_still_blocked(self, tmp_path, monkeypatch):
+        """An epic with children still cannot be migrated (subtree path
+        is for epic kind only; the guard for non-epic parents with
+        children remains)."""
+        from robotsix_mill.config import RepoConfig, ReposRegistry, Settings
+        from robotsix_mill.core import db
+        from robotsix_mill.core.service import TicketService
+
+        repos = ReposRegistry(
+            repos={
+                "repo-a": RepoConfig(
+                    repo_id="repo-a",
+                    board_id="board-a",
+                    langfuse_project_name="a",
+                    langfuse_public_key="pk-a",
+                    langfuse_secret_key="sk-a",
+                ),
+                "repo-b": RepoConfig(
+                    repo_id="repo-b",
+                    board_id="board-b",
+                    langfuse_project_name="b",
+                    langfuse_public_key="pk-b",
+                    langfuse_secret_key="sk-b",
+                ),
+            }
+        )
+        import robotsix_mill.config as _cfg
+
+        _cfg._repos_config = repos
+        try:
+            settings = Settings(data_dir=str(tmp_path))
+            db.init_db(settings, board_id="board-a")
+            db.init_db(settings, board_id="board-b")
+
+            svc_a = TicketService(settings, board_id="board-a")
+
+            parent = svc_a.create("Parent task")
+            svc_a.create("Child task", parent_id=parent.id)
+
+            import pytest
+
+            with pytest.raises(ValueError, match="has child tickets"):
+                svc_a.migrate(parent.id, "board-b")
+        finally:
+            _cfg._repos_config = None
+            db.reset_engine()
+
+    def test_resolve_child_board_id_warning_on_unknown_repo(self, caplog):
+        """resolve_child_board_id warns and falls back for unknown repo_id."""
+        from robotsix_mill.config import RepoConfig, ReposRegistry
+        from robotsix_mill.config.repos import resolve_child_board_id
+
+        repos = ReposRegistry(
+            repos={
+                "repo-a": RepoConfig(
+                    repo_id="repo-a",
+                    board_id="board-a",
+                    langfuse_project_name="a",
+                    langfuse_public_key="pk-a",
+                    langfuse_secret_key="sk-a",
+                ),
+            }
+        )
+        result = resolve_child_board_id(
+            "unknown-repo", "board-fallback", "epic-42", repos
+        )
+        assert result == "board-fallback"
+        assert "epic-42" in caplog.text
+        assert "unknown-repo" in caplog.text
+        assert "board-fallback" in caplog.text
+
+    def test_maybe_reevaluate_epic_uses_fanout_parent_lookup(
+        self, tmp_path, monkeypatch
+    ):
+        """_maybe_reevaluate_epic finds the parent epic even when the
+        child and epic live on different boards."""
+        from robotsix_mill.config import RepoConfig, ReposRegistry, Settings
+        from robotsix_mill.core import db
+        from robotsix_mill.core.service import TicketService
+        from robotsix_mill.core.states import State
+        from robotsix_mill.runtime.worker.processing import _maybe_reevaluate_epic
+
+        repos = ReposRegistry(
+            repos={
+                "repo-a": RepoConfig(
+                    repo_id="repo-a",
+                    board_id="board-a",
+                    langfuse_project_name="a",
+                    langfuse_public_key="pk-a",
+                    langfuse_secret_key="sk-a",
+                ),
+                "repo-b": RepoConfig(
+                    repo_id="repo-b",
+                    board_id="board-b",
+                    langfuse_project_name="b",
+                    langfuse_public_key="pk-b",
+                    langfuse_secret_key="sk-b",
+                ),
+            }
+        )
+        import robotsix_mill.config as _cfg
+
+        _cfg._repos_config = repos
+        try:
+            settings = Settings(data_dir=str(tmp_path))
+            db.init_db(settings, board_id="board-a")
+            db.init_db(settings, board_id="board-b")
+
+            svc_a = TicketService(settings, board_id="board-a")
+            svc_b = TicketService(settings, board_id="board-b")
+
+            # Epic on board-a.
+            epic = svc_a.create("Cross-board epic", kind="epic")
+            # Child on board-b.
+            child = svc_b.create("Child on B", parent_id=epic.id, board_id="board-b")
+
+            # Verify the parent lookup works from board-b's context.
+            from robotsix_mill.core.service import TicketService as TS
+
+            fanout_svc = TS(settings)
+            found = fanout_svc.get(child.parent_id)
+            assert found is not None
+            assert found.id == epic.id
+            assert found.kind.value == "epic"
+
+            # Patch _spawn_epic_reeval to record the call.
+            spawned: list[str] = []
+
+            def fake_spawn(eid, ctx):
+                spawned.append(eid)
+
+            monkeypatch.setattr(
+                "robotsix_mill.runtime.worker.processing._spawn_epic_reeval",
+                fake_spawn,
+            )
+
+            # Simulate a terminal child transition triggering re-eval.
+            # Build a minimal ctx with a fan-out service.
+            test_settings = settings  # alias to avoid class-body name shadow
+
+            class FakeCtx:
+                service = fanout_svc
+                settings = test_settings
+
+            _maybe_reevaluate_epic(child.id, FakeCtx(), State.DONE)
+            assert epic.id in spawned, (
+                f"Epic {epic.id} should be spawned for re-eval, got {spawned}"
+            )
+        finally:
+            _cfg._repos_config = None
+            db.reset_engine()

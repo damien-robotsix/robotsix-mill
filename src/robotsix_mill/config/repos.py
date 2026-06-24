@@ -367,3 +367,51 @@ def _reset_repos_config() -> None:
     import robotsix_mill.config as _pkg
 
     _pkg._repos_config = None
+
+
+def resolve_child_board_id(
+    repo_id: str,
+    epic_board_id: str,
+    epic_id: str,
+    repos: "ReposRegistry | None" = None,
+) -> str:
+    """Resolve a child's ``repo_id`` to a ``board_id`` for child creation.
+
+    On unknown or empty *repo_id*, falls back to *epic_board_id* and
+    emits a ``log.warning`` naming the epic, the bad repo_id, and the
+    fallback board.  NEVER raises — every child must be created
+    somewhere, even when the agent emits an unrecognised repo.
+
+    *repos* is the :class:`ReposRegistry`; when ``None`` it is loaded
+    via :func:`get_repos_config`.
+    """
+    import logging
+
+    log = logging.getLogger("robotsix_mill.config")
+
+    if repos is None:
+        try:
+            repos = get_repos_config()
+        except Exception:
+            log.warning(
+                "epic %s: cannot load repos config for child repo_id %r — "
+                "falling back to epic board %r",
+                epic_id,
+                repo_id,
+                epic_board_id,
+            )
+            return epic_board_id
+
+    if not repo_id or not repo_id.strip():
+        return epic_board_id
+
+    if repo_id not in repos.repos:
+        log.warning(
+            "epic %s: unknown child repo_id %r — falling back to epic board %r",
+            epic_id,
+            repo_id,
+            epic_board_id,
+        )
+        return epic_board_id
+
+    return repos.repos[repo_id].board_id
