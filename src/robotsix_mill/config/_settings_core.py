@@ -399,6 +399,8 @@ class _CoreSettings(BaseModel):
     # before it burns a fortune. The block is RESUMABLE — a genuinely
     # expensive ticket can be resumed with resume-blocked to continue.
     max_spend_usd_per_ticket: float = Field(default=20.0)
+    max_traces_per_ticket: int = Field(default=15, ge=0)
+    max_openrouter_marginal_usd_per_ticket: float = Field(default=3.0, ge=0.0)
     # Per-stage wall-clock timeout (seconds).  A stage that exceeds this
     # limit is escalated to BLOCKED, freeing the worker slot.  ≤ 0
     # disables the timeout entirely.  2400 s (40 min) comfortably

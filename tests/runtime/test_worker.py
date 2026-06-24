@@ -266,6 +266,102 @@ def test_dollar_cap_effective_equal_to_cap_not_blocked(ctx, service, monkeypatch
     assert service.get(t.id).state is State.READY
 
 
+def test_circuit_breaker_trace_count_blocks(ctx, service, monkeypatch):
+    """When trace count exceeds max_traces_per_ticket, escalate to BLOCKED."""
+    ctx.settings.max_traces_per_ticket = 5
+    ctx.settings.max_openrouter_marginal_usd_per_ticket = 0.0
+
+    fake_traces = [{"cost": 0.0, "model": ""} for _ in range(6)]
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.session_traces",
+        lambda *a, **k: fake_traces,
+    )
+
+    w = Worker(ctx)
+    t = service.create("x")
+    service.transition(t.id, State.READY)
+    w._check_progress(t.id, State.READY, State.READY)
+    blocked = service.get(t.id)
+    assert blocked.state is State.BLOCKED
+    assert "Circuit breaker tripped" in service.history(t.id)[-1].note
+
+
+def test_circuit_breaker_trace_count_below_limit_noop(ctx, service, monkeypatch):
+    """When trace count is at or below the limit, no block."""
+    ctx.settings.max_traces_per_ticket = 5
+    ctx.settings.max_openrouter_marginal_usd_per_ticket = 0.0
+
+    fake_traces = [{"cost": 0.0, "model": ""} for _ in range(5)]
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.session_traces",
+        lambda *a, **k: fake_traces,
+    )
+
+    w = Worker(ctx)
+    t = service.create("x")
+    service.transition(t.id, State.READY)
+    w._check_progress(t.id, State.READY, State.READY)
+    assert service.get(t.id).state is State.READY
+
+
+def test_circuit_breaker_openrouter_spend_blocks(ctx, service, monkeypatch):
+    """When OpenRouter marginal spend exceeds the limit, escalate to BLOCKED."""
+    ctx.settings.max_traces_per_ticket = 0
+    ctx.settings.max_openrouter_marginal_usd_per_ticket = 3.0
+
+    fake_traces = [
+        {"cost": 1.5, "model": "openrouter/gpt-4o"},
+        {"cost": 0.5, "model": "anthropic/claude"},
+        {"cost": 2.0, "model": "openrouter/gpt-4o"},
+    ]
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.session_traces",
+        lambda *a, **k: fake_traces,
+    )
+
+    w = Worker(ctx)
+    t = service.create("x")
+    service.transition(t.id, State.READY)
+    w._check_progress(t.id, State.READY, State.READY)
+    blocked = service.get(t.id)
+    assert blocked.state is State.BLOCKED
+    assert "Circuit breaker tripped" in service.history(t.id)[-1].note
+
+
+def test_circuit_breaker_both_disabled_noop(ctx, service, monkeypatch):
+    """When both breakers are disabled (0), the guard is entirely skipped."""
+    ctx.settings.max_traces_per_ticket = 0
+    ctx.settings.max_openrouter_marginal_usd_per_ticket = 0.0
+
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.session_traces",
+        lambda *a, **k: pytest.fail("must not be called"),
+    )
+
+    w = Worker(ctx)
+    t = service.create("x")
+    service.transition(t.id, State.READY)
+    w._check_progress(t.id, State.READY, State.READY)
+    assert service.get(t.id).state is State.READY
+
+
+def test_circuit_breaker_none_traces_noop(ctx, service, monkeypatch):
+    """When session_traces returns None (Langfuse down), degrade gracefully."""
+    ctx.settings.max_traces_per_ticket = 5
+    ctx.settings.max_openrouter_marginal_usd_per_ticket = 0.0
+
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.session_traces",
+        lambda *a, **k: None,
+    )
+
+    w = Worker(ctx)
+    t = service.create("x")
+    service.transition(t.id, State.READY)
+    w._check_progress(t.id, State.READY, State.READY)
+    assert service.get(t.id).state is State.READY
+
+
 def test_no_progress_guard_exempts_poll_stage(ctx, service):
     """human_mr_approval (merge, traced=False) legitimately waits on an open PR
     across many poll cycles — it must NEVER be auto-blocked."""

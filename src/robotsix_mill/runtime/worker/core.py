@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from ...config import RepoConfig, get_repos_config
-from ...langfuse.client import effective_cost, session_cost
+from ...langfuse.client import effective_cost, session_cost, session_traces
 from ...stages import StageContext, get_stage
 from ...core.states import STAGE_FOR_STATE, State
 from ...core.models import TicketKind
@@ -565,6 +565,49 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                 if t is not None:
                     send_notification(t, State.BLOCKED, note[:200], self.ctx.settings)
                 return
+
+        # --- trace-count / OpenRouter marginal-spend circuit breaker ---
+        if (
+            self.ctx.settings.max_traces_per_ticket > 0
+            or self.ctx.settings.max_openrouter_marginal_usd_per_ticket > 0.0
+        ):
+            traces = session_traces(
+                self.ctx.settings, ticket_id, repo_config=repo_config
+            )
+            if traces is not None:
+                n = len(traces)
+                openrouter_cost = sum(
+                    t["cost"]
+                    for t in traces
+                    if "openrouter" in (t.get("model") or "").lower()
+                )
+                if (
+                    self.ctx.settings.max_traces_per_ticket > 0
+                    and n > self.ctx.settings.max_traces_per_ticket
+                ) or (
+                    self.ctx.settings.max_openrouter_marginal_usd_per_ticket > 0.0
+                    and openrouter_cost
+                    > self.ctx.settings.max_openrouter_marginal_usd_per_ticket
+                ):
+                    note = (
+                        f"Circuit breaker tripped: {n} traces "
+                        f"(limit {self.ctx.settings.max_traces_per_ticket}), "
+                        f"OpenRouter spend ${openrouter_cost:.2f} "
+                        f"(limit ${self.ctx.settings.max_openrouter_marginal_usd_per_ticket:.2f}). "
+                        "Escalated to BLOCKED to stop further LLM billing. "
+                        "Use resume-blocked to override and continue."
+                    )
+                    log.error("%s: %s", ticket_id, note)
+                    self.ctx.service.transition(
+                        ticket_id, State.BLOCKED, note=note[:200]
+                    )
+                    self._stuck.pop(ticket_id, None)
+                    t = self.ctx.service.get(ticket_id)
+                    if t is not None:
+                        send_notification(
+                            t, State.BLOCKED, note[:200], self.ctx.settings
+                        )
+                    return
 
         if after is None or after != before:
             self._stuck.pop(ticket_id, None)

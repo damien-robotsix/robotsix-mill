@@ -251,6 +251,8 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.limits.max_fix_iterations": "max_fix_iterations",
     "core.limits.max_stuck_cycles": "max_stuck_cycles",
     "core.limits.max_spend_usd_per_ticket": "max_spend_usd_per_ticket",
+    "core.limits.max_traces_per_ticket": "max_traces_per_ticket",
+    "core.limits.max_openrouter_marginal_usd_per_ticket": "max_openrouter_marginal_usd_per_ticket",
     "core.limits.stage_timeout_seconds": "stage_timeout_seconds",
     "core.limits.stage_timeout_overrides": "stage_timeout_overrides",
     "core.limits.transient_retries": "transient_retries",
