@@ -1758,6 +1758,9 @@ class TestValidationInvalid:
         assert s.refine_subscription_model_default == "sonnet"
         assert s.refine_subscription_model_complex == "opus"
         assert s.refine_request_limit_simple == 40
+        assert s.refine_findings_downgrade_enabled is True
+        assert s.refine_findings_downgrade_min_chars == 200
+        assert s.refine_subscription_model_findings == "sonnet"
 
     def test_refine_subscription_settings_custom_values(self):
         """Subscription-tier routing settings accept custom values."""

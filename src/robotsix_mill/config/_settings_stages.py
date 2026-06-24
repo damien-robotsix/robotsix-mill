@@ -388,6 +388,21 @@ class _StagesSettings(BaseModel):
     # Claude model alias for escalated level-3 refines (complexity="needs-exploration").
     # Only the Claude-SDK branch (level 3) consumes this; DeepSeek levels 1/2 ignore it.
     refine_subscription_model_complex: str = Field(default="opus")
+    # When True (default), a non-trivial level-3 refine that WOULD route to
+    # Opus (complexity="needs-exploration") is downgraded to a cheaper Claude
+    # alias (refine_subscription_model_findings) when the triage stage already
+    # produced substantial exploration findings (root cause known). Opus is
+    # kept only when triage findings are absent or too short. Set False for a
+    # clean rollback to the prior simple/complex binary.
+    refine_findings_downgrade_enabled: bool = Field(default=True)
+    # Minimum stripped-character length of the triage exploration findings for
+    # the Opus->cheaper downgrade above to fire. Below this, findings are
+    # treated as insufficient and Opus is kept.
+    refine_findings_downgrade_min_chars: int = Field(default=200, ge=0)
+    # Claude model alias used when the findings-present downgrade fires.
+    # Defaults to sonnet (same tier the "simple" path already trusts). Only
+    # the Claude-SDK branch (level 3) consumes this; DeepSeek levels 1/2 ignore it.
+    refine_subscription_model_findings: str = Field(default="sonnet")
     # Maximum number of "changes requested" re-refine rounds before the
     # refine agent is forced to the cheap model (``refine_trivial_model_level``)
     # regardless of the persisted triage verdict.  A value of 0 disables

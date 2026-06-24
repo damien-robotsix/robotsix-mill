@@ -1745,6 +1745,188 @@ def test_triage_findings_none_not_forwarded_to_run_refine_agent(
 
 
 # ===========================================================================
+# Findings-present downgrade: Opus -> cheaper Claude alias
+# ===========================================================================
+
+
+def test_findings_present_downgrades_opus_to_sonnet(ctx_factory, monkeypatch, tmp_path):
+    """When complexity="needs-exploration" and triage produced substantial
+    exploration findings, the refine_model is downgraded from Opus to the
+    findings model alias (default "sonnet")."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+
+    refine_kwargs: dict = {}
+
+    def _run(**kw):
+        refine_kwargs.update(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    _apply_default_mocks(
+        monkeypatch,
+        triage_refine=lambda **kw: TriageResult(
+            decision="REFINE",
+            reason="multi-file refactor",
+            complexity="needs-exploration",
+            trivial_scope=False,
+            exploration_findings="x" * 300,
+        ),
+        run_refine_agent=_run,
+    )
+
+    _run_agent(ctx, t, tmp_path)
+
+    assert refine_kwargs.get("refine_model") == (
+        ctx.settings.refine_subscription_model_findings
+    ), (
+        f"Expected refine_model={ctx.settings.refine_subscription_model_findings!r}, "
+        f"got {refine_kwargs.get('refine_model')!r}"
+    )
+    assert refine_kwargs.get("refine_level") is None, (
+        "refine_level must be None (still level 3 / Claude-SDK)"
+    )
+
+
+def test_short_findings_keeps_opus(ctx_factory, monkeypatch, tmp_path):
+    """When exploration_findings is below refine_findings_downgrade_min_chars,
+    the Opus model is kept."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+
+    refine_kwargs: dict = {}
+
+    def _run(**kw):
+        refine_kwargs.update(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    _apply_default_mocks(
+        monkeypatch,
+        triage_refine=lambda **kw: TriageResult(
+            decision="REFINE",
+            reason="needs exploration",
+            complexity="needs-exploration",
+            trivial_scope=False,
+            exploration_findings="too short",
+        ),
+        run_refine_agent=_run,
+    )
+
+    _run_agent(ctx, t, tmp_path)
+
+    assert refine_kwargs.get("refine_model") == (
+        ctx.settings.refine_subscription_model_complex
+    ), (
+        f"Expected refine_model={ctx.settings.refine_subscription_model_complex!r}, "
+        f"got {refine_kwargs.get('refine_model')!r}"
+    )
+
+
+def test_no_findings_keeps_opus(ctx_factory, monkeypatch, tmp_path):
+    """When exploration_findings is None (absent or unparseable artifact),
+    the Opus model is kept."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+
+    refine_kwargs: dict = {}
+
+    def _run(**kw):
+        refine_kwargs.update(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    _apply_default_mocks(
+        monkeypatch,
+        triage_refine=lambda **kw: TriageResult(
+            decision="REFINE",
+            reason="needs exploration",
+            complexity="needs-exploration",
+            trivial_scope=False,
+            exploration_findings=None,
+        ),
+        run_refine_agent=_run,
+    )
+
+    _run_agent(ctx, t, tmp_path)
+
+    assert refine_kwargs.get("refine_model") == (
+        ctx.settings.refine_subscription_model_complex
+    ), (
+        f"Expected refine_model={ctx.settings.refine_subscription_model_complex!r}, "
+        f"got {refine_kwargs.get('refine_model')!r}"
+    )
+
+
+def test_findings_downgrade_flag_off_keeps_opus(ctx_factory, monkeypatch, tmp_path):
+    """When refine_findings_downgrade_enabled=False, substantial findings
+    do NOT trigger the downgrade -- Opus is kept (prior behaviour)."""
+    ctx = ctx_factory(refine_findings_downgrade_enabled=False)
+    t = _ticket(ctx)
+
+    refine_kwargs: dict = {}
+
+    def _run(**kw):
+        refine_kwargs.update(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    _apply_default_mocks(
+        monkeypatch,
+        triage_refine=lambda **kw: TriageResult(
+            decision="REFINE",
+            reason="needs exploration",
+            complexity="needs-exploration",
+            trivial_scope=False,
+            exploration_findings="x" * 300,
+        ),
+        run_refine_agent=_run,
+    )
+
+    _run_agent(ctx, t, tmp_path)
+
+    assert refine_kwargs.get("refine_model") == (
+        ctx.settings.refine_subscription_model_complex
+    ), (
+        f"Expected refine_model={ctx.settings.refine_subscription_model_complex!r} "
+        f"(flag off), got {refine_kwargs.get('refine_model')!r}"
+    )
+
+
+def test_simple_complexity_unaffected_by_findings(ctx_factory, monkeypatch, tmp_path):
+    """Regression: complexity="simple" is unaffected by the findings
+    downgrade -- the elif chain keeps the simple path intact."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+
+    refine_kwargs: dict = {}
+
+    def _run(**kw):
+        refine_kwargs.update(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    _apply_default_mocks(
+        monkeypatch,
+        triage_refine=lambda **kw: TriageResult(
+            decision="REFINE",
+            reason="simple fix",
+            complexity="simple",
+            trivial_scope=False,
+            exploration_findings="x" * 300,
+        ),
+        run_refine_agent=_run,
+    )
+
+    _run_agent(ctx, t, tmp_path)
+
+    assert refine_kwargs.get("refine_model") == (
+        ctx.settings.refine_subscription_model_default
+    ), (
+        f"Expected refine_model={ctx.settings.refine_subscription_model_default!r} "
+        f"(simple path), got {refine_kwargs.get('refine_model')!r}"
+    )
+    assert refine_kwargs.get("request_limit_override") == (
+        ctx.settings.refine_request_limit_simple
+    ), "request_limit_override must be set on the simple path"
+
+
+# ===========================================================================
 # Re-refine round counter → force cheap model after threshold
 # ===========================================================================
 
