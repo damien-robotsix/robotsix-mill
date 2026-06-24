@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Wire `bespoke_discovery_interval_seconds` to YAML config: add alias mapping in `_YAML_PATH_TO_ALIAS`, default leaf in `config/mill.defaults.yaml`, and documentation row in `docs/configuration.md`.
 - Strengthen refine agent budget warning: hard-cap `read_file` at ≤10 calls per generation, mandate `explore`/`parallel_explore` for multi-file work, and add a 20-tool-invocation stop-rule to force delegation to sub-agents after the first 20 `read_file`+`run_command` calls.
 - Fix `run_doc_agent` crash on empty `board_id`: guard all memory-ledger operations (`memory_file_for`, `load_memory`, `persist_memory`) behind a non-empty `board_id` check so the doc agent runs without a memory ledger instead of raising `ValueError` — resolves non-blocking failures on meta-split child tickets where `board_id` was empty/unresolvable.
 - Stamp `board_id=ticket.board_id` on split-child and umbrella-epic `TicketService.create()` calls in `orchestration.py` so split children carry the parent ticket's resolvable board rather than silently inheriting the service's `self.board_id`.

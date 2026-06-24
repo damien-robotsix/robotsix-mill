@@ -608,6 +608,7 @@ Additional fields:
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
+| `periodic.bespoke_discovery_interval_seconds` | — | `600` | Seconds between bespoke supervisor clone-refresh and agent-reconciliation cycles. A new YAML committed to a managed repo's `.robotsix-mill/agents/` lands within this window. |
 | `periodic.trace_review.enabled` | `MILL_TRACE_REVIEW_PERIODIC` | `true` | Enable periodic trace-review passes |
 | `periodic.trace_review.interval_seconds` | `MILL_TRACE_REVIEW_INTERVAL_SECONDS` | `86400` | Seconds between trace-review passes |
 | `periodic.trace_review.cost_multiplier` | — | `3.0` | Outlier threshold: cost > median × N → flagged |
