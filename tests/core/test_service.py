@@ -2151,14 +2151,14 @@ def test_migrate_rejects_bad_targets_and_states(migrate_env):
     assert migrated_epic.board_id == "other-board"
     assert migrated_epic.state is State.DRAFT
 
-    # A non-epic child linked to a parent is AUTO-UNLINKED on migrate — the
-    # cross-board parent link can't survive the move, so it's dropped (with a
-    # note) rather than refusing.
+    # A non-epic child linked to a parent KEEPS the parent link across the
+    # migration — cross-board parent links are now supported, so the link
+    # survives the move intact.
     parent = service.create("parent task")
     child = service.create("child task", parent_id=parent.id)
     migrated_child = service.migrate(child.id, "other-board")
     assert migrated_child.board_id == "other-board"
-    assert migrated_child.parent_id is None
+    assert migrated_child.parent_id == parent.id
 
     # A non-epic parent WITH children is still blocked (the subtree
     # path only triggers for kind == "epic").

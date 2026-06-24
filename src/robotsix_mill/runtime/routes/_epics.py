@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -108,7 +109,7 @@ def list_children(
 
 
 @router.post("/tickets/{ticket_id}/generate-children", status_code=202)
-def generate_children(
+def generate_children(  # noqa: C901
     ticket_id: str,
     request: Request,
     svc=Depends(get_service),
@@ -150,13 +151,14 @@ def generate_children(
 
     run_id = registry.start("epic-breakdown", repo_id=epic_board_id)
 
-    def _run() -> None:
+    def _run() -> None:  # noqa: C901
         try:
             from .. import tracing
             from ...agents.epic_breakdown import (
                 plan_child_dependencies,
                 run_epic_breakdown_agent,
             )
+            from ...config.repos import resolve_child_board_id
 
             session_id = ticket_id
             with tracing.start_ticket_root_span(
@@ -172,10 +174,21 @@ def generate_children(
                     }
                 )
                 description = epic_svc.workspace(ticket).read_description()
+
+                # Build the available-repos list for the agent prompt.
+                available_repos: list[tuple[str, str]] = []
+                epic_repo_id = ""
+                for rid, rc in repos.repos.items():
+                    available_repos.append((rid, rc.board_id))
+                    if rc.board_id == epic_board_id:
+                        epic_repo_id = rid
+
                 result = run_epic_breakdown_agent(
                     settings=settings,
                     epic_title=ticket.title,
                     epic_description=description,
+                    available_repos=available_repos or None,
+                    epic_repo_id=epic_repo_id,
                 )
                 # Advisory pre-filing dedup: flag (never drop) children
                 # whose scope overlaps a recent ticket or an earlier
@@ -187,6 +200,16 @@ def generate_children(
 
                 child_titles = list(result.child_titles)
                 child_bodies = list(result.child_bodies)
+                child_repo_ids = list(result.child_repo_ids)
+
+                # Tolerate short repo_ids list (default missing entries to epic repo).
+                if len(child_repo_ids) < len(child_titles):
+                    child_repo_ids.extend(
+                        [""] * (len(child_titles) - len(child_repo_ids))
+                    )
+                # Truncate extra repo_ids beyond titles.
+                child_repo_ids = child_repo_ids[: len(child_titles)]
+
                 overlap_notes = find_child_overlaps(
                     epic_svc,
                     ticket_id,
@@ -196,11 +219,15 @@ def generate_children(
                     datetime.now(timezone.utc),
                 )
 
+                # Cache TicketService per board to avoid rebuilding.
+                per_board_svc: dict[str, Any] = {}
+
                 created_children: list[tuple[str, str, str]] = []
-                for title, body, dup_note in zip(
+                for title, body, dup_note, repo_id in zip(
                     child_titles,
                     child_bodies,
                     overlap_notes,
+                    child_repo_ids,
                     strict=True,
                 ):
                     if dup_note:
@@ -211,7 +238,18 @@ def generate_children(
                             dup_note,
                         )
                         body = annotate_child_body(body, dup_note)
-                    child = epic_svc.create(
+
+                    # Resolve the child's target board.
+                    child_board = resolve_child_board_id(
+                        repo_id, epic_board_id, ticket_id, repos
+                    )
+                    if child_board not in per_board_svc:
+                        per_board_svc[child_board] = _TicketService(
+                            settings, board_id=child_board
+                        )
+                    child_svc = per_board_svc[child_board]
+
+                    child = child_svc.create(
                         title=title,
                         description=body,
                         kind=TicketKind.TASK,
@@ -220,27 +258,30 @@ def generate_children(
                     created_children.append((child.id, title, body))
                 created_ids = [cid for cid, _t, _b in created_children]
 
-                # Dependency wiring: linear chain (C0 ← C1 ← C2 ← …) by
-                # default, but when the batch includes a create/initialize-
-                # repo child the repo-populating siblings depend on it so
-                # they cannot run before the repo exists.  Cross-repo
-                # producer→consumer edges and bump-child synthesis are
-                # also applied when children target different repos.
+                # Dependency wiring: use a fan-out capable service (empty
+                # board_id) for child_board_id lookups so cross-board
+                # children can be resolved.  The create_child callable
+                # must also create on the correct child board.
+                fanout_svc = _TicketService(settings)
+
+                def _child_board_id(cid: str) -> str:
+                    t = fanout_svc.get(cid)
+                    return t.board_id if t is not None else epic_board_id
+
+                def _create_child(title: str, body: str) -> str:
+                    # Bump children go on the epic's own board (they are
+                    # cross-cutting infrastructure tickets).
+                    return epic_svc.create(
+                        title=title,
+                        description=body,
+                        kind=TicketKind.TASK,
+                        parent_id=ticket_id,
+                    ).id
+
                 for child_id, deps in plan_child_dependencies(
                     created_children,
-                    child_board_id=lambda cid: (
-                        _t.board_id
-                        if (_t := epic_svc.get(cid)) is not None
-                        else epic_svc.board_id
-                    ),
-                    create_child=lambda title, body: (
-                        epic_svc.create(
-                            title=title,
-                            description=body,
-                            kind=TicketKind.TASK,
-                            parent_id=ticket_id,
-                        ).id
-                    ),
+                    child_board_id=_child_board_id,
+                    create_child=_create_child,
                 ).items():
                     epic_svc.set_depends_on(child_id, deps)
 

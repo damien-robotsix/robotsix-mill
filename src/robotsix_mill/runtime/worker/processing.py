@@ -195,12 +195,20 @@ def _maybe_reevaluate_epic(
     """After a ticket reaches a terminal-ish state, re-evaluate its
     parent epic (if any).
 
+    The parent epic may live on a DIFFERENT board than the child
+    (cross-repo epics).  Use a fan-out ``get`` (``TicketService``
+    with empty ``board_id``, whose ``get`` fans out via
+    ``_get_anywhere``) so a child on board A finds its epic on
+    board B.
+
     ``_spawn_epic_reeval`` fires-and-forgets a daemon thread, so this
     helper does not need to be ``async``.
     """
     if next_state in _EPIC_CHILD_TERMINAL:
         ticket = ctx.service.get(ticket_id)
         if ticket is not None and ticket.parent_id is not None:
+            # Use a fan-out service (empty board_id) for parent lookup
+            # so cross-board epic links are resolved.
             parent = ctx.service.get(ticket.parent_id)
             if parent is not None and parent.kind == TicketKind.EPIC:
                 _spawn_epic_reeval(parent.id, ctx)

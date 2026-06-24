@@ -209,6 +209,54 @@ class _QueryMixin(_ServiceBase):
             stmt = select(Ticket).where(Ticket.parent_id == ticket_id)
             return list(s.exec(stmt).all())
 
+    def list_children_across_boards(self, parent_id: str) -> list[Ticket]:
+        """Return all tickets whose ``parent_id`` equals *parent_id*,
+        searching every configured board.
+
+        Mirrors the board-enumeration in :meth:`_get_anywhere`: collects
+        candidate boards from the :class:`ReposRegistry` AND a disk scan
+        of ``data_dir``, then queries each board for children.  Returns
+        the union — a child on any board whose ``parent_id`` matches
+        *parent_id* is included.
+
+        Each returned ticket has its ``board_id`` resolved via
+        :meth:`_resolve_board_id`.
+        """
+        from ...config import get_repos_config
+
+        candidates: list[str] = []
+        try:
+            for rc in get_repos_config().repos.values():
+                if rc.board_id and rc.board_id not in candidates:
+                    candidates.append(rc.board_id)
+        except Exception as exc:
+            log.warning(
+                "Failed to load repos config for list_children_across_boards: %s(%r)",
+                type(exc).__name__,
+                exc,
+            )
+        # Disk-scan fallback for boards not in the registry.
+        try:
+            for sub in self.settings.data_dir.iterdir():
+                if sub.is_dir() and (sub / "mill.db").exists():
+                    if sub.name not in candidates:
+                        candidates.append(sub.name)
+        except OSError:
+            pass
+
+        result: list[Ticket] = []
+        seen: set[str] = set()
+        for board_id in candidates:
+            with db.session(self.settings, board_id) as s:
+                for child in s.exec(
+                    select(Ticket).where(Ticket.parent_id == parent_id)
+                ).all():
+                    if child.id not in seen:
+                        seen.add(child.id)
+                        self._resolve_board_id(child)
+                        result.append(child)
+        return result
+
     def cumulative_cost(
         self,
         ticket_id: str,

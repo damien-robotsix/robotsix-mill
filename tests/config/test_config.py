@@ -2136,3 +2136,85 @@ class TestComponentAgentSettings:
             component_agent_broker_token="",
         )
         assert s.component_agent_enabled is False
+
+
+# -- resolve_child_board_id tests ------------------------------------------
+
+
+class TestResolveChildBoardId:
+    def test_known_repo_returns_board_id(self):
+        from robotsix_mill.config import RepoConfig, ReposRegistry
+        from robotsix_mill.config.repos import resolve_child_board_id
+
+        repos = ReposRegistry(
+            repos={
+                "robotsix-mill": RepoConfig(
+                    repo_id="robotsix-mill",
+                    board_id="board-mill",
+                    langfuse_project_name="mill",
+                    langfuse_public_key="pk",
+                    langfuse_secret_key="sk",
+                ),
+                "robotsix-auto-mail": RepoConfig(
+                    repo_id="robotsix-auto-mail",
+                    board_id="board-mail",
+                    langfuse_project_name="mail",
+                    langfuse_public_key="pk",
+                    langfuse_secret_key="sk",
+                ),
+            }
+        )
+        assert (
+            resolve_child_board_id("robotsix-auto-mail", "board-mill", "epic-1", repos)
+            == "board-mail"
+        )
+
+    def test_unknown_repo_falls_back_to_epic_board(self, caplog):
+        from robotsix_mill.config import RepoConfig, ReposRegistry
+        from robotsix_mill.config.repos import resolve_child_board_id
+
+        repos = ReposRegistry(
+            repos={
+                "robotsix-mill": RepoConfig(
+                    repo_id="robotsix-mill",
+                    board_id="board-mill",
+                    langfuse_project_name="mill",
+                    langfuse_public_key="pk",
+                    langfuse_secret_key="sk",
+                ),
+            }
+        )
+        result = resolve_child_board_id(
+            "nonexistent-repo", "board-mill", "epic-1", repos
+        )
+        assert result == "board-mill"
+        # Must emit a warning naming the epic and the bad repo.
+        assert "epic-1" in caplog.text
+        assert "nonexistent-repo" in caplog.text
+        assert "board-mill" in caplog.text
+
+    def test_empty_repo_id_returns_epic_board(self):
+        from robotsix_mill.config import RepoConfig, ReposRegistry
+        from robotsix_mill.config.repos import resolve_child_board_id
+
+        repos = ReposRegistry(
+            repos={
+                "robotsix-mill": RepoConfig(
+                    repo_id="robotsix-mill",
+                    board_id="board-mill",
+                    langfuse_project_name="mill",
+                    langfuse_public_key="pk",
+                    langfuse_secret_key="sk",
+                ),
+            }
+        )
+        assert resolve_child_board_id("", "board-mill", "epic-1", repos) == "board-mill"
+        assert (
+            resolve_child_board_id("   ", "board-mill", "epic-1", repos) == "board-mill"
+        )
+
+    def test_no_repos_returns_epic_board(self):
+        from robotsix_mill.config.repos import resolve_child_board_id
+
+        result = resolve_child_board_id("some-repo", "board-mill", "epic-1", None)
+        assert result == "board-mill"
