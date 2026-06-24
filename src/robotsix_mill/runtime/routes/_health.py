@@ -280,6 +280,7 @@ def board() -> str:
 
     try:
         from robotsix_board import render_config_script
+
         config_script = render_config_script(
             adapter,
             refresh_url="/board/cards",
