@@ -26,6 +26,7 @@ from robotsix_mill.agents.refining import (
     TriageResult,
 )
 from robotsix_mill.core import db
+from robotsix_mill.core.models import TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
@@ -1301,7 +1302,7 @@ def test_spec_is_degenerate_false(spec):
 
 def test_split_child_shortcut_detected_and_resolved(ctx_factory, monkeypatch):
     ctx = ctx_factory(require_approval="false")
-    parent = ctx.service.create("Epic parent", "Split me", kind="epic")
+    parent = ctx.service.create("Epic parent", "Split me", kind=TicketKind.EPIC)
 
     # Directly set parent to CLOSED with a "split into" history event.
     from robotsix_mill.core.models import TicketEvent, Ticket as TicketModel
@@ -1343,7 +1344,7 @@ def test_split_child_shortcut_detected_and_resolved(ctx_factory, monkeypatch):
 
 def test_split_child_empty_description_blocks(ctx_factory, monkeypatch):
     ctx = ctx_factory()
-    parent = ctx.service.create("Epic parent", "Split me", kind="epic")
+    parent = ctx.service.create("Epic parent", "Split me", kind=TicketKind.EPIC)
 
     # Directly set parent to CLOSED with a "split into" history event.
     from robotsix_mill.core.models import TicketEvent, Ticket as TicketModel
@@ -1453,7 +1454,7 @@ def test_successful_split_creates_children_and_closes_parent(ctx_factory, monkey
 
     all_tickets = ctx.service.list()
     # Find the umbrella epic that was created.
-    epics = [tk for tk in all_tickets if tk.kind == "epic"]
+    epics = [tk for tk in all_tickets if tk.kind == TicketKind.EPIC]
     assert len(epics) == 1
     epic = epics[0]
     assert epic.title == "Umbrella Epic Title"
@@ -1497,7 +1498,7 @@ def test_split_with_depends_on_resolves_indices(ctx_factory, monkeypatch):
     assert out.next_state is State.CLOSED
     all_tickets = ctx.service.list()
     # Find the umbrella epic and get its children.
-    epics = [tk for tk in all_tickets if tk.kind == "epic"]
+    epics = [tk for tk in all_tickets if tk.kind == TicketKind.EPIC]
     assert len(epics) == 1
     epic = epics[0]
     children = sorted(
@@ -1633,7 +1634,7 @@ def test_spec_review_failure_uses_verbose_spec(ctx_factory, monkeypatch):
 
 def test_epic_body_applied_in_autonomous_mode(ctx_factory, monkeypatch):
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
-    epic = ctx.service.create("Epic", "Original epic goal", kind="epic")
+    epic = ctx.service.create("Epic", "Original epic goal", kind=TicketKind.EPIC)
     child = ctx.service.create("Child", "Do part of epic", parent_id=epic.id)
 
     _apply_default_mocks(
@@ -1661,7 +1662,7 @@ def test_epic_body_stored_as_artifact_in_gated_mode(ctx_factory, monkeypatch):
         auto_approve_enabled="false",
         refine_triage_enabled="false",
     )
-    epic = ctx.service.create("Epic", "Original epic goal", kind="epic")
+    epic = ctx.service.create("Epic", "Original epic goal", kind=TicketKind.EPIC)
     child = ctx.service.create("Child", "Do part of epic", parent_id=epic.id)
 
     _apply_default_mocks(
@@ -1790,7 +1791,7 @@ def test_split_creates_umbrella_epic_with_result_title(ctx_factory, monkeypatch)
     assert "split into" in out.note
 
     all_tickets = ctx.service.list()
-    epics = [tk for tk in all_tickets if tk.kind == "epic"]
+    epics = [tk for tk in all_tickets if tk.kind == TicketKind.EPIC]
     assert len(epics) == 1
     epic = epics[0]
     assert epic.title == "Auth + Dashboard Overhaul"
@@ -1831,7 +1832,7 @@ def test_split_epic_title_fallback_to_ticket_title(ctx_factory, monkeypatch):
     assert out.next_state is State.CLOSED
 
     all_tickets = ctx.service.list()
-    epics = [tk for tk in all_tickets if tk.kind == "epic"]
+    epics = [tk for tk in all_tickets if tk.kind == TicketKind.EPIC]
     assert len(epics) == 1
     assert epics[0].title == "Refactor core modules"
 
@@ -1865,7 +1866,7 @@ def test_split_epic_description_fallback_to_draft(ctx_factory, monkeypatch):
     assert out.next_state is State.CLOSED
 
     all_tickets = ctx.service.list()
-    epics = [tk for tk in all_tickets if tk.kind == "epic"]
+    epics = [tk for tk in all_tickets if tk.kind == TicketKind.EPIC]
     assert len(epics) == 1
     epic = epics[0]
     assert epic.title == "Feature Epic"
@@ -1881,7 +1882,9 @@ def test_split_with_existing_epic_reparents_children(ctx_factory, monkeypatch):
     """When the ticket already belongs to an epic, children are reparented
     to the existing epic — no new epic is created."""
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
-    existing_epic = ctx.service.create("Existing Epic", "Epic description", kind="epic")
+    existing_epic = ctx.service.create(
+        "Existing Epic", "Epic description", kind=TicketKind.EPIC
+    )
     child_of_epic = ctx.service.create(
         "Split me",
         "Break into parts",
@@ -1909,7 +1912,7 @@ def test_split_with_existing_epic_reparents_children(ctx_factory, monkeypatch):
 
     all_tickets = ctx.service.list()
     # No new epic created — only the existing one.
-    epics = [tk for tk in all_tickets if tk.kind == "epic"]
+    epics = [tk for tk in all_tickets if tk.kind == TicketKind.EPIC]
     assert len(epics) == 1
     assert epics[0].id == existing_epic.id
 
@@ -2001,7 +2004,7 @@ def test_promote_to_epic_converts_and_spawns_children(ctx_factory, monkeypatch):
     # state via the Outcome. Assert on the kind here; the EPIC_OPEN
     # state assertion lives on out.next_state above.
     promoted = ctx.service.get(t.id)
-    assert promoted.kind == "epic"
+    assert promoted.kind == TicketKind.EPIC
 
     # Children parented to the promoted ticket (NOT an umbrella copy).
     all_tickets = ctx.service.list()
@@ -2060,7 +2063,7 @@ def test_promote_to_epic_breakdown_failure_leaves_epic_intact(ctx_factory, monke
     # kind flip is synchronous; the worker handles the state move
     # to EPIC_OPEN after stage.run returns.
     promoted = ctx.service.get(t.id)
-    assert promoted.kind == "epic"
+    assert promoted.kind == TicketKind.EPIC
 
     # No children spawned.
     all_tickets = ctx.service.list()

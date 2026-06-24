@@ -2,6 +2,7 @@
 
 import pytest
 
+from robotsix_mill.core.models import TicketKind
 from robotsix_mill.core.states import State
 from robotsix_mill.runtime.worker import (
     _process_ticket_inner,
@@ -54,7 +55,7 @@ async def test_hook_fires_on_done_for_epic_parent(ctx, service, monkeypatch):
 
     monkeypatch.setitem(registry.STAGES, "retrospect", NoopRetrospectStage())
 
-    epic = service.create("My Epic", "Big goal", kind="epic")
+    epic = service.create("My Epic", "Big goal", kind=TicketKind.EPIC)
     child = service.create("Child", "do the thing", parent_id=epic.id)
     for st in (
         State.READY,
@@ -70,7 +71,7 @@ async def test_hook_fires_on_done_for_epic_parent(ctx, service, monkeypatch):
 
 
 async def test_hook_does_not_fire_for_non_epic_parent(ctx, service, monkeypatch):
-    """Worker hook: when the parent is not an epic (kind="task"),
+    """Worker hook: when the parent is not an epic (kind=TicketKind.TASK),
     _spawn_epic_reeval is NOT called."""
     called_with: list = []
 
@@ -129,7 +130,7 @@ async def test_hook_does_not_fire_for_non_done_transition(ctx, service, monkeypa
 
     monkeypatch.setitem(registry.STAGES, "implement", ReviewStage())
 
-    epic = service.create("My Epic", "Big goal", kind="epic")
+    epic = service.create("My Epic", "Big goal", kind=TicketKind.EPIC)
     child = service.create("Child", "do the thing", parent_id=epic.id)
     service.transition(child.id, State.READY)
 
@@ -210,7 +211,7 @@ def test_e2e_all_children_done_closes_epic(settings, service, monkeypatch):
         lambda **kw: EpicStatusResult(decision="close", note="All children complete."),
     )
 
-    epic = service.create("My Epic", "Build the thing", kind="epic")
+    epic = service.create("My Epic", "Build the thing", kind=TicketKind.EPIC)
     c1 = service.create("Child 1", "part 1", parent_id=epic.id)
     c2 = service.create("Child 2", "part 2", parent_id=epic.id)
 
@@ -235,7 +236,7 @@ def test_e2e_one_child_in_progress_keeps_open(settings, service, monkeypatch):
         ),
     )
 
-    epic = service.create("My Epic", "Build the thing", kind="epic")
+    epic = service.create("My Epic", "Build the thing", kind=TicketKind.EPIC)
     c1 = service.create("Child 1", "part 1", parent_id=epic.id)
     service.create("Child 2", "part 2", parent_id=epic.id)
 
@@ -261,7 +262,7 @@ def test_e2e_update_description(settings, service, monkeypatch):
         ),
     )
 
-    epic = service.create("My Epic", "Build the thing", kind="epic")
+    epic = service.create("My Epic", "Build the thing", kind=TicketKind.EPIC)
     c1 = service.create("Child 1", "part 1", parent_id=epic.id)
 
     service.transition(c1.id, State.DONE)
@@ -298,7 +299,7 @@ def test_e2e_rewrites_generic_description(settings, service, monkeypatch):
         ),
     )
 
-    epic = service.create("My Epic", "Make it better", kind="epic")
+    epic = service.create("My Epic", "Make it better", kind=TicketKind.EPIC)
     c1 = service.create("Child 1", "part 1", parent_id=epic.id)
     service.transition(c1.id, State.DONE)
 
@@ -310,7 +311,7 @@ def test_e2e_rewrites_generic_description(settings, service, monkeypatch):
 
 def test_e2e_adds_new_child(settings, service, monkeypatch):
     """Agent returns ``new_children`` with one entry. Assert a new child
-    ticket is created under the epic with kind="task"."""
+    ticket is created under the epic with kind=TicketKind.TASK."""
     from robotsix_mill.agents.epic_status import EpicStatusResult
 
     monkeypatch.setattr(
@@ -322,7 +323,7 @@ def test_e2e_adds_new_child(settings, service, monkeypatch):
         ),
     )
 
-    epic = service.create("My Epic", "Build the thing", kind="epic")
+    epic = service.create("My Epic", "Build the thing", kind=TicketKind.EPIC)
     c1 = service.create("Child 1", "part 1", parent_id=epic.id)
     service.transition(c1.id, State.DONE)
 
@@ -332,7 +333,7 @@ def test_e2e_adds_new_child(settings, service, monkeypatch):
     titles = [c.title for c in children]
     assert "New work" in titles
     new_child = next(c for c in children if c.title == "New work")
-    assert new_child.kind == "task"
+    assert new_child.kind == TicketKind.TASK
     assert new_child.parent_id == epic.id
 
 
@@ -341,7 +342,7 @@ def test_e2e_rescopes_draft_child(settings, service, monkeypatch):
     Assert child's title is updated."""
     from robotsix_mill.agents.epic_status import EpicStatusResult
 
-    epic = service.create("My Epic", "Build the thing", kind="epic")
+    epic = service.create("My Epic", "Build the thing", kind=TicketKind.EPIC)
     child = service.create("Old Title", "old body", parent_id=epic.id)
     # child starts in DRAFT
 
@@ -365,7 +366,7 @@ def test_e2e_skips_rescope_of_in_flight_child(settings, service, monkeypatch):
     Assert child's title is NOT changed (reconciliation skips it)."""
     from robotsix_mill.agents.epic_status import EpicStatusResult
 
-    epic = service.create("My Epic", "Build the thing", kind="epic")
+    epic = service.create("My Epic", "Build the thing", kind=TicketKind.EPIC)
     child = service.create("Old Title", "old body", parent_id=epic.id)
     service.transition(child.id, State.READY)  # move to in-flight
 
@@ -390,7 +391,7 @@ def test_e2e_closes_draft_child(settings, service, monkeypatch):
     Assert child transitions to CLOSED with a note naming the sibling."""
     from robotsix_mill.agents.epic_status import EpicStatusResult
 
-    epic = service.create("My Epic", "Build the thing", kind="epic")
+    epic = service.create("My Epic", "Build the thing", kind=TicketKind.EPIC)
     child = service.create("Obsolete child", "no longer needed", parent_id=epic.id)
     # child starts in DRAFT
     sibling = service.create("Did the work", "delivers scope", parent_id=epic.id)
@@ -424,7 +425,7 @@ def test_e2e_skips_closure_of_done_child(settings, service, monkeypatch):
     Assert child stays in DONE (reconciliation skips terminal children)."""
     from robotsix_mill.agents.epic_status import EpicStatusResult
 
-    epic = service.create("My Epic", "Build the thing", kind="epic")
+    epic = service.create("My Epic", "Build the thing", kind=TicketKind.EPIC)
     child = service.create("Already done", "finished work", parent_id=epic.id)
     service.transition(child.id, State.DONE)
 
@@ -453,7 +454,7 @@ def test_e2e_mixed_operations(settings, service, monkeypatch):
     Assert all safe operations are applied."""
     from robotsix_mill.agents.epic_status import EpicStatusResult
 
-    epic = service.create("My Epic", "Build the thing", kind="epic")
+    epic = service.create("My Epic", "Build the thing", kind=TicketKind.EPIC)
     draft_child = service.create("Rescope me", "old body", parent_id=epic.id)
     close_child = service.create("Close me", "obsolete", parent_id=epic.id)
     ready_child = service.create("In-flight", "don't touch", parent_id=epic.id)
@@ -500,7 +501,7 @@ def test_e2e_new_child_missing_title(settings, service, monkeypatch, caplog):
     """Agent returns new_children entry with empty title — skipped with warning."""
     from robotsix_mill.agents.epic_status import EpicStatusResult
 
-    epic = service.create("My Epic", "Build the thing", kind="epic")
+    epic = service.create("My Epic", "Build the thing", kind=TicketKind.EPIC)
 
     monkeypatch.setattr(
         "robotsix_mill.agents.epic_status.run_epic_status_agent",
@@ -522,7 +523,7 @@ def test_e2e_new_child_missing_body(settings, service, monkeypatch, caplog):
     """Agent returns new_children entry with empty body — skipped with warning."""
     from robotsix_mill.agents.epic_status import EpicStatusResult
 
-    epic = service.create("My Epic", "Build the thing", kind="epic")
+    epic = service.create("My Epic", "Build the thing", kind=TicketKind.EPIC)
 
     monkeypatch.setattr(
         "robotsix_mill.agents.epic_status.run_epic_status_agent",
@@ -544,7 +545,7 @@ def test_e2e_rescope_missing_both_fields(settings, service, monkeypatch, caplog)
     """Agent returns child_rescopes entry with neither title nor body — skipped."""
     from robotsix_mill.agents.epic_status import EpicStatusResult
 
-    epic = service.create("My Epic", "Build the thing", kind="epic")
+    epic = service.create("My Epic", "Build the thing", kind=TicketKind.EPIC)
     child = service.create("A child", "body", parent_id=epic.id)
 
     monkeypatch.setattr(
@@ -569,7 +570,7 @@ def test_e2e_new_child_not_a_dict(settings, service, monkeypatch, caplog):
     except-block logs the failure."""
     from robotsix_mill.agents.epic_status import EpicStatusResult
 
-    epic = service.create("My Epic", "Build the thing", kind="epic")
+    epic = service.create("My Epic", "Build the thing", kind=TicketKind.EPIC)
 
     monkeypatch.setattr(
         "robotsix_mill.agents.epic_status.run_epic_status_agent",
@@ -594,7 +595,7 @@ def test_e2e_child_rescopes_not_a_dict(settings, service, monkeypatch, caplog):
     with a validation error rather than crashing."""
     from robotsix_mill.agents.epic_status import EpicStatusResult
 
-    epic = service.create("My Epic", "Build the thing", kind="epic")
+    epic = service.create("My Epic", "Build the thing", kind=TicketKind.EPIC)
     child = service.create("A child", "body", parent_id=epic.id)
 
     monkeypatch.setattr(
@@ -619,7 +620,7 @@ def test_e2e_reconciliation_failure_does_not_crash(settings, service, monkeypatc
     caught and logged — the re-evaluation does not crash."""
     from robotsix_mill.agents.epic_status import EpicStatusResult
 
-    epic = service.create("My Epic", "Build the thing", kind="epic")
+    epic = service.create("My Epic", "Build the thing", kind=TicketKind.EPIC)
     child = service.create("Will fail", "body", parent_id=epic.id)
 
     monkeypatch.setattr(
@@ -649,7 +650,7 @@ def test_e2e_closure_bad_id_type(settings, service, monkeypatch, caplog):
     with a validation error rather than crashing."""
     from robotsix_mill.agents.epic_status import EpicStatusResult
 
-    epic = service.create("My Epic", "Build the thing", kind="epic")
+    epic = service.create("My Epic", "Build the thing", kind=TicketKind.EPIC)
 
     monkeypatch.setattr(
         "robotsix_mill.agents.epic_status.run_epic_status_agent",
@@ -673,7 +674,7 @@ def test_e2e_closure_nonexistent_child(settings, service, monkeypatch, caplog):
     logged as warning, does not crash."""
     from robotsix_mill.agents.epic_status import EpicStatusResult
 
-    epic = service.create("My Epic", "Build the thing", kind="epic")
+    epic = service.create("My Epic", "Build the thing", kind=TicketKind.EPIC)
 
     monkeypatch.setattr(
         "robotsix_mill.agents.epic_status.run_epic_status_agent",
@@ -694,7 +695,7 @@ def test_e2e_all_fields_none_backward_compatible(settings, service, monkeypatch)
     handles them gracefully."""
     from robotsix_mill.agents.epic_status import EpicStatusResult
 
-    epic = service.create("My Epic", "Build the thing", kind="epic")
+    epic = service.create("My Epic", "Build the thing", kind=TicketKind.EPIC)
 
     monkeypatch.setattr(
         "robotsix_mill.agents.epic_status.run_epic_status_agent",
@@ -717,7 +718,7 @@ def test_e2e_rescope_updates_body(settings, service, monkeypatch):
     Assert the body is updated."""
     from robotsix_mill.agents.epic_status import EpicStatusResult
 
-    epic = service.create("My Epic", "Build the thing", kind="epic")
+    epic = service.create("My Epic", "Build the thing", kind=TicketKind.EPIC)
     child = service.create("Keep title", "old body", parent_id=epic.id)
 
     monkeypatch.setattr(
@@ -761,7 +762,7 @@ async def test_hook_fires_on_closed_for_epic_parent(ctx, service, monkeypatch):
 
     monkeypatch.setitem(registry.STAGES, "retrospect", CloseStage())
 
-    epic = service.create("My Epic", "Big goal", kind="epic")
+    epic = service.create("My Epic", "Big goal", kind=TicketKind.EPIC)
     child = service.create("Child", "do the thing", parent_id=epic.id)
     for st in (
         State.READY,
@@ -798,8 +799,10 @@ async def test_hook_fires_on_answered_for_epic_parent(ctx, service, monkeypatch)
 
     monkeypatch.setitem(registry.STAGES, "answer", AnswerStage())
 
-    epic = service.create("My Epic", "Big goal", kind="epic")
-    child = service.create("Child", "do the thing", parent_id=epic.id, kind="inquiry")
+    epic = service.create("My Epic", "Big goal", kind=TicketKind.EPIC)
+    child = service.create(
+        "Child", "do the thing", parent_id=epic.id, kind=TicketKind.INQUIRY
+    )
 
     await _process_ticket_inner(child.id, ctx)
 
@@ -810,7 +813,7 @@ def test_idempotent_already_closed_epic_noop(settings, service, monkeypatch):
     """Calling _run_epic_reeval on an already EPIC_CLOSED epic is a no-op:
     no exception, no state change, and the agent is never invoked."""
 
-    epic = service.create("My Epic", "Build the thing", kind="epic")
+    epic = service.create("My Epic", "Build the thing", kind=TicketKind.EPIC)
     service.transition(epic.id, State.EPIC_CLOSED)
 
     def should_not_be_called(*args, **kwargs):
@@ -840,7 +843,7 @@ def test_closure_triggers_from_child_closed(settings, service, monkeypatch):
         lambda **kw: EpicStatusResult(decision="close", note="All children terminal."),
     )
 
-    epic = service.create("My Epic", "Build the thing", kind="epic")
+    epic = service.create("My Epic", "Build the thing", kind=TicketKind.EPIC)
     c1 = service.create("Child 1", "part 1", parent_id=epic.id)
     c2 = service.create("Child 2", "part 2", parent_id=epic.id)
 
@@ -891,7 +894,7 @@ def test_sweep_reevaluates_orphaned_all_terminal_epic(ctx, service, monkeypatch)
         "robotsix_mill.runtime.worker.core._spawn_epic_reeval",
         lambda epic_id, _c: spawned.append(epic_id),
     )
-    epic = service.create("Epic", "goal", kind="epic")
+    epic = service.create("Epic", "goal", kind=TicketKind.EPIC)
     service.create("c1", "x", parent_id=epic.id)
     service.create("c2", "y", parent_id=epic.id)
     _close_children(service, epic.id)
@@ -912,7 +915,7 @@ def test_sweep_skips_epic_with_open_child(ctx, service, monkeypatch):
         "robotsix_mill.runtime.worker.core._spawn_epic_reeval",
         lambda epic_id, _c: spawned.append(epic_id),
     )
-    epic = service.create("Epic", "goal", kind="epic")
+    epic = service.create("Epic", "goal", kind=TicketKind.EPIC)
     c1 = service.create("c1", "x", parent_id=epic.id)
     service.create("c2", "y", parent_id=epic.id)  # left in DRAFT (not terminal)
     for st in (
@@ -937,6 +940,6 @@ def test_sweep_skips_childless_epic(ctx, service, monkeypatch):
         "robotsix_mill.runtime.worker.core._spawn_epic_reeval",
         lambda epic_id, _c: spawned.append(epic_id),
     )
-    epic = service.create("Epic", "goal", kind="epic")
+    epic = service.create("Epic", "goal", kind=TicketKind.EPIC)
     Worker._maybe_sweep_orphaned_epic(_sweep_self(ctx), service.get(epic.id), service)
     assert spawned == []

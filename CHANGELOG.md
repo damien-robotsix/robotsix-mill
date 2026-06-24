@@ -6,6 +6,8 @@
 - Replace stale `awaiting_approval` state references with canonical `human_issue_approval` in docs (`approval-gate.md`, `audit-agent.md`, `configuration.md`, `docker-architecture.md`, `notifications.md`).
 - Wire `frontend_sync` periodic agent into the dispatch pipeline: add `SourceKind.FRONTEND_SYNC`, register in `_BUILTIN_KINDS`, add `PeriodicPassConfig`, and create backward-compat runner stub.
 
+- Replace bare string `kind` literals (`"task"`, `"epic"`, `"inquiry"`) with `TicketKind.TASK` / `TicketKind.EPIC` / `TicketKind.INQUIRY` in all test files; add `scripts/check_kind_literals.py` CI gate to prevent regressions.
+
 - Wire `completeness_check_request_limit` to YAML config: add alias mapping in `_YAML_PATH_TO_ALIAS` (`periodic.completeness_check.request_limit`) and default leaf in `config/mill.defaults.yaml`.
 - Remove stale `changes/` directory and its two unused `.misc.md` changelog fragments; drop `changes/**/*` glob from `docs/modules.yaml` dev-tooling module paths.
 - Add `fail_under = 80` to `[tool.coverage.report]` so `coverage report` fails when total coverage drops below 80%.

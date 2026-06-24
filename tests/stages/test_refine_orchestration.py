@@ -28,7 +28,7 @@ from robotsix_mill.agents.refining import (
     TriageResult,
 )
 from robotsix_mill.core import db
-from robotsix_mill.core.models import SourceKind
+from robotsix_mill.core.models import SourceKind, TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
@@ -428,7 +428,7 @@ def test_promote_to_epic(ctx_factory, monkeypatch, tmp_path):
     out = _run_agent(ctx, t, tmp_path)
 
     assert out.next_state is State.EPIC_OPEN
-    assert ctx.service.get(t.id).kind == "epic"
+    assert ctx.service.get(t.id).kind == TicketKind.EPIC
 
 
 def test_no_change_needed_closes_to_done(ctx_factory, monkeypatch, tmp_path):
@@ -1370,7 +1370,7 @@ def test_multi_scope_resolves_depends_on_chain(ctx_factory, monkeypatch, tmp_pat
 
 def test_multi_scope_reparents_under_existing_epic(ctx_factory, monkeypatch, tmp_path):
     ctx = ctx_factory()
-    epic = ctx.service.create("Epic umbrella", "epic body", kind="epic")
+    epic = ctx.service.create("Epic umbrella", "epic body", kind=TicketKind.EPIC)
     t = _ticket(ctx, parent_id=epic.id)
     _apply_default_mocks(
         monkeypatch,
@@ -1392,7 +1392,7 @@ def test_multi_scope_reparents_under_existing_epic(ctx_factory, monkeypatch, tmp
     for cid in child_ids:
         assert ctx.service.get(cid).parent_id == epic.id
     # No NEW umbrella epic was created — only the pre-existing one.
-    epics = [tk for tk in ctx.service.list() if tk.kind == "epic"]
+    epics = [tk for tk in ctx.service.list() if tk.kind == TicketKind.EPIC]
     assert len(epics) == 1
     assert epics[0].id == epic.id
 
@@ -1417,7 +1417,7 @@ def test_multi_scope_creates_new_umbrella_epic(ctx_factory, monkeypatch, tmp_pat
 
     assert out.next_state is State.CLOSED
     child_ids = out.note.removeprefix("split into ").split(", ")
-    epics = [tk for tk in ctx.service.list() if tk.kind == "epic"]
+    epics = [tk for tk in ctx.service.list() if tk.kind == TicketKind.EPIC]
     assert len(epics) == 1
     umbrella = epics[0]
     for cid in child_ids:
@@ -1478,7 +1478,7 @@ def test_split_children_inherit_parent_board_id(ctx_factory, monkeypatch, tmp_pa
     child = ctx.service.get(child_ids[0])
     assert child.parent_id is not None
     epic = ctx.service.get(child.parent_id)
-    assert epic.kind == "epic"
+    assert epic.kind == TicketKind.EPIC
     assert epic.board_id == "parent-board"
 
 

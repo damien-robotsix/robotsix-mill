@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from robotsix_mill.core.states import State
-from robotsix_mill.core.models import SourceKind
+from robotsix_mill.core.models import SourceKind, TicketKind
 from robotsix_mill.runtime.api import create_app
 
 
@@ -211,7 +211,7 @@ def test_board_cards_closed_sorted_newest_first(client, service, settings):
     t_draft2 = service.create("Draft newest")
     t_closed_old = service.create("Closed old")
     t_closed_new = service.create("Closed new")
-    t_epic_closed = service.create("Epic closed ticket", kind="epic")
+    t_epic_closed = service.create("Epic closed ticket", kind=TicketKind.EPIC)
 
     # Walk legal edges to reach closed / epic_closed.
     service.transition(t_closed_old.id, State.DONE)
@@ -1200,13 +1200,13 @@ def test_post_tickets_with_kind_inquiry_creates_asked_inquiry(client):
         json={
             "title": "Why does X happen?",
             "description": "context",
-            "kind": "inquiry",
+            "kind": TicketKind.INQUIRY,
         },
     )
     assert r.status_code == 201
     d = r.json()
     assert d["state"] == "asked"  # inquiries start in ASKED, not DRAFT
-    assert d["kind"] == "inquiry"
+    assert d["kind"] == TicketKind.INQUIRY
     assert d["source"] == SourceKind.USER
 
 
@@ -1286,7 +1286,7 @@ def test_create_inquiry_with_depends_on_is_rejected(client):
         "/tickets",
         json={
             "title": "Inquiry with dep",
-            "kind": "inquiry",
+            "kind": TicketKind.INQUIRY,
             "depends_on": '["ticket-abc"]',
         },
     )
@@ -1308,8 +1308,8 @@ def test_list_tickets_include_closed_hides_closed_and_epic_closed_and_answered_k
     closed = service.create("C-closed")
     done = service.create("C-done")
     draft = service.create("C-draft")
-    epic = service.create("C-epic", kind="epic")
-    answered = service.create("C-answered", kind="inquiry")
+    epic = service.create("C-epic", kind=TicketKind.EPIC)
+    answered = service.create("C-answered", kind=TicketKind.INQUIRY)
     # Walk via legal edges: DRAFT -> DONE (refine's dedup-discard route),
     # DONE -> CLOSED (retrospect's edge), EPIC_OPEN -> EPIC_CLOSED,
     # ASKED -> ANSWERED.
@@ -1402,7 +1402,7 @@ def test_create_epic_via_api(client):
     assert r.status_code == 201
     data = r.json()
     assert data["state"] == "epic_open"
-    assert data["kind"] == "epic"
+    assert data["kind"] == TicketKind.EPIC
 
 
 def test_create_epic_via_api_repo_resolution(client):
@@ -1411,7 +1411,7 @@ def test_create_epic_via_api_repo_resolution(client):
     assert r.status_code == 201
     data = r.json()
     assert data["state"] == "epic_open"
-    assert data["kind"] == "epic"
+    assert data["kind"] == TicketKind.EPIC
     # The ticket should have been placed on the lone board.
     assert data.get("board_id") is not None
 
@@ -1435,7 +1435,7 @@ def test_create_epic_via_cli_pattern(client):
     assert r.status_code == 201
     data = r.json()
     assert data["state"] == "epic_open"
-    assert data["kind"] == "epic"
+    assert data["kind"] == TicketKind.EPIC
     assert data["title"] == "CLI-created epic"
     # CLI prints the id — verify it's present and non-empty.
     assert data["id"]
@@ -1443,7 +1443,7 @@ def test_create_epic_via_cli_pattern(client):
 
 def test_create_ticket_with_parent(client, service):
     """POST /tickets with parent_id set links child to epic."""
-    epic = service.create("Epic", kind="epic")
+    epic = service.create("Epic", kind=TicketKind.EPIC)
     r = client.post(
         "/tickets",
         json={
@@ -1459,9 +1459,9 @@ def test_create_ticket_with_parent(client, service):
 
 def test_list_children_endpoint(client, service):
     """GET /tickets/{epic_id}/children returns children."""
-    epic = service.create("Epic", kind="epic")
-    c1 = service.create("Child 1", kind="task", parent_id=epic.id)
-    c2 = service.create("Child 2", kind="task", parent_id=epic.id)
+    epic = service.create("Epic", kind=TicketKind.EPIC)
+    c1 = service.create("Child 1", kind=TicketKind.TASK, parent_id=epic.id)
+    c2 = service.create("Child 2", kind=TicketKind.TASK, parent_id=epic.id)
 
     r = client.get(f"/tickets/{epic.id}/children")
     assert r.status_code == 200
@@ -1512,7 +1512,7 @@ def test_generate_children_404_nonexistent(client):
 
 def test_generate_children_400_non_epic(client, service):
     """POST /tickets/{id}/generate-children on a task returns 400."""
-    t = service.create("Not an epic", kind="task")
+    t = service.create("Not an epic", kind=TicketKind.TASK)
     r = client.post(f"/tickets/{t.id}/generate-children")
     assert r.status_code == 400
     assert "ticket is not an epic" in r.json()["detail"]
@@ -1524,7 +1524,7 @@ def test_generate_children_202_fire_and_forget(client, service, monkeypatch):
     block on the LLM call."""
     import threading
 
-    epic = service.create("Fire and forget epic", kind="epic")
+    epic = service.create("Fire and forget epic", kind=TicketKind.EPIC)
 
     ran = threading.Event()
     release = threading.Event()
@@ -1566,7 +1566,7 @@ def test_generate_children_creates_children(client, service, monkeypatch):
     from robotsix_mill.agents.epic_breakdown import EpicBreakdownResult
     from robotsix_mill.core.service import TicketService
 
-    epic = service.create("Break me down", kind="epic")
+    epic = service.create("Break me down", kind=TicketKind.EPIC)
 
     # Signal when the background thread has created both children.
     # Patch at the CLASS level — the route builds a fresh per-board
@@ -1610,7 +1610,7 @@ def test_generate_children_background_error_path(client, service, monkeypatch):
     ``registry.finish_error``."""
     import threading
 
-    epic = service.create("Will fail", kind="epic")
+    epic = service.create("Will fail", kind=TicketKind.EPIC)
 
     def boom(**kw):
         raise RuntimeError("boom")
@@ -1647,7 +1647,7 @@ def test_generate_children_flags_overlapping_child(client, service, monkeypatch)
     from robotsix_mill.agents.epic_breakdown import EpicBreakdownResult
     from robotsix_mill.core.service import TicketService
 
-    epic = service.create("Audit Trivy SARIF", kind="epic")
+    epic = service.create("Audit Trivy SARIF", kind=TicketKind.EPIC)
 
     children_created = threading.Event()
     child_count = [0]
@@ -1692,7 +1692,9 @@ def test_generate_children_applies_epic_body(client, service, monkeypatch):
     from robotsix_mill.agents.epic_breakdown import EpicBreakdownResult
     from robotsix_mill.core.service import TicketService
 
-    epic = service.create("Break me down", "Original epic description", kind="epic")
+    epic = service.create(
+        "Break me down", "Original epic description", kind=TicketKind.EPIC
+    )
 
     # Signal when the background thread has written the epic body.
     # Patch at the CLASS level for the same multi-repo reason as
@@ -1739,7 +1741,7 @@ def test_add_comment_on_epic_triggers_reprocess(client, service, monkeypatch):
 
     from robotsix_mill.agents.epic_breakdown import EpicBreakdownResult
 
-    epic = service.create("Epic to comment on", "Epic desc", kind="epic")
+    epic = service.create("Epic to comment on", "Epic desc", kind=TicketKind.EPIC)
 
     monkeypatch.setattr(
         "robotsix_mill.agents.epic_breakdown.run_epic_breakdown_agent",
@@ -1792,7 +1794,7 @@ def test_add_comment_on_non_epic_does_not_trigger_reprocess(
         fake_agent,
     )
 
-    task = service.create("A task ticket", kind="task")
+    task = service.create("A task ticket", kind=TicketKind.TASK)
     r = client.post(
         f"/tickets/{task.id}/comments",
         json={"body": "This should not trigger anything"},
@@ -1815,8 +1817,8 @@ def test_add_comment_on_epic_skips_duplicate_children(
 
     from robotsix_mill.agents.epic_breakdown import EpicBreakdownResult
 
-    epic = service.create("Epic with existing child", kind="epic")
-    service.create("Add auth module", kind="task", parent_id=epic.id)
+    epic = service.create("Epic with existing child", kind=TicketKind.EPIC)
+    service.create("Add auth module", kind=TicketKind.TASK, parent_id=epic.id)
 
     monkeypatch.setattr(
         "robotsix_mill.agents.epic_breakdown.run_epic_breakdown_agent",
@@ -1855,7 +1857,7 @@ def test_add_comment_on_epic_response_is_immediate(client, service, monkeypatch)
 
     from robotsix_mill.agents.epic_breakdown import EpicBreakdownResult
 
-    epic = service.create("Slow epic", kind="epic")
+    epic = service.create("Slow epic", kind=TicketKind.EPIC)
 
     ran = threading.Event()
     release = threading.Event()
@@ -1889,7 +1891,7 @@ def test_add_comment_comment_history_reaches_agent(client, service, monkeypatch)
 
     from robotsix_mill.agents.epic_breakdown import EpicBreakdownResult
 
-    epic = service.create("Epic with history", "Epic desc", kind="epic")
+    epic = service.create("Epic with history", "Epic desc", kind=TicketKind.EPIC)
     service.add_comment(epic.id, "First comment")
     service.add_comment(epic.id, "Second comment")
 
@@ -1938,9 +1940,9 @@ def test_add_comment_comment_history_reaches_agent(client, service, monkeypatch)
 def test_epic_detail_cost_is_cumulative(client, service, monkeypatch):
     """GET /tickets/{epic_id} returns cost_usd = epic's own session cost,
     and cumulative_cost = epic own cost + all children."""
-    epic = service.create("Epic", kind="epic")
-    c1 = service.create("Child 1", kind="task", parent_id=epic.id)
-    c2 = service.create("Child 2", kind="task", parent_id=epic.id)
+    epic = service.create("Epic", kind=TicketKind.EPIC)
+    c1 = service.create("Child 1", kind=TicketKind.TASK, parent_id=epic.id)
+    c2 = service.create("Child 2", kind=TicketKind.TASK, parent_id=epic.id)
 
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client.session_cost",
@@ -1960,9 +1962,9 @@ def test_epic_list_cost_is_cache_only(client, service, monkeypatch):
     """GET /tickets builds its RESPONSE cache-only — epic cumulative cost must
     not trigger blocking session_cost during the request. (Children are still
     warmed afterwards by the background task, which is fine.)"""
-    epic = service.create("Epic", kind="epic")
-    service.create("Child 1", kind="task", parent_id=epic.id)
-    service.create("Child 2", kind="task", parent_id=epic.id)
+    epic = service.create("Epic", kind=TicketKind.EPIC)
+    service.create("Child 1", kind=TicketKind.TASK, parent_id=epic.id)
+    service.create("Child 2", kind=TicketKind.TASK, parent_id=epic.id)
 
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client.session_cost",
@@ -1981,9 +1983,9 @@ def test_epic_list_cost_is_cache_only(client, service, monkeypatch):
 def test_nested_epic_cost_is_recursive(client, service, monkeypatch):
     """Epic → sub-epic → task: top epic cumulative includes all three,
     but cost_usd stays as its own direct session cost."""
-    e1 = service.create("E1", kind="epic")
-    e2 = service.create("E2", kind="epic", parent_id=e1.id)
-    t = service.create("T", kind="task", parent_id=e2.id)
+    e1 = service.create("E1", kind=TicketKind.EPIC)
+    e2 = service.create("E2", kind=TicketKind.EPIC, parent_id=e1.id)
+    t = service.create("T", kind=TicketKind.TASK, parent_id=e2.id)
 
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client.session_cost",
@@ -2003,9 +2005,9 @@ def test_nested_epic_cost_is_recursive(client, service, monkeypatch):
 
 def test_ticket_with_children_has_cumulative_cost(client, service, monkeypatch):
     """A non-epic ticket with child tickets gets cumulative_cost > cost_usd."""
-    parent = service.create("Parent task", kind="task")
-    c1 = service.create("Child 1", kind="task", parent_id=parent.id)
-    c2 = service.create("Child 2", kind="task", parent_id=parent.id)
+    parent = service.create("Parent task", kind=TicketKind.TASK)
+    c1 = service.create("Child 1", kind=TicketKind.TASK, parent_id=parent.id)
+    c2 = service.create("Child 2", kind=TicketKind.TASK, parent_id=parent.id)
 
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client.session_cost",
@@ -2023,7 +2025,7 @@ def test_ticket_with_children_has_cumulative_cost(client, service, monkeypatch):
 
 def test_leaf_ticket_cumulative_cost_is_none(client, service, monkeypatch):
     """A ticket with no children has cumulative_cost: null in JSON."""
-    leaf = service.create("Leaf task", kind="task")
+    leaf = service.create("Leaf task", kind=TicketKind.TASK)
 
     monkeypatch.setattr(
         "robotsix_mill.langfuse.client.session_cost",
@@ -2532,7 +2534,7 @@ class TestCrossBoardChildren:
             svc_b = TicketService(settings, board_id="board-b")
 
             # Create an epic on board-a.
-            epic = svc_a.create("Cross-board epic", kind="task")
+            epic = svc_a.create("Cross-board epic", kind=TicketKind.TASK)
             # Create a child on board-b (cross-board parent link).
             child_b = svc_b.create("Child on B", parent_id=epic.id, board_id="board-b")
             # Create a child on board-a (same-board).
@@ -2708,7 +2710,7 @@ class TestCrossBoardChildren:
             svc_b = TicketService(settings, board_id="board-b")
 
             # Epic on board-a.
-            epic = svc_a.create("Cross-board epic", kind="epic")
+            epic = svc_a.create("Cross-board epic", kind=TicketKind.EPIC)
             # Child on board-b.
             child = svc_b.create("Child on B", parent_id=epic.id, board_id="board-b")
 

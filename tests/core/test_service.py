@@ -2161,7 +2161,7 @@ def test_migrate_rejects_bad_targets_and_states(migrate_env):
     assert migrated_child.parent_id == parent.id
 
     # A non-epic parent WITH children is still blocked (the subtree
-    # path only triggers for kind == "epic").
+    # path only triggers for kind == TicketKind.EPIC).
     parent2 = service.create("parent2 task")
     service.create("child2 task", parent_id=parent2.id)
     with pytest.raises(ValueError, match="has child tickets"):

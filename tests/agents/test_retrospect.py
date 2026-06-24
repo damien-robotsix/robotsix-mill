@@ -6,7 +6,7 @@ from robotsix_mill.core.text_utils import truncate_at_boundary
 from robotsix_mill.langfuse import client as langfuse_client
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
-from robotsix_mill.core.models import SourceKind
+from robotsix_mill.core.models import SourceKind, TicketKind
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.retrospect import RetrospectStage
 
@@ -992,7 +992,7 @@ def test_epic_context_passed_to_retrospect_agent(tmp_path, monkeypatch):
     epic = ctx.service.create(
         "Epic: Configuration system overhaul",
         "Deliver a unified config system across all stages.",
-        kind="epic",
+        kind=TicketKind.EPIC,
     )
     # Create a child ticket linked to the epic.
     child = ctx.service.create(
@@ -1032,7 +1032,7 @@ def test_sibling_context_passed_to_retrospect_agent(tmp_path, monkeypatch):
     _no_langfuse(monkeypatch)
 
     epic = ctx.service.create(
-        "Epic: Multi-stage refactor", "Big refactor.", kind="epic"
+        "Epic: Multi-stage refactor", "Big refactor.", kind=TicketKind.EPIC
     )
 
     current = ctx.service.create("Refactor refine stage", "desc", parent_id=epic.id)
@@ -1129,7 +1129,7 @@ def test_follow_up_suppressed_when_sibling_covers_gap(tmp_path, monkeypatch):
     _no_langfuse(monkeypatch)
 
     epic = ctx.service.create(
-        "Epic: Doc system", "Wire doc agent + tests.", kind="epic"
+        "Epic: Doc system", "Wire doc agent + tests.", kind=TicketKind.EPIC
     )
     current = ctx.service.create("Wire doc agent stub", "desc", parent_id=epic.id)
     ctx.service.create("Doc agent unit tests", "desc", parent_id=epic.id)
@@ -1168,7 +1168,9 @@ def test_sibling_context_empty_when_no_other_children(tmp_path, monkeypatch):
     ctx = _ctx(tmp_path)
     _no_langfuse(monkeypatch)
 
-    epic = ctx.service.create("Epic: Solo mission", "Just one child.", kind="epic")
+    epic = ctx.service.create(
+        "Epic: Solo mission", "Just one child.", kind=TicketKind.EPIC
+    )
     child = ctx.service.create("The only child", "desc", parent_id=epic.id)
     for st in (
         State.READY,
@@ -1197,7 +1199,7 @@ def test_sibling_title_truncated_at_80_chars(tmp_path, monkeypatch):
     ctx = _ctx(tmp_path)
     _no_langfuse(monkeypatch)
 
-    epic = ctx.service.create("Epic: Truncation test", "Test.", kind="epic")
+    epic = ctx.service.create("Epic: Truncation test", "Test.", kind=TicketKind.EPIC)
     current = ctx.service.create("Current ticket", "desc", parent_id=epic.id)
     long_title = "A" * 100 + " suffix"
     ctx.service.create(long_title, "desc", parent_id=epic.id)

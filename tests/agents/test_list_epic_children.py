@@ -9,6 +9,7 @@ Covers the ticket spec's required cases:
 """
 
 from robotsix_mill.agents.list_epic_children import make_list_epic_children_tool
+from robotsix_mill.core.models import TicketKind
 
 
 def test_returns_callable(settings):
@@ -17,7 +18,7 @@ def test_returns_callable(settings):
 
 
 def test_lists_siblings_and_marks_current(settings, service):
-    epic = service.create("Test feature epic", "Epic body", kind="epic")
+    epic = service.create("Test feature epic", "Epic body", kind=TicketKind.EPIC)
     child_a = service.create(
         "Implement the real feature", "Do the substantive work.", parent_id=epic.id
     )
@@ -61,7 +62,7 @@ def test_unknown_id_returns_graceful_message(settings):
 
 
 def test_never_raises_returns_error_string(settings, service, monkeypatch):
-    epic = service.create("Epic", "body", kind="epic")
+    epic = service.create("Epic", "body", kind=TicketKind.EPIC)
     child = service.create("Child", "body", parent_id=epic.id)
 
     # Force an internal failure on the read path; the closure must swallow

@@ -7,6 +7,7 @@ import pytest
 from robotsix_mill.agents import coding
 from robotsix_mill.agents.fs_tools import build_fs_tools
 from robotsix_mill.core import db
+from robotsix_mill.core.models import TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
@@ -1299,7 +1300,9 @@ def test_epic_context_prepended_to_spec(ctx_factory, tmp_path, monkeypatch):
     )
 
     # Create an epic with rich global context
-    epic = ctx.service.create("Global Epic", "High-level goal: unify UX", kind="epic")
+    epic = ctx.service.create(
+        "Global Epic", "High-level goal: unify UX", kind=TicketKind.EPIC
+    )
     # Create a child ticket under this epic
     child = ctx.service.create(
         "Add dark mode",
@@ -1402,8 +1405,8 @@ def test_epic_context_not_injected_for_non_epic_parent(
         FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
     )
 
-    # Create a regular task parent (kind="task")
-    parent = ctx.service.create("Parent task", "Ordinary task", kind="task")
+    # Create a regular task parent (kind=TicketKind.TASK)
+    parent = ctx.service.create("Parent task", "Ordinary task", kind=TicketKind.TASK)
     child = ctx.service.create(
         "Child of task",
         "Do a sub-thing",
@@ -1456,7 +1459,7 @@ def test_epic_context_not_injected_for_empty_epic_description(
         FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
     )
 
-    epic = ctx.service.create("Empty Epic", "", kind="epic")
+    epic = ctx.service.create("Empty Epic", "", kind=TicketKind.EPIC)
     child = ctx.service.create(
         "Child of empty epic",
         "Do a thing",

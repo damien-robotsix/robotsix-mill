@@ -10,7 +10,7 @@ from robotsix_mill.agents import obsolescence
 from robotsix_mill.agents import refining
 from robotsix_mill.agents.refining import ChildSpec, FileMapEntry, RefineResult
 from robotsix_mill.config import Settings
-from robotsix_mill.core.models import SourceKind
+from robotsix_mill.core.models import SourceKind, TicketKind
 from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.refine import OBSOLESCENCE_GAP_PREFIX, RefineStage
@@ -1256,9 +1256,13 @@ def test_dedup_parent_filter_narrows_candidates(ctx, service, monkeypatch):
     the candidates passed to dedup are filtered to only siblings,
     the parent epic itself, orphans, and recently-closed tickets."""
     # Epic A — the draft's parent
-    epic_a = service.create("Epic A: Agent Memory", "memory system", kind="epic")
+    epic_a = service.create(
+        "Epic A: Agent Memory", "memory system", kind=TicketKind.EPIC
+    )
     # Epic B — unrelated
-    epic_b = service.create("Epic B: Deploy Config", "deployment things", kind="epic")
+    epic_b = service.create(
+        "Epic B: Deploy Config", "deployment things", kind=TicketKind.EPIC
+    )
 
     # Draft ticket — child of epic A
     draft_ticket = service.create(
@@ -1293,7 +1297,9 @@ def test_dedup_parent_filter_narrows_candidates(ctx, service, monkeypatch):
     service.transition(cross_epic_closed.id, State.CLOSED)
 
     # Another epic that is NOT the draft's parent — should NOT appear
-    unrelated_epic = service.create("Epic C: Observability", "metrics", kind="epic")
+    unrelated_epic = service.create(
+        "Epic C: Observability", "metrics", kind=TicketKind.EPIC
+    )
 
     # Non-sibling open ticket in same epic is the only non-CLOSED,
     # non-orphan, non-parent candidate that SHOULD appear (sibling).
@@ -1337,7 +1343,7 @@ def test_dedup_no_parent_fallback_unchanged(ctx, service, monkeypatch):
     is passed through — behaviour is identical to before."""
     t = service.create("Standalone ticket", _DEDUP_BODY)
     # Create several tickets with various parents — all should appear.
-    epic = service.create("Some epic", "stuff", kind="epic")
+    epic = service.create("Some epic", "stuff", kind=TicketKind.EPIC)
     child = service.create("Epic child", _DEDUP_BODY, parent_id=epic.id)
     orphan = service.create("Another orphan", _DEDUP_BODY)
 
@@ -2148,7 +2154,7 @@ def test_split_creates_children_and_closes_parent(ctx, service, monkeypatch):
 
     # Find the umbrella epic that was created.
     all_tickets = service.list()
-    epics = [t for t in all_tickets if t.kind == "epic"]
+    epics = [t for t in all_tickets if t.kind == TicketKind.EPIC]
     assert len(epics) == 1
     epic = epics[0]
     assert epic.state is State.EPIC_OPEN
@@ -2418,7 +2424,7 @@ def test_split_child_skips_re_refinement(ctx, service, monkeypatch):
     assert child.state is State.DRAFT
     # Child should be parented to the umbrella epic, not the original parent.
     all_tickets = service.list()
-    epics = [t for t in all_tickets if t.kind == "epic"]
+    epics = [t for t in all_tickets if t.kind == TicketKind.EPIC]
     assert len(epics) == 1
     assert child.parent_id == epics[0].id
 
@@ -2962,7 +2968,7 @@ def test_memory_prompt_forbids_per_ticket_diary():
 def test_epic_context_passed_to_refine_agent(ctx, service, monkeypatch):
     """When a ticket has an epic parent, epic_context is passed to
     run_refine_agent and contains the epic description."""
-    epic = service.create("Global Epic", "High-level: unify UX", kind="epic")
+    epic = service.create("Global Epic", "High-level: unify UX", kind=TicketKind.EPIC)
     child = service.create(
         "Add dark mode",
         "Please add dark mode toggle",
@@ -2999,7 +3005,7 @@ def test_epic_context_passed_to_refine_agent(ctx, service, monkeypatch):
 
 def test_epic_context_empty_for_non_epic_parent_in_refine(ctx, service, monkeypatch):
     """Refine: ticket with non-epic parent → epic_context is empty."""
-    parent = service.create("Parent task", "Ordinary task", kind="task")
+    parent = service.create("Parent task", "Ordinary task", kind=TicketKind.TASK)
     child = service.create(
         "Child of task",
         "Do a sub-thing",
@@ -3797,7 +3803,9 @@ def test_auto_approve_architecture_decision_needs_approval(
 def test_epic_body_applied_immediately_in_autonomous_mode(ctx, service, monkeypatch):
     """When require_approval=false, epic_body is written to the parent
     epic's description.md immediately after refine."""
-    epic = service.create("Epic: Auth System", "Add authentication", kind="epic")
+    epic = service.create(
+        "Epic: Auth System", "Add authentication", kind=TicketKind.EPIC
+    )
     child = service.create("Add login", "draft", parent_id=epic.id)
 
     monkeypatch.setattr(
@@ -3824,7 +3832,9 @@ def test_epic_body_stored_as_artifact_in_gated_mode(
 ):
     """When require_approval=true, epic_body is stored as an artifact
     in the child's workspace, NOT written to the epic yet."""
-    epic = service.create("Epic: Auth System", "Add authentication", kind="epic")
+    epic = service.create(
+        "Epic: Auth System", "Add authentication", kind=TicketKind.EPIC
+    )
     child = service.create("Add login", "draft", parent_id=epic.id)
 
     monkeypatch.setattr(
@@ -3861,7 +3871,9 @@ def test_epic_body_applied_on_approval_in_gated_mode(
 ):
     """When require_approval=true, the epic body is applied to the
     epic only when the child ticket is approved."""
-    epic = service.create("Epic: Auth System", "Add authentication", kind="epic")
+    epic = service.create(
+        "Epic: Auth System", "Add authentication", kind=TicketKind.EPIC
+    )
     child = service.create("Add login", "draft", parent_id=epic.id)
 
     monkeypatch.setattr(
@@ -3939,7 +3951,9 @@ def test_epic_body_applied_immediately_in_split_path(
 ):
     """In the split path, epic_body is applied immediately even when
     require_approval=true, because the original ticket is closed."""
-    epic = service.create("Epic: Auth System", "Add authentication", kind="epic")
+    epic = service.create(
+        "Epic: Auth System", "Add authentication", kind=TicketKind.EPIC
+    )
     child = service.create(
         "Multi-change", "draft with multiple changes", parent_id=epic.id
     )
@@ -5960,7 +5974,7 @@ def test_run_refine_agent_no_request_limit_override_uses_default(
 def test_split_child_fast_path_sets_simple_complexity(ctx, service, monkeypatch):
     """Split-child fast path writes triage_complexity.json as 'simple',
     suppressing exploration on the already-refined child."""
-    parent = service.create("Parent task", "big feature", kind="task")
+    parent = service.create("Parent task", "big feature", kind=TicketKind.TASK)
     # Close the parent with a "split into" note to trigger fast-path.
     service.transition(parent.id, State.CLOSED, "split into 1 children: child-1")
     child = service.create(

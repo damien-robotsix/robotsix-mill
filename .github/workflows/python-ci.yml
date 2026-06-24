@@ -161,6 +161,9 @@ jobs:
           uv run ruff check --output-format=github .
           uv run ruff format --check --diff .
 
+      - name: Reject bare string TicketKind literals
+        run: python scripts/check_kind_literals.py
+
       - name: Mypy (static type check, baseline ratchet)
         if: ${{ inputs.mypy-advisory }}
         # Ratchets against a committed mypy-baseline.txt snapshot: known

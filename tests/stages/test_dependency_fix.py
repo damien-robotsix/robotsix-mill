@@ -11,7 +11,7 @@ import json
 import logging
 from types import SimpleNamespace
 
-from robotsix_mill.core.models import SourceKind
+from robotsix_mill.core.models import SourceKind, TicketKind
 from robotsix_mill.core.states import State
 from robotsix_mill.stages.base import StageContext
 from robotsix_mill.stages.dependency_fix import spawn_dependency_fix
@@ -98,7 +98,7 @@ def test_fresh_spawn_creates_new_ticket() -> None:
     assert call["title"] == "fix the thing"
     assert call["description"] == "please fix it"
     assert call["source"] == SourceKind.CI_FIX_DEPENDENCY
-    assert call["kind"] == "task"
+    assert call["kind"] == TicketKind.TASK
     assert call["board_id"] == "test-board"
     assert call["priority"] is False
     assert "fix-99" in (outcome.note or "")

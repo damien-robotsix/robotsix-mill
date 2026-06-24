@@ -101,6 +101,14 @@ repos:
         always_run: true
   - repo: local
     hooks:
+      - id: check-kind-literals
+        name: Reject bare string TicketKind literals in tests
+        entry: python scripts/check_kind_literals.py
+        language: python
+        files: ^tests/.*\.py$
+        pass_filenames: false
+  - repo: local
+    hooks:
       - id: check-registration
         name: Check module file registration
         entry: robotsix-modules check-registration docs/modules.yaml --root .
