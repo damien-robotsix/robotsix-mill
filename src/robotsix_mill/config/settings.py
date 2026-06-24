@@ -20,6 +20,7 @@ from pydantic_settings import (
 )
 
 from ._settings_board_agent import _BoardAgentSettings
+from ._settings_component_agent import _ComponentAgentSettings
 from ._settings_core import _CoreSettings
 from ._settings_observability import _ObservabilitySettings
 from ._settings_periodic import _PeriodicSettings
@@ -35,7 +36,8 @@ class Settings(
     # order because pydantic collects fields in reverse-MRO order; listing
     # the mixins back-to-front here preserves the original
     # ``Settings.model_fields`` ordering (core → stages → periodic →
-    # observability → board-agent).
+    # observability → board-agent → component-agent).
+    _ComponentAgentSettings,
     _BoardAgentSettings,
     _ObservabilitySettings,
     _PeriodicSettings,
@@ -327,6 +329,19 @@ class Settings(
             if not self.forge_remote_url:
                 raise ValueError(
                     f"forge_kind={self.forge_kind} requires forge_remote_url to be set"
+                )
+
+        # component_agent_enabled=True requires broker host + token
+        if self.component_agent_enabled:
+            if not self.component_agent_broker_host:
+                raise ValueError(
+                    "component_agent_enabled=True requires "
+                    "component_agent_broker_host to be set"
+                )
+            if not self.component_agent_broker_token:
+                raise ValueError(
+                    "component_agent_enabled=True requires "
+                    "component_agent_broker_token to be set"
                 )
 
         return self

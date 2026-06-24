@@ -546,6 +546,13 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "board_manager.model": "board_manager_model",
     "board_manager.recall_model": "board_manager_recall_model",
     "board_manager.max_conversations": "board_manager_max_conversations",
+    # -- component_agent (monitor/config responder on the broker) --
+    "component_agent.enabled": "component_agent_enabled",
+    "component_agent.agent_id": "component_agent_agent_id",
+    "component_agent.broker_host": "component_agent_broker_host",
+    "component_agent.broker_port": "component_agent_broker_port",
+    "component_agent.broker_scheme": "component_agent_broker_scheme",
+    "component_agent.broker_token": "component_agent_broker_token",
     # -- epic dedup lookback (top-level, mirrors core.memory.dedup_lookback_days) --
     "epic_dedup_lookback_days": "epic_dedup_lookback_days",
 }

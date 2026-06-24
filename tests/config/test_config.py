@@ -2097,3 +2097,42 @@ class TestConfigErrorBackwardCompat:
         except ConfigError:
             caught = True
         assert caught
+
+
+# ---------------------------------------------------------------------------
+#  Component-agent settings invariant
+# ---------------------------------------------------------------------------
+
+
+class TestComponentAgentSettings:
+    def test_enabled_without_host_raises(self):
+        with pytest.raises(ValueError, match="component_agent_broker_host"):
+            Settings(
+                component_agent_enabled=True,
+                component_agent_broker_token="token",
+                component_agent_broker_host="",
+            )
+
+    def test_enabled_without_token_raises(self):
+        with pytest.raises(ValueError, match="component_agent_broker_token"):
+            Settings(
+                component_agent_enabled=True,
+                component_agent_broker_host="broker.example.com",
+                component_agent_broker_token="",
+            )
+
+    def test_enabled_with_host_and_token_ok(self):
+        s = Settings(
+            component_agent_enabled=True,
+            component_agent_broker_host="broker.example.com",
+            component_agent_broker_token="secret",
+        )
+        assert s.component_agent_enabled is True
+
+    def test_disabled_without_host_ok(self):
+        s = Settings(
+            component_agent_enabled=False,
+            component_agent_broker_host="",
+            component_agent_broker_token="",
+        )
+        assert s.component_agent_enabled is False

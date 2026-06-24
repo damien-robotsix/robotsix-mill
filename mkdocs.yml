@@ -43,6 +43,7 @@ nav:
       - Meta board: meta-board.md
   - Operations:
       - Board agent: board-agent.md
+      - Component agent: component-agent.md
       - Board operations: board-operations.md
       - Cost controls & resilience: cost-and-resilience.md
       - Notifications: notifications.md

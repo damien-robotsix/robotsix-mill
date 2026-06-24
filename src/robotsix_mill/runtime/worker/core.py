@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ...config import RepoConfig, get_repos_config
 from ...langfuse.client import effective_cost, session_cost
@@ -225,6 +225,59 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         import asyncio as _asyncio
 
         await _asyncio.gather(*(q.join() for q in self.queues.values()))
+
+    def snapshot(self) -> dict[str, Any]:
+        """Return a read-only telemetry snapshot of the worker.
+
+        ZERO side effects — no start/stop/cancel/requeue. Safe for the
+        component-agent ``monitor`` handler to call on every request.
+
+        Returns a plain dict with:
+        - ``running`` — whether the worker pool is started
+        - ``periodic_loops`` — list of active periodic loop names
+        - ``active_tasks`` — number of consumer tasks currently running
+        - ``queue_depth`` — total tickets waiting across all queues
+        - ``in_flight_passes`` — count of periodic passes mid-execution
+        """
+        periodic_names: list[str] = []
+        for attr, label in (
+            ("_poll_task", "poll/reconcile"),
+            ("_audit_task", "audit"),
+            ("_trace_health_task", "trace-health"),
+            ("_trace_review_task", "trace-review"),
+            ("_health_task", "health"),
+            ("_ci_monitor_task", "ci-monitor"),
+            ("_agent_check_task", "agent-check"),
+            ("_bc_check_task", "bc-check"),
+            ("_completeness_check_task", "completeness-check"),
+            ("_copy_paste_task", "copy-paste"),
+            ("_module_curator_task", "module-curator"),
+            ("_test_gap_task", "test-gap"),
+            ("_survey_task", "survey"),
+            ("_config_sync_task", "config-sync"),
+            ("_data_dir_audit_task", "data-dir-audit"),
+            ("_langfuse_cleanup_task", "langfuse-cleanup"),
+            ("_timeout_escalation_task", "timeout-escalation"),
+            ("_meta_task", "meta"),
+            ("_run_health_task", "run-health"),
+            ("_diagnostic_task", "diagnostic"),
+            ("_stale_branch_task", "stale-branch-cleanup"),
+            ("_db_maintenance_task", "db-maintenance"),
+            ("_sandbox_reaper_task", "sandbox-reaper"),
+            ("_credit_balance_task", "credit-balance"),
+            ("_requeue_task", "requeue-drip"),
+        ):
+            t = getattr(self, attr, None)
+            if t is not None and not t.done():
+                periodic_names.append(label)
+
+        return {
+            "running": bool(self._tasks),
+            "periodic_loops": periodic_names,
+            "active_tasks": sum(1 for t in self._tasks if not t.done()),
+            "queue_depth": self.queue_size(),
+            "in_flight_passes": len(self._inflight_passes),
+        }
 
     def _queue_for(self, board_id: str) -> asyncio.PriorityQueue:
         """Return the per-repo queue, creating it on first use.
