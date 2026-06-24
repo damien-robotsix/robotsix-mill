@@ -2086,3 +2086,133 @@ def test_check_status_none_does_not_write_history_note(tmp_path, monkeypatch):
     assert notes_after == notes_before, (
         f"status-None re-poll must not add a note, but {notes_after - notes_before} added"
     )
+
+
+# ---------------------------------------------------------------------------
+# CodeQL alerts-unreadable (403) guard
+# ---------------------------------------------------------------------------
+
+
+def test_codeql_403_unreadable_blocks_immediately(tmp_path, monkeypatch):
+    """When CodeQL is failing and list_code_scanning_alerts raises
+    CodeScanningAlertsUnavailable (403), the stage blocks immediately with
+    a permission-hint note and does NOT invoke the ci-fix agent."""
+    from robotsix_mill.forge.github_code_scanning import (
+        CodeScanningAlertsUnavailable,
+    )
+
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {
+                    "name": "CodeQL / Analyze (python)",
+                    "summary": "alert",
+                    "text": None,
+                    "annotations": [],
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    # list_code_scanning_alerts raises the 403 signal.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_code_scanning_alerts",
+        lambda self, *, source_branch: (_ for _ in ()).throw(
+            CodeScanningAlertsUnavailable("403 forbidden")
+        ),
+    )
+
+    agent_called = []
+
+    def fake_agent(**k):
+        agent_called.append(True)
+        return CiFixResult(status="DONE", summary="should not run")
+
+    monkeypatch.setattr("robotsix_mill.stages.ci_fix.run_ci_fix_agent", fake_agent)
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "UNREADABLE" in out.note
+    assert "security-events" in out.note
+    assert "Code scanning alerts: read" in out.note
+    assert not agent_called, "ci-fix agent must not be called on 403"
+
+
+def test_codeql_403_readable_alerts_still_works(tmp_path, monkeypatch):
+    """Readable CodeQL alerts → existing dismiss/unblock flow stays green
+    (regression guard: the new 403 guard must not break the normal path)."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {
+                    "name": "CodeQL / Analyze (python)",
+                    "summary": "alert",
+                    "text": None,
+                    "annotations": [],
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    # Return a security-severity alert (high) — the normal readable path.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_code_scanning_alerts",
+        lambda self, *, source_branch: [
+            {
+                "number": 42,
+                "rule": "py/clear-text-logging-sensitive-data",
+                "security_severity_level": "high",
+                "severity": "error",
+                "path": "src/foo.py",
+                "line": 10,
+                "message": "Sensitive data logged",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [
+            {"path": "src/foo.py", "status": "modified", "additions": 1, "deletions": 0}
+        ],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_workflow_runs",
+        lambda self, *, head_sha=None, branch=None: [],
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(status="FAILED", summary="could not fix"),
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    # The block note references the real alert, not the 403 permission text.
+    assert "42" in out.note
+    assert "py/clear-text-logging-sensitive-data" in out.note
+    assert "UNREADABLE" not in out.note

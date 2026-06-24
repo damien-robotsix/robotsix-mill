@@ -1848,13 +1848,26 @@ def test_list_code_scanning_alerts_parses(tmp_path, monkeypatch):
 
 
 def test_list_code_scanning_alerts_404_returns_empty(tmp_path, monkeypatch):
-    """403/404 (code-scanning off, or token lacks scope) → [] (not an error)."""
+    """404 (code-scanning off) → [] (not an error)."""
     _mock_httpx(
         monkeypatch,
         get_map={"code-scanning/alerts": _make_response(404, {}, "not found")},
     )
     forge = _forge(tmp_path)
     assert forge.list_code_scanning_alerts(source_branch="feature/x") == []
+
+
+def test_list_code_scanning_alerts_403_raises_unavailable(tmp_path, monkeypatch):
+    """403 (token lacks security-events scope) raises CodeScanningAlertsUnavailable."""
+    from robotsix_mill.forge.github_code_scanning import CodeScanningAlertsUnavailable
+
+    _mock_httpx(
+        monkeypatch,
+        get_map={"code-scanning/alerts": _make_response(403, {}, "forbidden")},
+    )
+    forge = _forge(tmp_path)
+    with pytest.raises(CodeScanningAlertsUnavailable):
+        forge.list_code_scanning_alerts(source_branch="feature/x")
 
 
 def _alert(number, rule_id, path, line):

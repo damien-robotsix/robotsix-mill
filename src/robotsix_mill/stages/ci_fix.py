@@ -24,6 +24,7 @@ from ..core.models import SourceKind, Ticket
 from ..core.states import State
 from ..forge import Forge, get_forge
 from ..forge.auth import _resolve_remote_url, github_token
+from ..forge.github_code_scanning import CodeScanningAlertsUnavailable
 from ..runners.pass_runner import load_memory, persist_memory
 from ..runtime import tracing
 from ..vcs import git_ops
@@ -299,6 +300,7 @@ def _codeql_block_note(  # noqa: C901
     alerts: list[dict[str, Any]],
     changed_paths: set[str],
     verdicts: list[dict[str, Any]] | None = None,
+    alerts_unreadable: bool = False,
 ) -> str | None:
     """Return a CodeQL-specific BLOCKED note, or None when CodeQL is not a blocker.
 
@@ -325,6 +327,15 @@ def _codeql_block_note(  # noqa: C901
             if only_codeql
             else "Blocked partly on CodeQL code-scanning (other checks also red)"
         )
+        if alerts_unreadable:
+            return (
+                f"{header} — alerts are UNREADABLE (HTTP 403). "
+                "The CI-fix agent will not guess suppressions when "
+                "alert details are unavailable. "
+                "Grant the mill GitHub App the "
+                "**Code scanning alerts: read** (`security-events`) "
+                "permission, then re-run."
+            )
         return (
             f"{header} — a human must act.\n\n"
             "Alert details could not be retrieved from the code-scanning API."
@@ -436,6 +447,7 @@ class _FailingContext(NamedTuple):
     failing: list[dict[str, Any]] = []
     alerts: list[dict[str, Any]] = []
     changed_paths: set[str] = set()
+    alerts_unreadable: bool = False
 
 
 class CIFixStage(Stage):
@@ -451,7 +463,31 @@ class CIFixStage(Stage):
         resolved = self._resolve_clone_and_status(ticket, ctx)
         if isinstance(resolved, Outcome):
             return resolved
-        repo_dir, branch, failing_summary, failing, alerts, changed_paths = resolved
+        (
+            repo_dir,
+            branch,
+            failing_summary,
+            failing,
+            alerts,
+            changed_paths,
+            alerts_unreadable,
+        ) = resolved
+
+        # --- Early guard: CodeQL failing but alerts unreadable (403) ---
+        # When CodeQL is among the failing checks and the alerts API
+        # returned 403 (permission gap), block immediately with an
+        # actionable note — the ci-fix agent must never reach the
+        # blind-suppression path when alert details are unavailable.
+        if alerts_unreadable and any(
+            any(
+                token in (chk.get("name") or "").lower() for token in _CODQL_CHECK_NAMES
+            )
+            for chk in failing
+        ):
+            codeql_note = _codeql_block_note(
+                failing, alerts, changed_paths, alerts_unreadable=True
+            )
+            return Outcome(State.BLOCKED, codeql_note or "")
 
         # --- CodeQL FP triage: early trigger before consuming attempts ---
         # If CodeQL is the sole remaining red check, try FP triage
@@ -582,26 +618,33 @@ class CIFixStage(Stage):
 
         # --- CI is failing → attempt fix ---
         failing = status.get("failing", [])
-        failing_summary, alerts, changed_paths = self._build_failure_detail(
-            ticket, ctx, branch, failing
+        failing_summary, alerts, changed_paths, alerts_unreadable = (
+            self._build_failure_detail(ticket, ctx, branch, failing)
         )
         # Persist the failure detail for observability.
         self._write_failing_summary_artifact(ctx, ticket, failing_summary, failing)
         return _FailingContext(
-            repo_dir, branch, failing_summary, failing, alerts, changed_paths
+            repo_dir,
+            branch,
+            failing_summary,
+            failing,
+            alerts,
+            changed_paths,
+            alerts_unreadable,
         )
 
-    def _build_failure_detail(
+    def _build_failure_detail(  # noqa: C901 — enrichment is inherently branchy
         self,
         ticket: Ticket,
         ctx: StageContext,
         branch: str,
         failing: list[dict[str, Any]],
-    ) -> tuple[str, list[dict[str, Any]], set[str]]:
+    ) -> tuple[str, list[dict[str, Any]], set[str], bool]:
         """Enrich the failing-check list with job logs + code-scanning alerts.
 
-        Returns ``(failing_summary, alerts, changed_paths)`` so callers
-        can inspect the raw alert data (e.g. for FP triage gating).
+        Returns ``(failing_summary, alerts, changed_paths, alerts_unreadable)``
+        so callers can inspect the raw alert data (e.g. for FP triage gating)
+        and detect when alerts were unreadable due to a 403 permission gap.
         """
         s = ctx.settings
 
@@ -610,6 +653,7 @@ class CIFixStage(Stage):
         log_text = ""
         alerts: list[dict[str, Any]] = []
         changed_paths: set[str] = set()
+        alerts_unreadable = False
         try:
             forge = get_forge(s, repo_config=ctx.repo_config)
             alerts = forge.list_code_scanning_alerts(source_branch=branch)
@@ -626,6 +670,32 @@ class CIFixStage(Stage):
                                 f"\n--- {run.get('name', 'workflow')} "
                                 f"(run {run['id']}) ---\n{logs}"
                             )
+        except CodeScanningAlertsUnavailable:
+            log.warning(
+                "%s: code-scanning alerts unreadable (HTTP 403) — "
+                "token lacks 'security-events' permission",
+                ticket.id,
+            )
+            alerts_unreadable = True
+            # Still try to fetch changed_paths and job logs — do not lose
+            # log enrichment just because alerts are unreadable.
+            try:
+                forge = get_forge(s, repo_config=ctx.repo_config)
+                changed_paths = _pr_changed_paths(forge, branch)
+                pr = forge.pr_status(source_branch=branch)
+                head_sha = (pr or {}).get("sha", "")
+                if head_sha:
+                    runs = forge.list_workflow_runs(head_sha=head_sha)
+                    for run in runs:
+                        if run.get("conclusion") == "failure":
+                            logs = forge.fetch_workflow_job_logs(run_id=run["id"])
+                            if logs:
+                                log_text += (
+                                    f"\n--- {run.get('name', 'workflow')} "
+                                    f"(run {run['id']}) ---\n{logs}"
+                                )
+            except Exception:  # noqa: BLE001 — best-effort enrichment
+                log.warning("%s: failed to fetch job logs", ticket.id)
         except Exception:  # noqa: BLE001 — best-effort enrichment
             log.warning("%s: failed to fetch job logs / alerts", ticket.id)
 
@@ -633,6 +703,7 @@ class CIFixStage(Stage):
             _build_failing_summary(failing, log_text, alerts, changed_paths),
             alerts,
             changed_paths,
+            alerts_unreadable,
         )
 
     def _write_failing_summary_artifact(
@@ -1108,7 +1179,7 @@ class CIFixStage(Stage):
                 return ("success", "")
             if conclusion == "failure":
                 failing = status.get("failing", [])
-                summary, _alerts, _changed = self._build_failure_detail(
+                summary, _alerts, _changed, _unreadable = self._build_failure_detail(
                     ticket, ctx, branch, failing
                 )
                 return ("failure", summary)
