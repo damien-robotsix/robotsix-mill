@@ -2697,3 +2697,169 @@ def test_requeue_config_defaults():
     assert s.requeue_batch_size == 5
     assert s.requeue_batch_pause_seconds == 2.0
     assert s.startup_jitter_seconds == 30
+
+
+# ---------------------------------------------------------------------------
+# ticket state cycle ceiling (per-pass, per-stage re-dispatch guard)
+# ---------------------------------------------------------------------------
+
+
+async def test_bounce_loop_blocks_at_ceiling(ctx, service, monkeypatch):
+    """A traced stage that keeps re-dispatching (ping-pong between two
+    LLM-bearing stages) must pause the ticket to BLOCKED once the
+    per-stage ceiling is exceeded, preventing an unbounded re-run loop."""
+
+    implement_calls = []
+    review_calls = []
+
+    class PingImplement(Stage):
+        name = "implement"
+        input_state = State.READY
+
+        def run(self, _t, _c):
+            implement_calls.append(1)
+            return Outcome(State.CODE_REVIEW, "to review")
+
+    class PongReview(Stage):
+        name = "review"
+        input_state = State.CODE_REVIEW
+
+        def run(self, _t, _c):
+            review_calls.append(1)
+            return Outcome(State.READY, "back to implement")
+
+    monkeypatch.setitem(registry.STAGES, "implement", PingImplement())
+    monkeypatch.setitem(registry.STAGES, "review", PongReview())
+
+    limit = 3
+    ctx.settings.ticket_state_cycle_limit = limit
+
+    t = service.create("bounce")
+    service.transition(t.id, State.READY)
+    await process_ticket(t.id, ctx)
+
+    blocked = service.get(t.id)
+    assert blocked.state is State.BLOCKED
+
+    history_note = service.history(t.id)[-1].note
+    assert "Cycle ceiling" in history_note
+    assert "'implement'" in history_note
+    assert f"limit {limit}" in history_note
+
+    # Each traced stage was dispatched exactly `limit` times; the
+    # (limit+1)-th attempt tripped the ceiling and returned before
+    # dispatching.
+    assert len(implement_calls) == limit, (
+        f"implement should be called {limit} times, got {len(implement_calls)}"
+    )
+    assert len(review_calls) == limit, (
+        f"review should be called {limit} times, got {len(review_calls)}"
+    )
+
+
+async def test_healthy_linear_flow_never_blocks(ctx, service, monkeypatch):
+    """A normal pipeline dispatching each LLM stage exactly once en route
+    to a terminal/waiting state must finish without tripping the ceiling."""
+
+    refine_calls = []
+
+    class LinearRefine(Stage):
+        name = "refine"
+        input_state = State.DRAFT
+
+        def run(self, _t, _c):
+            refine_calls.append(1)
+            return Outcome(State.HUMAN_ISSUE_APPROVAL, "refined")
+
+    monkeypatch.setitem(registry.STAGES, "refine", LinearRefine())
+
+    ctx.settings.ticket_state_cycle_limit = 3
+
+    t = service.create("linear")
+    await process_ticket(t.id, ctx)
+
+    # HUMAN_ISSUE_APPROVAL has no pipeline stage → chain stops normally.
+    assert service.get(t.id).state is State.HUMAN_ISSUE_APPROVAL
+    assert len(refine_calls) == 1  # each stage dispatched exactly once
+
+
+async def test_cycle_limit_zero_disables_ceiling(ctx, service, monkeypatch):
+    """With ticket_state_cycle_limit=0, a bounce-loop that would
+    otherwise trip the ceiling does NOT block via this mechanism."""
+
+    implement_calls = []
+    stop_after = 10  # arbitrary bound so the test doesn't loop forever
+
+    class PingImplement(Stage):
+        name = "implement"
+        input_state = State.READY
+
+        def run(self, ticket, _c):
+            implement_calls.append(1)
+            if len(implement_calls) >= stop_after:
+                return Outcome(ticket.state, "self-noop stop")
+            return Outcome(State.CODE_REVIEW, "to review")
+
+    class PongReview(Stage):
+        name = "review"
+        input_state = State.CODE_REVIEW
+
+        def run(self, _t, _c):
+            return Outcome(State.READY, "back to implement")
+
+    monkeypatch.setitem(registry.STAGES, "implement", PingImplement())
+    monkeypatch.setitem(registry.STAGES, "review", PongReview())
+
+    ctx.settings.ticket_state_cycle_limit = 0
+
+    t = service.create("unlimited")
+    service.transition(t.id, State.READY)
+    await process_ticket(t.id, ctx)
+
+    # Must NOT be BLOCKED by the cycle ceiling.
+    assert service.get(t.id).state != State.BLOCKED
+    # The stage ran more times than the default limit of 3, proving
+    # the ceiling is disabled.
+    assert len(implement_calls) > 3, (
+        f"limit=0 should allow >3 implement calls, got {len(implement_calls)}"
+    )
+
+
+async def test_poll_stage_exempt_from_ceiling(ctx, service, monkeypatch):
+    """A traced=False poll stage (merge/deliver-like) re-dispatched many
+    times within one pass must never be blocked by the cycle ceiling."""
+
+    merge_calls = []
+
+    class BounceMerge(Stage):
+        name = "merge"
+        input_state = State.IMPLEMENT_COMPLETE
+        traced = False
+
+        def run(self, ticket, _c):
+            merge_calls.append(1)
+            if len(merge_calls) >= 10:
+                # Return a same-state outcome to stop the loop cleanly.
+                return Outcome(ticket.state, "noop stop")
+            # Cycle between two states that both map to "merge".
+            if ticket.state is State.IMPLEMENT_COMPLETE:
+                return Outcome(State.WAITING_AUTO_MERGE, "bounce")
+            return Outcome(State.IMPLEMENT_COMPLETE, "bounce back")
+
+    monkeypatch.setitem(registry.STAGES, "merge", BounceMerge())
+
+    ctx.settings.ticket_state_cycle_limit = 3
+
+    t = service.create("poll-bounce")
+    # Walk the ticket through the real pipeline chain to reach
+    # IMPLEMENT_COMPLETE legally.
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE):
+        service.transition(t.id, st)
+    await process_ticket(t.id, ctx)
+
+    # Must NOT be BLOCKED — poll stages are exempt.
+    assert service.get(t.id).state is not State.BLOCKED
+    # The untraced stage ran far more times than the ceiling allows.
+    assert len(merge_calls) == 10, (
+        f"untraced stage should run all 10 times, got {len(merge_calls)}"
+    )
