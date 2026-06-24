@@ -1,0 +1,34 @@
+# Dependency graph submission only — version updates are handled by Renovate.
+# Explicit "pip" ecosystem configuration ensures the dependency graph action
+# uses the mature pip parser which handles uv.lock files more reliably than
+# the experimental uv ecosystem auto-detection.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Etc/UTC"
+    # open-pull-requests-limit 0 means "submit dependency graph but
+    # never open version-update PRs" — Renovate handles those.
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 0
