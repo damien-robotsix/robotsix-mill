@@ -27,6 +27,7 @@ from typing import Any, cast
 from ...agents import refining
 from ...config.settings import Settings
 from ...core.models import SourceKind, Ticket, TicketKind
+from ...core.service import TicketService
 from ...core.states import State
 from ...core.workspace import Workspace
 from ...runtime.tracing import set_current_span_attribute
@@ -123,7 +124,7 @@ def _read_triage_trivial(ws: Workspace) -> bool:
 _MIGRATE_NOTE_PREFIX = "migrated from board "
 
 
-def _parse_prior_boards(service, ticket_id: str) -> tuple[set[str], int]:
+def _parse_prior_boards(service: TicketService, ticket_id: str) -> tuple[set[str], int]:
     """Parse migration-history events to find boards this ticket has been on.
 
     Returns ``(prior_boards, migration_count)``.  ``prior_boards`` is the
