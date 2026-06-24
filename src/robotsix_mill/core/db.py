@@ -147,6 +147,16 @@ def init_db(settings: Settings, board_id: str) -> None:
             )
     except Exception:
         pass
+    # Self-heal any legacy rows whose ``kind`` was persisted as the
+    # lowercase StrEnum *value* instead of the canonical uppercase member
+    # NAME. Idempotent: upper(upper(x)) == upper(x). The CaseTolerantEnum
+    # column on Ticket.kind already tolerates lowercase on read, so this is
+    # defense-in-depth that also normalizes the stored bytes.
+    try:
+        with engine.begin() as conn:
+            conn.exec_driver_sql("UPDATE ticket SET kind = upper(kind)")
+    except Exception:
+        pass
     _initialized.add(board_id)
 
 
