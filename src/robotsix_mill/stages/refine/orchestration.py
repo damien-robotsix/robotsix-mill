@@ -120,6 +120,118 @@ def _read_triage_trivial(ws: Workspace) -> bool:
         return False
 
 
+_MIGRATE_NOTE_PREFIX = "migrated from board "
+
+
+def _parse_prior_boards(service, ticket_id: str) -> tuple[set[str], int]:
+    """Parse migration-history events to find boards this ticket has been on.
+
+    Returns ``(prior_boards, migration_count)``.  ``prior_boards`` is the
+    set of destination board ids extracted from ``"migrated from board …"``
+    notes.  ``migration_count`` is the total number of migration events.
+    """
+    prior_boards: set[str] = set()
+    migration_count = 0
+    for ev in service.history(ticket_id):
+        note = ev.note or ""
+        if note.startswith(_MIGRATE_NOTE_PREFIX):
+            migration_count += 1
+            to_pos = note.find(" to ")
+            if to_pos != -1:
+                rest = note[to_pos + 4 :]  # after " to "
+                suffix_pos = rest.find(" (was ")
+                if suffix_pos == -1:
+                    suffix_pos = rest.find(": ")
+                dst_repr = rest[:suffix_pos] if suffix_pos != -1 else rest
+                dst_board = dst_repr.strip().strip("'\"")
+                if dst_board:
+                    prior_boards.add(dst_board)
+    return prior_boards, migration_count
+
+
+def _anti_bounce_escalate(
+    ctx: StageContext,
+    ws: Workspace,
+    draft: str,
+    ticket: Ticket,
+    triage: Any,
+    resolved_board: str,
+) -> Outcome | None:
+    """Check migration anti-bounce guard; escalate to human if triggered.
+
+    Derives prior boards from migration history via
+    :func:`_parse_prior_boards`.  If history cannot be read, or if the
+    ticket has already been migrated at least once (or the target board
+    is a prior destination), writes the standard draft-artifact + empty
+    file_map and returns a human-escalation :class:`Outcome`.  Returns
+    ``None`` when migration is safe to proceed.
+    """
+    try:
+        prior_boards, migration_count = _parse_prior_boards(ctx.service, ticket.id)
+    except Exception:
+        log.warning(
+            "%s: could not read ticket history for anti-bounce check, "
+            "escalating to human",
+            ticket.id,
+            exc_info=True,
+        )
+        (ws.artifacts_dir / "draft-original.md").write_text(
+            draft if draft else "(title-only ticket, no body provided)",
+            encoding="utf-8",
+        )
+        RefineAgentMixin._write_file_map(ws, [], only_if_absent=True)
+        return RefineAgentMixin._resolved_outcome(
+            ctx,
+            draft,
+            ticket.id,
+            f"triage MIGRATE anti-bounce error: {triage.reason}",
+            source=ticket.source,
+            triage_note=triage.reason,
+        )
+
+    if migration_count >= 1 or resolved_board in prior_boards:
+        log.info(
+            "%s: anti-bounce blocked MIGRATE to %r "
+            "(prior boards=%r, migration_count=%d) — escalating to human",
+            ticket.id,
+            resolved_board,
+            prior_boards,
+            migration_count,
+        )
+        (ws.artifacts_dir / "draft-original.md").write_text(
+            draft if draft else "(title-only ticket, no body provided)",
+            encoding="utf-8",
+        )
+        RefineAgentMixin._write_file_map(ws, [], only_if_absent=True)
+        return RefineAgentMixin._resolved_outcome(
+            ctx,
+            draft,
+            ticket.id,
+            f"triage MIGRATE anti-bounce blocked: {triage.reason}",
+            source=ticket.source,
+            triage_note=triage.reason,
+        )
+
+    return None
+
+
+def _persist_triage_complexity(
+    ws: Workspace,
+    triage: Any,
+) -> None:
+    """Persist the triage complexity verdict for downstream exploration gating."""
+    complexity = triage.complexity
+    if complexity is None:
+        # Default: needs-exploration for backward compat / safety.
+        complexity = "needs-exploration"
+    _write_triage_complexity(
+        ws,
+        complexity,
+        trivial_scope=triage.trivial_scope,
+        findings=triage.exploration_findings,
+    )
+
+
 class RefineAgentMixin:
     """Refine-agent pipeline staticmethods mixed into :class:`RefineStage`."""
 
@@ -594,17 +706,7 @@ class RefineAgentMixin:
                 repo_dir=repo_dir,
                 extra_roots=extra_roots,
             )
-            # Persist complexity verdict for exploration gating downstream.
-            complexity = triage.complexity
-            if complexity is None:
-                # Default: needs-exploration for backward compat / safety.
-                complexity = "needs-exploration"
-            _write_triage_complexity(
-                ws,
-                complexity,
-                trivial_scope=triage.trivial_scope,
-                findings=triage.exploration_findings,
-            )
+            _persist_triage_complexity(ws, triage)
 
             if (
                 triage.decision == "MAINTENANCE"
@@ -743,77 +845,13 @@ class RefineAgentMixin:
                         triage_note=triage.reason,
                     )
 
-                # Anti-bounce cap: derive prior boards from migration history events.
-                # A ticket that has already been automatically migrated at least once
-                # (or whose target is a board it has previously been on) must NOT be
-                # migrated again — escalate to human instead.
-                _MIGRATE_NOTE_PREFIX = "migrated from board "
-                prior_boards: set[str] = set()
-                migration_count = 0
-                try:
-                    for ev in ctx.service.history(ticket.id):
-                        note = ev.note or ""
-                        if note.startswith(_MIGRATE_NOTE_PREFIX):
-                            migration_count += 1
-                            # Parse "migrated from board 'src' to 'dst'"
-                            # dst is repr-quoted, e.g. 'auto-mail'.
-                            to_pos = note.find(" to ")
-                            if to_pos != -1:
-                                rest = note[to_pos + 4 :]  # after " to "
-                                # Strip optional suffixes: " (was <state>)" and ": <note>"
-                                suffix_pos = rest.find(" (was ")
-                                if suffix_pos == -1:
-                                    suffix_pos = rest.find(": ")
-                                dst_repr = (
-                                    rest[:suffix_pos] if suffix_pos != -1 else rest
-                                )
-                                # Un-repr: strip leading/trailing quotes.
-                                dst_board = dst_repr.strip().strip("'\"")
-                                if dst_board:
-                                    prior_boards.add(dst_board)
-                except Exception:
-                    log.warning(
-                        "%s: could not read ticket history for anti-bounce check, "
-                        "escalating to human",
-                        ticket.id,
-                        exc_info=True,
-                    )
-                    (ws.artifacts_dir / "draft-original.md").write_text(
-                        draft if draft else "(title-only ticket, no body provided)",
-                        encoding="utf-8",
-                    )
-                    RefineAgentMixin._write_file_map(ws, [], only_if_absent=True)
-                    return RefineAgentMixin._resolved_outcome(
-                        ctx,
-                        draft,
-                        ticket.id,
-                        f"triage MIGRATE anti-bounce error: {triage.reason}",
-                        source=ticket.source,
-                        triage_note=triage.reason,
-                    )
-
-                if migration_count >= 1 or resolved_board in prior_boards:
-                    log.info(
-                        "%s: anti-bounce blocked MIGRATE to %r "
-                        "(prior boards=%r, migration_count=%d) — escalating to human",
-                        ticket.id,
-                        resolved_board,
-                        prior_boards,
-                        migration_count,
-                    )
-                    (ws.artifacts_dir / "draft-original.md").write_text(
-                        draft if draft else "(title-only ticket, no body provided)",
-                        encoding="utf-8",
-                    )
-                    RefineAgentMixin._write_file_map(ws, [], only_if_absent=True)
-                    return RefineAgentMixin._resolved_outcome(
-                        ctx,
-                        draft,
-                        ticket.id,
-                        f"triage MIGRATE anti-bounce blocked: {triage.reason}",
-                        source=ticket.source,
-                        triage_note=triage.reason,
-                    )
+                # Anti-bounce cap: escalate to human when the ticket has already
+                # been migrated (or the target is a board it has been on before).
+                anti_bounce = _anti_bounce_escalate(
+                    ctx, ws, draft, ticket, triage, resolved_board
+                )
+                if anti_bounce is not None:
+                    return anti_bounce
 
                 # Perform the migration.
                 try:
