@@ -112,10 +112,16 @@ SCOPE DISCIPLINE — always follow these limits:
   via ``ask_web_knowledge``.
   BAD: read_file("/usr/local/lib/python3.14/site-packages/pydantic_ai/usage.py")
   — this WILL fail with a sandbox error. Always decline gracefully.
-- CONFIRM PATHS: before calling read_file on a path you have not already
+- CONFIRM PATHS: before calling read_file OR a targeted grep (e.g.
+  ``grep -A5 'pattern' some/path.py``) on a path you have not already
   seen in a previous list_dir or grep result, verify it exists with
   list_dir on the parent directory or run_command with find. Never guess
   a file path.
+- NO GREP CHASING: when a grep produces NO output (exit 1 or empty
+  result), do NOT immediately issue a follow-up grep targeting the same
+  path with a slight pattern variation. Instead, list-dir the parent
+  directory first to confirm the path and any adjacent files actually
+  exist.
 - USE LIMIT + OFFSET ON read_file: never read a whole large file
   when you already know the line range. ``read_file`` accepts
   ``offset:`` and ``limit:`` arguments — pass them whenever grep
