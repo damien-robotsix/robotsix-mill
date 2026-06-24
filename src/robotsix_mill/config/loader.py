@@ -460,6 +460,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.completeness_check.enabled": "completeness_check_periodic",
     "periodic.completeness_check.interval_seconds": "completeness_check_interval_seconds",
     "periodic.completeness_check.memory_path": "completeness_check_memory_path",
+    "periodic.completeness_check.request_limit": "completeness_check_request_limit",
     # -- periodic.copy_paste --
     "periodic.copy_paste.enabled": "copy_paste_periodic",
     "periodic.copy_paste.interval_seconds": "copy_paste_interval_seconds",
