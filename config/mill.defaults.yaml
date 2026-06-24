@@ -65,6 +65,8 @@ core:
     max_fix_iterations: 8              # implement→test fix loop iterations before BLOCK
     max_stuck_cycles: 3                # re-entries to same stage without progress before BLOCK
     max_spend_usd_per_ticket: 20.0     # dollar cap per ticket — universal runaway-loop backstop (0.0 = disabled)
+    max_traces_per_ticket: 15          # trace-count circuit-breaker (0 = disabled)
+    max_openrouter_marginal_usd_per_ticket: 3.0  # OpenRouter marginal-spend breaker (0.0 = disabled)
     stage_timeout_seconds: 2400        # per-stage wall-clock timeout before BLOCK (0 = disabled)
     stage_timeout_overrides: {refine: 900}  # per-stage timeout overrides; refine caps at 900s (15 min), operators can override/disable (0) via MILL_STAGE_TIMEOUT_OVERRIDES / core.limits.stage_timeout_overrides
     transient_retries: 4               # max retries for transient network/model failures

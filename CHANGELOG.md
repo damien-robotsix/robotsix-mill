@@ -1,5 +1,7 @@
 ## 0.0.0 (unreleased)
 
+- Add per-ticket circuit breaker: `max_traces_per_ticket` (trace-count guard, default 15) and `max_openrouter_marginal_usd_per_ticket` (OpenRouter spend guard, default $3.00), wired through settings, YAML config aliases, and `config/mill.defaults.yaml`; integrated into `Worker._check_progress` with Langfuse `session_traces()` to block runaway loops that the dollar cap may miss.
+
 - Refactor `ci_fix.py`: extract stateless helpers (formatters, hashing, `_FailingContext`) into `ci_fix_helpers.py` and CodeQL FP triage subsystem into `ci_fix_codeql.py`; update all importers.
 
 - Wire `language_instructions_dir` to YAML config: add alias mapping in `_YAML_PATH_TO_ALIAS` (`core.language_instructions_dir`), default leaf in `config/mill.defaults.yaml`, and documentation row in `docs/configuration.md`.
