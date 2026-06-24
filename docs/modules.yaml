@@ -181,6 +181,23 @@ modules:
     dependencies: [config, core, forge, stages]
 
   # -------------------------------------------------------------------
+  # Component Agent (brokered monitor / config responder)
+  # -------------------------------------------------------------------
+
+  - id: component-agent
+    description: >-
+      Generic component-agent responder on the agent-comm broker: serves
+      monitor, config-get, and config-set over structured messages. Additive
+      to the existing board-agent and board-manager integrations.
+    paths:
+      - src/robotsix_mill/component_agent/__init__.py
+      - src/robotsix_mill/component_agent/responder.py
+      - src/robotsix_mill/component_agent/config_contract.py
+      - src/robotsix_mill/config/_settings_component_agent.py
+      - tests/runtime/test_component_agent.py
+    dependencies: [config, runtime]
+
+  # -------------------------------------------------------------------
   # Runners (glue between runtime workers and agents)
   # -------------------------------------------------------------------
 

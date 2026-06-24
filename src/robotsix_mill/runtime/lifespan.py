@@ -202,6 +202,8 @@ def create_lifespan(
             await _start_board_agent(app, settings, repo_config.board_id)
         if settings.board_manager_enabled:
             await _start_board_manager(app, settings, repo_config.board_id)
+        if settings.component_agent_enabled:
+            await _start_component_agent(app, settings)
 
         try:
             yield
@@ -210,6 +212,8 @@ def create_lifespan(
                 await _stop_board_manager(app)
             if settings.board_agent_enabled:
                 await _stop_board_agent(app)
+            if settings.component_agent_enabled:
+                await _stop_component_agent(app)
             await worker.stop()
 
     return lifespan
@@ -343,3 +347,53 @@ async def _stop_board_manager(app: FastAPI) -> None:
     if manager is not None:
         await asyncio.to_thread(manager.stop)
         del app.state.board_manager
+
+
+async def _start_component_agent(
+    app: FastAPI,
+    settings: Settings,
+) -> None:
+    """Start the component-agent responder (deferred import).
+
+    Registers a generic monitor/config responder on the broker under
+    ``component_agent_agent_id`` (default ``"component-robotsix-mill"``).
+    Mirrors the ``_start_board_agent`` pattern: lazy-import, graceful
+    degradation when the SDK is absent, host-empty guard.
+    """
+    import importlib.util
+
+    if not importlib.util.find_spec("robotsix_agent_comm"):
+        logging.getLogger(__name__).warning(
+            "component_agent_enabled=True but robotsix-agent-comm is not "
+            "installed; skipping component-agent start."
+        )
+        return
+
+    if not settings.component_agent_broker_host:
+        logging.getLogger(__name__).warning(
+            "component_agent_enabled=True but component_agent_broker_host "
+            "is unset; the component agent needs a broker to be reachable "
+            "— skipping start."
+        )
+        return
+
+    from ..component_agent.responder import ComponentAgentResponder
+
+    responder = ComponentAgentResponder(
+        agent_id=settings.component_agent_agent_id,
+        broker_host=settings.component_agent_broker_host,
+        broker_port=settings.component_agent_broker_port,
+        broker_scheme=settings.component_agent_broker_scheme,
+        broker_token=settings.component_agent_broker_token,
+        app_state=app.state,
+    )
+    await responder.start()
+    app.state.component_agent = responder
+
+
+async def _stop_component_agent(app: FastAPI) -> None:
+    """Stop the component agent if it was started."""
+    responder = getattr(app.state, "component_agent", None)
+    if responder is not None:
+        await responder.stop()
+        del app.state.component_agent

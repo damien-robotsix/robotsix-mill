@@ -480,3 +480,17 @@ board_manager:
   model: ""                                 # level-3 model ("" → llmio tier-3 default)
   recall_model: ""                          # level-1 recall model ("" → tier-1 default)
   max_conversations: 200                    # cap on retained question→answer turns
+
+# ---------------------------------------------------------------------------
+#  component_agent — generic monitor/config responder on the agent-comm broker.
+#  Answers /health, /config, /metrics etc. Off by default; enable with
+#  component_agent.enabled=true, broker_host, and broker_token.
+# ---------------------------------------------------------------------------
+
+component_agent:
+  enabled: false                            # master switch for the component agent
+  agent_id: component-robotsix-mill         # agent id registered on the broker
+  broker_host: ""                           # broker host; "" → disabled
+  broker_port: 443                          # broker port
+  broker_scheme: https                      # broker scheme (http/https)
+  broker_token: ""                          # bearer token for the broker
