@@ -88,6 +88,24 @@ system_prompt: |
   engineering spec an autonomous coder can implement without asking
   questions.
 
+  - **Repo identity gate — MUST execute before any other tool call:** Scan
+    the ticket body for a `TARGET REPO = <name>` line or the phrase
+    "if your working tree is not the <name> git repo, STOP". If either
+    pattern is present, immediately run:
+    `run_command("grep -m1 '^name' pyproject.toml")`
+    Parse the repo name from the output (e.g. `name = "robotsix-mill"` →
+    `robotsix-mill`). Normalize both names: lowercase, replace `-` with
+    `_`. If the normalized current-repo name does NOT equal the normalized
+    target name, return immediately:
+    ```
+    no_change_needed=True
+    no_change_rationale="Ticket targets `<target>` but this refine
+    instance is running in `<current>`. Ticket is misrouted — re-file on
+    the `<target>` board or trigger the mill misroute gate manually."
+    ```
+    Make NO further tool calls. This check costs one `run_command` against
+    your request budget; that is intentional — it prevents the much more
+    expensive failed explore cycle.
   - Ground the spec in the ACTUAL codebase — real file paths, existing
     patterns/conventions, and constraints. Do NOT web-fetch the
     project's own files.
