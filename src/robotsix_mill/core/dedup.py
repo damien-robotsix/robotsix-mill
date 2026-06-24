@@ -322,6 +322,74 @@ def _extract_paths(text: str) -> list[str]:
     return out
 
 
+def paths_excluding_out_of_scope(text: str) -> list[str]:
+    """Like :func:`_extract_paths`, but skip tokens inside out-of-scope regions.
+
+    Recognises two exclusion-marker styles:
+
+    - **Markdown heading** (``## Out of scope``, ``### Explicitly out of
+      scope``): exclusion runs from the heading through to the next
+      markdown heading (inclusive).  A non-out-of-scope heading
+      resumes capture.
+    - **Inline marker** (``**Explicitly out of scope — …**``, ``- Out of
+      scope: …``): exclusion runs from that line through the next blank
+      line OR the next markdown heading (paragraph boundary).
+
+    A path token that appears in BOTH an in-scope section AND an
+    out-of-scope section is still returned (because of the in-scope
+    occurrence).  De-duplicated, first-seen order.
+
+    Total/defensive: any parsing failure logs and returns an empty list
+    rather than raising into the caller."""
+    try:
+        captured: list[str] = []
+        excluding = False
+        exclusion_mode: str | None = None  # 'heading' or 'inline'
+
+        for line in (text or "").splitlines():
+            stripped = line.strip()
+            is_heading = stripped.startswith("#")
+
+            if is_heading:
+                title = stripped.lstrip("#").strip().casefold()
+                if title.startswith("out of scope") or title.startswith(
+                    "explicitly out of scope"
+                ):
+                    excluding = True
+                    exclusion_mode = "heading"
+                else:
+                    excluding = False
+                    exclusion_mode = None
+                continue
+
+            # Non-heading line: blank line ends inline-mode exclusion.
+            if excluding and exclusion_mode == "inline" and stripped == "":
+                excluding = False
+                exclusion_mode = None
+                captured.append(line)
+                continue
+
+            # Still inside an exclusion region (any mode).
+            if excluding:
+                continue
+
+            # Not excluding — check for an inline exclusion marker.
+            cleaned = stripped.lstrip("#*- ").strip().casefold()
+            if cleaned.startswith("out of scope") or cleaned.startswith(
+                "explicitly out of scope"
+            ):
+                excluding = True
+                exclusion_mode = "inline"
+                continue
+
+            captured.append(line)
+
+        return _extract_paths("\n".join(captured))
+    except Exception:  # noqa: BLE001 — best-effort
+        log.exception("dedup: paths_excluding_out_of_scope failed")
+        return []
+
+
 def _scope_paths(text: str) -> set[str]:
     """Return the path-like tokens (per :data:`_PATH_TOKEN_RE`, via
     :func:`_extract_paths`) that appear within a ticket body's

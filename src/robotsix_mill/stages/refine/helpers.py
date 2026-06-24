@@ -39,6 +39,7 @@ DEDUP_ALREADY_DONE_PREFIX = "already implemented in "
 FRESHNESS_STALE_PREFIX = "stale or invalid finding"
 OBSOLESCENCE_GAP_PREFIX = "obsolete — gap already resolved"
 REFINE_MILL_MISROUTE_PREFIX = "redirected to mill board"
+REFINE_MILL_CONSUMER_FOLLOWUP_PREFIX = "filed mill consumer follow-up"
 NON_IMPLEMENTATION_CLOSE_PREFIXES = (
     DEDUP_DUPLICATE_PREFIX,
     DEDUP_ALREADY_DONE_PREFIX,

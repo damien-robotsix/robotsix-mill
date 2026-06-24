@@ -31,6 +31,7 @@ from robotsix_mill.core.dedup import (
     find_inflight_overlap,
     find_prior_matching_ticket,
     normalize,
+    paths_excluding_out_of_scope,
 )
 
 _BOARD = "test-board"
@@ -1498,3 +1499,122 @@ def test_label_dedup_ci_fp_mismatch_without_candidate_labels(settings):
     )
     # No labels on candidate → can't match ci_fp:* → suppression kicks in.
     assert match is None
+
+
+# ---------------------------------------------------------------------------
+# paths_excluding_out_of_scope
+# ---------------------------------------------------------------------------
+
+
+def test_paths_excluding_out_of_scope_heading_form_exclusion():
+    """Paths under a ``## Out of scope`` heading are excluded."""
+    body = (
+        "## Scope\n\n"
+        "- src/robotsix_mill/core/db.py\n\n"
+        "## Out of scope\n\n"
+        "src/robotsix_mill/core/db.py\n\n"
+        "## Another heading\n\n"
+        "more text mentioning ci.yml\n"
+    )
+    result = paths_excluding_out_of_scope(body)
+    # The db.py path appears in BOTH Scope and Out of scope sections,
+    # so it's still returned (in-scope occurrence wins).
+    assert "src/robotsix_mill/core/db.py" in result
+    # ci.yml from after the out-of-scope section is captured.
+    assert "ci.yml" in result
+    # First-seen order: Scope's db.py then ci.yml.
+    assert result == ["src/robotsix_mill/core/db.py", "ci.yml"]
+
+
+def test_paths_excluding_out_of_scope_inline_bold_form_exclusion():
+    """Paths under an inline ``**Explicitly out of scope …**`` marker are excluded."""
+    body = (
+        "## Scope\n\n"
+        "- src/robotsix_llmio/core/sqlite_utils.py\n\n"
+        "**Explicitly out of scope — consumer migrations:** src/robotsix_mill/core/db.py\n\n"
+        "## Another heading\n\n"
+        "more text\n"
+    )
+    result = paths_excluding_out_of_scope(body)
+    assert "src/robotsix_llmio/core/sqlite_utils.py" in result
+    assert "src/robotsix_mill/core/db.py" not in result
+    assert result == ["src/robotsix_llmio/core/sqlite_utils.py"]
+
+
+def test_paths_excluding_out_of_scope_path_in_both_sections_returned():
+    """A path in BOTH an in-scope section and an out-of-scope section is
+    still returned because of the in-scope occurrence."""
+    body = (
+        "## Scope\n\n"
+        "Edit src/foo.py to add the new helper.\n\n"
+        "## Out of scope\n\n"
+        "Do NOT touch src/foo.py in this ticket.\n"
+    )
+    result = paths_excluding_out_of_scope(body)
+    assert "src/foo.py" in result
+
+
+def test_paths_excluding_out_of_scope_no_marker_behaves_like_extract_paths():
+    """When there are no out-of-scope markers, the function behaves like
+    ``_extract_paths``."""
+    from robotsix_mill.core.dedup import _extract_paths
+
+    body = "Fix runtime/worker.py and ci.yml, see CONTRIBUTING.md (e.g. this)"
+    result = paths_excluding_out_of_scope(body)
+    expected = _extract_paths(body)
+    assert result == expected
+
+
+def test_paths_excluding_out_of_scope_inline_until_blank_line():
+    """Inline exclusion stops at the next blank line, then paths are captured again."""
+    body = (
+        "## Scope\n\n"
+        "src/robotsix_llmio/core/foo.py\n\n"
+        "**Explicitly out of scope:**\n"
+        "- src/robotsix_mill/core/db.py\n"
+        "- src/robotsix_mill/core/other.py\n"
+        "\n"
+        "Real content mentioning ci.yml\n"
+    )
+    result = paths_excluding_out_of_scope(body)
+    assert "src/robotsix_llmio/core/foo.py" in result
+    assert "src/robotsix_mill/core/db.py" not in result
+    assert "src/robotsix_mill/core/other.py" not in result
+    assert "ci.yml" in result
+
+
+def test_paths_excluding_out_of_scope_heading_exclusion_until_next_heading():
+    """Heading-based exclusion runs until the next heading."""
+    body = (
+        "## Scope\n\n"
+        "src/keep.py\n\n"
+        "### Explicitly out of scope\n\n"
+        "src/discard.py\n\n"
+        "src/also_discard.py\n\n"
+        "## Acceptance criteria\n\n"
+        "src/keep2.py\n"
+    )
+    result = paths_excluding_out_of_scope(body)
+    assert "src/keep.py" in result
+    assert "src/discard.py" not in result
+    assert "src/also_discard.py" not in result
+    assert "src/keep2.py" in result
+
+
+def test_paths_excluding_out_of_scope_bullet_out_of_scope_marker():
+    """``- Out of scope: …`` bullet-style inline marker is recognised."""
+    body = (
+        "## Scope\n\n"
+        "src/robotsix_llmio/core/foo.py\n\n"
+        "- Out of scope: src/robotsix_mill/core/db.py\n\n"
+        "More real content\n"
+    )
+    result = paths_excluding_out_of_scope(body)
+    assert "src/robotsix_llmio/core/foo.py" in result
+    assert "src/robotsix_mill/core/db.py" not in result
+
+
+def test_paths_excluding_out_of_scope_empty_text_returns_empty():
+    """Empty or None text returns an empty list."""
+    assert paths_excluding_out_of_scope("") == []
+    assert paths_excluding_out_of_scope(None) == []

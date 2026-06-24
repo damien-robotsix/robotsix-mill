@@ -33,7 +33,7 @@ import logging
 import pathlib
 
 from ..config import Settings
-from .dedup import _extract_paths
+from .dedup import paths_excluding_out_of_scope
 from .repo_layout import resolve_under_src
 from .service import TicketService
 
@@ -222,7 +222,8 @@ def referenced_mill_paths_absent(
     """Return mill-prefixed file-path tokens that are absent from *repo_dir*.
 
     Extracts candidate path tokens from ``f"{title}\\n{body}"`` (via
-    :func:`_extract_paths`), keeps only those whose normalized form
+    :func:`paths_excluding_out_of_scope`, which skips tokens inside
+    out-of-scope regions), keeps only those whose normalized form
     starts with one of :data:`MILL_PATH_PREFIXES` (case-insensitive),
     and returns the subset for which ``(repo_dir / token).exists()``
     is ``False``.
@@ -236,7 +237,7 @@ def referenced_mill_paths_absent(
         return []
     haystack = f"{title or ''}\n{body or ''}"
     try:
-        candidates = _extract_paths(haystack)
+        candidates = paths_excluding_out_of_scope(haystack)
     except Exception:
         return []
     absent: list[str] = []
@@ -252,3 +253,69 @@ def referenced_mill_paths_absent(
             if resolve_under_src(repo_dir, token) is None:
                 absent.append(token)
     return absent
+
+
+def referenced_local_deliverable_paths(
+    title: str | None,
+    body: str | None,
+    repo_dir: pathlib.Path | None,
+) -> list[str]:
+    """In-scope path tokens that are NOT mill-prefixed AND whose package
+    root directory exists under *repo_dir* (existing or to-be-created
+    files in a package that lives on the current checkout).
+
+    Extracts candidates via :func:`paths_excluding_out_of_scope` (so
+    out-of-scope and excluded-region paths never count), excludes any
+    token matching a :data:`MILL_PATH_PREFIXES` prefix (case-insensitive),
+    and keeps only tokens whose **package root** directory exists on
+    disk.  The package root is computed as:
+
+    - ``src/<segment-1>/`` when the token starts with ``src/`` and has
+      at least two segments (e.g. ``src/robotsix_llmio/core/foo.py`` →
+      ``src/robotsix_llmio``).
+    - Otherwise the first path segment (before the first ``/``).
+
+    A stray ``src/foo.py``-style token (only one segment under ``src/``)
+    is never treated as a local deliverable — it requires ≥2 segments.
+
+    *repo_dir* is ``None`` → returns ``[]`` immediately.
+    Pure / read-only, must never raise.
+    """
+    if repo_dir is None:
+        return []
+    haystack = f"{title or ''}\n{body or ''}"
+    try:
+        candidates = paths_excluding_out_of_scope(haystack)
+    except Exception:
+        return []
+    result: list[str] = []
+    for token in candidates:
+        try:
+            token_lower = token.lower()
+        except Exception:
+            log.debug(
+                "referenced_local_deliverable_paths: token.lower() failed for %r",
+                token,
+            )
+            continue
+        # Exclude mill-prefixed consumer paths.
+        if any(token_lower.startswith(prefix.lower()) for prefix in MILL_PATH_PREFIXES):
+            continue
+        # Compute package root.
+        parts = token.split("/")
+        if parts[0] == "src" and len(parts) >= 2:
+            package_root = f"src/{parts[1]}"
+        else:
+            package_root = parts[0]
+        try:
+            if (repo_dir / package_root).is_dir():
+                if token not in result:
+                    result.append(token)
+        except Exception:
+            log.debug(
+                "referenced_local_deliverable_paths: is_dir check failed for %r",
+                package_root,
+                exc_info=True,
+            )
+            continue
+    return result

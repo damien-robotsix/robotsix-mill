@@ -13,6 +13,7 @@ import logging
 from types import SimpleNamespace
 
 from robotsix_mill.core.draft_target import (
+    referenced_local_deliverable_paths,
     referenced_mill_paths_absent,
     resolve_mill_service,
 )
@@ -227,3 +228,193 @@ def test_referenced_mill_paths_absent_root_present_still_present(tmp_path):
         repo_dir=tmp_path,
     )
     assert result == []
+
+
+# ---------------------------------------------------------------------------
+# Tests for ``referenced_mill_paths_absent`` — out-of-scope exclusion
+# ---------------------------------------------------------------------------
+
+
+def test_referenced_mill_paths_absent_excludes_out_of_scope_heading(tmp_path):
+    """A mill path appearing ONLY under ``## Explicitly out of scope``
+    is excluded → returns []."""
+    body = (
+        "## Scope\n\n"
+        "Create src/robotsix_llmio/core/sqlite_utils.py\n\n"
+        "## Explicitly out of scope\n\n"
+        "src/robotsix_mill/core/db.py is NOT modified here.\n"
+    )
+    result = referenced_mill_paths_absent(
+        title="Extract SQLite helpers",
+        body=body,
+        repo_dir=tmp_path,
+    )
+    # The only mill path is under an out-of-scope heading → excluded.
+    assert result == []
+
+
+def test_referenced_mill_paths_absent_excludes_inline_out_of_scope_marker(tmp_path):
+    """A mill path appearing ONLY under an inline out-of-scope marker
+    is excluded → returns []."""
+    body = (
+        "## Scope\n\n"
+        "Create src/robotsix_llmio/core/sqlite_utils.py\n\n"
+        "**Explicitly out of scope — consumer migrations:** "
+        "src/robotsix_mill/core/db.py\n"
+    )
+    result = referenced_mill_paths_absent(
+        title="Extract SQLite helpers",
+        body=body,
+        repo_dir=tmp_path,
+    )
+    assert result == []
+
+
+def test_referenced_mill_paths_absent_still_returns_in_scope_mill_paths(tmp_path):
+    """A mill path in an in-scope section is still returned (absent from disk)."""
+    body = (
+        "## Scope\n\n"
+        "Migrate agent_definitions/language_instructions/python.md\n\n"
+        "## Out of scope\n\n"
+        "Do NOT touch src/robotsix_mill/core/other.py\n"
+    )
+    result = referenced_mill_paths_absent(
+        title="Update language instructions",
+        body=body,
+        repo_dir=tmp_path,
+    )
+    assert result == ["agent_definitions/language_instructions/python.md"]
+
+
+# ---------------------------------------------------------------------------
+# Tests for ``referenced_local_deliverable_paths``
+# ---------------------------------------------------------------------------
+
+
+def test_referenced_local_deliverable_paths_repo_dir_none_returns_empty():
+    """``repo_dir`` is None → returns []."""
+    result = referenced_local_deliverable_paths(
+        title="Create src/robotsix_llmio/core/foo.py",
+        body="",
+        repo_dir=None,
+    )
+    assert result == []
+
+
+def test_referenced_local_deliverable_paths_existing_package(tmp_path):
+    """A path whose package root exists on disk → returned."""
+    # Create the package directory.
+    (tmp_path / "src" / "robotsix_llmio").mkdir(parents=True)
+    result = referenced_local_deliverable_paths(
+        title="Create src/robotsix_llmio/core/sqlite_utils.py",
+        body="",
+        repo_dir=tmp_path,
+    )
+    assert result == ["src/robotsix_llmio/core/sqlite_utils.py"]
+
+
+def test_referenced_local_deliverable_paths_excludes_mill_prefixed(tmp_path):
+    """Mill-prefixed paths (e.g. ``src/robotsix_mill/…``) are excluded
+    from local deliverables even if the directory happens to exist."""
+    # Create the mill package directory just to be sure.
+    (tmp_path / "src" / "robotsix_mill").mkdir(parents=True)
+    result = referenced_local_deliverable_paths(
+        title="Fix src/robotsix_mill/core/db.py",
+        body="",
+        repo_dir=tmp_path,
+    )
+    # Mill-prefixed → excluded, even though the package dir exists.
+    assert result == []
+
+
+def test_referenced_local_deliverable_paths_excludes_agent_definitions(tmp_path):
+    """``agent_definitions/…`` paths are mill-prefixed → excluded."""
+    (tmp_path / "agent_definitions").mkdir(parents=True, exist_ok=True)
+    result = referenced_local_deliverable_paths(
+        title="Update agent_definitions/triage.yaml",
+        body="",
+        repo_dir=tmp_path,
+    )
+    assert result == []
+
+
+def test_referenced_local_deliverable_paths_package_root_not_exist(tmp_path):
+    """A path whose package root does NOT exist on disk → excluded."""
+    # Do NOT create the package directory.
+    result = referenced_local_deliverable_paths(
+        title="Create src/nonexistent_pkg/core/foo.py",
+        body="",
+        repo_dir=tmp_path,
+    )
+    assert result == []
+
+
+def test_referenced_local_deliverable_paths_bare_src_not_treated_as_local(tmp_path):
+    """A stray ``src/foo.py``-style token (only one segment under src/)
+    is NOT treated as a local deliverable (requires ≥2 segments)."""
+    # First call with no src/ dir — should return [].
+    _first = referenced_local_deliverable_paths(
+        title="Fix src/foo.py",
+        body="",
+        repo_dir=tmp_path,
+    )
+    assert _first == []
+    # Create src/ to make sure the "≥2 segments" guard works:
+    # even when src/ exists, src/foo.py is still excluded because
+    # the heuristic requires src/<segment>/... (≥2 segments).
+    (tmp_path / "src").mkdir(parents=True, exist_ok=True)
+    result2 = referenced_local_deliverable_paths(
+        title="Fix src/foo.py",
+        body="",
+        repo_dir=tmp_path,
+    )
+    # Still excluded: the heuristic requires src/<segment>/...
+    assert result2 == []
+
+
+def test_referenced_local_deliverable_paths_excludes_out_of_scope(tmp_path):
+    """Paths under out-of-scope markers are excluded from local deliverables."""
+    (tmp_path / "src" / "robotsix_llmio").mkdir(parents=True)
+    body = (
+        "## Scope\n\n"
+        "Create src/robotsix_llmio/core/sqlite_utils.py\n\n"
+        "## Out of scope\n\n"
+        "src/robotsix_llmio/core/other.py is not touched.\n"
+    )
+    result = referenced_local_deliverable_paths(
+        title="Extract SQLite helpers",
+        body=body,
+        repo_dir=tmp_path,
+    )
+    assert "src/robotsix_llmio/core/sqlite_utils.py" in result
+    assert "src/robotsix_llmio/core/other.py" not in result
+
+
+def test_referenced_local_deliverable_paths_dedup_first_seen_order(tmp_path):
+    """Results are de-duplicated, preserving first-seen order."""
+    (tmp_path / "src" / "robotsix_llmio").mkdir(parents=True)
+    body = (
+        "Create src/robotsix_llmio/core/a.py\n"
+        "Also src/robotsix_llmio/core/b.py\n"
+        "And again src/robotsix_llmio/core/a.py\n"
+    )
+    result = referenced_local_deliverable_paths(
+        title="Multiple files",
+        body=body,
+        repo_dir=tmp_path,
+    )
+    assert result == [
+        "src/robotsix_llmio/core/a.py",
+        "src/robotsix_llmio/core/b.py",
+    ]
+
+
+def test_referenced_local_deliverable_paths_non_src_package(tmp_path):
+    """A non-src/ path whose first segment exists as a directory → returned."""
+    (tmp_path / "tests").mkdir(parents=True, exist_ok=True)
+    result = referenced_local_deliverable_paths(
+        title="Add tests/core/test_foo.py",
+        body="",
+        repo_dir=tmp_path,
+    )
+    assert result == ["tests/core/test_foo.py"]
