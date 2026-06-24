@@ -32,7 +32,7 @@ core:
     coordinator_requests: 200          # per-ticket request cap for implement (coordinator)
     coordinator_max_tool_calls: 300       # hard cap on total tool calls per coordinator trace (runaway-loop backstop)
     subtask_request_limit: 30          # per-subtask request cap for spawn_subtask sub-agents
-    test_requests: 16                  # per-call cap for test-distillation sub-agent
+    test_requests: 30                  # per-call cap for test-distillation sub-agent
     consult_requests: 15               # per-call cap for domain-expert consultation sub-agent
     explore_requests: 100              # per-call cap for explore sub-agent
     explore_max_tokens: 4096              # output token cap for explore sub-agent responses

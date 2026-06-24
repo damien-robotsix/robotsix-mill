@@ -20,6 +20,7 @@ from robotsix_mill.agents.testing import (
     _env_error_diag,
     _evaluate_gate_result,
     _load_file_map,
+    is_network_dependent_failure,
     run_smoke_agent,
     run_test_agent,
     smoke_paths_match,
@@ -905,3 +906,68 @@ def test_run_smoke_agent_broken_pyproject_toml_short_circuits(monkeypatch, tmp_p
     assert passed is False
     assert "invalid TOML" in msg
     assert sandbox_called is False
+
+
+# ---------------------------------------------------------------------------
+# is_network_dependent_failure
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "out,expected",
+    [
+        # JSONDecodeError on empty response — hallmark of blocked network
+        (
+            "json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)",
+            True,
+        ),
+        # httpx ConnectError
+        ("httpx.ConnectError: [Errno 111] Connection refused", True),
+        # requests ConnectionError
+        (
+            "requests.exceptions.ConnectionError: "
+            "HTTPConnectionPool(host='api.openai.com', port=443): "
+            "Max retries exceeded",
+            True,
+        ),
+        # ConnectionRefusedError
+        ("ConnectionRefusedError: [Errno 111] Connection refused", True),
+        # RemoteDisconnected (httpx/httpcore)
+        ("httpcore.RemoteDisconnected: Server disconnected", True),
+        # DNS failure — glibc
+        ("socket.gaierror: [Errno -2] Name or service not known", True),
+        # DNS failure — macOS
+        ("socket.gaierror: [Errno 8] nodename nor servname provided", True),
+        # getaddrinfo
+        ("getaddrinfo ENOTFOUND api.langfuse.com", True),
+        # Temporary failure in name resolution
+        ("Temporary failure in name resolution", True),
+        # Failed to resolve (httpx)
+        ("Failed to resolve 'api.openai.com'", True),
+        # Combine: connection + JSONDecodeError
+        (
+            "httpx.ConnectError\njson.decoder.JSONDecodeError: "
+            "Expecting value: line 1 column 1 (char 0)",
+            True,
+        ),
+        # --- False cases: genuine test failures ---
+        # Plain AssertionError
+        ("AssertionError: assert 1 == 2", False),
+        # pytest assertion
+        ("E       assert 1 == 2", False),
+        # JSONDecodeError on NON-empty data (fixture with stray brace)
+        (
+            "json.decoder.JSONDecodeError: Expecting ',' delimiter: "
+            "line 42 column 15 (char 981)",
+            False,
+        ),
+        # Normal test failure output
+        ("FAILED tests/test_foo.py::test_bar - assert 1 == 2", False),
+        # Empty string
+        ("", False),
+        # ImportError (not network)
+        ("ModuleNotFoundError: No module named 'foo'", False),
+    ],
+)
+def test_is_network_dependent_failure(out, expected):
+    assert is_network_dependent_failure(out) == expected

@@ -7,9 +7,11 @@ import subprocess
 from pathlib import Path
 
 from ...agents import prerequisite
+from ...agents.testing import is_network_dependent_failure
 from ...config import target_branch_for
 from ...core.models import SourceKind, Ticket
 from ...core.states import State
+from ...forge.base import get_forge
 from ...vcs import git_ops
 from .. import dependency_fix
 from ..base import Outcome, StageContext
@@ -25,6 +27,32 @@ from ._shared import (
     _vendored_dep_roots,
     log,
 )
+
+
+def classify_baseline_verdict(
+    ci_conclusion: str
+    | None,  # forge commit_ci_conclusion(...)["conclusion"], or None when unavailable
+    network_dependent: bool,  # is_network_dependent_failure(out)
+) -> str:
+    """Pure decision helper: should the baseline gate proceed or block?
+
+    Returns ``"proceed"`` (sandbox failure is an environment artifact) or
+    ``"block"`` (real main breakage or indeterminate without network
+    signature).
+
+    Decision table:
+    - CI green  → ``"proceed"`` (always).
+    - CI red    → ``"block"`` (real breakage).
+    - CI unknown (``None`` / ``"pending"``):
+      ``"proceed"`` iff *network_dependent*, else ``"block"``.
+    """
+    if ci_conclusion == "success":
+        return "proceed"
+    if ci_conclusion == "failure":
+        return "block"
+    # CI unavailable or pending: proceed only when the failure looks
+    # network-dependent (sandbox artifact), otherwise block.
+    return "proceed" if network_dependent else "block"
 
 
 class ValidationMixin(_ImplementStageBase):
@@ -709,6 +737,58 @@ class ValidationMixin(_ImplementStageBase):
         cache_path.write_text(json.dumps(cache_data, indent=2), encoding="utf-8")
 
         if passed:
+            return None
+
+        # --- baseline CI cross-check ---
+        # The sandbox blocks egress, so network-dependent tests fail even
+        # when main is green on GitHub CI. Cross-check the forge's commit-
+        # CI status to avoid false-blocking every ticket on a repo whose
+        # main is actually green.
+        try:
+            forge = get_forge(settings, repo_config=ctx.repo_config)
+            status = forge.commit_ci_conclusion(sha=base_sha)
+        except Exception:
+            log.debug(
+                "%s: forge.commit_ci_conclusion raised — treating CI as unavailable",
+                ticket.id,
+                exc_info=True,
+            )
+            status = None
+        ci_conclusion = status.get("conclusion") if status else None
+        network_dependent = is_network_dependent_failure(diag)
+        verdict = classify_baseline_verdict(ci_conclusion, network_dependent)
+
+        if verdict == "proceed":
+            # Sandbox artifact — record a warning and proceed.
+            names_or_diag = diag[:300]
+            if ci_conclusion == "success":
+                warning_msg = (
+                    f"sandbox suite failed but GitHub CI on {base_sha[:8]} "
+                    f"is green — proceeding; failing tests likely "
+                    f"network-dependent: {names_or_diag}"
+                )
+            else:
+                warning_msg = (
+                    f"CI status unavailable for {base_sha[:8]}; sandbox "
+                    f"failure matched network-error signature — proceeding; "
+                    f"failing tests: {names_or_diag}"
+                )
+            log.warning("%s: %s", ticket.id, warning_msg)
+            try:
+                ctx.service.add_history_note(ticket.id, warning_msg)
+            except Exception:  # noqa: BLE001 — history note is best-effort
+                log.warning(
+                    "%s: failed to record baseline-warning history note",
+                    ticket.id,
+                )
+            # Overwrite the baseline cache as passing so retries don't
+            # re-run and re-block.
+            cache_data = {
+                "passed": True,
+                "diagnosis": warning_msg,
+                "base_sha": base_sha,
+            }
+            cache_path.write_text(json.dumps(cache_data, indent=2), encoding="utf-8")
             return None
 
         # Write the implement.md artifact so the blocked ticket has a

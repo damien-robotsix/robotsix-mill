@@ -115,6 +115,16 @@ class Forge(ABC):
         20 per failing check (adapter-enforced truncation).
         """
 
+    def commit_ci_conclusion(self, *, sha: str) -> dict | None:
+        """Aggregate CI conclusion for an arbitrary commit SHA (no PR).
+
+        Default returns ``None`` (CI status unavailable) — non-GitHub forges
+        must opt-in by overriding.  Same return shape as ``check_status``:
+        ``{"conclusion": "success"|"failure"|"pending"|None,
+           "failing": [...], "pending": [...]}``.
+        """
+        return None
+
     @abstractmethod
     def pr_files(self, *, source_branch: str) -> list[dict]:
         """Return the file-list diff of the PR/MR for *source_branch*.

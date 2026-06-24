@@ -106,13 +106,16 @@ class _CoreSettings(BaseModel):
     # easily exceeds 8 calls on a non-trivial failure (live case: the
     # a74b baseline distill burned 2 of its 8 requests on a wrong
     # tool-arg and a wrong-cwd guess, then died mid-diagnosis with
-    # "exceed the request_limit of 8"). 16 gives a real diagnosis budget
-    # while flash stays cheap; cost-bounded by the ticket-level cap.
-    # Aligned with config/mill.defaults.yaml's core.limits.test_requests
-    # (16). The yaml value wins at runtime via _YAML_PATH_TO_ALIAS; this
-    # just stops the dry-Settings() default from contradicting it on
-    # machines without a yaml override.
-    test_request_limit: int = Field(default=16, ge=1)
+    # "exceed the request_limit of 8"). 30 gives a real diagnosis budget
+    # — the baseline-distill agent must inspect failing output, read
+    # sources, and name the failing test; 16 was observed to run out
+    # before producing a usable diagnosis on multi-test failures.
+    # Cost-bounded by the ticket-level cap. Aligned with
+    # config/mill.defaults.yaml's core.limits.test_requests (30). The
+    # yaml value wins at runtime via _YAML_PATH_TO_ALIAS; this just stops
+    # the dry-Settings() default from contradicting it on machines without
+    # a yaml override.
+    test_request_limit: int = Field(default=30, ge=1)
     # Max implement→test fix iterations before BLOCKing. Complex
     # tickets may need several correction rounds.
     max_fix_iterations: int = Field(default=8, ge=0)

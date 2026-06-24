@@ -21,7 +21,9 @@ from robotsix_mill.core.models import SourceKind
 from robotsix_mill.core.states import State
 from robotsix_mill.stages.base import Outcome
 from robotsix_mill.stages.implement import validation as validation_mod
-from robotsix_mill.stages.implement.validation import ValidationMixin
+from robotsix_mill.stages.implement.validation import (
+    ValidationMixin,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -969,3 +971,181 @@ def test_scope_guardrail_vendored_dirs_logged(monkeypatch, caplog):
     assert len(step_events) == 1
     assert "auto-ignored vendored-dep dir" in step_events[0][1]
     assert ".pip-packages" in step_events[0][1]
+
+
+# ---------------------------------------------------------------------------
+# classify_baseline_verdict — pure decision helper
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "ci_conclusion,network_dependent,expected",
+    [
+        # CI green + sandbox fail → proceed
+        ("success", True, "proceed"),
+        ("success", False, "proceed"),
+        # CI red + sandbox fail → block
+        ("failure", True, "block"),
+        ("failure", False, "block"),
+        # CI unknown (None) + network-error signature → proceed
+        (None, True, "proceed"),
+        # CI unknown (None) + real assertion failure → block
+        (None, False, "block"),
+        # CI pending + network-error → proceed
+        ("pending", True, "proceed"),
+        # CI pending + real failure → block
+        ("pending", False, "block"),
+    ],
+)
+def test_classify_baseline_verdict(ci_conclusion, network_dependent, expected):
+    assert (
+        validation_mod.classify_baseline_verdict(ci_conclusion, network_dependent)
+        == expected
+    )
+
+
+# ---------------------------------------------------------------------------
+# _run_baseline_check — CI cross-check integration tests
+# ---------------------------------------------------------------------------
+
+
+def test_baseline_check_ci_green_overrides_sandbox_fail(tmp_path, monkeypatch):
+    """When sandbox fails but GitHub CI is green → proceed with warning."""
+    _install_baseline_seams(
+        monkeypatch,
+        test_result=(
+            False,
+            "JSONDecodeError: Expecting value: line 1 column 1 (char 0)",
+        ),
+    )
+    ctx = _baseline_ctx(tmp_path)
+
+    # Stub forge.commit_ci_conclusion to return green.
+    monkeypatch.setattr(
+        validation_mod,
+        "get_forge",
+        lambda *a, **kw: SimpleNamespace(
+            commit_ci_conclusion=lambda sha: {
+                "conclusion": "success",
+                "failing": [],
+                "pending": [],
+            }
+        ),
+    )
+
+    out = _call_baseline(ctx)
+    # Must proceed (return None), not block.
+    assert out is None
+
+    # Cache must be written as passing.
+    cache_path = tmp_path / "baseline_check.json"
+    assert cache_path.exists()
+    cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert cache["passed"] is True
+    assert cache["base_sha"] == _REMOTE_SHA
+    assert "GitHub CI" in cache["diagnosis"]
+
+    # History note must be recorded.
+    assert ctx.history_notes
+    assert any("GitHub CI" in note for _, note in ctx.history_notes)
+
+
+def test_baseline_check_ci_red_still_blocks(tmp_path, monkeypatch):
+    """When sandbox fails AND GitHub CI is red → still BLOCKED."""
+    _install_baseline_seams(monkeypatch, test_result=(False, "some real failure"))
+    rec = _install_spawn_finalize(monkeypatch)
+    ctx = _baseline_ctx(tmp_path)
+
+    monkeypatch.setattr(
+        validation_mod,
+        "get_forge",
+        lambda *a, **kw: SimpleNamespace(
+            commit_ci_conclusion=lambda sha: {
+                "conclusion": "failure",
+                "failing": [{"name": "CI"}],
+                "pending": [],
+            }
+        ),
+    )
+
+    out = _call_baseline(ctx)
+    assert out is rec.sentinel
+    assert out.next_state is State.BLOCKED
+
+    # Cache must be written as failing (original behavior preserved).
+    cache_path = tmp_path / "baseline_check.json"
+    assert cache_path.exists()
+    cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert cache["passed"] is False
+
+
+def test_baseline_check_ci_unavailable_network_signature_proceeds(
+    tmp_path, monkeypatch
+):
+    """CI unavailable + network-error signature → proceed."""
+    _install_baseline_seams(
+        monkeypatch,
+        test_result=(False, "httpx.ConnectError: Connection refused"),
+    )
+    ctx = _baseline_ctx(tmp_path)
+
+    monkeypatch.setattr(
+        validation_mod,
+        "get_forge",
+        lambda *a, **kw: SimpleNamespace(commit_ci_conclusion=lambda sha: None),
+    )
+
+    out = _call_baseline(ctx)
+    assert out is None
+    cache_path = tmp_path / "baseline_check.json"
+    assert cache_path.exists()
+    cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert cache["passed"] is True
+    assert "network-error" in cache["diagnosis"]
+
+
+def test_baseline_check_ci_unavailable_real_failure_blocks(tmp_path, monkeypatch):
+    """CI unavailable + real assertion failure → block (conservative)."""
+    _install_baseline_seams(
+        monkeypatch,
+        test_result=(False, "AssertionError: assert 1 == 2"),
+    )
+    rec = _install_spawn_finalize(monkeypatch)
+    ctx = _baseline_ctx(tmp_path)
+
+    monkeypatch.setattr(
+        validation_mod,
+        "get_forge",
+        lambda *a, **kw: SimpleNamespace(commit_ci_conclusion=lambda sha: None),
+    )
+
+    out = _call_baseline(ctx)
+    assert out is rec.sentinel
+    assert out.next_state is State.BLOCKED
+    assert rec.finalize_calls
+    assert rec.spawn_calls
+
+
+def test_baseline_check_forge_raises_treated_as_unavailable(tmp_path, monkeypatch):
+    """When forge.commit_ci_conclusion raises, treat as CI unavailable."""
+    _install_baseline_seams(
+        monkeypatch,
+        test_result=(False, "ConnectError: Connection refused"),
+    )
+    ctx = _baseline_ctx(tmp_path)
+
+    monkeypatch.setattr(
+        validation_mod,
+        "get_forge",
+        lambda *a, **kw: SimpleNamespace(
+            commit_ci_conclusion=lambda sha: (_ for _ in ()).throw(RuntimeError("boom"))
+        ),
+    )
+
+    out = _call_baseline(ctx)
+    # CI unavailable + network signature → proceed
+    assert out is None
+    cache_path = tmp_path / "baseline_check.json"
+    assert cache_path.exists()
+    cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert cache["passed"] is True
