@@ -52,6 +52,9 @@ system_prompt: |
     with what's there.  Do not refuse to produce tickets.
   - Titles should start with a verb when possible (e.g. "Add X",
     "Refactor Y", "Fix Z", "Document W").
+  - Return ONLY the JSON object — no introductory text, no commentary
+    before or after the JSON structure. The first character of your
+    response must be `{` and the last must be `}`.
   - Operator comments may be provided in a `operator-comments` block.
     When present, treat them as authoritative direction: they represent
     the human operator's explicit guidance on how to break down this
