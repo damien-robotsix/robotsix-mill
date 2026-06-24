@@ -2592,6 +2592,7 @@ def test_derive_conclusion_cancelled_among_passing_is_pending():
     out = _derive_check_conclusion(None, "", "o", "r", {}, runs)
     assert out["conclusion"] == "pending"
     assert out["failing"] == []
+    assert out["pending"] == ["mypy"]
 
 
 def test_derive_conclusion_real_failure_still_fails_despite_cancelled():
@@ -2605,6 +2606,7 @@ def test_derive_conclusion_real_failure_still_fails_despite_cancelled():
     out = _derive_check_conclusion(None, "", "o", "r", {}, runs)
     assert out["conclusion"] == "failure"
     assert [f for f in out["failing"]]
+    assert out["pending"] == ["mypy"]
 
 
 def test_derive_conclusion_superseded_cancelled_same_name_uses_success():
@@ -2649,3 +2651,4 @@ def test_derive_conclusion_superseded_cancelled_same_name_uses_success():
     out = _derive_check_conclusion(None, "", "o", "r", {}, runs)
     assert out["conclusion"] == "success"
     assert out["failing"] == []
+    assert out["pending"] == []

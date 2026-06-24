@@ -42,10 +42,12 @@ def _ci_truly_green(conclusion: str | None, pr: dict[str, Any]) -> bool:
     then reddens the target branch (observed: fbf8/PR#1423).
 
     GitHub's ``mergeable_state`` is the authoritative combined view:
-    ``"clean"`` means mergeable AND every required check passed. While checks
-    are still settling it is ``"blocked"``/``"behind"``/``"unknown"`` — never
-    ``"clean"``. So we require ``conclusion == "success"`` AND a clean
-    ``mergeable_state``.
+    ``"clean"`` means mergeable AND every required check passed;
+    ``"unstable"`` means mergeable but a non-required status is non-green
+    (the required gates passed — the PR IS mergeable). While checks are
+    still settling the state is ``"blocked"``/``"behind"``/``"unknown"`` —
+    those genuinely mean not-ready. So we require ``conclusion == "success"``
+    AND a promotable ``mergeable_state``.
 
     Other forges (GitLab) omit ``mergeable_state`` (``None``); there we fall
     back to trusting the CI conclusion alone (no regression for them).
@@ -53,7 +55,7 @@ def _ci_truly_green(conclusion: str | None, pr: dict[str, Any]) -> bool:
     if conclusion != "success":
         return False
     mergeable_state = pr.get("mergeable_state")
-    return mergeable_state is None or mergeable_state == "clean"
+    return mergeable_state in (None, "clean", "unstable")
 
 
 def _load_pr_urls(ws_artifacts_dir: Path) -> list[dict] | None:
