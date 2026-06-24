@@ -722,7 +722,6 @@ modules:
       - renovate.json
       - .github/**/*
       - .jscpd.json
-      - changes/**/*
       - .python-version
       - .trivyignore
       - .secrets.baseline
