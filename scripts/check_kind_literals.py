@@ -58,7 +58,9 @@ def main() -> int:
             if _is_skip_line(line):
                 continue
             if KIND_BARE_STRING_RE.search(line):
-                violations.append((str(py_file.relative_to(repo_root)), i, line.strip()))
+                violations.append(
+                    (str(py_file.relative_to(repo_root)), i, line.strip())
+                )
 
     if violations:
         print(
