@@ -12,17 +12,16 @@ Failure after max attempts escalates to BLOCKED (resumable).
 
 from __future__ import annotations
 
-import hashlib
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any
 
 from ..agents.ci_fixing import CiFixResult, run_ci_fix_agent
 from ..config import target_branch_for
 from ..core.models import SourceKind, Ticket
 from ..core.states import State
-from ..forge import Forge, get_forge
+from ..forge import get_forge
 from ..forge.auth import _resolve_remote_url, github_token
 from ..forge.github_code_scanning import CodeScanningAlertsUnavailable
 from ..runners.pass_runner import load_memory, persist_memory
@@ -30,424 +29,29 @@ from ..runtime import tracing
 from ..vcs import git_ops
 from . import dependency_fix
 from .base import Outcome, Stage, StageContext
+from .ci_fix_codeql import (
+    _CODQL_CHECK_NAMES,
+    _CODQL_FP_TRIAGE_VERDICTS,
+    _codeql_block_note,
+    _partition_open_alerts,
+    _try_codeql_fp_triage,
+)
+from .ci_fix_helpers import (
+    _CI_FAILURE_FINGERPRINT,
+    _CI_IDENTICAL_FAILURE_COUNT,
+    _CI_REFRESH_COUNTER,
+    _FailingContext,
+    _build_failing_summary,
+    _ci_failure_fingerprint,
+    _format_alert_refs,
+    _pr_changed_paths,
+    _read_counter,
+    _write_counter,
+    _write_text,
+    _workspace_repo_dir,
+)
 
 log = logging.getLogger("robotsix_mill.stages.ci_fix")
-
-# Refresh counter (rebase / forge update-branch) and the failure fingerprint
-# that gates re-rebasing remain — the retry/cycle/no-change/last-done counters
-# were removed when the agent took ownership of the fix→verify loop.
-_CI_REFRESH_COUNTER = "ci_fix_refresh_attempts.txt"
-_CI_FAILURE_FINGERPRINT = "ci_failure_fingerprint.txt"
-_CI_IDENTICAL_FAILURE_COUNT = "ci_identical_failure_count.txt"
-_CODQL_FP_TRIAGE_SENTINEL = "codeql_fp_triage_ran.txt"
-_CODQL_FP_TRIAGE_VERDICTS = "codeql_fp_triage_verdicts.json"
-
-# Maximum number of alerts the codeql_fp_triage agent may dismiss in a
-# single pass.  Caps the blast radius of a misjudged dismissal.
-_CODQL_FP_TRIAGE_MAX_DISMISSALS = 5
-
-# Check-run names that are CodeQL-related (case-insensitive contains).
-_CODQL_CHECK_NAMES = frozenset({"codeql", "code-scanning", "code scanning"})
-
-
-def _read_counter(path) -> int:
-    try:
-        return int(path.read_text(encoding="utf-8").strip())
-    except FileNotFoundError, ValueError:
-        return 0
-
-
-def _write_counter(path, value: int) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(str(value), encoding="utf-8")
-
-
-def _write_text(path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
-
-
-def _workspace_repo_dir(ctx, ticket) -> str | None:
-    """Return the ticket's workspace clone dir, or None if missing."""
-    ws = ctx.service.workspace(ticket)
-    repo = ws.dir / "repo"
-    if not (repo / ".git").exists():
-        return None
-    return str(repo)
-
-
-def _format_code_scanning_alerts(alerts: list[dict]) -> str:
-    """Render open code-scanning (CodeQL) alerts as a markdown block. These
-    come from the security/code-scanning API, NOT the workflow job logs, so
-    without them the agent can't see what a CodeQL check actually flagged."""
-    if not alerts:
-        return ""
-    lines = ["**Code-scanning alerts (CodeQL — these are NOT in the job logs):**"]
-    for a in alerts:
-        loc = a.get("path", "")
-        if a.get("line"):
-            loc += f":{a['line']}"
-        sev = a.get("severity") or "?"
-        lines.append(f"- [{sev}] `{a.get('rule', '')}` {loc}: {a.get('message', '')}")
-    return "\n".join(lines)
-
-
-def _partition_alerts_by_diff(
-    alerts: list[dict], changed_paths: set[str]
-) -> tuple[list[dict], list[dict]]:
-    """Split open code-scanning alerts into (in_scope, out_of_scope).
-
-    An alert is IN SCOPE when its repo-relative ``path`` is among the PR's
-    changed files; otherwise it is an out-of-scope candidate. Alerts with an
-    empty/missing ``path`` are treated as out-of-scope (cannot prove they are
-    in the diff).
-    """
-    in_scope: list[dict] = []
-    out_of_scope: list[dict] = []
-    for a in alerts:
-        path = a.get("path", "")
-        if path and path in changed_paths:
-            in_scope.append(a)
-        else:
-            out_of_scope.append(a)
-    return in_scope, out_of_scope
-
-
-def _pr_changed_paths(forge: Forge, branch: str) -> set[str]:
-    # Best-effort: if pr_files cannot be fetched, the set is empty → no alert
-    # is provably in-diff → the stage falls back to today's behaviour (may
-    # spawn). This is the conservative direction and is intentional.
-    try:
-        return {f.get("path", "") for f in forge.pr_files(source_branch=branch)} - {""}
-    except Exception:  # noqa: BLE001 — best-effort; degrade to empty set
-        return set()
-
-
-def _alert_loc(a: dict) -> str:
-    """Return the ``path`` or ``path:line`` location string for an alert."""
-    loc = a.get("path", "")
-    if a.get("line"):
-        loc += f":{a['line']}"
-    return loc
-
-
-def _format_alert_refs(alerts: list[dict]) -> str:
-    """Render alerts as a compact ``rule @ path:line`` semicolon list."""
-    return "; ".join(f"{a.get('rule', '')} @ {_alert_loc(a)}" for a in alerts)
-
-
-def _format_labelled_alerts(in_scope: list[dict], out_of_scope: list[dict]) -> str:
-    """Render code-scanning alerts split into in-diff / untouched sections.
-
-    Each alert is explicitly marked so the agent (and any downstream fixer)
-    sees which alerts it MUST fix in-scope versus which may be out of scope.
-    """
-    if not in_scope and not out_of_scope:
-        return ""
-    lines = ["**Code-scanning alerts (CodeQL — these are NOT in the job logs):**"]
-    if in_scope:
-        lines.append(
-            "The following CodeQL alert(s) are located in THIS PR's own changed "
-            "files and MUST be fixed in-scope — do NOT report OUT_OF_SCOPE for "
-            "them:"
-        )
-        for a in in_scope:
-            sev = a.get("severity") or "?"
-            lines.append(
-                f"- [{sev}] `{a.get('rule', '')}` {_alert_loc(a)}: "
-                f"{a.get('message', '')} — IN THIS PR'S DIFF — must fix"
-            )
-    if out_of_scope:
-        lines.append("Alert(s) in untouched files (may be out of scope):")
-        for a in out_of_scope:
-            sev = a.get("severity") or "?"
-            lines.append(
-                f"- [{sev}] `{a.get('rule', '')}` {_alert_loc(a)}: "
-                f"{a.get('message', '')} — untouched file (out-of-scope candidate)"
-            )
-    return "\n".join(lines)
-
-
-def _format_alert_summary_block(
-    alerts: list[dict[str, Any]] | None, *, codeql_failing: bool = False
-) -> str:
-    """Render a compact CodeQL alert summary for top-of-prompt injection.
-
-    Returns a short bullet list of ``rule @ path:line`` entries so the
-    agent sees exactly which alerts to fix without having to read through
-    the full failing summary first.
-
-    When *codeql_failing* is True and *alerts* is empty/None, emits an
-    explicit could-not-retrieve notice so the ci_fix worker escalates
-    rather than blocking on an un-actionable empty summary.
-    """
-    if not alerts:
-        if codeql_failing:
-            return (
-                "**CodeQL alerts could not be retrieved from the code-scanning API — "
-                "the CodeQL check is failing but alert details are unavailable.**\n"
-            )
-        return ""
-    lines = [
-        "**CodeQL alerts to fix (extracted for fast reference — rule ID and location):**"
-    ]
-    for a in alerts:
-        lines.append(f"- `{a.get('rule', '?')}` @ {_alert_loc(a)}")
-    lines.append("")
-    return "\n".join(lines)
-
-
-def _build_failing_summary(
-    failing: list[dict],
-    log_text: str = "",
-    alerts: list[dict] | None = None,
-    changed_paths: set[str] | None = None,
-) -> str:
-    """Build a markdown summary from the failing check list.
-
-    When *log_text* is provided (non-empty), it is included under a
-    **Job logs:** heading. When *alerts* (open code-scanning/CodeQL alerts)
-    are provided they are listed too — they don't appear in the job logs.
-    When *changed_paths* is provided, the alerts are partitioned against the
-    PR's own diff and rendered with explicit in-scope / out-of-scope labels.
-
-    A compact alert summary is injected at the **top** of the prompt so the
-    agent can quickly identify what to fix without speculative reasoning.
-    """
-    parts = []
-    # Inject compact alert summary at the very top for fast reference.
-    codeql_failing = _only_codeql_failing(failing)
-    parts.append(_format_alert_summary_block(alerts, codeql_failing=codeql_failing))
-    for i, chk in enumerate(failing):
-        parts.append(f"## Failing check #{i + 1}: {chk['name']}")
-        if chk.get("summary"):
-            parts.append(f"\n**Summary:**\n{chk['summary']}")
-        if chk.get("text"):
-            parts.append(f"\n**Details:**\n{chk['text']}")
-        anns = chk.get("annotations") or []
-        if anns:
-            parts.append("\n**Annotations:**")
-            for a in anns:
-                loc = f"{a['path']}"
-                if a.get("start_line"):
-                    loc += f":{a['start_line']}"
-                parts.append(f"- [{a['level']}] {loc}: {a['message']}")
-        parts.append("")
-    if changed_paths is None:
-        alert_block = _format_code_scanning_alerts(alerts or [])
-    else:
-        in_scope, out_of_scope = _partition_alerts_by_diff(alerts or [], changed_paths)
-        alert_block = _format_labelled_alerts(in_scope, out_of_scope)
-    if alert_block:
-        parts.append(alert_block)
-        parts.append("")
-    if log_text:
-        parts.append("**Job logs:**")
-        parts.append("```")
-        parts.append(log_text)
-        parts.append("```")
-        parts.append("")
-    return "\n".join(parts)
-
-
-def _only_codeql_failing(failing: list[dict[str, Any]]) -> bool:
-    """Return True when every failing check is CodeQL code-scanning.
-
-    A check is CodeQL-related when its name contains one of the known
-    CodeQL check-name substrings (case-insensitive).  Returns False
-    when *failing* is empty (no failures → nothing to triage) or when
-    any non-CodeQL check is failing alongside.
-    """
-    if not failing:
-        return False
-    for chk in failing:
-        name = (chk.get("name") or "").lower()
-        if not any(token in name for token in _CODQL_CHECK_NAMES):
-            return False
-    return True
-
-
-def _eligible_for_triage(
-    alerts: list[dict[str, Any]], changed_paths: set[str], max_dismissals: int
-) -> list[dict[str, Any]]:
-    """Return the subset of *alerts* eligible for FP triage.
-
-    An alert is eligible when ALL of the following hold:
-    1. Its file is in *changed_paths* (in-scope — this PR's own diff).
-    2. Its ``security_severity_level`` is ``None`` (NOT a security alert).
-    3. It has a ``number`` (required for the dismissal API).
-
-    Returns at most *max_dismissals* alerts (the rest are trimmed so
-    the agent never dismisses more than the cap in one pass).
-    """
-    eligible: list[dict[str, Any]] = []
-    for a in alerts:
-        path = a.get("path", "")
-        if not path or path not in changed_paths:
-            continue
-        if a.get("security_severity_level") is not None:
-            continue
-        if a.get("number") is None:
-            continue
-        eligible.append(a)
-        if len(eligible) >= max_dismissals:
-            break
-    return eligible
-
-
-def _codeql_block_note(  # noqa: C901
-    failing: list[dict[str, Any]],
-    alerts: list[dict[str, Any]],
-    changed_paths: set[str],
-    verdicts: list[dict[str, Any]] | None = None,
-    alerts_unreadable: bool = False,
-) -> str | None:
-    """Return a CodeQL-specific BLOCKED note, or None when CodeQL is not a blocker.
-
-    Detects whether CodeQL is among the failing checks (sole or contributing)
-    and, when it is, builds a markdown note that lists every gating alert with
-    the reason the auto-solver abstained.
-    """
-    # --- gate: is CodeQL among the failing checks? ---
-    codeql_blocking = False
-    for chk in failing:
-        name = (chk.get("name") or "").lower()
-        if any(token in name for token in _CODQL_CHECK_NAMES):
-            codeql_blocking = True
-            break
-    if not codeql_blocking:
-        return None
-
-    only_codeql = _only_codeql_failing(failing)
-
-    # --- no alert details available ---
-    if not alerts:
-        header = (
-            "Blocked on CodeQL code-scanning"
-            if only_codeql
-            else "Blocked partly on CodeQL code-scanning (other checks also red)"
-        )
-        if alerts_unreadable:
-            return (
-                f"{header} — alerts are UNREADABLE (HTTP 403). "
-                "The CI-fix agent will not guess suppressions when "
-                "alert details are unavailable. "
-                "Grant the mill GitHub App the "
-                "**Code scanning alerts: read** (`security-events`) "
-                "permission, then re-run."
-            )
-        return (
-            f"{header} — a human must act.\n\n"
-            "Alert details could not be retrieved from the code-scanning API."
-        )
-
-    # --- partition & sort ---
-    _in_scope, _out_of_scope = _partition_alerts_by_diff(alerts, changed_paths)
-
-    verdict_by_number: dict[int, dict[str, Any]] = {}
-    if verdicts:
-        for v in verdicts:
-            n = v.get("alert_number")
-            if n is not None:
-                verdict_by_number[n] = v
-
-    sorted_alerts = sorted(alerts, key=lambda a: a.get("number", 0))
-
-    # --- build the note ---
-    header = (
-        "Blocked on CodeQL code-scanning"
-        if only_codeql
-        else "Blocked partly on CodeQL code-scanning (other checks also red)"
-    )
-    lines = [f"{header} — a human must act.", ""]
-
-    for a in sorted_alerts:
-        num = a.get("number", "?")
-        rule = a.get("rule", "?")
-        sev = a.get("security_severity_level")
-        sev_str = str(sev) if sev is not None else "n/a"
-        path = a.get("path", "?")
-        line = a.get("line")
-        loc = f"{path}:{line}" if line is not None else path
-
-        lines.append(
-            f"- Alert {num}: `{rule}` ({loc}), security_severity_level={sev_str}"
-        )
-
-        # Determine why the auto-solver abstained.
-        if sev is not None:
-            lines.append(
-                f"  → security-severity (level={sev}) → "
-                f"requires human sign-off (guardrail policy)"
-            )
-        elif path and path not in changed_paths:
-            lines.append(
-                "  → out-of-scope of this PR's diff "
-                "(pre-existing on the base branch) → needs human review"
-            )
-        elif path and path in changed_paths and a.get("number") is not None:
-            alert_number: int = a["number"]
-            verdict = verdict_by_number.get(alert_number)
-            if verdict is not None and verdict.get("verdict") == "abstain":
-                rationale = verdict.get("rationale", "")
-                if rationale:
-                    truncated = (
-                        rationale[:200] + "..." if len(rationale) > 200 else rationale
-                    )
-                    lines.append(f"  → codeql_fp_triage abstained: {truncated}")
-                else:
-                    lines.append("  → codeql_fp_triage abstained")
-            elif verdicts is not None:
-                # We had verdicts but none for this alert, or verdict != abstain.
-                lines.append("  → agent could not produce a code fix")
-            else:
-                # No verdicts available at all — combined fallback.
-                lines.append(
-                    "  → codeql_fp_triage abstained or agent could not "
-                    "produce a code fix"
-                )
-        else:
-            # In-scope but missing number or other edge case.
-            lines.append(
-                "  → codeql_fp_triage abstained or agent could not produce a code fix"
-            )
-
-    return "\n".join(lines)
-
-
-def _ci_failure_fingerprint(failing_summary: str, repo_id: str) -> str:
-    """Compute a stable hex fingerprint for a CI failure.
-
-    The fingerprint is derived from *failing_summary* up to the
-    ``**Job logs:**`` marker (exclusive), or the first 2000 characters
-    when there is no marker.  The marker-trimmed summary is combined
-    with *repo_id* and hashed with SHA-256; the first 16 hex digits
-    become the fingerprint.
-
-    This is deterministic (same input → same output) and stable across
-    different PRs that hit the same underlying CI failure, while
-    remaining specific enough to distinguish different failures.
-    """
-    marker = "**Job logs:**"
-    idx = failing_summary.find(marker)
-    if idx != -1:
-        core_summary = failing_summary[:idx].rstrip()
-    else:
-        core_summary = failing_summary[:2000]
-    data = f"{repo_id}\n{core_summary}"
-    return hashlib.sha256(data.encode("utf-8")).hexdigest()[:16]
-
-
-class _FailingContext(NamedTuple):
-    """Data the counter/agent phases need once CI is confirmed failing."""
-
-    repo_dir: str
-    branch: str
-    failing_summary: str
-    failing: list[dict[str, Any]] = []
-    alerts: list[dict[str, Any]] = []
-    changed_paths: set[str] = set()
-    alerts_unreadable: bool = False
 
 
 class CIFixStage(Stage):
@@ -494,7 +98,7 @@ class CIFixStage(Stage):
         # immediately.  The triage call has its own guardrails
         # (feature flag, run-once sentinel, eligible alerts, etc.) and
         # returns None when not applicable.
-        triage_outcome = self._try_codeql_fp_triage(
+        triage_outcome = _try_codeql_fp_triage(
             ticket, ctx, failing, alerts, changed_paths
         )
         if triage_outcome is not None:
@@ -787,158 +391,6 @@ class CIFixStage(Stage):
         fp_path.write_text(current_fp, encoding="utf-8")
         return None
 
-    def _try_codeql_fp_triage(  # noqa: C901 — guardrail chain is inherently branchy
-        self,
-        ticket: Ticket,
-        ctx: StageContext,
-        failing: list[dict[str, Any]],
-        alerts: list[dict[str, Any]],
-        changed_paths: set[str],
-    ) -> Outcome | None:
-        """Try the codeql_fp_triage sub-agent before blocking on CodeQL FPs.
-
-        Returns an ``Outcome(State.IMPLEMENT_COMPLETE)`` when the agent
-        dismissed at least one alert (so CI should re-poll green), or
-        ``None`` when triage is not applicable / ran but dismissed nothing
-        / is disabled — the caller then falls through to BLOCKED.
-        """
-        s = ctx.settings
-
-        # --- gate: feature flag ---
-        if not s.codeql_fp_triage_enabled:
-            return None
-
-        # --- gate: only CodeQL is failing ---
-        if not _only_codeql_failing(failing):
-            return None
-
-        # --- gate: run-once sentinel ---
-        artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
-        sentinel_path = artifacts_dir / _CODQL_FP_TRIAGE_SENTINEL
-        if sentinel_path.exists():
-            log.info(
-                "%s: codeql_fp_triage already ran for this ticket — skipping",
-                ticket.id,
-            )
-            return None
-        # Write sentinel BEFORE running the agent so a crash doesn't retry.
-        _write_counter(sentinel_path, 1)
-
-        # --- gate: filter eligible alerts ---
-        eligible = _eligible_for_triage(alerts, changed_paths, max_dismissals=5)
-        if not eligible:
-            log.info(
-                "%s: no CodeQL alerts eligible for FP triage "
-                "(all are security-severity, out-of-scope, or absent)",
-                ticket.id,
-            )
-            return None
-
-        log.info(
-            "%s: attempting codeql_fp_triage on %d eligible alert(s)",
-            ticket.id,
-            len(eligible),
-        )
-
-        # --- run the agent ---
-        import json
-        from pathlib import Path
-
-        from ..agents.codeql_fp_triage import run_codeql_fp_triage_agent
-
-        repo_dir = _workspace_repo_dir(ctx, ticket)
-        if repo_dir is None:
-            return None
-
-        try:
-            result = run_codeql_fp_triage_agent(
-                settings=s,
-                repo_dir=Path(repo_dir),
-                alerts_json=json.dumps(eligible),
-                ticket_id=ticket.id,
-                board_id=ctx.repo_config.board_id if ctx.repo_config else "",
-            )
-        except Exception:  # noqa: BLE001 — best-effort
-            log.warning("%s: codeql_fp_triage agent crashed", ticket.id, exc_info=True)
-            return None
-
-        # Persist verdicts for the block-note builder.
-        try:
-            verdicts_path = artifacts_dir / _CODQL_FP_TRIAGE_VERDICTS
-            verdicts_path.parent.mkdir(parents=True, exist_ok=True)
-            verdicts_path.write_text(
-                json.dumps([v.model_dump() for v in result.verdicts]),
-                encoding="utf-8",
-            )
-        except Exception:  # noqa: BLE001 — best-effort
-            log.warning(
-                "%s: failed to persist codeql_fp_triage verdicts",
-                ticket.id,
-                exc_info=True,
-            )
-
-        # --- dismiss alerts the agent greenlit ---
-        dismissals = [v for v in result.verdicts if v.verdict == "dismiss"]
-        if not dismissals:
-            log.info(
-                "%s: codeql_fp_triage abstained on all %d alert(s) — blocking",
-                ticket.id,
-                len(eligible),
-            )
-            return None
-
-        forge = get_forge(s, repo_config=ctx.repo_config)
-        dismissed_count = 0
-        dismissal_notes: list[str] = []
-        for v in dismissals:
-            ok = forge.dismiss_code_scanning_alert(
-                number=v.alert_number,
-                reason="false positive",
-                comment=v.rationale[:4000],  # GitHub dismiss comment limit
-            )
-            if ok:
-                dismissed_count += 1
-                dismissal_notes.append(
-                    f"- Alert #{v.alert_number}: {v.rationale[:200]}"
-                )
-            else:
-                log.warning(
-                    "%s: failed to dismiss code-scanning alert %d",
-                    ticket.id,
-                    v.alert_number,
-                )
-
-        # --- record audit trail ---
-        try:
-            note_lines = [
-                "## codeql_fp_triage: auto-dismissed CodeQL false positive(s)",
-                "",
-                f"Dismissed {dismissed_count} alert(s) out of "
-                f"{len(eligible)} eligible:",
-                "",
-            ]
-            note_lines.extend(dismissal_notes)
-            note_lines.append("")
-            note_lines.append(
-                "These dismissals persist by fingerprint and will also "
-                "clear the alert on `main` after merge.  A human can "
-                "re-open any alert via the GitHub security tab."
-            )
-            ctx.service.add_history_note(ticket.id, "\n".join(note_lines))
-        except Exception:  # noqa: BLE001 — best-effort
-            log.warning("%s: failed to record codeql_fp_triage note", ticket.id)
-
-        if dismissed_count > 0:
-            log.info(
-                "%s: codeql_fp_triage dismissed %d alert(s) — "
-                "returning to IMPLEMENT_COMPLETE for re-poll",
-                ticket.id,
-                dismissed_count,
-            )
-            return Outcome(State.IMPLEMENT_COMPLETE)
-
-        return None
-
     def _run_agent_and_finalize(
         self,
         ticket: Ticket,
@@ -1205,25 +657,6 @@ class CIFixStage(Stage):
 
         return fetch_fn
 
-    def _partition_open_alerts(
-        self, ctx: StageContext, branch: str
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        """Fetch open code-scanning alerts + PR changed files and partition.
-
-        All forge calls are best-effort: any failure degrades to "no in-scope
-        alerts" (empty in_scope) so a forge outage falls back to the existing
-        spawn path rather than crashing the stage.
-        """
-        s = ctx.settings
-        try:
-            forge = get_forge(s, repo_config=ctx.repo_config)
-            alerts = forge.list_code_scanning_alerts(source_branch=branch)
-            changed_paths = _pr_changed_paths(forge, branch)
-            return _partition_alerts_by_diff(alerts, changed_paths)
-        except Exception:  # noqa: BLE001 — best-effort; degrade to no in-scope
-            log.warning("ci-fix in-diff alert guard failed; falling back")
-            return [], []
-
     def _handle_out_of_scope(
         self,
         ticket: Ticket,
@@ -1249,7 +682,7 @@ class CIFixStage(Stage):
         # PR's own diff, the verdict is wrong for at least those — do NOT spawn
         # a dependency fixer; route back to re-run the agent against the
         # in-scope-labelled summary instead.
-        in_scope_alerts, out_of_scope_alerts = self._partition_open_alerts(ctx, branch)
+        in_scope_alerts, out_of_scope_alerts = _partition_open_alerts(ctx, branch)
 
         if in_scope_alerts:
             # OUT_OF_SCOPE is wrong for these alerts — suppress the spawn and

@@ -15,14 +15,13 @@ from ...core.models import Ticket
 from ...core.states import State
 from ...forge import get_forge
 from ..base import Outcome, StageContext
-from ..ci_fix import (
+from ..ci_fix_codeql import (
     _CODQL_FP_TRIAGE_SENTINEL,
     _CODQL_FP_TRIAGE_VERDICTS,
     _codeql_block_note,
     _eligible_for_triage,
-    _only_codeql_failing,
-    _pr_changed_paths,
 )
+from ..ci_fix_helpers import _only_codeql_failing, _pr_changed_paths
 from ._base import _MergeStageBase
 from ._shared import (
     _build_failing_summary,
