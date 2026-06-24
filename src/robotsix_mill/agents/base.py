@@ -562,6 +562,7 @@ def build_agent(  # noqa: C901
         provider = get_provider_for_level(level)
         handle = provider.build_agent(
             level=level,
+            model=model,
             system_prompt=composed_system,
             tools=all_tools,
             output_type=output_type,
