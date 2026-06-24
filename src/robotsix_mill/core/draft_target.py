@@ -34,6 +34,7 @@ import pathlib
 
 from ..config import Settings
 from .dedup import _extract_paths
+from .repo_layout import resolve_under_src
 from .service import TicketService
 
 log = logging.getLogger("robotsix_mill.core.draft_target")
@@ -248,6 +249,6 @@ def referenced_mill_paths_absent(
             )
             continue
         if any(token_lower.startswith(prefix.lower()) for prefix in MILL_PATH_PREFIXES):
-            if not (repo_dir / token).exists():
+            if resolve_under_src(repo_dir, token) is None:
                 absent.append(token)
     return absent
