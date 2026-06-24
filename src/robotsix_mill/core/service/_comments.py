@@ -75,14 +75,16 @@ class _CommentMixin(_ServiceBase):
         ticket id in hand (the user is on a ticket page when closing
         a thread), so this is the production path.
 
-        Fall back to a cross-board fanout when *ticket_id* is missing,
-        purely for backward compatibility with callers that haven't
-        been threaded through yet. The fanout picks the first board
-        whose DB contains a matching id — wrong on collisions, but
-        no worse than the prior behaviour.
+        Fall back to a cross-board fanout when *ticket_id* is missing.
+        ``Comment.id`` collides across boards (each repo's SQLite has
+        its own sequence), so the fanout collects EVERY board that has
+        a matching id: exactly one → that board; more than one → a
+        ``ValueError`` telling the caller to pass *ticket_id* (silently
+        picking one would act on the wrong comment, e.g. close the
+        mill board's comment 106 instead of the chat board's).
 
         Raises ``ValueError`` when no matching comment is found and
-        ``self.board_id`` is empty.
+        ``self.board_id`` is empty, or when the id is ambiguous.
         """
         if ticket_id is not None:
             return self._board_for(ticket_id)
@@ -108,10 +110,21 @@ class _CommentMixin(_ServiceBase):
                         candidates.append(sub.name)
         except OSError:
             pass
+        matches: list[str] = []
         for board_id in candidates:
             with db.session(self.settings, board_id) as s:
                 if s.get(Comment, comment_id) is not None:
-                    return board_id
+                    matches.append(board_id)
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            raise ValueError(
+                f"Comment id {comment_id} is ambiguous — it exists on "
+                f"multiple boards ({matches}). Comment.id is per-board (not "
+                f"globally unique); pass ticket_id to disambiguate."
+            )
+        # No board had it. Preserve the single-board / test fallback so the
+        # caller gets a clean 'comment not found' (KeyError) downstream.
         if self.board_id:
             return self.board_id
         raise ValueError(
