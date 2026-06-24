@@ -470,4 +470,15 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         clone_token_fn=None,  # uses forge_token (raises on missing)
         requires_repo=True,
     ),
+    "frontend_sync": PeriodicPassConfig(
+        label="frontend_sync",
+        source_kind=SourceKind.FRONTEND_SYNC,
+        agent_module_attr="frontend_syncing",
+        agent_fn_name="run_frontend_sync_agent",
+        memory_filename="frontend_sync_memory.md",
+        workspace_subdir="frontend_sync_workspace",
+        result_dataclass=PeriodicPassResult,
+        clone_token_fn=None,  # uses forge_token (raises on missing)
+        requires_repo=True,
+    ),
 }

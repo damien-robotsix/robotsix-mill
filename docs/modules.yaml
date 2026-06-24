@@ -231,6 +231,7 @@ modules:
       - src/robotsix_mill/runners/diagnostic_check_errors.py
       - src/robotsix_mill/runners/diagnostic_data.py
       - src/robotsix_mill/runners/env_doc_sync_runner.py
+      - src/robotsix_mill/runners/frontend_sync_runner.py
       - src/robotsix_mill/runners/config_sync_runner.py
       - src/robotsix_mill/runners/member_sync_runner.py
       - src/robotsix_mill/runners/health_runner.py

@@ -74,6 +74,7 @@ def test_sourcekind_member_count():
         "ROADMAP_SYNC",
         "STATE_SYNC",
         "ENV_DOC_SYNC",
+        "FRONTEND_SYNC",
         "META",
         "RUN_HEALTH",
         "CI_FIX_DEPENDENCY",

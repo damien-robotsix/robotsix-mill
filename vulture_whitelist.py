@@ -211,6 +211,7 @@ query_traces_since
 query_recent_traces
 query_session_summary
 run_forge_parity_pass
+run_frontend_sync_pass
 run_health_pass
 run_module_curator_pass
 __test__
