@@ -278,16 +278,13 @@ def board() -> str:
     # so the column skeleton is rendered server-side here.
     skeleton = build_board_skeleton(adapter.columns())
 
-    try:
-        from robotsix_board import render_config_script
+    from robotsix_board import render_config_script
 
-        config_script = render_config_script(
-            adapter,
-            refresh_url="/board/cards",
-            refresh_interval_ms=5_000,
-        )
-    except ImportError:
-        config_script = ""
+    config_script = render_config_script(
+        adapter,
+        refresh_url="/board/cards",
+        refresh_interval_ms=5_000,
+    )
     return render_board_html(config_script, skeleton)
 
 

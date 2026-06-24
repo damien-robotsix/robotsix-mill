@@ -127,21 +127,6 @@ def test_list_repos_multi_repo(multi_repo_client):
         assert set(entry.keys()) == {"repo_id", "board_id"}
 
 
-def test_board_import_error_fallback(client, monkeypatch):
-    """When robotsix_board is not importable, board() falls back to
-    render_board_html("", skeleton) without raising."""
-    import sys
-
-    monkeypatch.setitem(sys.modules, "robotsix_board", None)
-
-    r = client.get("/")
-    assert r.status_code == 200
-    assert r.headers["content-type"].startswith("text/html")
-    body = r.text
-    assert 'class="board-column" data-status="draft"' in body
-    assert "{CONFIG_SCRIPT}" not in body
-
-
 def test_gates(client, settings):
     """GET /gates returns the pipeline gate flags from the live Settings."""
     r = client.get("/gates")
