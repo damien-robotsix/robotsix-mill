@@ -7,6 +7,7 @@ picks it up immediately and chains it through the pipeline.
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -42,8 +43,47 @@ def create_app(
     """
     setup_logging()
     settings = settings or Settings()
+
+    _pyproject = tomllib.loads(
+        (Path(__file__).parent.parent.parent.parent / "pyproject.toml").read_text()
+    )
+    _project = _pyproject["project"]
+
     app = FastAPI(
         title="robotsix-mill",
+        version=_project["version"],
+        description=_project["description"],
+        contact={
+            "name": _project["authors"][0]["name"],
+            "url": "https://github.com/damien-robotsix/robotsix-mill",
+        },
+        license_info={
+            "name": "MIT",
+            "url": "https://spdx.org/licenses/MIT.html",
+        },
+        servers=[
+            {"url": "http://127.0.0.1:8077", "description": "Local development"},
+        ],
+        openapi_tags=[
+            {
+                "name": "Health",
+                "description": "Liveness, readiness, and service health probes",
+            },
+            {
+                "name": "Tickets",
+                "description": "Ticket CRUD, transitions, events, and metadata",
+            },
+            {"name": "Comments", "description": "Ticket comment management"},
+            {"name": "Epics", "description": "Epic grouping and management"},
+            {"name": "Passes", "description": "Solver passes and ticket processing"},
+            {"name": "Traces", "description": "Execution traces and agent run history"},
+            {"name": "Candidates", "description": "Merge request candidate inspection"},
+            {"name": "Agents", "description": "Agent lifecycle and status"},
+            {
+                "name": "Board",
+                "description": "Board card management and workflow transitions",
+            },
+        ],
         lifespan=create_lifespan(settings, repos, single_repo_id=single_repo_id),
     )
 
