@@ -547,6 +547,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `pipeline.ci_fix_max_attempts` | `MILL_CI_FIX_MAX_ATTEMPTS` | `2` | Multi-repo merge ci-fix only: max CI-fix LLM invocations before BLOCK |
 | `pipeline.ci_fix_max_cycles` | `MILL_CI_FIX_MAX_CYCLES` | `3` | Multi-repo merge ci-fix only: hard ceiling on total ci-fix cycles per repo (reset only when CI turns green). Set to 0 to disable. |
 | `pipeline.ci_fix_max_identical_failures` | `MILL_CI_FIX_MAX_IDENTICAL_FAILURES` | `2` | Max consecutive identical CI failure cycles before escalating to BLOCKED. When the same failure fingerprint repeats this many times without progress, the stage short-circuits. Set to 0 to disable. |
+| `pipeline.ci_fix_request_limit` | `MILL_CI_FIX_REQUEST_LIMIT` | `120` | Per-run request budget for the ci-fix agent (must cover ALL fix→push→verify iterations). When exhausted, pydantic-ai raises `UsageLimitExceeded`, which the retry layer catches and triggers the fallback model (if configured). Set to 0 to disable. |
 | `pipeline.review_revision_max_attempts` | `MILL_REVIEW_REVISION_MAX_ATTEMPTS` | `2` | Max review-revision LLM invocations before BLOCK |
 | `pipeline.branch_prefix` | `MILL_BRANCH_PREFIX` | `mill/` | Prefix for deliver-stage branch names |
 | `pipeline.delete_branch_on_merge` | `MILL_DELETE_BRANCH_ON_MERGE` | `true` | Delete the per-ticket head branch on the forge after merge to DONE |
