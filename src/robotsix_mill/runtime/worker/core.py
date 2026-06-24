@@ -356,7 +356,14 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                         self._pending.discard(ticket_id)
                         self.enqueue(ticket_id)
                         await asyncio.sleep(15)
-                        queue.task_done()
+                        # NOTE: do NOT call queue.task_done() here. `continue`
+                        # still runs the `finally` block below, which calls
+                        # task_done() exactly once per get(). Calling it here
+                        # too double-counts the same get() → the queue raises
+                        # ValueError("task_done() called too many times"),
+                        # which propagates out of the while-loop and KILLS the
+                        # board consumer. Every cap-gated board that deferred a
+                        # ticket lost its consumer this way (silent board stall).
                         continue
 
                 # --- Global concurrency cap ---
