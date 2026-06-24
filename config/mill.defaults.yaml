@@ -244,6 +244,11 @@ pipeline:
 
 periodic:
 
+  # -- bespoke-agent supervisor reconciliation interval ------------------
+  # How often (seconds) the bespoke supervisor refreshes its clone
+  # and reconciles which YAMLs are scheduled.
+  bespoke_discovery_interval_seconds: 600
+
   # -- diagnostic agent — daily deterministic check orchestrator -----------
   diagnostic:
     enabled: false        # skeleton ships disabled; later tickets add checks then enable
