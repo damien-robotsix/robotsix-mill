@@ -58,7 +58,7 @@ core:
     scope_triage_max_files: 50   # max out-of-scope text files before flood guard blocks (0 disables)
     triage_requests: 8                # per-call cap for pre-refine triage agent
     already_done_requests: 8            # per-call cap for already-done verifier sub-agent
-    doc_requests: 8                   # per-run request cap for the document agent
+    doc_requests: 16                  # per-run request cap for the document agent
     doc_classifier_requests: 3         # per-call cap for doc-classifier gate
     doc_classifier_diff_max_chars: 6000  # cap diff fed to doc-classifier gate (truncation safe: conservative user_facing bias)
     review_requests: 80                # per-call cap for review agent (counts tool calls + reasoning steps; 80 covers a 4-6 file PR)
