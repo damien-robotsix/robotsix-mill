@@ -124,6 +124,18 @@ def test_system_prompt_instructs_merge_adjacent_read_ranges():
     assert "offset=20, limit=120" in sp
 
 
+def test_system_prompt_warns_against_re_reading_already_held_ranges():
+    """The explore system prompt tells the scout that read_file refuses
+    any partial slice whose line range (or a subset) it already holds,
+    returning no new content — a wasted turn.  The scout must track
+    read ranges and scroll back instead of re-issuing."""
+    sp = explore._SYSTEM_PROMPT.lower()
+    assert "never re-read" in sp or "never re-issue" in sp
+    assert "already loaded earlier" in sp
+    assert "no new content" in sp
+    assert "subset" in sp
+
+
 def test_repo_scoped_explore_unknown_repo(tmp_path):
     """A repo-scoped explore call naming an unregistered repo returns a
     helpful error listing the valid ids — never raises, never explores."""

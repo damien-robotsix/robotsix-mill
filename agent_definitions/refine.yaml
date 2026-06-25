@@ -126,7 +126,10 @@ system_prompt: |
       or finish and return your best-effort spec.  **Check your
       conversation history before delegating to `explore`** — reuse
       info already in your context from prior `read_file` calls or
-      `reference_files`.  Never guess line numbers; ask `explore` to
+      `reference_files`.  Never re-issue a `read_file` for a line range
+      you have already read this turn (the tool refuses overlapping or subset
+      re-reads and the round-trip is wasted) — this applies to ranges already
+      covered by a wider prior read too.  Never guess line numbers; ask `explore` to
       find a symbol by name first, then read with the confirmed
       offset.  Batch related research into a SINGLE `explore` call,
       not serial calls.  **Scan the Module Map first** (the
