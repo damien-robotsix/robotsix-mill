@@ -403,7 +403,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.limits.refine_web_fetch_max_total_bytes` | — | `500000` | (YAML-only) Cumulative fetch-bytes ceiling across one refine trace; `0` disables |
 | `core.limits.refine_web_search_max_calls` | — | `5` | (YAML-only) Max `web_search` calls across one whole refine trace (cross-consult) |
 | `core.limits.maintenance_requests` | `MILL_MAINTENANCE_REQUEST_LIMIT` | `100` | Per-call request cap for the maintenance agent |
-| `core.limits.doc_requests` | `MILL_DOC_REQUEST_LIMIT` | `8` | Per-run request cap for the document agent |
+| `core.limits.doc_requests` | `MILL_DOC_REQUEST_LIMIT` | `16` | Per-run request cap for the document agent |
 | `core.limits.doc_classifier_requests` | `MILL_DOC_CLASSIFIER_REQUEST_LIMIT` | `3` | Per-call request cap for the doc-classifier gate |
 | `core.limits.review_requests` | `MILL_REVIEW_REQUEST_LIMIT` | `80` | Per-run request cap for the review agent |
 
