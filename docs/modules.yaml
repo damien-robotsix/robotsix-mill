@@ -603,8 +603,6 @@ modules:
       - tests/deploy/**/*.py
       - Dockerfile.deploy
       - docker-compose.deploy.yml
-      - .github/workflows/deploy-server-ci.yml
-      - .github/workflows/deploy-server-release.yml
     dependencies: [config]
 
   - id: repo-scaffold

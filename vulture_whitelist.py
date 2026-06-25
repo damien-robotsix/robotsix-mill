@@ -198,6 +198,15 @@ MARKERS
 
 # -- repo_scaffold -----------------------------------------------------------
 
+# -- deploy-server ------------------------------------------------------------
+# Pydantic model fields (DeploySettings) — accessed via string-based
+# env-var binding; vulture does not trace pydantic-settings Field() usage.
+broker_url
+langfuse_host
+# FastAPI route handler — invoked via @app.get("/ready") decorator, not
+# by direct Python call. Tested via HTTP TestClient.
+ready
+
 # -- runners -----------------------------------------------------------------
 run_agent_check_pass
 run_audit_pass
