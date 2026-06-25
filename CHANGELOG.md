@@ -1,6 +1,11 @@
 ## 0.0.0 (unreleased)
 
 - Exclude cross-reference sections (`## Reference`, `## See also`, `## Related work`, and any heading starting with `reference` or `see also`) from path-token extraction in `paths_excluding_out_of_scope`, preventing consumer-migration follow-ups from being filed for paths that are merely cross-referenced, not deliverables.
+- Make the per-pass implement (coordinator) agent-request budget configurable
+  via `MILL_PER_PASS_REQUEST_BUDGET` env var (or `core.limits.coordinator_requests`
+  in YAML config).  Default raised from 200 to 500 so normal-sized tickets
+  complete in a single pass.  Hard upper bound 5000 prevents runaway cost
+  from misconfiguration.
 
 - Extract duplicate `_paths_from_diff` from `document.py` and `review.py` into shared `vcs/git_ops.py`.
 - Add `actionlint` step to `workflow-audit` job in `security-audit.yml` for workflow syntax checking, pinned to `rhysd/actionlint@v1.7.12`.

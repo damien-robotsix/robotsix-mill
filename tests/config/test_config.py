@@ -84,6 +84,28 @@ def test_default_coordinator_max_tool_calls():
     assert s.coordinator_max_tool_calls == 300
 
 
+def test_default_coordinator_request_limit():
+    """coordinator_request_limit defaults to 500 (not the old 200) so
+    normal-sized tickets can complete in a single pass.  The hard
+    upper bound of 5000 prevents runaway cost from misconfiguration."""
+    s = Settings()
+    assert s.coordinator_request_limit == 500
+    # Also verify the hard upper bound is enforced at the model level.
+    from pydantic import ValidationError
+
+    from robotsix_mill.config._settings_core import _CoreSettings
+
+    # 5001 exceeds le=5000 — must pass via alias (field has alias set)
+    try:
+        _CoreSettings(**{"MILL_PER_PASS_REQUEST_BUDGET": 5001})
+        raise AssertionError("expected ValidationError")
+    except ValidationError:
+        pass
+    # boundary: 5000 is ok
+    cs = _CoreSettings(**{"MILL_PER_PASS_REQUEST_BUDGET": 5000})
+    assert cs.coordinator_request_limit == 5000
+
+
 def test_default_stage_timeout_overrides_refine():
     """The shipped default ``stage_timeout_overrides`` contains a
     ``{"refine": 900}`` entry (not empty).  900 s (15 min) leaves
@@ -159,7 +181,7 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     # --- core / api key ---
     ("openrouter_api_key", "OPENROUTER_API_KEY", "sk-test", "sk-test"),
     # --- request limits ---
-    ("coordinator_request_limit", "MILL_COORDINATOR_REQUEST_LIMIT", "42", 42),
+    ("coordinator_request_limit", "MILL_PER_PASS_REQUEST_BUDGET", "42", 42),
     ("refine_request_limit", "MILL_REFINE_REQUEST_LIMIT", "42", 42),
     ("test_request_limit", "MILL_TEST_REQUEST_LIMIT", "15", 15),
     ("maintenance_request_limit", "MILL_MAINTENANCE_REQUEST_LIMIT", "33", 33),
