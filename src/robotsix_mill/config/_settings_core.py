@@ -86,15 +86,25 @@ class _CoreSettings(BaseModel):
     web_knowledge_model: str = Field(
         default="deepseek/deepseek-v4-flash",
     )
-    # Per-call request caps (bound each role's loop). Sized for slow
-    # deepseek-v4-pro + complex tickets: a medium ticket (53de) used
-    # ~49 implement calls, so 200 leaves generous headroom; raising it
-    # only matters if a ticket genuinely needs more steps.
-    coordinator_request_limit: int = Field(default=200, ge=1)
+    # Per-pass request budget for the implement (coordinator) agent.
+    # Default 500 — high enough that normal-sized tickets finish in a
+    # single pass (a medium ticket used ~49 calls; 500 provides ~10×
+    # headroom) while still bounded.  The hard upper bound (5000)
+    # prevents runaway cost from a misconfigured value; the budget
+    # resets each pass so resumed tickets get a fresh allocation.
+    # Set via MILL_PER_PASS_REQUEST_BUDGET env var or
+    # core.limits.coordinator_requests in YAML config.
+    coordinator_request_limit: int = Field(
+        default=500,
+        ge=1,
+        le=5000,
+        alias="MILL_PER_PASS_REQUEST_BUDGET",
+    )
     # Hard cap on total tool calls per coordinator (implement) trace.
-    # The request cap is 200; this ceiling sits generously above any
-    # legitimate implement run while still terminating the 1000+-read
-    # runaway loops that produced incomplete_trace + cost_outlier flags.
+    # The request cap defaults to 500; this ceiling sits generously
+    # above any legitimate implement run while still terminating the
+    # 1000+-read runaway loops that produced incomplete_trace +
+    # cost_outlier flags.
     coordinator_max_tool_calls: int = Field(default=300, ge=1)
     # Per-subtask request budget when the coordinator delegates via
     # ``spawn_subtask``. The parent's ``coordinator_request_limit``

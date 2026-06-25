@@ -218,7 +218,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.diagnostic.target_repo_id": "diagnostic_target_repo_id",
     "periodic.diagnostic.monitored_repo_ids": "diagnostic_monitored_repo_ids",
     # -- core.limits --
-    "core.limits.coordinator_requests": "coordinator_request_limit",
+    "core.limits.coordinator_requests": "MILL_PER_PASS_REQUEST_BUDGET",
     "core.limits.subtask_request_limit": "subtask_request_limit",
     "core.limits.test_requests": "test_request_limit",
     "core.limits.consult_requests": "consult_request_limit",

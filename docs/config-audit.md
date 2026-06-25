@@ -74,7 +74,7 @@ other code depends on.
 
 | Env var | Field | Default | Type | Source | Sensitivity | YAML | Docs | Consumers | Notes |
 |---|---|---|---|---|---|---|---|---|---|
-| `MILL_COORDINATOR_REQUEST_LIMIT` | `coordinator_request_limit` | `200` | `int` | Settings | non-sensitive | default | §2 | `stages/implement.py` | |
+| `MILL_PER_PASS_REQUEST_BUDGET` | `coordinator_request_limit` | `500` | `int` | Settings | non-sensitive | default | §2 | `stages/implement.py` | Hard upper bound 5000 |
 | `MILL_TEST_REQUEST_LIMIT` | `test_request_limit` | `8` | `int` | Settings | non-sensitive | default | §2 | Test sub-agent | |
 | `MILL_MAX_FIX_ITERATIONS` | `max_fix_iterations` | `8` | `int` | Settings | non-sensitive | default | §3 | `stages/implement.py` | |
 | `MILL_MODEL_REQUEST_TIMEOUT` | `model_request_timeout` | `900.0` | `float` | Settings | non-sensitive | default | §4 | `runtime/model.py` | |

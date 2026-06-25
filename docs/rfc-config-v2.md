@@ -158,7 +158,7 @@ marked `→ secrets` are loaded from `config/secrets.yaml` into a separate
 
 | Env var | YAML key | Default | Note |
 |---|---|---|---|
-| `MILL_COORDINATOR_REQUEST_LIMIT` | `core.limits.coordinator_requests` | `200` | |
+| `MILL_PER_PASS_REQUEST_BUDGET` | `core.limits.coordinator_requests` | `500` | Hard upper bound 5000 |
 | `MILL_TEST_REQUEST_LIMIT` | `core.limits.test_requests` | `8` | |
 | `MILL_EXPLORE_REQUEST_LIMIT` | `core.limits.explore_requests` | `20` | |
 | `MILL_DEDUP_REQUEST_LIMIT` | `core.limits.dedup_requests` | `4` | |
