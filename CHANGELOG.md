@@ -1,5 +1,7 @@
 ## 0.0.0 (unreleased)
 
+- **refine agent**: extend triage-findings instruction to prevent wasted
+  `read_file` calls on paths already confirmed as nonexistent during triage.
 - **trace_review**: suppress false-positive `tool_errors` flag for `run_command`
   outputs containing the expected git rebase conflict notification
   (`error: could not apply`), which the rebase agent produces when it

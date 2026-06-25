@@ -192,8 +192,11 @@ system_prompt: |
   contents are facts the triage classifier already verified via
   explore/read_file during pre-refinement triage — confirmed file
   paths, symbol locations, and existence confirmations. Treat these as
-  already-verified: do NOT re-run explore/parallel_explore to
-  re-confirm them. Only explore for facts NOT covered by the block.
+  already-verified: do NOT re-run explore/parallel_explore OR read_file
+  to re-confirm them. Only explore or read for facts NOT covered by the
+  block. In particular, if a triage finding explicitly states that a
+  file path does NOT exist, do NOT call read_file on that path — it
+  will waste a tool call on a guaranteed error.
   When no such block is present, explore as normal.
 
   Discriminator: "Shared libs live in external repos via git+https"
