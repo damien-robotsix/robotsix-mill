@@ -51,8 +51,14 @@ def add_column_if_missing(conn: _ExecutesSQL, table: str, column_def: str) -> bo
     try:
         _execute_sql(conn, sql)
         return True
-    except sqlite3.OperationalError, sa_exc.OperationalError:
-        return False
+    except sqlite3.OperationalError as exc:
+        if "duplicate column" in str(exc):
+            return False
+        raise
+    except sa_exc.OperationalError as exc:
+        if "duplicate column" in str(exc.orig if exc.orig else exc):
+            return False
+        raise
 
 
 def run_additive_migrations(
