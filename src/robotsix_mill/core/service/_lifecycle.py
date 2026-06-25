@@ -1431,7 +1431,7 @@ class _LifecycleMixin(_ServiceBase):
             if pruned_c:
                 result["comments_pruned"] += pruned_c
 
-        # 3. Reclaim freed pages.
+        # 3. Reclaim freed pages and truncate the WAL file.
         with db.session(self.settings, self.board_id) as s:
             s.connection().exec_driver_sql("PRAGMA optimize")
             s.connection().exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)")

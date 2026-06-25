@@ -74,8 +74,14 @@ def get_engine(settings: Settings, board_id: str):
 
         @event.listens_for(engine, "connect")
         def _set_wal(dbapi_connection: Any, _: Any) -> None:
-            """Enable WAL mode on each new connection to reduce write contention."""
+            """Enable WAL mode and cap the WAL file at 2 MiB.
+
+            Without a size limit SQLite's default auto-checkpoint
+            threshold (1000 pages ≈ 4 MiB) lets the WAL grow to ~4 MiB,
+            which the data-dir audit flags as unbounded growth.
+            """
             dbapi_connection.execute("PRAGMA journal_mode=WAL")
+            dbapi_connection.execute("PRAGMA journal_size_limit = 2097152")
 
         _engines[board_id] = engine
     return engine

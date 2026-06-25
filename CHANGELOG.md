@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Cap SQLite WAL file at 2 MiB via `PRAGMA journal_size_limit` and add `PRAGMA wal_checkpoint(TRUNCATE)` to the periodic DB maintenance pass to prevent unbounded WAL growth.
 - Enrich FastAPI OpenAPI schema with version, description, contact, license, servers, and tag descriptions parsed from `pyproject.toml`.
 - Replace 9 inline `try: except Exception: pass` ALTER TABLE blocks in `init_db()` (one per column) with calls to `add_column_if_missing()`, which catches `sqlite3.OperationalError` specifically, consolidates all column migrations into a single transaction, and returns `bool` for whether each column was newly added. The helper lives in `src/robotsix_mill/core/sqlite_utils.py` (mirrors the API of `robotsix_llmio.core.sqlite_utils` from PR #255).
 - explore sub-agent prompt: add "CONFIRM PATHS" grep guard and "NO GREP CHASING" rule to prevent wasteful grep calls on non-existent paths.
