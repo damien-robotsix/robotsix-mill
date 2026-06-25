@@ -653,7 +653,7 @@ def build_fs_tools(
         # The pydantic-ai path above scans message history; this path
         # consults the per-build accumulator of previously served ranges.
         # Coverage semantics match _find_covering_read.
-        elif ctx is None and not is_full_read:
+        elif ctx is None:
             key = str(p.resolve())
             records = _served_reads.get(key, [])
             if records:
@@ -756,6 +756,7 @@ def build_fs_tools(
         except (ValueError, OSError) as e:
             return f"error: {e}"
         _file_cache.pop(p.resolve(), None)
+        _served_reads.pop(str(p.resolve()), None)
         return f"wrote {len(content)} bytes to {path}"
 
     def edit_file(path: str, old_string: str, new_string: str, count: int = 1) -> str:
@@ -792,6 +793,7 @@ def build_fs_tools(
                     return syntax_error
                 p.write_text(new_content, encoding="utf-8")
                 _file_cache.pop(p.resolve(), None)
+                _served_reads.pop(str(p.resolve()), None)
                 return f"edit_file: replaced {count} occurrence(s) in {path}"
         except (ValueError, OSError) as e:
             return f"error: {e}"
@@ -805,6 +807,7 @@ def build_fs_tools(
         except (ValueError, OSError) as e:
             return f"error: {e}"
         _file_cache.pop(p.resolve(), None)
+        _served_reads.pop(str(p.resolve()), None)
         return f"deleted {path}"
 
     def list_dir(path: str = ".") -> str:
