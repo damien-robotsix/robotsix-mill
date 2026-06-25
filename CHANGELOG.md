@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Enable `frontend_sync` periodic workflow for `robotsix-mill` by adding the per-repo opt-in file `.robotsix-mill/periodic/frontend_sync.yaml` that cross-references Python `State`/`SourceKind` enum values against CSS selectors and JS maps in `board-mill.{css,js}`.
 - Add cross-repo import verification instruction to refine agent prompt: before referencing a symbol from a git-pinned dependency, verify it is importable; emit a ````prereq```` block on failure rather than assuming the module exists.
 - Wire spec-review conciseness pass into the multi-scope degraded path so auto-approve receives the concise spec instead of the verbose original when a split result degrades with no valid children.
 - Cap SQLite WAL file at 2 MiB via `PRAGMA journal_size_limit` and add `PRAGMA wal_checkpoint(TRUNCATE)` to the periodic DB maintenance pass to prevent unbounded WAL growth.
