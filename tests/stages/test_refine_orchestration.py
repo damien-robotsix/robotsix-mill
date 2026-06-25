@@ -455,7 +455,10 @@ def test_no_change_needed_closes_to_done(ctx_factory, monkeypatch, tmp_path):
     # HUMAN_ISSUE_APPROVAL when gated) so implement can verify the
     # "no change needed" claim against the live tree.
     assert out.next_state is not State.DONE
-    assert "no change needed" in out.note.lower() or "routing to implement" in out.note.lower()
+    assert (
+        "no change needed" in out.note.lower()
+        or "routing to implement" in out.note.lower()
+    )
 
 
 def test_no_change_needed_empty_rationale_degrades(ctx_factory, monkeypatch, tmp_path):

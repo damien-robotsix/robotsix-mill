@@ -21,19 +21,25 @@ from pathlib import Path
 
 from ...agents import refining
 from ...config.settings import Settings
-from ...core.constants import (
-    BINARY_EXTENSIONS,
-    DEDUP_ALREADY_DONE_PREFIX,  # noqa: F401 — re-exported
-    DEDUP_DUPLICATE_PREFIX,  # noqa: F401 — re-exported
-    FRESHNESS_STALE_PREFIX,  # noqa: F401 — re-exported
-    NON_IMPLEMENTATION_CLOSE_PREFIXES,  # noqa: F401 — re-exported
-    OBSOLESCENCE_GAP_PREFIX,  # noqa: F401 — re-exported
-    REFINE_MILL_CONSUMER_FOLLOWUP_PREFIX,  # noqa: F401 — re-exported
-    REFINE_MILL_MISROUTE_PREFIX,  # noqa: F401 — re-exported
-)
+from ...core import constants as _constants
+from ...core.constants import BINARY_EXTENSIONS
 from ...core.models import Ticket
 from ...core.states import State
 from ..base import StageContext
+
+# Re-export prefix constants for backward compatibility
+# (consumers import them from .helpers).
+DEDUP_DUPLICATE_PREFIX: str = _constants.DEDUP_DUPLICATE_PREFIX
+DEDUP_ALREADY_DONE_PREFIX: str = _constants.DEDUP_ALREADY_DONE_PREFIX
+FRESHNESS_STALE_PREFIX: str = _constants.FRESHNESS_STALE_PREFIX
+OBSOLESCENCE_GAP_PREFIX: str = _constants.OBSOLESCENCE_GAP_PREFIX
+REFINE_MILL_MISROUTE_PREFIX: str = _constants.REFINE_MILL_MISROUTE_PREFIX
+REFINE_MILL_CONSUMER_FOLLOWUP_PREFIX: str = (
+    _constants.REFINE_MILL_CONSUMER_FOLLOWUP_PREFIX
+)
+NON_IMPLEMENTATION_CLOSE_PREFIXES: tuple[str, ...] = (
+    _constants.NON_IMPLEMENTATION_CLOSE_PREFIXES
+)
 
 log = logging.getLogger("robotsix_mill.stages.refine")
 

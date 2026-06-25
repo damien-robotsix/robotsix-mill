@@ -6493,9 +6493,7 @@ def test_reviewer_agreement_routes_to_ready_for_task_without_branch(
     assert "routing to implement" in out.note.lower()
 
 
-def test_guard_implementation_done_blocks_unrecognized_done(
-    ctx, service
-):
+def test_guard_implementation_done_blocks_unrecognized_done(ctx, service):
     """The ``_guard_implementation_done`` helper must redirect a DONE
     outcome to READY when the ticket is TASK-kind, has no branch, and
     the note does not signal a recognised non-implementation shortcut."""
@@ -6514,9 +6512,7 @@ def test_guard_implementation_done_blocks_unrecognized_done(
     assert "was: all done!" in guarded.note
 
 
-def test_guard_implementation_done_allows_legitimate_prefix(
-    ctx, service
-):
+def test_guard_implementation_done_allows_legitimate_prefix(ctx, service):
     """The ``_guard_implementation_done`` helper must NOT redirect a DONE
     outcome whose note starts with a recognised non-implementation
     prefix (dedup, freshness, obsolescence, misroute)."""
@@ -6537,9 +6533,7 @@ def test_guard_implementation_done_allows_legitimate_prefix(
     )
 
 
-def test_maintenance_ticket_done_without_branch_allowed(
-    ctx, service, monkeypatch
-):
+def test_maintenance_ticket_done_without_branch_allowed(ctx, service, monkeypatch):
     """A maintenance ticket (DRAFT → MAINTENANCE → DONE) must be allowed
     to reach DONE without an implementation branch."""
     ticket = service.create("Create repo X", "draft body")
