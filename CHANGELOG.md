@@ -1,5 +1,7 @@
 ## 0.0.0 (unreleased)
 
+- Extract duplicate `_paths_from_diff` from `document.py` and `review.py` into shared `vcs/git_ops.py`.
+
 - Wire `frontend-sync` agent into the dispatch/UI layers: add POST route
   (`/frontend-sync`), CLI `_RUNNERS` entry, AGENT_COLORS key, and board
   button handler + window export in `board-mill.js`.
