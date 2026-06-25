@@ -401,6 +401,20 @@ class _CoreSettings(BaseModel):
     # + notifies instead of silently re-billing the LLM forever. Poll
     # stages (merge/deliver) are exempt — human_mr_approval legitimately waits.
     max_stuck_cycles: int = Field(default=3, ge=0)
+    # Adaptive poll backoff: when a ticket is processed and its state is
+    # unchanged/blocked, the reconcile poll loop backs off re-enqueuing it
+    # to reduce wasted LLM calls on stuck tickets. The backoff grows
+    # exponentially with consecutive unchanged cycles and resets instantly
+    # on any state transition. Set poll_backoff_enabled=False to disable.
+    poll_backoff_enabled: bool = Field(default=True)
+    # Fast-poll cadence (seconds) — the first backoff step after one
+    # unchanged cycle. Default 300 s = 5 min.
+    poll_backoff_base_seconds: int = Field(default=300, ge=0)
+    # Maximum poll backoff (seconds). Default 1800 s = 30 min.
+    poll_backoff_max_seconds: int = Field(default=1800, ge=0)
+    # Exponential factor applied per consecutive unchanged cycle.
+    # delay = min(max, base * factor ^ (cycles - 1)).
+    poll_backoff_factor: float = Field(default=2.0, gt=0)
     # Dollar-cap safety net: if a ticket's cumulative Langfuse-traced
     # LLM spend exceeds this value (across all stages), the worker
     # escalates it to BLOCKED. 0.0 disables the cap entirely.

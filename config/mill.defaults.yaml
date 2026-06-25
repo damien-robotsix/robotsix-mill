@@ -64,6 +64,10 @@ core:
     review_requests: 80                # per-call cap for review agent (counts tool calls + reasoning steps; 80 covers a 4-6 file PR)
     max_fix_iterations: 8              # implement→test fix loop iterations before BLOCK
     max_stuck_cycles: 3                # re-entries to same stage without progress before BLOCK
+    poll_backoff_enabled: true           # adaptive poll backoff for unchanged/blocked tickets (reduces wasted LLM calls)
+    poll_backoff_base_seconds: 300       # fast-poll cadence — first backoff step after one unchanged cycle (5 min)
+    poll_backoff_max_seconds: 1800       # max poll backoff (30 min cap)
+    poll_backoff_factor: 2.0             # exponential factor per consecutive unchanged cycle
     max_spend_usd_per_ticket: 20.0     # dollar cap per ticket — universal runaway-loop backstop (0.0 = disabled)
     max_traces_per_ticket: 15          # trace-count circuit-breaker (0 = disabled)
     max_openrouter_marginal_usd_per_ticket: 3.0  # OpenRouter marginal-spend breaker (0.0 = disabled)

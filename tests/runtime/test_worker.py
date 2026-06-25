@@ -2963,3 +2963,242 @@ async def test_poll_stage_exempt_from_ceiling(ctx, service, monkeypatch):
     assert len(merge_calls) == 10, (
         f"untraced stage should run all 10 times, got {len(merge_calls)}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Adaptive poll backoff
+# ---------------------------------------------------------------------------
+
+
+def test_poll_backoff_increases_on_unchanged_ticket(ctx, service):
+    """A ticket that keeps returning the same state gets exponentially
+    increasing poll backoff, capped at poll_backoff_max_seconds."""
+    import time as _time
+
+    # Prevent stuck-cycle escalation from interfering with backoff test.
+    ctx.settings.max_stuck_cycles = 20
+
+    w = Worker(ctx)
+    t = service.create("stuck-ticket")
+    service.transition(t.id, State.READY)
+
+    base = ctx.settings.poll_backoff_base_seconds  # 300
+    factor = ctx.settings.poll_backoff_factor  # 2.0
+    cap = ctx.settings.poll_backoff_max_seconds  # 1800
+
+    # First unchanged cycle: backoff = base * factor^0 = 300
+    now = _time.monotonic()
+    with __import__("unittest").mock.patch("time.monotonic", return_value=now):
+        w._check_progress(t.id, State.READY, State.READY)
+    assert t.id in w._poll_backoff
+    assert w._poll_backoff[t.id] == pytest.approx(now + base, rel=1e-9)
+
+    # Second unchanged cycle: backoff = base * factor^1 = 600
+    now2 = now + base
+    with __import__("unittest").mock.patch("time.monotonic", return_value=now2):
+        w._check_progress(t.id, State.READY, State.READY)
+    assert w._poll_backoff[t.id] == pytest.approx(now2 + base * factor, rel=1e-9)
+
+    # Third: base * factor^2 = 1200
+    now3 = now2 + base * factor
+    with __import__("unittest").mock.patch("time.monotonic", return_value=now3):
+        w._check_progress(t.id, State.READY, State.READY)
+    assert w._poll_backoff[t.id] == pytest.approx(now3 + base * (factor**2), rel=1e-9)
+
+    # Fourth: base * factor^3 = 2400 → capped at 1800
+    now4 = now3 + base * (factor**2)
+    with __import__("unittest").mock.patch("time.monotonic", return_value=now4):
+        w._check_progress(t.id, State.READY, State.READY)
+    assert w._poll_backoff[t.id] == pytest.approx(now4 + cap, rel=1e-9)
+
+    # Fifth: still capped at 1800
+    now5 = now4 + cap
+    with __import__("unittest").mock.patch("time.monotonic", return_value=now5):
+        w._check_progress(t.id, State.READY, State.READY)
+    assert w._poll_backoff[t.id] == pytest.approx(now5 + cap, rel=1e-9)
+
+
+def test_poll_backoff_resets_on_state_change(ctx, service):
+    """A state transition clears the poll backoff so fast polling resumes."""
+    import time as _time
+
+    w = Worker(ctx)
+    t = service.create("progressing-ticket")
+    service.transition(t.id, State.READY)
+
+    # Simulate one unchanged cycle to set a backoff.
+    now = _time.monotonic()
+    with __import__("unittest").mock.patch("time.monotonic", return_value=now):
+        w._check_progress(t.id, State.READY, State.READY)
+    assert t.id in w._poll_backoff
+
+    # State change must clear the backoff.
+    w._check_progress(t.id, State.READY, State.DELIVERABLE)
+    assert t.id not in w._poll_backoff
+
+
+def test_poll_backoff_disabled_when_flag_false(ctx, service):
+    """With poll_backoff_enabled=False, _check_progress never sets a backoff."""
+    import time as _time
+
+    ctx.settings.poll_backoff_enabled = False
+    w = Worker(ctx)
+    t = service.create("no-backoff")
+    service.transition(t.id, State.READY)
+
+    now = _time.monotonic()
+    with __import__("unittest").mock.patch("time.monotonic", return_value=now):
+        w._check_progress(t.id, State.READY, State.READY)
+
+    assert t.id not in w._poll_backoff
+
+
+def test_poll_backoff_disabled_when_base_zero(ctx, service):
+    """With poll_backoff_base_seconds=0, _check_progress never sets a backoff."""
+    import time as _time
+
+    ctx.settings.poll_backoff_base_seconds = 0
+    w = Worker(ctx)
+    t = service.create("zero-base")
+    service.transition(t.id, State.READY)
+
+    now = _time.monotonic()
+    with __import__("unittest").mock.patch("time.monotonic", return_value=now):
+        w._check_progress(t.id, State.READY, State.READY)
+
+    assert t.id not in w._poll_backoff
+
+
+async def test_poll_loop_skips_backoff_tickets(ctx, service, monkeypatch):
+    """The reconcile sweep skips tickets whose _poll_backoff hasn't elapsed."""
+    import time as _time
+
+    w = Worker(ctx)
+
+    t = service.create("backoff-poll")
+    # Transition to READY so the poll loop will try to re-enqueue it
+    # (READY has the implement stage).
+    service.transition(t.id, State.READY)
+
+    # Set a backoff far in the future.
+    w._poll_backoff[t.id] = _time.monotonic() + 3600
+
+    # Let the loop body run exactly once, then break.
+    calls = [0]
+
+    async def fake_sleep(_):
+        calls[0] += 1
+        if calls[0] >= 2:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.asyncio.sleep",
+        fake_sleep,
+    )
+    with pytest.raises(asyncio.CancelledError):
+        await w._poll_loop()
+
+    assert t.id not in w._pending, (
+        "ticket in backoff must NOT be enqueued by the reconcile sweep"
+    )
+
+    # Clear the backoff — now it should be enqueued.
+    del w._poll_backoff[t.id]
+    calls[0] = 0
+
+    with pytest.raises(asyncio.CancelledError):
+        await w._poll_loop()
+
+    assert t.id in w._pending, "ticket with expired/cleared backoff must be enqueued"
+
+
+async def test_poll_loop_enqueues_when_backoff_elapsed(ctx, service, monkeypatch):
+    """The reconcile sweep enqueues a ticket whose backoff has passed."""
+    import time as _time
+
+    w = Worker(ctx)
+
+    t = service.create("elapsed-backoff")
+    service.transition(t.id, State.READY)
+
+    # Set a backoff that has already elapsed.
+    w._poll_backoff[t.id] = _time.monotonic() - 10
+
+    calls = [0]
+
+    async def fake_sleep(_):
+        calls[0] += 1
+        if calls[0] >= 2:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.asyncio.sleep",
+        fake_sleep,
+    )
+    with pytest.raises(asyncio.CancelledError):
+        await w._poll_loop()
+
+    assert t.id in w._pending, "ticket with elapsed backoff must be enqueued"
+
+
+def test_long_stable_ticket_reduces_enqueue_count(ctx, service, monkeypatch):
+    """A ticket that stays unchanged for many cycles reduces enqueue
+    count by 3–6× compared to no-backoff baseline.
+
+    Simulates 12 poll-loop cycles (~1 h at 5-min cadence). Without
+    backoff all 12 would enqueue. With backoff, only a fraction are
+    enqueued because most cycles fall within the backoff window."""
+
+    # Prevent stuck-cycle escalation from interfering.
+    ctx.settings.max_stuck_cycles = 20
+
+    w = Worker(ctx)
+    # Use the default backoff: base=300s, factor=2.0, cap=1800s.
+    base = ctx.settings.poll_backoff_base_seconds
+
+    t = service.create("stable-ticket")
+    # Transition to READY so the ticket is in a state that the poll
+    # loop will re-enqueue (READY has the implement stage).
+    service.transition(t.id, State.READY)
+    workable_state = State.READY
+
+    # Simulate 12 poll-loop ticks spaced base=300s apart.
+    # Each tick: check if the ticket would be enqueued (backoff elapsed
+    # or absent). After each unchanged processing, set the next backoff.
+    enqueues = 0
+    current_time = 1000.0  # arbitrary starting monotonic
+
+    for _cycle in range(12):
+        # Check if ticket would be enqueued at this moment.
+        until = w._poll_backoff.get(t.id)
+        if until is None or current_time >= until:
+            enqueues += 1
+            # Simulate processing: ticket unchanged → set backoff.
+            with __import__("unittest").mock.patch(
+                "time.monotonic", return_value=current_time
+            ):
+                w._check_progress(t.id, workable_state, workable_state)
+        current_time += base  # next poll tick
+
+    # Without backoff: 12 enqueues.
+    # With backoff (base=300, factor=2.0, cap=1800):
+    # Cycle 0: enqueue → backoff until 1000+300=1300
+    # Tick 1 (1300): enqueue → backoff until 1300+600=1900
+    # Tick 2 (1600): skip (1600 < 1900)
+    # Tick 3 (1900): enqueue → backoff until 1900+1200=3100
+    # Tick 4 (2200): skip
+    # Tick 5 (2500): skip
+    # Tick 6 (2800): skip
+    # Tick 7 (3100): enqueue → backoff until 3100+1800=4900
+    # Tick 8 (3400): skip
+    # Tick 9 (3700): skip
+    # Tick 10 (4000): skip
+    # Tick 11 (4300): skip
+    # Total: 4 enqueues → reduction ratio = 12/4 = 3×
+    assert enqueues <= 5, (
+        f"expected ≤5 enqueues with backoff, got {enqueues} "
+        f"(reduction ratio {12 / enqueues:.1f}×)"
+    )
+    assert enqueues >= 2, (
+        f"expected ≥2 enqueues (some must still happen), got {enqueues}"
+    )

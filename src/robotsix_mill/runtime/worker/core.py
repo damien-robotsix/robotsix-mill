@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
@@ -203,6 +204,10 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         self._periodic_supervisor_tasks: dict[str, asyncio.Task[None]] = {}
         # ticket_id -> consecutive no-progress cycles in a traced stage
         self._stuck: dict[str, int] = {}
+        # ticket_id -> monotonic timestamp of next-allowed poll-loop
+        # re-enqueue.  Set by _check_progress when a ticket is unchanged;
+        # cleared on any state transition.  Drives adaptive poll backoff.
+        self._poll_backoff: dict[str, float] = {}
         # Epic-sweep dedup: epic_id → child count at last sweep re-eval, so the
         # safety-net sweep re-evaluates an all-children-terminal epic at most
         # once per stable child set (re-eval again only when children change).
@@ -535,6 +540,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         ticket = self.ctx.service.get(ticket_id)
         if ticket is not None and (ticket.retry_attempt or 0) > 0:
             self._stuck.pop(ticket_id, None)
+            self._poll_backoff.pop(ticket_id, None)
             return
 
         # --- dollar-cap safety net: check before the state-change
@@ -563,6 +569,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                 log.error("%s: %s", ticket_id, note)
                 self.ctx.service.transition(ticket_id, State.BLOCKED, note=note[:200])
                 self._stuck.pop(ticket_id, None)
+                self._poll_backoff.pop(ticket_id, None)
                 t = self.ctx.service.get(ticket_id)
                 if t is not None:
                     send_notification(t, State.BLOCKED, note[:200], self.ctx.settings)
@@ -604,6 +611,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                         ticket_id, State.BLOCKED, note=note[:200]
                     )
                     self._stuck.pop(ticket_id, None)
+                    self._poll_backoff.pop(ticket_id, None)
                     t = self.ctx.service.get(ticket_id)
                     if t is not None:
                         send_notification(
@@ -613,6 +621,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
 
         if after is None or after != before:
             self._stuck.pop(ticket_id, None)
+            self._poll_backoff.pop(ticket_id, None)
             return
         stage_name = STAGE_FOR_STATE.get(after)
         if stage_name is None:
@@ -628,9 +637,18 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         ticket = self.ctx.service.get(ticket_id)
         if ticket is not None and self.ctx.service.unmet_dependencies(ticket):
             self._stuck.pop(ticket_id, None)
+            self._poll_backoff.pop(ticket_id, None)
             return
         n = self._stuck.get(ticket_id, 0) + 1
         self._stuck[ticket_id] = n
+        # --- adaptive poll backoff ---
+        if self.ctx.settings.poll_backoff_enabled:
+            base = self.ctx.settings.poll_backoff_base_seconds
+            factor = self.ctx.settings.poll_backoff_factor
+            cap = self.ctx.settings.poll_backoff_max_seconds
+            if base > 0 and cap > 0:
+                delay = min(cap, base * (factor ** (n - 1)))
+                self._poll_backoff[ticket_id] = time.monotonic() + delay
         if n < self.ctx.settings.max_stuck_cycles:
             return
         note = (
@@ -643,6 +661,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         log.error("%s: %s", ticket_id, note)
         self.ctx.service.transition(ticket_id, State.BLOCKED, note=note[:200])
         self._stuck.pop(ticket_id, None)
+        self._poll_backoff.pop(ticket_id, None)
         t = self.ctx.service.get(ticket_id)
         if t is not None:
             send_notification(t, State.BLOCKED, note[:200], self.ctx.settings)
@@ -730,6 +749,11 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                         # an unmet check. Cheaper to filter here.
                         if svc.unmet_dependencies(t):
                             continue
+                        # --- adaptive poll backoff ---
+                        if self.ctx.settings.poll_backoff_enabled:
+                            until = self._poll_backoff.get(t.id)
+                            if until is not None and time.monotonic() < until:
+                                continue
                         self.enqueue(t.id)
             except Exception:  # noqa: BLE001 — never let the poll die
                 log.exception("reconcile sweep failed")
