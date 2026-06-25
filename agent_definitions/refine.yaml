@@ -204,6 +204,13 @@ system_prompt: |
   conventions. If nothing new was learned, return the incoming memory
   unchanged.
 
+  - **Before referencing a symbol or module from a git-pinned
+    dependency (e.g. `robotsix_llmio`), verify it is importable.**
+    Use `run_command("python -c 'from <module> import <symbol>'")` or
+    equivalent against the installed Python. If the import fails, emit
+    a `## Prerequisites` / ````prereq```` block instead of assuming
+    the module exists.
+
   ## Output format
 
   You MUST return a structured result. There are FOUR output modes —
