@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- **trace_review**: suppress false-positive `tool_errors` flag for `run_command`
+  outputs containing the expected git rebase conflict notification
+  (`error: could not apply`), which the rebase agent produces when it
+  encounters conflicts it is expected to resolve.
 - **trace_review env-var docs**: add dedicated sub-table under section 12 of
   `docs/configuration.md` documenting all 22 `MILL_TRACE_REVIEW_*` environment
   variables with their YAML paths, defaults, and descriptions.
