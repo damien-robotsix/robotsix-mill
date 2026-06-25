@@ -430,6 +430,7 @@ pre {
    ============================================================ */
 .s-draft                 { --c: #6b7280; }
 .s-human_issue_approval  { --c: #f59e0b; }
+.s-implement_complete    { --c: #3b82f6; }
 .s-ready                 { --c: #3b82f6; }
 .s-human_mr_approval     { --c: #a855f7; }
 .s-waiting_auto_merge    { --c: #3b82f6; }
