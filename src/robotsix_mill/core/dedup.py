@@ -18,6 +18,7 @@ import logging
 import re
 from collections.abc import Collection, Sequence
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 
 from ..config import Settings
 from .models import SourceKind, Ticket
@@ -84,6 +85,149 @@ def _ci_draft_fingerprint(body: str) -> str:
     # Collapse remaining whitespace.
     collapsed = re.sub(r"\s+", " ", " ".join(lines)).strip()
     return hashlib.sha256(collapsed.encode("utf-8")).hexdigest()[:16]
+
+
+# ---------------------------------------------------------------------------
+# Private helpers for find_prior_matching_ticket
+# ---------------------------------------------------------------------------
+
+
+def _is_eligible_candidate(
+    ticket: Ticket,
+    exclude_ids: Collection[str],
+    cutoff: datetime,
+    service: TicketService,
+) -> bool:
+    """Return True if *ticket* passes all pre-match guard clauses."""
+    if ticket.id in exclude_ids:
+        return False
+    created_at = ticket.created_at
+    if created_at is None:
+        return False
+    # Normalize to UTC-aware before comparing.
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    if created_at < cutoff:
+        return False
+
+    state = ticket.state
+    if state == State.ERRORED:
+        return False
+    if state == State.CLOSED:
+        history = service.history(ticket.id)
+        if not any(ev.state == State.DONE for ev in history):
+            return False
+        # else: CLOSED after DONE → eligible
+    return True
+
+
+def _label_gate(
+    ticket: Ticket,
+    dedup_labels: list[str] | None,
+) -> Literal["match", "skip", "continue"]:
+    """Evaluate label-based dedup for *ticket*.
+
+    Returns:
+        ``"match"`` — *ticket* carries a matching label; return it immediately.
+        ``"skip"`` — ``ci_fp:*`` mismatch; skip this candidate entirely.
+        ``"continue"`` — no label signal; fall through to subsequent checks.
+    """
+    if not dedup_labels:
+        return "continue"
+
+    cand_labels: list[str] = []
+    if ticket.labels:
+        try:
+            parsed = json.loads(ticket.labels)
+            if isinstance(parsed, list):
+                cand_labels = parsed
+        except json.JSONDecodeError, TypeError:
+            pass
+
+    if any(label in cand_labels for label in dedup_labels):
+        return "match"
+
+    # Label mismatch: a ``ci_fp:*`` fingerprint differs — skip this
+    # candidate entirely rather than falling through to the weak
+    # title-only fallback.
+    if any(label.startswith("ci_fp:") for label in dedup_labels):
+        return "skip"
+
+    return "continue"
+
+
+def _is_path_strong(
+    matched: list[str],
+    body: str,
+    require_scope_for_single_path: bool,
+) -> bool:
+    """Decide whether matched paths strongly corroborate a duplicate."""
+    if len(matched) >= 2:
+        return True  # ≥2 distinct shared paths
+    if not require_scope_for_single_path:
+        return True  # permissive prose-mention rule
+    return matched[0] in _scope_paths(body)  # declared in scope section
+
+
+def _concern_gate(
+    ticket_title: str,
+    body: str,
+    target_concern_tokens: set[str],
+    concern_min_overlap: int,
+) -> bool:
+    """Return True if concern-token overlap supports the path match."""
+    cand_concern = _extract_concern_tokens(ticket_title + "\n" + body)
+
+    if target_concern_tokens and cand_concern:
+        overlap = target_concern_tokens & cand_concern
+        return len(overlap) >= concern_min_overlap
+    # One or both sides have no concern tokens.
+    if concern_min_overlap > 1:
+        return False  # absence of tokens not evidence of sameness
+    return True  # conservative: cannot determine difference
+
+
+def _path_match(
+    ticket: Ticket,
+    board_id: str,
+    settings: Settings,
+    target_files: list[str],
+    require_scope_for_single_path: bool,
+    target_concern_tokens: set[str] | None,
+    concern_min_overlap: int,
+) -> bool:
+    """Return True if *ticket* matches via shared file paths."""
+    if not target_files:
+        return False
+
+    body = Workspace(
+        settings.workspaces_dir_for(ticket.board_id or board_id),
+        ticket.id,
+    ).read_description()
+    matched = [p for p in target_files if p and p in body]
+    if not matched:
+        return False
+    if not _is_path_strong(matched, body, require_scope_for_single_path):
+        return False
+
+    if target_concern_tokens is not None:
+        return _concern_gate(
+            ticket.title, body, target_concern_tokens, concern_min_overlap
+        )
+    return True
+
+
+def _fingerprint_match(
+    ticket: Ticket,
+    fingerprint: str,
+    suppress_title_only_match: bool,
+) -> bool:
+    """Return True if *ticket*'s normalized title contains *fingerprint*."""
+    if suppress_title_only_match:
+        return False
+    if not fingerprint:
+        return False
+    return fingerprint in normalize(ticket.title)
 
 
 def find_prior_matching_ticket(
@@ -157,106 +301,26 @@ def find_prior_matching_ticket(
         cutoff = now - timedelta(days=lookback_days)
         candidates = service.recent_tickets(limit=200, sources=sources)
         fingerprint = normalize(fingerprint_text)[:60]
+        # fmt: off
         for ticket in candidates:
-            if ticket.id in exclude_ids:
-                continue
-            created_at = ticket.created_at
-            if created_at is None:
-                continue
-            # Normalize to UTC-aware before comparing.
-            if created_at.tzinfo is None:
-                created_at = created_at.replace(tzinfo=timezone.utc)
-            if created_at < cutoff:
+            if not _is_eligible_candidate(ticket, exclude_ids, cutoff, service):
                 continue
 
-            # Classify candidate by state.
-            state = ticket.state
-            if state == State.ERRORED:
-                # Fix attempt failed — let a fresh draft retry.
+            gate = _label_gate(ticket, dedup_labels)
+            if gate == "match":
+                return ticket
+            if gate == "skip":
                 continue
-            if state == State.CLOSED:
-                # Was it ever DONE? If yes, treat as merged-then-closed
-                # (a match). If no, it was declined-as-noise; skip.
-                history = service.history(ticket.id)
-                if not any(ev.state == State.DONE for ev in history):
-                    continue
-                # else: fall through, this is a match-eligible candidate.
-            # DONE or any non-terminal (DRAFT/READY/IMPLEMENTING/etc.)
-            # falls through here as a match-eligible candidate.
 
-            # Label-based dedup (strong signal — runs before file-path/title
-            # checks so a ``ci_fp:*`` label match short-circuits, and a
-            # ``ci_fp:*`` label mismatch suppresses the weak title fallback).
-            if dedup_labels:
-                cand_labels: list[str] = []
-                if ticket.labels:
-                    try:
-                        parsed = json.loads(ticket.labels)
-                        if isinstance(parsed, list):
-                            cand_labels = parsed
-                    except json.JSONDecodeError, TypeError:
-                        pass
-                if any(label in cand_labels for label in dedup_labels):
-                    return ticket
-                # Label mismatch: a ``ci_fp:*`` fingerprint differs — skip
-                # this candidate entirely rather than falling through to
-                # the weak title-only fallback, which is the source of
-                # false positives for CI failure tickets.
-                if any(label.startswith("ci_fp:") for label in dedup_labels):
-                    continue
-
-            # File-path substring check (body).
-            if target_files:
-                body = Workspace(
-                    settings.workspaces_dir_for(ticket.board_id or board_id),
-                    ticket.id,
-                ).read_description()
-                matched = [p for p in target_files if p and p in body]
-                if matched:
-                    # Decide whether the path match is strong enough on
-                    # its own to proceed to the concern-token gate.
-                    if len(matched) >= 2:
-                        paths_strong = True  # ≥2 distinct shared paths
-                    elif not require_scope_for_single_path:
-                        paths_strong = True  # permissive prose-mention rule
-                    elif matched[0] in _scope_paths(body):
-                        paths_strong = True  # candidate declares this path
-                    else:
-                        paths_strong = False  # lone prose-only path
-
-                    if paths_strong:
-                        if target_concern_tokens is not None:
-                            cand_concern = _extract_concern_tokens(
-                                ticket.title + "\n" + body
-                            )
-                            if target_concern_tokens and cand_concern:
-                                overlap = target_concern_tokens & cand_concern
-                                if len(overlap) >= concern_min_overlap:
-                                    return ticket
-                                # Concern tokens present on both sides
-                                # but insufficient overlap — different
-                                # concerns; fall through to fingerprint.
-                            elif concern_min_overlap > 1:
-                                # One or both sides have no concern
-                                # tokens, and the caller requires
-                                # multiple substantive tokens — fall
-                                # through to fingerprint.
-                                pass
-                            else:
-                                # At least one side has no concern
-                                # tokens — cannot determine difference;
-                                # flag conservatively.
-                                return ticket
-                        else:
-                            return ticket
-
-            # Fingerprint check (normalized title).
-            if (
-                not suppress_title_only_match
-                and fingerprint
-                and fingerprint in normalize(ticket.title)
+            if _path_match(
+                ticket, board_id, settings, target_files,
+                require_scope_for_single_path, target_concern_tokens, concern_min_overlap,
             ):
                 return ticket
+
+            if _fingerprint_match(ticket, fingerprint, suppress_title_only_match):
+                return ticket
+        # fmt: on
         return None
     except Exception:  # noqa: BLE001 — best-effort dedup
         log.exception("dedup: find_prior_matching_ticket failed")
