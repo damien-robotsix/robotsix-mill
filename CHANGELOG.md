@@ -7,6 +7,13 @@
   `docs/configuration.md` section 12, including the three standard
   periodic-agent fields and the thirteen agent-specific GC/size-threshold
   settings.
+- Document missing gate and refine-routing environment variables in
+  `docs/configuration.md`: add `reviewer_agreement_gate_enabled` and
+  `refine_mill_misroute_gate_enabled` to section 7, and add a new
+  section 11.3 (Refine routing) covering the refine subscription model
+  routing knobs (`refine_trivial_*`, `refine_subscription_*`,
+  `refine_findings_*`, `max_re_refine_cycles_before_cheap`,
+  `refine_delta_reuse_enabled`).
 - Add `.github/ISSUE_TEMPLATE/config.yml` to disable blank issues and
   redirect questions, feature requests, and security reports to
   Discussions and the security policy page.
