@@ -387,13 +387,16 @@ def _extract_paths(text: str) -> list[str]:
 
 
 def paths_excluding_out_of_scope(text: str) -> list[str]:
-    """Like :func:`_extract_paths`, but skip tokens inside out-of-scope regions.
+    """Like :func:`_extract_paths`, but skip tokens inside out-of-scope
+    and cross-reference regions.
 
     Recognises two exclusion-marker styles:
 
     - **Markdown heading** (``## Out of scope``, ``### Explicitly out of
-      scope``): exclusion runs from the heading through to the next
-      markdown heading (inclusive).  A non-out-of-scope heading
+      scope``, ``## Reference``, ``## See also``, ``## Related work``,
+      and any heading whose title starts with ``reference`` or
+      ``see also``): exclusion runs from the heading through to the
+      next markdown heading (inclusive).  A non-excluded heading
       resumes capture.
     - **Inline marker** (``**Explicitly out of scope — …**``, ``- Out of
       scope: …``): exclusion runs from that line through the next blank
@@ -416,8 +419,12 @@ def paths_excluding_out_of_scope(text: str) -> list[str]:
 
             if is_heading:
                 title = stripped.lstrip("#*- ").strip().casefold()
-                if title.startswith("out of scope") or title.startswith(
-                    "explicitly out of scope"
+                if (
+                    title.startswith("out of scope")
+                    or title.startswith("explicitly out of scope")
+                    or title.startswith("reference")
+                    or title.startswith("see also")
+                    or title.startswith("related work")
                 ):
                     excluding = True
                     exclusion_mode = "heading"

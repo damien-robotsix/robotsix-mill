@@ -1864,3 +1864,99 @@ def test_paths_excluding_out_of_scope_empty_text_returns_empty():
     """Empty or None text returns an empty list."""
     assert paths_excluding_out_of_scope("") == []
     assert paths_excluding_out_of_scope(None) == []
+
+
+def test_paths_excluding_reference_section():
+    """Paths inside a ``## Reference`` section are excluded."""
+    body = (
+        "## Scope\n\n"
+        "src/robotsix_mill/core/foo.py\n\n"
+        "## Reference\n\n"
+        "agent_definitions/periodic/agent_check.yaml\n\n"
+        "## Acceptance criteria\n\n"
+        "tests/core/test_foo.py\n"
+    )
+    result = paths_excluding_out_of_scope(body)
+    assert "src/robotsix_mill/core/foo.py" in result
+    assert "tests/core/test_foo.py" in result
+    assert "agent_definitions/periodic/agent_check.yaml" not in result
+
+
+def test_paths_excluding_see_also_section():
+    """Paths inside a ``## See also`` section are excluded."""
+    body = (
+        "## Scope\n\n"
+        "src/robotsix_mill/core/foo.py\n\n"
+        "## See also\n\n"
+        "agent_definitions/explore.yaml\n\n"
+        "## Done\n\n"
+        "tests/core/test_foo.py\n"
+    )
+    result = paths_excluding_out_of_scope(body)
+    assert "src/robotsix_mill/core/foo.py" in result
+    assert "tests/core/test_foo.py" in result
+    assert "agent_definitions/explore.yaml" not in result
+
+
+def test_paths_excluding_related_work_section():
+    """Paths inside a ``## Related work`` section are excluded."""
+    body = (
+        "## Scope\n\n"
+        "src/robotsix_mill/core/foo.py\n\n"
+        "## Related work\n\n"
+        "ci.yml\n\n"
+        "## Done\n\n"
+        "tests/core/test_foo.py\n"
+    )
+    result = paths_excluding_out_of_scope(body)
+    assert "src/robotsix_mill/core/foo.py" in result
+    assert "tests/core/test_foo.py" in result
+    assert "ci.yml" not in result
+
+
+def test_paths_excluding_reference_prefix_heading():
+    """Any heading starting with ``reference`` (e.g. ``## References``) is excluded."""
+    body = (
+        "## Scope\n\n"
+        "src/keep.py\n\n"
+        "## References\n\n"
+        "src/discard.py\n\n"
+        "## Done\n\n"
+        "src/keep2.py\n"
+    )
+    result = paths_excluding_out_of_scope(body)
+    assert "src/keep.py" in result
+    assert "src/keep2.py" in result
+    assert "src/discard.py" not in result
+
+
+def test_paths_excluding_see_also_prefix_heading():
+    """Any heading starting with ``see also`` is excluded."""
+    body = (
+        "## Scope\n\n"
+        "src/keep.py\n\n"
+        "## See also: cross-references\n\n"
+        "src/discard.py\n\n"
+        "## Done\n\n"
+        "src/keep2.py\n"
+    )
+    result = paths_excluding_out_of_scope(body)
+    assert "src/keep.py" in result
+    assert "src/keep2.py" in result
+    assert "src/discard.py" not in result
+
+
+def test_paths_excluding_reference_section_path_in_both_returned():
+    """A path that appears in BOTH a reference section and an in-scope
+    section is still returned because of the in-scope occurrence."""
+    body = (
+        "## Scope\n\n"
+        "agent_definitions/periodic/agent_check.yaml\n\n"
+        "## Reference\n\n"
+        "The built-in definition lives at agent_definitions/periodic/agent_check.yaml\n\n"
+        "## Done\n\n"
+        "tests/core/test_foo.py\n"
+    )
+    result = paths_excluding_out_of_scope(body)
+    assert "agent_definitions/periodic/agent_check.yaml" in result
+    assert "tests/core/test_foo.py" in result
