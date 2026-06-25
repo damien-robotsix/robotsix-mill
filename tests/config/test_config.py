@@ -271,7 +271,9 @@ def test_default_language_instructions_dir():
     """language_instructions_dir defaults to
     agent_definitions/language_instructions."""
     s = Settings()
-    assert s.language_instructions_dir == Path("agent_definitions/language_instructions")
+    assert s.language_instructions_dir == Path(
+        "agent_definitions/language_instructions"
+    )
 
 
 # ===========================================================================
@@ -317,10 +319,20 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("review_max_rounds", "MILL_REVIEW_MAX_ROUNDS", "5", 5),
     # --- forge ---
     ("forge_kind", "FORGE_KIND", "gitlab", "gitlab"),
-    ("forge_remote_url", "FORGE_REMOTE_URL", "https://example.com/repo.git", "https://example.com/repo.git"),
+    (
+        "forge_remote_url",
+        "FORGE_REMOTE_URL",
+        "https://example.com/repo.git",
+        "https://example.com/repo.git",
+    ),
     ("forge_target_branch", "FORGE_TARGET_BRANCH", "develop", "develop"),
     ("forge_auth", "FORGE_AUTH", "app", "app"),
-    ("github_api_url", "MILL_GITHUB_API_URL", "https://github.example.com/api/v3", "https://github.example.com/api/v3"),
+    (
+        "github_api_url",
+        "MILL_GITHUB_API_URL",
+        "https://github.example.com/api/v3",
+        "https://github.example.com/api/v3",
+    ),
     # --- sandbox ---
     ("sandbox_image", "MILL_SANDBOX_IMAGE", "python:3.12-slim", "python:3.12-slim"),
     ("sandbox_memory", "MILL_SANDBOX_MEMORY", "4g", "4g"),
@@ -343,13 +355,38 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("api_port", "MILL_API_PORT", "8080", 8080),
     ("api_url", "MILL_API_URL", "http://localhost:8080", "http://localhost:8080"),
     # --- memory paths ---
-    ("retrospect_memory_path", "MILL_RETROSPECT_MEMORY_PATH", "/mem/retro.md", "/mem/retro.md"),
-    ("implement_memory_path", "MILL_IMPLEMENT_MEMORY_PATH", "/mem/impl.md", "/mem/impl.md"),
-    ("refine_memory_path", "MILL_REFINE_MEMORY_PATH", "/mem/refine.md", "/mem/refine.md"),
+    (
+        "retrospect_memory_path",
+        "MILL_RETROSPECT_MEMORY_PATH",
+        "/mem/retro.md",
+        "/mem/retro.md",
+    ),
+    (
+        "implement_memory_path",
+        "MILL_IMPLEMENT_MEMORY_PATH",
+        "/mem/impl.md",
+        "/mem/impl.md",
+    ),
+    (
+        "refine_memory_path",
+        "MILL_REFINE_MEMORY_PATH",
+        "/mem/refine.md",
+        "/mem/refine.md",
+    ),
     ("ci_fix_memory_path", "MILL_CI_FIX_MEMORY_PATH", "/mem/cifix.md", "/mem/cifix.md"),
-    ("rebase_memory_path", "MILL_REBASE_MEMORY_PATH", "/mem/rebase.md", "/mem/rebase.md"),
+    (
+        "rebase_memory_path",
+        "MILL_REBASE_MEMORY_PATH",
+        "/mem/rebase.md",
+        "/mem/rebase.md",
+    ),
     # --- CI patterns ---
-    ("ci_patterns_path", "MILL_CI_PATTERNS_PATH", "/mem/patterns.json", "/mem/patterns.json"),
+    (
+        "ci_patterns_path",
+        "MILL_CI_PATTERNS_PATH",
+        "/mem/patterns.json",
+        "/mem/patterns.json",
+    ),
     # --- CI-fix tuning ---
     ("ci_fix_max_cycles", "MILL_CI_FIX_MAX_CYCLES", "5", 5),
     ("ci_fix_max_identical_failures", "MILL_CI_FIX_MAX_IDENTICAL_FAILURES", "3", 3),
@@ -358,26 +395,46 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("max_stuck_cycles", "MILL_MAX_STUCK_CYCLES", "5", 5),
     # --- web research / fetch ---
     ("web_search", "MILL_WEB_SEARCH", "1", True),
-    ("fetch_image", "MILL_FETCH_IMAGE", "curlimages/curl:8.17.1", "curlimages/curl:8.17.1"),
+    (
+        "fetch_image",
+        "MILL_FETCH_IMAGE",
+        "curlimages/curl:8.17.1",
+        "curlimages/curl:8.17.1",
+    ),
     ("web_fetch_max_bytes", "MILL_WEB_FETCH_MAX_BYTES", "1048576", 1048576),
     ("web_fetch_timeout", "MILL_WEB_FETCH_TIMEOUT", "10", 10),
     # --- OpenRouter low-credit polling ---
     ("low_credit_threshold_usd", "MILL_LOW_CREDIT_THRESHOLD_USD", "2.5", 2.5),
     ("low_credit_poll_enabled", "MILL_LOW_CREDIT_POLL_ENABLED", "0", False),
-    ("low_credit_poll_interval_seconds", "MILL_LOW_CREDIT_POLL_INTERVAL_SECONDS", "1800", 1800),
+    (
+        "low_credit_poll_interval_seconds",
+        "MILL_LOW_CREDIT_POLL_INTERVAL_SECONDS",
+        "1800",
+        1800,
+    ),
     # --- periodic agent toggles ---
     ("survey_periodic", "MILL_SURVEY_PERIODIC", "0", False),
     ("survey_interval_seconds", "MILL_SURVEY_INTERVAL_SECONDS", "43200", 43200),
     ("audit_periodic", "MILL_AUDIT_PERIODIC", "1", True),
     ("audit_interval_seconds", "MILL_AUDIT_INTERVAL_SECONDS", "43200", 43200),
     ("trace_health_periodic", "MILL_TRACE_HEALTH_PERIODIC", "1", True),
-    ("trace_health_interval_seconds", "MILL_TRACE_HEALTH_INTERVAL_SECONDS", "43200", 43200),
+    (
+        "trace_health_interval_seconds",
+        "MILL_TRACE_HEALTH_INTERVAL_SECONDS",
+        "43200",
+        43200,
+    ),
     ("health_periodic", "MILL_HEALTH_PERIODIC", "1", True),
     ("health_interval_seconds", "MILL_HEALTH_INTERVAL_SECONDS", "43200", 43200),
     ("test_gap_periodic", "MILL_TEST_GAP_PERIODIC", "1", True),
     ("test_gap_interval_seconds", "MILL_TEST_GAP_INTERVAL_SECONDS", "43200", 43200),
     ("agent_check_periodic", "MILL_AGENT_CHECK_PERIODIC", "1", True),
-    ("agent_check_interval_seconds", "MILL_AGENT_CHECK_INTERVAL_SECONDS", "43200", 43200),
+    (
+        "agent_check_interval_seconds",
+        "MILL_AGENT_CHECK_INTERVAL_SECONDS",
+        "43200",
+        43200,
+    ),
     ("diagnostic_periodic", "MILL_DIAGNOSTIC_PERIODIC", "1", True),
     ("diagnostic_interval_seconds", "MILL_DIAGNOSTIC_INTERVAL_SECONDS", "43200", 43200),
     ("ci_log_max_bytes", "MILL_CI_LOG_MAX_BYTES", "32768", 32768),
@@ -390,25 +447,65 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("retrospect_model", "MILL_RETROSPECT_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
     ("audit_model", "MILL_AUDIT_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
     ("dedup_model", "MILL_DEDUP_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
-    ("web_research_model", "MILL_WEB_RESEARCH_MODEL", "openai/gpt-4o-mini", "openai/gpt-4o-mini"),
+    (
+        "web_research_model",
+        "MILL_WEB_RESEARCH_MODEL",
+        "openai/gpt-4o-mini",
+        "openai/gpt-4o-mini",
+    ),
     ("review_model", "MILL_REVIEW_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
-    ("trace_inspector_model", "MILL_TRACE_INSPECTOR_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
+    (
+        "trace_inspector_model",
+        "MILL_TRACE_INSPECTOR_MODEL",
+        "openai/gpt-4o",
+        "openai/gpt-4o",
+    ),
     ("test_gap_model", "MILL_TEST_GAP_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
     ("agent_check_model", "MILL_AGENT_CHECK_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
     ("health_model", "MILL_HEALTH_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
     ("survey_model", "MILL_SURVEY_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
-    ("rate_limit_fallback_model", "MILL_RATE_LIMIT_FALLBACK_MODEL", "openai/gpt-4o-mini", "openai/gpt-4o-mini"),
+    (
+        "rate_limit_fallback_model",
+        "MILL_RATE_LIMIT_FALLBACK_MODEL",
+        "openai/gpt-4o-mini",
+        "openai/gpt-4o-mini",
+    ),
     ("triage_model", "MILL_TRIAGE_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
     ("doc_model", "MILL_DOC_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
-    ("auto_approve_model", "MILL_AUTO_APPROVE_MODEL", "openai/gpt-4o-mini", "openai/gpt-4o-mini"),
-    ("doc_classifier_model", "MILL_DOC_CLASSIFIER_MODEL", "openai/gpt-4o-mini", "openai/gpt-4o-mini"),
-    ("scope_triage_model", "MILL_SCOPE_TRIAGE_MODEL", "openai/gpt-4o-mini", "openai/gpt-4o-mini"),
+    (
+        "auto_approve_model",
+        "MILL_AUTO_APPROVE_MODEL",
+        "openai/gpt-4o-mini",
+        "openai/gpt-4o-mini",
+    ),
+    (
+        "doc_classifier_model",
+        "MILL_DOC_CLASSIFIER_MODEL",
+        "openai/gpt-4o-mini",
+        "openai/gpt-4o-mini",
+    ),
+    (
+        "scope_triage_model",
+        "MILL_SCOPE_TRIAGE_MODEL",
+        "openai/gpt-4o-mini",
+        "openai/gpt-4o-mini",
+    ),
     # --- epic dedup ---
     ("epic_dedup_lookback_days", "MILL_EPIC_DEDUP_LOOKBACK_DAYS", "14", 14),
     # --- survey agent ---
-    ("survey_memory_path", "MILL_SURVEY_MEMORY_PATH", "/mem/survey.md", "/mem/survey.md"),
+    (
+        "survey_memory_path",
+        "MILL_SURVEY_MEMORY_PATH",
+        "/mem/survey.md",
+        "/mem/survey.md",
+    ),
     # --- review revision ---
-    ("review_revision_memory_path", "MILL_REVIEW_REVISION_MEMORY_PATH", "/mem/review_revision.md", "/mem/review_revision.md"),
+    (
+        "review_revision_memory_path",
+        "MILL_REVIEW_REVISION_MEMORY_PATH",
+        "/mem/review_revision.md",
+        "/mem/review_revision.md",
+    ),
     ("review_revision_max_attempts", "MILL_REVIEW_REVISION_MAX_ATTEMPTS", "4", 4),
     # --- other memory paths ---
     ("doc_memory_path", "MILL_DOC_MEMORY_PATH", "/mem/doc.md", "/mem/doc.md"),
@@ -429,8 +526,12 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     # --- accessor ---
     ("langfuse_cleanup_max_traces", "MILL_LANGFUSE_CLEANUP_MAX_TRACES", "2000", 2000),
     # --- timeout overrides ---
-    ("stage_timeout_overrides", "MILL_STAGE_TIMEOUT_OVERRIDES",
-     '{"refine": 1200, "merge": 0}', {"refine": 1200, "merge": 0}),
+    (
+        "stage_timeout_overrides",
+        "MILL_STAGE_TIMEOUT_OVERRIDES",
+        '{"refine": 1200, "merge": 0}',
+        {"refine": 1200, "merge": 0},
+    ),
     # --- model-request-timeout ---
     ("model_request_timeout", "MILL_MODEL_REQUEST_TIMEOUT", "600.0", 600.0),
     # --- auto-fix / ping-pong ---
@@ -440,24 +541,64 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("rate_limit_fallback_retries", "MILL_RATE_LIMIT_FALLBACK_RETRIES", "5", 5),
     # --- board-agent env vars ---
     ("board_agent_enabled", "MILL_BOARD_AGENT_ENABLED", "1", True),
-    ("board_agent_api_url", "MILL_BOARD_AGENT_API_URL", "http://host.docker.internal:8077", "http://host.docker.internal:8077"),
+    (
+        "board_agent_api_url",
+        "MILL_BOARD_AGENT_API_URL",
+        "http://host.docker.internal:8077",
+        "http://host.docker.internal:8077",
+    ),
     ("board_agent_api_token", "MILL_BOARD_AGENT_API_TOKEN", "mytoken", "mytoken"),
     ("board_agent_repo_id", "MILL_BOARD_AGENT_REPO_ID", "my-repo", "my-repo"),
     ("board_agent_write_ops", "MILL_BOARD_AGENT_WRITE_OPS", "0", False),
-    ("board_agent_broker_host", "MILL_BOARD_AGENT_BROKER_HOST", "broker.example.com", "broker.example.com"),
+    (
+        "board_agent_broker_host",
+        "MILL_BOARD_AGENT_BROKER_HOST",
+        "broker.example.com",
+        "broker.example.com",
+    ),
     ("board_agent_broker_port", "MILL_BOARD_AGENT_BROKER_PORT", "8443", 8443),
     ("board_agent_broker_scheme", "MILL_BOARD_AGENT_BROKER_SCHEME", "http", "http"),
-    ("board_agent_broker_token", "MILL_BOARD_AGENT_BROKER_TOKEN", "brokertoken", "brokertoken"),
+    (
+        "board_agent_broker_token",
+        "MILL_BOARD_AGENT_BROKER_TOKEN",
+        "brokertoken",
+        "brokertoken",
+    ),
     # --- board-manager env vars ---
     ("board_manager_enabled", "MILL_BOARD_MANAGER_ENABLED", "1", True),
-    ("board_manager_broker_token", "MILL_BOARD_MANAGER_BROKER_TOKEN", "mgrtoken", "mgrtoken"),
-    ("board_manager_model", "MILL_BOARD_MANAGER_MODEL", "anthropic/claude-sonnet-4-20250514", "anthropic/claude-sonnet-4-20250514"),
-    ("board_manager_recall_model", "MILL_BOARD_MANAGER_RECALL_MODEL", "openai/gpt-4o-mini", "openai/gpt-4o-mini"),
-    ("board_manager_max_conversations", "MILL_BOARD_MANAGER_MAX_CONVERSATIONS", "100", 100),
+    (
+        "board_manager_broker_token",
+        "MILL_BOARD_MANAGER_BROKER_TOKEN",
+        "mgrtoken",
+        "mgrtoken",
+    ),
+    (
+        "board_manager_model",
+        "MILL_BOARD_MANAGER_MODEL",
+        "anthropic/claude-sonnet-4-20250514",
+        "anthropic/claude-sonnet-4-20250514",
+    ),
+    (
+        "board_manager_recall_model",
+        "MILL_BOARD_MANAGER_RECALL_MODEL",
+        "openai/gpt-4o-mini",
+        "openai/gpt-4o-mini",
+    ),
+    (
+        "board_manager_max_conversations",
+        "MILL_BOARD_MANAGER_MAX_CONVERSATIONS",
+        "100",
+        100,
+    ),
     # --- claude sdk vision ---
     ("claude_sdk_vision_enabled", "MILL_CLAUDE_SDK_VISION_ENABLED", "1", True),
     # --- review stage tuning ---
-    ("review_prior_context_max_chars", "MILL_REVIEW_PRIOR_CONTEXT_MAX_CHARS", "4000", 4000),
+    (
+        "review_prior_context_max_chars",
+        "MILL_REVIEW_PRIOR_CONTEXT_MAX_CHARS",
+        "4000",
+        4000,
+    ),
     ("review_diff_max_chars", "MILL_REVIEW_DIFF_MAX_CHARS", "100000", 100000),
     ("review_output_token_budget", "MILL_REVIEW_OUTPUT_TOKEN_BUDGET", "32768", 32768),
     # --- lint & read-file cap ---
@@ -472,34 +613,81 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("network_probe_host", "MILL_NETWORK_PROBE_HOST", "gitlab.com", "gitlab.com"),
     ("network_outage_retry_seconds", "MILL_NETWORK_OUTAGE_RETRY_SECONDS", "60", 60),
     # --- language_instructions_dir ---
-    ("language_instructions_dir", "MILL_LANGUAGE_INSTRUCTIONS_DIR",
-     "my_instructions", "my_instructions"),
+    (
+        "language_instructions_dir",
+        "MILL_LANGUAGE_INSTRUCTIONS_DIR",
+        "my_instructions",
+        "my_instructions",
+    ),
     # --- diagnostic target / monitor ---
-    ("diagnostic_target_repo_id", "MILL_DIAGNOSTIC_TARGET_REPO_ID", "my-project", "my-project"),
-    ("diagnostic_monitored_repo_ids", "MILL_DIAGNOSTIC_MONITORED_REPO_IDS",
-     '["repo-a", "repo-b"]', ["repo-a", "repo-b"]),
+    (
+        "diagnostic_target_repo_id",
+        "MILL_DIAGNOSTIC_TARGET_REPO_ID",
+        "my-project",
+        "my-project",
+    ),
+    (
+        "diagnostic_monitored_repo_ids",
+        "MILL_DIAGNOSTIC_MONITORED_REPO_IDS",
+        '["repo-a", "repo-b"]',
+        ["repo-a", "repo-b"],
+    ),
     # --- scope_triage_max_files ---
     ("scope_triage_max_files", "MILL_SCOPE_TRIAGE_MAX_FILES", "25", 25),
     # --- periodic bc_check ---
     ("bc_check_periodic", "MILL_BC_CHECK_PERIODIC", "0", False),
     ("bc_check_interval_seconds", "MILL_BC_CHECK_INTERVAL_SECONDS", "43200", 43200),
-    ("bc_check_memory_path", "MILL_BC_CHECK_MEMORY_PATH", "/mem/bc_check.md", "/mem/bc_check.md"),
+    (
+        "bc_check_memory_path",
+        "MILL_BC_CHECK_MEMORY_PATH",
+        "/mem/bc_check.md",
+        "/mem/bc_check.md",
+    ),
     # --- periodic completeness_check ---
     ("completeness_check_periodic", "MILL_COMPLETENESS_CHECK_PERIODIC", "0", False),
-    ("completeness_check_interval_seconds", "MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS", "43200", 43200),
-    ("completeness_check_memory_path", "MILL_COMPLETENESS_CHECK_MEMORY_PATH",
-     "/mem/completeness_check.md", "/mem/completeness_check.md"),
-    ("completeness_check_request_limit", "MILL_COMPLETENESS_CHECK_REQUEST_LIMIT", "50", 50),
+    (
+        "completeness_check_interval_seconds",
+        "MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS",
+        "43200",
+        43200,
+    ),
+    (
+        "completeness_check_memory_path",
+        "MILL_COMPLETENESS_CHECK_MEMORY_PATH",
+        "/mem/completeness_check.md",
+        "/mem/completeness_check.md",
+    ),
+    (
+        "completeness_check_request_limit",
+        "MILL_COMPLETENESS_CHECK_REQUEST_LIMIT",
+        "50",
+        50,
+    ),
     # --- periodic env-doc-sync ---
     ("env_doc_sync_model", "MILL_ENV_DOC_SYNC_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
     ("env_doc_sync_periodic", "MILL_ENV_DOC_SYNC_PERIODIC", "0", False),
-    ("env_doc_sync_interval_seconds", "MILL_ENV_DOC_SYNC_INTERVAL_SECONDS", "43200", 43200),
-    ("env_doc_sync_memory_path", "MILL_ENV_DOC_SYNC_MEMORY_PATH", "/mem/env_doc_sync.md", "/mem/env_doc_sync.md"),
+    (
+        "env_doc_sync_interval_seconds",
+        "MILL_ENV_DOC_SYNC_INTERVAL_SECONDS",
+        "43200",
+        43200,
+    ),
+    (
+        "env_doc_sync_memory_path",
+        "MILL_ENV_DOC_SYNC_MEMORY_PATH",
+        "/mem/env_doc_sync.md",
+        "/mem/env_doc_sync.md",
+    ),
     # --- periodic state-sync ---
     ("state_sync_model", "MILL_STATE_SYNC_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
     ("state_sync_periodic", "MILL_STATE_SYNC_PERIODIC", "0", False),
     ("state_sync_interval_seconds", "MILL_STATE_SYNC_INTERVAL_SECONDS", "43200", 43200),
-    ("state_sync_memory_path", "MILL_STATE_SYNC_MEMORY_PATH", "/mem/state_sync.md", "/mem/state_sync.md"),
+    (
+        "state_sync_memory_path",
+        "MILL_STATE_SYNC_MEMORY_PATH",
+        "/mem/state_sync.md",
+        "/mem/state_sync.md",
+    ),
     # --- repo visibility default ---
     ("repo_visibility_default", "MILL_REPO_VISIBILITY_DEFAULT", "private", "private"),
     # --- enable_repo_creation ---
@@ -510,56 +698,150 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     # --- web_knowledge_* ---
     ("web_knowledge_stale_days", "MILL_WEB_KNOWLEDGE_STALE_DAYS", "15", 15),
     ("web_knowledge_request_limit", "MILL_WEB_KNOWLEDGE_REQUEST_LIMIT", "4", 4),
-    ("web_knowledge_model", "MILL_WEB_KNOWLEDGE_MODEL", "deepseek/deepseek-v4-pro", "deepseek/deepseek-v4-pro"),
+    (
+        "web_knowledge_model",
+        "MILL_WEB_KNOWLEDGE_MODEL",
+        "deepseek/deepseek-v4-pro",
+        "deepseek/deepseek-v4-pro",
+    ),
     # --- data_dir_audit ---
     ("data_dir_audit_periodic", "MILL_DATA_DIR_AUDIT_PERIODIC", "0", False),
-    ("data_dir_audit_interval_seconds", "MILL_DATA_DIR_AUDIT_INTERVAL_SECONDS", "43200", 43200),
-    ("data_dir_audit_memory_path", "MILL_DATA_DIR_AUDIT_MEMORY_PATH", "/mem/data_dir_audit.md", "/mem/data_dir_audit.md"),
+    (
+        "data_dir_audit_interval_seconds",
+        "MILL_DATA_DIR_AUDIT_INTERVAL_SECONDS",
+        "43200",
+        43200,
+    ),
+    (
+        "data_dir_audit_memory_path",
+        "MILL_DATA_DIR_AUDIT_MEMORY_PATH",
+        "/mem/data_dir_audit.md",
+        "/mem/data_dir_audit.md",
+    ),
     # --- copy_paste ---
     ("copy_paste_periodic", "MILL_COPY_PASTE_PERIODIC", "0", False),
     ("copy_paste_interval_seconds", "MILL_COPY_PASTE_INTERVAL_SECONDS", "43200", 43200),
-    ("copy_paste_memory_path", "MILL_COPY_PASTE_MEMORY_PATH", "/mem/copy_paste.md", "/mem/copy_paste.md"),
+    (
+        "copy_paste_memory_path",
+        "MILL_COPY_PASTE_MEMORY_PATH",
+        "/mem/copy_paste.md",
+        "/mem/copy_paste.md",
+    ),
     # --- forge_parity ---
     ("forge_parity_periodic", "MILL_FORGE_PARITY_PERIODIC", "0", False),
-    ("forge_parity_interval_seconds", "MILL_FORGE_PARITY_INTERVAL_SECONDS", "43200", 43200),
-    ("forge_parity_memory_path", "MILL_FORGE_PARITY_MEMORY_PATH", "/mem/forge_parity.md", "/mem/forge_parity.md"),
+    (
+        "forge_parity_interval_seconds",
+        "MILL_FORGE_PARITY_INTERVAL_SECONDS",
+        "43200",
+        43200,
+    ),
+    (
+        "forge_parity_memory_path",
+        "MILL_FORGE_PARITY_MEMORY_PATH",
+        "/mem/forge_parity.md",
+        "/mem/forge_parity.md",
+    ),
     # --- module_curator ---
     ("module_curator_periodic", "MILL_MODULE_CURATOR_PERIODIC", "0", False),
-    ("module_curator_interval_seconds", "MILL_MODULE_CURATOR_INTERVAL_SECONDS", "43200", 43200),
-    ("module_curator_memory_path", "MILL_MODULE_CURATOR_MEMORY_PATH", "/mem/module_curator.md", "/mem/module_curator.md"),
+    (
+        "module_curator_interval_seconds",
+        "MILL_MODULE_CURATOR_INTERVAL_SECONDS",
+        "43200",
+        43200,
+    ),
+    (
+        "module_curator_memory_path",
+        "MILL_MODULE_CURATOR_MEMORY_PATH",
+        "/mem/module_curator.md",
+        "/mem/module_curator.md",
+    ),
     # --- stale_branch_cleanup ---
     ("stale_branch_cleanup_periodic", "MILL_STALE_BRANCH_CLEANUP_PERIODIC", "0", False),
-    ("stale_branch_cleanup_interval_seconds", "MILL_STALE_BRANCH_CLEANUP_INTERVAL_SECONDS", "43200", 43200),
+    (
+        "stale_branch_cleanup_interval_seconds",
+        "MILL_STALE_BRANCH_CLEANUP_INTERVAL_SECONDS",
+        "43200",
+        43200,
+    ),
     # --- sandbox_reaper ---
     ("sandbox_reaper_periodic", "MILL_SANDBOX_REAPER_PERIODIC", "0", False),
-    ("sandbox_reaper_interval_seconds", "MILL_SANDBOX_REAPER_INTERVAL_SECONDS", "1800", 1800),
+    (
+        "sandbox_reaper_interval_seconds",
+        "MILL_SANDBOX_REAPER_INTERVAL_SECONDS",
+        "1800",
+        1800,
+    ),
     # --- run_health ---
     ("run_health_periodic", "MILL_RUN_HEALTH_PERIODIC", "0", False),
     ("run_health_interval_seconds", "MILL_RUN_HEALTH_INTERVAL_SECONDS", "43200", 43200),
-    ("run_health_memory_path", "MILL_RUN_HEALTH_MEMORY_PATH", "/mem/run_health.md", "/mem/run_health.md"),
+    (
+        "run_health_memory_path",
+        "MILL_RUN_HEALTH_MEMORY_PATH",
+        "/mem/run_health.md",
+        "/mem/run_health.md",
+    ),
     ("run_health_window_hours", "MILL_RUN_HEALTH_WINDOW_HOURS", "72", 72),
-    ("run_health_target_repo_id", "MILL_RUN_HEALTH_TARGET_REPO_ID", "my-board", "my-board"),
+    (
+        "run_health_target_repo_id",
+        "MILL_RUN_HEALTH_TARGET_REPO_ID",
+        "my-board",
+        "my-board",
+    ),
     # --- config_sync ---
     ("config_sync_periodic", "MILL_CONFIG_SYNC_PERIODIC", "0", False),
-    ("config_sync_interval_seconds", "MILL_CONFIG_SYNC_INTERVAL_SECONDS", "43200", 43200),
-    ("config_sync_memory_path", "MILL_CONFIG_SYNC_MEMORY_PATH", "/mem/config_sync.md", "/mem/config_sync.md"),
+    (
+        "config_sync_interval_seconds",
+        "MILL_CONFIG_SYNC_INTERVAL_SECONDS",
+        "43200",
+        43200,
+    ),
+    (
+        "config_sync_memory_path",
+        "MILL_CONFIG_SYNC_MEMORY_PATH",
+        "/mem/config_sync.md",
+        "/mem/config_sync.md",
+    ),
     # --- dependabot_ingest ---
     ("dependabot_ingest_periodic", "MILL_DEPENDABOT_INGEST_PERIODIC", "0", False),
-    ("dependabot_ingest_interval_seconds", "MILL_DEPENDABOT_INGEST_INTERVAL_SECONDS", "43200", 43200),
+    (
+        "dependabot_ingest_interval_seconds",
+        "MILL_DEPENDABOT_INGEST_INTERVAL_SECONDS",
+        "43200",
+        43200,
+    ),
     # --- timeout_escalation ---
     ("timeout_escalation_periodic", "MILL_TIMEOUT_ESCALATION_PERIODIC", "0", False),
-    ("timeout_escalation_interval_seconds", "MILL_TIMEOUT_ESCALATION_INTERVAL_SECONDS", "1800", 1800),
-    ("timeout_escalation_threshold_seconds", "MILL_TIMEOUT_ESCALATION_THRESHOLD_SECONDS", "86400", 86400),
+    (
+        "timeout_escalation_interval_seconds",
+        "MILL_TIMEOUT_ESCALATION_INTERVAL_SECONDS",
+        "1800",
+        1800,
+    ),
+    (
+        "timeout_escalation_threshold_seconds",
+        "MILL_TIMEOUT_ESCALATION_THRESHOLD_SECONDS",
+        "86400",
+        86400,
+    ),
     # --- langfuse_cleanup ---
     ("langfuse_cleanup_periodic", "MILL_LANGFUSE_CLEANUP_PERIODIC", "0", False),
-    ("langfuse_cleanup_interval_seconds", "MILL_LANGFUSE_CLEANUP_INTERVAL_SECONDS", "43200", 43200),
+    (
+        "langfuse_cleanup_interval_seconds",
+        "MILL_LANGFUSE_CLEANUP_INTERVAL_SECONDS",
+        "43200",
+        43200,
+    ),
     # --- test_gap request_limit ---
     ("test_gap_request_limit", "MILL_TEST_GAP_REQUEST_LIMIT", "60", 60),
     # --- max_spend_usd_per_ticket ---
     ("max_spend_usd_per_ticket", "MILL_MAX_SPEND_USD_PER_TICKET", "5.0", 5.0),
     ("max_traces_per_ticket", "MILL_MAX_TRACES_PER_TICKET", "10", 10),
-    ("max_openrouter_marginal_usd_per_ticket", "MILL_MAX_OPENROUTER_MARGINAL_USD_PER_TICKET",
-     "2.0", 2.0),
+    (
+        "max_openrouter_marginal_usd_per_ticket",
+        "MILL_MAX_OPENROUTER_MARGINAL_USD_PER_TICKET",
+        "2.0",
+        2.0,
+    ),
     # --- stage_timeout_seconds ---
     ("stage_timeout_seconds", "MILL_STAGE_TIMEOUT_SECONDS", "1200", 1200),
     # --- dedup_lookback_days ---
@@ -579,7 +861,12 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     # --- reference_files_max_count ---
     ("reference_files_max_count", "MILL_REFERENCE_FILES_MAX_COUNT", "3", 3),
     # --- reference_files_max_total_lines ---
-    ("reference_files_max_total_lines", "MILL_REFERENCE_FILES_MAX_TOTAL_LINES", "2000", 2000),
+    (
+        "reference_files_max_total_lines",
+        "MILL_REFERENCE_FILES_MAX_TOTAL_LINES",
+        "2000",
+        2000,
+    ),
     # --- board_list_cache_ttl_seconds ---
     ("board_list_cache_ttl_seconds", "MILL_BOARD_LIST_CACHE_TTL_SECONDS", "5.0", 5.0),
     # --- enable_repo_creation (string alias) ---
@@ -608,8 +895,7 @@ def test_alias_roundtrip(
     s = Settings()
     actual = getattr(s, field_name)
     assert actual == expected, (
-        f"Field {field_name!r} (alias {alias!r}): "
-        f"expected {expected!r}, got {actual!r}"
+        f"Field {field_name!r} (alias {alias!r}): expected {expected!r}, got {actual!r}"
     )
 
 
