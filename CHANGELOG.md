@@ -1,5 +1,7 @@
 ## 0.0.0 (unreleased)
 
+- Add `robotsix-deploy` package: central deployment & lifecycle server scaffold with FastAPI /health and /ready endpoints, env-based config (`DEPLOY_*` prefix), Dockerfile, docker-compose, CI workflow calling the shared `python-ci.yml`, and GHCR publish workflow calling `docker-release.yml`.
+
 - Fix `docs/configuration.md` — correct `core.limits.test_requests` documented default from `16` to `30` to match the model and YAML defaults.
 
 - Enable `board_cleanup` periodic workflow for `robotsix-mill` by adding the per-repo opt-in file `.robotsix-mill/periodic/board_cleanup.yaml`.

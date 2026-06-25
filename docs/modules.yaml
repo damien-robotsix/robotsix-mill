@@ -591,6 +591,22 @@ modules:
   # Support services
   # -------------------------------------------------------------------
 
+  - id: deploy-server
+    description: >-
+      Central deployment & lifecycle server for the robotsix suite.
+      Manages service deployments, rollbacks, and lifecycle operations.
+      Currently provides a FastAPI HTTP API surface with /health and
+      /ready endpoints; the full lifecycle API is added by sibling
+      tickets.
+    paths:
+      - src/robotsix_deploy/**/*.py
+      - tests/deploy/**/*.py
+      - Dockerfile.deploy
+      - docker-compose.deploy.yml
+      - .github/workflows/deploy-server-ci.yml
+      - .github/workflows/deploy-server-release.yml
+    dependencies: [config]
+
   - id: repo-scaffold
     description: >-
       Repo-scaffold workflow.  When a meta-board ticket carries a

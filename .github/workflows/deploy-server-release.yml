@@ -1,0 +1,24 @@
+name: Deploy Server Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/robotsix_deploy/**"
+      - "Dockerfile.deploy"
+      - ".github/workflows/deploy-server-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/docker-release.yml
+    with:
+      dockerfile: "./Dockerfile.deploy"

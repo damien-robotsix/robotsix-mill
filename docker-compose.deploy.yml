@@ -1,0 +1,29 @@
+# robotsix-deploy: central deployment & lifecycle server.
+# Local bring-up for development — the container runs the HTTP API
+# on 127.0.0.1:8080 with env-based configuration.
+#
+# Build and start:
+#   docker compose -f docker-compose.deploy.yml up --build
+#
+# The API is unauthenticated (localhost-only).  Do not bind to 0.0.0.0.
+
+services:
+  deploy:
+    build:
+      context: .
+      dockerfile: Dockerfile.deploy
+    image: robotsix/deploy:latest
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      - DEPLOY_HOST=0.0.0.0
+      - DEPLOY_PORT=8080
+      - DEPLOY_LOG_LEVEL=info
+      # Downstream integration placeholders — populated by sibling tickets.
+      - DEPLOY_BROKER_URL=
+      - DEPLOY_LANGFUSE_HOST=
+      - DEPLOY_LANGFUSE_PUBLIC_KEY=
+      - DEPLOY_LANGFUSE_SECRET_KEY=
