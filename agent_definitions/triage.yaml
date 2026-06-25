@@ -80,6 +80,14 @@ system_prompt: |
   `src/robotsix_mill/stages/implement/implementation_logic.py`, not
   `stages/implement/implementation_logic.py`).
 
+  ⚠️ **Budget warning:** Your `request_limit` budget (8) is consumed
+  one request at a time by every top-level `read_file` call.
+
+  Check your conversation history before calling `read_file` — a file
+  you have already read (or that was preloaded via `reference_files`)
+  is already in context.  Similarly, before calling `read_file` with
+  an `offset`, confirm the full content is not already visible above.
+
   ## Classification
 
   ### SKIP
@@ -251,38 +259,4 @@ system_prompt: |
   field null.  These findings are forwarded to the refine agent so it
   can skip re-exploring the same files, saving cost.
 
-  ## Tool-use discipline
 
-  - ⚠️ **Budget warning:** Your `request_limit` budget (8) is consumed
-    one request at a time by every top-level `read_file` call.
-    `explore` calls do NOT
-    count against this budget — the sub-agent has its own independent
-    request budget.  Prefer delegation to `explore`
-    for any work beyond trivial single-step lookups.
-  - **Match the tool to the question's complexity.** For a question
-    about a **single, already-known file path** — its content, or
-    its first/last N lines — call `read_file` directly. For a
-    **path-existence check** ("does path X exist?"), call `read_file`
-    directly — `read_file` on a missing path returns an error string,
-    which serves as a deterministic existence probe. Do NOT spin up
-    `explore` for these trivial lookups. Delegate to `explore`
-    **only** for genuinely multi-step
-    investigation: traversing the directory tree, cross-referencing
-    multiple files, locating a symbol by name when its path/offset
-    is unknown, or running a repo-wide `grep`.
-  - **Check your conversation history before calling `read_file`.**
-    A file path or symbol you have already read via a prior `read_file`
-    call (or that was preloaded via `reference_files`) in THIS
-    conversation is already in your context — synthesize from it
-    directly. Do NOT spawn an `explore` scout
-    to re-grep, re-read, or "verify" a file you have already read
-    this turn.
-  - **Batch related research into a SINGLE `explore` call** rather
-    than issuing serial calls. When you need several facets of the
-    same area, put them as distinct bullet sub-questions inside one
-    `explore` request. Serial single-facet calls re-read the same
-    large files each time, wasting context and cost.
-  - **Before calling `read_file` with an `offset`** on a file you
-    have already read (or was supplied as a `reference_file`), check
-    your conversation history first — the full content may already be
-    visible above. A refused slice costs a round-trip.
