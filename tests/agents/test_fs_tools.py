@@ -944,8 +944,8 @@ class TestFileReadCache:
     """Tests for the in-memory file-content cache in ``build_fs_tools``."""
 
     def test_repeated_read_hits_cache(self, tmp_path, settings):
-        """First full-file read returns content; second also returns the
-        same content (served from the in-memory cache, not re-read from disk)."""
+        """First full-file read returns content; second full read is refused
+        by the closure-scoped dedup (file is already loaded in full)."""
         root = tmp_path / "repo"
         root.mkdir()
         _make_file(root, "f.txt", "original\n")
@@ -955,28 +955,28 @@ class TestFileReadCache:
         assert first == "original\n"
 
         second = tools["read_file"](path="f.txt")
-        assert second == "original\n"
+        assert second.startswith("refused:")
+        assert "already loaded in full" in second
 
     def test_offset_limit_still_hits_cache(self, tmp_path, settings):
-        """A full read populates the cache; a subsequent full read
-        after disk mutation returns the cached (stale) content.
-        Full reads never trigger the closure-scoped dedup guard
-        (which only applies to partial slices on the ctx=None path)."""
+        """A full read populates the cache and the closure-scoped dedup
+        record. A subsequent full read after disk mutation is refused by
+        the dedup since the file was already served in full."""
         root = tmp_path / "repo"
         root.mkdir()
         _make_file(root, "f.txt", "line1\nline2\nline3\n")
         tools = _build(root, settings)
 
-        # Populate cache with full read.
+        # Populate cache and served-reads with full read.
         tools["read_file"](path="f.txt")
 
         # Mutate on disk.
         (root / "f.txt").write_text("x\ny\nz\n", encoding="utf-8")
 
-        # Full read should still return cached original (not the mutated
-        # disk content).  is_full_read=True → dedup guard not consulted.
+        # Full read refused — dedup guard intercepts before cache lookup.
         result = tools["read_file"](path="f.txt")
-        assert result == "line1\nline2\nline3\n"
+        assert result.startswith("refused:")
+        assert "already loaded in full" in result
 
     def test_write_file_invalidates(self, tmp_path, settings):
         """After write_file, a subsequent read_file sees the new content."""
@@ -1028,9 +1028,9 @@ class TestFileReadCache:
         assert tools["read_file"](path="f.txt") == "second\n"
 
     def test_equivalent_paths_same_cache_entry(self, tmp_path, settings):
-        """``read_file("foo/bar.py")`` and ``read_file("./foo/bar.py")``
-        hit the same cache entry — the second full-file read returns the
-        same cached content."""
+        """``read_file("./sub/file.txt")`` and ``read_file("sub/file.txt")``
+        hit the same cache entry — the second full-file read is refused
+        because the canonical path matches a prior served read."""
         root = tmp_path / "repo"
         root.mkdir()
         (root / "sub").mkdir()
@@ -1041,14 +1041,15 @@ class TestFileReadCache:
         first = tools["read_file"](path="./sub/file.txt")
         assert first == "cached\n"
 
-        # Second read via the normal path — must hit cache.
+        # Second read via the normal path — refused.
         second = tools["read_file"](path="sub/file.txt")
-        assert second == "cached\n"
+        assert second.startswith("refused:")
+        assert "already loaded in full" in second
 
     def test_parent_dotdot_paths_same_cache_entry(self, tmp_path, settings):
         """``read_file("sub/../sub/file.txt")`` resolves to the same
         canonical path as ``read_file("sub/file.txt")`` — the second
-        full-file read returns the same cached content."""
+        full-file read is refused."""
         root = tmp_path / "repo"
         root.mkdir()
         (root / "sub").mkdir()
@@ -1059,7 +1060,8 @@ class TestFileReadCache:
         assert first == "cached\n"
 
         second = tools["read_file"](path="sub/../sub/file.txt")
-        assert second == "cached\n"
+        assert second.startswith("refused:")
+        assert "already loaded in full" in second
 
     def test_error_returns_not_cached(self, tmp_path, settings):
         """read_file of a nonexistent file returns an error string and
@@ -1114,8 +1116,8 @@ class TestFileReadCache:
         assert "Do NOT retry" in result
 
     def test_repeat_full_read_returns_content(self, tmp_path, settings):
-        """First full-file read returns content; second returns the same
-        cached content (not a stub)."""
+        """First full-file read returns content; second full read is refused
+        by the closure-scoped dedup since the file is already loaded."""
         root = tmp_path / "repo"
         root.mkdir()
         _make_file(root, "f.txt", "hello\n")
@@ -1125,7 +1127,8 @@ class TestFileReadCache:
         assert first == "hello\n"
 
         second = tools["read_file"](path="f.txt")
-        assert second == "hello\n"
+        assert second.startswith("refused:")
+        assert "already loaded in full" in second
 
     def test_offset_limit_read_not_stubbed(self, tmp_path, settings):
         """A partial read of a file that has NOT been previously read
@@ -1147,8 +1150,9 @@ class TestFileReadCache:
         assert result == "line2\n"
 
     def test_after_edit_subsequent_read_returns_content(self, tmp_path, settings):
-        """After edit_file invalidates cache, first read returns fresh
-        content; second read returns the same (now cached) content."""
+        """After edit_file invalidates cache and served-reads, first read
+        returns fresh content; second read of the same (now cached and
+        served) file is refused by the dedup."""
         root = tmp_path / "repo"
         root.mkdir()
         _make_file(root, "f.txt", "hello world\n")
@@ -1163,12 +1167,15 @@ class TestFileReadCache:
         # First read after edit → fresh content from disk.
         assert tools["read_file"](path="f.txt") == "HELLO world\n"
 
-        # Second read → same cached content.
-        assert tools["read_file"](path="f.txt") == "HELLO world\n"
+        # Second read → refused (already served in full).
+        second = tools["read_file"](path="f.txt")
+        assert second.startswith("refused:")
+        assert "already loaded in full" in second
 
     def test_after_write_subsequent_read_returns_content(self, tmp_path, settings):
-        """After write_file invalidates cache, first read returns new
-        content; second read returns the same (now cached) content."""
+        """After write_file invalidates cache and served-reads, first read
+        returns new content; second read of the same file is refused by the
+        dedup."""
         root = tmp_path / "repo"
         root.mkdir()
         _make_file(root, "f.txt", "old\n")
@@ -1183,8 +1190,10 @@ class TestFileReadCache:
         # First read after write → fresh content from disk.
         assert tools["read_file"](path="f.txt") == "new\n"
 
-        # Second read → same cached content.
-        assert tools["read_file"](path="f.txt") == "new\n"
+        # Second read → refused (already served in full).
+        second = tools["read_file"](path="f.txt")
+        assert second.startswith("refused:")
+        assert "already loaded in full" in second
 
 
 # ===================================================================
@@ -1759,6 +1768,23 @@ class TestClosureScopedDedup:
         assert refused.startswith("refused:")
         assert "already loaded in full" in refused
 
+    def test_full_reread_refused(self, tmp_path, settings):
+        """A second full read of the same file on the ctx=None path is
+        refused — the file is already loaded in full from the first read."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "l1\nl2\nl3\nl4\n")
+        tools = _build(root, settings)
+
+        # Full read → records (1, None).
+        result = tools["read_file"](path="f.txt")
+        assert result == "l1\nl2\nl3\nl4\n"
+
+        # Second full read → refused.
+        refused = tools["read_file"](path="f.txt")
+        assert refused.startswith("refused:")
+        assert "already loaded in full" in refused
+
     def test_first_read_is_served(self, tmp_path, settings):
         """The first read of any region (full or partial) is always
         served — the accumulator starts empty."""
@@ -2026,21 +2052,23 @@ class TestReadFilePDF:
         assert "Third page text" not in sliced
 
     def test_pdf_caching(self, tmp_path, settings):
-        """Two consecutive ``read_file`` calls on the same .pdf return
-        the same extracted text (cache hit)."""
+        """First ``read_file`` on a .pdf returns extracted text; second
+        full read is refused by the closure-scoped dedup."""
         root = tmp_path / "repo"
         root.mkdir()
         _make_text_pdf(str(root / "doc.pdf"), "Cache me")
         tools = _build(root, settings)
 
         first = tools["read_file"](path="doc.pdf")
-        second = tools["read_file"](path="doc.pdf")
-        assert first == second
         assert "Cache me" in first
+
+        second = tools["read_file"](path="doc.pdf")
+        assert second.startswith("refused:")
+        assert "already loaded in full" in second
 
     def test_pdf_caching_equivalent_paths(self, tmp_path, settings):
         """Different path strings that resolve to the same PDF hit the
-        same cache entry."""
+        same served-reads record — the second full read is refused."""
         root = tmp_path / "repo"
         root.mkdir()
         (root / "sub").mkdir()
@@ -2048,10 +2076,11 @@ class TestReadFilePDF:
         tools = _build(root, settings)
 
         first = tools["read_file"](path="./sub/doc.pdf")
-        second = tools["read_file"](path="sub/doc.pdf")
-        # Same cache entry → same extracted text (not re-extracted).
-        assert first == second
         assert "Cached PDF" in first
+
+        second = tools["read_file"](path="sub/doc.pdf")
+        assert second.startswith("refused:")
+        assert "already loaded in full" in second
 
     def test_pdf_cache_invalidated_by_write(self, tmp_path, settings):
         """After ``write_file`` overwrites a ``.pdf``, ``read_file``

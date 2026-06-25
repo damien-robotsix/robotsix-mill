@@ -1,5 +1,7 @@
 ## 0.0.0 (unreleased)
 
+- Extend `_served_reads` closure-scoped read-file dedup to cover full-file re-reads on the Claude SDK path (`ctx=None`), matching the pydantic-ai path behavior. Full re-reads of already-loaded files are now refused instead of silently re-serving cached content. Added `_served_reads` invalidation on `write_file`, `edit_file`, and `delete_file` so mutations clear the dedup record.
+
 - Add missing `addressing_review` entry to `STATE_TRACE` map in `board-mill.js`, fixing bare state-name display for the `ADDRESSING_REVIEW → HUMAN_MR_APPROVAL` transition in the drawer history timeline.
 - Add missing `.s-implement_complete` CSS state colour (`--c: #3b82f6`) to `board-mill.css`, fixing rendering of column headers, event chips, and child-state badges for the `implement_complete` pipeline state.
 - Add `.s-maintenance` CSS state-colour selector to `board-mill.css` so MAINTENANCE-state column headers and event chips render with the same gray as DRAFT.
