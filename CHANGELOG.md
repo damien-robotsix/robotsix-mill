@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add missing `.s-implement_complete` CSS state colour (`--c: #3b82f6`) to `board-mill.css`, fixing rendering of column headers, event chips, and child-state badges for the `implement_complete` pipeline state.
 - Add mandatory `read_file` verification gate to triage agent NO_CHANGE path, and prior-stage findings protection to dedup agent prompt, preventing hallucinated file-existence assertions that incorrectly close tickets.
 
 - Enable `frontend_sync` periodic workflow for `robotsix-mill` by adding the per-repo opt-in file `.robotsix-mill/periodic/frontend_sync.yaml` that cross-references Python `State`/`SourceKind` enum values against CSS selectors and JS maps in `board-mill.{css,js}`.
