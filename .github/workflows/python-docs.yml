@@ -67,7 +67,7 @@ jobs:
         run: |
           for i in $(seq 1 "$RETRIES"); do
             echo "Attempt $i/$RETRIES..."
-            # shellcheck disable=SC2086 (word splitting intentional: multiple install args)
+            # shellcheck disable=SC2086
             if uv sync --frozen $DOCS_INSTALL_ARGS; then
               echo "Install succeeded on attempt $i/$RETRIES"
               exit 0
