@@ -100,6 +100,7 @@ h1 {
 .src-completeness-check   { background: #1a2e05; color: #bef264; }
 .src-trace-review    { background: #3b1f1f; color: #fca5a5; }
 .src-roadmap-sync    { background: #4c1d95; color: #c4b5fd; }
+.src-frontend-sync   { background: #4c1d95; color: #c4b5fd; }
 .src-forge-parity    { background: #2e1065; color: #a78bfa; }
 .src-member-sync     { background: #164e63; color: #0891b2; }
 .src-state-sync      { background: #164e63; color: #0891b2; }

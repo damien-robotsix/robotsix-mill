@@ -4,6 +4,7 @@
 - Add missing `.s-implement_complete` CSS state colour (`--c: #3b82f6`) to `board-mill.css`, fixing rendering of column headers, event chips, and child-state badges for the `implement_complete` pipeline state.
 - Add `.s-maintenance` CSS state-colour selector to `board-mill.css` so MAINTENANCE-state column headers and event chips render with the same gray as DRAFT.
 - Add missing `.s-addressing_review` CSS selector to `board-mill.css` so tickets in `AddressingReview` state render with amber column-header and event-chip styling on the board.
+- Add `frontend_sync` entry to `SOURCE_CLASS` map in `board-mill.js` and corresponding `.src-frontend-sync` CSS badge class in `board-mill.css`, so tickets created by the frontend_sync periodic agent display a dedicated purple badge instead of the generic "user" fallback.
 - Add mandatory `read_file` verification gate to triage agent NO_CHANGE path, and prior-stage findings protection to dedup agent prompt, preventing hallucinated file-existence assertions that incorrectly close tickets.
 
 - Enable `frontend_sync` periodic workflow for `robotsix-mill` by adding the per-repo opt-in file `.robotsix-mill/periodic/frontend_sync.yaml` that cross-references Python `State`/`SourceKind` enum values against CSS selectors and JS maps in `board-mill.{css,js}`.
