@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Extract duplicate `_paths_from_diff` from `document.py` and `review.py` into shared `vcs/git_ops.py`.
+- Add `actionlint` step to `workflow-audit` job in `security-audit.yml` for workflow syntax checking, pinned to `rhysd/actionlint@v1.7.12`.
 
 - Wire `frontend-sync` agent into the dispatch/UI layers: add POST route
   (`/frontend-sync`), CLI `_RUNNERS` entry, AGENT_COLORS key, and board

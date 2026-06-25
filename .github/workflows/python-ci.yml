@@ -113,9 +113,11 @@ jobs:
         # into the run block, to avoid template injection (zizmor).
         run: |
           extras=""
+          # shellcheck disable=SC2086
           for x in $INSTALL_EXTRAS; do
             extras="$extras --extra $x"
           done
+          # shellcheck disable=SC2086
           uv sync --frozen $extras
         env:
           UV_PROJECT_ENVIRONMENT: system
