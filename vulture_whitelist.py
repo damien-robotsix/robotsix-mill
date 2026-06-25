@@ -137,6 +137,7 @@ diagnostic_periodic
 stale_branch_cleanup_periodic
 db_maintenance_periodic
 sandbox_reaper_periodic
+dependabot_ingest_periodic
 scope_triage_request_limit
 already_done_request_limit
 langfuse_cleanup_periodic
@@ -312,6 +313,7 @@ _diagnostic_task
 _stale_branch_task
 _db_maintenance_task
 _sandbox_reaper_task
+_dependabot_ingest_task
 _requeue_task
 queue_size
 queue_join

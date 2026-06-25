@@ -387,6 +387,12 @@ periodic:
     prune_orphans: true             # opt-in: prune orphan workspace dirs
     prune_orphans_age_seconds: 86400  # 1 day — min age for orphan pruning
 
+  # -- dependabot-ingest — files tickets from GitHub Dependabot alerts --------
+  dependabot_ingest:
+    enabled: true                   # enable periodic Dependabot alert ingest
+    interval_seconds: 86400         # seconds between passes (min 60 enforced in worker)
+    max_drafts_per_pass: 5          # max Dependabot drafts created per pass
+
   # -- config-sync — detects config ↔ .env ↔ docs drift -----------------------
   config_sync:
     enabled: true                 # enable periodic config-sync passes

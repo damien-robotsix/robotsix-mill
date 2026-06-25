@@ -305,6 +305,25 @@ class _PeriodicSettings(BaseModel):
     # Override with MILL_DATA_DIR_AUDIT_PRUNE_ORPHANS_AGE_SECONDS.
     data_dir_audit_prune_orphans_age_seconds: int = Field(default=86_400, ge=0)
 
+    # --- dependabot-alert ingest (deterministic cross-repo poll) ---
+    # Master switch for the Dependabot vulnerability-alert ingest poll loop.
+    # When on, the worker iterates every registered repo, lists its OPEN
+    # GitHub Dependabot alerts, and files one deduped draft per new alert.
+    # Default True — harmless when idle (no alerts → no drafts).
+    # Override with MILL_DEPENDABOT_INGEST_PERIODIC.
+    dependabot_ingest_periodic: bool = Field(default=True)
+    # Seconds between Dependabot ingest passes when
+    # MILL_DEPENDABOT_INGEST_PERIODIC=true. Minimum enforced at 60 s in the
+    # worker loop. Default 86400 (1 day).
+    # Override with MILL_DEPENDABOT_INGEST_INTERVAL_SECONDS.
+    dependabot_ingest_interval_seconds: int = Field(default=86_400)
+    # Maximum number of Dependabot drafts created per ingest pass (across all
+    # repos in that pass). Findings beyond this cap are dropped and
+    # re-considered on the next scheduled pass — mirrors
+    # data_dir_audit_max_drafts_per_pass.
+    # Override with MILL_DEPENDABOT_INGEST_MAX_DRAFTS_PER_PASS.
+    dependabot_ingest_max_drafts_per_pass: int = Field(default=5, ge=0)
+
     # --- completeness_check agent (feature-wiring completeness) ---
     # Model for the completeness-check agent. Defaults to the same
     # capable model as other read-only periodic agents. Override with

@@ -10,7 +10,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from ..config import RepoConfig, Settings
 
@@ -266,6 +266,18 @@ class Forge(ABC):
         ``False`` — only GitHub implements this capability.
         """
         return False
+
+    def list_dependabot_alerts(self) -> list[dict[str, Any]]:
+        """List OPEN Dependabot vulnerability alerts on the repo.
+
+        Concrete (not abstract) with a ``[]`` default — Dependabot is a
+        GitHub feature, so non-GitHub forges inherit the no-op.
+
+        Each dict: ``number``, ``ghsa_id``, ``cve_id``, ``severity``
+        (``critical``/``high``/``medium``/``low``), ``package``,
+        ``ecosystem``, ``manifest_path``, ``summary``, ``url``.
+        """
+        return []
 
     def update_branch(self, *, source_branch: str) -> dict:
         """Merge the PR's base branch into the PR branch (server-side) so its
