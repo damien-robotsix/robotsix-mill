@@ -1437,6 +1437,14 @@ class RefineAgentMixin:
                 if triage_complexity == "simple":
                     refine_model = s.refine_subscription_model_default
                     request_limit_override = s.refine_request_limit_simple
+                elif (
+                    s.refine_findings_downgrade_enabled
+                    and triage_findings is not None
+                    and len(triage_findings.strip())
+                    >= s.refine_findings_downgrade_min_chars
+                ):
+                    refine_model = s.refine_subscription_model_findings
+                    set_current_span_attribute("refine.findings_downgrade", True)
                 else:
                     refine_model = s.refine_subscription_model_complex
 
