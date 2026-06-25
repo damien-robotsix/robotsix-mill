@@ -390,7 +390,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.limits.explore_max_tokens` | — | `4096` | Output token cap for explore sub-agent responses |
 | `core.limits.parallel_explore_max` | — | `4` | Max concurrent scouts per `parallel_explore` fan-out |
 | `core.limits.consult_requests` | `MILL_CONSULT_REQUEST_LIMIT` | `15` | Per-call request cap for the domain-expert consultation sub-agent |
-| `core.limits.test_requests` | `MILL_TEST_REQUEST_LIMIT` | `16` | Per-call request cap for the test sub-agent |
+| `core.limits.test_requests` | `MILL_TEST_REQUEST_LIMIT` | `30` | Per-call request cap for the test sub-agent |
 | `core.limits.web_research_requests` | `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `8` | Per-call request cap for the web-research sub-agent |
 | `core.limits.dedup_requests` | `MILL_DEDUP_REQUEST_LIMIT` | `6` | Per-call request cap for the dedup check |
 | `core.limits.obsolescence_requests` | `MILL_OBSOLESCENCE_REQUEST_LIMIT` | `6` | Per-call request cap for the obsolescence gate |
