@@ -1560,6 +1560,21 @@ def test_trivial_scope_routes_to_cheap_model(ctx_factory, monkeypatch, tmp_path)
         f"Expected refine_level={ctx.settings.refine_trivial_model_level}, "
         f"got {refine_kwargs.get('refine_level')}"
     )
+    # Cheap route: refining model is the subscription alias (sonnet).
+    assert (
+        refine_kwargs.get("refine_model")
+        == ctx.settings.refine_trivial_subscription_model
+    ), (
+        f"Expected refine_model={ctx.settings.refine_trivial_subscription_model!r} "
+        f"on cheap route, got {refine_kwargs.get('refine_model')!r}"
+    )
+    assert (
+        refine_kwargs.get("request_limit_override")
+        == ctx.settings.refine_request_limit_simple
+    ), (
+        f"Expected request_limit_override={ctx.settings.refine_request_limit_simple} "
+        f"on cheap route, got {refine_kwargs.get('request_limit_override')!r}"
+    )
 
 
 def test_non_trivial_scope_routes_to_none(ctx_factory, monkeypatch, tmp_path):
@@ -1985,6 +2000,21 @@ def test_re_refine_counter_forces_cheap_after_threshold(
         f"(cheap) after {ctx.settings.max_re_refine_cycles_before_cheap} "
         f"sendbacks, got {refine_kwargs.get('refine_level')}"
     )
+    # Forced-cheap route: refining model is the subscription alias.
+    assert (
+        refine_kwargs.get("refine_model")
+        == ctx.settings.refine_trivial_subscription_model
+    ), (
+        f"Expected refine_model={ctx.settings.refine_trivial_subscription_model!r} "
+        f"on forced-cheap route, got {refine_kwargs.get('refine_model')!r}"
+    )
+    assert (
+        refine_kwargs.get("request_limit_override")
+        == ctx.settings.refine_request_limit_simple
+    ), (
+        f"Expected request_limit_override={ctx.settings.refine_request_limit_simple} "
+        f"on forced-cheap route, got {refine_kwargs.get('request_limit_override')!r}"
+    )
     # Exploration sub-agents must be disabled on sendback.
     assert refine_kwargs.get("include_explore") is False
     assert refine_kwargs.get("include_parallel_explore") is False
@@ -2070,6 +2100,21 @@ def test_re_refine_first_run_trivial_stays_cheap(ctx_factory, monkeypatch, tmp_p
         f"Expected refine_level={ctx.settings.refine_trivial_model_level} "
         f"(cheap) from persisted first-run trivial verdict, "
         f"got {refine_kwargs.get('refine_level')}"
+    )
+    # Persisted trivial verdict → cheap route with subscription alias.
+    assert (
+        refine_kwargs.get("refine_model")
+        == ctx.settings.refine_trivial_subscription_model
+    ), (
+        f"Expected refine_model={ctx.settings.refine_trivial_subscription_model!r} "
+        f"from persisted trivial verdict, got {refine_kwargs.get('refine_model')!r}"
+    )
+    assert (
+        refine_kwargs.get("request_limit_override")
+        == ctx.settings.refine_request_limit_simple
+    ), (
+        f"Expected request_limit_override={ctx.settings.refine_request_limit_simple} "
+        f"from persisted trivial verdict, got {refine_kwargs.get('request_limit_override')!r}"
     )
 
 
@@ -2818,8 +2863,9 @@ def test_subscription_tier_routing_disabled_no_alias(
 
 
 def test_trivial_scope_unchanged_by_tier_routing(ctx_factory, monkeypatch, tmp_path):
-    """trivial_scope=True still routes to refine_trivial_model_level (level 1)
-    and does NOT receive a refine_model alias — unchanged behaviour."""
+    """trivial_scope=True routes to refines via the cheap route (level 3
+    subscription with sonnet), bypassing the subscription-tier complexity
+    ladder — the cheap route is independent of tier routing."""
     ctx = ctx_factory()
     t = _ticket(ctx)
 
@@ -2842,17 +2888,30 @@ def test_trivial_scope_unchanged_by_tier_routing(ctx_factory, monkeypatch, tmp_p
 
     _run_agent(ctx, t, tmp_path)
 
-    # Trivial → level 1 (DeepSeek flash)
+    # Trivial → level 3 (Claude subscription)
     assert (
         refine_kwargs.get("refine_level") == ctx.settings.refine_trivial_model_level
     ), (
-        f"Expected refine_level=1 for trivial ticket, "
+        f"Expected refine_level={ctx.settings.refine_trivial_model_level} "
+        f"for trivial ticket, "
         f"got {refine_kwargs.get('refine_level')!r}"
     )
-    # No model alias on the DeepSeek path (DeepSeek ignores model anyway)
-    assert refine_kwargs.get("refine_model") is None, (
-        f"Expected refine_model=None for trivial (DeepSeek path), "
+    # Cheap route → sonnet on the subscription, not the tier-routing ladder.
+    assert (
+        refine_kwargs.get("refine_model")
+        == ctx.settings.refine_trivial_subscription_model
+    ), (
+        f"Expected refine_model={ctx.settings.refine_trivial_subscription_model!r} "
+        f"for trivial (subscription cheap route), "
         f"got {refine_kwargs.get('refine_model')!r}"
+    )
+    assert (
+        refine_kwargs.get("request_limit_override")
+        == ctx.settings.refine_request_limit_simple
+    ), (
+        f"Expected request_limit_override={ctx.settings.refine_request_limit_simple} "
+        f"for trivial cheap route, "
+        f"got {refine_kwargs.get('request_limit_override')!r}"
     )
 
 

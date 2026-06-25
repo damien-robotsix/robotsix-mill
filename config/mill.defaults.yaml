@@ -173,7 +173,8 @@ gates:
   refine_triage_enabled: true              # cheap triage before full refine (skip if precise)
   max_re_refine_cycles_before_cheap: 2     # force cheap model after this many "changes requested" send-backs; 0 = never
   refine_trivial_routing_enabled: true     # route trivial-scope tickets to cheap model instead of Opus
-  refine_trivial_model_level: 1            # model level for trivial-scope refines (1=DeepSeek flash)
+  refine_trivial_model_level: 3            # model level for trivial-scope refines (3=flat-cost Claude subscription; 1/2=DeepSeek rollback)
+  refine_trivial_subscription_model: sonnet  # Claude alias for trivial/forced-cheap refines routed to the level-3 subscription
   refine_subscription_tier_routing_enabled: true  # complexity-gated Claude alias routing for level-3 refines (False = Opus-always rollback)
   refine_subscription_model_default: sonnet  # Claude alias for simple level-3 refines (non-escalated)
   refine_subscription_model_complex: opus    # Claude alias for needs-exploration level-3 refines (escalated)

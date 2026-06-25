@@ -694,6 +694,8 @@ class TestYamlLoading:
         assert gates.get("refine_subscription_tier_routing_enabled") is True
         assert gates.get("refine_subscription_model_default") == "sonnet"
         assert gates.get("refine_subscription_model_complex") == "opus"
+        assert gates.get("refine_trivial_model_level") == 3
+        assert gates.get("refine_trivial_subscription_model") == "sonnet"
         limits = config.get("core", {}).get("limits", {})
         assert limits.get("refine_requests_simple") == 40
 
@@ -867,6 +869,8 @@ class TestYamlLoading:
             "  refine_subscription_tier_routing_enabled: false\n"
             "  refine_subscription_model_default: haiku\n"
             "  refine_subscription_model_complex: sonnet\n"
+            "  refine_trivial_model_level: 1\n"
+            "  refine_trivial_subscription_model: haiku\n"
             "core:\n"
             "  limits:\n"
             "    refine_requests_simple: 25\n"
@@ -877,6 +881,8 @@ class TestYamlLoading:
         assert config["gates"]["refine_subscription_tier_routing_enabled"] is False
         assert config["gates"]["refine_subscription_model_default"] == "haiku"
         assert config["gates"]["refine_subscription_model_complex"] == "sonnet"
+        assert config["gates"]["refine_trivial_model_level"] == 1
+        assert config["gates"]["refine_trivial_subscription_model"] == "haiku"
         assert config["core"]["limits"]["refine_requests_simple"] == 25
 
     # -- load_secrets_yaml edge cases ----------------------------------
@@ -1761,6 +1767,8 @@ class TestValidationInvalid:
         assert s.refine_findings_downgrade_enabled is True
         assert s.refine_findings_downgrade_min_chars == 200
         assert s.refine_subscription_model_findings == "sonnet"
+        assert s.refine_trivial_model_level == 3
+        assert s.refine_trivial_subscription_model == "sonnet"
 
     def test_refine_subscription_settings_custom_values(self):
         """Subscription-tier routing settings accept custom values."""
@@ -1770,11 +1778,15 @@ class TestValidationInvalid:
             refine_subscription_model_default="haiku",
             refine_subscription_model_complex="sonnet",
             refine_request_limit_simple=25,
+            refine_trivial_model_level=1,
+            refine_trivial_subscription_model="sonnet",
         )
         assert s.refine_subscription_tier_routing_enabled is False
         assert s.refine_subscription_model_default == "haiku"
         assert s.refine_subscription_model_complex == "sonnet"
         assert s.refine_request_limit_simple == 25
+        assert s.refine_trivial_model_level == 1
+        assert s.refine_trivial_subscription_model == "sonnet"
 
 
 # ---------------------------------------------------------------------------

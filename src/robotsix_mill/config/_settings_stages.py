@@ -373,10 +373,15 @@ class _StagesSettings(BaseModel):
     # ``refine_trivial_model_level`` instead of the YAML default (3 / Opus).
     # Set False to force all refines through the default level.
     refine_trivial_routing_enabled: bool = Field(default=True)
-    # Model level used for trivial-scope refines.  Default 1 = DeepSeek
-    # flash (~1/100th the cost of Opus).  Bump to 2 (DeepSeek pro) if
-    # quality regresses on trivial tickets.
-    refine_trivial_model_level: int = Field(default=1, ge=1, le=3)
+    # Model level used for trivial-scope refines.  Default 3 = flat-cost
+    # Claude subscription (marginal $0).  Set to 1 or 2 to roll back to
+    # pay-per-token DeepSeek (OpenRouter, ~$0.0002+/run).
+    refine_trivial_model_level: int = Field(default=3, ge=1, le=3)
+    # Claude model alias used when a trivial/forced-cheap refine routes to
+    # the level-3 subscription.  ``sonnet`` is the cheapest alias already
+    # trusted by the ``"simple"`` path.  Only the Claude-SDK branch (level 3)
+    # consumes this; DeepSeek levels 1/2 ignore it.
+    refine_trivial_subscription_model: str = Field(default="sonnet")
     # When True (default), non-trivial level-3 refines route to a cheaper
     # Claude alias (sonnet) for "simple" tickets and keep Opus only for
     # "needs-exploration" tickets — all on the same claudeSDK subscription

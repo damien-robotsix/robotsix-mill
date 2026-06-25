@@ -338,6 +338,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "gates.max_re_refine_cycles_before_cheap": "max_re_refine_cycles_before_cheap",
     "gates.refine_trivial_routing_enabled": "refine_trivial_routing_enabled",
     "gates.refine_trivial_model_level": "refine_trivial_model_level",
+    "gates.refine_trivial_subscription_model": "refine_trivial_subscription_model",
     "gates.refine_subscription_tier_routing_enabled": "refine_subscription_tier_routing_enabled",
     "gates.refine_subscription_model_default": "refine_subscription_model_default",
     "gates.refine_subscription_model_complex": "refine_subscription_model_complex",
