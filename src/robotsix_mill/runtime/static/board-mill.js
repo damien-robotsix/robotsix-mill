@@ -139,6 +139,7 @@
     deliverable: "deliver",
     implement_complete: "deliver",
     human_mr_approval: "merge",
+    addressing_review: "merge",
     waiting_auto_merge: "merge",
     fixing_ci: "ci_fix",
     rebasing: "rebase",
