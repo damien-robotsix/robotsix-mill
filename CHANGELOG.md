@@ -4,6 +4,13 @@
   outputs containing the expected git rebase conflict notification
   (`error: could not apply`), which the rebase agent produces when it
   encounters conflicts it is expected to resolve.
+- **Adaptive poll backoff**: the reconcile poll loop now backs off
+  re-enqueuing tickets whose state is unchanged, reducing wasted LLM
+  calls on stuck/blocked tickets by 3–6×. Backoff grows exponentially
+  (base 5 min, factor 2×, cap 30 min) and resets instantly on any state
+  transition. Configurable via `core.limits.poll_backoff_*` settings
+  (`poll_backoff_enabled`, `poll_backoff_base_seconds`,
+  `poll_backoff_max_seconds`, `poll_backoff_factor`).
 - **trace_review env-var docs**: add dedicated sub-table under section 12 of
   `docs/configuration.md` documenting all 22 `MILL_TRACE_REVIEW_*` environment
   variables with their YAML paths, defaults, and descriptions.

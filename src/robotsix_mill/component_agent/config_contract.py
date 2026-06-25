@@ -102,6 +102,10 @@ SETTABLE_KEYS: frozenset[str] = frozenset(
         "low_credit_poll_interval_seconds",  # credit-balance poll cadence
         # Stuck-detection / requeue tuning — read on each stuck check.
         "max_stuck_cycles",  # no-progress cycles before BLOCKED escalation
+        "poll_backoff_enabled",  # adaptive poll backoff toggle
+        "poll_backoff_base_seconds",  # backoff base cadence
+        "poll_backoff_max_seconds",  # backoff cap
+        "poll_backoff_factor",  # exponential backoff factor
         "requeue_batch_size",  # startup requeue batch size
         "requeue_batch_pause_seconds",  # pause between requeue batches
         # CI fix tuning — read per CI-fix cycle.
