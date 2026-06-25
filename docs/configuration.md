@@ -610,12 +610,6 @@ Additional fields:
 |-----------|---------|---------|-------------|
 | `periodic.bespoke_periodic` | — | `true` | Master toggle for the per-repo bespoke periodic agent supervisor (default `true` — enabled) |
 | `periodic.bespoke_discovery_interval_seconds` | — | `600` | Seconds between bespoke supervisor clone-refresh and agent-reconciliation cycles. A new YAML committed to a managed repo's `.robotsix-mill/agents/` lands within this window. |
-| `periodic.trace_review.enabled` | `MILL_TRACE_REVIEW_PERIODIC` | `true` | Enable periodic trace-review passes |
-| `periodic.trace_review.interval_seconds` | `MILL_TRACE_REVIEW_INTERVAL_SECONDS` | `86400` | Seconds between trace-review passes |
-| `periodic.trace_review.cost_multiplier` | — | `3.0` | Outlier threshold: cost > median × N → flagged |
-| `periodic.trace_review.obs_multiplier` | — | `3.0` | Outlier threshold: observation count > median × N → flagged |
-| `periodic.trace_review.max_repeated_tool` | — | `50` | Absolute cap on repeated tool calls before flagging |
-| `periodic.trace_review.max_drafts_per_run` | — | `5` | Cap on drafted findings per trace-review pass |
 | `periodic.ci_monitor.log_max_bytes` | `MILL_CI_LOG_MAX_BYTES` | `65536` | Max bytes fetched per CI job log |
 | `periodic.diagnostic.target_repo_id` | `MILL_DIAGNOSTIC_TARGET_REPO_ID` | `robotsix-mill` | Board the diagnostic agent routes activity to; single-repo fallback when the monitored list is empty |
 | `periodic.diagnostic.monitored_repo_ids` | `MILL_DIAGNOSTIC_MONITORED_REPO_IDS` | `[]` | Repos the diagnostic agent monitors each pass (JSON list); empty → falls back to `target_repo_id`. Add/remove repos here — no code change. See [diagnostic-agent.md](diagnostic-agent.md) |
@@ -624,6 +618,39 @@ Additional fields:
 | `pipeline.retrospect_spawn_agented_proposals` | `MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS` | `true` | When True, retrospect may append AGENT.md proposals to AGENT_CANDIDATES.md for human review. |
 | `pipeline.retrospect_memory_path` | `MILL_RETROSPECT_MEMORY_PATH` | `None` | Override path for retrospect memory |
 | `pipeline.trace_inspector_memory_path` | `MILL_TRACE_INSPECTOR_MEMORY_PATH` | `None` | Override path for trace-inspector memory |
+
+#### trace_review
+
+The trace-review periodic agent inspects Langfuse traces for anomalies
+(cost spikes, tool-call errors, repeated-tool storms, explore loops,
+ask_user stalls) and files draft tickets with proposed fixes. Every
+field below is settable via its `MILL_TRACE_REVIEW_*` environment
+variable and its dotted YAML path.
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| `periodic.trace_review.enabled` | `MILL_TRACE_REVIEW_PERIODIC` | `true` | Enable periodic trace-review passes |
+| `periodic.trace_review.interval_seconds` | `MILL_TRACE_REVIEW_INTERVAL_SECONDS` | `86400` | Seconds between trace-review passes (minimum 3600) |
+| `periodic.trace_review.cost_multiplier` | `MILL_TRACE_REVIEW_COST_MULTIPLIER` | `3.0` | Outlier threshold: cost > batch median × N → flagged |
+| `periodic.trace_review.per_obs_cost_threshold` | `MILL_TRACE_REVIEW_PER_OBS_COST_THRESHOLD` | `0.001` | Per-observation cost threshold for flagging |
+| `periodic.trace_review.obs_multiplier` | `MILL_TRACE_REVIEW_OBS_MULTIPLIER` | `3.0` | Outlier threshold: observation count > batch median × N → flagged |
+| `periodic.trace_review.max_repeated_tool` | `MILL_TRACE_REVIEW_MAX_REPEATED_TOOL` | `50` | Absolute cap on repeated tool calls before flagging |
+| `periodic.trace_review.max_tool_calls` | `MILL_TRACE_REVIEW_MAX_TOOL_CALLS` | `100` | Hard cap on total tool calls per trace inspection |
+| `periodic.trace_review.max_errors` | `MILL_TRACE_REVIEW_MAX_ERRORS` | `20` | Hard cap on tool-call errors before auto-termination |
+| `periodic.trace_review.model_level` | `MILL_TRACE_REVIEW_MODEL_LEVEL` | `1` | Model tier for the trace inspector (1–3) |
+| `periodic.trace_review.inspector_min_requests` | `MILL_TRACE_REVIEW_INSPECTOR_MIN_REQUESTS` | `20` | Floor for the tools-on request budget |
+| `periodic.trace_review.inspector_max_requests` | `MILL_TRACE_REVIEW_INSPECTOR_MAX_REQUESTS` | `80` | Ceiling for the tools-on request budget |
+| `periodic.trace_review.inspector_requests_per_obs` | `MILL_TRACE_REVIEW_INSPECTOR_REQUESTS_PER_OBS` | `0.1` | Requests granted per observation before clamping |
+| `periodic.trace_review.inspector_max_obs_for_tools` | `MILL_TRACE_REVIEW_INSPECTOR_MAX_OBS_FOR_TOOLS` | `200` | Observation count above which code-access tools are dropped |
+| `periodic.trace_review.inspector_toolless_requests` | `MILL_TRACE_REVIEW_INSPECTOR_TOOLLESS_REQUESTS` | `3` | Request budget for the tool-less summary-only path |
+| `periodic.trace_review.tool_request_limit` | `MILL_TRACE_REVIEW_TOOL_REQUEST_LIMIT` | `15` | Request budget for the interactive `langfuse_inspect_trace` tool |
+| `periodic.trace_review.max_drafts_per_run` | `MILL_TRACE_REVIEW_MAX_DRAFTS_PER_RUN` | `5` | Cap on drafted findings per trace-review pass |
+| `periodic.trace_review.max_inspections_per_run` | `MILL_TRACE_REVIEW_MAX_INSPECTIONS_PER_RUN` | `5` | Hard cap on LLM inspector calls per trace-review run |
+| `periodic.trace_review.max_traces_per_run` | `MILL_TRACE_REVIEW_MAX_TRACES_PER_RUN` | `300` | Hard cap on traces pulled for full detail per run |
+| `periodic.trace_review.initial_lookback_hours` | `MILL_TRACE_REVIEW_INITIAL_LOOKBACK_HOURS` | `24` | First-run lookback window when no watermark exists (hours) |
+| `periodic.trace_review.restart_correlation_window_seconds` | `MILL_TRACE_REVIEW_RESTART_CORRELATION_WINDOW_SECONDS` | `60` | Window for correlating incomplete traces with process restarts (seconds) |
+| `periodic.trace_review.dedup_lookback_days` | `MILL_TRACE_REVIEW_DEDUP_LOOKBACK_DAYS` | `7` | Recency window (days) for pre-filing duplicate check |
+| `pipeline.trace_review_target_repo_id` | `MILL_TRACE_REVIEW_TARGET_REPO_ID` | `""` | Target repo for trace-review drafts; empty → source-repo routing |
 
 #### Env-var-only periodic agents
 

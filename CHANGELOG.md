@@ -1,5 +1,8 @@
 ## 0.0.0 (unreleased)
 
+- **trace_review env-var docs**: add dedicated sub-table under section 12 of
+  `docs/configuration.md` documenting all 22 `MILL_TRACE_REVIEW_*` environment
+  variables with their YAML paths, defaults, and descriptions.
 - Add `.github/ISSUE_TEMPLATE/config.yml` to disable blank issues and
   redirect questions, feature requests, and security reports to
   Discussions and the security policy page.
