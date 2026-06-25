@@ -32,3 +32,5 @@ docker-compose.override.yml
 /artifacts/board.png
 # Stray pip-install output file accidentally committed (see ticket 20260621T173905Z)
 =8
+# actionlint binary downloaded by security-audit.yml at runtime
+actionlint
