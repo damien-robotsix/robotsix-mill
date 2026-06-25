@@ -5,6 +5,7 @@
   button handler + window export in `board-mill.js`.
 
 - Add `robotsix-deploy` package: central deployment & lifecycle server scaffold with FastAPI /health and /ready endpoints, env-based config (`DEPLOY_*` prefix), Dockerfile, docker-compose, CI workflow calling the shared `python-ci.yml`, and GHCR publish workflow calling `docker-release.yml`.
+- Fix `Dockerfile.deploy` builder stage missing `git` installation — `uv pip install` needs git to clone the git-sourced dependencies (robotsix-llmio, robotsix-yaml-config, robotsix-board-agent, robotsix-agent-comm, robotsix-board) when installing from the lockfile-generated requirements.txt.
 
 - Fix `docs/configuration.md` — correct `core.limits.test_requests` documented default from `16` to `30` to match the model and YAML defaults.
 
