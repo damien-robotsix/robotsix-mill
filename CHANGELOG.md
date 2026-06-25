@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Enable `board_cleanup` periodic workflow for `robotsix-mill` by adding the per-repo opt-in file `.robotsix-mill/periodic/board_cleanup.yaml`.
+- Enable `cost_reconciliation` periodic workflow for `robotsix-mill` by adding the per-repo opt-in file `.robotsix-mill/periodic/cost_reconciliation.yaml`.
 - Extend `_served_reads` closure-scoped read-file dedup to cover full-file re-reads on the Claude SDK path (`ctx=None`), matching the pydantic-ai path behavior. Full re-reads of already-loaded files are now refused instead of silently re-serving cached content. Added `_served_reads` invalidation on `write_file`, `edit_file`, and `delete_file` so mutations clear the dedup record.
 
 - Add missing `addressing_review` entry to `STATE_TRACE` map in `board-mill.js`, fixing bare state-name display for the `ADDRESSING_REVIEW → HUMAN_MR_APPROVAL` transition in the drawer history timeline.
