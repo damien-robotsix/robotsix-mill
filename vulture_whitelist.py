@@ -321,3 +321,7 @@ _run_periodic_pass_per_repo
 
 # -- stages ------------------------------------------------------------------
 input_state
+# RefineAgentMixin delegation methods — called from tests (test_refine_orchestration.py)
+# and via RefineStage class inheritance; vulture (60% confidence) doesn't trace test calls.
+_review_spec_conciseness
+_short_circuit_for_internal_failure

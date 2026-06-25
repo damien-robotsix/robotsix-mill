@@ -46,7 +46,7 @@ def _parse_prior_boards(service: TicketService, ticket_id: str) -> tuple[set[str
     """
     prior_boards: set[str] = set()
     migration_count = 0
-    for ev in service.history(ticket_id):
+    for ev in service.history(ticket_id):  # type: ignore[attr-defined]
         note = ev.note or ""
         if note.startswith(_MIGRATE_NOTE_PREFIX):
             migration_count += 1
@@ -133,7 +133,7 @@ def is_sendback_reentry(service: TicketService, ticket_id: str) -> bool:
     """Return ``True`` when this refine run follows an operator "changes requested"
     sendback — i.e. a prior ``DRAFT`` event whose note starts with
     ``OPERATOR_SENDBACK_PREFIX``."""
-    for ev in service.history(ticket_id):
+    for ev in service.history(ticket_id):  # type: ignore[attr-defined]
         if (
             ev.state == State.DRAFT
             and ev.note
@@ -183,12 +183,13 @@ def split_child_fast_path(
                 ev.state == State.CLOSED
                 and ev.note
                 and ev.note.startswith("split into")
-                for ev in parent_history
+                for ev in parent_history  # type: ignore[attr-defined]
             )
     if not is_split_child:
         own_history = ctx.service.history(ticket.id)
         is_split_child = any(
-            ev.note and ev.note.startswith("split from") for ev in own_history
+            ev.note and ev.note.startswith("split from")
+            for ev in own_history  # type: ignore[attr-defined]
         )
     if not (is_split_child and not reviewer_comments):
         return None

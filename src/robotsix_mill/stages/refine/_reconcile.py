@@ -305,7 +305,7 @@ def apply_agent_side_effects(
     # In gated mode: store as artifact in child workspace for
     # later application on approval.
     if result.epic_body and result.epic_body.strip() and epic_ctx:
-        parent = ctx.service.get(ticket.parent_id)
+        parent = ctx.service.get(ticket.parent_id)  # type: ignore[arg-type]
         if parent is not None and parent.kind == TicketKind.EPIC:
             if not ctx.settings.require_approval:
                 new_hash = ctx.service.workspace(parent).write_description(
