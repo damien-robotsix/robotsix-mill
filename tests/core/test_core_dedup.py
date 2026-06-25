@@ -22,9 +22,14 @@ from robotsix_mill.core.states import State
 from robotsix_mill.core.workspace import Workspace
 from robotsix_mill.core.dedup import (
     _ci_draft_fingerprint,
+    _concern_gate,
     _describe_recent_signal,
     _extract_concern_tokens,
     _extract_paths,
+    _fingerprint_match,
+    _is_eligible_candidate,
+    _is_path_strong,
+    _label_gate,
     _scope_paths,
     annotate_child_body,
     find_child_overlaps,
@@ -1499,6 +1504,229 @@ def test_label_dedup_ci_fp_mismatch_without_candidate_labels(settings):
     )
     # No labels on candidate → can't match ci_fp:* → suppression kicks in.
     assert match is None
+
+
+# ---------------------------------------------------------------------------
+# Refactored private helpers — unit tests
+# ---------------------------------------------------------------------------
+
+
+# ── _is_eligible_candidate ─────────────────────────────────────────────
+
+
+def test_is_eligible_candidate_errored_skip(settings):
+    svc, ticket = _seed(settings, title="err", body="")
+    svc.transition(ticket.id, State.ERRORED, note="fail")
+    live = svc.get(ticket.id)
+    assert not _is_eligible_candidate(live, set(), _now() - timedelta(days=1), svc)
+
+
+def test_is_eligible_candidate_closed_with_done_eligible(settings):
+    svc, ticket = _seed(settings, title="ok", body="")
+    svc.transition(ticket.id, State.DONE, note="merged")
+    svc.transition(ticket.id, State.CLOSED, note="retrospected")
+    live = svc.get(ticket.id)
+    assert _is_eligible_candidate(live, set(), _now() - timedelta(days=1), svc)
+
+
+def test_is_eligible_candidate_closed_without_done_skip(settings):
+    svc, ticket = _seed(settings, title="declined", body="")
+    svc.transition(ticket.id, State.CLOSED, note="declined")
+    live = svc.get(ticket.id)
+    assert not _is_eligible_candidate(live, set(), _now() - timedelta(days=1), svc)
+
+
+def test_is_eligible_candidate_none_created_at_skip(settings):
+    svc, ticket = _seed(settings, title="no date", body="")
+    svc.transition(ticket.id, State.DONE, note="merged")
+    _backdate(settings, ticket.id, None)
+    # Re-fetch to get the None created_at
+    live = svc.get(ticket.id)
+    assert not _is_eligible_candidate(live, set(), _now() - timedelta(days=1), svc)
+
+
+def test_is_eligible_candidate_too_old_skip(settings):
+    svc, ticket = _seed(settings, title="old", body="")
+    svc.transition(ticket.id, State.DONE, note="merged")
+    _backdate(settings, ticket.id, _now() - timedelta(days=30))
+    live = svc.get(ticket.id)
+    assert not _is_eligible_candidate(live, set(), _now() - timedelta(days=7), svc)
+
+
+def test_is_eligible_candidate_exclude_id_skip(settings):
+    svc, ticket = _seed(settings, title="excluded", body="")
+    svc.transition(ticket.id, State.DONE, note="merged")
+    assert not _is_eligible_candidate(
+        ticket, {ticket.id}, _now() - timedelta(days=1), svc
+    )
+
+
+def test_is_eligible_candidate_naive_created_at_gets_utc(settings):
+    svc, ticket = _seed(settings, title="naive", body="")
+    svc.transition(ticket.id, State.DONE, note="merged")
+    live = svc.get(ticket.id)
+    live.created_at = datetime.now() - timedelta(days=1)  # noqa: DTZ005 — naive
+    assert live.created_at.tzinfo is None
+    assert _is_eligible_candidate(live, set(), _now() - timedelta(days=2), svc)
+
+
+def test_is_eligible_candidate_done_eligible(settings):
+    svc, ticket = _seed(settings, title="done", body="")
+    svc.transition(ticket.id, State.DONE, note="merged")
+    assert _is_eligible_candidate(ticket, set(), _now() - timedelta(days=1), svc)
+
+
+# ── _label_gate ────────────────────────────────────────────────────────
+
+
+def test_label_gate_none_continue(settings):
+    svc, ticket = _seed(settings, title="x", body="")
+    assert _label_gate(ticket, None) == "continue"
+
+
+def test_label_gate_empty_list_continue(settings):
+    svc, ticket = _seed(settings, title="x", body="")
+    assert _label_gate(ticket, []) == "continue"
+
+
+def test_label_gate_matching_label_match(settings):
+    svc, ticket = _seed(settings, title="x", body="")
+    svc.set_labels(ticket.id, ["ci_fp:abc123", "other"])
+    live = svc.get(ticket.id)
+    assert _label_gate(live, ["ci_fp:abc123"]) == "match"
+
+
+def test_label_gate_ci_fp_mismatch_skip(settings):
+    svc, ticket = _seed(settings, title="x", body="")
+    svc.set_labels(ticket.id, ["ci_fp:1111"])
+    live = svc.get(ticket.id)
+    assert _label_gate(live, ["ci_fp:2222"]) == "skip"
+
+
+def test_label_gate_non_ci_label_unmatched_continue(settings):
+    svc, ticket = _seed(settings, title="x", body="")
+    svc.set_labels(ticket.id, ["other:label"])
+    live = svc.get(ticket.id)
+    assert _label_gate(live, ["different:label"]) == "continue"
+
+
+def test_label_gate_malformed_json_continue(settings):
+    svc, ticket = _seed(settings, title="x", body="")
+    # Manually set labels to malformed JSON via a db update
+    with db_session(settings, _BOARD) as s:
+        row = s.exec(_select(Ticket).where(Ticket.id == ticket.id)).first()
+        row.labels = "not valid json {{{"
+        s.add(row)
+        s.commit()
+    live = svc.get(ticket.id)
+    # Must not crash; no label match, and dedup_labels has no ci_fp:* → continue
+    assert _label_gate(live, ["ci_fp:abc"]) == "skip"
+    assert _label_gate(live, ["other:label"]) == "continue"
+
+
+def test_label_gate_candidate_no_labels_ci_fp_mismatch_skip(settings):
+    svc, ticket = _seed(settings, title="x", body="")
+    # Candidate has no labels at all.
+    assert _label_gate(ticket, ["ci_fp:abc"]) == "skip"
+
+
+# ── _is_path_strong ────────────────────────────────────────────────────
+
+
+def test_is_path_strong_two_paths_true():
+    assert _is_path_strong(["a.py", "b.py"], "", True) is True
+
+
+def test_is_path_strong_single_path_permissive_true():
+    assert _is_path_strong(["a.py"], "", False) is True
+
+
+def test_is_path_strong_single_path_strict_in_scope_true():
+    body = "## Scope\n\na.py\n"
+    assert _is_path_strong(["a.py"], body, True) is True
+
+
+def test_is_path_strong_single_path_strict_not_in_scope_false():
+    body = "## Problem\n\na.py\n"
+    assert _is_path_strong(["a.py"], body, True) is False
+
+
+# ── _concern_gate ──────────────────────────────────────────────────────
+
+
+def test_concern_gate_both_sides_sufficient_overlap_true():
+    assert (
+        _concern_gate(
+            "fix `login()` and `validate()`",
+            "## Scope\n\n`login()` call",
+            {"login()", "validate()"},
+            1,
+        )
+        is True
+    )
+
+
+def test_concern_gate_both_sides_insufficient_overlap_false():
+    assert (
+        _concern_gate(
+            "fix `login()`",
+            "## Scope\n\n`login()` call",
+            {"unrelated()"},
+            1,
+        )
+        is False
+    )
+
+
+def test_concern_gate_one_side_empty_min_overlap_1_true():
+    assert (
+        _concern_gate(
+            "fix stuff",
+            "no backticks here",
+            {"login()"},
+            1,
+        )
+        is True
+    )
+
+
+def test_concern_gate_one_side_empty_min_overlap_2_false():
+    assert (
+        _concern_gate(
+            "fix `login()`",
+            "## Scope\n\n`login()` call",
+            set(),
+            2,
+        )
+        is False
+    )
+
+
+def test_concern_gate_both_sides_empty_min_overlap_1_true():
+    assert _concern_gate("x", "y", set(), 1) is True
+
+
+# ── _fingerprint_match ─────────────────────────────────────────────────
+
+
+def test_fingerprint_match_suppress_true_false():
+    ticket = Ticket(title="CI failure: CI on main")
+    assert not _fingerprint_match(ticket, "ci failure ci on main", True)
+
+
+def test_fingerprint_match_empty_fingerprint_false():
+    ticket = Ticket(title="CI failure: CI on main")
+    assert not _fingerprint_match(ticket, "", False)
+
+
+def test_fingerprint_match_present_in_title_true():
+    ticket = Ticket(title="CI failure: CI on main")
+    assert _fingerprint_match(ticket, "ci failure ci on main", False)
+
+
+def test_fingerprint_match_absent_false():
+    ticket = Ticket(title="CI failure: CI on main")
+    assert not _fingerprint_match(ticket, "totally different", False)
 
 
 # ---------------------------------------------------------------------------
