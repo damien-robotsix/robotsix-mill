@@ -309,6 +309,10 @@ modules:
       - src/robotsix_mill/stages/refine/core.py
       - src/robotsix_mill/stages/refine/gates.py
       - src/robotsix_mill/stages/refine/orchestration.py
+      - src/robotsix_mill/stages/refine/_checkpoint.py
+      - src/robotsix_mill/stages/refine/_reconcile.py
+      - src/robotsix_mill/stages/refine/_result_paths.py
+      - src/robotsix_mill/stages/refine/_triage.py
       - src/robotsix_mill/stages/refine/helpers.py
       - src/robotsix_mill/stages/answer.py
       - src/robotsix_mill/stages/merge/__init__.py

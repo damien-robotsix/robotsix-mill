@@ -6,6 +6,8 @@
   (`/frontend-sync`), CLI `_RUNNERS` entry, AGENT_COLORS key, and board
   button handler + window export in `board-mill.js`.
 
+- Split `src/robotsix_mill/stages/refine/orchestration.py` (2181 lines) into focused sub-modules: `_result_paths.py` (no-change/promote/single/multi result handlers), `_triage.py` (triage skip logic), `_checkpoint.py` (save/load/clear checkpoint), `_reconcile.py` (short-circuit and side-effect application). The `orchestration.py` module is now a 499-line thin coordinator delegating to sub-module functions. Backward-compatible: `RefineAgentMixin` exposes delegation staticmethods and module-level re-exports preserve test monkeypatch targets.
+
 - Add `robotsix-deploy` package: central deployment & lifecycle server scaffold with FastAPI /health and /ready endpoints, env-based config (`DEPLOY_*` prefix), Dockerfile, docker-compose, CI workflow calling the shared `python-ci.yml`, and GHCR publish workflow calling `docker-release.yml`.
 - Fix `Dockerfile.deploy` builder stage missing `git` installation — `uv pip install` needs git to clone the git-sourced dependencies (robotsix-llmio, robotsix-yaml-config, robotsix-board-agent, robotsix-agent-comm, robotsix-board) when installing from the lockfile-generated requirements.txt.
 
