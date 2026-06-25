@@ -315,6 +315,11 @@ def _classify_trace(
                 and "and produced no output" in out_s
             ):
                 pass
+            # run_command rebase conflict notification
+            # (e.g. "error: could not apply 57cd7900...")
+            # is expected git output, not a tool failure.
+            elif name == "run_command" and "error: could not apply" in out_s:
+                pass
             elif _TOOL_ERR_PATTERNS.search(out_s) or _TOOL_ERR_PATTERNS.search(
                 status_msg
             ):
