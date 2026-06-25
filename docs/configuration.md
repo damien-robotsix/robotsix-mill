@@ -425,6 +425,10 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.limits.stage_retry_max_delay` | `MILL_STAGE_RETRY_MAX_DELAY` | `60.0` | Max seconds between stage-level retries |
 | `core.limits.rate_limit_backoff_base` | `MILL_RATE_LIMIT_BACKOFF_BASE` | `30.0` | Base seconds for rate-limit backoff (longer window) |
 | `core.limits.rate_limit_backoff_cap` | `MILL_RATE_LIMIT_BACKOFF_CAP` | `120.0` | Max seconds between rate-limit retries |
+| `core.limits.poll_backoff_enabled` | — | `true` | Adaptive poll backoff for unchanged/blocked tickets; when enabled, tickets whose state hasn't changed get progressively longer intervals before re-enqueue, reducing wasted LLM calls on stuck tickets |
+| `core.limits.poll_backoff_base_seconds` | — | `300` | Fast-poll cadence — the first backoff step after one unchanged cycle (5 min). Delay = min(max, base × factor^(cycles−1)) |
+| `core.limits.poll_backoff_max_seconds` | — | `1800` | Maximum poll backoff (30 min cap). Once a ticket reaches this ceiling, the poll interval stays at this value until a state transition resets it |
+| `core.limits.poll_backoff_factor` | — | `2.0` | Exponential factor per consecutive unchanged cycle. Default 2.0 doubles the delay after each unchanged tick until the cap is reached |
 | `core.low_credit_threshold_usd` | — | `5.0` | OpenRouter credit balance below this value triggers the board warning banner |
 | `core.low_credit_poll_enabled` | — | `true` | Enable the proactive OpenRouter credit-balance poll (hourly via `GET /api/v1/credits`) |
 | `core.low_credit_poll_interval_seconds` | — | `3600` | Seconds between proactive credit-balance checks |
