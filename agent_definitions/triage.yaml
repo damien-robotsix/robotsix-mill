@@ -132,6 +132,16 @@ system_prompt: |
   on-disk existence cannot be verified after a reasonable check, prefer
   REFINE or SKIP over NO_CHANGE.
 
+  **Mandatory verification procedure:** Before returning NO_CHANGE you
+  MUST have a `read_file(path)` call in your tool-call history for the
+  specific deliverable path cited in the draft, and that call MUST have
+  returned actual file content — not an error string.  A `read_file`
+  call that returns an error string means the file DOES NOT exist; you
+  MUST NOT return NO_CHANGE in that case.  An `explore` call alone is
+  NOT sufficient — explore scouts can flake or return truncated results.
+  If the specific deliverable path cannot be determined from the draft,
+  default to REFINE rather than NO_CHANGE.
+
   ### REFINE
 
   A draft that needs REFINEment has ANY of:
