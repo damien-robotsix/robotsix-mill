@@ -57,11 +57,6 @@ def settings() -> Settings:
 # ===========================================================================
 
 
-def test_default_model():
-    s = Settings()
-    assert s.model == "deepseek/deepseek-v4-pro"
-
-
 def test_default_coordinator_max_tool_calls():
     """coordinator_max_tool_calls defaults to 300 — a generous but bounded
     tool-call backstop for the implement/coordinator agent, sitting
@@ -136,42 +131,42 @@ def test_default_web_research_request_limit():
 
 
 def test_default_audit_requests():
-    """audit_requests defaults to 80."""
+    """audit_request_limit defaults to 80."""
     s = Settings()
-    assert s.audit_requests == 80
+    assert s.audit_request_limit == 80
 
 
 def test_default_maintenance_requests():
-    """maintenance_requests defaults to 100."""
+    """maintenance_request_limit defaults to 100."""
     s = Settings()
-    assert s.maintenance_requests == 100
+    assert s.maintenance_request_limit == 100
 
 
 def test_default_doc_requests():
-    """doc_requests defaults to 16 (raised from 8 to prevent
+    """doc_request_limit defaults to 16 (raised from 8 to prevent
     UsageLimitExceeded on feature-sized tickets)."""
     s = Settings()
-    assert s.doc_requests == 16
+    assert s.doc_request_limit == 16
 
 
 def test_default_refine_requests():
-    """refine_requests defaults to 80."""
+    """refine_request_limit defaults to 80."""
     s = Settings()
-    assert s.refine_requests == 80
+    assert s.refine_request_limit == 80
 
 
 def test_default_refine_requests_simple():
-    """refine_requests_simple defaults to 40 (roughly half of the main
+    """refine_request_limit_simple defaults to 40 (roughly half of the main
     refine budget, matching the faster sonnet model path)."""
     s = Settings()
-    assert s.refine_requests_simple == 40
+    assert s.refine_request_limit_simple == 40
 
 
 def test_default_review_requests():
-    """review_requests defaults to 80 — covers a 4-6 file PR with
+    """review_request_limit defaults to 80 — covers a 4-6 file PR with
     tool calls and reasoning steps."""
     s = Settings()
-    assert s.review_requests == 80
+    assert s.review_request_limit == 80
 
 
 def test_default_max_spend_usd():
@@ -193,9 +188,9 @@ def test_default_max_openrouter_marginal_usd():
 
 
 def test_default_doc_classifier_requests():
-    """doc_classifier_requests defaults to 3."""
+    """doc_classifier_request_limit defaults to 3."""
     s = Settings()
-    assert s.doc_classifier_requests == 3
+    assert s.doc_classifier_request_limit == 3
 
 
 def test_default_doc_classifier_diff_max_chars():
@@ -205,33 +200,33 @@ def test_default_doc_classifier_diff_max_chars():
 
 
 def test_default_triage_requests():
-    """triage_requests defaults to 8."""
+    """triage_request_limit defaults to 8."""
     s = Settings()
-    assert s.triage_requests == 8
+    assert s.triage_request_limit == 8
 
 
 def test_default_already_done_requests():
-    """already_done_requests defaults to 8."""
+    """already_done_request_limit defaults to 8."""
     s = Settings()
-    assert s.already_done_requests == 8
+    assert s.already_done_request_limit == 8
 
 
 def test_default_scope_triage_requests():
-    """scope_triage_requests defaults to 8."""
+    """scope_triage_request_limit defaults to 8."""
     s = Settings()
-    assert s.scope_triage_requests == 8
+    assert s.scope_triage_request_limit == 8
 
 
 def test_default_obsolescence_requests():
-    """obsolescence_requests defaults to 6."""
+    """obsolescence_request_limit defaults to 6."""
     s = Settings()
-    assert s.obsolescence_requests == 6
+    assert s.obsolescence_request_limit == 6
 
 
 def test_default_dedup_requests():
-    """dedup_requests defaults to 6."""
+    """dedup_request_limit defaults to 6."""
     s = Settings()
-    assert s.dedup_requests == 6
+    assert s.dedup_request_limit == 6
 
 
 def test_default_dedup_skip_on_no_overlap():
@@ -247,24 +242,16 @@ def test_default_dedup_candidate_body_max_chars():
 
 
 def test_default_web_research_requests():
-    """web_research_requests defaults to 8."""
+    """web_research_request_limit defaults to 8."""
     s = Settings()
-    assert s.web_research_requests == 8
-
-
-def test_default_coordinator_model():
-    """The coordinator model defaults to the tier-2 default
-    (deepseek/deepseek-v4-pro)."""
-    s = Settings()
-    assert s.model == "deepseek/deepseek-v4-pro"
+    assert s.web_research_request_limit == 8
 
 
 def test_default_sandbox_image():
-    """The sandbox image defaults to python:3.14-slim (not
-    robotsix/mill-sandbox:latest which would pull an external image by
-    default)."""
+    """The sandbox image defaults to robotsix/mill-sandbox:latest via
+    the YAML config override (field default is python:3.14-slim)."""
     s = Settings()
-    assert s.sandbox_image == "python:3.14-slim"
+    assert s.sandbox_image == "robotsix/mill-sandbox:latest"
 
 
 def test_default_language_instructions_dir():
@@ -318,7 +305,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("spec_review_enabled", "MILL_SPEC_REVIEW_ENABLED", "1", True),
     ("review_max_rounds", "MILL_REVIEW_MAX_ROUNDS", "5", 5),
     # --- forge ---
-    ("forge_kind", "FORGE_KIND", "gitlab", "gitlab"),
     (
         "forge_remote_url",
         "FORGE_REMOTE_URL",
@@ -326,7 +312,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "https://example.com/repo.git",
     ),
     ("forge_target_branch", "FORGE_TARGET_BRANCH", "develop", "develop"),
-    ("forge_auth", "FORGE_AUTH", "app", "app"),
     (
         "github_api_url",
         "MILL_GITHUB_API_URL",
@@ -340,7 +325,7 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("sandbox_readonly", "MILL_SANDBOX_READONLY", "0", False),
     ("command_timeout", "MILL_COMMAND_TIMEOUT", "3600", 3600),
     ("test_command", "MILL_TEST_COMMAND", "pytest -x", "pytest -x"),
-    ("skills_dir", "MILL_SKILLS_DIR", "my_skills", "my_skills"),
+    ("skills_dir", "MILL_SKILLS_DIR", "my_skills", Path("my_skills")),
     # --- pipeline ---
     ("branch_prefix", "MILL_BRANCH_PREFIX", "feature/", "feature/"),
     ("merge_poll_seconds", "MILL_MERGE_POLL_SECONDS", "60", 60),
@@ -350,7 +335,7 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("prune_clone_on_close", "MILL_PRUNE_CLONE_ON_CLOSE", "0", False),
     ("max_archived_tickets", "MILL_MAX_ARCHIVED_TICKETS", "50", 50),
     # --- service ---
-    ("data_dir", "MILL_DATA_DIR", "/custom/data", "/custom/data"),
+    ("data_dir", "MILL_DATA_DIR", "/custom/data", Path("/custom/data")),
     ("api_host", "MILL_API_HOST", "0.0.0.0", "0.0.0.0"),
     ("api_port", "MILL_API_PORT", "8080", 8080),
     ("api_url", "MILL_API_URL", "http://localhost:8080", "http://localhost:8080"),
@@ -359,33 +344,38 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "retrospect_memory_path",
         "MILL_RETROSPECT_MEMORY_PATH",
         "/mem/retro.md",
-        "/mem/retro.md",
+        Path("/mem/retro.md"),
     ),
     (
         "implement_memory_path",
         "MILL_IMPLEMENT_MEMORY_PATH",
         "/mem/impl.md",
-        "/mem/impl.md",
+        Path("/mem/impl.md"),
     ),
     (
         "refine_memory_path",
         "MILL_REFINE_MEMORY_PATH",
         "/mem/refine.md",
-        "/mem/refine.md",
+        Path("/mem/refine.md"),
     ),
-    ("ci_fix_memory_path", "MILL_CI_FIX_MEMORY_PATH", "/mem/cifix.md", "/mem/cifix.md"),
+    (
+        "ci_fix_memory_path",
+        "MILL_CI_FIX_MEMORY_PATH",
+        "/mem/cifix.md",
+        Path("/mem/cifix.md"),
+    ),
     (
         "rebase_memory_path",
         "MILL_REBASE_MEMORY_PATH",
         "/mem/rebase.md",
-        "/mem/rebase.md",
+        Path("/mem/rebase.md"),
     ),
     # --- CI patterns ---
     (
         "ci_patterns_path",
         "MILL_CI_PATTERNS_PATH",
         "/mem/patterns.json",
-        "/mem/patterns.json",
+        Path("/mem/patterns.json"),
     ),
     # --- CI-fix tuning ---
     ("ci_fix_max_cycles", "MILL_CI_FIX_MAX_CYCLES", "5", 5),
@@ -438,77 +428,30 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("diagnostic_periodic", "MILL_DIAGNOSTIC_PERIODIC", "1", True),
     ("diagnostic_interval_seconds", "MILL_DIAGNOSTIC_INTERVAL_SECONDS", "43200", 43200),
     ("ci_log_max_bytes", "MILL_CI_LOG_MAX_BYTES", "32768", 32768),
-    # --- model selection ---
-    ("model", "MILL_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
-    ("explore_model", "MILL_EXPLORE_MODEL", "openai/gpt-4o-mini", "openai/gpt-4o-mini"),
-    ("test_model", "MILL_TEST_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
-    ("refine_model", "MILL_REFINE_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
-    ("answer_model", "MILL_ANSWER_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
-    ("retrospect_model", "MILL_RETROSPECT_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
-    ("audit_model", "MILL_AUDIT_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
-    ("dedup_model", "MILL_DEDUP_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
     (
-        "web_research_model",
-        "MILL_WEB_RESEARCH_MODEL",
-        "openai/gpt-4o-mini",
-        "openai/gpt-4o-mini",
+        "web_knowledge_model",
+        "MILL_WEB_KNOWLEDGE_MODEL",
+        "deepseek/deepseek-v4-pro",
+        "deepseek/deepseek-v4-pro",
     ),
-    ("review_model", "MILL_REVIEW_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
-    (
-        "trace_inspector_model",
-        "MILL_TRACE_INSPECTOR_MODEL",
-        "openai/gpt-4o",
-        "openai/gpt-4o",
-    ),
-    ("test_gap_model", "MILL_TEST_GAP_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
-    ("agent_check_model", "MILL_AGENT_CHECK_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
-    ("health_model", "MILL_HEALTH_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
-    ("survey_model", "MILL_SURVEY_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
-    (
-        "rate_limit_fallback_model",
-        "MILL_RATE_LIMIT_FALLBACK_MODEL",
-        "openai/gpt-4o-mini",
-        "openai/gpt-4o-mini",
-    ),
-    ("triage_model", "MILL_TRIAGE_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
-    ("doc_model", "MILL_DOC_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
-    (
-        "auto_approve_model",
-        "MILL_AUTO_APPROVE_MODEL",
-        "openai/gpt-4o-mini",
-        "openai/gpt-4o-mini",
-    ),
-    (
-        "doc_classifier_model",
-        "MILL_DOC_CLASSIFIER_MODEL",
-        "openai/gpt-4o-mini",
-        "openai/gpt-4o-mini",
-    ),
-    (
-        "scope_triage_model",
-        "MILL_SCOPE_TRIAGE_MODEL",
-        "openai/gpt-4o-mini",
-        "openai/gpt-4o-mini",
-    ),
-    # --- epic dedup ---
     ("epic_dedup_lookback_days", "MILL_EPIC_DEDUP_LOOKBACK_DAYS", "14", 14),
     # --- survey agent ---
     (
         "survey_memory_path",
         "MILL_SURVEY_MEMORY_PATH",
         "/mem/survey.md",
-        "/mem/survey.md",
+        Path("/mem/survey.md"),
     ),
     # --- review revision ---
     (
         "review_revision_memory_path",
         "MILL_REVIEW_REVISION_MEMORY_PATH",
         "/mem/review_revision.md",
-        "/mem/review_revision.md",
+        Path("/mem/review_revision.md"),
     ),
     ("review_revision_max_attempts", "MILL_REVIEW_REVISION_MAX_ATTEMPTS", "4", 4),
     # --- other memory paths ---
-    ("doc_memory_path", "MILL_DOC_MEMORY_PATH", "/mem/doc.md", "/mem/doc.md"),
+    ("doc_memory_path", "MILL_DOC_MEMORY_PATH", "/mem/doc.md", Path("/mem/doc.md")),
     # --- ci-fix request limit ---
     ("ci_fix_request_limit", "MILL_CI_FIX_REQUEST_LIMIT", "80", 80),
     # --- pipeline limits ---
@@ -532,13 +475,10 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         '{"refine": 1200, "merge": 0}',
         {"refine": 1200, "merge": 0},
     ),
-    # --- model-request-timeout ---
-    ("model_request_timeout", "MILL_MODEL_REQUEST_TIMEOUT", "600.0", 600.0),
     # --- auto-fix / ping-pong ---
     ("auto_fix_max_cycles", "MILL_AUTO_FIX_MAX_CYCLES", "4", 4),
     ("ping_pong_max_alternations", "MILL_PING_PONG_MAX_ALTERNATIONS", "2", 2),
     # --- rate-limit fallback ---
-    ("rate_limit_fallback_retries", "MILL_RATE_LIMIT_FALLBACK_RETRIES", "5", 5),
     # --- board-agent env vars ---
     ("board_agent_enabled", "MILL_BOARD_AGENT_ENABLED", "1", True),
     (
@@ -617,7 +557,7 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "language_instructions_dir",
         "MILL_LANGUAGE_INSTRUCTIONS_DIR",
         "my_instructions",
-        "my_instructions",
+        Path("my_instructions"),
     ),
     # --- diagnostic target / monitor ---
     (
@@ -641,7 +581,7 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "bc_check_memory_path",
         "MILL_BC_CHECK_MEMORY_PATH",
         "/mem/bc_check.md",
-        "/mem/bc_check.md",
+        Path("/mem/bc_check.md"),
     ),
     # --- periodic completeness_check ---
     ("completeness_check_periodic", "MILL_COMPLETENESS_CHECK_PERIODIC", "0", False),
@@ -655,7 +595,7 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "completeness_check_memory_path",
         "MILL_COMPLETENESS_CHECK_MEMORY_PATH",
         "/mem/completeness_check.md",
-        "/mem/completeness_check.md",
+        Path("/mem/completeness_check.md"),
     ),
     (
         "completeness_check_request_limit",
@@ -676,7 +616,7 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "env_doc_sync_memory_path",
         "MILL_ENV_DOC_SYNC_MEMORY_PATH",
         "/mem/env_doc_sync.md",
-        "/mem/env_doc_sync.md",
+        Path("/mem/env_doc_sync.md"),
     ),
     # --- periodic state-sync ---
     ("state_sync_model", "MILL_STATE_SYNC_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
@@ -686,7 +626,7 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "state_sync_memory_path",
         "MILL_STATE_SYNC_MEMORY_PATH",
         "/mem/state_sync.md",
-        "/mem/state_sync.md",
+        Path("/mem/state_sync.md"),
     ),
     # --- repo visibility default ---
     ("repo_visibility_default", "MILL_REPO_VISIBILITY_DEFAULT", "private", "private"),
@@ -716,7 +656,7 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "data_dir_audit_memory_path",
         "MILL_DATA_DIR_AUDIT_MEMORY_PATH",
         "/mem/data_dir_audit.md",
-        "/mem/data_dir_audit.md",
+        Path("/mem/data_dir_audit.md"),
     ),
     # --- copy_paste ---
     ("copy_paste_periodic", "MILL_COPY_PASTE_PERIODIC", "0", False),
@@ -725,7 +665,7 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "copy_paste_memory_path",
         "MILL_COPY_PASTE_MEMORY_PATH",
         "/mem/copy_paste.md",
-        "/mem/copy_paste.md",
+        Path("/mem/copy_paste.md"),
     ),
     # --- forge_parity ---
     ("forge_parity_periodic", "MILL_FORGE_PARITY_PERIODIC", "0", False),
@@ -739,7 +679,7 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "forge_parity_memory_path",
         "MILL_FORGE_PARITY_MEMORY_PATH",
         "/mem/forge_parity.md",
-        "/mem/forge_parity.md",
+        Path("/mem/forge_parity.md"),
     ),
     # --- module_curator ---
     ("module_curator_periodic", "MILL_MODULE_CURATOR_PERIODIC", "0", False),
@@ -753,7 +693,7 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "module_curator_memory_path",
         "MILL_MODULE_CURATOR_MEMORY_PATH",
         "/mem/module_curator.md",
-        "/mem/module_curator.md",
+        Path("/mem/module_curator.md"),
     ),
     # --- stale_branch_cleanup ---
     ("stale_branch_cleanup_periodic", "MILL_STALE_BRANCH_CLEANUP_PERIODIC", "0", False),
@@ -778,7 +718,7 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "run_health_memory_path",
         "MILL_RUN_HEALTH_MEMORY_PATH",
         "/mem/run_health.md",
-        "/mem/run_health.md",
+        Path("/mem/run_health.md"),
     ),
     ("run_health_window_hours", "MILL_RUN_HEALTH_WINDOW_HOURS", "72", 72),
     (
@@ -799,7 +739,7 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "config_sync_memory_path",
         "MILL_CONFIG_SYNC_MEMORY_PATH",
         "/mem/config_sync.md",
-        "/mem/config_sync.md",
+        Path("/mem/config_sync.md"),
     ),
     # --- dependabot_ingest ---
     ("dependabot_ingest_periodic", "MILL_DEPENDABOT_INGEST_PERIODIC", "0", False),
@@ -871,10 +811,7 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("board_list_cache_ttl_seconds", "MILL_BOARD_LIST_CACHE_TTL_SECONDS", "5.0", 5.0),
     # --- enable_repo_creation (string alias) ---
     ("enable_repo_creation", "MILL_ENABLE_REPO_CREATION", "0", False),
-    # --- progress logging ---
-    ("progress_log_enabled", "MILL_PROGRESS_LOG_ENABLED", "0", False),
     # --- progress log interval ---
-    ("progress_log_interval_seconds", "MILL_PROGRESS_LOG_INTERVAL_SECONDS", "30", 30),
 ]
 
 
@@ -906,13 +843,13 @@ def test_alias_roundtrip(
 
 def test_forge_kind_requires_remote_url():
     """When forge_kind is set (not 'none'), remote_url must be set too."""
-    with pytest.raises(ValidationError, match="FORGE_REMOTE_URL"):
+    with pytest.raises(ValidationError, match="forge_remote_url"):
         Settings(forge_kind="github", forge_remote_url=None)
 
 
 def test_forge_auth_app_requires_credentials():
     """When forge_auth is 'app', either gha_app_id or private_key_path must be set."""
-    with pytest.raises(ValidationError, match="GITHUB_APP_ID"):
+    with pytest.raises(ValidationError, match="github_app_id"):
         Settings(
             forge_kind="github",
             forge_remote_url="https://github.com/org/repo.git",
