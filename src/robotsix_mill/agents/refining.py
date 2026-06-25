@@ -1046,7 +1046,8 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
 
     # When a cheap triage classifier rules the ticket trivial-scope,
     # override the YAML's default model level (3 / Opus) with the
-    # configured cheaper tier (1 / DeepSeek flash by default).
+    # configured trivial level (default 3 = subscription; set to 1/2
+    # to roll back to DeepSeek).
     if refine_level is not None:
         overrides["level"] = refine_level
 

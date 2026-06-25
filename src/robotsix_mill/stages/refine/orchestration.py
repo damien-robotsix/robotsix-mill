@@ -1395,9 +1395,11 @@ class RefineAgentMixin:
             # reflects the first-run verdict; a first-run-trivial ticket stays
             # on the cheap model during re-refine with no extra logic.
             _trivial = _read_triage_trivial(ws)
+            _cheap_route = False
             refine_level: int | None = None
             if s.refine_trivial_routing_enabled and _trivial:
                 refine_level = s.refine_trivial_model_level
+                _cheap_route = True
 
             # Re-refine round counter: force the cheap model after a
             # configurable threshold of operator "changes requested"
@@ -1421,19 +1423,23 @@ class RefineAgentMixin:
                 )
                 if re_refine_rounds >= s.max_re_refine_cycles_before_cheap:
                     refine_level = s.refine_trivial_model_level
+                    _cheap_route = True
                     set_current_span_attribute("refine.forced_cheap_re_refine", True)
 
             # Record the routing decision on the current span for Langfuse.
-            set_current_span_attribute(
-                "refine.model_level", refine_level if refine_level is not None else 3
-            )
+            resolved_level = refine_level if refine_level is not None else 3
+            set_current_span_attribute("refine.model_level", resolved_level)
             set_current_span_attribute("refine.routed_trivial", _trivial)
 
-            # Compute the Claude model alias for level-3 non-trivial refines.
-            # Gate: feature flag ON, not already downgraded to DeepSeek.
+            # Compute the Claude model alias for level-3 refines.
+            # Cheap route: use the configured subscription alias (sonnet).
+            # Non-cheap route: the existing complexity/findings ladder.
             refine_model: str | None = None
             request_limit_override: int | None = None
-            if refine_level is None and s.refine_subscription_tier_routing_enabled:
+            if _cheap_route:
+                refine_model = s.refine_trivial_subscription_model
+                request_limit_override = s.refine_request_limit_simple
+            elif refine_level is None and s.refine_subscription_tier_routing_enabled:
                 if triage_complexity == "simple":
                     refine_model = s.refine_subscription_model_default
                     request_limit_override = s.refine_request_limit_simple
@@ -1448,9 +1454,16 @@ class RefineAgentMixin:
                 else:
                     refine_model = s.refine_subscription_model_complex
 
-            set_current_span_attribute(
-                "refine.model_alias", refine_model if refine_model else "opus"
-            )
+            # Truthful model_alias: reflect the actual route, not a
+            # hardcoded fallback that misleads cost-analysis.
+            if resolved_level == 3:
+                set_current_span_attribute(
+                    "refine.model_alias", refine_model if refine_model else "opus"
+                )
+            else:
+                set_current_span_attribute(
+                    "refine.model_alias", f"deepseek-l{resolved_level}"
+                )
 
             # When reviewer comments are present (sendback path), disable
             # exploration sub-agents — the agent's only job is text-level
