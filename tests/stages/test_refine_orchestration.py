@@ -1156,11 +1156,13 @@ def test_mechanical_draft_fast_path_not_triggered_when_auto_approve_disabled(
     assert len(calls) == 1  # full refine agent WAS invoked
 
 
-def test_mechanical_draft_fast_path_falls_through_on_needs_approval(
+def test_mechanical_draft_fast_path_short_circuits_on_needs_approval(
     ctx_factory, monkeypatch, tmp_path
 ):
-    """When auto-approve returns NEEDS_APPROVAL, fall through to the full
-    refine agent."""
+    """When auto-approve returns NEEDS_APPROVAL, the mechanical fast-path
+    still short-circuits — the draft is preserved as-is and the expensive
+    refine agent is skipped.  The ticket routes to HUMAN_ISSUE_APPROVAL
+    via _resolved_outcome so the human reviewer sees why."""
     ctx = ctx_factory(auto_approve_enabled=True)
     t = _ticket(ctx, source="periodic")
     calls = _spy_refine(
@@ -1185,8 +1187,13 @@ def test_mechanical_draft_fast_path_falls_through_on_needs_approval(
         draft="Add a new public endpoint with authentication.",
     )
 
-    assert not out.note.startswith("mechanical draft fast-path")
-    assert len(calls) == 1  # full refine agent WAS invoked
+    # Fast-path short-circuit fires even on NEEDS_APPROVAL.
+    assert out.note.startswith("mechanical draft fast-path")
+    assert "NEEDS_APPROVAL" in out.note
+    assert "New API contract introduced" in out.note
+    assert calls == []  # full refine agent was NOT invoked
+    ws = ctx.service.workspace(t)
+    assert (ws.artifacts_dir / "draft-original.md").exists()
 
 
 def test_mechanical_draft_fast_path_falls_through_on_auto_approve_error(

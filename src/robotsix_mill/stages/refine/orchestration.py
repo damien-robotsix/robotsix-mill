@@ -1016,6 +1016,32 @@ class RefineAgentMixin:
                                 f"triage REFINE → auto-approve APPROVE: {auto.reason}"
                             ),
                         )
+                    elif auto.decision == "NEEDS_APPROVAL":
+                        (ws.artifacts_dir / "draft-original.md").write_text(
+                            draft if draft else "(title-only ticket, no body provided)",
+                            encoding="utf-8",
+                        )
+                        _PATH_RE = re.compile(r"`([^`]*/[^`]*\.[a-zA-Z]{1,10})`")
+                        extracted = _PATH_RE.findall(draft)
+                        if extracted:
+                            RefineAgentMixin._write_file_map(
+                                ws,
+                                [{"file": p, "note": "from draft"} for p in extracted],
+                                only_if_absent=True,
+                            )
+                        else:
+                            RefineAgentMixin._write_file_map(
+                                ws, [], only_if_absent=True
+                            )
+                        return RefineAgentMixin._resolved_outcome(
+                            ctx,
+                            draft,
+                            ticket.id,
+                            f"mechanical draft fast-path — "
+                            f"auto-approve NEEDS_APPROVAL (skipped refine): {auto.reason}",
+                            source=ticket.source,
+                            triage_note=triage.reason,
+                        )
                 except Exception:
                     log.warning(
                         "%s: mechanical fast-path auto-approve failed, falling through",
