@@ -107,12 +107,14 @@ modules:
       - src/robotsix_mill/forge/github_pr.py
       - src/robotsix_mill/forge/github_ci.py
       - src/robotsix_mill/forge/github_code_scanning.py
+      - src/robotsix_mill/forge/github_dependabot.py
       - src/robotsix_mill/forge/gitlab.py
       - src/robotsix_mill/forge/_http.py
       - src/robotsix_mill/forge/_log_utils.py
       - tests/forge/test_forge_auth.py
       - tests/forge/test_forge_base.py
       - tests/forge/test_github.py
+      - tests/forge/test_github_dependabot.py
       - tests/forge/test_gitlab.py
       - tests/forge/test_http.py
     dependencies: [config, vcs]
@@ -157,6 +159,7 @@ modules:
       - tests/runtime/test_tracing.py
       - tests/runtime/test_run_registry.py
       - tests/runtime/test_ci_monitor.py
+      - tests/runtime/test_dependabot_ingest.py
       - tests/runtime/test_cost_warm.py
       - tests/runtime/test_recent_traces.py
       - tests/runtime/test_bespoke_supervisor.py

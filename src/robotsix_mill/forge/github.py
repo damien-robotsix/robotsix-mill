@@ -20,6 +20,7 @@ from ._http import _ApiClient
 from .base import Forge, NotConfiguredError, RepoInfo
 from .github_ci import GitHubForgeCIMixin
 from .github_code_scanning import GitHubForgeCodeScanningMixin
+from .github_dependabot import GitHubForgeDependabotMixin
 from .github_pr import GitHubForgePRMixin
 
 
@@ -100,11 +101,12 @@ class GitHubForge(
     GitHubForgePRMixin,
     GitHubForgeCIMixin,
     GitHubForgeCodeScanningMixin,
+    GitHubForgeDependabotMixin,
     Forge,
 ):
     """GitHub adapter — opens PRs, queries checks/reviews/files, merges,
-    fetches workflow logs, and manages code-scanning alerts via the
-    GitHub REST API."""
+    fetches workflow logs, and manages code-scanning and Dependabot alerts
+    via the GitHub REST API."""
 
     def __init__(self, settings, repo_config=None):
         super().__init__(settings)

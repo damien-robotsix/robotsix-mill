@@ -38,6 +38,7 @@ class SourceKind(StrEnum):
     AGENT_CHECK = "agent_check"
     BC_CHECK = "bc_check"
     DATA_DIR_AUDIT = "data_dir_audit"
+    DEPENDABOT_ALERTS = "dependabot_alerts"
     COMPLETENESS_CHECK = "completeness_check"
     COPY_PASTE = "copy_paste"
     FORGE_PARITY = "forge_parity"

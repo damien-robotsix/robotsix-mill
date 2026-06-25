@@ -498,6 +498,10 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.data_dir_audit.prune_memory_ledgers": "data_dir_audit_prune_memory_ledgers",
     "periodic.data_dir_audit.prune_orphans": "data_dir_audit_prune_orphans",
     "periodic.data_dir_audit.prune_orphans_age_seconds": "data_dir_audit_prune_orphans_age_seconds",
+    # -- periodic.dependabot_ingest --
+    "periodic.dependabot_ingest.enabled": "dependabot_ingest_periodic",
+    "periodic.dependabot_ingest.interval_seconds": "dependabot_ingest_interval_seconds",
+    "periodic.dependabot_ingest.max_drafts_per_pass": "dependabot_ingest_max_drafts_per_pass",
     # -- periodic.state_sync --
     "periodic.state_sync.model": "state_sync_model",
     "periodic.state_sync.enabled": "state_sync_periodic",

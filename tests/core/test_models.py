@@ -65,6 +65,7 @@ def test_sourcekind_member_count():
         "AGENT_CHECK",
         "BC_CHECK",
         "DATA_DIR_AUDIT",
+        "DEPENDABOT_ALERTS",
         "COMPLETENESS_CHECK",
         "COPY_PASTE",
         "FORGE_PARITY",

@@ -195,6 +195,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         self._db_maintenance_task: asyncio.Task | None = None
         self._sandbox_reaper_task: asyncio.Task[None] | None = None
         self._credit_balance_task: asyncio.Task[None] | None = None
+        self._dependabot_ingest_task: asyncio.Task[None] | None = None
         self._requeue_task: asyncio.Task[None] | None = None
         # board_id -> per-repo bespoke supervisor task. The supervisor
         # itself owns each repo's per-bespoke child tasks; cancelling
@@ -265,6 +266,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             ("_db_maintenance_task", "db-maintenance"),
             ("_sandbox_reaper_task", "sandbox-reaper"),
             ("_credit_balance_task", "credit-balance"),
+            ("_dependabot_ingest_task", "dependabot-ingest"),
             ("_requeue_task", "requeue-drip"),
         ):
             t = getattr(self, attr, None)
@@ -837,6 +839,13 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             "_sandbox_reaper_task",
             log_msg="Periodic sandbox reaper enabled: interval %ds",
             log_args=(self.ctx.settings.sandbox_reaper_interval_seconds,),
+        )
+        self._start_poll_loop_pass(
+            "dependabot-ingest",
+            self._dependabot_ingest_poll_loop,
+            "_dependabot_ingest_task",
+            log_msg="Periodic Dependabot ingest enabled: interval %ds",
+            log_args=(self.ctx.settings.dependabot_ingest_interval_seconds,),
         )
 
         # --- Credit balance poll (gated on its own flag, not _periodic) ---
