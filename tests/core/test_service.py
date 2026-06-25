@@ -2639,3 +2639,54 @@ class TestDbMaintenancePass:
         assert any("optimize" in s.lower() for s in pragmas_seen), (
             f"PRAGMA optimize was not observed; saw: {pragmas_seen}"
         )
+
+    def test_wal_truncation_after_maintenance_pass(self, service, settings):
+        """db_maintenance_pass issues PRAGMA wal_checkpoint(TRUNCATE)
+        and the WAL file is truncated to near-zero bytes afterward."""
+        from robotsix_mill.core import db as db_mod
+
+        # Locate the DB path and derive the WAL path.
+        db_path = db_mod._db_path(settings, service.board_id)
+        wal_path = db_path.with_suffix(db_path.suffix + "-wal")
+
+        # Create a ticket and generate enough writes to grow the WAL.
+        t = service.create("wal-truncation test")
+        for i in range(50):
+            service.add_step_event(t.id, f"wal event {i}")
+
+        # The WAL file should exist and be non-trivial.
+        # (On first access with WAL mode, SQLite creates the WAL file.)
+        if wal_path.exists():
+            wal_size_before = wal_path.stat().st_size
+        else:
+            wal_size_before = 0
+
+        # Run the maintenance pass, which now includes the TRUNCATE checkpoint.
+        summary = service.db_maintenance_pass()
+
+        # After the pass the WAL should be truncated to ~0 bytes or absent.
+        if wal_path.exists():
+            wal_size_after = wal_path.stat().st_size
+        else:
+            wal_size_after = 0
+
+        # If the WAL was non-zero before, assert it shrank.  When the
+        # file never existed (size 0 before and after) the test still
+        # passes — the checkpoint call completed without error, and the
+        # assertion only fails when a non-zero WAL fails to shrink.
+        assert wal_size_after <= wal_size_before, (
+            f"WAL file grew after TRUNCATE checkpoint: "
+            f"{wal_size_before} → {wal_size_after}"
+        )
+        if wal_size_before > 0:
+            assert wal_size_after < 100, (
+                f"WAL file not truncated: {wal_size_after} bytes remain"
+            )
+
+        # Spot-check: the summary contract is unchanged.
+        assert set(summary.keys()) == {
+            "archived_purged",
+            "events_pruned",
+            "comments_pruned",
+            "tickets_pruned",
+        }

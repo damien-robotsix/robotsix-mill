@@ -1434,6 +1434,7 @@ class _LifecycleMixin(_ServiceBase):
         # 3. Reclaim freed pages.
         with db.session(self.settings, self.board_id) as s:
             s.connection().exec_driver_sql("PRAGMA optimize")
+            s.connection().exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)")
             s.commit()
 
         return result
