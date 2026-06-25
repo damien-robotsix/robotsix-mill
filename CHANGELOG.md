@@ -1,5 +1,7 @@
 ## 0.0.0 (unreleased)
 
+- Exclude cross-reference sections (`## Reference`, `## See also`, `## Related work`, and any heading starting with `reference` or `see also`) from path-token extraction in `paths_excluding_out_of_scope`, preventing consumer-migration follow-ups from being filed for paths that are merely cross-referenced, not deliverables.
+
 - Extract duplicate `_paths_from_diff` from `document.py` and `review.py` into shared `vcs/git_ops.py`.
 
 - Wire `frontend-sync` agent into the dispatch/UI layers: add POST route
