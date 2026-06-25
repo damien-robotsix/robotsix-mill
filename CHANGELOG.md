@@ -5,6 +5,10 @@
   Discussions and the security policy page.
 - Add `.github/PULL_REQUEST_TEMPLATE.md` with the PR checklist from
   `CONTRIBUTING.md` and a note for autonomous agents.
+- **Module test layout alignment**: moved `tests/runtime/test_component_agent.py`
+  to `tests/component_agent/test_component_agent.py`, matching the per-module
+  directory convention used by every other module. Added
+  `tests/component_agent/__init__.py`. Updated `docs/modules.yaml` accordingly.
 
 - **Refine no-op guard**: refine passes that yielded a "no change needed"
   verdict (refiner returned `no_change_needed=True`, reviewer-agreement
