@@ -343,6 +343,20 @@ env_doc_sync_pass = _make_background_pass(
 router.post("/env-doc-sync", status_code=202)(env_doc_sync_pass)
 
 
+frontend_sync_pass = _make_background_pass(
+    kind="frontend-sync",
+    runner_module="robotsix_mill.runners.frontend_sync_runner",
+    runner_func="run_frontend_sync_pass",
+    docstring="""Kick off a frontend-sync pass in the BACKGROUND and return at once.
+
+    The frontend-sync agent keeps the front-end codebase aligned with
+    backend API definitions — route signatures, type bindings, and
+    shared constants. New draft tickets appear on the board when it
+    finishes.""",
+)
+router.post("/frontend-sync", status_code=202)(frontend_sync_pass)
+
+
 # -- handlers with custom summary builders -------------------------------
 
 trace_review_pass = _make_background_pass(

@@ -74,6 +74,7 @@
     copy_paste: '#ec4899',
     state_sync: '#0891b2',
     env_doc_sync: '#7c3aed',
+    frontend_sync: '#06b6d4',
     meta: '#a855f7',
   };
 
@@ -2126,6 +2127,23 @@
     }
   }
 
+  async function runFrontendSync() {
+    var btn = event.target;
+    btn.disabled = true; btn.textContent = 'Running...';
+    try {
+      var repoId = getRepoId();
+      var fsUrl = repoId !== "all" ? "/frontend-sync?repo_id=" + encodeURIComponent(repoId) : "/frontend-sync";
+      var r = await jpost(fsUrl);
+      if (!r.ok) { throw new Error(await r.text()); }
+      alert("Frontend-sync started — it aligns the front-end with backend API definitions. New draft tickets appear on the board when it finishes.");
+      setTimeout(refresh, 4000);
+    } catch (e) {
+      alert("Frontend-sync failed to start: " + e);
+    } finally {
+      btn.disabled = false; btn.textContent = 'Frontend Sync';
+    }
+  }
+
   async function runTraceReview() {
     var btn = event.target;
     btn.disabled = true; btn.textContent = 'Running...';
@@ -2484,6 +2502,7 @@
   window.runCopyPaste = runCopyPaste;
   window.runStateSync = runStateSync;
   window.runEnvDocSync = runEnvDocSync;
+  window.runFrontendSync = runFrontendSync;
   window.runBcCheck = runBcCheck;
   window.runCompletenessCheck = runCompletenessCheck;
   window.runRunHealth = runRunHealth;

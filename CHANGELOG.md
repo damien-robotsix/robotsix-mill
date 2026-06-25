@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- Wire `frontend-sync` agent into the dispatch/UI layers: add POST route
+  (`/frontend-sync`), CLI `_RUNNERS` entry, AGENT_COLORS key, and board
+  button handler + window export in `board-mill.js`.
+
 - Add `robotsix-deploy` package: central deployment & lifecycle server scaffold with FastAPI /health and /ready endpoints, env-based config (`DEPLOY_*` prefix), Dockerfile, docker-compose, CI workflow calling the shared `python-ci.yml`, and GHCR publish workflow calling `docker-release.yml`.
 
 - Fix `docs/configuration.md` — correct `core.limits.test_requests` documented default from `16` to `30` to match the model and YAML defaults.
