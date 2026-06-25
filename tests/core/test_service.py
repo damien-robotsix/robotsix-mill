@@ -1408,6 +1408,21 @@ def test_explicit_priority_composes_with_inheritance(service):
 # --- ask_user close-thread → auto-resume --------------------------------
 
 
+def test_transition_to_awaiting_user_reply_sets_paused_from(service):
+    """``transition()`` to AWAITING_USER_REPLY auto-populates
+    ``paused_from`` to the pre-pause state value — no caller
+    kwarg required (regression test for commit 170f7991)."""
+    t = service.create("paused_from auto test")
+    service.transition(t.id, State.READY)
+
+    # Transition to AWAITING_USER_REPLY — no explicit paused_from
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+
+    reloaded = service.get(t.id)
+    assert reloaded.state is State.AWAITING_USER_REPLY
+    assert reloaded.paused_from == State.READY.value
+
+
 def test_close_thread_resumes_when_all_ask_user_closed(service):
     """AC1: Closing the last open [ASK_USER] thread on a paused ticket
     auto-resumes it to paused_from."""
@@ -1544,16 +1559,50 @@ def test_pause_and_resume_full_cycle(service):
     assert service.get(t.id).state is State.READY  # resumed again
 
 
-def test_awaiting_user_reply_without_paused_from_no_crash(service):
-    """Defensive: AWAITING_USER_REPLY with no paused_from (legacy)
-    should not crash close_thread — it just logs a warning and
-    returns without transitioning."""
+def test_awaiting_user_reply_without_paused_from_recovers_from_history(service):
+    """AWAITING_USER_REPLY with no paused_from (legacy pre-170f7991)
+    recovers the pre-pause state from event history instead of
+    staying stranded."""
     from robotsix_mill.core import db
     from robotsix_mill.core.models import Ticket
 
     t = service.create("Legacy paused")
-    # Manually corrupt to simulate legacy state.
+    # Simulate a ticket that was paused via transition() (which wrote the
+    # AWAITING_USER_REPLY event) but whose paused_from was lost (pre-170f7991).
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+
+    # Manually clear paused_from to simulate pre-170f7991 state.
     with db.session(service.settings, service.board_id) as s:
+        ticket = s.get(Ticket, t.id)
+        ticket.paused_from = None
+        s.add(ticket)
+        s.commit()
+
+    ask = service.add_comment(t.id, "[ASK_USER]\n\nQ?", author="refine")
+    # Should recover from event history, not raise.
+    result = service.close_thread(ask.id)
+    assert result.closed_at is not None
+    # Ticket resumes to READY (the state before AWAITING_USER_REPLY in history).
+    assert service.get(t.id).state is State.READY
+    assert service.get(t.id).paused_from is None
+
+
+def test_awaiting_user_reply_no_prior_events_no_recovery(service):
+    """When a ticket is in AWAITING_USER_REPLY with no paused_from AND
+    no prior events exist (e.g. direct DB corruption beyond the legacy
+    case), the fallback logs a warning and does NOT resume."""
+    from robotsix_mill.core import db
+    from robotsix_mill.core.models import Ticket, TicketEvent
+    from sqlmodel import select
+
+    t = service.create("No prior events")
+    # Delete all events to simulate a ticket with no history at all.
+    with db.session(service.settings, service.board_id) as s:
+        for ev in s.exec(
+            select(TicketEvent).where(TicketEvent.ticket_id == t.id)
+        ).all():
+            s.delete(ev)
         ticket = s.get(Ticket, t.id)
         ticket.state = State.AWAITING_USER_REPLY
         ticket.paused_from = None
@@ -1561,11 +1610,47 @@ def test_awaiting_user_reply_without_paused_from_no_crash(service):
         s.commit()
 
     ask = service.add_comment(t.id, "[ASK_USER]\n\nQ?", author="refine")
-    # Should NOT raise — just log and return.
     result = service.close_thread(ask.id)
     assert result.closed_at is not None
-    # Ticket stays AWAITING_USER_REPLY (no paused_from to resume to).
+    # No prior events → cannot recover; stays AWAITING_USER_REPLY.
     assert service.get(t.id).state is State.AWAITING_USER_REPLY
+
+
+def test_legacy_paused_from_recovery_via_event_history(service):
+    """A legacy ticket with paused_from=None (stranded pre-170f7991)
+    auto-resumes by recovering the pre-pause state from event history
+    when its last [ASK_USER] thread is closed."""
+    from robotsix_mill.core import db
+    from robotsix_mill.core.models import Ticket
+
+    t = service.create("legacy recovery test")
+    service.transition(t.id, State.READY)
+
+    # Add [ASK_USER] comment
+    c = service.add_comment(t.id, "[ASK_USER]\n\nWhat branch?", author="implement")
+
+    # Transition to AWAITING_USER_REPLY (this sets paused_from via the
+    # _lifecycle fix, creating an AWAITING_USER_REPLY event row).
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+    assert service.get(t.id).paused_from == State.READY.value
+
+    # Simulate pre-170f7991: clear paused_from in the DB while the
+    # event row for AWAITING_USER_REPLY still exists.
+    with db.session(service.settings, service.board_id) as s:
+        ticket = s.get(Ticket, t.id)
+        ticket.paused_from = None
+        s.add(ticket)
+        s.commit()
+
+    # Verify the corruption took effect.
+    assert service.get(t.id).paused_from is None
+
+    # Close the thread → should recover from event history.
+    service.close_thread(c.id, ticket_id=t.id)
+
+    reloaded = service.get(t.id)
+    assert reloaded.state is State.READY
+    assert reloaded.paused_from is None
 
 
 def test_close_thread_no_ask_user_threads_on_paused_no_resume(service):

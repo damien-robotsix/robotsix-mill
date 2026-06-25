@@ -234,6 +234,7 @@ src/robotsix_mill/core/service/_lifecycle.py:0: error: "State" has no attribute 
 src/robotsix_mill/core/service/_lifecycle.py:0: error: Argument 1 to "order_by" of "GenerativeSelect" has incompatible type "datetime"; expected "Literal[_NoArg.NO_ARG] | str | ColumnElement[Any] | _HasClauseElement[Any] | SQLCoreOperations[Any] | ExpressionElementRole[Any] | TypedColumnsClauseRole[Any] | Callable[[], ColumnElement[Any]] | LambdaElement | None"  [arg-type]
 src/robotsix_mill/core/service/_comments.py:0: error: Item "int" of "int | None" has no attribute "is_"  [union-attr]
 src/robotsix_mill/core/service/_comments.py:0: error: Item "None" of "int | None" has no attribute "is_"  [union-attr]
+src/robotsix_mill/core/service/_comments.py:0: error: "datetime" has no attribute "desc"  [attr-defined]
 src/robotsix_mill/core/dedup.py:0: error: "list?[robotsix_mill.core.models.Ticket]" has no attribute "__iter__" (not iterable)  [attr-defined]
 src/robotsix_mill/core/dedup.py:0: error: "list?[robotsix_mill.core.models.TicketEvent]" has no attribute "__iter__" (not iterable)  [attr-defined]
 src/robotsix_mill/core/dedup.py:0: error: Returning Any from function declared to return "Ticket | None"  [no-any-return]

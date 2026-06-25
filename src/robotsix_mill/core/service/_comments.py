@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from sqlmodel import select
 
 from .. import db
-from ..models import Comment, Ticket
+from ..models import Comment, Ticket, TicketEvent
 from ..states import ASK_USER_MARKER, State
 from ._base import _ServiceBase
 from ._helpers import _get_ticket, _make_event
@@ -190,11 +190,32 @@ class _CommentMixin(_ServiceBase):
                 return
 
             if not ticket.paused_from:
+                # Legacy ticket: paused_from not recorded at pause time.
+                # Recover from event history: find the most recent state
+                # before AWAITING_USER_REPLY was entered.
+                prev_state_event = s.exec(
+                    select(TicketEvent)
+                    .where(
+                        TicketEvent.ticket_id == ticket_id,
+                        TicketEvent.state != State.AWAITING_USER_REPLY,
+                    )
+                    .order_by(TicketEvent.at.desc())
+                    .limit(1)
+                ).first()
+                if prev_state_event is None:
+                    log.warning(
+                        "%s: AWAITING_USER_REPLY but no paused_from and no prior"
+                        " events — cannot auto-resume",
+                        ticket_id,
+                    )
+                    return
                 log.warning(
-                    "%s: AWAITING_USER_REPLY but no paused_from — cannot auto-resume",
+                    "%s: AWAITING_USER_REPLY but no paused_from — recovering from"
+                    " event history (last state before pause: %s)",
                     ticket_id,
+                    prev_state_event.state.value,
                 )
-                return
+                ticket.paused_from = prev_state_event.state.value
 
             # Count all top-level [ASK_USER] threads and check whether
             # every one is closed.
