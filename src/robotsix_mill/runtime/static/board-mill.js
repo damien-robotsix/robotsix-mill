@@ -94,6 +94,7 @@
     "trace-review": "trace-review",
     roadmap_sync: "roadmap-sync",
     forge_parity: "forge-parity",
+    frontend_sync: "frontend-sync",
     module_curator: "module-curator",
     copy_paste: "copy-paste",
     state_sync: "state-sync",
