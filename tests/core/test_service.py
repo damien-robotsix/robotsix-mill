@@ -2347,7 +2347,7 @@ def test_migrate_epic_subtree_rolls_back_on_db_failure(settings, migrate_env):
 
 class TestDbMaintenancePass:
     """Tests for periodic DB maintenance: event cap + archive purge +
-    PRAGMA optimize."""
+    PRAGMA optimize + WAL checkpoint."""
 
     def test_empty_db_returns_zero_summary(self, service):
         """db_maintenance_pass on an empty DB returns all-zero summary
