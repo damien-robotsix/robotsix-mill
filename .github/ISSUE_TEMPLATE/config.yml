@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🤔 Questions & Help
+    url: https://github.com/damien-robotsix/robotsix-mill/discussions/categories/q-a
+    about: Ask questions and discuss usage with the community
+  - name: 💡 Feature Requests & Ideas
+    url: https://github.com/damien-robotsix/robotsix-mill/discussions/categories/ideas
+    about: Suggest new features and improvements
+  - name: 🐛 Bug Reports
+    url: https://github.com/damien-robotsix/robotsix-mill/issues/new?template=bug_report.yml
+    about: Report a bug or unexpected behaviour
+  - name: 🔒 Security Vulnerabilities
+    url: https://github.com/damien-robotsix/robotsix-mill/security/policy
+    about: Report security vulnerabilities (do NOT file public issues)
