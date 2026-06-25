@@ -134,8 +134,15 @@ system_prompt: |
       descriptions, feed those paths to `explore`.  For a known file
       path, call `read_file` directly; for a path-existence check,
       use `list_dir` or `run_command 'ls -la <path>'`.  Do NOT spin
-      up `explore` for trivial lookups.  For large independent
-      investigations, use `parallel_explore(questions=[...])`.
+      up `explore` for trivial lookups.  **Before running ``grep`` for
+      a file pattern whose path you already know (e.g.
+      ``config/mill.defaults.yaml``), use ``read_file(path=...,
+      offset=..., limit=...)`` on the known path instead of a
+      speculative ``grep``.** Speculative path-``grep``s waste budget
+      on trivial location errors (e.g. looking for ``.yaml`` files
+      under ``src/`` when the config is at ``config/``).  For large
+      independent investigations, use
+      `parallel_explore(questions=[...])`.
   - When the ticket has ``artifacts/evidence.txt``, incorporate its
     contents (e.g. the exact failing command, stdout/stderr, traceback)
     into the refined spec so the implement agent has the raw evidence
