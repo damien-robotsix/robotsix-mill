@@ -57,24 +57,6 @@ def _sanitize_comments(text: str) -> str:
     return re.sub(r"^\[ASK_USER\]\s*", "", text)
 
 
-def _paths_from_diff(diff: str) -> list[str]:
-    """Extract modified file paths from a unified git diff.
-
-    Reads `+++ b/<path>` lines (skipping `+++ /dev/null` for deletions),
-    deduplicates, preserves first-seen order. Used to pre-seed the
-    review agent's message_history with every modified file's content
-    so the reviewer doesn't pay for one read_file round-trip per file.
-    """
-    seen: set[str] = set()
-    out: list[str] = []
-    for m in re.finditer(r"^\+\+\+ b/(.+)$", diff, re.MULTILINE):
-        path = m.group(1).strip()
-        if path and path != "/dev/null" and path not in seen:
-            seen.add(path)
-            out.append(path)
-    return out
-
-
 _WORKFLOW_RE = re.compile(
     r"uses:\s*([^/\s]+(?:/(?!\.github/(?:workflows|actions)/)[^/\s]+)?)"
     r"/\.github/(?:workflows|actions)/[^@\s]+",
@@ -559,7 +541,7 @@ class ReviewStage(Stage):
         # the preseed file set, the cross-repo clone set, or the action-ref
         # validation. The agent receives the bounded diff; the preseed and
         # extra_roots still cover every referenced file and repo.
-        modified_paths = _paths_from_diff(diff)
+        modified_paths = git_ops._paths_from_diff(diff)
         workflow_refs = _workflow_refs_from_diff(diff)
         action_refs = _action_refs_from_diff(diff)
 

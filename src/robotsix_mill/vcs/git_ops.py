@@ -63,6 +63,25 @@ def redact_credentials(text: str | bytes) -> str:
     return _CREDENTIAL_IN_URL.sub("://***@", text)
 
 
+def _paths_from_diff(diff: str) -> list[str]:
+    """Extract modified file paths from a unified git diff.
+
+    Reads ``+++ b/<path>`` lines (skipping ``+++ /dev/null`` for deletions),
+    deduplicates, preserves first-seen order. Used to pre-seed agent
+    message histories with modified files so they don't pay one
+    ``read_file`` round-trip per file.
+    """
+    _DIFF_PATH_RE = re.compile(r"^\+\+\+ b/(.+)$", re.MULTILINE)
+    seen: set[str] = set()
+    out: list[str] = []
+    for m in _DIFF_PATH_RE.finditer(diff):
+        path = m.group(1).strip()
+        if path and path != "/dev/null" and path not in seen:
+            seen.add(path)
+            out.append(path)
+    return out
+
+
 def _authed_url(url: str, token: str | None) -> str:
     """Inject a token into an https remote for non-interactive clone/push.
     Other schemes (file://, ssh) are returned unchanged. Never log the

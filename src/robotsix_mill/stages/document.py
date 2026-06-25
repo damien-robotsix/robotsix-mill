@@ -13,7 +13,6 @@ implementation over a doc-update hiccup is the wrong trade.
 from __future__ import annotations
 
 import logging
-import re
 from pathlib import Path
 
 from ..agents.documenting import DocClassifierResult, DocResult
@@ -26,23 +25,6 @@ from ._implemented_repos import combined_diff, implemented_repos
 from .base import Outcome, Stage, StageContext
 
 log = logging.getLogger("robotsix_mill.stages.document")
-
-
-def _paths_from_diff(diff: str) -> list[str]:
-    """Extract modified file paths from a unified git diff.
-
-    Mirrors ``stages.review._paths_from_diff`` — kept as a local copy
-    (instead of an import) to avoid a stage-to-stage dependency for a
-    single regex; if a third stage needs it, lift to ``vcs.git_ops``.
-    """
-    seen: set[str] = set()
-    out: list[str] = []
-    for m in re.finditer(r"^\+\+\+ b/(.+)$", diff, re.MULTILINE):
-        path = m.group(1).strip()
-        if path and path != "/dev/null" and path not in seen:
-            seen.add(path)
-            out.append(path)
-    return out
 
 
 class DocumentStage(Stage):
@@ -143,7 +125,7 @@ class DocumentStage(Stage):
         # whichever top-level docs actually exist (README.md, AGENT.md)
         # so the doc agent doesn't have to read each file via a
         # separate round-trip. Same pattern review uses.
-        modified_paths = _paths_from_diff(diff)
+        modified_paths = git_ops._paths_from_diff(diff)
         preload_paths: list[str] = list(modified_paths)
         for doc_name in ("README.md", "AGENT.md"):
             if doc_name not in preload_paths and (repo_dir / doc_name).exists():
