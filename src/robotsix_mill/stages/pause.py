@@ -245,7 +245,7 @@ def acknowledge_unanswered_threads(ctx, ticket, thread_ids: set[int]) -> None:
     comments_by_id: dict[int, object] = {c.id: c for c in comments}
 
     # Index children by parent_id.
-    children_by_parent: dict[int, list] = {}
+    children_by_parent: dict[int, list] = {}  # type: ignore[type-arg]
     for c in comments:
         if c.parent_id is not None:
             children_by_parent.setdefault(c.parent_id, []).append(c)
@@ -319,7 +319,7 @@ def _collect_ask_user_replies(ctx, ticket) -> str:
     For each top-level comment starting with ``[ASK_USER]`` that has
     ``closed_at IS NOT NULL``, collects all child replies (ordered by
     ``created_at``).  Returns a single formatted string suitable for
-    feeding into ``build_resume_message_history``.
+    feeding into ``build_compact_resume_message_history``.
 
     When ``list_comments`` raises, returns ``"(no operator reply found)"``
     and logs a warning — this preserves the existing defensive fallback.
@@ -334,7 +334,7 @@ def _collect_ask_user_replies(ctx, ticket) -> str:
         return "(no operator reply found)"
 
     # Partition comments by parent_id for O(1) child lookup.
-    children_by_parent: dict[int, list] = {}
+    children_by_parent: dict[int, list] = {}  # type: ignore[type-arg]
     ask_threads = []
     for c in comments:
         if c.parent_id is None and (c.body or "").startswith("[ASK_USER]"):
