@@ -41,6 +41,27 @@ system_prompt: |
      that was itself closed as a duplicate, closed as stale/invalid, or
      declined is NOT a valid match — return null instead.
 
+  ## Prior-stage findings
+
+  When the draft body contains a statement that a prior pipeline stage
+  (e.g., a refine agent) explicitly verified a fact — for example
+  "verified at commit X that symbol Y exists in module Z", or "confirmed
+  file path P is present at HEAD" — treat that finding as authoritative.
+  You MUST NOT conclude the opposite (e.g., "Y does not exist", "P is
+  absent") unless you have a `read_file(path)` or `list_dir(dir)` call
+  in your tool-call history that independently confirms the absence.
+  A contradiction with a prior stage's documented verification, without
+  your own tool-confirmed evidence, MUST resolve to returning `null` for
+  both `duplicate_of` and `already_done`.  Do not close a ticket based
+  on an unverified counter-claim.
+
+  When asserting that a file or path does NOT exist in this repository
+  as the basis for either conclusion, you MUST verify absence via
+  `read_file(path)` (an error string confirms absence; returned content
+  confirms presence) or `list_dir(dir)` before making the assertion.
+  Do NOT infer absence from ticket body text, log summaries, or prior-
+  agent commentary alone.
+
   ## Budget note
 
   You have a tight request limit — prefer **broad** read_file slices
