@@ -1,5 +1,18 @@
 ## 0.0.0 (unreleased)
 
+- **Refine no-op guard**: refine passes that yielded a "no change needed"
+  verdict (refiner returned `no_change_needed=True`, reviewer-agreement
+  guard, or triage `NO_CHANGE` classifier) now route TASK-kind tickets
+  without a branch toward `ready` (implementation) instead of auto-closing
+  to `done`.  The `_guard_implementation_done` helper in
+  `stages/refine/core.py` provides defense-in-depth — any future DONE
+  outcome for a branchless TASK ticket that does not carry a recognised
+  non-implementation prefix (dedup, freshness, obsolescence, misroute) is
+  redirected to `ready`.  Maintenance tickets and human `mark_done` are
+  unaffected.  The non-implementation close-prefix constants moved from
+  `stages/refine/helpers.py` to `core/constants.py` so the guard can
+  import them without a circular dependency.
+
 - Exclude cross-reference sections (`## Reference`, `## See also`, `## Related work`, and any heading starting with `reference` or `see also`) from path-token extraction in `paths_excluding_out_of_scope`, preventing consumer-migration follow-ups from being filed for paths that are merely cross-referenced, not deliverables.
 
 - Extract duplicate `_paths_from_diff` from `document.py` and `review.py` into shared `vcs/git_ops.py`.
