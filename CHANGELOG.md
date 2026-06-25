@@ -1,5 +1,11 @@
 ## 0.0.0 (unreleased)
 
+- Add `.github/ISSUE_TEMPLATE/config.yml` to disable blank issues and
+  redirect questions, feature requests, and security reports to
+  Discussions and the security policy page.
+- Add `.github/PULL_REQUEST_TEMPLATE.md` with the PR checklist from
+  `CONTRIBUTING.md` and a note for autonomous agents.
+
 - **Refine no-op guard**: refine passes that yielded a "no change needed"
   verdict (refiner returned `no_change_needed=True`, reviewer-agreement
   guard, or triage `NO_CHANGE` classifier) now route TASK-kind tickets
