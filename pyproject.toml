@@ -82,9 +82,10 @@ default-groups = ["dev"]
 [project.scripts]
 robotsix-mill = "robotsix_mill.cli:main"
 robotsix-autoupdate = "robotsix_mill.autoupdate:main"
+robotsix-deploy = "robotsix_deploy.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/robotsix_mill"]
+packages = ["src/robotsix_mill", "src/robotsix_deploy"]
 
 # Allow the direct git references for robotsix-llmio / robotsix-modules in
 # the dependency lists.
@@ -108,7 +109,7 @@ filterwarnings = [
 ]
 
 [tool.coverage.run]
-source = ["robotsix_mill"]
+source = ["robotsix_mill", "robotsix_deploy"]
 branch = true
 relative_files = true
 
@@ -305,6 +306,6 @@ DEP001 = ["playwright"]
 [tool.mypy]
 strict = true
 python_version = "3.14"
-packages = ["src/robotsix_mill"]
+packages = ["src/robotsix_mill", "src/robotsix_deploy"]
 ignore_missing_imports = true
 show_error_codes = true

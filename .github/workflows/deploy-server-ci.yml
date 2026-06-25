@@ -1,0 +1,43 @@
+name: Deploy Server CI
+
+on:
+  pull_request:
+    paths:
+      - "src/robotsix_deploy/**"
+      - "tests/deploy/**"
+      - "Dockerfile.deploy"
+      - "docker-compose.deploy.yml"
+      - ".github/workflows/deploy-server-ci.yml"
+      - ".github/workflows/deploy-server-release.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/robotsix_deploy/**"
+      - "tests/deploy/**"
+      - "Dockerfile.deploy"
+      - "docker-compose.deploy.yml"
+      - ".github/workflows/deploy-server-ci.yml"
+      - ".github/workflows/deploy-server-release.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    permissions:
+      contents: read
+      security-events: write
+    uses: ./.github/workflows/python-ci.yml
+    with:
+      python-version: "3.14"
+      uv-version: "0.8.15"
+      install-extras: ""
+      cov-package: "robotsix_deploy"
+      coverage-threshold: 70
+      pytest-args: "-m 'not docker' tests/deploy/"
+      bandit-severity: "medium"
+      mypy-advisory: true
