@@ -5,6 +5,17 @@ FROM python:3.14-slim@sha256:c845af9399020c7e562969a13689e929074a10fd057acd1b1fa
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
+# git is needed so uv can clone the git-sourced dependencies
+# (robotsix-llmio, robotsix-yaml-config, robotsix-board-agent,
+# robotsix-agent-comm, robotsix-board) when installing from the
+# lockfile-generated requirements.txt.
+RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
+    && apt-get update \
+    && apt-get -y upgrade \
+    && apt-get install -y --no-install-recommends \
+        git=1:2.47.3-* \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /build
 COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
