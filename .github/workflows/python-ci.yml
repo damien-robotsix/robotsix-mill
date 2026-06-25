@@ -113,10 +113,12 @@ jobs:
         # into the run block, to avoid template injection (zizmor).
         run: |
           extras=""
-          for x in $INSTALL_EXTRAS; do  # shellcheck disable=SC2086 (word splitting intentional: multiple --extra flags)
+          # shellcheck disable=SC2086 (word splitting intentional: multiple --extra flags)
+          for x in $INSTALL_EXTRAS; do
             extras="$extras --extra $x"
           done
-          uv sync --frozen $extras  # shellcheck disable=SC2086 (word splitting intentional: multiple --extra flags)
+          # shellcheck disable=SC2086 (word splitting intentional: multiple --extra flags)
+          uv sync --frozen $extras
         env:
           UV_PROJECT_ENVIRONMENT: system
           INSTALL_EXTRAS: ${{ inputs.install-extras }}

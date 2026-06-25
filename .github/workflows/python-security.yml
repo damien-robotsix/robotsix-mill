@@ -88,10 +88,12 @@ jobs:
         # run block, to avoid template injection (zizmor).
         run: |
           extras=""
-          for x in $INSTALL_EXTRAS; do  # shellcheck disable=SC2086 (word splitting intentional: multiple --extra flags)
+          # shellcheck disable=SC2086 (word splitting intentional: multiple --extra flags)
+          for x in $INSTALL_EXTRAS; do
             extras="$extras --extra $x"
           done
-          uv sync --frozen $extras  # shellcheck disable=SC2086 (word splitting intentional: multiple --extra flags)
+          # shellcheck disable=SC2086 (word splitting intentional: multiple --extra flags)
+          uv sync --frozen $extras
         env:
           UV_PROJECT_ENVIRONMENT: system
           INSTALL_EXTRAS: ${{ inputs.install-extras }}
@@ -126,15 +128,19 @@ jobs:
           PIP_AUDIT_IGNORE_VULNS: ${{ inputs.pip-audit-ignore-vulns }}
         run: |
           no_emit=""
-          for p in $PIP_AUDIT_IGNORE_PACKAGES; do  # shellcheck disable=SC2086 (word splitting intentional: multiple package names)
+          # shellcheck disable=SC2086 (word splitting intentional: multiple package names)
+          for p in $PIP_AUDIT_IGNORE_PACKAGES; do
             no_emit="$no_emit --no-emit-package $p"
           done
-          uv export --frozen --no-emit-project $no_emit -o "$PIP_AUDIT_REQUIREMENTS_FILE"  # shellcheck disable=SC2086 (word splitting intentional: multiple --no-emit-package flags)
+          # shellcheck disable=SC2086 (word splitting intentional: multiple --no-emit-package flags)
+          uv export --frozen --no-emit-project $no_emit -o "$PIP_AUDIT_REQUIREMENTS_FILE"
           ignore=""
-          for v in $PIP_AUDIT_IGNORE_VULNS; do  # shellcheck disable=SC2086 (word splitting intentional: multiple vuln IDs)
+          # shellcheck disable=SC2086 (word splitting intentional: multiple vuln IDs)
+          for v in $PIP_AUDIT_IGNORE_VULNS; do
             ignore="$ignore --ignore-vuln $v"
           done
-          uv run --with pip-audit pip-audit -r "$PIP_AUDIT_REQUIREMENTS_FILE" $ignore  # shellcheck disable=SC2086 (word splitting intentional: multiple --ignore-vuln flags)
+          # shellcheck disable=SC2086 (word splitting intentional: multiple --ignore-vuln flags)
+          uv run --with pip-audit pip-audit -r "$PIP_AUDIT_REQUIREMENTS_FILE" $ignore
 
       - name: pip-audit (synced environment)
         if: ${{ inputs.run-pip-audit && inputs.pip-audit-requirements-file == '' }}
@@ -143,10 +149,12 @@ jobs:
           PIP_AUDIT_IGNORE_VULNS: ${{ inputs.pip-audit-ignore-vulns }}
         run: |
           ignore=""
-          for v in $PIP_AUDIT_IGNORE_VULNS; do  # shellcheck disable=SC2086 (word splitting intentional: multiple vuln IDs)
+          # shellcheck disable=SC2086 (word splitting intentional: multiple vuln IDs)
+          for v in $PIP_AUDIT_IGNORE_VULNS; do
             ignore="$ignore --ignore-vuln $v"
           done
-          uv run --with pip-audit pip-audit $ignore  # shellcheck disable=SC2086 (word splitting intentional: multiple --ignore-vuln flags)
+          # shellcheck disable=SC2086 (word splitting intentional: multiple --ignore-vuln flags)
+          uv run --with pip-audit pip-audit $ignore
 
       - name: Generate SBOM (CycloneDX)
         if: always()
