@@ -1973,6 +1973,13 @@ class RefineAgentMixin:
                     next_state,
                     "refined (empty spec, split degraded — kept original draft)",
                 )
+
+            # --- spec review (conciseness pass) ---
+            if s.spec_review_enabled and not reviewer_comments:
+                spec = RefineAgentMixin._review_spec_conciseness(
+                    s, ws, ticket, spec, "refine-verbose.md"
+                )
+
             new_hash = ws.write_description(spec)
             ctx.service.set_content_hash(ticket.id, new_hash)
 
