@@ -132,6 +132,16 @@ SCOPE DISCIPLINE — always follow these limits:
   Examples:
     read_file("src/foo.py", offset=140, limit=40)   # function at L150
     read_file("config/repos.yaml", offset=1, limit=30)
+- MERGE ADJACENT READ RANGES: when you need several nearby
+  regions of the same file, request the maximum contiguous range
+  you expect to need in a single read.  Do NOT issue several short
+  sequential reads — that wastes tool turns on windows that could
+  have been one call.
+  Example: instead of
+    read_file("..._http.py", offset=20, limit=80)   # lines 20-99
+    read_file("..._http.py", offset=100, limit=40)  # lines 100-139
+  merge into a single read:
+    read_file("..._http.py", offset=20, limit=120)  # lines 20-139
 - FILE BUDGET: read at most 5 files per answer. If you need more, stop
   and return the most relevant files found so far, with a note that
   more exist.

@@ -112,6 +112,18 @@ def test_system_prompt_forbids_whole_file_shell_dumps():
     assert "re-run" in sp
 
 
+def test_system_prompt_instructs_merge_adjacent_read_ranges():
+    """The explore system prompt tells the scout to merge adjacent
+    read ranges into a single read_file call, with a concrete example
+    drawn from observed trace waste (two sequential reads of the same
+    file that should have been one)."""
+    sp = explore._SYSTEM_PROMPT.lower()
+    assert "merge" in sp or "adjacent" in sp
+    assert "single read" in sp or "maximum" in sp
+    # Concrete merge example from the trace
+    assert "offset=20, limit=120" in sp
+
+
 def test_repo_scoped_explore_unknown_repo(tmp_path):
     """A repo-scoped explore call naming an unregistered repo returns a
     helpful error listing the valid ids — never raises, never explores."""
