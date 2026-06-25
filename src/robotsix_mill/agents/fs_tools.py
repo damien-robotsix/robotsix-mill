@@ -837,6 +837,11 @@ def build_fs_tools(
                                 f"{listing}"
                             )
                     # No fallback found — let iterdir() raise.
+                if d.is_file():
+                    return (
+                        f"error: '{path}' is a file, not a directory"
+                        " — use read_file to read its content"
+                    )
                 return "\n".join(
                     sorted(f"{e.name}/" if e.is_dir() else e.name for e in d.iterdir())
                 )
