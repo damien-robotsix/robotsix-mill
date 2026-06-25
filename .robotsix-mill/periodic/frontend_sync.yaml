@@ -1,0 +1,7 @@
+# Per-repo periodic workflow: presence enables frontend_sync for this repo.
+# Cross-references canonical Python State and SourceKind enum values against
+# CSS class selectors and JS constant maps in board-mill.{css,js}, and files
+# draft tickets for missing, stale, or mismatched frontend representations.
+# Name-only → inherits the built-in frontend_sync definition
+# (robotsix-mill: agent_definitions/periodic/frontend_sync.yaml).
+name: frontend_sync
