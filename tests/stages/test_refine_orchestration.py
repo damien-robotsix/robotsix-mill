@@ -450,8 +450,15 @@ def test_no_change_needed_closes_to_done(ctx_factory, monkeypatch, tmp_path):
 
     out = _run_agent(ctx, t, tmp_path)
 
-    assert out.next_state is State.DONE
-    assert out.note.startswith("no change needed — ")
+    # For a TASK ticket without a branch, the no-change-needed path
+    # must NOT auto-close to DONE — it routes to READY (or
+    # HUMAN_ISSUE_APPROVAL when gated) so implement can verify the
+    # "no change needed" claim against the live tree.
+    assert out.next_state is not State.DONE
+    assert (
+        "no change needed" in out.note.lower()
+        or "routing to implement" in out.note.lower()
+    )
 
 
 def test_no_change_needed_empty_rationale_degrades(ctx_factory, monkeypatch, tmp_path):
@@ -796,8 +803,11 @@ def test_reviewer_agreement_guard_agree_short_circuits(
 
     out = _run_agent(ctx, t, tmp_path)
 
-    assert out.next_state is State.DONE
-    assert out.note.startswith("reviewer agreement — no change needed:")
+    # For a TASK ticket without a branch, the reviewer-agreement guard
+    # must NOT auto-close to DONE — it routes to READY (or
+    # HUMAN_ISSUE_APPROVAL when gated) so implement can verify.
+    assert out.next_state is not State.DONE
+    assert "reviewer agreement" in out.note.lower()
     assert "Reviewer confirmed" in out.note
     assert calls == []  # full refine agent never invoked
     ws = ctx.service.workspace(t)
@@ -918,9 +928,12 @@ def test_triage_no_change_verdict_returns_done(ctx_factory, monkeypatch, tmp_pat
         ctx, t, tmp_path, draft="Create `.robotsix-mill/periodic/audit.yaml`."
     )
 
-    assert out.next_state is State.DONE
+    # For a TASK ticket without a branch, triage NO_CHANGE must NOT
+    # auto-close to DONE — it routes to READY (or HUMAN_ISSUE_APPROVAL
+    # when gated) so implement can verify the "no change" claim.
+    assert out.next_state is not State.DONE
     assert "NO_CHANGE" in out.note
-    assert out.note.startswith("triage NO_CHANGE:")
+    assert "routing to implement" in out.note.lower()
     assert calls == []  # full refine agent never invoked
     ws = ctx.service.workspace(t)
     assert (ws.artifacts_dir / "draft-original.md").exists()

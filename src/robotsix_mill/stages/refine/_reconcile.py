@@ -393,6 +393,19 @@ def reviewer_agreement_guard(
     )
     write_file_map(ws, [], only_if_absent=True)
     short = agreement.reason[:400] + ("…" if len(agreement.reason) > 400 else "")
+
+    # A TASK-kind (implementation) ticket that hasn't produced a branch
+    # must not be auto-closed from DRAFT.  Route it toward READY so
+    # implement can verify the claim against the live tree.
+    if ticket.kind == TicketKind.TASK and not ticket.branch:
+        return _result_paths.resolved_outcome(
+            ctx,
+            draft,
+            ticket.id,
+            f"reviewer agreement — routing to implement: {short}",
+            source=ticket.source,
+        )
+
     return Outcome(
         State.DONE,
         f"reviewer agreement — no change needed: {short}",

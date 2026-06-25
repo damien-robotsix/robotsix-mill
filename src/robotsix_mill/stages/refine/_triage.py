@@ -14,7 +14,7 @@ from typing import Any
 
 from ...agents import refining
 from ...config.settings import Settings
-from ...core.models import SourceKind, Ticket
+from ...core.models import SourceKind, Ticket, TicketKind
 from ...core.service import TicketService
 from ...core.states import State
 from ...core.workspace import Workspace
@@ -283,6 +283,19 @@ def triage_skip(
             short_reason = triage.reason[:400] + (
                 "…" if len(triage.reason) > 400 else ""
             )
+            # A TASK-kind (implementation) ticket that hasn't produced a
+            # branch must not be auto-closed from DRAFT.  Route to READY
+            # so implement can verify the "no change" claim against the
+            # live tree.
+            if ticket.kind == TicketKind.TASK and not ticket.branch:
+                return _result_paths.resolved_outcome(
+                    ctx,
+                    draft,
+                    ticket.id,
+                    f"triage NO_CHANGE — routing to implement: {short_reason}",
+                    source=ticket.source,
+                    triage_note=triage.reason,
+                )
             return Outcome(
                 State.DONE,
                 f"triage NO_CHANGE: {short_reason}",

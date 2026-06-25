@@ -8,6 +8,30 @@ states, and text utilities.
 
 from __future__ import annotations
 
+# ---------------------------------------------------------------------------
+# Non-implementation close prefixes — note-prefix constants marking a
+# **non-implementation** closure (dedup, freshness, obsolescence, mill
+# misroute).  The refine stage writes these prefixes on DRAFT→DONE
+# transitions and reads them back in ``_is_valid_dedup_target`` to
+# reject a candidate that was itself dedup-/freshness-closed.  They
+# also gate the transition guard in ``_lifecycle.py`` which exempts
+# legitimate non-implementation DONE closures from the branch/PR
+# requirement for implementation tickets.
+# ---------------------------------------------------------------------------
+DEDUP_DUPLICATE_PREFIX: str = "duplicate of "
+DEDUP_ALREADY_DONE_PREFIX: str = "already implemented in "
+FRESHNESS_STALE_PREFIX: str = "stale or invalid finding"
+OBSOLESCENCE_GAP_PREFIX: str = "obsolete — gap already resolved"
+REFINE_MILL_MISROUTE_PREFIX: str = "redirected to mill board"
+REFINE_MILL_CONSUMER_FOLLOWUP_PREFIX: str = "filed mill consumer follow-up"
+NON_IMPLEMENTATION_CLOSE_PREFIXES: tuple[str, ...] = (
+    DEDUP_DUPLICATE_PREFIX,
+    DEDUP_ALREADY_DONE_PREFIX,
+    FRESHNESS_STALE_PREFIX,
+    OBSOLESCENCE_GAP_PREFIX,
+    REFINE_MILL_MISROUTE_PREFIX,
+)
+
 # File extensions that are likely binary — should be skipped during
 # text preview / log traversal.
 BINARY_EXTENSIONS: frozenset[str] = frozenset(

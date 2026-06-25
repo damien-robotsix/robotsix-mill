@@ -6425,6 +6425,160 @@ def test_triage_prompt_graceful_on_repos_config_failure():
 
 
 # ---------------------------------------------------------------------------
+# Refine no-op guard regression tests (DRAFT→DONE without branch)
+# ---------------------------------------------------------------------------
+
+
+def test_no_change_needed_routes_to_ready_for_task_without_branch(
+    ctx, service, monkeypatch
+):
+    """A TASK ticket whose refine agent returns ``no_change_needed=True``
+    must land in READY (for implement to verify), never DONE.
+
+    This guards against the bug where a feature-request DRAFT can
+    auto-refine → DONE → CLOSED in one pass as a no-op without ever
+    being implemented.
+    """
+    ticket = service.create("Add session close feature", "draft body")
+    # Pre-condition: the ticket is DRAFT and has no branch.
+    assert ticket.state == State.DRAFT
+    assert ticket.branch is None
+
+    def spy_refine(*, settings, title, draft, **kwargs):
+        return RefineResult(
+            split=False,
+            no_change_needed=True,
+            no_change_rationale="Ticket is clear and ready for implementation.",
+        )
+
+    monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
+
+    out = RefineStage().run(ticket, ctx)
+    # The no_change_path should route to READY, not DONE.
+    assert out.next_state == State.READY, (
+        f"Expected READY for no-op on TASK without branch, got {out.next_state}"
+    )
+    assert "routing to implement" in out.note.lower()
+
+
+def test_reviewer_agreement_routes_to_ready_for_task_without_branch(
+    ctx, service, monkeypatch
+):
+    """When the reviewer-agreement guard fires for a TASK ticket without a
+    branch, the outcome must be READY, not DONE."""
+    ticket = service.create("Feature request", "draft body")
+    assert ticket.state == State.DRAFT
+    assert ticket.branch is None
+
+    # Enable the reviewer-agreement gate and make the triage return AGREE.
+    ctx.settings.reviewer_agreement_gate_enabled = True
+    ctx.settings.refine_triage_enabled = True
+
+    def fake_triage(*, settings, draft, reviewer_comments, **kwargs):
+        from robotsix_mill.agents.refining import ReviewerAgreementResult
+
+        return ReviewerAgreementResult(decision="AGREE", reason="The draft looks good.")
+
+    monkeypatch.setattr(refining, "triage_reviewer_agreement", fake_triage)
+
+    # Simulate reviewer comments existing (the guard only fires when there
+    # are reviewer comments).
+    service.add_comment(ticket.id, "Looks good to me.", author="reviewer")
+
+    out = RefineStage().run(ticket, ctx)
+    assert out.next_state == State.READY, (
+        f"Expected READY for reviewer-agreement on TASK without branch, "
+        f"got {out.next_state}"
+    )
+    assert "routing to implement" in out.note.lower()
+
+
+def test_guard_implementation_done_blocks_unrecognized_done(ctx, service):
+    """The ``_guard_implementation_done`` helper must redirect a DONE
+    outcome to READY when the ticket is TASK-kind, has no branch, and
+    the note does not signal a recognised non-implementation shortcut."""
+    ticket = service.create("A feature", "draft body")
+    assert ticket.branch is None
+
+    from robotsix_mill.stages.refine.core import RefineStage
+    from robotsix_mill.stages.base import Outcome
+
+    # A DONE outcome with a note that is NOT a recognised prefix.
+    bad_outcome = Outcome(State.DONE, "all done!")
+    guarded = RefineStage._guard_implementation_done(ctx, ticket, bad_outcome)
+    assert guarded.next_state == State.READY, (
+        f"Expected READY after guard, got {guarded.next_state}"
+    )
+    assert "was: all done!" in guarded.note
+
+
+def test_guard_implementation_done_allows_legitimate_prefix(ctx, service):
+    """The ``_guard_implementation_done`` helper must NOT redirect a DONE
+    outcome whose note starts with a recognised non-implementation
+    prefix (dedup, freshness, obsolescence, misroute)."""
+    ticket = service.create("A feature", "draft body")
+    assert ticket.branch is None
+
+    from robotsix_mill.stages.refine.core import RefineStage
+    from robotsix_mill.stages.base import Outcome
+    from robotsix_mill.core.constants import DEDUP_DUPLICATE_PREFIX
+
+    good_outcome = Outcome(
+        State.DONE,
+        f"{DEDUP_DUPLICATE_PREFIX}some-other-id: it's the same bug",
+    )
+    guarded = RefineStage._guard_implementation_done(ctx, ticket, good_outcome)
+    assert guarded.next_state == State.DONE, (
+        f"Expected DONE (legitimate prefix), got {guarded.next_state}"
+    )
+
+
+def test_maintenance_ticket_done_without_branch_allowed(ctx, service, monkeypatch):
+    """A maintenance ticket (DRAFT → MAINTENANCE → DONE) must be allowed
+    to reach DONE without an implementation branch."""
+    ticket = service.create("Create repo X", "draft body")
+    assert ticket.branch is None
+
+    # Simulate: the draft is classified as a maintenance action by the
+    # keyword classifier.  Patch it to return a known maintenance action.
+    monkeypatch.setattr(
+        refining,
+        "_classify_maintenance_draft",
+        lambda title, draft: "create_repo",
+    )
+    # Also ensure maintenance triage is enabled.
+    ctx.settings.maintenance_triage_enabled = True
+
+    out = RefineStage().run(ticket, ctx)
+    # The ticket should go to MAINTENANCE (phase 0 keyword check).
+    assert out.next_state == State.MAINTENANCE, (
+        f"Expected MAINTENANCE, got {out.next_state}"
+    )
+
+    # Now simulate the maintenance stage completing: transition to DONE.
+    service.transition(ticket.id, State.MAINTENANCE, note="routed to maintenance")
+    # MAINTENANCE → DONE should succeed without a branch.
+    service.transition(ticket.id, State.DONE, note="repo created")
+    ticket = service.get(ticket.id)
+    assert ticket.state == State.DONE, (
+        f"Expected DONE after maintenance, got {ticket.state}"
+    )
+
+
+def test_human_mark_done_still_works(ctx, service):
+    """Human explicit close via ``mark_done`` must still work on a TASK
+    ticket without a branch — the guard must not block it."""
+    ticket = service.create("Some ticket", "draft body")
+    assert ticket.branch is None
+
+    # mark_done bypasses transition(), so it should work regardless.
+    _, updated = service.mark_done(ticket.id, note="wont-fix: not needed")
+    assert updated.state == State.DONE, (
+        f"Expected DONE after mark_done, got {updated.state}"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Language gating regression tests
 # ---------------------------------------------------------------------------
 

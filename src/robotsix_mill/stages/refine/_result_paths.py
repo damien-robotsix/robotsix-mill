@@ -268,6 +268,21 @@ def no_change_path(
         )
 
     short = rationale[:400] + ("…" if len(rationale) > 400 else "")
+
+    # A TASK-kind (implementation) ticket that hasn't produced a branch
+    # must not be auto-closed from DRAFT.  Route it toward READY so
+    # implement can verify the "no change needed" claim against the live
+    # tree — the refiner may have misjudged a feature request as a no-op
+    # (the bug this guards against).
+    if ticket.kind == TicketKind.TASK and not ticket.branch:
+        return resolved_outcome(
+            ctx,
+            draft,
+            ticket.id,
+            f"refine no-op — routing to implement for verification: {short}",
+            source=ticket.source,
+        )
+
     return Outcome(
         State.DONE,
         f"no change needed — {short}",

@@ -12,7 +12,8 @@ from pathlib import Path
 
 from ...agents import refining
 from ...config import target_branch_for
-from ...core.models import Ticket
+from ...core.constants import NON_IMPLEMENTATION_CLOSE_PREFIXES
+from ...core.models import Ticket, TicketKind
 from ...core.states import State
 from ...forge.auth import github_token
 from ...vcs import git_ops
@@ -118,7 +119,7 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
         # dedup guard because it is deterministic (no LLM call).
         stale = RefineStage._run_freshness_gate(ctx, ticket, draft, repo_dir, s)
         if stale is not None:
-            return stale
+            return RefineStage._guard_implementation_done(ctx, ticket, stale)
 
         # Phase 2.1: mill-misroute gate — detect drafts that name
         # mill-specific source paths absent from this checkout and
@@ -126,7 +127,7 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
         # no LLM; runs before the first LLM-invoking gate.
         misrouted = RefineStage._run_mill_misroute_gate(ctx, ticket, draft, repo_dir, s)
         if misrouted is not None:
-            return misrouted
+            return RefineStage._guard_implementation_done(ctx, ticket, misrouted)
 
         # Phase 2.2: triage classifier — a single cheap LLM call that
         # classifies the draft as SKIP / NO_CHANGE / MAINTENANCE /
@@ -142,7 +143,7 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
             ctx, ticket, draft, repo_dir, extra_roots, title, ws, s, reviewer_comments
         )
         if triage is not None:
-            return triage
+            return RefineStage._guard_implementation_done(ctx, ticket, triage)
 
         # Phase 2.5: obsolescence gate — for *spawned* follow-up drafts,
         # re-evaluate (via a cheap LLM call) whether the cited gap was
@@ -151,12 +152,12 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
         # guard.
         obsolete = RefineStage._run_obsolescence_gate(ctx, ticket, draft, repo_dir, s)
         if obsolete is not None:
-            return obsolete
+            return RefineStage._guard_implementation_done(ctx, ticket, obsolete)
 
         # Phase 3: dedup guard
         dup = RefineStage._run_dedup_guard(ctx, ticket, draft, repo_dir, s)
         if dup is not None:
-            return dup
+            return RefineStage._guard_implementation_done(ctx, ticket, dup)
 
         # Phase 3.5: advisory dedup against CONCURRENT in-flight tickets.
         # The dedup guard above can only close against a genuinely-DONE
@@ -172,20 +173,63 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
             ctx, ticket, draft, repo_dir, ws, s
         )
         if isinstance(verified, Outcome):
-            return verified
+            return RefineStage._guard_implementation_done(ctx, ticket, verified)
         draft = verified
 
         # Phase 4: refine agent + result handling
         outcome = RefineStage._run_refine_agent(
             ctx, ticket, draft, repo_dir, epic_ctx, title, ws, s, extra_roots
         )
-        # Clear the error-recovery checkpoint on any outcome other than
-        # BLOCKED or AWAITING_USER_REPLY — those are the only states
-        # where the checkpoint is still needed for a future resume.
+        # Apply the implementation-DONE guard (defense-in-depth) and
+        # clear the error-recovery checkpoint.
+        outcome = RefineStage._guard_implementation_done(ctx, ticket, outcome)
         if outcome.next_state not in (State.BLOCKED, State.AWAITING_USER_REPLY):
             from .orchestration import RefineAgentMixin
 
             RefineAgentMixin._clear_refine_checkpoint(ws)
+        return outcome
+
+    @staticmethod
+    def _guard_implementation_done(
+        ctx: StageContext,
+        ticket: Ticket,
+        outcome: Outcome,
+    ) -> Outcome:
+        """Guard: refuse to auto-close a TASK ticket without a branch.
+
+        When the refine stage (or one of its gates) produces a DONE
+        outcome for a TASK-kind ticket that has no implementation
+        branch, and the note does not signal a recognised
+        non-implementation shortcut (dedup / freshness / obsolescence
+        / misroute), redirect the ticket toward READY instead so
+        implement verifies the claim against the live tree.
+
+        This is the defense-in-depth counterpart to the per-path fixes
+        in ``_result_paths.no_change_path``, ``_reconcile.reviewer_agreement_guard``,
+        and ``_triage.triage_skip`` — it catches any future code path
+        that tries to close an unimplemented feature ticket from DRAFT.
+        """
+        if (
+            outcome.next_state == State.DONE
+            and ticket.kind == TicketKind.TASK
+            and not ticket.branch
+        ):
+            note_lower = (outcome.note or "").lower()
+            if not note_lower.startswith(
+                tuple(p.lower() for p in NON_IMPLEMENTATION_CLOSE_PREFIXES)
+            ):
+                log.warning(
+                    "%s: DONE outcome blocked by implementation guard "
+                    "(no branch, TASK kind) — redirecting to READY. "
+                    "Original note: %s",
+                    ticket.id,
+                    outcome.note,
+                )
+                return Outcome(
+                    State.READY,
+                    f"refine guard: spec clear, routing to implement — "
+                    f"(was: {outcome.note})",
+                )
         return outcome
 
     @staticmethod

@@ -21,32 +21,28 @@ from pathlib import Path
 
 from ...agents import refining
 from ...config.settings import Settings
+from ...core import constants as _constants
 from ...core.constants import BINARY_EXTENSIONS
 from ...core.models import Ticket
 from ...core.states import State
 from ..base import StageContext
 
+# Re-export prefix constants for backward compatibility
+# (consumers import them from .helpers).
+DEDUP_DUPLICATE_PREFIX: str = _constants.DEDUP_DUPLICATE_PREFIX
+DEDUP_ALREADY_DONE_PREFIX: str = _constants.DEDUP_ALREADY_DONE_PREFIX
+FRESHNESS_STALE_PREFIX: str = _constants.FRESHNESS_STALE_PREFIX
+OBSOLESCENCE_GAP_PREFIX: str = _constants.OBSOLESCENCE_GAP_PREFIX
+REFINE_MILL_MISROUTE_PREFIX: str = _constants.REFINE_MILL_MISROUTE_PREFIX
+REFINE_MILL_CONSUMER_FOLLOWUP_PREFIX: str = (
+    _constants.REFINE_MILL_CONSUMER_FOLLOWUP_PREFIX
+)
+NON_IMPLEMENTATION_CLOSE_PREFIXES: tuple[str, ...] = (
+    _constants.NON_IMPLEMENTATION_CLOSE_PREFIXES
+)
+
 log = logging.getLogger("robotsix_mill.stages.refine")
 
-
-# Note-prefix constants marking a **non-implementation** closure.
-# The dedup guard both *writes* these prefixes (on the DRAFT→DONE
-# transition) and *reads* them back in ``_is_valid_dedup_target`` to
-# reject a candidate that was itself dedup-/freshness-closed.  Keeping
-# them in one place stops the producer and the validator from drifting.
-DEDUP_DUPLICATE_PREFIX = "duplicate of "
-DEDUP_ALREADY_DONE_PREFIX = "already implemented in "
-FRESHNESS_STALE_PREFIX = "stale or invalid finding"
-OBSOLESCENCE_GAP_PREFIX = "obsolete — gap already resolved"
-REFINE_MILL_MISROUTE_PREFIX = "redirected to mill board"
-REFINE_MILL_CONSUMER_FOLLOWUP_PREFIX = "filed mill consumer follow-up"
-NON_IMPLEMENTATION_CLOSE_PREFIXES = (
-    DEDUP_DUPLICATE_PREFIX,
-    DEDUP_ALREADY_DONE_PREFIX,
-    FRESHNESS_STALE_PREFIX,
-    OBSOLESCENCE_GAP_PREFIX,
-    REFINE_MILL_MISROUTE_PREFIX,
-)
 
 UNMERGED_BRANCH_PREFIX = "Implementation exists on branch"
 
