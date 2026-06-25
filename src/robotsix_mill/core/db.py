@@ -17,10 +17,13 @@ import logging
 from pathlib import Path
 from typing import Any
 
+import sqlite3
+
 from sqlalchemy import event
 from sqlmodel import Session, SQLModel, create_engine
 
 from ..config import Settings
+from .sqlite_utils import run_additive_migrations
 
 log = logging.getLogger("robotsix_mill.db")
 
@@ -87,75 +90,49 @@ def init_db(settings: Settings, board_id: str) -> None:
     SQLModel.metadata.create_all(engine)
 
     # SQLite / SQLModel do not auto-add columns to existing tables.
-    # Ensure the board_id column from RepoConfig exists so the model
-    # and schema stay in sync.  Ignore "duplicate column" errors.
-    try:
-        with engine.begin() as conn:
-            conn.exec_driver_sql(
-                "ALTER TABLE ticket ADD COLUMN board_id TEXT NOT NULL DEFAULT ''"
-            )
-    except Exception:
-        pass
-    # Same pattern for the operator-set ``priority`` flag.
-    try:
-        with engine.begin() as conn:
-            conn.exec_driver_sql(
-                "ALTER TABLE ticket ADD COLUMN priority INTEGER NOT NULL DEFAULT 0"
-            )
-    except Exception:
-        pass
-    # paused_from column: records the originating state when a ticket is
-    # paused mid-stage to await a user reply (AWAITING_USER_REPLY).
-    try:
-        with engine.begin() as conn:
-            conn.exec_driver_sql("ALTER TABLE ticket ADD COLUMN paused_from TEXT")
-    except Exception:
-        pass
-    # unblocks column: JSON list of ticket IDs to auto-unblock when this
-    # ticket completes (the inverse of depends_on, declared on the solver).
-    try:
-        with engine.begin() as conn:
-            conn.exec_driver_sql("ALTER TABLE ticket ADD COLUMN unblocks TEXT")
-    except Exception:
-        pass
-    # labels column: JSON list of free-form label strings on the ticket.
-    try:
-        with engine.begin() as conn:
-            conn.exec_driver_sql("ALTER TABLE ticket ADD COLUMN labels TEXT")
-    except Exception:
-        pass
-    # pre_redraft_cost_usd column: snapshot of the full Langfuse session
-    # cost captured at the last redraft, subtracted from the live session
-    # total so the dollar-cap limit restarts at zero after a redraft.
-    try:
-        with engine.begin() as conn:
-            conn.exec_driver_sql(
-                "ALTER TABLE ticket ADD COLUMN pre_redraft_cost_usd REAL DEFAULT 0.0"
-            )
-    except Exception:
-        pass
-    # Hash-chain integrity columns for TicketEvent.
-    try:
-        with engine.begin() as conn:
-            conn.exec_driver_sql("ALTER TABLE ticketevent ADD COLUMN prev_hash TEXT")
-    except Exception:
-        pass
-    try:
-        with engine.begin() as conn:
-            conn.exec_driver_sql(
-                "ALTER TABLE ticketevent ADD COLUMN hash TEXT NOT NULL DEFAULT ''"
-            )
-    except Exception:
-        pass
+    # Additive migrations — each ALTER TABLE is wrapped in an
+    # add_column_if_missing call that catches sqlite3.OperationalError
+    # (typically "duplicate column name") so repeated runs are safe.
+    with engine.begin() as conn:
+        run_additive_migrations(
+            conn,
+            [
+                # board_id column from RepoConfig.
+                ("ticket", "board_id TEXT NOT NULL DEFAULT ''"),
+                # Operator-set priority flag.
+                ("ticket", "priority INTEGER NOT NULL DEFAULT 0"),
+                # paused_from column: records the originating state when a
+                # ticket is paused mid-stage to await a user reply
+                # (AWAITING_USER_REPLY).
+                ("ticket", "paused_from TEXT"),
+                # unblocks column: JSON list of ticket IDs to auto-unblock
+                # when this ticket completes (the inverse of depends_on,
+                # declared on the solver).
+                ("ticket", "unblocks TEXT"),
+                # labels column: JSON list of free-form label strings on the
+                # ticket.
+                ("ticket", "labels TEXT"),
+                # pre_redraft_cost_usd column: snapshot of the full Langfuse
+                # session cost captured at the last redraft, subtracted from
+                # the live session total so the dollar-cap limit restarts at
+                # zero after a redraft.
+                ("ticket", "pre_redraft_cost_usd REAL DEFAULT 0.0"),
+                # Hash-chain integrity columns for TicketEvent.
+                ("ticketevent", "prev_hash TEXT"),
+                ("ticketevent", "hash TEXT NOT NULL DEFAULT ''"),
+            ],
+        )
+
     # Self-heal any legacy rows whose ``kind`` was persisted as the
-    # lowercase StrEnum *value* instead of the canonical uppercase member
-    # NAME. Idempotent: upper(upper(x)) == upper(x). The CaseTolerantEnum
-    # column on Ticket.kind already tolerates lowercase on read, so this is
-    # defense-in-depth that also normalizes the stored bytes.
+    # lowercase StrEnum *value* instead of the canonical uppercase
+    # member NAME.  Idempotent: upper(upper(x)) == upper(x).  The
+    # CaseTolerantEnum column on Ticket.kind already tolerates
+    # lowercase on read, so this is defense-in-depth that also
+    # normalizes the stored bytes.
     try:
         with engine.begin() as conn:
             conn.exec_driver_sql("UPDATE ticket SET kind = upper(kind)")
-    except Exception:
+    except sqlite3.OperationalError:
         pass
     _initialized.add(board_id)
 
