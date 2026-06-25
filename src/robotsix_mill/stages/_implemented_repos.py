@@ -68,9 +68,17 @@ def implemented_repos(ws, settings: Settings, ticket: Ticket) -> list[Implemente
             repo_dir = ws.dir / "repos" / repo_id
             if (repo_dir / ".git").exists():
                 out.append(ImplementedRepo(repo_id, branch, repo_dir))
-        return out
+        if out:
+            return out
+        # Manifest present but NONE of its clones exist on disk. This happens
+        # when a ticket was a meta multi-repo ticket (which wrote the manifest)
+        # and was later retargeted to a single-repo board: implement re-cloned
+        # into ws.dir/"repo", but the stale manifest still points at the gone
+        # ws.dir/"repos"/<id> paths. On-disk reality wins — fall through to the
+        # single-repo layout rather than spuriously BLOCK with "no repository
+        # clone to review".
 
-    # Legacy single-repo layout: one clone at ws.dir/"repo".
+    # Single-repo / legacy layout: one clone at ws.dir/"repo".
     repo_dir = ws.dir / "repo"
     if (repo_dir / ".git").exists():
         branch = ticket.branch or f"{settings.branch_prefix}{ticket.id}"

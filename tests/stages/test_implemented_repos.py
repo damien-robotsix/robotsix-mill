@@ -106,5 +106,47 @@ def test_corrupt_manifest_returns_empty(tmp_path):
     ws.artifacts_dir.joinpath("touched_repos.json").write_text(
         "{ not json", encoding="utf-8"
     )
-    # Corrupt manifest → no entries → empty (caller BLOCKs cleanly).
+    # Corrupt manifest → no entries → no meta clones → falls through to the
+    # single-repo path; with no ws.dir/"repo" either, empty (caller BLOCKs).
+    assert implemented_repos(ws, Settings(), _ticket()) == []
+
+
+def test_stale_manifest_falls_back_to_single_repo(tmp_path):
+    """A manifest whose clones are all gone must not block when a single-repo
+    clone exists.
+
+    Reproduces the central-deploy lifecycle-API bug: #2 was a meta ticket
+    (which wrote ``touched_repos.json``), got retargeted to a single-repo
+    board, and implement re-cloned into ``ws.dir/"repo"`` — but the stale
+    manifest still pointed at the gone ``ws.dir/"repos"/<id>`` paths, so
+    review hard-BLOCKED with "no repository clone" while ignoring the valid
+    single-repo clone.
+    """
+    ws = _FakeWorkspace(dir=tmp_path)
+    manifest = [
+        {
+            "repo_id": "robotsix-agent-comm",
+            "branch": "mill/x",
+            "repo_path": "/data/meta/workspaces/x/repos/robotsix-agent-comm",
+        }
+    ]
+    ws.artifacts_dir.joinpath("touched_repos.json").write_text(
+        json.dumps(manifest), encoding="utf-8"
+    )
+    _git_clone(tmp_path / "repo")  # the real, retargeted single-repo clone
+
+    repos = implemented_repos(ws, Settings(), _ticket())
+
+    assert len(repos) == 1
+    assert repos[0].repo_id == ""
+    assert repos[0].repo_dir == tmp_path / "repo"
+
+
+def test_stale_manifest_no_clone_anywhere_returns_empty(tmp_path):
+    """Manifest present, no repos/<id> clones, and no ws.dir/"repo" → []."""
+    ws = _FakeWorkspace(dir=tmp_path)
+    manifest = [{"repo_id": "x", "branch": "b", "repo_path": "/gone"}]
+    ws.artifacts_dir.joinpath("touched_repos.json").write_text(
+        json.dumps(manifest), encoding="utf-8"
+    )
     assert implemented_repos(ws, Settings(), _ticket()) == []
