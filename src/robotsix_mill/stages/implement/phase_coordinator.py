@@ -13,7 +13,8 @@ from ...runners.pass_runner import load_memory
 from ...vcs import git_ops
 from ..base import Outcome, StageContext
 from ..pause import (
-    build_resume_message_history,
+    build_compact_resume_message_history,
+    build_resume_message_history,  # noqa: F401 — kept for debugging/rollback
     check_for_pause,
     load_conversation_state,
     save_conversation_state,
@@ -340,9 +341,28 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                     from ..pause import _collect_ask_user_replies
 
                     reply_text = _collect_ask_user_replies(ctx, ticket)
-                    resume_history = build_resume_message_history(
+                    # Compute git diff --stat for the compact resume
+                    # history so the agent knows which files were
+                    # modified during the prior session.
+                    import subprocess
+
+                    git_stat: str | None = None
+                    try:
+                        git_stat = (
+                            subprocess.run(
+                                ["git", "diff", "--stat", "HEAD"],
+                                cwd=repo_dir,
+                                capture_output=True,
+                                text=True,
+                            ).stdout.strip()
+                            or None
+                        )
+                    except Exception:
+                        git_stat = None
+                    resume_history = build_compact_resume_message_history(
                         saved_state,
                         reply_text,
+                        git_stat=git_stat,
                     )
                     log.info(
                         "%s: resuming implement from pause — "

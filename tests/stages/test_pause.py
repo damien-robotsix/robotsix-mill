@@ -22,6 +22,7 @@ from robotsix_mill.core.workspace import Workspace
 from robotsix_mill.stages.pause import (
     _SENTINEL,
     acknowledge_unanswered_threads,
+    build_compact_resume_message_history,
     check_for_pause,
     clear_conversation_state,
     load_conversation_state,
@@ -262,6 +263,145 @@ def test_acknowledge_thread_not_in_list_comments_skipped():
 
     ctx.service.close_thread.assert_not_called()
     ctx.service.add_comment.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# build_compact_resume_message_history
+# ---------------------------------------------------------------------------
+
+
+def _request_msg(parts: list[dict]) -> dict:
+    """Minimal serialized ModelRequest message (dict form)."""
+    return {"kind": "request", "parts": parts}
+
+
+def _response_msg(parts: list[dict]) -> dict:
+    """Minimal serialized ModelResponse message (dict form)."""
+    return {"kind": "response", "parts": parts}
+
+
+def _user_prompt_part(content: str) -> dict:
+    return {"part_kind": "user-prompt", "content": content}
+
+
+def _tool_call_part(tool_name: str = "read_file", tool_call_id: str = "tc1") -> dict:
+    return {
+        "part_kind": "tool-call",
+        "tool_name": tool_name,
+        "args": {},
+        "tool_call_id": tool_call_id,
+    }
+
+
+def _tool_return_part_compact(
+    content: str = "ok", tool_name: str = "read_file"
+) -> dict:
+    return {
+        "part_kind": "tool-return",
+        "content": content,
+        "tool_call_id": "tc1",
+        "tool_name": tool_name,
+    }
+
+
+def test_compact_resume_returns_three_messages():
+    """Given a saved_state with at least one assistant text message and
+    a non-empty reply_text, the returned list has exactly 3 elements."""
+    msgs = [
+        _response_msg([_text_part("First, I will read the file.")]),
+        _request_msg([_user_prompt_part("Here is the content.")]),
+        _response_msg([_text_part("Now I will make the edit.")]),
+    ]
+    saved_state = json.dumps(msgs).encode()
+    result = build_compact_resume_message_history(saved_state, "Yes, proceed.")
+    assert len(result) == 3
+
+
+def test_compact_resume_last_message_contains_operator_reply():
+    """The third message is a ModelRequest whose UserPromptPart content
+    includes reply_text."""
+    msgs = [
+        _response_msg([_text_part("Some plan.")]),
+    ]
+    saved_state = json.dumps(msgs).encode()
+    result = build_compact_resume_message_history(saved_state, "Go ahead")
+    # Third message is a ModelRequest with a UserPromptPart
+    third = result[2]
+    assert third.kind == "request"
+    assert any(
+        getattr(p, "part_kind", None) == "user-prompt"
+        and "Go ahead" in (getattr(p, "content", "") or "")
+        for p in third.parts
+    )
+
+
+def test_compact_resume_second_message_contains_prior_summary():
+    """The second message is a ModelResponse whose text content includes
+    the last assistant text from saved_state."""
+    msgs = [
+        _response_msg([_text_part("earlier text")]),
+        _request_msg([_user_prompt_part("user said something")]),
+        _response_msg([_text_part("Final summary: done.")]),
+    ]
+    saved_state = json.dumps(msgs).encode()
+    result = build_compact_resume_message_history(saved_state, "ok")
+    second = result[1]
+    assert second.kind == "response"
+    combined_text = " ".join(getattr(p, "content", "") for p in second.parts)
+    assert "Final summary: done." in combined_text
+
+
+def test_compact_resume_git_stat_included_when_provided():
+    """The second message text includes the git_stat value when passed."""
+    msgs = [
+        _response_msg([_text_part("Added feature X.")]),
+    ]
+    saved_state = json.dumps(msgs).encode()
+    result = build_compact_resume_message_history(
+        saved_state, "thanks", git_stat="modified: src/main.py | 5 +++"
+    )
+    second = result[1]
+    assert second.kind == "response"
+    combined_text = " ".join(getattr(p, "content", "") for p in second.parts)
+    assert "modified: src/main.py | 5 +++" in combined_text
+
+
+def test_compact_resume_no_assistant_text_uses_fallback():
+    """Given a saved_state with no ModelResponse text parts (only
+    tool-call messages), the second message's text contains the
+    fallback string."""
+    # A realistic transcript with tool calls only — no TextPart in any
+    # ModelResponse. The assistant only issued tool calls.
+    msgs = [
+        _response_msg(
+            [
+                _tool_call_part("read_file", "tc1"),
+            ]
+        ),
+        _request_msg([_tool_return_part_compact("file content")]),
+        _response_msg(
+            [
+                _tool_call_part("edit_file", "tc2"),
+            ]
+        ),
+        _request_msg([_tool_return_part_compact("ok")]),
+    ]
+    saved_state = json.dumps(msgs).encode()
+    result = build_compact_resume_message_history(saved_state, "ok")
+    second = result[1]
+    assert second.kind == "response"
+    combined_text = " ".join(getattr(p, "content", "") for p in second.parts)
+    assert "(prior session contained no text summary)" in combined_text
+
+
+def test_compact_resume_empty_state_uses_fallback():
+    """saved_state = b"[]" → no crash, returns 3 messages, fallback summary."""
+    result = build_compact_resume_message_history(b"[]", "go")
+    assert len(result) == 3
+    second = result[1]
+    assert second.kind == "response"
+    combined_text = " ".join(getattr(p, "content", "") for p in second.parts)
+    assert "(prior session contained no text summary)" in combined_text
 
 
 def test_save_load_namespaced_per_stage(tmp_path):

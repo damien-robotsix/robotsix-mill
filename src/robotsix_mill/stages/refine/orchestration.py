@@ -33,7 +33,8 @@ from ...runtime.tracing import set_current_span_attribute
 from ..base import Outcome, StageContext
 from ..pause import (
     acknowledge_unanswered_threads,  # noqa: F401 — re-exported for test monkeypatch compat
-    build_resume_message_history,
+    build_compact_resume_message_history,
+    build_resume_message_history,  # noqa: F401 — kept for debugging/rollback
     check_for_pause,
     clear_conversation_state,
     load_conversation_state,
@@ -335,7 +336,7 @@ class RefineAgentMixin:
             )
             if was_paused:
                 reply_text = _collect_ask_user_replies(ctx, ticket)
-                resume_history = build_resume_message_history(
+                resume_history = build_compact_resume_message_history(
                     saved_state,
                     reply_text,
                 )

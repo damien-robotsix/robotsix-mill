@@ -325,3 +325,6 @@ input_state
 # and via RefineStage class inheritance; vulture (60% confidence) doesn't trace test calls.
 _review_spec_conciseness
 _short_circuit_for_internal_failure
+# build_resume_message_history — kept for debugging/rollback; replaced by
+# build_compact_resume_message_history in the pause/resume handoff.
+build_resume_message_history
