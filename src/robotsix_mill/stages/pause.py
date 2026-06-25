@@ -12,6 +12,14 @@ import json
 import logging
 from pathlib import Path
 
+from pydantic_ai.messages import (
+    ModelMessagesTypeAdapter,
+    ModelRequest,
+    ModelResponse,
+    TextPart,
+    UserPromptPart,
+)
+
 from ..core.workspace import Workspace
 
 log = logging.getLogger(__name__)
@@ -117,12 +125,6 @@ def build_resume_message_history(
             ``all_messages_json()`` call.
         reply_text: The operator's answer text.
     """
-    from pydantic_ai.messages import (
-        ModelMessagesTypeAdapter,
-        ModelRequest,
-        UserPromptPart,
-    )
-
     messages = ModelMessagesTypeAdapter.validate_json(conversation_state)
     messages.append(
         ModelRequest(
@@ -132,6 +134,74 @@ def build_resume_message_history(
         ),
     )
     return messages
+
+
+def build_compact_resume_message_history(
+    saved_state: bytes,
+    reply_text: str,
+    *,
+    git_stat: str | None = None,
+) -> list:
+    """Build a compact 3-message resume history from the prior session.
+
+    Unlike :func:`build_resume_message_history` — which replays the
+    entire prior transcript — this helper extracts only the last
+    assistant text summary and constructs a fresh synthetic
+    ``message_history`` that is small and safe to re-upload.
+
+    Args:
+        saved_state: Raw JSON bytes from a prior
+            ``all_messages_json()`` call.
+        reply_text: The operator's answer text.
+        git_stat: Optional ``git diff --stat HEAD`` output from the
+            workspace repo, injected into the synthetic assistant
+            acknowledgment.
+
+    Returns:
+        A ``list[ModelMessage]`` of exactly 3 messages.
+    """
+    # 1. Deserialize the full prior transcript.
+    messages: list = ModelMessagesTypeAdapter.validate_json(saved_state)
+
+    # 2. Find the last ModelResponse with at least one TextPart.
+    prior_summary = "(prior session contained no text summary)"
+    for m in reversed(messages):
+        if getattr(m, "kind", None) == "response":
+            text_parts = [
+                p
+                for p in getattr(m, "parts", [])
+                if getattr(p, "part_kind", None) == "text"
+            ]
+            if text_parts:
+                prior_summary = "\n".join(
+                    p.content for p in text_parts if hasattr(p, "content")
+                )
+                break
+
+    # 3. Build exactly three messages.
+    return [
+        ModelRequest(
+            parts=[
+                UserPromptPart(content="Context from previous session:"),
+            ]
+        ),
+        ModelResponse(
+            parts=[
+                TextPart(
+                    content=(
+                        f"Prior session summary:\n{prior_summary}\n\n"
+                        f"Modified files during that session:\n"
+                        f"{git_stat or '(unavailable)'}"
+                    )
+                ),
+            ]
+        ),
+        ModelRequest(
+            parts=[
+                UserPromptPart(content=f"[Operator reply]: {reply_text}"),
+            ]
+        ),
+    ]
 
 
 def acknowledge_unanswered_threads(ctx, ticket, thread_ids: set[int]) -> None:
