@@ -362,9 +362,7 @@ async def _process_ticket_inner(
                 # / "retrospect" instead of a generic "ticket". The
                 # session.id attribute still groups all of a ticket's
                 # stage traces together via Langfuse's session view.
-                extra_attrs = _root_span_attributes(
-                    ticket, stage_name, dispatch_counts
-                )
+                extra_attrs = _root_span_attributes(ticket, stage_name, dispatch_counts)
                 root_io = es.enter_context(
                     tracing.start_ticket_root_span(
                         ticket_id,
@@ -448,17 +446,13 @@ async def _process_ticket_inner(
                     ticket_id,
                 )
                 if root_io is not None:
-                    root_io.set_attribute(
-                        "error.classification", "not_implemented"
-                    )
+                    root_io.set_attribute("error.classification", "not_implemented")
                     root_io.set_output({"error": f"stub: {e}"})
                 _post_trace_event(ctx, ticket_id, trace_id, stage_name)
                 return
             except Exception as e:  # noqa: BLE001 — any failure fails the ticket
                 if root_io is not None:
-                    root_io.set_output(
-                        {"error": f"{type(e).__name__}: {str(e)[:200]}"}
-                    )
+                    root_io.set_output({"error": f"{type(e).__name__}: {str(e)[:200]}"})
                     root_io.set_attribute(
                         "ticket.retry_attempt",
                         str(getattr(ticket, "retry_attempt", 0) + 1),
