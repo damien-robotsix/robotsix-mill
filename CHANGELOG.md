@@ -1,5 +1,10 @@
 ## 0.0.0 (unreleased)
 
+- **deps**: switch back from inline PEP 508 `@ git+https://` URLs to
+  `[tool.uv.sources]` for all git dependencies. The inline-URL approach
+  (e9a52c3f) still triggers Dependabot `uv` ecosystem graph-submission
+  failures on main; `[tool.uv.sources]` is the configuration the grapher
+  can parse correctly.
 - **deps**: remove `[tool.uv.sources]` and inline all git dependencies as
   PEP 508 `@ git+https://` entries in `[project].dependencies` and
   `[dependency-groups].dev`.  The `pin_pep508_entry` Dependabot bug was
