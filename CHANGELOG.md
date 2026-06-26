@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- **docs**: add missing `core.limits.max_openrouter_marginal_usd_per_ticket` row to configuration reference section 3 table.
 - **board-mill.js**: add `asked: "answer"` to `STATE_TRACE` so the history
   timeline renders `ASKED` transitions with the "answer" stage label instead
   of a bare state name.
