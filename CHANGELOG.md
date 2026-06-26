@@ -13,6 +13,14 @@
   `[tool.uv.sources]` coexists. Switch `security-audit.yml` from `pip install`
   to `uv sync` / `uv run` so the audit jobs continue to function without the
   PEP 508 inline references.
+- **deps**: revert the `[tool.uv.sources]`-only approach and restore inline
+  PEP 508 `@ git+https://` direct references for all git dependencies. The
+  `uv`-sources-only configuration (bare names in `[project].dependencies`,
+  git URLs in `[tool.uv.sources]`) caused a Dependabot `uv` ecosystem
+  graph-submission failure on every push. The prior working configuration
+  (inline PEP 508 URLs with no `[tool.uv.sources]` table) is restored.
+  The `security-audit.yml` `uv` migration is kept — `uv sync` / `uv run`
+  handles inline PEP 508 URLs correctly.
 - **deps**: pin `robotsix-yaml-config` to a specific commit to resolve a
   `uv lock` conflict with `robotsix-modules`' transitive pin; fixes the
   Dependabot `uv` ecosystem graph-submission failure on main.
