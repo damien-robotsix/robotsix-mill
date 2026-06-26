@@ -3,6 +3,11 @@
 - **deps**: pin `robotsix-yaml-config` to a specific commit to resolve a
   `uv lock` conflict with `robotsix-modules`' transitive pin; fixes the
   Dependabot `uv` ecosystem graph-submission failure on main.
+- **observability**: enrich agent trace root spans with ticket state, retry
+  attempt, transient error reason, review rounds, dispatch count, and blocked/
+  paused origin — metadata previously only in the SQLite row or in-memory
+  counters is now stamped onto Langfuse traces so expensive/runaway tickets
+  are diagnosable from trace data alone.
 - **periodic**: remove orphan `.robotsix-mill/periodic/board_cleanup.yaml` and
   `cost_reconciliation.yaml` presence files that had no implementation anywhere
   in the codebase, and drop the matching dead Ruff per-file-ignore entry for
