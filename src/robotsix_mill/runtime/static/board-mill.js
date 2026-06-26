@@ -140,6 +140,7 @@
     documenting: "document",
     deliverable: "deliver",
     implement_complete: "deliver",
+    maintenance: "maintenance",
     human_mr_approval: "merge",
     addressing_review: "merge",
     waiting_auto_merge: "merge",
