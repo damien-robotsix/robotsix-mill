@@ -1,5 +1,13 @@
 ## 0.0.0 (unreleased)
 
+- **deps**: complete the git-dependency migration: remove the remaining inline
+  `@ git+https://` PEP 508 direct references from `[project].dependencies` and
+  `[dependency-groups].dev` (they were already mirrored in `[tool.uv.sources]`).
+  The `pin_pep508_entry` Dependabot bug drops inline URLs, so keeping them
+  causes the `uv` ecosystem graph-submission to fail even when
+  `[tool.uv.sources]` coexists. Switch `security-audit.yml` from `pip install`
+  to `uv sync` / `uv run` so the audit jobs continue to function without the
+  PEP 508 inline references.
 - **deps**: pin `robotsix-yaml-config` to a specific commit to resolve a
   `uv lock` conflict with `robotsix-modules`' transitive pin; fixes the
   Dependabot `uv` ecosystem graph-submission failure on main.
@@ -8,10 +16,6 @@
   paused origin — metadata previously only in the SQLite row or in-memory
   counters is now stamped onto Langfuse traces so expensive/runaway tickets
   are diagnosable from trace data alone.
-- **deps**: migrate all git dependencies from inline `@ git+https://` PEP 508
-  direct references to `[tool.uv.sources]` (the uv-native approach) to resolve
-  Dependabot `uv` ecosystem graph-submission failures caused by the
-  `pin_pep508_entry` parser bug with inline URLs.
 - **periodic**: remove orphan `.robotsix-mill/periodic/board_cleanup.yaml` and
   `cost_reconciliation.yaml` presence files that had no implementation anywhere
   in the codebase, and drop the matching dead Ruff per-file-ignore entry for
