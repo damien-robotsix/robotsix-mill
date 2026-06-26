@@ -34,3 +34,6 @@ docker-compose.override.yml
 =8
 # actionlint binary downloaded by security-audit.yml at runtime
 actionlint
+# Workspace clones created during mill ticket execution
+/agent-comm-clone/
+/board-agent-clone/
