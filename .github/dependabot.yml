@@ -14,13 +14,7 @@ updates:
       timezone: "Etc/UTC"
     # open-pull-requests-limit 0 means "submit dependency graph but
     # never open version-update PRs" — Renovate handles those.
-    # Raised from 0 to 1 because Dependabot's "uv" ecosystem
-    # graph-submission-only mode (limit 0) has a known bug that fails
-    # to parse [tool.uv.sources]-resolved git dependencies.  With
-    # limit ≥1 the full version-check pipeline runs, which handles
-    # git-backed packages correctly.  Since uv.lock already pins exact
-    # versions, Dependabot won't open spurious update PRs in practice.
-    open-pull-requests-limit: 1
+    open-pull-requests-limit: 0
 
   - package-ecosystem: "github-actions"
     directory: "/"

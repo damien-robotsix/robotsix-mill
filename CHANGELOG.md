@@ -1,26 +1,12 @@
 ## 0.0.0 (unreleased)
 
-- **deps**: raise Dependabot `uv` ecosystem `open-pull-requests-limit` from 0
-  to 1 to work around a known Dependabot bug in graph-submission-only mode.
-  When the limit is 0 the `uv` grapher runs a reduced pipeline that cannot
-  resolve `[tool.uv.sources]`-backed git dependencies; with limit ≥1 the full
-  version-check pipeline runs and handles git-backed packages correctly.
-- **deps**: complete the git-dependency migration: remove the remaining inline
-  `@ git+https://` PEP 508 direct references from `[project].dependencies` and
-  `[dependency-groups].dev` (they were already mirrored in `[tool.uv.sources]`).
-  The `pin_pep508_entry` Dependabot bug drops inline URLs, so keeping them
-  causes the `uv` ecosystem graph-submission to fail even when
-  `[tool.uv.sources]` coexists. Switch `security-audit.yml` from `pip install`
-  to `uv sync` / `uv run` so the audit jobs continue to function without the
-  PEP 508 inline references.
-- **deps**: revert the `[tool.uv.sources]`-only approach and restore inline
-  PEP 508 `@ git+https://` direct references for all git dependencies. The
-  `uv`-sources-only configuration (bare names in `[project].dependencies`,
-  git URLs in `[tool.uv.sources]`) caused a Dependabot `uv` ecosystem
-  graph-submission failure on every push. The prior working configuration
-  (inline PEP 508 URLs with no `[tool.uv.sources]` table) is restored.
-  The `security-audit.yml` `uv` migration is kept — `uv sync` / `uv run`
-  handles inline PEP 508 URLs correctly.
+- **deps**: remove `[tool.uv.sources]` and inline all git dependencies as
+  PEP 508 `@ git+https://` entries in `[project].dependencies` and
+  `[dependency-groups].dev`.  The `pin_pep508_entry` Dependabot bug was
+  actually in the reverse direction: `[tool.uv.sources]` is what the `uv`
+  ecosystem grapher cannot resolve, while inline PEP 508 URLs work correctly.
+  Revert `dependabot.yml` `open-pull-requests-limit` from 1 back to 0 — the
+  graph-submission-only mode is now sufficient.
 - **deps**: pin `robotsix-yaml-config` to a specific commit to resolve a
   `uv lock` conflict with `robotsix-modules`' transitive pin; fixes the
   Dependabot `uv` ecosystem graph-submission failure on main.
