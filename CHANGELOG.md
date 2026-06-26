@@ -1,5 +1,10 @@
 ## 0.0.0 (unreleased)
 
+- **ci**: raise Dependabot `uv` ecosystem `open-pull-requests-limit` from 0
+  back to 1. The `[tool.uv.sources]` migration resolved the inline-URL
+  parsing issue, but `limit: 0` (graph-submission-only mode) still triggers
+  a Dependabot bug with git-backed packages. With `limit: 1` the full
+  version-check pipeline runs and handles them correctly.
 - **deps**: switch back from inline PEP 508 `@ git+https://` URLs to
   `[tool.uv.sources]` for all git dependencies. The inline-URL approach
   (e9a52c3f) still triggers Dependabot `uv` ecosystem graph-submission
