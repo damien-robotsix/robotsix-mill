@@ -16,7 +16,7 @@ dependencies = [
     # LLM I/O (OpenRouter model construction, DeepSeek pin, per-tier reasoning,
     # cost, retry/transient) extracted to a standalone library. See
     # agents/openrouter_cost.py + agents/retry.py (now thin shims).
-    "robotsix-llmio[openrouter-deepseek,claude-sdk] @ git+https://github.com/damien-robotsix/robotsix-llmio.git@28b23a84800366d8a6dfe97f04354100c248298f",
+    "robotsix-llmio[openrouter-deepseek,claude-sdk] @ git+https://github.com/damien-robotsix/robotsix-llmio.git@28b23a848003",
     # Shared YAML config-cascade library, consumed via git like robotsix-llmio.
     # Imported by config_loader.py in the follow-on integration ticket.
     "robotsix-yaml-config @ git+https://github.com/damien-robotsix/robotsix-yaml-config.git@d302ee4ada88905efa48333894ed19519f9f7920",
@@ -64,12 +64,6 @@ tracing = [
 # — so `ruff format --check` flip-flops and turns CI red on formatting the
 # agent (and humans) already consider clean. Pin so CI, the sandbox, and local
 # format identically. Bump deliberately, reformatting the repo in the same commit.
-# Module-taxonomy JSON Schema and validation CLI — a standalone library
-# (github.com/damien-robotsix/robotsix-modules) consumed via a git dependency,
-# exactly like robotsix-llmio. Used only via pre-commit / CI (the
-# `robotsix-modules validate` step + the validate-module-taxonomy hook); no
-# Python import in mill. CI/dev-only, so it stays in the dev group (out of the
-# pip-based audit install and the runtime image).
 dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "pytest-xdist>=3", "bandit[toml]>=1.8", "mypy>=1.15", "mypy-baseline>=0.7", "ruff==0.15.15", "deptry>=0.25", "vulture>=2", "robotsix-modules @ git+https://github.com/damien-robotsix/robotsix-modules.git@d56fd5d0ae36e2226a471ef276a38faa5d611e6b"]
 docs = ["mkdocs-material>=9", "mkdocstrings[python]>=0.27"]
 
@@ -86,8 +80,9 @@ robotsix-deploy = "robotsix_deploy.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/robotsix_mill", "src/robotsix_deploy"]
 
-# Allow the direct git references for robotsix-llmio / robotsix-modules in
-# the dependency lists.
+# Allow direct git references (PEP 508 @ git+https://) for first-party
+# libraries. Hatchling does not process uv-specific sources, but keep
+# this flag for safety.
 [tool.hatch.metadata]
 allow-direct-references = true
 
