@@ -1,5 +1,8 @@
 ## 0.0.0 (unreleased)
 
+- **board-mill.js**: add `asked: "answer"` to `STATE_TRACE` so the history
+  timeline renders `ASKED` transitions with the "answer" stage label instead
+  of a bare state name.
 - **board CSS**: add `.s-asked` state colour (`#f59e0b` amber) so column
   headers and event chips for the `ASKED` inquiry state render with colour.
 - **board UI**: add `maintenance` entry to `STATE_TRACE` in `board-mill.js`

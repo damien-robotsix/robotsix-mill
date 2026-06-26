@@ -144,6 +144,7 @@
     human_mr_approval: "merge",
     addressing_review: "merge",
     waiting_auto_merge: "merge",
+    asked: "answer",
     fixing_ci: "ci_fix",
     rebasing: "rebase",
     done: "merge",
