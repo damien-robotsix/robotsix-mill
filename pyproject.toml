@@ -194,7 +194,6 @@ max-complexity = 10
 "src/robotsix_mill/agents/trace_inspector.py" = ["C901"]
 "src/robotsix_mill/cli/**/*.py" = ["C901"]
 "src/robotsix_mill/core/dedup.py" = ["C901"]
-"src/robotsix_mill/runners/cost_reconciliation_runner.py" = ["C901"]
 "src/robotsix_mill/langfuse/client.py" = ["C901", "DTZ003", "E731"]
 "src/robotsix_mill/runtime/routes.py" = ["F821", "C901"]
 "src/robotsix_mill/runtime/lifespan.py" = ["C901"]
