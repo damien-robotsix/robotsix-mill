@@ -1,5 +1,10 @@
 ## 0.0.0 (unreleased)
 
+- **docs**: document `MILL_RUN_HEALTH_*` extra fields (`MILL_RUN_HEALTH_WINDOW_HOURS`,
+  `MILL_RUN_HEALTH_TARGET_REPO_ID`, `MILL_RUN_HEALTH_MEMORY_PATH`) in
+  `docs/configuration.md` section 12 (periodic agents) with a dedicated
+  `#### run_health` subsection listing all 5 env vars with YAML paths,
+  defaults, and descriptions.
 - **docs**: document `MILL_DB_MAINTENANCE_*` and `MILL_SANDBOX_REAPER_*`
   environment variables in `docs/configuration.md` section 12 (periodic
   agents), including `db_maintenance` and `sandbox_reaper` subsections
