@@ -426,6 +426,18 @@ class _RootIO:
             return
         self._span.set_attribute("langfuse.observation.output", self._serialize(value))
 
+    def set_attribute(self, key: str, value) -> None:
+        """Set an arbitrary OTel attribute on the root span.
+
+        No-op when tracing is disabled or the span is not recording.
+        Use this instead of :func:`set_current_span_attribute` when
+        you already hold a ``_RootIO`` handle — it stamps the correct
+        span even after the root-span context manager has exited.
+        """
+        if self._span is None or not self._span.is_recording():
+            return
+        self._span.set_attribute(key, value)
+
 
 class _NoopRootIO:
     """Drop-in for ``_RootIO`` when tracing is disabled — accepts the
@@ -439,6 +451,9 @@ class _NoopRootIO:
         pass
 
     def set_output(self, value: object) -> None:  # noqa: D401, ARG002
+        pass
+
+    def set_attribute(self, key: str, value: object) -> None:  # noqa: D401, ARG002
         pass
 
 

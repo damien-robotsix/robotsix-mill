@@ -354,30 +354,30 @@ async def _process_ticket_inner(
                 await _block_ticket_and_notify(ticket_id, ctx, stage_name, note, None)
                 return
         trace_id = None
-        try:
-            with contextlib.ExitStack() as es:
-                root_io = None
-                if traced:
-                    # One root span per stage call, named after the stage
-                    # so Langfuse trace listings read "refine" / "implement"
-                    # / "retrospect" instead of a generic "ticket". The
-                    # session.id attribute still groups all of a ticket's
-                    # stage traces together via Langfuse's session view.
-                    extra_attrs = _root_span_attributes(
-                        ticket, stage_name, dispatch_counts
+        with contextlib.ExitStack() as es:
+            root_io = None
+            if traced:
+                # One root span per stage call, named after the stage
+                # so Langfuse trace listings read "refine" / "implement"
+                # / "retrospect" instead of a generic "ticket". The
+                # session.id attribute still groups all of a ticket's
+                # stage traces together via Langfuse's session view.
+                extra_attrs = _root_span_attributes(
+                    ticket, stage_name, dispatch_counts
+                )
+                root_io = es.enter_context(
+                    tracing.start_ticket_root_span(
+                        ticket_id,
+                        stage_name,
+                        extra_attributes=extra_attrs,
+                        repo_config=ctx.repo_config,
                     )
-                    root_io = es.enter_context(
-                        tracing.start_ticket_root_span(
-                            ticket_id,
-                            stage_name,
-                            extra_attributes=extra_attrs,
-                            repo_config=ctx.repo_config,
-                        )
-                    )
-                    # Attach a top-level "input" summary to the root span
-                    # so Langfuse's trace view shows what was processed
-                    # without drilling into children. Output is set
-                    # below, once the stage returns.
+                )
+                # Attach a top-level "input" summary to the root span
+                # so Langfuse's trace view shows what was processed
+                # without drilling into children. Output is set
+                # below, once the stage returns.
+                if root_io is not None:
                     root_io.set_input(
                         _root_input_summary(
                             ticket,
@@ -386,7 +386,10 @@ async def _process_ticket_inner(
                             dispatch_count=dispatch_counts.get(stage_name, 0),
                         )
                     )
-                    trace_id = root_io.trace_id if root_io is not None else None
+                trace_id = root_io.trace_id if root_io is not None else None
+            # --- error handlers live INSIDE the ExitStack so the root
+            # span is still active when attributes are stamped ---
+            try:
                 # stage.run is sync (LLM/tool) — keep the loop responsive
                 if active_map is not None:
                     active_map[ticket_id] = {
@@ -409,51 +412,59 @@ async def _process_ticket_inner(
                 # top of the trace in Langfuse alongside the input.
                 if root_io is not None:
                     root_io.set_output(_root_output_summary(outcome, ticket))
-        except asyncio.TimeoutError:
-            timeout = ctx.settings.stage_timeout_overrides.get(
-                stage_name, ctx.settings.stage_timeout_seconds
-            )
-            log.error(
-                "%s: %s timed out after %ds — escalating to BLOCKED",
-                stage_name,
-                ticket_id,
-                timeout,
-            )
-            note = f"stage {stage_name} timed out after {timeout}s"[:200]
-            tracing.set_current_span_attribute("error.classification", "timeout")
-            tracing.set_current_span_attribute("error.timeout_seconds", str(timeout))
-            if root_io is not None:
-                root_io.set_output(
-                    {
-                        "error": f"stage {stage_name} timed out after {timeout}s",
-                        "next_state": "BLOCKED",
-                    }
+                    root_io.set_attribute(
+                        "outcome.next_state", outcome.next_state.value
+                    )
+            except asyncio.TimeoutError:
+                timeout = ctx.settings.stage_timeout_overrides.get(
+                    stage_name, ctx.settings.stage_timeout_seconds
                 )
-            await _block_ticket_and_notify(ticket_id, ctx, stage_name, note, trace_id)
-            return
-        except NotImplementedError as e:
-            log.warning(
-                "%s: stub (%s) — chain paused at %s for %s",
-                stage_name,
-                e,
-                ticket.state,
-                ticket_id,
-            )
-            tracing.set_current_span_attribute(
-                "error.classification", "not_implemented"
-            )
-            if root_io is not None:
-                root_io.set_output({"error": f"stub: {e}"})
-            _post_trace_event(ctx, ticket_id, trace_id, stage_name)
-            return
-        except Exception as e:  # noqa: BLE001 — any failure fails the ticket
-            if root_io is not None:
-                root_io.set_output({"error": f"{type(e).__name__}: {str(e)[:200]}"})
-            tracing.set_current_span_attribute(
-                "ticket.retry_attempt", str(getattr(ticket, "retry_attempt", 0) + 1)
-            )
-            await _handle_stage_error(ticket_id, ctx, stage_name, e, trace_id)
-            return
+                log.error(
+                    "%s: %s timed out after %ds — escalating to BLOCKED",
+                    stage_name,
+                    ticket_id,
+                    timeout,
+                )
+                note = f"stage {stage_name} timed out after {timeout}s"[:200]
+                if root_io is not None:
+                    root_io.set_attribute("error.classification", "timeout")
+                    root_io.set_attribute("error.timeout_seconds", str(timeout))
+                    root_io.set_output(
+                        {
+                            "error": f"stage {stage_name} timed out after {timeout}s",
+                            "next_state": "BLOCKED",
+                        }
+                    )
+                await _block_ticket_and_notify(
+                    ticket_id, ctx, stage_name, note, trace_id
+                )
+                return
+            except NotImplementedError as e:
+                log.warning(
+                    "%s: stub (%s) — chain paused at %s for %s",
+                    stage_name,
+                    e,
+                    ticket.state,
+                    ticket_id,
+                )
+                if root_io is not None:
+                    root_io.set_attribute(
+                        "error.classification", "not_implemented"
+                    )
+                    root_io.set_output({"error": f"stub: {e}"})
+                _post_trace_event(ctx, ticket_id, trace_id, stage_name)
+                return
+            except Exception as e:  # noqa: BLE001 — any failure fails the ticket
+                if root_io is not None:
+                    root_io.set_output(
+                        {"error": f"{type(e).__name__}: {str(e)[:200]}"}
+                    )
+                    root_io.set_attribute(
+                        "ticket.retry_attempt",
+                        str(getattr(ticket, "retry_attempt", 0) + 1),
+                    )
+                await _handle_stage_error(ticket_id, ctx, stage_name, e, trace_id)
+                return
         # Stage finished without raising — any prior transient-retry
         # breadcrumbs are stale and must clear now, even when the outcome
         # is a no-op (poll stages like merge can succeed-but-wait forever,
@@ -483,9 +494,8 @@ async def _process_ticket_inner(
         # the stage that produced the transition and sits at the
         # pre-transition state — semantically "work done while in
         # this state".
-        tracing.set_current_span_attribute(
-            "outcome.next_state", outcome.next_state.value
-        )
+        # (outcome.next_state is already stamped on the root span
+        # inside the ExitStack block above.)
         _post_trace_event(ctx, ticket_id, trace_id, stage_name)
         # A stage tool may have already moved the ticket to outcome.next_state
         # (e.g. ask_user → AWAITING_USER_REPLY) before returning an Outcome
