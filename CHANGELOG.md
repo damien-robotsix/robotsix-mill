@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- **periodic**: remove orphan `.robotsix-mill/periodic/board_cleanup.yaml` and
+  `cost_reconciliation.yaml` presence files that had no implementation anywhere
+  in the codebase, and drop the matching dead Ruff per-file-ignore entry for
+  the non-existent `cost_reconciliation_runner.py`.
 - **board UI**: add missing `runFrontendSync()` button to the Agents dropdown
   menu in `board_html.py` — the `frontend_sync` `llm_agent` was the only one
   without a user-facing trigger in the board.
