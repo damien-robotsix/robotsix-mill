@@ -2850,3 +2850,349 @@ def test_commit_ci_conclusion_does_not_call_get_pr(tmp_path, monkeypatch):
     result = forge.commit_ci_conclusion(sha="abc123")
     assert result is not None
     assert result["conclusion"] == "success"
+
+
+# ---------------------------------------------------------------------------
+# pr_review_status / _pr_review_status
+# ---------------------------------------------------------------------------
+
+
+def test_pr_review_status_no_pr_returns_none(tmp_path, monkeypatch):
+    """pr_review_status returns None when _get_pr finds no PR."""
+    forge = _forge(tmp_path)
+    monkeypatch.setattr(
+        forge, "_get_pr", lambda *, owner, repo, head: None
+    )
+
+    result = forge.pr_review_status(source_branch="feature/x")
+    assert result is None
+
+
+def test_pr_review_status_delegates_to__pr_review_status(tmp_path, monkeypatch):
+    """pr_review_status resolves PR via _get_pr then delegates."""
+    forge = _forge(tmp_path)
+    monkeypatch.setattr(
+        forge, "_get_pr",
+        lambda *, owner, repo, head: {"number": 7},
+    )
+    expected = {
+        "state": "APPROVED",
+        "comments": [],
+        "files": ["a.py"],
+    }
+    monkeypatch.setattr(
+        forge, "_pr_review_status",
+        lambda *, owner, repo, pull_number: expected,
+    )
+
+    result = forge.pr_review_status(source_branch="feature/x")
+    assert result is expected
+
+
+def test__pr_review_status_happy_path(tmp_path, monkeypatch):
+    """200 on all endpoints, mixed review states → correct aggregation."""
+    import time as _time
+
+    from robotsix_mill.forge import auth as forge_auth
+
+    monkeypatch.setattr(_time, "sleep", lambda s: None)
+    invalidate_calls: list = []
+    monkeypatch.setattr(
+        forge_auth, "invalidate_github_token",
+        lambda settings, repo_config: invalidate_calls.append(1),
+    )
+
+    reviews_data = [
+        {"id": 1, "state": "CHANGES_REQUESTED", "body": "Please fix X"},
+        {"id": 2, "state": "APPROVED", "body": "LGTM!"},
+        {"id": 3, "state": "DISMISSED", "body": "dismissed"},
+    ]
+    comments_data = [
+        {
+            "id": 101, "body": "inline nit", "path": "src/foo.py",
+            "line": 42, "pull_request_review_id": 1,
+        },
+        {
+            "id": 102, "body": "good point", "path": "src/bar.py",
+            "line": 7, "pull_request_review_id": 2,
+        },
+    ]
+    files_data = [
+        {"filename": "src/foo.py", "status": "modified", "additions": 3, "deletions": 0},
+        {"filename": "src/bar.py", "status": "added", "additions": 10, "deletions": 0},
+    ]
+
+    get_map = {
+        "pulls/7/reviews": _make_response(200, reviews_data),
+        "pulls/7/comments": _make_response(200, comments_data),
+        "pulls/7/files": _make_response(200, files_data),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge._pr_review_status(owner="o", repo="r", pull_number=7)
+
+    # Latest non-dismissed review is APPROVED (id=2, after CHANGES_REQUESTED)
+    assert result["state"] == "APPROVED"
+    assert result["files"] == ["src/foo.py", "src/bar.py"]
+
+    # Comments: 3 review body comments (all non-empty) + 2 inline
+    assert len(result["comments"]) == 5
+    bodies = {c["body"] for c in result["comments"]}
+    assert bodies >= {"LGTM!", "Please fix X", "dismissed", "inline nit", "good point"}
+
+    # Inline comments carry review_state from parent review
+    inline_by_path = {c["path"]: c for c in result["comments"] if c["path"]}
+    assert inline_by_path["src/foo.py"]["review_state"] == "CHANGES_REQUESTED"
+    assert inline_by_path["src/bar.py"]["review_state"] == "APPROVED"
+    assert inline_by_path["src/foo.py"]["line"] == 42
+
+    # No spurious invalidate calls
+    assert invalidate_calls == []
+
+
+def test__pr_review_status_401_on_reviews_retry_succeeds(tmp_path, monkeypatch):
+    """First reviews GET returns 401 → invalidate + retry → success."""
+    import time as _time
+
+    from robotsix_mill.forge import auth as forge_auth
+
+    monkeypatch.setattr(_time, "sleep", lambda s: None)
+    invalidate_calls: list = []
+    monkeypatch.setattr(
+        forge_auth, "invalidate_github_token",
+        lambda settings, repo_config: invalidate_calls.append(1),
+    )
+
+    call_count = [0]
+
+    class RetryClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def post(self, url, headers=None, json=None, **kwargs):
+            return _make_response(500, {}, "")
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            call_count[0] += 1
+            if "reviews" in url and call_count[0] == 1:
+                return _make_response(401, {"message": "Bad credentials"})
+            if "reviews" in url:
+                return _make_response(200, [
+                    {"id": 1, "state": "APPROVED", "body": "LGTM"},
+                ])
+            if "comments" in url:
+                return _make_response(200, [])
+            if "files" in url:
+                return _make_response(200, [])
+            return _make_response(404, [], "")
+
+    monkeypatch.setattr(real_httpx, "Client", RetryClient)
+
+    forge = _forge(tmp_path)
+    result = forge._pr_review_status(owner="o", repo="r", pull_number=7)
+
+    assert result["state"] == "APPROVED"
+    assert result["comments"] == [{
+        "body": "LGTM", "path": "", "line": None, "review_state": "APPROVED",
+    }]
+    assert result["files"] == []
+    assert len(invalidate_calls) == 1
+
+
+def test__pr_review_status_401_on_comments_retry_succeeds(tmp_path, monkeypatch):
+    """First comments GET returns 401 → invalidate + retry → success."""
+    import time as _time
+
+    from robotsix_mill.forge import auth as forge_auth
+
+    monkeypatch.setattr(_time, "sleep", lambda s: None)
+    invalidate_calls: list = []
+    monkeypatch.setattr(
+        forge_auth, "invalidate_github_token",
+        lambda settings, repo_config: invalidate_calls.append(1),
+    )
+
+    # Track per-client-loop state: need 401 only on the *first* comments
+    # GET (retry=0), then 200 on retry=1.
+    reviews_401_done = [False]
+
+    class RetryClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def post(self, url, headers=None, json=None, **kwargs):
+            return _make_response(500, {}, "")
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            if "reviews" in url:
+                return _make_response(200, [
+                    {"id": 1, "state": "APPROVED", "body": "LGTM"},
+                ])
+            if "comments" in url:
+                if not reviews_401_done[0]:
+                    reviews_401_done[0] = True
+                    return _make_response(401, {"message": "Bad credentials"})
+                return _make_response(200, [
+                    {"id": 101, "body": "inline", "path": "f.py",
+                     "line": 1, "pull_request_review_id": 1},
+                ])
+            if "files" in url:
+                return _make_response(200, [{"filename": "f.py"}])
+            return _make_response(404, [], "")
+
+    monkeypatch.setattr(real_httpx, "Client", RetryClient)
+
+    forge = _forge(tmp_path)
+    result = forge._pr_review_status(owner="o", repo="r", pull_number=7)
+
+    assert result["state"] == "APPROVED"
+    assert len(result["comments"]) == 2  # body + inline
+    assert result["files"] == ["f.py"]
+    assert len(invalidate_calls) == 1
+
+
+def test__pr_review_status_empty_reviews_defaults_to_pending(tmp_path, monkeypatch):
+    """No reviews → state PENDING, no comments, files empty."""
+    get_map = {
+        "pulls/7/reviews": _make_response(200, []),
+        "pulls/7/comments": _make_response(200, []),
+        "pulls/7/files": _make_response(200, []),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge._pr_review_status(owner="o", repo="r", pull_number=7)
+
+    assert result["state"] == "PENDING"
+    assert result["comments"] == []
+    assert result["files"] == []
+
+
+def test__pr_review_status_all_dismissed_uses_latest_state(tmp_path, monkeypatch):
+    """All reviews DISMISSED → state is the latest review's state (DISMISSED)."""
+    reviews_data = [
+        {"id": 1, "state": "DISMISSED", "body": "stale"},
+        {"id": 2, "state": "DISMISSED", "body": "also stale"},
+    ]
+    get_map = {
+        "pulls/7/reviews": _make_response(200, reviews_data),
+        "pulls/7/comments": _make_response(200, []),
+        "pulls/7/files": _make_response(200, []),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge._pr_review_status(owner="o", repo="r", pull_number=7)
+
+    assert result["state"] == "DISMISSED"
+    # Both bodies included (non-empty)
+    assert len(result["comments"]) == 2
+
+
+def test__pr_review_status_pending_when_only_commented_reviews(tmp_path, monkeypatch):
+    """Reviews with only COMMENTED state → state PENDING."""
+    reviews_data = [
+        {"id": 1, "state": "COMMENTED", "body": "just a note"},
+    ]
+    get_map = {
+        "pulls/7/reviews": _make_response(200, reviews_data),
+        "pulls/7/comments": _make_response(200, []),
+        "pulls/7/files": _make_response(200, []),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge._pr_review_status(owner="o", repo="r", pull_number=7)
+
+    # COMMENTED is not DISMISSED, so it becomes the state
+    assert result["state"] == "COMMENTED"
+
+
+def test__pr_review_status_empty_review_body_not_included(tmp_path, monkeypatch):
+    """Reviews with empty/whitespace body are not included in comments list."""
+    reviews_data = [
+        {"id": 1, "state": "APPROVED", "body": ""},
+        {"id": 2, "state": "COMMENTED", "body": "   "},
+        {"id": 3, "state": "CHANGES_REQUESTED", "body": "Fix this"},
+    ]
+    get_map = {
+        "pulls/7/reviews": _make_response(200, reviews_data),
+        "pulls/7/comments": _make_response(200, []),
+        "pulls/7/files": _make_response(200, []),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge._pr_review_status(owner="o", repo="r", pull_number=7)
+
+    # Only the non-empty body is included
+    assert len(result["comments"]) == 1
+    assert result["comments"][0]["body"] == "Fix this"
+    assert result["comments"][0]["review_state"] == "CHANGES_REQUESTED"
+    assert result["state"] == "CHANGES_REQUESTED"
+
+
+def test__pr_review_status_inline_comment_without_review_id_defaults(tmp_path, monkeypatch):
+    """Inline comment missing pull_request_review_id → review_state defaults to COMMENTED."""
+    reviews_data = [
+        {"id": 1, "state": "APPROVED", "body": "LGTM"},
+    ]
+    comments_data = [
+        {
+            "id": 201, "body": "orphan comment", "path": "x.py",
+            "line": 10,
+            # No pull_request_review_id
+        },
+    ]
+    get_map = {
+        "pulls/7/reviews": _make_response(200, reviews_data),
+        "pulls/7/comments": _make_response(200, comments_data),
+        "pulls/7/files": _make_response(200, []),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge._pr_review_status(owner="o", repo="r", pull_number=7)
+
+    inline = [c for c in result["comments"] if c["path"] == "x.py"]
+    assert len(inline) == 1
+    assert inline[0]["review_state"] == "COMMENTED"
+
+
+def test__pr_review_status_inline_comment_original_line_fallback(tmp_path, monkeypatch):
+    """Inline comment with no line field uses original_line as fallback."""
+    reviews_data = [
+        {"id": 1, "state": "COMMENTED", "body": ""},
+    ]
+    comments_data = [
+        {
+            "id": 301, "body": "old diff comment", "path": "old.py",
+            "original_line": 55, "pull_request_review_id": 1,
+        },
+    ]
+    get_map = {
+        "pulls/7/reviews": _make_response(200, reviews_data),
+        "pulls/7/comments": _make_response(200, comments_data),
+        "pulls/7/files": _make_response(200, []),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge._pr_review_status(owner="o", repo="r", pull_number=7)
+
+    inline = [c for c in result["comments"] if c["path"] == "old.py"]
+    assert len(inline) == 1
+    assert inline[0]["line"] == 55
