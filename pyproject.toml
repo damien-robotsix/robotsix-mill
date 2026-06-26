@@ -7,7 +7,7 @@ name = "robotsix-mill"
 version = "0.0.1"
 description = "Self-contained LLM-driven ticket solver. SQLite-backed management plane + file workspaces, event-driven worker, delivers merge requests to GitHub/GitLab."
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.14,<3.15"
 license = "MIT"
 authors = [{ name = "Damien Robotsix" }]
 dependencies = [
