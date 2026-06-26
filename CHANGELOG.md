@@ -4,6 +4,10 @@
   environment variables in `docs/configuration.md` section 12 (periodic
   agents), including `db_maintenance` and `sandbox_reaper` subsections
   with their env vars, defaults, and descriptions.
+- **deps**: relax `requires-python` from `>=3.14,<3.15` back to `>=3.14`
+  and revert `uv.lock` `requires-python` from `==3.14.*` to `>=3.14`.
+  The `==3.14.*` lockfile format may not be recognized by Dependabot's
+  `uv` ecosystem parser, causing graph-submission failures on every push.
 - **cleanup**: remove redundant `from typing import Any` from the
   `TYPE_CHECKING` block in `src/robotsix_mill/runners/trace_review_runner.py`
   (`Any` is already imported at module level).
