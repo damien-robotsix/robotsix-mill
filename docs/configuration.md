@@ -494,7 +494,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `gates.comments_after_body` | `MILL_COMMENTS_AFTER_BODY` | `false` | Render description.md before comments in ticket detail drawer |
 | `gates.reviewer_agreement_gate_enabled` | `MILL_REVIEWER_AGREEMENT_GATE_ENABLED` | `true` | Pre-Opus guard: when a reviewer's sendback feedback already agrees with the draft's no-change-needed conclusion, the pipeline short-circuits to DONE, skipping the expensive Opus refine agent. Requires `refine_triage_enabled=true`. |
 | `gates.refine_mill_misroute_gate_enabled` | `MILL_REFINE_MILL_MISROUTE_GATE_ENABLED` | `true` | Deterministic pre-refine gate: detects drafts referencing mill-specific source paths absent from the current checkout and redirects them to the mill maintenance board before any LLM budget is spent. |
-| `ci.codeql_fp_triage_enabled` | `MILL_CODEL_FP_TRIAGE_ENABLED` | `true` | When enabled, ci_fix may invoke a conservative sub-agent at the hard cycle ceiling to dismiss high-conviction CodeQL false positives, unblocking the ticket |
+| `ci.codeql_fp_triage_enabled` | `MILL_CODEQL_FP_TRIAGE_ENABLED` | `true` | When enabled, ci_fix may invoke a conservative sub-agent at the hard cycle ceiling to dismiss high-conviction CodeQL false positives, unblocking the ticket |
 
 ### 8. Forge
 
