@@ -1,5 +1,8 @@
 ## 0.0.0 (unreleased)
 
+- **board UI**: add missing `runFrontendSync()` button to the Agents dropdown
+  menu in `board_html.py` — the `frontend_sync` `llm_agent` was the only one
+  without a user-facing trigger in the board.
 - **docs**: add missing `core.limits.max_openrouter_marginal_usd_per_ticket` row to configuration reference section 3 table.
 - **docs**: add `core.limits.refine_requests_simple` to the request limits table in
   `docs/configuration.md`.
