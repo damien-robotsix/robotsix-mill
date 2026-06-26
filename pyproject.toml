@@ -16,21 +16,21 @@ dependencies = [
     # LLM I/O (OpenRouter model construction, DeepSeek pin, per-tier reasoning,
     # cost, retry/transient) extracted to a standalone library. See
     # agents/openrouter_cost.py + agents/retry.py (now thin shims).
-    "robotsix-llmio[openrouter_deepseek,claude_sdk] @ git+https://github.com/damien-robotsix/robotsix-llmio.git@28b23a848003",
+    "robotsix-llmio[openrouter-deepseek,claude-sdk]",
     # Shared YAML config-cascade library, consumed via git like robotsix-llmio.
     # Imported by config_loader.py in the follow-on integration ticket.
-    "robotsix-yaml-config @ git+https://github.com/damien-robotsix/robotsix-yaml-config.git@d302ee4ada88905efa48333894ed19519f9f7920",
+    "robotsix-yaml-config",
     # Agent-comm board agent: exposes the mill board's full ticket lifecycle
     # over agent-comm structured ops, so other agents can drive a board
     # programmatically (query, file, comment, transition, approve, merge,
     # resume, migrate).
-    "robotsix-board-agent @ git+https://github.com/damien-robotsix/robotsix-board-agent.git@main",
+    "robotsix-board-agent",
     # robotsix-agent-comm is imported by board-agent's BrokeredBoardResponder
     # (the board agent's pull/mailbox transport). Declared here as a direct git
     # URL — not via board-agent's [prod] extra — because that extra references
     # agent-comm by bare name + uv-only sources, which the pip-based license/
     # security audit can't resolve. A direct URL works for both pip and uv.
-    "robotsix-agent-comm @ git+https://github.com/damien-robotsix/robotsix-agent-comm.git@main",
+    "robotsix-agent-comm",
     "prometheus-fastapi-instrumentator>=8",
     "pydantic-settings>=2",
     "pyyaml>=6",
@@ -43,7 +43,7 @@ dependencies = [
     # Shared kanban-board frontend library: column-per-status board chrome
     # parameterized by a BoardAdapter Protocol and a render-mode switch.
     # Consumed via git dependency — see robotsix-board README for API docs.
-    "robotsix-board @ git+https://github.com/damien-robotsix/robotsix-board.git@main",
+    "robotsix-board",
 ]
 
 [project.optional-dependencies]
@@ -71,13 +71,21 @@ tracing = [
 # `robotsix-modules validate` step + the validate-module-taxonomy hook); no
 # Python import in mill. CI/dev-only, so it stays in the dev group (out of the
 # pip-based audit install and the runtime image).
-dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "pytest-xdist>=3", "bandit[toml]>=1.8", "mypy>=1.15", "mypy-baseline>=0.7", "ruff==0.15.15", "deptry>=0.25", "vulture>=2", "robotsix-modules @ git+https://github.com/damien-robotsix/robotsix-modules.git@main"]
+dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "pytest-xdist>=3", "bandit[toml]>=1.8", "mypy>=1.15", "mypy-baseline>=0.7", "ruff==0.15.15", "deptry>=0.25", "vulture>=2", "robotsix-modules"]
 docs = ["mkdocs-material>=9", "mkdocstrings[python]>=0.27"]
 
 [tool.uv]
 # `uv sync` pulls the dev group automatically, so CI/contributors don't need
 # an explicit `--group dev` on every sync.
 default-groups = ["dev"]
+
+[tool.uv.sources]
+robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "28b23a848003" }
+robotsix-yaml-config = { git = "https://github.com/damien-robotsix/robotsix-yaml-config.git", rev = "d302ee4ada88905efa48333894ed19519f9f7920" }
+robotsix-board-agent = { git = "https://github.com/damien-robotsix/robotsix-board-agent.git", rev = "3b999fc697fd1112024160f6f5ba45bd89e7f5d0" }
+robotsix-agent-comm = { git = "https://github.com/damien-robotsix/robotsix-agent-comm.git", rev = "87bb25cde8176cbf4f7136f8c8254f27ff75aecd" }
+robotsix-board = { git = "https://github.com/damien-robotsix/robotsix-board.git", rev = "338cf1698b5f9db9afa232445fb39e298d80ce17" }
+robotsix-modules = { git = "https://github.com/damien-robotsix/robotsix-modules.git", rev = "d56fd5d0ae36e2226a471ef276a38faa5d611e6b" }
 
 [project.scripts]
 robotsix-mill = "robotsix_mill.cli:main"

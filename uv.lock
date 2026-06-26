@@ -1578,17 +1578,17 @@ wheels = [
 [[package]]
 name = "robotsix-agent-comm"
 version = "0.1.0"
-source = { git = "https://github.com/damien-robotsix/robotsix-agent-comm.git?rev=main#87bb25cde8176cbf4f7136f8c8254f27ff75aecd" }
+source = { git = "https://github.com/damien-robotsix/robotsix-agent-comm.git?rev=87bb25cde8176cbf4f7136f8c8254f27ff75aecd#87bb25cde8176cbf4f7136f8c8254f27ff75aecd" }
 
 [[package]]
 name = "robotsix-board"
 version = "0.1.0"
-source = { git = "https://github.com/damien-robotsix/robotsix-board.git?rev=main#338cf1698b5f9db9afa232445fb39e298d80ce17" }
+source = { git = "https://github.com/damien-robotsix/robotsix-board.git?rev=338cf1698b5f9db9afa232445fb39e298d80ce17#338cf1698b5f9db9afa232445fb39e298d80ce17" }
 
 [[package]]
 name = "robotsix-board-agent"
 version = "0.1.0"
-source = { git = "https://github.com/damien-robotsix/robotsix-board-agent.git?rev=main#3b999fc697fd1112024160f6f5ba45bd89e7f5d0" }
+source = { git = "https://github.com/damien-robotsix/robotsix-board-agent.git?rev=3b999fc697fd1112024160f6f5ba45bd89e7f5d0#3b999fc697fd1112024160f6f5ba45bd89e7f5d0" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic" },
@@ -1678,9 +1678,9 @@ requires-dist = [
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2" },
     { name = "pypdf", specifier = ">=5" },
     { name = "pyyaml", specifier = ">=6" },
-    { name = "robotsix-agent-comm", git = "https://github.com/damien-robotsix/robotsix-agent-comm.git?rev=main" },
-    { name = "robotsix-board", git = "https://github.com/damien-robotsix/robotsix-board.git?rev=main" },
-    { name = "robotsix-board-agent", git = "https://github.com/damien-robotsix/robotsix-board-agent.git?rev=main" },
+    { name = "robotsix-agent-comm", git = "https://github.com/damien-robotsix/robotsix-agent-comm.git?rev=87bb25cde8176cbf4f7136f8c8254f27ff75aecd" },
+    { name = "robotsix-board", git = "https://github.com/damien-robotsix/robotsix-board.git?rev=338cf1698b5f9db9afa232445fb39e298d80ce17" },
+    { name = "robotsix-board-agent", git = "https://github.com/damien-robotsix/robotsix-board-agent.git?rev=3b999fc697fd1112024160f6f5ba45bd89e7f5d0" },
     { name = "robotsix-llmio", extras = ["openrouter-deepseek", "claude-sdk"], git = "https://github.com/damien-robotsix/robotsix-llmio.git?rev=28b23a848003" },
     { name = "robotsix-yaml-config", git = "https://github.com/damien-robotsix/robotsix-yaml-config.git?rev=d302ee4ada88905efa48333894ed19519f9f7920" },
     { name = "sqlmodel", specifier = ">=0.0.22" },
@@ -1698,7 +1698,7 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=0.21" },
     { name = "pytest-cov", specifier = ">=7" },
     { name = "pytest-xdist", specifier = ">=3" },
-    { name = "robotsix-modules", git = "https://github.com/damien-robotsix/robotsix-modules.git?rev=main" },
+    { name = "robotsix-modules", git = "https://github.com/damien-robotsix/robotsix-modules.git?rev=d56fd5d0ae36e2226a471ef276a38faa5d611e6b" },
     { name = "ruff", specifier = "==0.15.15" },
     { name = "vulture", specifier = ">=2" },
 ]
@@ -1710,7 +1710,7 @@ docs = [
 [[package]]
 name = "robotsix-modules"
 version = "0.2.0"
-source = { git = "https://github.com/damien-robotsix/robotsix-modules.git?rev=main#d56fd5d0ae36e2226a471ef276a38faa5d611e6b" }
+source = { git = "https://github.com/damien-robotsix/robotsix-modules.git?rev=d56fd5d0ae36e2226a471ef276a38faa5d611e6b#d56fd5d0ae36e2226a471ef276a38faa5d611e6b" }
 dependencies = [
     { name = "jsonschema" },
     { name = "pyyaml" },

@@ -8,6 +8,10 @@
   paused origin — metadata previously only in the SQLite row or in-memory
   counters is now stamped onto Langfuse traces so expensive/runaway tickets
   are diagnosable from trace data alone.
+- **deps**: migrate all git dependencies from inline `@ git+https://` PEP 508
+  direct references to `[tool.uv.sources]` (the uv-native approach) to resolve
+  Dependabot `uv` ecosystem graph-submission failures caused by the
+  `pin_pep508_entry` parser bug with inline URLs.
 - **periodic**: remove orphan `.robotsix-mill/periodic/board_cleanup.yaml` and
   `cost_reconciliation.yaml` presence files that had no implementation anywhere
   in the codebase, and drop the matching dead Ruff per-file-ignore entry for
