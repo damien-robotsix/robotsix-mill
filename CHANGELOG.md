@@ -7,6 +7,9 @@
 - **board-mill.css**: add missing `.s-answered` state colour (teal, `#14b8a6`)
   so that column headers and event chips for the `ANSWERED` state render with
   the appropriate colour.
+- **board-mill**: add missing `SOURCE_CLASS` entry and CSS badge for
+  `dependabot_alerts` source kind — tickets from the dependabot-alerts scanner
+  now show a dedicated amber/orange badge instead of the generic "USER" badge.
 - **refine agent**: extend triage-findings instruction to prevent wasted
   `read_file` calls on paths already confirmed as nonexistent during triage.
 - **trace_review**: suppress false-positive `tool_errors` flag for `run_command`
