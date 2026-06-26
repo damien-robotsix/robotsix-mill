@@ -614,7 +614,7 @@ Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_monitor`, `config_sync`, `member_sync`, `bc_check`,
 `completeness_check`, `diagnostic`, `forge_parity`, `module_curator`,
 `copy_paste`, `timeout_escalation`, `langfuse_cleanup`, `data_dir_audit`, `dependabot_ingest`, `run_health`, `stale_branch_cleanup`,
-`state_sync`, `env_doc_sync`.
+`state_sync`, `env_doc_sync`, `db_maintenance`, `sandbox_reaper`.
 
 > ¹ Most agents default to `enabled: true`. Exceptions: `diagnostic`, `stale_branch_cleanup`, and `meta_periodic` default to `false`.
 >
@@ -704,6 +704,29 @@ agent-specific settings are available:
 | `periodic.data_dir_audit.prune_memory_ledgers` | `MILL_DATA_DIR_AUDIT_PRUNE_MEMORY_LEDGERS` | `true` | Default-on GC: truncate over-cap `*_memory.md` files on disk before size measurement, using the same tail_keep primitive the agent already uses at read/write time. |
 | `periodic.data_dir_audit.prune_orphans` | `MILL_DATA_DIR_AUDIT_PRUNE_ORPHANS` | `true` | Default-on GC: prune orphan workspace directories (ticket absent from the board DB) older than the configured age at the start of each data-dir audit pass, before size measurement. |
 | `periodic.data_dir_audit.prune_orphans_age_seconds` | `MILL_DATA_DIR_AUDIT_PRUNE_ORPHANS_AGE_SECONDS` | `86400` | Minimum age (seconds since the ticket-ID timestamp) before an orphan workspace becomes eligible for GC. Default 1 day. |
+
+#### db_maintenance
+
+The `db_maintenance` periodic agent runs SQLite maintenance (`VACUUM`,
+`ANALYZE`, WAL checkpoint) to keep the ticket database healthy.  It has
+**no YAML path** — configure it via environment variables only:
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `MILL_DB_MAINTENANCE_PERIODIC` | `true` | Enable periodic database maintenance passes |
+| `MILL_DB_MAINTENANCE_INTERVAL_SECONDS` | `86400` | Seconds between database maintenance passes |
+
+#### sandbox_reaper
+
+The `sandbox_reaper` periodic agent prunes stopped Docker sandbox
+containers left behind by the implement stage.  YAML paths
+(`periodic.sandbox_reaper.enabled`, `periodic.sandbox_reaper.interval_seconds`)
+and environment variables are both available:
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `MILL_SANDBOX_REAPER_PERIODIC` | `true` | Enable periodic sandbox-container reaping |
+| `MILL_SANDBOX_REAPER_INTERVAL_SECONDS` | `3600` | Seconds between sandbox-reaper passes |
 
 #### Env-var-only periodic agents
 
