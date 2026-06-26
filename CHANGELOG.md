@@ -1,5 +1,8 @@
 ## 0.0.0 (unreleased)
 
+- **deps**: pin `robotsix-yaml-config` to a specific commit to resolve a
+  `uv lock` conflict with `robotsix-modules`' transitive pin; fixes the
+  Dependabot `uv` ecosystem graph-submission failure on main.
 - **periodic**: remove orphan `.robotsix-mill/periodic/board_cleanup.yaml` and
   `cost_reconciliation.yaml` presence files that had no implementation anywhere
   in the codebase, and drop the matching dead Ruff per-file-ignore entry for
