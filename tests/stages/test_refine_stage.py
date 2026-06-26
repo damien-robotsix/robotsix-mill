@@ -3445,3 +3445,79 @@ def test_clone_failure_note_redacts_credentials(ctx_factory, monkeypatch):
     # exception (the worker's error handler does not include it in the
     # blocking note, so the token is never leaked).
     assert b"ghs_secret123" in exc_info.value.stderr
+
+
+# ---------------------------------------------------------------------------
+# clone-target re-resolution after board migration
+# ---------------------------------------------------------------------------
+
+
+def test_clone_target_re_resolved_from_ticket_board_id_after_migration(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """When a ticket has been migrated to a different board before refine
+    runs, _clone_or_resume re-resolves the RepoConfig from the ticket's
+    current board_id and clones the destination board's repo — not the
+    creation-time board's repo (which ctx.repo_config still references).
+    """
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+    from robotsix_mill.stages.refine.core import RefineStage
+    from robotsix_mill.stages.base import StageContext
+    from robotsix_mill.core.service import TicketService
+    from robotsix_mill.config import Settings
+    from robotsix_mill.core import db as _db
+
+    board_a_repo = RepoConfig(
+        repo_id="board-a-repo",
+        board_id="board-a",
+        langfuse_project_name="proj-a",
+        langfuse_public_key="pk-a",
+        langfuse_secret_key="sk-a",
+        forge_remote_url="https://board-a.example.com/repo.git",
+    )
+    board_b_repo = RepoConfig(
+        repo_id="board-b-repo",
+        board_id="board-b",
+        langfuse_project_name="proj-b",
+        langfuse_public_key="pk-b",
+        langfuse_secret_key="sk-b",
+        forge_remote_url="https://board-b.example.com/repo.git",
+    )
+    registry = ReposRegistry(
+        repos={"board-a-repo": board_a_repo, "board-b-repo": board_b_repo}
+    )
+
+    monkeypatch.setattr("robotsix_mill.config.get_repos_config", lambda: registry)
+
+    # Build a StageContext whose repo_config is board A (the creation-time
+    # board), but the ticket's board_id is board B (post-migration).
+    s = Settings(data_dir=str(tmp_path / "data"), FORGE_REMOTE_URL="")
+    _db.init_db(s, board_id="board-a")
+    svc = TicketService(s, board_id="board-a")
+    ctx = StageContext(
+        settings=s,
+        service=svc,
+        repo_config=board_a_repo,
+    )
+    t = svc.create("Migrated ticket", "This ticket was moved from board A to board B")
+    t.board_id = "board-b"
+
+    # Intercept the clone call to capture the remote URL.
+    clone_args: dict = {}
+
+    def _capture_clone(remote_url, dest, branch, token):
+        clone_args["remote_url"] = remote_url
+        clone_args["dest"] = dest
+        clone_args["branch"] = branch
+
+    monkeypatch.setattr("robotsix_mill.vcs.git_ops.clone", _capture_clone)
+
+    ws = svc.workspace(t)
+    result = RefineStage._clone_or_resume(ctx, t, ws)
+
+    # The clone should target board B's repo URL (post-migration board),
+    # not board A's (which is still in ctx.repo_config).
+    assert clone_args["remote_url"] == "https://board-b.example.com/repo.git"
+    assert result == (ws.dir / "repo")
+
+    _db.reset_engine()
