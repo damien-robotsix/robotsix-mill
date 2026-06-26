@@ -3,6 +3,8 @@
 - **docs**: add missing `core.limits.max_openrouter_marginal_usd_per_ticket` row to configuration reference section 3 table.
 - **docs**: add `core.limits.refine_requests_simple` to the request limits table in
   `docs/configuration.md`.
+- **docs/configuration.md**: add missing `stale_branch_cleanup` to the named
+  periodic-agent roster in section 12.
 - **board-mill.js**: add `asked: "answer"` to `STATE_TRACE` so the history
   timeline renders `ASKED` transitions with the "answer" stage label instead
   of a bare state name.
