@@ -249,8 +249,32 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
         # seam in the pre-split module) still takes effect.
         from robotsix_mill.stages import refine as _facade
 
+        # Re-resolve the RepoConfig from the ticket's *current* board_id
+        # so a migration that completed before refine started is always
+        # honoured — the clone targets the destination board's repo, not
+        # the creation-time board's repo.
+        from ...config import get_repos_config
+
+        repo_config = ctx.repo_config
+        if ticket.board_id:
+            try:
+                repos = get_repos_config()
+                for rc in repos.repos.values():
+                    if rc.board_id == ticket.board_id:
+                        repo_config = rc
+                        break
+            except Exception:
+                # best-effort: fall back to ctx.repo_config
+                log.debug(
+                    "%s: re-resolve repo_config from board_id %r failed — "
+                    "using ctx.repo_config",
+                    ticket.id,
+                    ticket.board_id,
+                    exc_info=True,
+                )
+
         s = ctx.settings
-        remote_url = _facade._resolve_remote_url(s, ctx.repo_config)
+        remote_url = _facade._resolve_remote_url(s, repo_config)
         if not remote_url:
             return None
 
@@ -259,13 +283,13 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
             return cand  # idempotent: reuse an existing clone
 
         try:
-            token = github_token(s, repo_config=ctx.repo_config)
+            token = github_token(s, repo_config=repo_config)
         except RuntimeError:
             token = None  # no credentials configured — clone will fail
         git_ops.clone(
             remote_url,
             cand,
-            target_branch_for(s, ctx.repo_config),
+            target_branch_for(s, repo_config),
             token,
         )
         return cand
