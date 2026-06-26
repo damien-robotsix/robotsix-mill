@@ -1,5 +1,8 @@
 ## 0.0.0 (unreleased)
 
+- **cleanup**: remove redundant `from typing import Any` from the
+  `TYPE_CHECKING` block in `src/robotsix_mill/runners/trace_review_runner.py`
+  (`Any` is already imported at module level).
 - **ci**: raise Dependabot `uv` ecosystem `open-pull-requests-limit` from 0
   back to 1. The `[tool.uv.sources]` migration resolved the inline-URL
   parsing issue, but `limit: 0` (graph-submission-only mode) still triggers

@@ -41,8 +41,6 @@ from typing import TYPE_CHECKING, Any
 from sqlmodel import select
 
 if TYPE_CHECKING:
-    from typing import Any
-
     from ..agents.trace_inspector import TraceFinding
 
 from ..config import RepoConfig, Settings
