@@ -193,7 +193,7 @@ jobs:
       # is already pushed to the registry (push-to-registry: true) and the SBOM
       # is preserved as a workflow artifact, so a transient 401 from the
       # create-an-attestation API must not gate the publish.
-      - uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26  # v4
+      - uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26  # v4.1.0
         continue-on-error: true
         with:
           subject-name: docker.io/robotsix/mill
@@ -348,7 +348,7 @@ jobs:
       # is already pushed to the registry (push-to-registry: true) and the SBOM
       # is preserved as a workflow artifact, so a transient 401 from the
       # create-an-attestation API must not gate the publish.
-      - uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26  # v4
+      - uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26  # v4.1.0
         continue-on-error: true
         with:
           subject-name: docker.io/robotsix/mill-sandbox
@@ -493,7 +493,7 @@ jobs:
       # is already pushed to the registry (push-to-registry: true) and the SBOM
       # is preserved as a workflow artifact, so a transient 401 from the
       # create-an-attestation API must not gate the publish.
-      - uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26  # v4
+      - uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26  # v4.1.0
         continue-on-error: true
         with:
           subject-name: docker.io/robotsix/mill-sandbox-proxy
