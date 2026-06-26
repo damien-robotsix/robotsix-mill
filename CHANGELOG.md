@@ -1,5 +1,10 @@
 ## 0.0.0 (unreleased)
 
+- **deps**: raise Dependabot `uv` ecosystem `open-pull-requests-limit` from 0
+  to 1 to work around a known Dependabot bug in graph-submission-only mode.
+  When the limit is 0 the `uv` grapher runs a reduced pipeline that cannot
+  resolve `[tool.uv.sources]`-backed git dependencies; with limit ≥1 the full
+  version-check pipeline runs and handles git-backed packages correctly.
 - **deps**: complete the git-dependency migration: remove the remaining inline
   `@ git+https://` PEP 508 direct references from `[project].dependencies` and
   `[dependency-groups].dev` (they were already mirrored in `[tool.uv.sources]`).
