@@ -1,5 +1,11 @@
 ## 0.0.0 (unreleased)
 
+- **ci**: remove Dependabot `uv` ecosystem graph-submission entry from
+  `.github/dependabot.yml`.  The `Configured Graph Update: uv` job has
+  been failing repeatedly since 2026-06-26 due to Dependabot's internal
+  infrastructure not reliably supporting Python 3.14 lockfiles with
+  `[tool.uv.sources]` git dependencies.  Version updates remain with
+  Renovate; the dependency graph submission was advisory-only.
 - **docs**: document `MILL_RUN_HEALTH_*` extra fields (`MILL_RUN_HEALTH_WINDOW_HOURS`,
   `MILL_RUN_HEALTH_TARGET_REPO_ID`, `MILL_RUN_HEALTH_MEMORY_PATH`) in
   `docs/configuration.md` section 12 (periodic agents) with a dedicated
