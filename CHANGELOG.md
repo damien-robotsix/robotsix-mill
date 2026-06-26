@@ -8,6 +8,10 @@
   and revert `uv.lock` `requires-python` from `==3.14.*` to `>=3.14`.
   The `==3.14.*` lockfile format may not be recognized by Dependabot's
   `uv` ecosystem parser, causing graph-submission failures on every push.
+- **docs**: add missing pipeline circuit-breaker env vars to
+  `docs/configuration.md` — `codeql_fp_triage_enabled` in §7 (Approval &
+  review), and `auto_fix_max_cycles`, `ping_pong_max_alternations`,
+  `ticket_state_cycle_limit` in §11 (Pipeline tail). (mill: env doc sync: missing-from-docs — pipeline circuit-breaker env vars (4 fields) (20260626T204331Z-env-doc-sync-missing-from-docs-pipeline-7768))
 - **cleanup**: remove redundant `from typing import Any` from the
   `TYPE_CHECKING` block in `src/robotsix_mill/runners/trace_review_runner.py`
   (`Any` is already imported at module level).
