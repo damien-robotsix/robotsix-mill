@@ -1,27 +1,10 @@
-# Dependency graph submission only — version updates are handled by Renovate.
-# Use the native "uv" ecosystem (GA since March 2025) because the "pip"
-# ecosystem does not support VCS/git dependencies (e.g. `git+https://`,
-# `{git = "..."}` in pyproject.toml). The "uv" parser handles uv.lock +
-# git deps together.
+# Dependency graph submission is handled by Renovate; the native "uv"
+# ecosystem graph-submission job has been failing repeatedly (see tickets
+# 20260626T132643Z through 20260626T213027Z) due to Dependabot's internal
+# infrastructure not reliably supporting Python 3.14 lockfiles with git
+# dependencies.  Version updates remain with Renovate.
 version: 2
 updates:
-  - package-ecosystem: "uv"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "09:00"
-      timezone: "Etc/UTC"
-    # open-pull-requests-limit 0 means "submit dependency graph but
-    # never open version-update PRs" — Renovate handles those.
-    # Raised to 1 because Dependabot's "uv" ecosystem graph-submission-only
-    # mode (limit 0) has a known bug that fails to parse
-    # [tool.uv.sources]-resolved git dependencies.  With limit ≥1 the full
-    # version-check pipeline runs, which handles git-backed packages
-    # correctly.  Since uv.lock already pins exact versions, Dependabot
-    # won't open spurious update PRs in practice.
-    open-pull-requests-limit: 1
-
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
