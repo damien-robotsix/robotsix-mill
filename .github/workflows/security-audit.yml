@@ -165,6 +165,9 @@ jobs:
         with:
           python-version: "3.14"
 
+      - name: Create virtual environment
+        run: uv venv
+
       - name: Install zizmor
         run: uv pip install "zizmor==1.25.2"
 
