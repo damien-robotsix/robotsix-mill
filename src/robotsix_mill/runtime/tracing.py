@@ -426,7 +426,7 @@ class _RootIO:
             return
         self._span.set_attribute("langfuse.observation.output", self._serialize(value))
 
-    def set_attribute(self, key: str, value) -> None:
+    def set_attribute(self, key: str, value: object) -> None:
         """Set an arbitrary OTel attribute on the root span.
 
         No-op when tracing is disabled or the span is not recording.

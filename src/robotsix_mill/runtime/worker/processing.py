@@ -6,9 +6,9 @@ import logging
 from collections import Counter
 from datetime import datetime, timezone
 
-from ...stages import StageContext, get_stage
+from ...stages import Outcome, StageContext, get_stage
 from ...core.states import STAGE_FOR_STATE, State
-from ...core.models import TicketKind
+from ...core.models import Ticket, TicketKind
 from ...core.service._helpers import TransitionError
 from ...core.service._lifecycle import _TERMINAL_STATES
 from ...notify import send_notification, _TRIGGER_STATES
@@ -279,7 +279,7 @@ def _root_input_summary(
     }
 
 
-def _root_output_summary(outcome, ticket) -> dict:
+def _root_output_summary(outcome: Outcome | None, ticket: Ticket) -> dict:
     """Build the output-summary dict attached to the Langfuse root span."""
     return {
         "next_state": outcome.next_state.value
