@@ -430,6 +430,7 @@ pre {
    State colours (used on ev-state, column headers, etc.)
    ============================================================ */
 .s-addressing_review     { --c: #f59e0b; }
+.s-asked                 { --c: #f59e0b; }
 .s-draft                 { --c: #6b7280; }
 .s-maintenance           { --c: #6b7280; }
 .s-human_issue_approval  { --c: #f59e0b; }
