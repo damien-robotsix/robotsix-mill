@@ -560,7 +560,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `pipeline.branch_prefix` | `MILL_BRANCH_PREFIX` | `mill/` | Prefix for deliver-stage branch names |
 | `pipeline.delete_branch_on_merge` | `MILL_DELETE_BRANCH_ON_MERGE` | `true` | Delete the per-ticket head branch on the forge after merge to DONE |
 | `pipeline.prune_clone_on_close` | `MILL_PRUNE_CLONE_ON_CLOSE` | `true` | Delete workspace repo clone on ticket close |
-| `pipeline.max_archived_tickets` | `MILL_MAX_ARCHIVED_TICKETS` | `100` | Max terminal-state tickets retained (0 = no purge) |
+| `pipeline.max_archived_tickets` | `MILL_MAX_ARCHIVED_TICKETS` | `40` | Max terminal-state tickets retained (0 = no purge) |
 | `pipeline.max_events_per_ticket` | `MILL_MAX_EVENTS_PER_TICKET` | `200` | Max TicketEvent rows retained per non-terminal ticket; events beyond this cap are pruned (oldest first). 0 disables per-ticket event capping. |
 | `pipeline.max_comments_per_ticket` | `MILL_MAX_COMMENTS_PER_TICKET` | `500` | Max Comment rows retained per non-terminal ticket; OPEN threads are never pruned. 0 disables comment capping. |
 | `pipeline.auto_fix_max_cycles` | `MILL_AUTO_FIX_MAX_CYCLES` | `6` | Cross-stage ceiling on combined REBASING+FIXING_CI dispatches without CI turning green. Reset only when CI is observed green. Set to 0 to disable. |

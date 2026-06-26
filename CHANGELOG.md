@@ -5,6 +5,7 @@
   `docs/configuration.md` section 12 (periodic agents) with a dedicated
   `#### run_health` subsection listing all 5 env vars with YAML paths,
   defaults, and descriptions.
+- **docs**: fix documented default for `MILL_MAX_ARCHIVED_TICKETS` from 100 to 40 to match the code and YAML defaults.
 - **docs**: document `MILL_DB_MAINTENANCE_*` and `MILL_SANDBOX_REAPER_*`
   environment variables in `docs/configuration.md` section 12 (periodic
   agents), including `db_maintenance` and `sandbox_reaper` subsections
