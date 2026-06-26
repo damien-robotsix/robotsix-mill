@@ -80,9 +80,8 @@ robotsix-deploy = "robotsix_deploy.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/robotsix_mill", "src/robotsix_deploy"]
 
-# Allow direct git references (PEP 508 @ git+https://) for first-party
-# libraries. Hatchling does not process uv-specific sources, but keep
-# this flag for safety.
+# Allow the direct git references in dependencies. Hatchling does not
+# process PEP 508 direct references by default, so keep this flag.
 [tool.hatch.metadata]
 allow-direct-references = true
 
