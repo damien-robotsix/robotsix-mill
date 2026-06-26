@@ -414,6 +414,8 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.limits.max_fix_iterations` | `MILL_MAX_FIX_ITERATIONS` | `8` | Max implement→test fix loop iterations before BLOCK |
 | `core.limits.max_stuck_cycles` | `MILL_MAX_STUCK_CYCLES` | `3` | Re-entries to same stage without progress before BLOCK |
 | `core.limits.max_spend_usd_per_ticket` | `MILL_MAX_SPEND_USD_PER_TICKET` | `20.0` | Dollar cap per ticket (0.0 = disabled) |
+| `core.limits.max_traces_per_ticket` | — | `15` | Trace-count circuit-breaker (0 = disabled) |
+| `core.limits.max_openrouter_marginal_usd_per_ticket` | — | `3.0` | OpenRouter marginal-spend breaker (0.0 = disabled) |
 | `core.limits.stage_timeout_seconds` | `MILL_STAGE_TIMEOUT_SECONDS` | `2400` | Per-stage wall-clock timeout in seconds; stage that exceeds it is escalated to BLOCKED (≤ 0 disables) |
 | `core.limits.stage_timeout_overrides` | `MILL_STAGE_TIMEOUT_OVERRIDES` | `{"refine": 900}` | Per-stage overrides as a JSON dict (e.g. `{"merge":0,"deliver":0}`); keys are stage names, values are seconds; 0 disables timeout for that stage. The built-in default caps the **refine** stage at 900 seconds — add `"refine": 0` to disable this cap, or override it with a different value. |
 | `core.limits.max_global_concurrency` | `MILL_MAX_GLOBAL_CONCURRENCY` | `12` | Host-level cap on total concurrently-running stages across ALL boards, applied on top of each board's own `max_concurrency`. Default 12 provides a genuine backstop without throttling normal operation |
