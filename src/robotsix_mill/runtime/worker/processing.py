@@ -114,6 +114,8 @@ async def _handle_stage_error(
     from ..stage_retry import compute_retry_delay
 
     classification = classify_stage_error(error)
+    tracing.set_current_span_attribute("error.classification", classification)
+    tracing.set_current_span_attribute("error.type", type(error).__name__)
     if classification == "transient":
         ticket = ctx.service.get(ticket_id)
         if ticket is None:
@@ -141,6 +143,10 @@ async def _handle_stage_error(
                 )[:200],
                 next_retry_at=next_at_dt,
             )
+            tracing.set_current_span_attribute("retry.network_outage", True)
+            tracing.set_current_span_attribute(
+                "retry.attempt", max(ticket.retry_attempt, 1)
+            )
             log.warning(
                 "%s: %s network outage (%s unresolvable) — parked, re-checking in %ds",
                 stage_name,
@@ -166,6 +172,9 @@ async def _handle_stage_error(
                 last_transient_error=repr(error)[:200],
                 next_retry_at=next_at_dt,
             )
+            tracing.set_current_span_attribute("retry.attempt", attempt)
+            tracing.set_current_span_attribute("retry.max_attempts", max_attempts)
+            tracing.set_current_span_attribute("retry.next_at", next_at_dt.isoformat())
             log.warning(
                 "%s: %s transient error (attempt %d/%d) — retry in %.0fs",
                 stage_name,
@@ -181,10 +190,13 @@ async def _handle_stage_error(
             f"Transient: {type(error).__name__} persisted after "
             f"{max_attempts} attempts — last: {error}"
         )[:200]
+        tracing.set_current_span_attribute("retry.exhausted", True)
+        tracing.set_current_span_attribute("retry.attempt", attempt)
         await _block_ticket_and_notify(ticket_id, ctx, stage_name, note, trace_id)
     else:
         # FATAL — block immediately.
         note = f"Fatal: {type(error).__name__}: {error}"[:200]
+        tracing.set_current_span_attribute("error.fatal", True)
         await _block_ticket_and_notify(ticket_id, ctx, stage_name, note, trace_id)
 
 
@@ -214,15 +226,56 @@ def _maybe_reevaluate_epic(
                 _spawn_epic_reeval(parent.id, ctx)
 
 
-def _root_input_summary(ticket, ticket_id: str, stage_name: str) -> dict:
-    """Build the input-summary dict attached to the Langfuse root span."""
+def _root_span_attributes(
+    ticket, stage_name: str, dispatch_counts: Counter[str]
+) -> dict[str, str]:
+    """Build span attributes for Langfuse searchability from ticket metadata.
+
+    Returns string-keyed values only — OTel span attributes must be
+    scalar strings, bools, ints, or floats.
+    """
+    return {
+        "ticket.state": ticket.state.value,
+        "ticket.kind": (
+            ticket.kind.value if hasattr(ticket, "kind") and ticket.kind else ""
+        ),
+        "ticket.retry_attempt": str(getattr(ticket, "retry_attempt", 0)),
+        "ticket.review_rounds": str(getattr(ticket, "review_rounds", 0)),
+        "ticket.blocked_from": ticket.blocked_from or "",
+        "ticket.paused_from": ticket.paused_from or "",
+        "ticket.dispatch_count": str(dispatch_counts.get(stage_name, 0)),
+        "ticket.source": ticket.source or "",
+        "stage.name": stage_name,
+    }
+
+
+def _root_input_summary(
+    ticket, ticket_id: str, stage_name: str, dispatch_count: int = 0
+) -> dict:
+    """Build the input-summary dict attached to the Langfuse root span.
+
+    Includes ticket identity, current state, retry/review counters,
+    and a dispatch counter that serves as an early-loop-detection
+    trigger — a stage re-running many times in one pass signals a
+    potential runaway.
+    """
     return {
         "ticket_id": ticket_id,
         "title": ticket.title,
         "state": ticket.state.value,
+        "kind": (
+            ticket.kind.value if hasattr(ticket, "kind") and ticket.kind else None
+        ),
         "stage": stage_name,
         "source": ticket.source,
         "priority": bool(getattr(ticket, "priority", False)),
+        "retry_attempt": getattr(ticket, "retry_attempt", 0),
+        "last_transient_error": getattr(ticket, "last_transient_error", None),
+        "review_rounds": getattr(ticket, "review_rounds", 0),
+        "blocked_from": getattr(ticket, "blocked_from", None),
+        "paused_from": getattr(ticket, "paused_from", None),
+        "dispatch_count": dispatch_count,
+        "workspace_path": getattr(ticket, "workspace_path", None),
     }
 
 
@@ -310,9 +363,15 @@ async def _process_ticket_inner(
                     # / "retrospect" instead of a generic "ticket". The
                     # session.id attribute still groups all of a ticket's
                     # stage traces together via Langfuse's session view.
+                    extra_attrs = _root_span_attributes(
+                        ticket, stage_name, dispatch_counts
+                    )
                     root_io = es.enter_context(
                         tracing.start_ticket_root_span(
-                            ticket_id, stage_name, repo_config=ctx.repo_config
+                            ticket_id,
+                            stage_name,
+                            extra_attributes=extra_attrs,
+                            repo_config=ctx.repo_config,
                         )
                     )
                     # Attach a top-level "input" summary to the root span
@@ -320,7 +379,12 @@ async def _process_ticket_inner(
                     # without drilling into children. Output is set
                     # below, once the stage returns.
                     root_io.set_input(
-                        _root_input_summary(ticket, ticket_id, stage_name)
+                        _root_input_summary(
+                            ticket,
+                            ticket_id,
+                            stage_name,
+                            dispatch_count=dispatch_counts.get(stage_name, 0),
+                        )
                     )
                     trace_id = root_io.trace_id if root_io is not None else None
                 # stage.run is sync (LLM/tool) — keep the loop responsive
@@ -356,6 +420,8 @@ async def _process_ticket_inner(
                 timeout,
             )
             note = f"stage {stage_name} timed out after {timeout}s"[:200]
+            tracing.set_current_span_attribute("error.classification", "timeout")
+            tracing.set_current_span_attribute("error.timeout_seconds", str(timeout))
             if root_io is not None:
                 root_io.set_output(
                     {
@@ -373,6 +439,9 @@ async def _process_ticket_inner(
                 ticket.state,
                 ticket_id,
             )
+            tracing.set_current_span_attribute(
+                "error.classification", "not_implemented"
+            )
             if root_io is not None:
                 root_io.set_output({"error": f"stub: {e}"})
             _post_trace_event(ctx, ticket_id, trace_id, stage_name)
@@ -380,6 +449,9 @@ async def _process_ticket_inner(
         except Exception as e:  # noqa: BLE001 — any failure fails the ticket
             if root_io is not None:
                 root_io.set_output({"error": f"{type(e).__name__}: {str(e)[:200]}"})
+            tracing.set_current_span_attribute(
+                "ticket.retry_attempt", str(getattr(ticket, "retry_attempt", 0) + 1)
+            )
             await _handle_stage_error(ticket_id, ctx, stage_name, e, trace_id)
             return
         # Stage finished without raising — any prior transient-retry
@@ -411,6 +483,9 @@ async def _process_ticket_inner(
         # the stage that produced the transition and sits at the
         # pre-transition state — semantically "work done while in
         # this state".
+        tracing.set_current_span_attribute(
+            "outcome.next_state", outcome.next_state.value
+        )
         _post_trace_event(ctx, ticket_id, trace_id, stage_name)
         # A stage tool may have already moved the ticket to outcome.next_state
         # (e.g. ask_user → AWAITING_USER_REPLY) before returning an Outcome

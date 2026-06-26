@@ -115,7 +115,7 @@ async def test_untraced_noop_stage_emits_no_trace(ctx, service, monkeypatch):
     calls = {"root": 0, "stage_names": []}
 
     @contextlib.contextmanager
-    def fake_root(_tid, stage_name=None, repo_config=None):
+    def fake_root(_tid, stage_name=None, repo_config=None, **kwargs):
         calls["root"] += 1
         calls["stage_names"].append(stage_name)
         yield
@@ -1030,7 +1030,7 @@ async def test_periodic_pass_opens_root_span_before_runner(ctx, monkeypatch):
     captured = {}
 
     @contextlib.contextmanager
-    def fake_root(sid, name=None, repo_config=None):
+    def fake_root(sid, name=None, repo_config=None, **kwargs):
         seen["root_opened"] = True
         seen["session_id"] = sid
         seen["stage"] = name
@@ -1085,7 +1085,7 @@ async def test_periodic_pass_root_span_survives_runner_crash(ctx, monkeypatch):
     seen = {}
 
     @contextlib.contextmanager
-    def fake_root(sid, name=None, repo_config=None):
+    def fake_root(sid, name=None, repo_config=None, **kwargs):
         seen["root_opened"] = True
         seen["session_id"] = sid
         yield
@@ -1205,7 +1205,7 @@ async def test_periodic_pass_per_repo_forwards_repo_config_to_span(ctx, monkeypa
     seen: dict = {}
 
     @contextlib.contextmanager
-    def fake_root(sid, name=None, repo_config=None):
+    def fake_root(sid, name=None, repo_config=None, **kwargs):
         seen["root_opened"] = True
         seen["session_id"] = sid
         seen["stage"] = name
