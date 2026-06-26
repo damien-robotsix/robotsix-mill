@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- **docs**: document `MILL_DB_MAINTENANCE_*` and `MILL_SANDBOX_REAPER_*`
+  environment variables in `docs/configuration.md` section 12 (periodic
+  agents), including `db_maintenance` and `sandbox_reaper` subsections
+  with their env vars, defaults, and descriptions.
 - **cleanup**: remove redundant `from typing import Any` from the
   `TYPE_CHECKING` block in `src/robotsix_mill/runners/trace_review_runner.py`
   (`Any` is already imported at module level).
