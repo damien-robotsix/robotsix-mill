@@ -2860,9 +2860,7 @@ def test_commit_ci_conclusion_does_not_call_get_pr(tmp_path, monkeypatch):
 def test_pr_review_status_no_pr_returns_none(tmp_path, monkeypatch):
     """pr_review_status returns None when _get_pr finds no PR."""
     forge = _forge(tmp_path)
-    monkeypatch.setattr(
-        forge, "_get_pr", lambda *, owner, repo, head: None
-    )
+    monkeypatch.setattr(forge, "_get_pr", lambda *, owner, repo, head: None)
 
     result = forge.pr_review_status(source_branch="feature/x")
     assert result is None
@@ -2872,7 +2870,8 @@ def test_pr_review_status_delegates_to__pr_review_status(tmp_path, monkeypatch):
     """pr_review_status resolves PR via _get_pr then delegates."""
     forge = _forge(tmp_path)
     monkeypatch.setattr(
-        forge, "_get_pr",
+        forge,
+        "_get_pr",
         lambda *, owner, repo, head: {"number": 7},
     )
     expected = {
@@ -2881,7 +2880,8 @@ def test_pr_review_status_delegates_to__pr_review_status(tmp_path, monkeypatch):
         "files": ["a.py"],
     }
     monkeypatch.setattr(
-        forge, "_pr_review_status",
+        forge,
+        "_pr_review_status",
         lambda *, owner, repo, pull_number: expected,
     )
 
@@ -2898,7 +2898,8 @@ def test__pr_review_status_happy_path(tmp_path, monkeypatch):
     monkeypatch.setattr(_time, "sleep", lambda s: None)
     invalidate_calls: list = []
     monkeypatch.setattr(
-        forge_auth, "invalidate_github_token",
+        forge_auth,
+        "invalidate_github_token",
         lambda settings, repo_config: invalidate_calls.append(1),
     )
 
@@ -2909,16 +2910,27 @@ def test__pr_review_status_happy_path(tmp_path, monkeypatch):
     ]
     comments_data = [
         {
-            "id": 101, "body": "inline nit", "path": "src/foo.py",
-            "line": 42, "pull_request_review_id": 1,
+            "id": 101,
+            "body": "inline nit",
+            "path": "src/foo.py",
+            "line": 42,
+            "pull_request_review_id": 1,
         },
         {
-            "id": 102, "body": "good point", "path": "src/bar.py",
-            "line": 7, "pull_request_review_id": 2,
+            "id": 102,
+            "body": "good point",
+            "path": "src/bar.py",
+            "line": 7,
+            "pull_request_review_id": 2,
         },
     ]
     files_data = [
-        {"filename": "src/foo.py", "status": "modified", "additions": 3, "deletions": 0},
+        {
+            "filename": "src/foo.py",
+            "status": "modified",
+            "additions": 3,
+            "deletions": 0,
+        },
         {"filename": "src/bar.py", "status": "added", "additions": 10, "deletions": 0},
     ]
 
@@ -2960,7 +2972,8 @@ def test__pr_review_status_401_on_reviews_retry_succeeds(tmp_path, monkeypatch):
     monkeypatch.setattr(_time, "sleep", lambda s: None)
     invalidate_calls: list = []
     monkeypatch.setattr(
-        forge_auth, "invalidate_github_token",
+        forge_auth,
+        "invalidate_github_token",
         lambda settings, repo_config: invalidate_calls.append(1),
     )
 
@@ -2984,9 +2997,12 @@ def test__pr_review_status_401_on_reviews_retry_succeeds(tmp_path, monkeypatch):
             if "reviews" in url and call_count[0] == 1:
                 return _make_response(401, {"message": "Bad credentials"})
             if "reviews" in url:
-                return _make_response(200, [
-                    {"id": 1, "state": "APPROVED", "body": "LGTM"},
-                ])
+                return _make_response(
+                    200,
+                    [
+                        {"id": 1, "state": "APPROVED", "body": "LGTM"},
+                    ],
+                )
             if "comments" in url:
                 return _make_response(200, [])
             if "files" in url:
@@ -2999,9 +3015,14 @@ def test__pr_review_status_401_on_reviews_retry_succeeds(tmp_path, monkeypatch):
     result = forge._pr_review_status(owner="o", repo="r", pull_number=7)
 
     assert result["state"] == "APPROVED"
-    assert result["comments"] == [{
-        "body": "LGTM", "path": "", "line": None, "review_state": "APPROVED",
-    }]
+    assert result["comments"] == [
+        {
+            "body": "LGTM",
+            "path": "",
+            "line": None,
+            "review_state": "APPROVED",
+        }
+    ]
     assert result["files"] == []
     assert len(invalidate_calls) == 1
 
@@ -3015,7 +3036,8 @@ def test__pr_review_status_401_on_comments_retry_succeeds(tmp_path, monkeypatch)
     monkeypatch.setattr(_time, "sleep", lambda s: None)
     invalidate_calls: list = []
     monkeypatch.setattr(
-        forge_auth, "invalidate_github_token",
+        forge_auth,
+        "invalidate_github_token",
         lambda settings, repo_config: invalidate_calls.append(1),
     )
 
@@ -3038,17 +3060,28 @@ def test__pr_review_status_401_on_comments_retry_succeeds(tmp_path, monkeypatch)
 
         def get(self, url, headers=None, params=None, **kwargs):
             if "reviews" in url:
-                return _make_response(200, [
-                    {"id": 1, "state": "APPROVED", "body": "LGTM"},
-                ])
+                return _make_response(
+                    200,
+                    [
+                        {"id": 1, "state": "APPROVED", "body": "LGTM"},
+                    ],
+                )
             if "comments" in url:
                 if not reviews_401_done[0]:
                     reviews_401_done[0] = True
                     return _make_response(401, {"message": "Bad credentials"})
-                return _make_response(200, [
-                    {"id": 101, "body": "inline", "path": "f.py",
-                     "line": 1, "pull_request_review_id": 1},
-                ])
+                return _make_response(
+                    200,
+                    [
+                        {
+                            "id": 101,
+                            "body": "inline",
+                            "path": "f.py",
+                            "line": 1,
+                            "pull_request_review_id": 1,
+                        },
+                    ],
+                )
             if "files" in url:
                 return _make_response(200, [{"filename": "f.py"}])
             return _make_response(404, [], "")
@@ -3145,14 +3178,18 @@ def test__pr_review_status_empty_review_body_not_included(tmp_path, monkeypatch)
     assert result["state"] == "CHANGES_REQUESTED"
 
 
-def test__pr_review_status_inline_comment_without_review_id_defaults(tmp_path, monkeypatch):
+def test__pr_review_status_inline_comment_without_review_id_defaults(
+    tmp_path, monkeypatch
+):
     """Inline comment missing pull_request_review_id → review_state defaults to COMMENTED."""
     reviews_data = [
         {"id": 1, "state": "APPROVED", "body": "LGTM"},
     ]
     comments_data = [
         {
-            "id": 201, "body": "orphan comment", "path": "x.py",
+            "id": 201,
+            "body": "orphan comment",
+            "path": "x.py",
             "line": 10,
             # No pull_request_review_id
         },
@@ -3179,8 +3216,11 @@ def test__pr_review_status_inline_comment_original_line_fallback(tmp_path, monke
     ]
     comments_data = [
         {
-            "id": 301, "body": "old diff comment", "path": "old.py",
-            "original_line": 55, "pull_request_review_id": 1,
+            "id": 301,
+            "body": "old diff comment",
+            "path": "old.py",
+            "original_line": 55,
+            "pull_request_review_id": 1,
         },
     ]
     get_map = {
