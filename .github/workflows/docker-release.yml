@@ -11,9 +11,10 @@ on:
 
 permissions:
   contents: read
-  packages: write      # required to push images to ghcr.io
-  id-token: write      # provenance/SBOM attestation signing (provenance: mode=max, sbom: true)
+  packages: write         # required to push images to ghcr.io
+  id-token: write         # provenance/SBOM attestation signing (provenance: mode=max, sbom: true)
   attestations: write
+  security-events: write  # required to upload the Trivy SARIF to Code Scanning
 
 jobs:
   publish:
@@ -50,3 +51,54 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           provenance: mode=max
           sbom: true
+
+      - name: Resolve scan image tag
+        id: scan-ref
+        # Pass the metadata-action output via env, not inline ``${{ }}``
+        # interpolation into the run block, to avoid template injection.
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: echo "image=$(echo "$TAGS" | head -1)" >> "$GITHUB_OUTPUT"
+
+      # Gate: only CRITICAL, fixable CVEs block the pipeline. Runs in
+      # table format so the failing CVE row is visible in the CI log
+      # (SARIF mode would silently swallow it — see below).
+      - name: Trivy vulnerability scan (gate)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          image-ref: ${{ steps.scan-ref.outputs.image }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL
+          ignore-unfixed: true
+
+      # Code-scanning surface: separate Trivy run that emits SARIF for
+      # all severities (no exit-code). The two steps MUST stay separate:
+      # the trivy-action's entrypoint unsets TRIVY_SEVERITY when
+      # format=sarif (unless limit-severities-for-sarif=true), so
+      # combining gate + SARIF into one step would silently scan for
+      # ALL severities and fail on HIGH/MEDIUM findings the gate is
+      # supposed to ignore. `if: always()` so we still surface findings
+      # in the Security tab even when the gate above trips.
+      - name: Trivy vulnerability scan (SARIF for code-scanning)
+        # Only scan when an image was actually built. Without this guard, a
+        # failed build leaves scan-ref empty and trivy defaults to `.`, then
+        # fails with a misleading "could not parse reference: ." that masks
+        # the real build error.
+        if: ${{ always() && steps.scan-ref.outputs.image != '' }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          image-ref: ${{ steps.scan-ref.outputs.image }}
+          format: sarif
+          output: trivy-results.sarif
+          # No exit-code: this step is observability-only.
+          ignore-unfixed: true
+
+      - name: Upload Trivy SARIF results
+        uses: github/codeql-action/upload-sarif@03e4368ac7daa2bd82b3e85262f3bf87ee112f57  # v3.36.0
+        if: ${{ always() && hashFiles('trivy-results.sarif') != '' }}
+        # Code-scanning upload is observability-only; a SARIF-upload auth
+        # failure (e.g. 401) must not gate the image publish.
+        continue-on-error: true
+        with:
+          sarif_file: trivy-results.sarif
