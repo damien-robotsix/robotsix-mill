@@ -2,6 +2,8 @@
 
 - **board CSS**: add `.s-asked` state colour (`#f59e0b` amber) so column
   headers and event chips for the `ASKED` inquiry state render with colour.
+- **board UI**: add `maintenance` entry to `STATE_TRACE` in `board-mill.js`
+  so the history timeline labels maintenance transitions correctly.
 - **refine agent**: extend triage-findings instruction to prevent wasted
   `read_file` calls on paths already confirmed as nonexistent during triage.
 - **trace_review**: suppress false-positive `tool_errors` flag for `run_command`
