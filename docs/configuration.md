@@ -705,6 +705,23 @@ agent-specific settings are available:
 | `periodic.data_dir_audit.prune_orphans` | `MILL_DATA_DIR_AUDIT_PRUNE_ORPHANS` | `true` | Default-on GC: prune orphan workspace directories (ticket absent from the board DB) older than the configured age at the start of each data-dir audit pass, before size measurement. |
 | `periodic.data_dir_audit.prune_orphans_age_seconds` | `MILL_DATA_DIR_AUDIT_PRUNE_ORPHANS_AGE_SECONDS` | `86400` | Minimum age (seconds since the ticket-ID timestamp) before an orphan workspace becomes eligible for GC. Default 1 day. |
 
+#### run_health
+
+The run-health periodic agent reads every board's run registry over a
+lookback window, flags failed/degraded runs deterministically, runs one
+LLM pass to separate real failures from legitimate empties, and files
+high-confidence draft tickets to the mill board. Every field below is
+settable via its `MILL_RUN_HEALTH_*` environment variable and its dotted
+YAML path.
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| `periodic.run_health.enabled` | `MILL_RUN_HEALTH_PERIODIC` | `true` | Enable periodic run-health passes |
+| `periodic.run_health.interval_seconds` | `MILL_RUN_HEALTH_INTERVAL_SECONDS` | `86400` | Seconds between run-health passes |
+| `periodic.run_health.window_hours` | `MILL_RUN_HEALTH_WINDOW_HOURS` | `168` | Lookback window (hours) over which run registries are scanned |
+| `periodic.run_health.target_repo_id` | `MILL_RUN_HEALTH_TARGET_REPO_ID` | `robotsix-mill` | Board the run-health agent files its drafts to |
+| `periodic.run_health.memory_path` | `MILL_RUN_HEALTH_MEMORY_PATH` | `None` | Override path for the run-health memory ledger; defaults to `<data_dir>/<board>/run_health_memory.md` |
+
 #### db_maintenance
 
 The `db_maintenance` periodic agent runs SQLite maintenance (`VACUUM`,
