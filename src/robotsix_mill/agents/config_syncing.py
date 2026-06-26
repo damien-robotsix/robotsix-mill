@@ -203,6 +203,10 @@ def run_config_sync_agent(
             tool paths.
         memory: The agent's memory ledger as a Markdown string.
             Defaults to ``""`` (the agent starts a fresh ledger).
+        recent_proposals: Formatted block of recent proposals from
+            the board, used for deduplication.  Defaults to ``""``.
+        verified_proposals: Formatted block of verified (already-posted)
+            proposals, used for deduplication.  Defaults to ``""``.
         repo_dir: Optional path to the local repository clone.
             When not ``None``, enables the ``explore``,
             ``read_file``, and ``list_dir`` tools.

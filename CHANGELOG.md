@@ -4,6 +4,8 @@
   `cost_reconciliation.yaml` presence files that had no implementation anywhere
   in the codebase, and drop the matching dead Ruff per-file-ignore entry for
   the non-existent `cost_reconciliation_runner.py`.
+- **config_syncing**: document missing `recent_proposals` and `verified_proposals`
+  parameters in `run_config_sync_agent` docstring.
 - **board UI**: add missing `runFrontendSync()` button to the Agents dropdown
   menu in `board_html.py` — the `frontend_sync` `llm_agent` was the only one
   without a user-facing trigger in the board.
