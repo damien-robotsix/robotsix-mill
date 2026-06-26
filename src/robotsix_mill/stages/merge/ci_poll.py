@@ -35,6 +35,73 @@ from ._shared import (
 class CIPollMixin(_MergeStageBase):
     """CI polling: gate-check, mergeability, auto-merge eligibility, main-branch debt detection."""
 
+    def _check_pr_baseline(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        branch: str,
+        same_state: State,
+        *,
+        verify_merge: bool = False,
+    ) -> tuple[dict[str, Any] | None, Outcome | None]:
+        """Shared PR preamble: fetch status & handle merged/closed/None/error.
+
+        Returns ``(pr, None)`` when the PR is open and not merged/closed.
+        Returns ``(None, outcome)`` for early-return cases:
+        - error fetching PR → *same_state*
+        - no PR found → *same_state*
+        - PR merged → ``State.DONE``
+        - PR closed → ``State.BLOCKED``
+
+        When *verify_merge* is True and the PR is reported merged, the
+        helper confirms the merge is actually present on the target branch
+        (``_verify_merge_ancestor``).  If the verification fails the
+        outcome is ``State.IMPLEMENT_COMPLETE`` instead of DONE.
+        """
+        s = ctx.settings
+        try:
+            pr = get_forge(s, repo_config=ctx.repo_config).pr_status(
+                source_branch=branch
+            )
+        except Exception as e:  # noqa: BLE001 — transient: retry next poll
+            log.warning("%s: PR status check failed (retry): %s", ticket.id, e)
+            return None, Outcome(same_state)
+
+        if pr is None:
+            return None, Outcome(same_state)
+        if pr.get("merged"):
+            if verify_merge:
+                from robotsix_mill.stages import merge as _facade
+
+                sha = pr.get("sha", "")
+                repo_dir = _facade._workspace_repo_dir(ctx, ticket)
+                target = target_branch_for(s, ctx.repo_config)
+                if not _verify_merge_ancestor(repo_dir, sha, ticket.id, target):
+                    log.warning(
+                        "%s: PR reported merged but commit %s is not an ancestor of "
+                        "origin/%s — falling back to IMPLEMENT_COMPLETE for investigation",
+                        ticket.id,
+                        sha[:8] if sha else "(none)",
+                        target,
+                    )
+                    return None, Outcome(
+                        State.IMPLEMENT_COMPLETE,
+                        f"PR reported merged but merge not confirmed on origin/{target}: {pr.get('url', '')}",
+                    )
+            ctx.service.workspace(ticket).artifacts_dir.joinpath("merge.md").write_text(
+                f"merged: {pr.get('url', '')}\n", encoding="utf-8"
+            )
+            self._cleanup_branch_on_done(ticket, ctx, branch)
+            log.info("%s: PR merged → done", ticket.id)
+            return None, Outcome(State.DONE, f"merged: {pr.get('url', '')}")
+        if pr.get("state") == "closed":
+            return None, Outcome(
+                State.BLOCKED,
+                f"PR closed without merge — resumable: {pr.get('url', '')}",
+            )
+
+        return pr, None
+
     def _poll_implement_complete(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Poll PR status for a ticket in IMPLEMENT_COMPLETE.
 
@@ -51,29 +118,13 @@ class CIPollMixin(_MergeStageBase):
         """
         s = ctx.settings
         branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
-
-        try:
-            pr = get_forge(s, repo_config=ctx.repo_config).pr_status(
-                source_branch=branch
-            )
-        except Exception as e:  # noqa: BLE001 — transient: retry next poll
-            log.warning("%s: PR status check failed (retry): %s", ticket.id, e)
-            return Outcome(State.IMPLEMENT_COMPLETE)
-
-        if pr is None:
-            return Outcome(State.IMPLEMENT_COMPLETE)  # not visible yet — re-poll
-        if pr.get("merged"):
-            ctx.service.workspace(ticket).artifacts_dir.joinpath("merge.md").write_text(
-                f"merged: {pr.get('url', '')}\n", encoding="utf-8"
-            )
-            self._cleanup_branch_on_done(ticket, ctx, branch)
-            log.info("%s: PR merged → done", ticket.id)
-            return Outcome(State.DONE, f"merged: {pr.get('url', '')}")
-        if pr.get("state") == "closed":
-            return Outcome(
-                State.BLOCKED,
-                f"PR closed without merge — resumable: {pr.get('url', '')}",
-            )
+        pr, early = self._check_pr_baseline(
+            ticket, ctx, branch, State.IMPLEMENT_COMPLETE
+        )
+        if early is not None:
+            return early
+        if pr is None:  # type guard: _check_pr_baseline guarantees pr is non-None here
+            raise RuntimeError("_check_pr_baseline returned (None, None) — impossible")
 
         # PR is open.  Check mergeability.
         mergeable = pr.get("mergeable")
@@ -328,29 +379,13 @@ class CIPollMixin(_MergeStageBase):
 
         s = ctx.settings
         branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
-        try:
-            pr = get_forge(s, repo_config=ctx.repo_config).pr_status(
-                source_branch=branch
-            )
-        except Exception as e:  # noqa: BLE001 — transient: retry next poll
-            log.warning("%s: PR status check failed (retry): %s", ticket.id, e)
-            return Outcome(State.HUMAN_MR_APPROVAL)  # no-op
-
-        if pr is None:
-            return Outcome(State.HUMAN_MR_APPROVAL)  # not visible yet — re-poll
-
-        if pr.get("merged"):
-            ctx.service.workspace(ticket).artifacts_dir.joinpath("merge.md").write_text(
-                f"merged: {pr.get('url', '')}\n", encoding="utf-8"
-            )
-            self._cleanup_branch_on_done(ticket, ctx, branch)
-            log.info("%s: PR merged → done", ticket.id)
-            return Outcome(State.DONE, f"merged: {pr.get('url', '')}")
-        if pr.get("state") == "closed":
-            return Outcome(
-                State.BLOCKED,
-                f"PR closed without merge — resumable: {pr.get('url', '')}",
-            )
+        pr, early = self._check_pr_baseline(
+            ticket, ctx, branch, State.HUMAN_MR_APPROVAL
+        )
+        if early is not None:
+            return early
+        if pr is None:  # type guard: _check_pr_baseline guarantees pr is non-None here
+            raise RuntimeError("_check_pr_baseline returned (None, None) — impossible")
 
         # --- Review feedback check (opt-in, gated by config flag) ---
         review_outcome = self._review_changes_requested_outcome(
@@ -543,44 +578,14 @@ class CIPollMixin(_MergeStageBase):
             self._maybe_comment(ticket, ctx, reason)
             return Outcome(State.HUMAN_MR_APPROVAL, reason)
 
-        # Re-check PR status (could have become conflicting).
-        try:
-            pr = get_forge(s, repo_config=ctx.repo_config).pr_status(
-                source_branch=branch
-            )
-        except Exception as e:  # noqa: BLE001 — transient
-            log.warning("%s: PR status check failed (retry): %s", ticket.id, e)
-            return Outcome(State.WAITING_AUTO_MERGE)
+        pr, early = self._check_pr_baseline(
+            ticket, ctx, branch, State.WAITING_AUTO_MERGE, verify_merge=True
+        )
+        if early is not None:
+            return early
+        if pr is None:  # type guard: _check_pr_baseline guarantees pr is non-None here
+            raise RuntimeError("_check_pr_baseline returned (None, None) — impossible")
 
-        if pr is None:
-            return Outcome(State.WAITING_AUTO_MERGE)
-        if pr.get("merged"):
-            sha = pr.get("sha", "")
-            repo_dir = _facade._workspace_repo_dir(ctx, ticket)
-            target = target_branch_for(s, ctx.repo_config)
-            if _verify_merge_ancestor(repo_dir, sha, ticket.id, target):
-                ctx.service.workspace(ticket).artifacts_dir.joinpath(
-                    "merge.md"
-                ).write_text(f"merged: {pr.get('url', '')}\n", encoding="utf-8")
-                self._cleanup_branch_on_done(ticket, ctx, branch)
-                log.info("%s: PR merged → done", ticket.id)
-                return Outcome(State.DONE, f"merged: {pr.get('url', '')}")
-            log.warning(
-                "%s: PR reported merged but commit %s is not an ancestor of "
-                "origin/%s — falling back to IMPLEMENT_COMPLETE for investigation",
-                ticket.id,
-                sha[:8] if sha else "(none)",
-                target,
-            )
-            return Outcome(
-                State.IMPLEMENT_COMPLETE,
-                f"PR reported merged but merge not confirmed on origin/{target}: {pr.get('url', '')}",
-            )
-        if pr.get("state") == "closed":
-            return Outcome(
-                State.BLOCKED,
-                f"PR closed without merge — resumable: {pr.get('url', '')}",
-            )
         mergeable = pr.get("mergeable")
         if mergeable is False:
             log.info(
