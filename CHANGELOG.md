@@ -5,6 +5,8 @@
   `docs/configuration.md`.
 - **docs/configuration.md**: add missing `stale_branch_cleanup` to the named
   periodic-agent roster in section 12.
+- **docs**: add `dependabot_ingest` to the periodic agent roster in
+  `configuration.md` section 12 (was missing from the 22-agent list).
 - **board-mill.js**: add `asked: "answer"` to `STATE_TRACE` so the history
   timeline renders `ASKED` transitions with the "answer" stage label instead
   of a bare state name.

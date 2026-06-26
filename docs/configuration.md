@@ -613,7 +613,7 @@ Each periodic agent shares this pattern:
 Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_monitor`, `config_sync`, `member_sync`, `bc_check`,
 `completeness_check`, `diagnostic`, `forge_parity`, `module_curator`,
-`copy_paste`, `timeout_escalation`, `langfuse_cleanup`, `data_dir_audit`, `run_health`, `stale_branch_cleanup`,
+`copy_paste`, `timeout_escalation`, `langfuse_cleanup`, `data_dir_audit`, `dependabot_ingest`, `run_health`, `stale_branch_cleanup`,
 `state_sync`, `env_doc_sync`.
 
 > ¹ Most agents default to `enabled: true`. Exceptions: `diagnostic`, `stale_branch_cleanup`, and `meta_periodic` default to `false`.
