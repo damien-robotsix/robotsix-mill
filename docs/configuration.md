@@ -494,6 +494,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `gates.comments_after_body` | `MILL_COMMENTS_AFTER_BODY` | `false` | Render description.md before comments in ticket detail drawer |
 | `gates.reviewer_agreement_gate_enabled` | `MILL_REVIEWER_AGREEMENT_GATE_ENABLED` | `true` | Pre-Opus guard: when a reviewer's sendback feedback already agrees with the draft's no-change-needed conclusion, the pipeline short-circuits to DONE, skipping the expensive Opus refine agent. Requires `refine_triage_enabled=true`. |
 | `gates.refine_mill_misroute_gate_enabled` | `MILL_REFINE_MILL_MISROUTE_GATE_ENABLED` | `true` | Deterministic pre-refine gate: detects drafts referencing mill-specific source paths absent from the current checkout and redirects them to the mill maintenance board before any LLM budget is spent. |
+| `ci.codeql_fp_triage_enabled` | `MILL_CODEQL_FP_TRIAGE_ENABLED` | `true` | When enabled, ci_fix may invoke a conservative sub-agent at the hard cycle ceiling to dismiss high-conviction CodeQL false positives, unblocking the ticket |
 
 ### 8. Forge
 
@@ -562,6 +563,9 @@ the `claude` CLI in the container). These knobs govern that path:
 | `pipeline.max_archived_tickets` | `MILL_MAX_ARCHIVED_TICKETS` | `100` | Max terminal-state tickets retained (0 = no purge) |
 | `pipeline.max_events_per_ticket` | `MILL_MAX_EVENTS_PER_TICKET` | `200` | Max TicketEvent rows retained per non-terminal ticket; events beyond this cap are pruned (oldest first). 0 disables per-ticket event capping. |
 | `pipeline.max_comments_per_ticket` | `MILL_MAX_COMMENTS_PER_TICKET` | `500` | Max Comment rows retained per non-terminal ticket; OPEN threads are never pruned. 0 disables comment capping. |
+| `pipeline.auto_fix_max_cycles` | `MILL_AUTO_FIX_MAX_CYCLES` | `6` | Cross-stage ceiling on combined REBASING+FIXING_CI dispatches without CI turning green. Reset only when CI is observed green. Set to 0 to disable. |
+| `pipeline.ping_pong_max_alternations` | `MILL_PING_PONG_MAX_ALTERNATIONS` | `3` | Ceiling on REBASING↔FIXING_CI alternations before escalating to BLOCKED. Reset when CI is observed green. Set to 0 to disable. |
+| — | `MILL_TICKET_STATE_CYCLE_LIMIT` | `3` | Ceiling on re-dispatches of the same LLM-bearing stage within a single pass before BLOCKED. Set to 0 to disable. |
 
 ### 11.2 Stages tuning
 
