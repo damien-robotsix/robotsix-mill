@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- **docs**: remove duplicate `core.limits.max_openrouter_marginal_usd_per_ticket` row from
+  `docs/configuration.md` section 3 (Worker pool & retry) — merge-collision artifact
+  left two identical rows.
+
 - **ci**: remove Dependabot `uv` ecosystem graph-submission entry from
   `.github/dependabot.yml`.  The `Configured Graph Update: uv` job has
   been failing repeatedly since 2026-06-26 due to Dependabot's internal
