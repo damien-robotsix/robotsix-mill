@@ -53,6 +53,23 @@ def maybe_generate_towncrier_fragment(
     try:
         fragment_dir = repo_dir / directory
         fragment_dir.mkdir(parents=True, exist_ok=True)
+
+        # If an LLM agent already wrote a towncrier fragment (e.g.
+        # <id>.feature.md), skip the auto-generated .misc.md to avoid
+        # duplicate fragments for the same ticket id.
+        existing = (
+            list(fragment_dir.glob(f"{ticket_id}.*.md"))
+            if fragment_dir.is_dir()
+            else []
+        )
+        if existing:
+            log.info(
+                "towncrier: fragment %s already exists for %s — skipping .misc.md",
+                existing[0].name,
+                ticket_id,
+            )
+            return False
+
         fragment_file = fragment_dir / f"{ticket_id}.misc.md"
         fragment_file.write_text(title, encoding="utf-8")
     except OSError:
