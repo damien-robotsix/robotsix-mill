@@ -165,6 +165,10 @@ class Ticket(SQLModel, table=True):
     # review session.  Reset on APPROVE or when the cap is hit; persists
     # across the CODE_REVIEW → READY → DOCUMENTING → CODE_REVIEW loop.
     review_rounds: int = Field(default=0)
+    # total implement passes across all review rounds (ticket lifetime).
+    # Used by the implement↔review convergence backstop to catch a ticket
+    # that keeps re-running implement without converging.
+    implement_cycles: int = Field(default=0)
     # transient-error retry state (stage-runner level, not LLM-call level)
     retry_attempt: int = Field(default=0)
     last_transient_error: str | None = Field(default=None)

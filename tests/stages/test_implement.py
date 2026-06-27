@@ -5094,3 +5094,97 @@ def test_scope_triage_new_file_summary_shows_content(
     summary = captured["summaries"]["brand_new_module.py"]
     assert "NEW FILE" in summary
     assert "shiny_new_helper" in summary
+
+
+# ------------------------------------------------------------------
+
+
+def test_convergence_backstop_halts_at_cycle_cap(ctx_factory, tmp_path, monkeypatch):
+    """The implement↔review convergence backstop escalates to BLOCKED
+    when ``implement_cycles`` reaches ``max_implement_review_cycles``.
+    """
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        max_implement_review_cycles="2",
+    )
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    # Bypass gates that require a real sandbox / API key.
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    # Seed the counter at the cap so the next run trips it.
+    ctx.service.set_implement_cycles(t.id, 2)
+    # Reload so ticket.implement_cycles reflects the set value.
+    t = ctx.service.get(t.id)
+    assert t.implement_cycles == 2
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert "cycle limit reached" in out.note.lower()
+    assert "2/2" in out.note
+
+
+def test_convergence_empty_diff_after_review_blocks(ctx_factory, tmp_path, monkeypatch):
+    """When a ticket returns from review (review_rounds > 0) and the
+    branch has no commits beyond origin/main, implement blocks early.
+    """
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="true",
+        max_implement_review_cycles="10",
+    )
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    # Bypass gates that require a real sandbox / API key.
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    # Run implement once so the branch exists (creating the clone).
+    # The agent produces a simple change that gets committed.
+    def _run_once(*, repo_dir, **_kwargs):
+        (Path(repo_dir) / "feature.txt").write_text("implemented")
+        return ("done", ["feature.txt"], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run_once)
+    out1 = ImplementStage().run(t, ctx)
+    # With review_enabled=True, the first pass should proceed to CODE_REVIEW.
+    assert out1.next_state is State.CODE_REVIEW
+
+    # Now simulate returning from review: set review_rounds > 0 and
+    # RESET the branch so it has no commits beyond origin/main.
+    t = ctx.service.get(t.id)
+    ctx.service.set_review_rounds(t.id, 1)
+    ws = ctx.service.workspace(t)
+    repo_dir = ws.dir / "repo"
+    branch = f"{ctx.settings.branch_prefix}{t.id}"
+    target = "main"
+    subprocess.run(
+        ["git", "-C", str(repo_dir), "reset", "--hard", f"origin/{target}"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_dir), "checkout", "-B", branch],
+        check=True,
+        capture_output=True,
+    )
+
+    t = ctx.service.get(t.id)
+    assert t.review_rounds == 1
+
+    # Second implement run: resuming=True, review_rounds>0, branch has no
+    # commits ahead → empty-diff detection should block.
+    out2 = ImplementStage().run(t, ctx)
+    assert out2.next_state is State.BLOCKED
+    assert "empty diff" in out2.note.lower()

@@ -106,6 +106,7 @@ class TestSelectAgentLevel:
 
 class FakeTicket:
     id = "test-ticket-1"
+    implement_cycles = 0
 
 
 def _stage_ctx(**kw):
@@ -332,7 +333,10 @@ class TestEvaluateTestResults:
         params: dict = dict(
             ctx=_simple_namespace(
                 repo_config=None,
-                service=_simple_namespace(add_step_event=lambda *a: None),
+                service=_simple_namespace(
+                    add_step_event=lambda *a: None,
+                    set_implement_cycles=lambda *a: None,
+                ),
             ),
             ticket=FakeTicket(),
             repo_dir=_DUMMY_PATH,

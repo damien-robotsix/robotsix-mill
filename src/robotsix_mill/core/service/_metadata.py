@@ -174,6 +174,19 @@ class _MetadataMixin(_ServiceBase):
             s.add(ticket)
             s.commit()
 
+    def set_implement_cycles(self, ticket_id: str, value: int) -> None:
+        """Set the ``implement_cycles`` counter on *ticket_id*.
+
+        Tracks total implement passes across all review rounds
+        (ticket lifetime).  Used by the implement↔review convergence
+        backstop."""
+        with db.session(self.settings, self._board_for(ticket_id)) as s:
+            ticket = _get_ticket(s, ticket_id)
+            ticket.implement_cycles = value
+            ticket.updated_at = datetime.now(timezone.utc)
+            s.add(ticket)
+            s.commit()
+
     def set_depends_on(self, ticket_id: str, depends_on_ids: list[str]) -> None:
         """Set the ``depends_on`` field for *ticket_id* to a JSON-encoded
         list of ticket IDs.  Raises :class:`ValueError` if *ticket_id*
