@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- **forge**: extract `_to_repo_info` and `_paginated_get` helpers in
+  `GitLabForge` to eliminate internal copy-paste duplication between
+  `_create_project`/`_fork_repo` and `_list_branches`/`_list_open_pr_branches`.
+
 - **docs**: remove duplicate `core.limits.max_openrouter_marginal_usd_per_ticket` row from
   `docs/configuration.md` section 3 (Worker pool & retry) — merge-collision artifact
   left two identical rows.

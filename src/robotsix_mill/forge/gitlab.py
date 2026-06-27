@@ -6,7 +6,8 @@ stage (it owns the repo dir); this only does the API call.
 from __future__ import annotations
 
 import re
-from typing import Any
+from collections.abc import Callable, Iterator
+from typing import Any, TypeVar
 
 import httpx
 
@@ -16,6 +17,8 @@ from .auth import gitlab_token
 from .base import BranchInfo, Forge, NotConfiguredError, RepoInfo
 from .github import _parse_iso_utc
 from .github_ci import _ANSI_RE, _MAX_FAILED_JOBS
+
+T = TypeVar("T")
 
 # Earliest-failure markers in a GitLab CI job log.  GitLab jobs don't
 # emit GitHub Actions–style ``##[error]`` lines; instead we match the
@@ -601,6 +604,18 @@ class GitLabForge(Forge):
 
         return "\n".join(parts)
 
+    # -- shared helpers ---------------------------------------------------
+
+    @staticmethod
+    def _to_repo_info(data: dict) -> RepoInfo:
+        """Build a RepoInfo from a GitLab 201 project-creation response."""
+        return RepoInfo(
+            id=data["id"],
+            name=data["path"] or data["name"],
+            clone_url=data["http_url_to_repo"],
+            html_url=data["web_url"],
+        )
+
     def _create_project(
         self,
         *,
@@ -644,13 +659,7 @@ class GitLabForge(Forge):
 
             r = c.post(f"{api}/projects", headers=custom_headers, json=payload)
             if r.status_code == 201:
-                data = r.json()
-                return RepoInfo(
-                    id=data["id"],
-                    name=data["path"] or data["name"],
-                    clone_url=data["http_url_to_repo"],
-                    html_url=data["web_url"],
-                )
+                return self._to_repo_info(r.json())
             if r.status_code in (400, 409) and (
                 "already been taken" in (r.text or "").lower()
                 or "already exists" in (r.text or "").lower()
@@ -691,13 +700,7 @@ class GitLabForge(Forge):
                 json=payload,
             )
             if r.status_code == 201:
-                data = r.json()
-                return RepoInfo(
-                    id=data["id"],
-                    name=data["path"] or data["name"],
-                    clone_url=data["http_url_to_repo"],
-                    html_url=data["web_url"],
-                )
+                return self._to_repo_info(r.json())
             if r.status_code == 409 and (
                 "already been taken" in (r.text or "").lower()
                 or "already exists" in (r.text or "").lower()
@@ -873,33 +876,55 @@ class GitLabForge(Forge):
         except Exception:
             return False
 
+    def _paginated_get(
+        self,
+        url_suffix: str,
+        *,
+        params: dict,
+        item_fn: Callable[[dict], T],
+    ) -> Iterator[T]:
+        """Paginate through a GitLab API endpoint, yielding items via *item_fn*.
+
+        Each dict from the JSON array response is passed to *item_fn*; the
+        result is yielded.  Pagination stops when fewer than 100 items are
+        returned (last page).
+        """
+        with self._http.client() as (c, api, headers):
+            page = 1
+            while True:
+                r = c.get(
+                    f"{api}{url_suffix}",
+                    headers=headers,
+                    params={"per_page": 100, "page": page, **params},
+                )
+                r.raise_for_status()
+                items: list[dict] = r.json()
+                for item in items:
+                    yield item_fn(item)
+                if len(items) < 100:
+                    break
+                page += 1
+
     def _list_branches(self, project_path: str) -> list[BranchInfo]:
         """GET /projects/:id/repository/branches?per_page=100 (paginated)."""
         out: list[BranchInfo] = []
         try:
             pid = self._resolve_project_id(project_path)
-            with self._http.client() as (c, api, headers):
-                page = 1
-                while True:
-                    r = c.get(
-                        f"{api}/projects/{pid}/repository/branches",
-                        headers=headers,
-                        params={"per_page": 100, "page": page},
-                    )
-                    r.raise_for_status()
-                    items = r.json()
-                    for b in items:
-                        date = (b.get("commit") or {}).get("committed_date")
-                        out.append(
-                            BranchInfo(
-                                name=b["name"],
-                                last_commit_at=_parse_iso_utc(date),
-                                is_protected=bool(b.get("protected")),
-                            )
-                        )
-                    if len(items) < 100:
-                        break
-                    page += 1
+
+            def _mk(b: dict) -> BranchInfo:
+                date = (b.get("commit") or {}).get("committed_date")
+                return BranchInfo(
+                    name=b["name"],
+                    last_commit_at=_parse_iso_utc(date),
+                    is_protected=bool(b.get("protected")),
+                )
+
+            for bi in self._paginated_get(
+                f"/projects/{pid}/repository/branches",
+                params={},
+                item_fn=_mk,
+            ):
+                out.append(bi)
         except Exception:
             return []
         return out
@@ -909,23 +934,17 @@ class GitLabForge(Forge):
         out: set[str] = set()
         try:
             pid = self._resolve_project_id(project_path)
-            with self._http.client() as (c, api, headers):
-                page = 1
-                while True:
-                    r = c.get(
-                        f"{api}/projects/{pid}/merge_requests",
-                        headers=headers,
-                        params={"state": "opened", "per_page": 100, "page": page},
-                    )
-                    r.raise_for_status()
-                    items = r.json()
-                    for mr in items:
-                        ref = mr.get("source_branch")
-                        if ref:
-                            out.add(ref)
-                    if len(items) < 100:
-                        break
-                    page += 1
+
+            def _src_branch(mr: dict) -> str | None:
+                return mr.get("source_branch")
+
+            for ref in self._paginated_get(
+                f"/projects/{pid}/merge_requests",
+                params={"state": "opened"},
+                item_fn=_src_branch,
+            ):
+                if ref:
+                    out.add(ref)
         except Exception:
             return set()
         return out
