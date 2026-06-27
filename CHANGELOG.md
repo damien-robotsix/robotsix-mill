@@ -1,5 +1,10 @@
 ## 0.0.0 (unreleased)
 
+- **renovate**: enable `pre-commit` manager and add grouping rule so
+  Renovate automatically bumps `.pre-commit-config.yaml` hook versions
+  on the Monday schedule. Also fix stale Ruff pin (`v0.11.0` → `v0.15.15`
+  to match `pyproject.toml`), switching from SHA to tag format.
+
 - **pipeline**: add implement↔review convergence backstop: a configurable
   `max_implement_review_cycles` ceiling (default 10) on total implement passes
   per ticket, empty-diff detection that blocks when a review round produces no
