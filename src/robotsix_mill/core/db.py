@@ -123,6 +123,10 @@ def init_db(settings: Settings, board_id: str) -> None:
                 # the live session total so the dollar-cap limit restarts at
                 # zero after a redraft.
                 ("ticket", "pre_redraft_cost_usd REAL DEFAULT 0.0"),
+                # implement_cycles column: total implement passes across
+                # all review rounds (ticket lifetime). Feeds the
+                # implement↔review convergence backstop.
+                ("ticket", "implement_cycles INTEGER NOT NULL DEFAULT 0"),
                 # Hash-chain integrity columns for TicketEvent.
                 ("ticketevent", "prev_hash TEXT"),
                 ("ticketevent", "hash TEXT NOT NULL DEFAULT ''"),

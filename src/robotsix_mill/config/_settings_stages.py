@@ -252,6 +252,15 @@ class _StagesSettings(BaseModel):
     # A value ≤ 0 means escalate on the first REQUEST_CHANGES (the loop is
     # effectively disabled). Default 3.
     review_max_rounds: int = Field(default=3, ge=0)
+
+    # Backstop ceiling on total implement passes per ticket (across all
+    # review rounds, ticket lifetime).  Exceeding this limit escalates the
+    # ticket to BLOCKED for human inspection.  Set higher than the product
+    # of ``review_max_rounds`` × ``max_fix_iterations`` to ensure it only
+    # fires as a genuine runaway backstop, not as normal operation.  Default
+    # 10 is generous enough for 3 review rounds with ~3 fix iterations each.
+    # Set to 0 to disable.
+    max_implement_review_cycles: int = Field(default=10, ge=0)
     # How many model requests the review agent may make in one run
     # (counts each tool call + each reasoning step + the final verdict).
     # 20 (original) then 40 each routinely BLOCKED medium PRs with

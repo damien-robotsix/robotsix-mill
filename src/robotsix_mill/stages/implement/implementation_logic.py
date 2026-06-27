@@ -589,6 +589,13 @@ class ImplementationLogicMixin(_ImplementStageBase):
                 if next_state is State.CODE_REVIEW
                 else "documenting starting"
             )
+            # Increment the ticket-lifetime implement-cycle counter
+            # so the convergence backstop in phase_coordinator can
+            # catch a runaway implement↔review loop.
+            if next_state is State.CODE_REVIEW:
+                ctx.service.set_implement_cycles(
+                    ticket.id, ticket.implement_cycles + 1
+                )
             return _SinglePassResult(
                 next_action="proceed",
                 outcome=Outcome(next_state, next_note),

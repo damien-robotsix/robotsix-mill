@@ -1,5 +1,11 @@
 ## 0.0.0 (unreleased)
 
+- **pipeline**: add implement↔review convergence backstop: a configurable
+  `max_implement_review_cycles` ceiling (default 10) on total implement passes
+  per ticket, empty-diff detection that blocks when a review round produces no
+  new commits, and repeated-findings fingerprinting in the review stage that
+  escalates early when review asks are identical across rounds.  All three
+  paths escalate to BLOCKED for human inspection instead of silently re-running.
 - **forge**: extract `_to_repo_info` and `_paginated_get` helpers in
   `GitLabForge` to eliminate internal copy-paste duplication between
   `_create_project`/`_fork_repo` and `_list_branches`/`_list_open_pr_branches`.

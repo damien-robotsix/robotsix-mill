@@ -792,6 +792,45 @@ class ReviewStage(Stage):
                     State.DOCUMENTING,
                     f"review rounds exhausted ({rounds}/{s.review_max_rounds})",
                 )
+            # --- convergence detection: repeated findings fingerprint ---
+            # If the structured review asks are IDENTICAL to the previous
+            # round's asks, implement is not making progress — escalate
+            # early (BLOCKED) rather than burning another full cycle.
+            import hashlib
+
+            fp = hashlib.sha256()
+            for ask in sorted(verdict.request_changes, key=lambda a: a.title or ""):
+                fp.update((ask.title or "").encode())
+                fp.update((ask.description or "").encode())
+                for f in sorted(ask.files_touched or []):
+                    fp.update(f.encode())
+            fingerprint = fp.hexdigest()
+            fp_path = ws.artifacts_dir / "findings_fingerprint.txt"
+            prev_fp = None
+            if fp_path.exists():
+                try:
+                    prev_fp = fp_path.read_text(encoding="utf-8").strip()
+                except OSError:
+                    log.warning(
+                        "%s: failed to read findings fingerprint", ticket.id
+                    )
+            if prev_fp == fingerprint:
+                ctx.service.add_comment(
+                    ticket.id,
+                    f"Convergence detected: review round {rounds} found the "
+                    f"same {len(verdict.request_changes)} issue(s) as the "
+                    "previous round. Implement is not making progress on "
+                    "these findings — escalating to BLOCKED for human "
+                    "inspection.",
+                    author="review",
+                )
+                ctx.service.set_review_rounds(ticket.id, 0)
+                return Outcome(
+                    State.BLOCKED,
+                    "convergence: repeated review findings — implement stuck",
+                )
+            fp_path.parent.mkdir(parents=True, exist_ok=True)
+            fp_path.write_text(fingerprint, encoding="utf-8")
             # Split asks against the ticket's file_map. An out-of-scope ask
             # touches files outside the ticket's declared scope; making the
             # implement agent edit them would get bounced by scope-triage and
