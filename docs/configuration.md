@@ -748,6 +748,22 @@ and environment variables are both available:
 | `MILL_SANDBOX_REAPER_PERIODIC` | `true` | Enable periodic sandbox-container reaping |
 | `MILL_SANDBOX_REAPER_INTERVAL_SECONDS` | `3600` | Seconds between sandbox-reaper passes |
 
+#### survey
+
+The `survey` periodic agent searches for library/ecosystem news and files
+draft tickets with findings. Four extra fields beyond the generic periodic
+pattern control its tool-call and web-fetch budgets:
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `MILL_SURVEY_PERIODIC` | `true` | Enable periodic survey passes |
+| `MILL_SURVEY_INTERVAL_SECONDS` | `86400` | Seconds between survey passes |
+| `MILL_SURVEY_MEMORY_PATH` | `None` | Override path for survey memory; defaults to `<data_dir>/survey_memory.md` |
+| `MILL_SURVEY_REQUEST_LIMIT` | `40` | Per-call request cap for the survey agent |
+| `MILL_SURVEY_WEB_FETCH_MAX_CALLS` | `5` | Max real (cache-miss) web_fetch calls per survey run |
+| `MILL_SURVEY_WEB_FETCH_MAX_TOTAL_BYTES` | `500000` | Cumulative ceiling on returned fetch bytes per survey run |
+| `MILL_SURVEY_WEB_SEARCH_MAX_CALLS` | `5` | Max web_search invocations per survey run |
+
 #### Env-var-only periodic agents
 
 `bc_check` and `completeness_check` enabled, interval, and memory_path
