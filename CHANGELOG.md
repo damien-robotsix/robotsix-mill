@@ -3,6 +3,9 @@
 - **docs**: remove duplicate `core.limits.max_openrouter_marginal_usd_per_ticket` row from
   `docs/configuration.md` section 3 (Worker pool & retry) — merge-collision artifact
   left two identical rows.
+- **docs**: document `component_agent.*` settings (6 fields) in
+  `docs/configuration.md` §14, matching the Pydantic model and YAML
+  defaults that were already present but undocumented.)
 
 - **ci**: remove Dependabot `uv` ecosystem graph-submission entry from
   `.github/dependabot.yml`.  The `Configured Graph Update: uv` job has

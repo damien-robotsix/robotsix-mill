@@ -812,6 +812,19 @@ Both are off by default.
 | `board_manager.recall_model` | `MILL_BOARD_MANAGER_RECALL_MODEL` | `""` | Level-1 recall model (`""` → tier default) |
 | `board_manager.max_conversations` | `MILL_BOARD_MANAGER_MAX_CONVERSATIONS` | `200` | Cap on retained question→answer turns |
 
+#### Component agent
+
+The component agent is a generic monitor/config responder on the agent-comm broker. Off by default.
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| `component_agent.enabled` | `MILL_COMPONENT_AGENT_ENABLED` | `false` | Master switch for the component agent |
+| `component_agent.agent_id` | `MILL_COMPONENT_AGENT_AGENT_ID` | `"component-robotsix-mill"` | Agent id registered on the broker |
+| `component_agent.broker_host` | `MILL_COMPONENT_AGENT_BROKER_HOST` | `""` | Broker host; empty string disables |
+| `component_agent.broker_port` | `MILL_COMPONENT_AGENT_BROKER_PORT` | `443` | Broker port |
+| `component_agent.broker_scheme` | `MILL_COMPONENT_AGENT_BROKER_SCHEME` | `"https"` | Broker scheme (http/https) |
+| `component_agent.broker_token` | `MILL_COMPONENT_AGENT_BROKER_TOKEN` | `""` | Bearer token for the broker |
+
 ---
 
 ## Secrets reference
