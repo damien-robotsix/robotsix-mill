@@ -2216,3 +2216,131 @@ def test_codeql_403_readable_alerts_still_works(tmp_path, monkeypatch):
     assert "42" in out.note
     assert "py/clear-text-logging-sensitive-data" in out.note
     assert "UNREADABLE" not in out.note
+
+
+# ---------------------------------------------------------------------------
+# Duplicate changelog fragment dedup (before LLM agent)
+# ---------------------------------------------------------------------------
+
+
+def test_ci_fix_dedup_removes_extra_fragment_without_invoking_agent(
+    tmp_path, monkeypatch
+):
+    """When the PR branch carries two ``changes/<id>.<type>.md`` files, the
+    dedup early-path removes the lower-priority fragment, commits, pushes,
+    and returns IMPLEMENT_COMPLETE — without invoking the LLM agent."""
+    from pathlib import Path
+
+    ctx = _gh(tmp_path)
+    # CI must be failing for the flow to reach the dedup gate.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {
+                    "name": "ci / tests",
+                    "summary": "dup fragment",
+                    "text": None,
+                    "annotations": [],
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    # Keep enrichment seams quiet.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_code_scanning_alerts",
+        lambda self, *, source_branch: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_workflow_runs",
+        lambda self, *, head_sha=None, branch=None: [],
+    )
+
+    t = _fixing_ci(ctx)
+    repo_dir = _setup_repo(ctx, t)
+
+    # Create the duplicate towncrier fragments.
+    changes_dir = Path(repo_dir) / "changes"
+    changes_dir.mkdir()
+    (changes_dir / f"{t.id}.feature.md").write_text(
+        "New feature description", encoding="utf-8"
+    )
+    (changes_dir / f"{t.id}.misc.md").write_text("My ticket title", encoding="utf-8")
+
+    # Write pyproject.toml with towncrier config.
+    (Path(repo_dir) / "pyproject.toml").write_text(
+        '[tool.towncrier]\ndirectory = "changes"\n',
+        encoding="utf-8",
+    )
+
+    # Mock has_changes → True so the dedup path commits.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.has_changes",
+        lambda repo: True,
+    )
+
+    # Record commit_all calls.
+    commit_calls = []
+
+    def fake_commit_all(repo, message):
+        commit_calls.append((str(repo), message))
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.commit_all",
+        fake_commit_all,
+    )
+
+    # Record push calls.
+    push_calls = []
+
+    def fake_push(repo, branch, remote_url, token):
+        push_calls.append((str(repo), branch, remote_url, token))
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        fake_push,
+    )
+
+    # Mock credential resolution.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix._resolve_remote_url",
+        lambda s, rc: "https://example.com/repo.git",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.github_token",
+        lambda *args, **kwargs: "tok",
+    )
+
+    # Guard: the LLM agent must NOT be invoked.
+    def boom_agent(**k):
+        raise AssertionError("agent must not be invoked for duplicate-fragment fix")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        boom_agent,
+    )
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+    # .misc.md must no longer exist on disk.
+    assert not (changes_dir / f"{t.id}.misc.md").exists()
+
+    # .feature.md must still exist (higher priority).
+    assert (changes_dir / f"{t.id}.feature.md").exists()
+
+    # commit_all was called exactly once.
+    assert len(commit_calls) == 1
+
+    # push was called exactly once with the ticket branch.
+    assert len(push_calls) == 1
+    assert push_calls[0][1] == f"mill/{t.id}"

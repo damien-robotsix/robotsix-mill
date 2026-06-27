@@ -126,6 +126,13 @@ class CIFixStage(Stage):
         if identical_outcome is not None:
             return identical_outcome
 
+        # --- Duplicate changelog fragment recovery (before LLM agent) ---
+        dedup_outcome = self._try_dedup_changelog_fragments(
+            ticket, ctx, repo_dir, branch
+        )
+        if dedup_outcome is not None:
+            return dedup_outcome
+
         # Agent phase: the ci-fix agent now OWNS the fix→push→verify loop —
         # it fixes, pushes, and calls wait_for_ci to re-check, iterating up to
         # ci_fix_max_iterations before giving up. There is no external
@@ -390,6 +397,120 @@ class CIFixStage(Stage):
         fp_path.parent.mkdir(parents=True, exist_ok=True)
         fp_path.write_text(current_fp, encoding="utf-8")
         return None
+
+    def _try_dedup_changelog_fragments(  # noqa: C901 — multi-step dedup; each step is simple
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        repo_dir: str,
+        branch: str,
+    ) -> Outcome | None:
+        """Deduplicate towncrier changelog fragments for *ticket*.
+
+        When the CI failure is "Duplicate changelog fragments detected for
+        ticket(s): <id>", the PR branch carries two ``changes/<id>.<type>.md``
+        files. This method removes the lower-priority fragment(s), merges any
+        unique content into the kept fragment, commits, and pushes — all
+        without invoking the LLM agent.
+
+        Returns ``Outcome(State.IMPLEMENT_COMPLETE)`` on success, or ``None``
+        when no duplicate fragments exist, the repo doesn't use towncrier, or
+        any error occurs (so the LLM agent still gets a chance).
+        """
+        try:
+            repo_path = Path(repo_dir)
+
+            # 1. Read towncrier config from pyproject.toml.
+            pp = repo_path / "pyproject.toml"
+            if not pp.is_file():
+                return None
+
+            import tomllib
+
+            data = tomllib.loads(pp.read_text(encoding="utf-8"))
+            tc = (data.get("tool", {}) or {}).get("towncrier")
+            if not tc:
+                return None
+
+            directory = str(tc.get("directory") or "changes")
+            fragment_dir = repo_path / directory
+
+            # 2. Glob fragments for this ticket id.
+            if not fragment_dir.is_dir():
+                return None
+            fragments = list(fragment_dir.glob(f"{ticket.id}.*.md"))
+            if len(fragments) <= 1:
+                return None
+
+            # 3. Choose the fragment to keep by priority.  Lower index =
+            #    higher priority; unknown types rank below ``misc``.
+            _PRIORITY_ORDER = [
+                "feature",
+                "bugfix",
+                "removal",
+                "security",
+                "deprecation",
+                "misc",
+            ]
+
+            def _type_from_path(p: Path) -> str:
+                # Filename: <ticket_id>.<type>.md  →  type = parts[1]
+                parts = p.name.split(".")
+                return parts[1] if len(parts) >= 2 else ""
+
+            def _priority(p: Path) -> int:
+                t = _type_from_path(p)
+                try:
+                    return _PRIORITY_ORDER.index(t)
+                except ValueError:
+                    return len(_PRIORITY_ORDER)  # unknown → lowest priority
+
+            fragments.sort(key=_priority)  # ascending: highest priority first
+            keep = fragments[0]  # highest priority = first after ascending sort
+            to_delete = fragments[1:]
+
+            # 4. Merge content (conservative): append unique lines from each
+            #    deleted fragment to the kept fragment.
+            keep_content = keep.read_text(encoding="utf-8")
+            for frag in to_delete:
+                frag_content = frag.read_text(encoding="utf-8")
+                if frag_content and frag_content not in keep_content:
+                    keep_content = keep_content.rstrip("\n") + "\n" + frag_content
+            if keep_content != keep.read_text(encoding="utf-8"):
+                keep.write_text(keep_content, encoding="utf-8")
+
+            # 5. Delete extra fragments.
+            for frag in to_delete:
+                frag.unlink()
+
+            # 6. Commit.
+            if git_ops.has_changes(repo_path):
+                git_ops.commit_all(
+                    repo_path,
+                    f"ci: deduplicate changelog fragment for {ticket.id}",
+                )
+
+                # 7. Push.
+                remote_url = _resolve_remote_url(ctx.settings, ctx.repo_config)
+                token = github_token(ctx.settings, repo_config=ctx.repo_config)
+                git_ops.push(repo_path, branch, remote_url, token)
+
+            # 8. Success — no agent needed.
+            log.info(
+                "%s: deduplicated changelog fragments — kept %s, deleted %d extra(s)",
+                ticket.id,
+                keep.name,
+                len(to_delete),
+            )
+            return Outcome(State.IMPLEMENT_COMPLETE)
+
+        except Exception:
+            log.warning(
+                "%s: dedup changelog fragment failed — falling through to LLM agent",
+                ticket.id,
+                exc_info=True,
+            )
+            return None
 
     def _run_agent_and_finalize(
         self,

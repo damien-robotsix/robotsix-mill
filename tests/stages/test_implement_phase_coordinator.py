@@ -782,3 +782,41 @@ def test_finalize_skips_towncrier_when_no_changes(ctx_factory, tmp_path, monkeyp
     assert fake.commits == []
     # Fragment must NOT exist (gated on has_changes).
     assert not (repo_dir / "changes").exists()
+
+
+def test_finalize_skips_towncrier_when_fragment_already_exists(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When a towncrier fragment (e.g. ``<id>.feature.md``) already exists
+    before ``_finalize`` (the LLM agent wrote it), the auto-generated
+    ``.misc.md`` is silently skipped."""
+    ctx = ctx_factory()
+    t = _ticket(ctx, title="Add new feature to the system")
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    (repo_dir / "pyproject.toml").write_text(
+        '[tool.towncrier]\ndirectory = "changes"\n',
+        encoding="utf-8",
+    )
+    # Simulate the LLM agent having written a .feature.md fragment.
+    changes_dir = repo_dir / "changes"
+    changes_dir.mkdir()
+    feature_fragment = changes_dir / f"{t.id}.feature.md"
+    feature_content = "Add new feature to the system"
+    feature_fragment.write_text(feature_content, encoding="utf-8")
+
+    fake = _FakeGitOps(changed={repo_dir})
+    monkeypatch.setattr(pc, "git_ops", fake)
+
+    ImplementStage._finalize(
+        ctx, t, repo_dir, "mill/x", "summary", ok=True, reference_files=None
+    )
+
+    # .misc.md must NOT exist (skipped because .feature.md already exists).
+    assert not (changes_dir / f"{t.id}.misc.md").exists()
+
+    # .feature.md must be unchanged.
+    assert feature_fragment.read_text(encoding="utf-8") == feature_content
+
+    # Exactly one commit happened (the agent's other changes still get committed).
+    assert len(fake.commits) == 1
