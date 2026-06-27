@@ -347,6 +347,7 @@ modules:
       - tests/stages/test_refine_stage.py
       - tests/stages/test_refine_helpers.py
       - tests/stages/test_refine_orchestration.py
+      - tests/stages/test_refine_checkpoint.py
       - tests/stages/test_refine_gates.py
       - tests/stages/test_merge.py
       - tests/stages/test_ci_fix.py
