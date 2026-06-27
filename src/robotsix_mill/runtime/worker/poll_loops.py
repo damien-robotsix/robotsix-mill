@@ -569,7 +569,8 @@ class PollLoopsMixin(_WorkerBase):
 
         # 3. List completed workflow runs on the target branch.
         forge = get_forge(settings, repo_config=rc)
-        runs = forge.list_workflow_runs(
+        runs = await asyncio.to_thread(
+            forge.list_workflow_runs,
             branch=target,
         )
 
@@ -651,7 +652,9 @@ class PollLoopsMixin(_WorkerBase):
             fetch_error = ""
             for attempt in range(1, _CI_LOG_FETCH_ATTEMPTS + 1):
                 try:
-                    logs = forge.fetch_workflow_job_logs(run_id=run_id_val)
+                    logs = await asyncio.to_thread(
+                        forge.fetch_workflow_job_logs, run_id=run_id_val
+                    )
                     fetch_error = ""
                     break
                 except Exception as exc:  # noqa: BLE001 — captured for the draft
