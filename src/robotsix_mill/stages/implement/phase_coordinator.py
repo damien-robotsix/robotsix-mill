@@ -145,12 +145,23 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             target = target_branch_for(s, ctx.repo_config)
             try:
                 count = subprocess.run(
-                    ["git", "-C", str(repo_dir), "rev-list", "--count",
-                     f"origin/{target}..HEAD"],
-                    capture_output=True, text=True, timeout=10,
+                    [
+                        "git",
+                        "-C",
+                        str(repo_dir),
+                        "rev-list",
+                        "--count",
+                        f"origin/{target}..HEAD",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
                 ).stdout.strip()
                 ahead = int(count) if count else 0
-            except (subprocess.CalledProcessError, ValueError):
+            except (
+                subprocess.CalledProcessError,
+                ValueError,
+            ):
                 ahead = -1  # can't determine → don't block
             if ahead == 0:
                 return Outcome(

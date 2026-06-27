@@ -811,9 +811,7 @@ class ReviewStage(Stage):
                 try:
                     prev_fp = fp_path.read_text(encoding="utf-8").strip()
                 except OSError:
-                    log.warning(
-                        "%s: failed to read findings fingerprint", ticket.id
-                    )
+                    log.warning("%s: failed to read findings fingerprint", ticket.id)
             if prev_fp == fingerprint:
                 ctx.service.add_comment(
                     ticket.id,

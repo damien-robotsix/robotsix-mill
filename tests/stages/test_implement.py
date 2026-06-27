@@ -5115,12 +5115,8 @@ def test_convergence_backstop_halts_at_cycle_cap(ctx_factory, tmp_path, monkeypa
     _write_file_map(ctx, t, "feature.txt")
 
     # Bypass gates that require a real sandbox / API key.
-    monkeypatch.setattr(
-        ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None
-    )
-    monkeypatch.setattr(
-        ImplementStage, "_run_baseline_check", lambda *a, **kw: None
-    )
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
 
     # Seed the counter at the cap so the next run trips it.
     ctx.service.set_implement_cycles(t.id, 2)
@@ -5151,12 +5147,8 @@ def test_convergence_empty_diff_after_review_blocks(ctx_factory, tmp_path, monke
     _write_file_map(ctx, t, "feature.txt")
 
     # Bypass gates that require a real sandbox / API key.
-    monkeypatch.setattr(
-        ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None
-    )
-    monkeypatch.setattr(
-        ImplementStage, "_run_baseline_check", lambda *a, **kw: None
-    )
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
 
     # Run implement once so the branch exists (creating the clone).
     # The agent produces a simple change that gets committed.
