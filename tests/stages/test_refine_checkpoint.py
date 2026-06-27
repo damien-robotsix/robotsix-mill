@@ -21,9 +21,7 @@ def _make_result(**overrides) -> RefineResult:
         "split": True,
         "children": [
             ChildSpec(title="child-1", spec_markdown="## Child 1", depends_on=[]),
-            ChildSpec(
-                title="child-2", spec_markdown="## Child 2", depends_on=[1]
-            ),
+            ChildSpec(title="child-2", spec_markdown="## Child 2", depends_on=[1]),
         ],
         "promote_to_epic": False,
         "epic_body": None,
