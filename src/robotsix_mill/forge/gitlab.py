@@ -767,7 +767,7 @@ class GitLabForge(Forge):
         except Exception:
             return []
 
-        result: list[dict] = []
+        result: list[dict[str, Any]] = []
         for ch in changes:
             path = ch.get("new_path", ch.get("old_path", ""))
             if ch.get("new_file"):
@@ -880,8 +880,8 @@ class GitLabForge(Forge):
         self,
         url_suffix: str,
         *,
-        params: dict,
-        item_fn: Callable[[dict], T],
+        params: dict[str, Any],
+        item_fn: Callable[[dict[str, Any]], T],
     ) -> Iterator[T]:
         """Paginate through a GitLab API endpoint, yielding items via *item_fn*.
 
@@ -898,7 +898,7 @@ class GitLabForge(Forge):
                     params={"per_page": 100, "page": page, **params},
                 )
                 r.raise_for_status()
-                items: list[dict] = r.json()
+                items: list[dict[str, Any]] = r.json()
                 for item in items:
                     yield item_fn(item)
                 if len(items) < 100:
@@ -911,7 +911,7 @@ class GitLabForge(Forge):
         try:
             pid = self._resolve_project_id(project_path)
 
-            def _mk(b: dict) -> BranchInfo:
+            def _mk(b: dict[str, Any]) -> BranchInfo:
                 date = (b.get("commit") or {}).get("committed_date")
                 return BranchInfo(
                     name=b["name"],
@@ -935,7 +935,7 @@ class GitLabForge(Forge):
         try:
             pid = self._resolve_project_id(project_path)
 
-            def _src_branch(mr: dict) -> str | None:
+            def _src_branch(mr: dict[str, Any]) -> str | None:
                 return mr.get("source_branch")
 
             for ref in self._paginated_get(
