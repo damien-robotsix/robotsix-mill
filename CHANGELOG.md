@@ -6,6 +6,11 @@
   pattern with structured output (`TriageBoilerplateResult`), memory
   ledger round-tripping, and a ``STRUCTURED OUTPUT IS MANDATORY`` block.
 
+- **agents**: implement agent's CHANGELOG insertion instructions now include
+  explicit guidance for handling multi-line entries with continuation lines,
+  preventing the new entry from being inserted between a bullet's first line
+  and its continuation.  Review agent also gains a CHANGELOG well-formedness
+  check to detect corruption before human approval.
 - **agents**: move per-call content (`repo_dir`, `language_instructions`,
   `deployed_log_summary`) from system prompt to user prompt so the static
   system preamble is identical across every agent call within a ticket
