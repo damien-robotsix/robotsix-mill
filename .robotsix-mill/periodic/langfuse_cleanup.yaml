@@ -1,3 +1,0 @@
-# Per-repo periodic workflow: presence enables it for this repo.
-# Name-only → inherits the built-in langfuse_cleanup params.
-name: langfuse_cleanup

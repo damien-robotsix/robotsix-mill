@@ -61,8 +61,6 @@ _NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 #   "schedule_only" — built-in pass with NO prompt yaml (or a deterministic
 #                     runner): the per-repo file only carries presence +
 #                     interval_seconds/enabled; prompt fields are ignored.
-#   "maintenance"   — non-LLM maintenance loop (no prompt): presence +
-#                     interval only.
 #   "bespoke"       — brand-new repo-specific agent (name matches no
 #                     built-in); requires system_prompt.
 #   "global_only"   — recognized built-in that is NOT per-repo presence
@@ -89,9 +87,8 @@ _BUILTIN_KINDS: dict[str, str] = {
     "config_sync": "schedule_only",
     "member_sync": "schedule_only",
     "data_dir_audit": "schedule_only",
-    # Non-LLM maintenance loops.
-    "langfuse_cleanup": "maintenance",
     # Recognized but NOT per-repo-presence managed (cross-repo / always-on).
+    "langfuse_cleanup": "global_only",
     "meta": "global_only",
     "run_health": "global_only",
     "timeout_escalation": "global_only",

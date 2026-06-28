@@ -671,10 +671,10 @@ class _StagesSettings(BaseModel):
     # operational cap, not a per-repo policy decision.
     ci_log_max_bytes: int = Field(default=65536)
 
-    # --- langfuse cleanup (caps trace count per project) ---
+    # --- langfuse cleanup (caps trace count for the shared workspace project) ---
     # When True, the worker runs a periodic sweep that deletes the oldest
-    # traces from each repo's Langfuse project, keeping at most
-    # langfuse_cleanup_max_traces rows. Default False (opt-in).
+    # traces from the shared workspace Langfuse project, keeping at most
+    # langfuse_cleanup_max_traces rows. Default True (enabled out of the box).
     langfuse_cleanup_periodic: bool = Field(default=True)
     langfuse_cleanup_interval_seconds: int = Field(default=86400)
-    langfuse_cleanup_max_traces: int = Field(default=1000)
+    langfuse_cleanup_max_traces: int = Field(default=5000)
