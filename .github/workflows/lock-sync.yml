@@ -3,9 +3,17 @@ name: Lock sync
 # Self-healing lockfile gate. Runs BEFORE the rest of CI (callers wire the
 # CI jobs with `needs: lock-sync`). On a pull request it regenerates the
 # lockfile; if the committed lock was stale it commits the corrected lock
-# back to the PR branch and fails this run as *superseded* — the push (made
-# with a PAT, which unlike GITHUB_TOKEN re-triggers workflows) starts a
-# fresh run that finds the lock already correct and proceeds to CI.
+# back to the PR branch and fails this run as *superseded* — the push
+# re-triggers a fresh run that finds the lock already correct and proceeds
+# to CI.
+#
+# The push uses a token minted from the robotsix-mill GitHub App (already
+# installed on these repos). A GitHub App / PAT token is required because a
+# push made with the default GITHUB_TOKEN does NOT re-trigger workflows, so
+# the corrected commit would never get CI'd. An App token is preferred over
+# a PAT: it is short-lived (~1h, minted per run) and scoped to the
+# installation. When no App credentials are provided the job degrades to a
+# read-only check that fails with instructions instead of self-healing.
 #
 # This takes lockfile regeneration off agents/humans: a PR that changes
 # pyproject.toml / package.json no longer needs the author (or the mill's
@@ -29,14 +37,20 @@ on:
         required: false
         type: string
         default: "20"
-    secrets:
-      DEPS_BUMP_TOKEN:
+      app-id:
         description: >-
-          PAT with contents:write on this repo. Required to auto-commit the
-          corrected lock AND to re-trigger CI on the new commit (a push made
-          with the default GITHUB_TOKEN does not start new workflow runs).
-          When absent, the job degrades to a read-only check that fails with
-          instructions instead of self-healing.
+          robotsix-mill GitHub App ID (not sensitive). When set together
+          with the APP_PRIVATE_KEY secret, lock-sync mints an installation
+          token and self-heals. When empty, it runs read-only.
+        required: false
+        type: string
+        default: ""
+    secrets:
+      APP_PRIVATE_KEY:
+        description: >-
+          PEM private key of the robotsix-mill GitHub App, used with app-id
+          to mint a short-lived installation token that can push the
+          corrected lock AND re-trigger CI on it.
         required: false
 
 permissions:
@@ -48,15 +62,23 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Mint robotsix-mill App token
+        id: app-token
+        if: ${{ github.event_name == 'pull_request' && inputs.app-id != '' }}
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349  # v2
+        with:
+          app-id: ${{ inputs.app-id }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Checkout PR head branch
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           # Check out the PR's head *branch* (not the detached merge ref) so
-          # a corrected lock can be pushed straight back to it. Use the PAT
-          # when present so that push re-triggers CI; otherwise the default
-          # token (read-only verify path).
+          # a corrected lock can be pushed straight back to it. Use the App
+          # token when available so the push re-triggers CI; otherwise the
+          # default token (read-only verify path).
           ref: ${{ github.event.pull_request.head.ref }}
-          token: ${{ secrets.DEPS_BUMP_TOKEN || github.token }}
+          token: ${{ steps.app-token.outputs.token || github.token }}
           persist-credentials: true
 
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
@@ -104,19 +126,19 @@ jobs:
         if: ${{ steps.regen.outputs.changed == 'true' }}
         env:
           LOCKFILE: ${{ steps.regen.outputs.lockfile }}
-          HAS_TOKEN: ${{ secrets.DEPS_BUMP_TOKEN != '' }}
+          HAS_TOKEN: ${{ steps.app-token.outputs.token != '' }}
           SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           if [ "$HAS_TOKEN" != "true" ] || [ "$SAME_REPO" != "true" ]; then
             echo "::error::${LOCKFILE} is out of date and cannot be auto-synced \
-            (no DEPS_BUMP_TOKEN, or PR is from a fork). Regenerate it locally \
-            and commit it."
+            (no App token, or PR is from a fork). Regenerate it locally and \
+            commit it."
             git --no-pager diff -- "$LOCKFILE" | head -200
             exit 1
           fi
-          git config user.name "robotsix-bot"
-          git config user.email "noreply@robotsix.net"
+          git config user.name "robotsix-mill[bot]"
+          git config user.email "robotsix-mill[bot]@users.noreply.github.com"
           git add "$LOCKFILE"
           git commit -m "chore(deps): auto-sync ${LOCKFILE} [lock-sync]"
           git push origin "HEAD:${HEAD_REF}"

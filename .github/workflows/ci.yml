@@ -23,8 +23,11 @@ jobs:
     with:
       ecosystem: "uv"
       uv-version: "0.8.15"
+      # robotsix-mill App ID (a repo variable, not sensitive). Empty until
+      # set → lock-sync runs read-only (verify, no auto-commit).
+      app-id: ${{ vars.MILL_APP_ID }}
     secrets:
-      DEPS_BUMP_TOKEN: ${{ secrets.DEPS_BUMP_TOKEN }}
+      APP_PRIVATE_KEY: ${{ secrets.MILL_APP_PRIVATE_KEY }}
 
   ci:
     needs: lock-sync
