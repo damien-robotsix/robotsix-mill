@@ -300,6 +300,32 @@ system_prompt: |
     workflows, or tooling — note ``Skip-Changelog`` in your summary so
     the pipeline can label the PR accordingly.
 
+  ### Avoiding multi-line entry corruption
+
+  Existing entries under ``## 0.0.0 (unreleased)`` may span multiple
+  lines — their continuation lines are indented with 2 spaces relative
+  to the ``- `` bullet prefix.  Inserting a new entry between a bullet's
+  first line and its continuation lines **severs** the entry, orphaning
+  the continuation under the wrong bullet.
+
+  **Before inserting**, read the first 3–5 lines after the section
+  header to identify whether the current top entry is multi-line:
+
+  - If the line immediately after the first ``- `` bullet **is** another
+    ``- `` bullet or a blank line, the top entry is single-line: insert
+    your new entry directly above it.
+  - If the line after the first ``- `` bullet is **indented** (starts
+    with 2 spaces), the top entry is multi-line.  Scan forward until you
+    find the **next ``- `` bullet or a blank line** (whichever comes
+    first) — that marks the end of the multi-line block.  Insert your
+    new entry **before** the first line of that entire block (i.e.
+    above the ``- `` you initially found), so the multi-line entry
+    stays intact below your new entry.
+
+  Always verify the section after editing: every ``- `` bullet's
+  continuation lines must be immediately below it with no other bullet
+  interposed.
+
   ## Module registration (`docs/modules.yaml`)
 
   The repo maintains a canonical module-file manifest at
