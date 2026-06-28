@@ -483,6 +483,22 @@ def _build_prior_context(ticket, ctx, ws) -> str | None:
     return section("prior-context", "\n\n".join(parts))
 
 
+def _maybe_cache(ws, input_hash, outcome):
+    """Persist *outcome* to the stage-outcome cache, except for
+    ``AWAITING_USER_REPLY`` outcomes.
+
+    NEEDS_DISCUSSION verdicts produce AWAITING_USER_REPLY — caching
+    them would create an operator-answer loop because the cache key
+    (spec+diff) doesn't include the operator's response.  When the
+    ticket resumes after the operator replies, the unchanged spec+diff
+    would hit the cache and re-ask the same question.
+    """
+    if input_hash and outcome.next_state != State.AWAITING_USER_REPLY:
+        from ._stage_cache import _update
+
+        _update(ws, "review", input_hash, outcome)
+
+
 class ReviewStage(Stage):
     """Check out the target branch and perform automated code review on the ticket's implemented changes."""
 
@@ -536,7 +552,7 @@ class ReviewStage(Stage):
             return Outcome(State.DOCUMENTING, "empty diff (no-op implementation)")
 
         # --- stage-outcome cache: short-circuit when input is unchanged ---
-        from ._stage_cache import _check, _update, review_input_hash
+        from ._stage_cache import _check, review_input_hash
 
         input_hash = review_input_hash(ws, diff)
         cached = _check(ws, ReviewStage.name, input_hash)
@@ -790,8 +806,7 @@ class ReviewStage(Stage):
         if verdict.verdict == "APPROVE":
             ctx.service.set_review_rounds(ticket.id, 0)
             outcome = Outcome(State.DOCUMENTING, "review approved")
-            if input_hash:
-                _update(ws, ReviewStage.name, input_hash, outcome)
+            _maybe_cache(ws, input_hash, outcome)
             return outcome
         elif verdict.verdict == "REQUEST_CHANGES":
             rounds = ticket.review_rounds + 1
@@ -809,8 +824,7 @@ class ReviewStage(Stage):
                     State.DOCUMENTING,
                     f"review rounds exhausted ({rounds}/{s.review_max_rounds})",
                 )
-                if input_hash:
-                    _update(ws, ReviewStage.name, input_hash, outcome)
+                _maybe_cache(ws, input_hash, outcome)
                 return outcome
             # --- convergence detection: repeated findings fingerprint ---
             # If the structured review asks are IDENTICAL to the previous
@@ -847,8 +861,7 @@ class ReviewStage(Stage):
                     State.BLOCKED,
                     "convergence: repeated review findings — implement stuck",
                 )
-                if input_hash:
-                    _update(ws, ReviewStage.name, input_hash, outcome)
+                _maybe_cache(ws, input_hash, outcome)
                 return outcome
             fp_path.parent.mkdir(parents=True, exist_ok=True)
             fp_path.write_text(fingerprint, encoding="utf-8")
@@ -941,8 +954,7 @@ class ReviewStage(Stage):
                     )
                 ctx.service.add_comment(ticket.id, body, author="review")
                 outcome = Outcome(State.READY, verdict.comments)
-                if input_hash:
-                    _update(ws, ReviewStage.name, input_hash, outcome)
+                _maybe_cache(ws, input_hash, outcome)
                 return outcome
 
             if still_out_of_scope:
@@ -956,8 +968,7 @@ class ReviewStage(Stage):
                     f"approved; {len(still_out_of_scope)} out-of-scope "
                     "ask(s) spawned as follow-ups",
                 )
-                if input_hash:
-                    _update(ws, ReviewStage.name, input_hash, outcome)
+                _maybe_cache(ws, input_hash, outcome)
                 return outcome
 
             if already_addressed:
@@ -970,8 +981,7 @@ class ReviewStage(Stage):
                     f"approved; {len(already_addressed)} review gap(s) "
                     "already addressed in the implementer's commits",
                 )
-                if input_hash:
-                    _update(ws, ReviewStage.name, input_hash, outcome)
+                _maybe_cache(ws, input_hash, outcome)
                 return outcome
 
             # REQUEST_CHANGES with no actionable asks — historical behaviour:
@@ -980,8 +990,7 @@ class ReviewStage(Stage):
                 ticket.id, _sanitize_comments(verdict.comments), author="review"
             )
             outcome = Outcome(State.READY, verdict.comments)
-            if input_hash:
-                _update(ws, ReviewStage.name, input_hash, outcome)
+            _maybe_cache(ws, input_hash, outcome)
             return outcome
         else:  # NEEDS_DISCUSSION
             # A genuine human-decision verdict (e.g. "AC5 vs the 13
@@ -1005,6 +1014,5 @@ class ReviewStage(Stage):
                 State.AWAITING_USER_REPLY,
                 verdict.comments,
             )
-            if input_hash:
-                _update(ws, ReviewStage.name, input_hash, outcome)
+            _maybe_cache(ws, input_hash, outcome)
             return outcome

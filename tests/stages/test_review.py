@@ -1703,7 +1703,6 @@ def test_review_cache_hit_skips_agent(ctx_factory, monkeypatch):
     # Change the ticket body (simulates spec update).
     ws = ctx.service.workspace(t)
     ws.write_description("Add feature.txt\n\nUpdated spec with new details.")
-    ctx.service.set_content_hash(t.id, ws.content_hash())
 
     # Third run with changed spec: cache miss, agent IS called.
     out3 = ReviewStage().run(t, ctx)
