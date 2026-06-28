@@ -358,15 +358,6 @@ class PollLoopsMixin(_WorkerBase):
             await self._fire_periodic_pass(label, runner_fn, repo_config)
             await asyncio.sleep(interval)
 
-    def _maintenance_enabled_for(self, repo_config, name: str) -> bool:
-        """Whether a non-LLM maintenance loop (langfuse_cleanup) runs for
-        *repo_config*: enabled iff the repo ships a
-        ``.robotsix-mill/periodic/<name>.yaml`` presence file. (The legacy
-        ``RepoConfig.<name>_periodic`` flags were removed — presence is the
-        single source of truth.)
-        """
-        return self._has_periodic_presence(repo_config, name)
-
     def _has_periodic_presence(self, repo_config, label: str) -> bool:
         """True when *repo_config*'s clone ships ``.robotsix-mill/periodic/
         <label>.yaml`` — meaning the periodic supervisor owns that workflow
@@ -381,52 +372,39 @@ class PollLoopsMixin(_WorkerBase):
         return clone.joinpath(*PERIODIC_DIR, f"{name}.yaml").is_file()
 
     async def _langfuse_cleanup_poll_loop(self) -> None:
-        """Periodic Langfuse trace cleanup: keeps each repo's project at
-        most ``langfuse_cleanup_max_traces`` rows by deleting the oldest.
+        """Periodic Langfuse trace cleanup: keeps the shared workspace project
+        at most ``langfuse_cleanup_max_traces`` rows by deleting the oldest.
 
-        Multi-repo: iterates all registered repos whose
-        ``RepoConfig.langfuse_cleanup_periodic`` flag is True. Pure
-        HTTP, no LLM — the cap exists because the self-hosted Langfuse
-        instance degrades on large trace tables.
+        Global pass (non-per-repo): all managed repos share one Langfuse project
+        (credentials always come from global Secrets), so one pass per interval
+        is sufficient. Gated by ``settings.langfuse_cleanup_periodic`` via
+        ``_start_poll_loop_pass``. Pure HTTP, no LLM.
         """
         settings = self.ctx.settings
         interval = max(3600, settings.langfuse_cleanup_interval_seconds)
         initial = self._initial_delay("langfuse-cleanup", interval)
         await asyncio.sleep(initial)
         while True:
-            repos = get_repos_config()
-            repo_configs = list(repos.repos.values())
-            if not repo_configs:
-                repo_configs = [None]  # type: ignore[list-item]
-            else:
-                repo_configs = [
-                    rc
-                    for rc in repo_configs
-                    if self._maintenance_enabled_for(rc, "langfuse_cleanup")
-                ]
-            for repo_config in repo_configs:
-                label = repo_config.repo_id if repo_config else "default"
-                try:
-                    from ...runners.langfuse_cleanup_runner import (
-                        run_langfuse_cleanup_pass,
-                    )
+            try:
+                from ...runners.langfuse_cleanup_runner import (
+                    run_langfuse_cleanup_pass,
+                )
 
-                    result = await asyncio.to_thread(
-                        run_langfuse_cleanup_pass,
-                        settings=settings,
-                        repo_config=repo_config,
-                        max_traces=settings.langfuse_cleanup_max_traces,
+                result = await asyncio.to_thread(
+                    run_langfuse_cleanup_pass,
+                    settings=settings,
+                    repo_config=None,
+                    max_traces=settings.langfuse_cleanup_max_traces,
+                )
+                if result.traces_deleted > 0:
+                    log.info(
+                        "langfuse-cleanup: deleted %d of %d traces (cap %d)",
+                        result.traces_deleted,
+                        result.traces_before,
+                        settings.langfuse_cleanup_max_traces,
                     )
-                    if result.traces_deleted > 0:
-                        log.info(
-                            "langfuse-cleanup: %s — deleted %d of %d traces (cap %d)",
-                            label,
-                            result.traces_deleted,
-                            result.traces_before,
-                            settings.langfuse_cleanup_max_traces,
-                        )
-                except Exception:  # noqa: BLE001 — periodic sweep must not die
-                    log.exception("langfuse-cleanup poll failed for %s", label)
+            except Exception:  # noqa: BLE001 — periodic sweep must not die
+                log.exception("langfuse-cleanup poll failed")
             await asyncio.sleep(interval)
 
     async def _timeout_escalation_poll_loop(self) -> None:
