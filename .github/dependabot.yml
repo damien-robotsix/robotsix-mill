@@ -1,10 +1,12 @@
-# Dependency graph submission and version updates are handled by Renovate;
-# the native Dependabot "uv" graph-submission job has been failing
-# repeatedly (see tickets 20260626T132643Z through 20260626T213027Z) due
-# to Dependabot's internal infrastructure not reliably supporting Python
-# 3.14 lockfiles with git dependencies.  All three ecosystems below use
-# open-pull-requests-limit: 0 to disable Dependabot processing entirely
-# (no version-update PRs and no graph submission).
+# Dependency graph submission and version updates are handled by Renovate.
+# The native Dependabot "uv" graph-submission job ("Configured Graph
+# Update: uv in /") fails repeatedly because Dependabot's infrastructure
+# does not reliably support Python 3.14 lockfiles with git dependencies.
+# open-pull-requests-limit: 0 only suppresses version-update PRs — it does
+# NOT stop the graph-submission check — so the "uv" ecosystem is removed
+# entirely below (the only way to silence that failing check). The
+# remaining github-actions/docker ecosystems keep limit 0 (no PRs, and
+# their graph submissions do not fail).
 version: 2
 updates:
   - package-ecosystem: "github-actions"
@@ -17,15 +19,6 @@ updates:
     open-pull-requests-limit: 0
 
   - package-ecosystem: "docker"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "09:00"
-      timezone: "Etc/UTC"
-    open-pull-requests-limit: 0
-
-  - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"
