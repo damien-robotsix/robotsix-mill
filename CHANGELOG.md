@@ -30,7 +30,9 @@
   push when the root cause is an ops-only blocker (e.g. a missing repository
   secret).  The forge ``list_workflow_runs`` dict now includes a ``path`` key
   (the workflow file path, e.g. ``.github/workflows/release-please.yml``).
-
+- **docs**: document `MILL_AUDIT_REQUEST_LIMIT`, `MILL_TEST_GAP_REQUEST_LIMIT`,
+  `MILL_TEST_GAP_MAX_TOOL_CALLS`, and `MILL_TEST_GAP_MAX_ERRORS` env vars in
+  `configuration.md` under new `#### audit` and `#### test_gap` subsections.
 - **agents**: add `triage_boilerplate` periodic agent (YAML definition +
   Python runner module) to identify recurring triage patterns and propose
   boilerplate response templates. Follows the standard periodic-agent
