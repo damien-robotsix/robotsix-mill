@@ -273,12 +273,40 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
                     exc_info=True,
                 )
 
+        # Detect fall-through: ctx.repo_config is for a different board
+        if (
+            repo_config is ctx.repo_config  # loop found no match
+            and ticket.board_id  # ticket has a board
+            and getattr(ctx.repo_config, "board_id", None) != ticket.board_id
+        ):
+            msg = (
+                f"{ticket.id}: no RepoConfig found with board_id={ticket.board_id!r}; "
+                f"cannot resolve clone target — check repos.yaml. "
+                f"Falling back would clone {getattr(ctx.repo_config, 'board_id', '?')!r} instead."
+            )
+            log.warning("%s", msg)
+            ctx.service.add_comment(ticket.id, f"[BLOCKED] {msg}")
+            return Outcome(State.BLOCKED, msg)
+
         s = ctx.settings
         remote_url = _facade._resolve_remote_url(s, repo_config)
         if not remote_url:
             return None
 
-        cand = ws.dir / "repo"
+        # Derive clone target from the authoritative (re-resolved) board_id,
+        # never from the pre-computed ``ws`` parameter (which may be stale
+        # when the ticket's board_id changed between workspace creation and
+        # clone — e.g. after a mill→chat migration).
+        effective_board = (
+            getattr(repo_config, "board_id", None)
+            or ticket.board_id
+            or ctx.service.board_id
+        )
+        cand = ctx.settings.workspaces_dir_for(effective_board) / ticket.id / "repo"
+        # Ensure parent workspace directory exists — in the post-migration
+        # case it targets a different board than the pre-computed ``ws``,
+        # so the directory may not have been created yet.
+        cand.parent.mkdir(parents=True, exist_ok=True)
         if (cand / ".git").exists():
             return cand  # idempotent: reuse an existing clone
 
