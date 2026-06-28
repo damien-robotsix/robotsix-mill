@@ -634,7 +634,7 @@ def test_self_dependency_rejected_deterministic(service, monkeypatch):
     # Freeze the timestamp and token to get a predictable ID.
     fake_now = dt.datetime(2025, 1, 1, 0, 0, 0, tzinfo=dt.timezone.utc)
     monkeypatch.setattr(
-        "robotsix_mill.core.service._lifecycle.datetime",
+        "robotsix_mill.core.service._create_mixin.datetime",
         type(
             "m",
             (),
@@ -645,7 +645,7 @@ def test_self_dependency_rejected_deterministic(service, monkeypatch):
         )(),
     )
     monkeypatch.setattr(
-        "robotsix_mill.core.service._lifecycle.token_hex",
+        "robotsix_mill.core.service._create_mixin.token_hex",
         lambda n: "abcd1234",
     )
     # The ID will be: 20250101T000000Z-self-dep-test-abcd1234

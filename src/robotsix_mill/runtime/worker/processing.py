@@ -10,7 +10,7 @@ from ...stages import Outcome, StageContext, get_stage
 from ...core.states import STAGE_FOR_STATE, State
 from ...core.models import Ticket, TicketKind
 from ...core.service._helpers import TransitionError
-from ...core.service._lifecycle import _TERMINAL_STATES
+from ...core.service._transition_mixin import _TERMINAL_STATES
 from ...notify import send_notification, _TRIGGER_STATES
 from .. import tracing
 from ..tracing import langfuse_trace_url

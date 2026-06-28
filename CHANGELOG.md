@@ -5,6 +5,11 @@
   alert ingest, matching the existing `_poll_one_repo_ci` pattern.
 - **dev**: add `actionlint` as a pre-commit hook for GitHub Actions workflow
   linting, matching the v1.7.12 version used in CI.
+- **core/service**: split `_lifecycle.py` (1442 lines) into five
+  per-domain-action mixin modules — `_create_mixin.py`,
+  `_transition_mixin.py`, `_migrate_mixin.py`, `_delete_mixin.py`,
+  `_maintenance_mixin.py` — each under ~400 lines.  The assembled
+  `TicketService` public API is unchanged.
 - **docs**: fix `sandbox.image` documented default in `configuration.md`
   to match the YAML default (`robotsix/mill-sandbox:latest` instead of
   `python:3.14-slim`).

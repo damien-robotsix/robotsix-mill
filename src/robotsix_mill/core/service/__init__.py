@@ -7,9 +7,12 @@ from its coroutine (never from the stage threadpool).
 
 The implementation is split across responsibility mixins for navigability
 (this package was previously a single ``service.py`` module): read/query
-access (:mod:`._queries`), lifecycle/state mutation
-(:mod:`._lifecycle`), single-column metadata setters (:mod:`._metadata`),
-and comment/thread handling (:mod:`._comments`). The module-level helpers and
+access (:mod:`._queries`), ticket creation (:mod:`._create_mixin`),
+state transitions (:mod:`._transition_mixin`), cross-board migration
+(:mod:`._migrate_mixin`), delete/redraft (:mod:`._delete_mixin`),
+DB maintenance (:mod:`._maintenance_mixin`), single-column metadata
+setters (:mod:`._metadata`), and comment/thread handling
+(:mod:`._comments`). The module-level helpers and
 :class:`TransitionError` live in :mod:`._helpers`. The concrete
 :class:`TicketService` is assembled here by multiple inheritance; the
 public import path ``robotsix_mill.core.service`` is unchanged.
@@ -24,6 +27,8 @@ from ..models import Ticket
 from ..states import State
 from ..workspace import Workspace
 from ._comments import _CommentMixin
+from ._create_mixin import _CreateMixin
+from ._delete_mixin import _DeleteMixin
 from ._helpers import TransitionError
 from ._helpers import _event_hash as _event_hash
 from ._helpers import _make_event as _make_event
@@ -31,14 +36,25 @@ from ._helpers import _parse_depends_on_str as _parse_depends_on_str
 from ._helpers import _parse_labels as _parse_labels
 from ._helpers import _prev_hash_for as _prev_hash_for
 from ._helpers import _slug as _slug
-from ._lifecycle import _LifecycleMixin
+from ._maintenance_mixin import _MaintenanceMixin
 from ._metadata import _MetadataMixin
+from ._migrate_mixin import _MigrateMixin
 from ._queries import _QueryMixin
+from ._transition_mixin import _TransitionMixin
 
 __all__ = ["TicketService", "TransitionError"]
 
 
-class TicketService(_QueryMixin, _LifecycleMixin, _MetadataMixin, _CommentMixin):
+class TicketService(
+    _CreateMixin,
+    _TransitionMixin,
+    _MigrateMixin,
+    _DeleteMixin,
+    _MaintenanceMixin,
+    _QueryMixin,
+    _MetadataMixin,
+    _CommentMixin,
+):
     """Manage the ticket lifecycle over per-repo SQLite databases.
 
     Central service for creating tickets, moving them through the state
