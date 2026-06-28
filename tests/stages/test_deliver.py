@@ -1251,6 +1251,7 @@ def test_regen_uv_lock_warn_and_proceed_on_failure(tmp_path, monkeypatch, caplog
     assert len(commit_calls) == 0
     assert any("uv lock failed" in record.message for record in caplog.records)
 
+
 # --- merge-guard loop detection (fingerprint + counter) -----------------
 
 

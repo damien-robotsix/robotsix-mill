@@ -520,7 +520,7 @@ class DeliverStage(Stage):
                     try:
                         stored_fp = fp_path.read_text(encoding="utf-8").strip()
                     except FileNotFoundError:
-                        pass
+                        pass  # first cycle — no fingerprint stored yet
 
                     if current_fp == stored_fp and stored_fp:
                         # Same block as last cycle — increment counter.
