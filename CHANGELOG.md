@@ -5,6 +5,10 @@
   `python:3.14-slim`).
 - **docs**: add `core.board_list_cache_ttl_seconds` to configuration
   reference table (Worker pool & retry section).
+- **docs**: add six missing request-limit fields (`triage_requests`,
+  `already_done_requests`, `dedup_max_candidates`, `coordinator_max_tool_calls`,
+  `max_refine_explore_calls`, `max_refine_read_file_calls`) to the Request limits
+  table in `configuration.md`.
 
 - **docs**: document the 4 extra `MILL_SURVEY_*` env vars (request limit,
   web-fetch max calls/bytes, web-search max calls) in the periodic agents
