@@ -224,9 +224,9 @@ class _CreateMixin(_ServiceBase):
         *ticket_id* (those with ``closed_at IS NULL``)."""
         stmt = select(Comment).where(
             Comment.ticket_id == ticket_id,
-            Comment.parent_id == None,  # noqa: E711 (SQLAlchemy IS NULL)
+            Comment.parent_id.is_(None),
             Comment.body.startswith(ASK_USER_MARKER),
-            Comment.closed_at == None,  # noqa: E711
+            Comment.closed_at.is_(None),
         )
         return list(session.exec(stmt).all())
 

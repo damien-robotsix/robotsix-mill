@@ -31,17 +31,22 @@ class _ServiceBase:
 
     if TYPE_CHECKING:
 
-        def workspace(self, ticket: Ticket) -> Workspace: ...
+        def workspace(self, ticket: Ticket) -> Workspace:
+            pass
 
-        def get(self, ticket_id: str) -> Ticket | None: ...
+        def get(self, ticket_id: str) -> Ticket | None:
+            pass
 
-        def _board_for(self, ticket_id: str) -> str: ...
+        def _board_for(self, ticket_id: str) -> str:
+            pass
 
-        def _all_descendants(self, ticket_id: str) -> list[Ticket]: ...
+        def _all_descendants(self, ticket_id: str) -> list[Ticket]:
+            pass
 
         def transition(
             self, ticket_id: str, dst: State, note: str | None = ...
-        ) -> Ticket: ...
+        ) -> Ticket:
+            pass
 
         def add_comment(
             self,
@@ -49,19 +54,26 @@ class _ServiceBase:
             body: str,
             author: str = ...,
             parent_id: int | None = ...,
-        ) -> Comment: ...
+        ) -> Comment:
+            pass
 
-        def add_history_note(self, ticket_id: str, note: str) -> TicketEvent: ...
+        def add_history_note(self, ticket_id: str, note: str) -> TicketEvent:
+            pass
 
-        def set_labels(self, ticket_id: str, labels: list[str]) -> Ticket: ...
+        def set_labels(self, ticket_id: str, labels: list[str]) -> Ticket:
+            pass
 
         # Cross-mixin calls introduced by the lifecycle split.
         def _has_open_ask_user_threads(
             self, ticket_id: str, session: object
-        ) -> list[Comment]: ...
+        ) -> list[Comment]:
+            pass
 
-        def _maybe_purge_archived(self) -> None: ...
+        def _maybe_purge_archived(self) -> None:
+            pass
 
-        def _has_active_child(self, ticket_id: str) -> bool: ...
+        def _has_active_child(self, ticket_id: str) -> bool:
+            pass
 
-        def delete(self, ticket_id: str) -> bool: ...
+        def delete(self, ticket_id: str) -> bool:
+            pass

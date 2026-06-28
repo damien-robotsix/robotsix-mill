@@ -281,6 +281,9 @@ class _MigrateMixin(_ServiceBase):
                 known[rid] = rc.board_id
                 known[rc.board_id] = rc.board_id
         except Exception:
+            # get_repos_config() reads the repo registry YAML; if it is
+            # unavailable or malformed we continue with only the "meta"
+            # board known — migrate will catch unknown targets later.
             pass
         dst_board = known.get(target_board)
         if dst_board is None:
@@ -428,7 +431,10 @@ class _MigrateMixin(_ServiceBase):
                 s.delete(src_ticket)
             s.commit()
 
-        log.info("migrate: %s %s -> %s", ticket_id, src_board, dst_board)
+        # ticket_id has been validated by DB lookups above; guard log
+        # output against accidental newline injection anyway.
+        _safe_tid = ticket_id.replace("\n", "\\n").replace("\r", "\\r")
+        log.info("migrate: %s %s -> %s", _safe_tid, src_board, dst_board)
         migrated = self.get(ticket_id)
         if migrated is None:  # pragma: no cover - defensive
             raise RuntimeError(f"migrate: {ticket_id} vanished during migration")
