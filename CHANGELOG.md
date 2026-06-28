@@ -10,6 +10,11 @@
   `_transition_mixin.py`, `_migrate_mixin.py`, `_delete_mixin.py`,
   `_maintenance_mixin.py` — each under ~400 lines.  The assembled
   `TicketService` public API is unchanged.
+- **agents**: add `triage_boilerplate` periodic agent that scans
+  `src/robotsix_mill/stages/refine/_triage.py` for recurring boilerplate
+  patterns (the write_text+write_file_map+resolved_outcome triple and the
+  _PATH_RE.findall+conditional write_file_map block) and files a draft
+  ticket when either pattern exceeds 3 distinct instances.
 - **docs**: fix `sandbox.image` documented default in `configuration.md`
   to match the YAML default (`robotsix/mill-sandbox:latest` instead of
   `python:3.14-slim`).
