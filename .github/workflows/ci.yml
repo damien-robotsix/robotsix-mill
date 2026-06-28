@@ -13,7 +13,21 @@ permissions:
   contents: read
 
 jobs:
+  # Self-heal a stale uv.lock on the PR before any checks run. If the lock
+  # was out of date this job pushes the corrected lock and fails as
+  # superseded; the push re-triggers CI on the fixed commit.
+  lock-sync:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/lock-sync.yml
+    with:
+      ecosystem: "uv"
+      uv-version: "0.8.15"
+    secrets:
+      DEPS_BUMP_TOKEN: ${{ secrets.DEPS_BUMP_TOKEN }}
+
   ci:
+    needs: lock-sync
     permissions:
       contents: read
       security-events: write
@@ -32,6 +46,7 @@ jobs:
       mypy-advisory: true
 
   mill-specific:
+    needs: lock-sync
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4

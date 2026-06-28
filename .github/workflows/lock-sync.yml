@@ -1,0 +1,127 @@
+name: Lock sync
+
+# Self-healing lockfile gate. Runs BEFORE the rest of CI (callers wire the
+# CI jobs with `needs: lock-sync`). On a pull request it regenerates the
+# lockfile; if the committed lock was stale it commits the corrected lock
+# back to the PR branch and fails this run as *superseded* — the push (made
+# with a PAT, which unlike GITHUB_TOKEN re-triggers workflows) starts a
+# fresh run that finds the lock already correct and proceeds to CI.
+#
+# This takes lockfile regeneration off agents/humans: a PR that changes
+# pyproject.toml / package.json no longer needs the author (or the mill's
+# sandbox, which has no registry egress) to run `uv lock` / `npm install`.
+
+on:
+  workflow_call:
+    inputs:
+      ecosystem:
+        description: 'Which lockfile to sync: "uv" or "npm".'
+        required: false
+        type: string
+        default: "uv"
+      uv-version:
+        description: uv version (ecosystem == uv).
+        required: false
+        type: string
+        default: "0.8.15"
+      node-version:
+        description: Node version (ecosystem == npm).
+        required: false
+        type: string
+        default: "20"
+    secrets:
+      DEPS_BUMP_TOKEN:
+        description: >-
+          PAT with contents:write on this repo. Required to auto-commit the
+          corrected lock AND to re-trigger CI on the new commit (a push made
+          with the default GITHUB_TOKEN does not start new workflow runs).
+          When absent, the job degrades to a read-only check that fails with
+          instructions instead of self-healing.
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  lock-sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout PR head branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          # Check out the PR's head *branch* (not the detached merge ref) so
+          # a corrected lock can be pushed straight back to it. Use the PAT
+          # when present so that push re-triggers CI; otherwise the default
+          # token (read-only verify path).
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.DEPS_BUMP_TOKEN || github.token }}
+          persist-credentials: true
+
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
+        if: ${{ github.event_name == 'pull_request' && inputs.ecosystem == 'uv' }}
+        with:
+          version: ${{ inputs.uv-version }}
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        if: ${{ github.event_name == 'pull_request' && inputs.ecosystem == 'npm' }}
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Regenerate lockfile
+        id: regen
+        # Only acts on pull_request events. Skips immediately when this
+        # commit is our own auto-sync (marker in the message) — that is the
+        # re-triggered run, where the lock is already correct and CI should
+        # just proceed.
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          ECOSYSTEM: ${{ inputs.ecosystem }}
+        run: |
+          if git log -1 --pretty=%B | grep -qF '[lock-sync]'; then
+            echo "Head commit is an auto-sync; lock already current."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$ECOSYSTEM" = "npm" ]; then
+            lockfile="package-lock.json"
+            npm install --package-lock-only --no-audit --no-fund
+          else
+            lockfile="uv.lock"
+            uv lock
+          fi
+          echo "lockfile=$lockfile" >> "$GITHUB_OUTPUT"
+          if git diff --quiet -- "$lockfile"; then
+            echo "$lockfile is up to date."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "$lockfile was stale and has been regenerated."
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit corrected lock and supersede this run
+        if: ${{ steps.regen.outputs.changed == 'true' }}
+        env:
+          LOCKFILE: ${{ steps.regen.outputs.lockfile }}
+          HAS_TOKEN: ${{ secrets.DEPS_BUMP_TOKEN != '' }}
+          SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          if [ "$HAS_TOKEN" != "true" ] || [ "$SAME_REPO" != "true" ]; then
+            echo "::error::${LOCKFILE} is out of date and cannot be auto-synced \
+            (no DEPS_BUMP_TOKEN, or PR is from a fork). Regenerate it locally \
+            and commit it."
+            git --no-pager diff -- "$LOCKFILE" | head -200
+            exit 1
+          fi
+          git config user.name "robotsix-bot"
+          git config user.email "noreply@robotsix.net"
+          git add "$LOCKFILE"
+          git commit -m "chore(deps): auto-sync ${LOCKFILE} [lock-sync]"
+          git push origin "HEAD:${HEAD_REF}"
+          echo "::notice::${LOCKFILE} was stale; pushed an auto-sync commit. \
+          This run is superseded by the CI run on the new commit."
+          # Fail so dependent CI jobs do not run against the stale lock; the
+          # pushed commit's fresh run carries the real verdict.
+          exit 1
