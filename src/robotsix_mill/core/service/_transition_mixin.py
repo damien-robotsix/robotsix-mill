@@ -137,9 +137,7 @@ def _verify_citations(note: str, repo_dir: Path | None) -> str:
     return note.rstrip() + "\n\n" + "\n".join(lines)
 
 
-def _check_changelog_duplicates(
-    repo_dir: Path | None, ticket_id: str
-) -> list[str]:
+def _check_changelog_duplicates(repo_dir: Path | None, ticket_id: str) -> list[str]:
     """Check *repo_dir*'s HEAD for duplicate towncrier fragments for
     *ticket_id*.  Returns a list of the duplicate fragment basenames
     (empty when there are 0 or 1 fragments — no problem).

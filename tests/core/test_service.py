@@ -1292,19 +1292,26 @@ def _setup_repo_with_towncrier(repo_dir, fragment_dir_name="changes"):
     _sp.run(["git", "-C", str(repo_dir), "init"], capture_output=True, text=True)
     _sp.run(
         ["git", "-C", str(repo_dir), "config", "user.email", "test@example.com"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     _sp.run(
         ["git", "-C", str(repo_dir), "config", "user.name", "Test"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
 
     pp = repo_dir / "pyproject.toml"
     pp.write_text(f'[tool.towncrier]\ndirectory = "{fragment_dir_name}"\n')
-    _sp.run(["git", "-C", str(repo_dir), "add", "pyproject.toml"], capture_output=True, text=True)
+    _sp.run(
+        ["git", "-C", str(repo_dir), "add", "pyproject.toml"],
+        capture_output=True,
+        text=True,
+    )
     _sp.run(
         ["git", "-C", str(repo_dir), "commit", "-m", "init with towncrier"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
 
 
@@ -1317,11 +1324,13 @@ def _add_fragment(repo_dir, fragment_dir_name, filename, content="fragment conte
     (frag_dir / filename).write_text(content)
     _sp.run(
         ["git", "-C", str(repo_dir), "add", f"{fragment_dir_name}/{filename}"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     _sp.run(
         ["git", "-C", str(repo_dir), "commit", "-m", f"add {filename}"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
 
 
@@ -1379,17 +1388,20 @@ def test_mark_done_allows_no_towncrier_config(service, tmp_path):
     _sp.run(["git", "-C", str(repo), "init"], capture_output=True, text=True)
     _sp.run(
         ["git", "-C", str(repo), "config", "user.email", "test@example.com"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     _sp.run(
         ["git", "-C", str(repo), "config", "user.name", "Test"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     (repo / "pyproject.toml").write_text('[project]\nname = "test"\n')
     _sp.run(["git", "-C", str(repo), "add", "."], capture_output=True, text=True)
     _sp.run(
         ["git", "-C", str(repo), "commit", "-m", "init"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     # Add a fragment anyway (no towncrier config → gate should skip).
     _add_fragment(repo, "changes", f"{t.id}.feature.md")
