@@ -189,6 +189,46 @@ class GitLabForge(Forge):
         except Exception as e:
             return {"merged": False, "reason": str(e)}
 
+    def close_pr(self, *, source_branch: str) -> bool:
+        """Close/decline the open MR for *source_branch* without merging.
+
+        Returns ``True`` on success, ``False`` when the MR is not found
+        or already closed.  Never raises.
+        """
+        try:
+            project_path = _parse_gitlab_project_path(self._remote_url)
+            mr = self._find_mr(project_path=project_path, source_branch=source_branch)
+            if mr is None:
+                return False
+            return self._close_mr(project_path, mr["iid"])
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "close_pr failed for branch %s", source_branch
+            )
+            return False
+
+    def post_pr_comment(self, *, source_branch: str, body: str) -> bool:
+        """Post a plain comment on the open MR for *source_branch*.
+
+        Returns ``True`` on success, ``False`` when the MR is not found.
+        Never raises.
+        """
+        try:
+            project_path = _parse_gitlab_project_path(self._remote_url)
+            mr = self._find_mr(project_path=project_path, source_branch=source_branch)
+            if mr is None:
+                return False
+            return self._post_mr_note(project_path, mr["iid"], body)
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "post_pr_comment failed for branch %s", source_branch
+            )
+            return False
+
     def update_branch(self, *, source_branch: str) -> dict:
         try:
             project_path = _parse_gitlab_project_path(self._remote_url)
@@ -833,6 +873,64 @@ class GitLabForge(Forge):
             }
         except Exception as e:
             return {"merged": False, "reason": str(e)}
+
+    def _close_mr(self, project_path: str, mr_iid: int) -> bool:
+        """PUT /projects/:id/merge_requests/:iid with state_event=close."""
+        import logging
+
+        logger = logging.getLogger(__name__)
+        try:
+            pid = self._resolve_project_id(project_path)
+            r = self._http.put(
+                f"/projects/{pid}/merge_requests/{mr_iid}",
+                json={"state_event": "close"},
+            )
+            if r.status_code == 200:
+                return True
+            logger.info(
+                "close_pr HTTP %s for %s MR !%d: %s",
+                r.status_code,
+                project_path,
+                mr_iid,
+                r.text[:200],
+            )
+            return False
+        except Exception:
+            logger.exception(
+                "close_pr failed for %s MR !%d",
+                project_path,
+                mr_iid,
+            )
+            return False
+
+    def _post_mr_note(self, project_path: str, mr_iid: int, body: str) -> bool:
+        """POST /projects/:id/merge_requests/:iid/notes with body."""
+        import logging
+
+        logger = logging.getLogger(__name__)
+        try:
+            pid = self._resolve_project_id(project_path)
+            r = self._http.post(
+                f"/projects/{pid}/merge_requests/{mr_iid}/notes",
+                json={"body": body},
+            )
+            if r.status_code == 201:
+                return True
+            logger.info(
+                "post_pr_comment HTTP %s for %s MR !%d: %s",
+                r.status_code,
+                project_path,
+                mr_iid,
+                r.text[:200],
+            )
+            return False
+        except Exception:
+            logger.exception(
+                "post_pr_comment failed for %s MR !%d",
+                project_path,
+                mr_iid,
+            )
+            return False
 
     def _rebase_mr(self, project_path: str, mr_iid: int) -> dict[str, Any]:
         """PUT /projects/:id/merge_requests/:iid/rebase to merge the target

@@ -169,6 +169,22 @@ class Forge(ABC):
         conflict, network error) — catch and return a failure dict."""
 
     @abstractmethod
+    def close_pr(self, *, source_branch: str) -> bool:
+        """Close/decline the open PR for *source_branch* without merging.
+
+        Returns ``True`` on success, ``False`` when the PR is not found
+        or already closed.  Never raises.
+        """
+
+    @abstractmethod
+    def post_pr_comment(self, *, source_branch: str, body: str) -> bool:
+        """Post a plain comment on the open PR for *source_branch*.
+
+        Returns ``True`` on success, ``False`` when the PR is not found.
+        Never raises.
+        """
+
+    @abstractmethod
     def list_pr_reviews(self, *, source_branch: str) -> list[dict]:
         """Return formal PR reviews (approve/request-changes/comment).
 

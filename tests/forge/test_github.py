@@ -73,13 +73,19 @@ def _make_response(status_code, json_data, text=""):
     return resp
 
 
-def _mock_httpx(monkeypatch, *, post_response=None, get_map=None):
+def _mock_httpx(monkeypatch, *, post_response=None, get_map=None, patch_response=None):
     """Replace httpx.Client with a controllable mock.
 
     *post_response*: returned for every POST call.
     *get_map*: dict mapping URL substrings → FakeResponse for GET calls.
+    *patch_response*: returned for every PATCH call.
     """
-    captured = {"post_payload": None, "post_url": None}
+    captured = {
+        "post_payload": None,
+        "post_url": None,
+        "patch_payload": None,
+        "patch_url": None,
+    }
 
     class MockClient:
         def __init__(self, **kw):
@@ -95,6 +101,11 @@ def _mock_httpx(monkeypatch, *, post_response=None, get_map=None):
             captured["post_payload"] = json
             captured["post_url"] = url
             return post_response or _make_response(500, {}, "error")
+
+        def patch(self, url, headers=None, json=None, **kwargs):
+            captured["patch_payload"] = json
+            captured["patch_url"] = url
+            return patch_response or _make_response(500, {}, "error")
 
         def get(self, url, headers=None, params=None, **kwargs):
             if get_map:
@@ -1055,6 +1066,159 @@ def test_merge_pr_not_found(tmp_path, monkeypatch):
     forge = _forge(tmp_path)
     result = forge.merge_pr(source_branch="feature/x")
     assert result == {"merged": False, "reason": "PR not found"}
+
+
+# ---------------------------------------------------------------------------
+# close_pr
+# ---------------------------------------------------------------------------
+
+
+def test_close_pr_success(tmp_path, monkeypatch):
+    """Mock returns 200 → True."""
+    list_resp = [{"number": 7}]
+    detail_resp = {
+        "number": 7,
+        "merged": False,
+        "state": "open",
+        "html_url": "http://pr/7",
+        "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    get_map = {
+        "repos/o/r/pulls/7": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, list_resp),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    monkeypatch.setattr(
+        forge,
+        "_close_pr",
+        lambda *, owner, repo, pull_number: True,
+    )
+    result = forge.close_pr(source_branch="feature/x")
+    assert result is True
+
+
+def test_close_pr_not_found(tmp_path, monkeypatch):
+    """_get_pr returns None → False, no HTTP call made."""
+    get_map = {"repos/o/r/pulls": _make_response(200, [])}
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.close_pr(source_branch="feature/x")
+    assert result is False
+
+
+def test_close_pr_already_closed(tmp_path, monkeypatch):
+    """Mock returns False (e.g. 422 already-closed) → False, no exception."""
+    list_resp = [{"number": 7}]
+    detail_resp = {
+        "number": 7,
+        "merged": False,
+        "state": "open",
+        "html_url": "http://pr/7",
+        "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    get_map = {
+        "repos/o/r/pulls/7": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, list_resp),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    monkeypatch.setattr(
+        forge,
+        "_close_pr",
+        lambda *, owner, repo, pull_number: False,
+    )
+    result = forge.close_pr(source_branch="feature/x")
+    assert result is False
+
+
+# ---------------------------------------------------------------------------
+# post_pr_comment
+# ---------------------------------------------------------------------------
+
+
+def test_post_pr_comment_success(tmp_path, monkeypatch):
+    """Mock returns 201 → True."""
+    list_resp = [{"number": 7}]
+    detail_resp = {
+        "number": 7,
+        "merged": False,
+        "state": "open",
+        "html_url": "http://pr/7",
+        "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    get_map = {
+        "repos/o/r/pulls/7": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, list_resp),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    monkeypatch.setattr(
+        forge,
+        "_post_pr_comment",
+        lambda *, owner, repo, pull_number, body: True,
+    )
+    result = forge.post_pr_comment(source_branch="feature/x", body="closing note")
+    assert result is True
+
+
+def test_post_pr_comment_not_found(tmp_path, monkeypatch):
+    """_get_pr returns None → False."""
+    get_map = {"repos/o/r/pulls": _make_response(200, [])}
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.post_pr_comment(source_branch="feature/x", body="closing note")
+    assert result is False
+
+
+def test_post_pr_comment_error(tmp_path, monkeypatch):
+    """Mock raises → False, no exception propagated."""
+    list_resp = [{"number": 7}]
+    detail_resp = {
+        "number": 7,
+        "merged": False,
+        "state": "open",
+        "html_url": "http://pr/7",
+        "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+
+    class ErrorClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            if "/pulls/7" in url:
+                return _make_response(200, detail_resp)
+            if "/pulls" in url:
+                return _make_response(200, list_resp)
+            return _make_response(404, [], "")
+
+        def post(self, url, headers=None, json=None, **kwargs):
+            raise ConnectionError("connection refused")
+
+        def patch(self, url, headers=None, json=None, **kwargs):
+            return _make_response(500, {}, "error")
+
+    monkeypatch.setattr(real_httpx, "Client", ErrorClient)
+
+    forge = _forge(tmp_path)
+    result = forge.post_pr_comment(source_branch="feature/x", body="closing note")
+    assert result is False
 
 
 # ---------------------------------------------------------------------------
