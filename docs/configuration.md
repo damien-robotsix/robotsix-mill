@@ -513,7 +513,7 @@ the `claude` CLI in the container). These knobs govern that path:
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `sandbox.image` | `MILL_SANDBOX_IMAGE` | `python:3.14-slim` | Docker image for disposable sandbox containers. Must contain the Python toolchain your `MILL_TEST_COMMAND` requires. `python:3.14-slim` is a minimal, widely-available base; customize this to a pre-built image that includes any additional tooling (e.g. formatters, linters) your test command needs. |
+| `sandbox.image` | `MILL_SANDBOX_IMAGE` | `robotsix/mill-sandbox:latest` | Docker image for disposable sandbox containers. Includes the `uv` binary and Python toolchain. Defaults to `robotsix/mill-sandbox:latest`; customize this to a pre-built image that includes any additional tooling (e.g. formatters, linters) your test command needs. |
 | `sandbox.memory` | `MILL_SANDBOX_MEMORY` | `2g` | Memory limit for sandbox containers |
 | `sandbox.pids_limit` | `MILL_SANDBOX_PIDS_LIMIT` | `512` | PID limit for sandbox containers |
 | `sandbox.readonly` | `MILL_SANDBOX_READONLY` | `true` | Mount sandbox rootfs read-only (except tmpfs `/tmp`) |
