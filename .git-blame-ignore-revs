@@ -1,0 +1,14 @@
+# mill: lint-debt sweep + advisory mypy gate to unbreak CI
+c0c770250b3c1f36392e6a012dbda7b4fe9f3a1e
+
+# mill: adopt llmio level 1/2/3 as the single transport+model source; remove the DeepSeek↔Claude toggle (#1571)
+148d867f25ecef93436b9303d18dbb73bf205349
+
+# mill: Move 21 `_runner.py` modules from package root into `src/robotsix_mill/runners/` subpackage (#800)
+f51c074340088aed6f5dda9e7ad0abf7dcad4276
+
+# mill: Enable flake8-bugbear (B) in ruff lint configuration (#1221)
+0b563cc0dd3511bc4a7bb9a2a418abcf461ab49e
+
+# mill: switch prompt section framing from XML tags to fenced blocks
+573d52a6f11dea9d9438bb1deac003f35a7b0738
