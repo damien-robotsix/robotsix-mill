@@ -536,7 +536,6 @@ src/robotsix_mill/runtime/worker/poll_loops.py:0: error: Function is missing a t
 src/robotsix_mill/runtime/worker/poll_loops.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/runtime/worker/poll_loops.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/runtime/worker/poll_loops.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
-src/robotsix_mill/runtime/worker/poll_loops.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/runtime/worker/poll_loops.py:0: error: Missing type arguments for generic type "tuple"  [type-arg]
 src/robotsix_mill/runtime/worker/periodic_passes.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/runtime/worker/periodic_passes.py:0: error: Function is missing a type annotation  [no-untyped-def]
