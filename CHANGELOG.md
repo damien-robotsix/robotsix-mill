@@ -35,6 +35,11 @@
 - **dev**: add `.git-blame-ignore-revs` listing the five largest bulk-format/restructure
   commits so `git blame` (and GitHub's blame UI) skip them and attribute lines to the
   last meaningful human-authored change.
+- **fix**: add loop detection to the deliver stage's merge guard so that
+  consecutive identical "brand-new top-level file" blocks escalate to a
+  human-intervention BLOCKED instead of burning cost on a deterministic
+  resume→block cycle.  Controlled by `deliver_max_identical_blocks` (default
+  2; set to 0 to disable).
 - **docs**: document five missing periodic-agent env vars (`MILL_STALE_BRANCH_MAX_AGE_DAYS`,
   `MILL_STALE_BRANCH_CLEANUP_PREFIX_ONLY`, `MILL_TIMEOUT_ESCALATION_THRESHOLD_SECONDS`,
   `MILL_DEPENDABOT_INGEST_MAX_DRAFTS_PER_PASS`, `MILL_MODULE_CURATOR_REQUEST_LIMIT`)

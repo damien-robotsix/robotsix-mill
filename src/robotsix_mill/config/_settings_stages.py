@@ -612,6 +612,15 @@ class _StagesSettings(BaseModel):
     # resolves.  Set to 0 to disable the check entirely.
     ci_fix_max_identical_failures: int = Field(default=2, ge=0)
 
+    # Number of consecutive identical merge-guard blocks before escalating
+    # to a stronger BLOCKED that requires human intervention.  When the
+    # deliver stage's meta-triage-fallback guard blocks with the same
+    # fingerprint this many consecutive times without progress (e.g. the
+    # same brand-new top-level file is detected each cycle), the stage
+    # escalates instead of burning cost on a deterministic resume→block
+    # loop.  Set to 0 to disable the check entirely.
+    deliver_max_identical_blocks: int = Field(default=2, ge=0)
+
     # How often (seconds) wait_for_ci polls the forge for the branch's CI
     # conclusion while a run is in progress.
     ci_fix_wait_poll_interval_s: float = Field(default=30.0, gt=0)
