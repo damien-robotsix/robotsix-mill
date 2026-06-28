@@ -795,6 +795,18 @@ and as environment variables:
 | `MILL_ENV_DOC_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between env-doc-sync passes |
 | `MILL_ENV_DOC_SYNC_MEMORY_PATH` | `None` | Override path for env-doc-sync memory; defaults to `<data_dir>/env_doc_sync_memory.md` |
 
+#### Stale branch cleanup, timeout escalation, dependabot ingest, module curator
+
+These four periodic agents each carry one or two extra fields beyond the generic periodic pattern (periodic, interval, memory path). The following env vars configure those agent-specific extras:
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `MILL_STALE_BRANCH_MAX_AGE_DAYS` | `30` | A branch is eligible for cleanup only if its last commit is older than this many days |
+| `MILL_STALE_BRANCH_CLEANUP_PREFIX_ONLY` | `true` | When `true`, only delete branches whose name starts with `branch_prefix` ("old mill" branches); when `false`, also reap any other stale branch ("stale dev") |
+| `MILL_TIMEOUT_ESCALATION_THRESHOLD_SECONDS` | `259200` | Tickets in `AWAITING_USER_REPLY` with `updated_at` older than this many seconds are escalated to `BLOCKED`; set ≤ 0 to disable escalation |
+| `MILL_DEPENDABOT_INGEST_MAX_DRAFTS_PER_PASS` | `5` | Maximum number of Dependabot drafts created per ingest pass (across all repos) |
+| `MILL_MODULE_CURATOR_REQUEST_LIMIT` | `120` | Per-call request budget for the module-curator agent |
+
 ### 13. Skills & language instructions
 
 | YAML path | Env var | Default | Description |
