@@ -21,6 +21,7 @@ from ..config import target_branch_for
 from ..config.repos import get_repos_config
 from ..core.models import Ticket
 from ..core.states import State
+from ..core.workspace import Workspace
 from ..forge.auth import github_token
 from ..forge.github import _parse_owner_repo
 from ..vcs import git_ops
@@ -483,7 +484,7 @@ def _build_prior_context(ticket, ctx, ws) -> str | None:
     return section("prior-context", "\n\n".join(parts))
 
 
-def _maybe_cache(ws, input_hash, outcome):
+def _maybe_cache(ws: Workspace, input_hash: str | None, outcome: Outcome) -> None:
     """Persist *outcome* to the stage-outcome cache, except for
     ``AWAITING_USER_REPLY`` outcomes.
 

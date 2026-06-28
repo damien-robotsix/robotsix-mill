@@ -12,6 +12,7 @@ import hashlib
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 from ..core.workspace import Workspace
 from .base import Outcome
@@ -25,18 +26,19 @@ def _cache_path(ws: Workspace) -> Path:
     return ws.artifacts_dir / _CACHE_FILENAME
 
 
-def _load(ws: Workspace) -> dict:
+def _load(ws: Workspace) -> dict[str, Any]:
     p = _cache_path(ws)
     if not p.exists():
         return {}
     try:
-        return json.loads(p.read_text(encoding="utf-8"))
+        data: dict[str, Any] = json.loads(p.read_text(encoding="utf-8"))
+        return data
     except Exception:
         log.debug("Failed to load stage cache, starting fresh", exc_info=True)
         return {}
 
 
-def _save(ws: Workspace, data: dict) -> None:
+def _save(ws: Workspace, data: dict[str, Any]) -> None:
     p = _cache_path(ws)
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
