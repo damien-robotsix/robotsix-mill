@@ -859,7 +859,7 @@ class PollLoopsMixin(_WorkerBase):
 
         # 3. List OPEN Dependabot alerts (best-effort; [] on any error).
         forge = get_forge(settings, repo_config=rc)
-        alerts = forge.list_dependabot_alerts()
+        alerts = await asyncio.to_thread(forge.list_dependabot_alerts)
 
         created = 0
         if alerts:
@@ -886,7 +886,8 @@ class PollLoopsMixin(_WorkerBase):
                 title = _dependabot_title(alert)
                 body = _dependabot_body(alert)
                 try:
-                    service.create(
+                    await asyncio.to_thread(
+                        service.create,
                         title=title,
                         description=body,
                         source=SourceKind.DEPENDABOT_ALERTS,

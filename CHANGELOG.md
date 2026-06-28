@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- **fix**: wrap synchronous forge and DB calls in `_poll_one_repo_dependabot`
+  with `asyncio.to_thread` to prevent event-loop blocking during Dependabot
+  alert ingest, matching the existing `_poll_one_repo_ci` pattern.
+
 - **docs**: fix `sandbox.image` documented default in `configuration.md`
   to match the YAML default (`robotsix/mill-sandbox:latest` instead of
   `python:3.14-slim`).
