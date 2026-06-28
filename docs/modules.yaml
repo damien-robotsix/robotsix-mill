@@ -785,4 +785,5 @@ modules:
       - CHANGELOG.md
       - .gitignore
       - .gitmodules
+      - .git-blame-ignore-revs
     dependencies: []

@@ -5,6 +5,9 @@
   or diffs, collapsing the tail of near-identical re-check passes that burn
   subscription headroom without producing new output.
 
+- **dev**: add `.git-blame-ignore-revs` listing the five largest bulk-format/restructure
+  commits so `git blame` (and GitHub's blame UI) skip them and attribute lines to the
+  last meaningful human-authored change.
 - **docs**: document five missing periodic-agent env vars (`MILL_STALE_BRANCH_MAX_AGE_DAYS`,
   `MILL_STALE_BRANCH_CLEANUP_PREFIX_ONLY`, `MILL_TIMEOUT_ESCALATION_THRESHOLD_SECONDS`,
   `MILL_DEPENDABOT_INGEST_MAX_DRAFTS_PER_PASS`, `MILL_MODULE_CURATOR_REQUEST_LIMIT`)

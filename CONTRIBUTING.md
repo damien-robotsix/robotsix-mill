@@ -25,6 +25,13 @@ Install pre-commit hooks (Ruff, mypy, Bandit):
 .venv/bin/pre-commit install
 ```
 
+Also opt into `.git-blame-ignore-revs` locally so `git blame` skips
+bulk-format/restructure commits:
+
+```bash
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
+
 ### Dependencies
 
 `uv.lock` is **committed** and is the source of truth for installs:
