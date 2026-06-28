@@ -1690,6 +1690,7 @@ def test_list_workflow_runs_maps_pipelines(tmp_path, monkeypatch):
             "conclusion": "success",
             "html_url": "http://gl/pipelines/100",
             "created_at": "2026-03-03T00:00:00Z",
+            "path": "",
         },
         {
             "id": 101,
@@ -1699,6 +1700,7 @@ def test_list_workflow_runs_maps_pipelines(tmp_path, monkeypatch):
             "conclusion": "failure",
             "html_url": "http://gl/pipelines/101",
             "created_at": "2026-03-04T00:00:00Z",
+            "path": "",
         },
     ]
 
@@ -1741,6 +1743,7 @@ def test_list_workflow_runs_canceled_skipped(tmp_path, monkeypatch):
             "conclusion": "cancelled",
             "html_url": "http://gl/pipelines/200",
             "created_at": "2026-03-05T00:00:00Z",
+            "path": "",
         },
         {
             "id": 201,
@@ -1750,6 +1753,7 @@ def test_list_workflow_runs_canceled_skipped(tmp_path, monkeypatch):
             "conclusion": "skipped",
             "html_url": "http://gl/pipelines/201",
             "created_at": "2026-03-06T00:00:00Z",
+            "path": "",
         },
     ]
 

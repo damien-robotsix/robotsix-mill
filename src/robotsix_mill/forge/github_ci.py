@@ -410,6 +410,7 @@ class GitHubForgeCIMixin:
                 "created_at": run.get("created_at", ""),
                 "event": run.get("event", ""),
                 "head_branch": run.get("head_branch"),
+                "path": run.get("path", ""),
             }
             for run in raw
         ]
