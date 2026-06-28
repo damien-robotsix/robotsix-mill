@@ -52,6 +52,7 @@ EnvDocSyncResult
 StateSyncResult
 SurveyResult
 TestGapResult
+TriageBoilerplateResult
 model_config
 chunk_size
 max_chunks
@@ -73,6 +74,7 @@ _absorb_spec_markdown_typos
 output_context
 run_survey_agent
 run_test_gap_agent
+run_triage_boilerplate_agent
 run_state_sync_agent
 parameters
 web_fetch_budget
