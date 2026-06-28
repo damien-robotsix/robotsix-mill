@@ -18,6 +18,9 @@
   `mark_done()` also now rejects tickets in the `blocked` state (must be resumed
   first).  This closes a bypass where `mark_done` could force-close a blocked
   ticket without resolving the fragment conflict.
+- **stages**: route config/docs-only tickets (`.md`, `.yaml`, `.toml`, etc.) to the
+  cheaper level-1 (flash) model in `_select_agent_level`, avoiding overprovisioning on
+  trivial single-file changes.
 
 - **stages**: add per-stage outcome cache (`_stage_cache.py`) keyed on input hash
   to short-circuit repeated refine and review runs over unchanged ticket content

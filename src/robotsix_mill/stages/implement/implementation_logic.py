@@ -26,6 +26,7 @@ from ._shared import (
     _AgentRunOutcome,
     _ImplementContext,
     _SinglePassResult,
+    _is_config_only_change,
     _should_skip_test_gate,
     log,
 )
@@ -35,14 +36,28 @@ class ImplementationLogicMixin(_ImplementStageBase):
     """Agent-driven coding passes for :class:`ImplementStage`."""
 
     @classmethod
-    def _select_agent_level(cls, ic: _ImplementContext, settings) -> int | None:
-        """Pick the cheaper level-1 model on a no-change-needed re-check."""
-        # Gating heuristic: when the previous attempt already concluded
-        # ``no_change_needed`` (the summary or feedback carries that
-        # signal), the retry is a pure re-check — use the cheaper level-1
-        # (flash) model instead of the primary level-2 model.
+    def _select_agent_level(
+        cls,
+        ic: _ImplementContext,
+        settings,
+        repo_dir: Path,
+        target_branch: str,
+    ) -> int | None:
+        """Pick the cheaper level-1 model for simple tickets.
+
+        Returns ``1`` for:
+        * a no-change-needed re-check (the previous attempt already
+          concluded ``no_change_needed`` — pure re-check with the flash
+          model); or
+        * a config/docs-only ticket (every changed file is ``.md``,
+          ``.yaml``, ``.toml``, etc. — no code to test).
+
+        Returns ``None`` otherwise (keep the default level-2 model).
+        """
         prev = (ic.previous_attempt_summary or "") + (ic.feedback or "")
         if "no change needed" in prev.lower():
+            return 1
+        if _is_config_only_change(repo_dir, target_branch):
             return 1
         return None
 
@@ -651,7 +666,8 @@ class ImplementationLogicMixin(_ImplementStageBase):
             ticket,
             settings,
         )
-        agent_level = cls._select_agent_level(ic, settings)
+        target = target_branch_for(settings, ctx.repo_config)
+        agent_level = cls._select_agent_level(ic, settings, repo_dir, target)
 
         agent_result = cls._invoke_implement_agent(
             ctx,
