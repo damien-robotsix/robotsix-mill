@@ -685,54 +685,44 @@ class TestRunCoordinator:
         )
         prompt = self.captured["system_prompt"]
         assert prompt.startswith(definition.system_prompt)
+        # repo_dir is now in the user prompt (not system prompt) so the
+        # static system preamble stays cacheable across calls.
+        user_prompt = self.captured["user_prompt"]
         assert (
-            f"\n\nThe repository root (CWD for all run_command calls) is: {tmp_path}"
-            in prompt
+            f"The repository root (CWD for all run_command calls) is: {tmp_path}"
+            in user_prompt
         )
 
     # -- language_instructions -------------------------------------------
 
-    def test_language_instructions_injected_into_system_prompt(
+    def test_language_instructions_injected_into_user_prompt(
         self,
         settings,
         tmp_path,
     ):
         """When ``language_instructions`` is non-empty it is prepended
-        after ``## Language conventions`` heading."""
-        from robotsix_mill.agents.yaml_loader import load_agent_definition
-
-        definition = load_agent_definition(
-            Path(__file__).parent.parent.parent / "agent_definitions" / "implement.yaml"
-        )
+        in the user prompt under a ``## Language conventions`` heading."""
         snippet = "Use pytest. Never run uv sync."
         self._run(settings, tmp_path, language_instructions=snippet)
-        prompt: str = self.captured["system_prompt"]
-        assert prompt.startswith(definition.system_prompt)
-        assert "\n\n## Language conventions\n\n" + snippet in prompt
-        # The language conventions appear after the YAML preamble.
+        prompt: str = self.captured["user_prompt"]
+        assert "## Language conventions\n\n" + snippet in prompt
+        # The language conventions appear before the ticket-spec.
         conventions_pos = prompt.index("## Language conventions")
-        # The snippet text itself appears after the heading.
-        assert prompt.index(snippet) == conventions_pos + len(
-            "## Language conventions\n\n"
-        )
+        spec_pos = prompt.index("````ticket-spec")
+        assert conventions_pos < spec_pos
 
     def test_language_instructions_empty_unchanged(
         self,
         settings,
         tmp_path,
     ):
-        """When ``language_instructions`` is empty (default), the system
-        prompt is unchanged."""
-        from robotsix_mill.agents.yaml_loader import load_agent_definition
-
-        definition = load_agent_definition(
-            Path(__file__).parent.parent.parent / "agent_definitions" / "implement.yaml"
-        )
+        """When ``language_instructions`` is empty (default), the user
+        prompt does NOT contain a ``## Language conventions`` block."""
         self._run(settings, tmp_path, language_instructions="")
-        prompt = self.captured["system_prompt"]
-        assert prompt.startswith(definition.system_prompt)
+        prompt = self.captured["user_prompt"]
+        # repo_dir is still present.
         assert (
-            f"\n\nThe repository root (CWD for all run_command calls) is: {tmp_path}"
+            f"The repository root (CWD for all run_command calls) is: {tmp_path}"
             in prompt
         )
         # No language conventions block when language_instructions is empty.

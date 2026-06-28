@@ -63,14 +63,11 @@ def run_review_revision_agent(
 
     tools = build_fs_tools(Path(repo_dir), settings)
 
-    system_prompt = definition.system_prompt.format(repo_dir=repo_dir, branch=branch)
-
     agent = build_agent_from_definition(
         settings,
         definition,
         repo_dir=Path(repo_dir),  # confine SDK built-in edit tools to the clone
         tools=tools,
-        system_prompt=system_prompt,
     )
 
     user_prompt = (
