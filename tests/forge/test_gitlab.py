@@ -1072,6 +1072,140 @@ def test_merge_pr_payload_includes_squash_and_mwps(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# close_pr
+# ---------------------------------------------------------------------------
+
+
+def test_close_pr_success(tmp_path, monkeypatch):
+    """Mock returns 200 → True."""
+    project_json = {"id": 42}
+    mr = {
+        "iid": 7,
+        "state": "opened",
+        "web_url": "http://x",
+        "merge_status": "can_be_merged",
+        "sha": "abc",
+        "diff_refs": {"head_sha": "abc"},
+    }
+    get_map = {
+        "merge_requests": _make_response(200, [mr]),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    monkeypatch.setattr(forge, "_close_mr", lambda project_path, mr_iid: True)
+    result = forge.close_pr(source_branch="feature/x")
+    assert result is True
+
+
+def test_close_pr_not_found(tmp_path, monkeypatch):
+    """_find_mr returns None → False, no HTTP call made."""
+    project_json = {"id": 42}
+    get_map = {
+        "merge_requests": _make_response(200, []),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.close_pr(source_branch="feature/x")
+    assert result is False
+
+
+def test_close_pr_already_closed(tmp_path, monkeypatch):
+    """Mock returns False (e.g. 405/422 already-closed) → False, no exception."""
+    project_json = {"id": 42}
+    mr = {
+        "iid": 7,
+        "state": "opened",
+        "web_url": "http://x",
+        "merge_status": "can_be_merged",
+        "sha": "abc",
+        "diff_refs": {"head_sha": "abc"},
+    }
+    get_map = {
+        "merge_requests": _make_response(200, [mr]),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    monkeypatch.setattr(forge, "_close_mr", lambda project_path, mr_iid: False)
+    result = forge.close_pr(source_branch="feature/x")
+    assert result is False
+
+
+# ---------------------------------------------------------------------------
+# post_pr_comment
+# ---------------------------------------------------------------------------
+
+
+def test_post_pr_comment_success(tmp_path, monkeypatch):
+    """Mock returns 201 → True."""
+    project_json = {"id": 42}
+    mr = {
+        "iid": 7,
+        "state": "opened",
+        "web_url": "http://x",
+        "merge_status": "can_be_merged",
+        "sha": "abc",
+        "diff_refs": {"head_sha": "abc"},
+    }
+    get_map = {
+        "merge_requests": _make_response(200, [mr]),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    monkeypatch.setattr(forge, "_post_mr_note", lambda project_path, mr_iid, body: True)
+    result = forge.post_pr_comment(source_branch="feature/x", body="closing note")
+    assert result is True
+
+
+def test_post_pr_comment_not_found(tmp_path, monkeypatch):
+    """_find_mr returns None → False."""
+    project_json = {"id": 42}
+    get_map = {
+        "merge_requests": _make_response(200, []),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.post_pr_comment(source_branch="feature/x", body="closing note")
+    assert result is False
+
+
+def test_post_pr_comment_error(tmp_path, monkeypatch):
+    """Mock raises → False, no exception propagated."""
+    project_json = {"id": 42}
+    mr = {
+        "iid": 7,
+        "state": "opened",
+        "web_url": "http://x",
+        "merge_status": "can_be_merged",
+        "sha": "abc",
+        "diff_refs": {"head_sha": "abc"},
+    }
+    get_map = {
+        "merge_requests": _make_response(200, [mr]),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    monkeypatch.setattr(
+        forge,
+        "_post_mr_note",
+        lambda project_path, mr_iid, body: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    result = forge.post_pr_comment(source_branch="feature/x", body="closing note")
+    assert result is False
+
+
+# ---------------------------------------------------------------------------
 # _mr_changes
 # ---------------------------------------------------------------------------
 

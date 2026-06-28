@@ -1,5 +1,11 @@
 ## 0.0.0 (unreleased)
 
+- **forge**: add `close_pr()` and `post_pr_comment()` to the `Forge` ABC
+  with GitHub (PATCH pull state, POST issues comment) and GitLab
+  (PUT state_event=close, POST notes) implementations. Both return
+  ``True``/``False`` and never raise, enabling the upcoming orphaned-PR
+  cleanup periodic agent.
+
 - **agents**: add `triage_boilerplate` periodic agent (YAML definition +
   Python runner module) to identify recurring triage patterns and propose
   boilerplate response templates. Follows the standard periodic-agent

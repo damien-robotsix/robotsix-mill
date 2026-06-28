@@ -242,6 +242,39 @@ class GitHubForgePRMixin:
             pull_number=pr["number"],
         )
 
+    def close_pr(self, *, source_branch: str) -> bool:
+        """Close/decline the open PR for *source_branch* without merging.
+
+        Returns ``True`` on success, ``False`` when the PR is not found
+        or already closed.  Never raises.
+        """
+        owner, repo = self._owner_repo  # type: ignore[attr-defined]
+        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
+        if pr is None:
+            return False
+        return self._close_pr(
+            owner=owner,
+            repo=repo,
+            pull_number=pr["number"],
+        )
+
+    def post_pr_comment(self, *, source_branch: str, body: str) -> bool:
+        """Post a plain comment on the open PR for *source_branch*.
+
+        Returns ``True`` on success, ``False`` when the PR is not found.
+        Never raises.
+        """
+        owner, repo = self._owner_repo  # type: ignore[attr-defined]
+        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
+        if pr is None:
+            return False
+        return self._post_pr_comment(
+            owner=owner,
+            repo=repo,
+            pull_number=pr["number"],
+            body=body,
+        )
+
     def update_branch(self, *, source_branch: str) -> dict:
         """Update *source_branch*'s PR head with the latest base branch.
 
@@ -467,6 +500,77 @@ class GitHubForgePRMixin:
             }
         except Exception as e:
             return {"merged": False, "reason": str(e)}
+
+    def _close_pr(
+        self,
+        *,
+        owner: str,
+        repo: str,
+        pull_number: int,
+    ) -> bool:
+        import logging
+
+        logger = logging.getLogger(__name__)
+        try:
+            r = self._http.patch(  # type: ignore[attr-defined]
+                f"/repos/{owner}/{repo}/pulls/{pull_number}",
+                json={"state": "closed"},
+            )
+            if r.status_code == 200:
+                return True
+            logger.info(
+                "close_pr HTTP %s for %s/%s PR #%d: %s",
+                r.status_code,
+                owner,
+                repo,
+                pull_number,
+                r.text[:200],
+            )
+            return False
+        except Exception:
+            logger.exception(
+                "close_pr failed for %s/%s PR #%d",
+                owner,
+                repo,
+                pull_number,
+            )
+            return False
+
+    def _post_pr_comment(
+        self,
+        *,
+        owner: str,
+        repo: str,
+        pull_number: int,
+        body: str,
+    ) -> bool:
+        import logging
+
+        logger = logging.getLogger(__name__)
+        try:
+            r = self._http.post(  # type: ignore[attr-defined]
+                f"/repos/{owner}/{repo}/issues/{pull_number}/comments",
+                json={"body": body},
+            )
+            if r.status_code == 201:
+                return True
+            logger.info(
+                "post_pr_comment HTTP %s for %s/%s PR #%d: %s",
+                r.status_code,
+                owner,
+                repo,
+                pull_number,
+                r.text[:200],
+            )
+            return False
+        except Exception:
+            logger.exception(
+                "post_pr_comment failed for %s/%s PR #%d",
+                owner,
+                repo,
+                pull_number,
+            )
+            return False
 
     def _delete_branch(self, *, owner: str, repo: str, branch: str) -> bool:
         try:
