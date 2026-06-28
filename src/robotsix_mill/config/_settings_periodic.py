@@ -467,3 +467,23 @@ class _PeriodicSettings(BaseModel):
     # falls back to the single `diagnostic_target_repo_id` for backward
     # compatibility. Add/remove repos here — no code change required.
     diagnostic_monitored_repo_ids: list[str] = Field(default_factory=list)
+
+    # --- orphaned-PR check (deterministic per-repo stale-PR cleanup) ---
+    # Master switch for the orphaned-PR check pass. Defaults to False
+    # (opt-in) — closing PRs and filing tracking tickets are destructive
+    # actions.  Flip to True to enable the periodic pass.
+    orphaned_pr_check_periodic: bool = Field(default=False)
+    # Seconds between orphaned-PR check passes when
+    # MILL_ORPHANED_PR_CHECK_PERIODIC=true.  Minimum enforced at 3600 s
+    # (1 hour) in the worker loop.
+    orphaned_pr_check_interval_seconds: int = Field(default=86400)
+    # Minimum age (hours) of a ticket before its PR is considered for
+    # orphan classification.  Skips tickets younger than this to avoid
+    # racing the deliver stage.
+    orphaned_pr_min_age_hours: int = Field(default=4, ge=1)
+    # Maximum number of combined close+file actions per pass run.
+    # Findings beyond this cap are deferred to the next scheduled pass.
+    orphaned_pr_max_actions_per_pass: int = Field(default=5, ge=1)
+    # Dry-run mode: log intent only, make zero forge mutations.
+    # Default True for safety — flip to False to enable real actions.
+    orphaned_pr_dry_run: bool = Field(default=True)

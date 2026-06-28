@@ -535,6 +535,12 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.module_curator.interval_seconds": "module_curator_interval_seconds",
     "periodic.module_curator.memory_path": "module_curator_memory_path",
     "periodic.module_curator.request_limit": "module_curator_request_limit",
+    # -- periodic.orphaned_pr_check (deterministic per-repo stale-PR cleanup) --
+    "periodic.orphaned_pr_check.enabled": "orphaned_pr_check_periodic",
+    "periodic.orphaned_pr_check.interval_seconds": "orphaned_pr_check_interval_seconds",
+    "periodic.orphaned_pr_check.min_age_hours": "orphaned_pr_min_age_hours",
+    "periodic.orphaned_pr_check.max_actions_per_pass": "orphaned_pr_max_actions_per_pass",
+    "periodic.orphaned_pr_check.dry_run": "orphaned_pr_dry_run",
     # -- service --
     "service.data_dir": "data_dir",
     "service.default_repo_id": "default_repo_id",

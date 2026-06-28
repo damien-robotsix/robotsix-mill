@@ -436,6 +436,14 @@ periodic:
     memory_path: null               # defaults to <data_dir>/module_curator_memory.md
     request_limit: 120              # max model requests per curator pass
 
+  # -- orphaned_pr_check agent — detects and closes orphaned PRs ------------
+  orphaned_pr_check:
+    enabled: false                  # opt-in: enable periodic orphaned-PR check passes
+    interval_seconds: 86400         # seconds between passes (min 3600 enforced in worker)
+    min_age_hours: 4                # minimum ticket age before PR is considered orphaned
+    max_actions_per_pass: 5         # max combined close+file actions per pass
+    dry_run: true                   # log intent only, no forge mutations
+
   # -- CI monitor — enabled/interval are now per-repo fields in repos.yaml --
   #    ci_log_max_bytes stays here as a global operational cap.
   ci_monitor:

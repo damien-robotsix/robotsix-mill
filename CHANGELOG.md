@@ -5,6 +5,11 @@
   (PUT state_event=close, POST notes) implementations. Both return
   ``True``/``False`` and never raise, enabling the upcoming orphaned-PR
   cleanup periodic agent.
+- **periodic**: add orphaned-PR check pass (opt-in, `orphaned_pr_check_periodic`)
+  that lists open PRs per managed repo, classifies mill-authored ones as
+  orphaned when no active ticket drives them, and either auto-closes the PR
+  (with a comment) or files a tracking ticket.  Defaults to dry-run mode;
+  gated on `orphaned_pr_dry_run`, age, and per-pass action cap.
 - **docs**: fix 15 configuration-table rows that incorrectly showed `—`
   (YAML-only) in the "Env var" column.  All 15 fields derive valid
   `MILL_*` environment variables through Pydantic's `env_prefix="MILL_"`

@@ -192,6 +192,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         self._run_health_task: asyncio.Task | None = None
         self._diagnostic_task: asyncio.Task[None] | None = None
         self._stale_branch_task: asyncio.Task | None = None
+        self._orphaned_pr_check_task: asyncio.Task[None] | None = None
         self._db_maintenance_task: asyncio.Task | None = None
         self._sandbox_reaper_task: asyncio.Task[None] | None = None
         self._credit_balance_task: asyncio.Task[None] | None = None
@@ -263,6 +264,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             ("_run_health_task", "run-health"),
             ("_diagnostic_task", "diagnostic"),
             ("_stale_branch_task", "stale-branch-cleanup"),
+            ("_orphaned_pr_check_task", "orphaned-pr-check"),
             ("_db_maintenance_task", "db-maintenance"),
             ("_sandbox_reaper_task", "sandbox-reaper"),
             ("_credit_balance_task", "credit-balance"),
@@ -819,6 +821,13 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             "_stale_branch_task",
             log_msg="Periodic stale-branch cleanup enabled: interval %ds",
             log_args=(self.ctx.settings.stale_branch_cleanup_interval_seconds,),
+        )
+        self._start_poll_loop_pass(
+            "orphaned-pr-check",
+            self._orphaned_pr_check_loop,
+            "_orphaned_pr_check_task",
+            log_msg="Periodic orphaned-PR check enabled: interval %ds",
+            log_args=(self.ctx.settings.orphaned_pr_check_interval_seconds,),
         )
         self._start_poll_loop_pass(
             "db-maintenance",
