@@ -4,6 +4,9 @@
   `MILL_STALE_BRANCH_CLEANUP_PREFIX_ONLY`, `MILL_TIMEOUT_ESCALATION_THRESHOLD_SECONDS`,
   `MILL_DEPENDABOT_INGEST_MAX_DRAFTS_PER_PASS`, `MILL_MODULE_CURATOR_REQUEST_LIMIT`)
   in the Periodic agents section of `configuration.md`.
+- **docs**: restore 15 `MILL_*` env-var entries in `docs/configuration.md` that
+  were incorrectly replaced with `—` in PR #1963; these env vars remain
+  functional via pydantic-settings' `env_prefix='MILL_'` mechanism.
 - **fix**: wrap synchronous forge and DB calls in `_poll_one_repo_dependabot`
   with `asyncio.to_thread` to prevent event-loop blocking during Dependabot
   alert ingest, matching the existing `_poll_one_repo_ci` pattern.

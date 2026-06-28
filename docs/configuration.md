@@ -386,17 +386,17 @@ the `claude` CLI in the container). These knobs govern that path:
 |-----------|---------|---------|-------------|
 | `core.limits.coordinator_requests` | `MILL_PER_PASS_REQUEST_BUDGET` | `500` | Per-pass request budget for the implement (coordinator) agent. Resets each pass; normal tickets fit in one pass. Hard upper bound 5000 |
 | `core.limits.subtask_request_limit` | — | `30` | Per-subtask request cap for `spawn_subtask` sub-agents delegated by the coordinator |
-| `core.limits.explore_requests` | — | `100` | Per-call request cap for the explore sub-agent |
+| `core.limits.explore_requests` | `MILL_EXPLORE_REQUEST_LIMIT` | `100` | Per-call request cap for the explore sub-agent |
 | `core.limits.explore_max_tokens` | — | `4096` | Output token cap for explore sub-agent responses |
 | `core.limits.parallel_explore_max` | — | `4` | Max concurrent scouts per `parallel_explore` fan-out |
-| `core.limits.consult_requests` | — | `15` | Per-call request cap for the domain-expert consultation sub-agent |
-| `core.limits.test_requests` | — | `30` | Per-call request cap for the test sub-agent |
-| `core.limits.web_research_requests` | — | `8` | Per-call request cap for the web-research sub-agent |
-| `core.limits.dedup_requests` | — | `6` | Per-call request cap for the dedup check |
-| `core.limits.obsolescence_requests` | — | `6` | Per-call request cap for the obsolescence gate |
-| `core.limits.scope_triage_requests` | — | `8` | Per-call request cap for the scope-triage agent |
+| `core.limits.consult_requests` | `MILL_CONSULT_REQUEST_LIMIT` | `15` | Per-call request cap for the domain-expert consultation sub-agent |
+| `core.limits.test_requests` | `MILL_TEST_REQUEST_LIMIT` | `30` | Per-call request cap for the test sub-agent |
+| `core.limits.web_research_requests` | `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `8` | Per-call request cap for the web-research sub-agent |
+| `core.limits.dedup_requests` | `MILL_DEDUP_REQUEST_LIMIT` | `6` | Per-call request cap for the dedup check |
+| `core.limits.obsolescence_requests` | `MILL_OBSOLESCENCE_REQUEST_LIMIT` | `6` | Per-call request cap for the obsolescence gate |
+| `core.limits.scope_triage_requests` | `MILL_SCOPE_TRIAGE_REQUEST_LIMIT` | `8` | Per-call request cap for the scope-triage agent |
 | `core.limits.scope_triage_max_files` | `MILL_SCOPE_TRIAGE_MAX_FILES` | `50` | Max out-of-scope text files before the scope-triage flood guard blocks (0 disables) |
-| `core.limits.refine_requests` | — | `80` | Per-call request cap for the refine agent |
+| `core.limits.refine_requests` | `MILL_REFINE_REQUEST_LIMIT` | `80` | Per-call request cap for the refine agent |
 | `core.limits.refine_requests_simple` | — | `40` | Per-call request cap for simple/sonnet refine runs (lower because explore tools are gated off) |
 | `core.limits.refine_max_tool_calls` | — | `120` | (YAML-only) Hard cap on total tool calls per refine trace (runaway-loop backstop) |
 | `core.limits.refine_max_errors` | — | `20` | (YAML-only) Max tool-call errors per refine trace before auto-termination |
@@ -404,27 +404,27 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.limits.refine_web_fetch_max_total_bytes` | — | `500000` | (YAML-only) Cumulative fetch-bytes ceiling across one refine trace; `0` disables |
 | `core.limits.refine_web_search_max_calls` | — | `5` | (YAML-only) Max `web_search` calls across one whole refine trace (cross-consult) |
 | `core.limits.maintenance_requests` | `MILL_MAINTENANCE_REQUEST_LIMIT` | `100` | Per-call request cap for the maintenance agent |
-| `core.limits.doc_requests` | — | `16` | Per-run request cap for the document agent |
-| `core.limits.doc_classifier_requests` | — | `3` | Per-call request cap for the doc-classifier gate |
+| `core.limits.doc_requests` | `MILL_DOC_REQUEST_LIMIT` | `16` | Per-run request cap for the document agent |
+| `core.limits.doc_classifier_requests` | `MILL_DOC_CLASSIFIER_REQUEST_LIMIT` | `3` | Per-call request cap for the doc-classifier gate |
 | `core.limits.triage_requests` | — | `8` | Per-call cap for the pre-refine triage agent (main call + tool calls). Distinct from `scope_triage_requests` (which caps the scope-triage agent) |
 | `core.limits.already_done_requests` | — | `8` | Per-call cap for the already-done verifier sub-agent (short-circuits when a prior no-change-needed memory entry matches the draft) |
 | `core.limits.dedup_max_candidates` | — | `8` | Maximum candidates passed to the dedup LLM after similarity pre-filtering. Caps token budget regardless of repo size |
 | `core.limits.coordinator_max_tool_calls` | — | `300` | Hard cap on total tool calls per implement (coordinator) trace — runaway-loop backstop above the request budget |
 | `core.limits.max_refine_explore_calls` | — | `4` | Hard cap on explore/parallel_explore sub-agent calls per refine run. 0 disables exploration entirely |
 | `core.limits.max_refine_read_file_calls` | — | `10` | Hard cap on read_file calls per refine/triage agent run. 0 disables the cap (unbounded reads) |
-| `core.limits.review_requests` | — | `80` | Per-run request cap for the review agent |
+| `core.limits.review_requests` | `MILL_REVIEW_REQUEST_LIMIT` | `80` | Per-run request cap for the review agent |
 
 ### 3. Worker pool & retry
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `core.limits.max_fix_iterations` | — | `8` | Max implement→test fix loop iterations before BLOCK |
+| `core.limits.max_fix_iterations` | `MILL_MAX_FIX_ITERATIONS` | `8` | Max implement→test fix loop iterations before BLOCK |
 | `core.limits.max_stuck_cycles` | `MILL_MAX_STUCK_CYCLES` | `3` | Re-entries to same stage without progress before BLOCK |
-| `core.limits.max_spend_usd_per_ticket` | — | `20.0` | Dollar cap per ticket (0.0 = disabled) |
+| `core.limits.max_spend_usd_per_ticket` | `MILL_MAX_SPEND_USD_PER_TICKET` | `20.0` | Dollar cap per ticket (0.0 = disabled) |
 | `core.limits.max_traces_per_ticket` | — | `15` | Trace-count circuit-breaker (0 = disabled) |
 | `core.limits.max_openrouter_marginal_usd_per_ticket` | — | `3.0` | OpenRouter marginal-spend breaker (0.0 = disabled) |
-| `core.limits.stage_timeout_seconds` | — | `2400` | Per-stage wall-clock timeout in seconds; stage that exceeds it is escalated to BLOCKED (≤ 0 disables) |
-| `core.limits.stage_timeout_overrides` | — | `{"refine": 900}` | Per-stage overrides as a JSON dict (e.g. `{"merge":0,"deliver":0}`); keys are stage names, values are seconds; 0 disables timeout for that stage. The built-in default caps the **refine** stage at 900 seconds — add `"refine": 0` to disable this cap, or override it with a different value. |
+| `core.limits.stage_timeout_seconds` | `MILL_STAGE_TIMEOUT_SECONDS` | `2400` | Per-stage wall-clock timeout in seconds; stage that exceeds it is escalated to BLOCKED (≤ 0 disables) |
+| `core.limits.stage_timeout_overrides` | `MILL_STAGE_TIMEOUT_OVERRIDES` | `{"refine": 900}` | Per-stage overrides as a JSON dict (e.g. `{"merge":0,"deliver":0}`); keys are stage names, values are seconds; 0 disables timeout for that stage. The built-in default caps the **refine** stage at 900 seconds — add `"refine": 0` to disable this cap, or override it with a different value. |
 | `core.limits.max_global_concurrency` | `MILL_MAX_GLOBAL_CONCURRENCY` | `12` | Host-level cap on total concurrently-running stages across ALL boards, applied on top of each board's own `max_concurrency`. Default 12 provides a genuine backstop without throttling normal operation |
 | `core.limits.transient_retries` | `MILL_TRANSIENT_RETRIES` | `4` | Max retries for transient LLM-call failures (429, 5xx, timeouts) |
 | `core.limits.transient_backoff_base` | `MILL_TRANSIENT_BACKOFF_BASE` | `2.0` | Base seconds for exponential backoff at LLM-call level (jittered) |
