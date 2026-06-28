@@ -3,6 +3,8 @@
 - **docs**: fix `sandbox.image` documented default in `configuration.md`
   to match the YAML default (`robotsix/mill-sandbox:latest` instead of
   `python:3.14-slim`).
+- **docs**: add `core.board_list_cache_ttl_seconds` to configuration
+  reference table (Worker pool & retry section).
 
 - **docs**: document the 4 extra `MILL_SURVEY_*` env vars (request limit,
   web-fetch max calls/bytes, web-search max calls) in the periodic agents
