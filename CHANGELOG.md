@@ -13,6 +13,10 @@
 - **docs**: fix `sandbox.image` documented default in `configuration.md`
   to match the YAML default (`robotsix/mill-sandbox:latest` instead of
   `python:3.14-slim`).
+- **docs**: remove stale `MILL_*` env var references from 15
+  `core.limits.*` rows in `configuration.md` sections 2–3; these
+  aliases were purged during the YAML-only refactor and the fields
+  are now YAML-path-only.
 - **docs**: add `core.board_list_cache_ttl_seconds` to configuration
   reference table (Worker pool & retry section).
 - **docs**: add six missing request-limit fields (`triage_requests`,
