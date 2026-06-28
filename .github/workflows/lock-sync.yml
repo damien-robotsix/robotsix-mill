@@ -65,6 +65,10 @@ jobs:
       - name: Mint robotsix-mill App token
         id: app-token
         if: ${{ github.event_name == 'pull_request' && inputs.app-id != '' }}
+        # Never let a missing/invalid key break CI: on failure the token
+        # output stays empty and the job degrades to the read-only path
+        # (verify, no auto-commit) instead of failing the gate.
+        continue-on-error: true
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349  # v2
         with:
           app-id: ${{ inputs.app-id }}
