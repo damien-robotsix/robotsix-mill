@@ -22,22 +22,22 @@ from robotsix_mill.config import Settings, Secrets, _reset_secrets
 
 
 def test_auto_merge_eligible_description_approve_true():
-    """Field description anchors: APPROVE + no specific concern → true."""
+    """Field description anchors: APPROVE + minor/informational observations → true."""
     desc = ReviewVerdict.model_fields["auto_merge_eligible"].description
     assert desc is not None
     desc_lower = desc.lower()
     assert "approve" in desc_lower
-    assert "no specific concern" in desc_lower
-    assert "true" in desc_lower
+    assert "minor or informational observations" in desc_lower
+    assert "set to true" in desc_lower
 
 
 def test_auto_merge_eligible_description_named_reason_to_false():
-    """Field description anchors: false requires a named, concrete reason."""
+    """Field description anchors: false requires a genuine security risk or correctness blocker."""
     desc = ReviewVerdict.model_fields["auto_merge_eligible"].description
     assert desc is not None
     desc_lower = desc.lower()
-    assert "concrete reason" in desc_lower
-    assert "name a concrete reason" in desc_lower
+    assert "genuine security risk" in desc_lower
+    assert "correctness blocker" in desc_lower
     assert "set to false" in desc_lower
 
 
@@ -48,7 +48,7 @@ def test_auto_merge_eligible_description_request_changes_false():
     desc_lower = desc.lower()
     assert "request_changes" in desc_lower
     assert "needs_discussion" in desc_lower
-    assert "always leave this false" in desc_lower
+    assert "set to false only when" in desc_lower
 
 
 # ------------------------------------------------------------------

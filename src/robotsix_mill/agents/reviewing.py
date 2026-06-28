@@ -100,13 +100,17 @@ class ReviewVerdict(BaseModel):
     auto_merge_eligible: bool = Field(
         default=False,
         description=(
-            "Default to true when verdict is APPROVE and you raised no "
-            "specific concern in comments. Set to false only when you can "
-            "name a concrete reason a human should still look — an "
-            "architectural decision noticed in passing, an "
-            "accepted-but-flagged risk, or a spec-vs-implementation gap "
-            "below the REQUEST_CHANGES threshold. REQUEST_CHANGES and "
-            "NEEDS_DISCUSSION verdicts always leave this false."
+            "Set to true when verdict is APPROVE and your comments "
+            "contain only minor or informational observations (style "
+            "nits, non-blocking improvement suggestions, informational "
+            "notes). Set to false ONLY when: (a) verdict is "
+            "REQUEST_CHANGES or NEEDS_DISCUSSION; OR (b) you identified "
+            "a genuine security risk, irreversible action, or "
+            "correctness blocker — even if you approved overall — that "
+            "a human should specifically review before the PR merges. "
+            "Minor observations, style nits, and non-blocking notes do "
+            "NOT justify false. When in doubt, set to true for "
+            "APPROVE verdicts."
         ),
     )
 
