@@ -259,6 +259,7 @@ modules:
       - src/robotsix_mill/runners/data_dir_audit/filing.py
       - src/robotsix_mill/runners/data_dir_audit/summary.py
       - src/robotsix_mill/runners/module_curator_runner.py
+      - src/robotsix_mill/runners/orphaned_pr_check.py
       - src/robotsix_mill/runners/periodic_runner.py
       - src/robotsix_mill/runners/credit_balance_runner.py
       - src/robotsix_mill/runners/verify_runner.py
@@ -270,6 +271,7 @@ modules:
       - tests/runners/test_diagnostic_data.py
       - tests/runners/test_config_sync_runner.py
       - tests/runners/test_member_sync_runner.py
+      - tests/runners/test_orphaned_pr_check.py
       - tests/runners/test_roadmap_sync_runner.py
       - tests/runners/test_trace_review_runner.py
       - tests/runners/test_langfuse_cleanup_runner.py

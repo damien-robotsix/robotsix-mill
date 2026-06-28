@@ -520,6 +520,46 @@ class PeriodicPassesMixin(_WorkerBase):
                     )
             await asyncio.sleep(interval)
 
+    async def _orphaned_pr_check_loop(self) -> None:
+        """Periodic orphaned-PR check loop.  Only runs when
+        ``MILL_ORPHANED_PR_CHECK_PERIODIC=true`` (default off).
+
+        Per-repo: iterates registered repos, lists open PRs, classifies
+        mill-authored ones as orphaned when no active ticket drives them,
+        and either auto-closes the PR (with a comment) or files a
+        tracking ticket.
+        """
+        from robotsix_mill.runners.orphaned_pr_check import run_orphaned_pr_check_pass
+
+        settings = self.ctx.settings
+        interval = max(3600, settings.orphaned_pr_check_interval_seconds)
+        initial = self._initial_delay("orphaned-pr-check", interval)
+        await asyncio.sleep(initial)
+        while True:
+            repos = get_repos_config()
+            for repo_config in list(repos.repos.values()):
+                try:
+                    result = run_orphaned_pr_check_pass(
+                        session_id=tracing.make_session_id("orphaned-pr-check"),
+                        repo_config=repo_config,
+                    )
+                    log.info(
+                        "orphaned-pr-check: repo %s — scanned=%d closed=%d "
+                        "filed=%d skipped=%d dry_run=%s",
+                        repo_config.repo_id,
+                        result.total_scanned,
+                        result.closed,
+                        result.filed,
+                        result.skipped,
+                        result.dry_run,
+                    )
+                except Exception:
+                    log.exception(
+                        "orphaned-pr-check: error on repo %s",
+                        repo_config.repo_id,
+                    )
+            await asyncio.sleep(interval)
+
     async def _sandbox_reaper_loop(self) -> None:
         """Periodic orphan-sandbox reaper. Only runs when
         ``MILL_SANDBOX_REAPER_PERIODIC=true`` (default on).
