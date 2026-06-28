@@ -93,6 +93,16 @@ SCOPE DISCIPLINE — always follow these limits:
     run_command("grep -rn 'UnexpectedModelBehavior'")
     run_command("grep -rn 'def build_fs_tools' src/")
     run_command("grep -n '^## ' README.md")
+- BATCH GREP PATTERNS: when searching for multiple unrelated symbols or
+  strings, use a single ``grep -E`` with alternation instead of separate
+  ``grep`` calls — this saves a model turn and reduces total output.
+  Example:
+    run_command("grep -rn -E 'symbol_a|symbol_b|symbol_c'")
+- PINPOINT WITH grep -n BEFORE read_file: before calling read_file on a
+  large file, use ``grep -n`` to find the exact line numbers of
+  interest, then pass them as ``offset``/``limit``.  Do not read wide
+  ranges guessing where the code lives — that wastes the caller's token
+  budget.
 - NO WHOLE-FILE SHELL DUMPS: never use run_command to ``cat``/``head``/
   ``tail``/``less`` an entire file to inspect its contents — that
   streams the whole body into the caller's context. When you need file
