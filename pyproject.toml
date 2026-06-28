@@ -16,7 +16,7 @@ dependencies = [
     # LLM I/O (OpenRouter model construction, DeepSeek pin, per-tier reasoning,
     # cost, retry/transient) extracted to a standalone library. See
     # agents/openrouter_cost.py + agents/retry.py (now thin shims).
-    "robotsix-llmio[openrouter-deepseek,claude-sdk]",
+    "robotsix-llmio[openrouter,claude-sdk]",
     # Shared YAML config-cascade library, consumed via git like robotsix-llmio.
     # Imported by config_loader.py in the follow-on integration ticket.
     "robotsix-yaml-config",
