@@ -13,6 +13,7 @@ from robotsix_mill.config import Settings
 from robotsix_mill.core.models import SourceKind, TicketKind
 from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
+from robotsix_mill.stages import refine as refine_module
 from robotsix_mill.stages.refine import OBSOLESCENCE_GAP_PREFIX, RefineStage
 from robotsix_mill.runtime.worker import process_ticket
 
@@ -3795,6 +3796,168 @@ def test_auto_approve_architecture_decision_needs_approval(
     out = RefineStage().run(t, gated_ctx)
 
     assert out.next_state is State.HUMAN_ISSUE_APPROVAL
+
+
+# ---------------------------------------------------------------------------
+# Classification-pin tests — new permissive auto-approve criteria
+# ---------------------------------------------------------------------------
+
+
+def _ctx(require_approval=True, auto_approve_enabled=False):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        settings=SimpleNamespace(
+            require_approval=require_approval,
+            auto_approve_enabled=auto_approve_enabled,
+        )
+    )
+
+
+def test_auto_approve_yaml_criteria_permissive_tie_breaker():
+    """The auto-approve YAML must encode the permissive tie-breaker and the
+    five NEEDS_APPROVAL gates. Protects against prompt regressions."""
+    import yaml as _yaml
+    from pathlib import Path
+
+    text = (
+        Path(__file__).parents[2] / "agent_definitions" / "auto-approve.yaml"
+    ).read_text()
+    data = _yaml.safe_load(text)
+    prompt = data["system_prompt"]
+    assert "when unsure, return APPROVE" in prompt
+    prompt_lower = prompt.lower()
+    for phrase in [
+        "authentication",  # gate 1 — security
+        "destructive",  # gate 2 — irreversible
+        "cross-repo",  # gate 3 — infra/CI
+        "public-api",  # gate 4 — breaking
+        "external runtime dependency",  # gate 5 — new dep
+    ]:
+        assert phrase in prompt_lower, (
+            f"Expected criteria phrase {phrase!r} missing from auto-approve.yaml"
+        )
+
+
+_ROUTINE_SPEC_CASES = [
+    (
+        "new_internal_module",
+        "## Problem\nAdd ExportManager to handle CSV exports.\n"
+        "## Scope\n- src/export/manager.py: new ExportManager class\n"
+        "## Acceptance criteria\n- [ ] ExportManager.export() returns bytes\n",
+    ),
+    (
+        "new_pydantic_schema",
+        "## Problem\nAdd ExportConfig schema.\n"
+        "## Scope\n- src/schemas/export.py: new Pydantic model\n"
+        "## Acceptance criteria\n- [ ] ExportConfig validates required fields\n",
+    ),
+    (
+        "ui_change",
+        "## Problem\nUpdate button styling on the dashboard.\n"
+        "## Scope\n- src/templates/dashboard.html: change CSS class\n"
+        "## Acceptance criteria\n- [ ] Button shows correct colour\n",
+    ),
+    (
+        "tests_only",
+        "## Problem\nAdd missing tests for ExportManager.\n"
+        "## Scope\n- tests/test_export_manager.py: five unit tests\n"
+        "## Acceptance criteria\n- [ ] All five tests pass\n",
+    ),
+    (
+        "docs_only",
+        "## Problem\nDocument the new export endpoints.\n"
+        "## Scope\n- docs/export.md: add usage section\n"
+        "## Acceptance criteria\n- [ ] Section present and accurate\n",
+    ),
+    (
+        "internal_endpoint",
+        "## Problem\nAdd GET /internal/health endpoint.\n"
+        "## Scope\n- src/routes/internal.py: register route\n"
+        "## Acceptance criteria\n- [ ] 200 on GET /internal/health\n",
+    ),
+    (
+        "refactor",
+        "## Problem\nExtract _parse_csv helper from CsvImporter.\n"
+        "## Scope\n- src/importers/csv.py: extract helper function\n"
+        "## Acceptance criteria\n- [ ] All existing tests pass\n",
+    ),
+]
+
+_HIGH_RISK_SPEC_CASES = [
+    (
+        "auth_secrets",
+        "## Problem\nRotate JWT signing secret.\n"
+        "## Scope\n- src/auth/jwt.py: update secret key handling\n"
+        "## Acceptance criteria\n- [ ] New secret applied on startup\n",
+    ),
+    (
+        "destructive_migration",
+        "## Problem\nRemove legacy columns from users table.\n"
+        "## Scope\n- migrations/0042_drop_columns.py: DROP COLUMN legacy_flag, legacy_data\n"
+        "## Acceptance criteria\n- [ ] Columns removed; migration irreversible\n",
+    ),
+    (
+        "cross_repo_ci",
+        "## Problem\nUpdate shared CI deploy workflow.\n"
+        "## Scope\n- .github/workflows/deploy.yml: change shared deploy step\n"
+        "## Acceptance criteria\n- [ ] CI pipeline updated across all repos\n",
+    ),
+    (
+        "breaking_public_api",
+        "## Problem\nRemove deprecated public endpoint GET /api/v1/users.\n"
+        "## Scope\n- src/api/v1/users.py: remove route; external callers must migrate\n"
+        "## Acceptance criteria\n- [ ] Endpoint removed from public API\n",
+    ),
+    (
+        "new_external_runtime_dep",
+        "## Problem\nAdd cryptography package for FIPS-compliant hashing.\n"
+        "## Scope\n- pyproject.toml: add cryptography>=41 to runtime dependencies\n"
+        "## Acceptance criteria\n- [ ] cryptography importable at runtime\n",
+    ),
+]
+
+
+@pytest.mark.parametrize("label,spec", _ROUTINE_SPEC_CASES)
+def test_auto_approve_criteria_approve_routine(label, spec, monkeypatch):
+    """Routine specs (new internal module / schema / UI / tests / docs /
+    internal endpoint / refactor) must route to APPROVE under new criteria."""
+    monkeypatch.setattr(
+        refining,
+        "triage_auto_approve",
+        lambda *, settings, spec, **kw: refining.AutoApproveResult(
+            decision="APPROVE", reason=f"routine: {label}"
+        ),
+    )
+    state, note = refine_module._resolve_next_state(
+        _ctx(auto_approve_enabled=True),
+        spec,
+        "t1",
+    )
+    assert state is State.READY, f"{label!r} expected APPROVE → READY, got {state}"
+    assert "APPROVE" in (note or "")
+
+
+@pytest.mark.parametrize("label,spec", _HIGH_RISK_SPEC_CASES)
+def test_auto_approve_criteria_needs_approval_high_risk(label, spec, monkeypatch):
+    """High-risk specs (auth, destructive, cross-repo CI, breaking public API,
+    new external runtime dep) must route to NEEDS_APPROVAL under new criteria."""
+    monkeypatch.setattr(
+        refining,
+        "triage_auto_approve",
+        lambda *, settings, spec, **kw: refining.AutoApproveResult(
+            decision="NEEDS_APPROVAL", reason=f"high-risk: {label}"
+        ),
+    )
+    state, note = refine_module._resolve_next_state(
+        _ctx(auto_approve_enabled=True),
+        spec,
+        "t1",
+    )
+    assert state is State.HUMAN_ISSUE_APPROVAL, (
+        f"{label!r} expected NEEDS_APPROVAL → HUMAN_ISSUE_APPROVAL, got {state}"
+    )
+    assert "NEEDS_APPROVAL" in (note or "")
 
 
 # --- epic body tests ---

@@ -229,14 +229,17 @@ class TriageResult(BaseModel):
 
 
 class AutoApproveResult(BaseModel):
-    """Auto-approve triage output — gates on genuine design decisions.
+    """Auto-approve triage output — gates on genuinely high-risk changes only.
 
-    Returns APPROVE when the spec is precise, unambiguous, and free of
-    design/architecture decisions that a human would want to review.
-    Returns NEEDS_APPROVAL when the spec contains a genuine design
-    decision, is ambiguous, or is security-sensitive.  The bias is
-    conservative: when unsure whether a real decision exists, return
-    NEEDS_APPROVAL.
+    Returns APPROVE for all routine work: new internal modules/classes/
+    schemas/endpoints, UI changes, refactors, tests, docs, config, and
+    any single-repo feature that does not cross the five high-risk gates.
+    Returns NEEDS_APPROVAL only for: security/auth/secrets, destructive
+    or irreversible operations, cross-repo/infra/CI/deploy changes,
+    PUBLIC-API breaking changes, or a new external runtime dependency
+    with material license or security weight.
+    The bias is permissive: when unsure whether a high-risk condition
+    applies, return APPROVE.
 
     The ``reason`` field must follow a concise/structured contract:
     - For NEEDS_APPROVAL: one short sentence naming the primary
@@ -524,12 +527,14 @@ def triage_auto_approve(
 ) -> AutoApproveResult:
     """Return an ``AutoApproveResult`` from a single cheap LLM call.
 
-    Inspects the refined spec and decides whether a genuine design
-    decision exists that a human should review.  Returns APPROVE when
-    the spec is precise, unambiguous, and free of design/architecture
-    decisions.  Returns NEEDS_APPROVAL when a real decision is
-    present.  The bias is conservative: when unsure whether a genuine
-    decision exists, returns NEEDS_APPROVAL.
+    Inspects the refined spec and decides whether it contains a
+    genuinely high-risk change requiring human review.  Returns
+    APPROVE for all routine work.  Returns NEEDS_APPROVAL only for
+    the five high-risk gates: security/auth, destructive/irreversible
+    operations, cross-repo/infra/CI, public-API breaking changes, or
+    new external runtime dependencies with material license or
+    security weight.  The bias is permissive: when unsure whether a
+    high-risk condition applies, return APPROVE.
 
     NO tools, NO web, NO explore — just a tiny prompt and a
     structured classification.
