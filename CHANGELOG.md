@@ -3,7 +3,8 @@
 - **fix**: wrap synchronous forge and DB calls in `_poll_one_repo_dependabot`
   with `asyncio.to_thread` to prevent event-loop blocking during Dependabot
   alert ingest, matching the existing `_poll_one_repo_ci` pattern.
-
+- **dev**: add `actionlint` as a pre-commit hook for GitHub Actions workflow
+  linting, matching the v1.7.12 version used in CI.
 - **docs**: fix `sandbox.image` documented default in `configuration.md`
   to match the YAML default (`robotsix/mill-sandbox:latest` instead of
   `python:3.14-slim`).
