@@ -492,14 +492,15 @@ def make_parallel_explore_tool(
     """
 
     async def parallel_explore(questions: list[str]) -> str:
-        """Run SEVERAL independent investigations CONCURRENTLY — one fresh
-        scout sub-agent per question. Use this (instead of many serial
-        ``explore`` calls) for long, splittable work: e.g. partition a big
-        task into independent slices ("enumerate warnings in tests/core",
-        "...in tests/agents", …) and pass them all at once. Each scout can
-        read files and run sandboxed commands in the repo. Returns every
-        answer, labeled by its question. Keep each question self-contained;
-        they cannot see each other's results."""
+        """Batch SEVERAL independent questions into a single scout call.
+
+        Use this (instead of many serial ``explore`` calls) for long,
+        splittable work: e.g. partition a big task into independent slices
+        ("enumerate warnings in tests/core", "...in tests/agents", …) and
+        pass them all at once.  All questions are sent in one prompt so the
+        system context is loaded only once.  Returns every answer labeled by
+        its question.  Keep each question self-contained; the scout answers
+        them sequentially within the same call."""
         if not questions:
             return "parallel_explore: no questions provided"
 
@@ -551,8 +552,8 @@ def make_parallel_explore_tool(
         ToolInfo(
             name="parallel_explore",
             description=(
-                "Run several independent explore investigations concurrently "
-                "(one scout per question) for long, splittable work."
+                "Run several independent explore investigations batched "
+                "into a single call — the system context is loaded only once."
             ),
             category="exploration",
             parameters={"questions": "list[str]"},
