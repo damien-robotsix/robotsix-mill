@@ -140,6 +140,7 @@ stale_branch_cleanup_periodic
 db_maintenance_periodic
 sandbox_reaper_periodic
 dependabot_ingest_periodic
+orphaned_pr_check_periodic
 scope_triage_request_limit
 already_done_request_limit
 langfuse_cleanup_periodic
@@ -315,6 +316,7 @@ _meta_task
 _run_health_task
 _diagnostic_task
 _stale_branch_task
+_orphaned_pr_check_task
 _db_maintenance_task
 _sandbox_reaper_task
 _dependabot_ingest_task
