@@ -630,6 +630,12 @@ already exists — your only task is to address each comment in the
   introduce new scope or restructure untouched sections.
 - The revised spec must remain concrete and testable so the implement
   agent can act on it without asking questions.
+- **Do NOT re-explore the codebase.** The spec was already grounded in
+  the actual files during the original refine run. Only re-read a file
+  if the reviewer's comment makes the existing file_map entry
+  insufficient. Every unnecessary read_file or explore call on a
+  re-refine pass wastes quota and inflates cost without improving
+  spec quality.
 
 ## Reviewer threads
 

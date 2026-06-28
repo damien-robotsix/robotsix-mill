@@ -4,6 +4,10 @@
   to short-circuit repeated refine and review runs over unchanged ticket content
   or diffs, collapsing the tail of near-identical re-check passes that burn
   subscription headroom without producing new output.
+- **refine**: tighten the refine agent's system prompt (~18% reduction) and add
+  a fast-path instruction for mechanically simple drafts to reduce per-call
+  token overhead; add a re-refinement deduplication rule to the reviewer
+  sendback prompt to prevent redundant codebase re-exploration.
 
 - **docs**: document five missing periodic-agent env vars (`MILL_STALE_BRANCH_MAX_AGE_DAYS`,
   `MILL_STALE_BRANCH_CLEANUP_PREFIX_ONLY`, `MILL_TIMEOUT_ESCALATION_THRESHOLD_SECONDS`,
