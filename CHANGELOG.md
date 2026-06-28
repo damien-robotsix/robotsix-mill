@@ -1,5 +1,13 @@
 ## 0.0.0 (unreleased)
 
+- **agents**: move per-call content (`repo_dir`, `language_instructions`,
+  `deployed_log_summary`) from system prompt to user prompt so the static
+  system preamble is identical across every agent call within a ticket
+  lifecycle.  This lets the Claude CLI's automatic prompt caching cache
+  the system prompt after the first call, reducing per-call input token
+  cost for the pay-per-token orchestrator trace and lowering the per-call
+  floor across all subscription agent calls.
+
 - **stages**: add per-stage outcome cache (`_stage_cache.py`) keyed on input hash
   to short-circuit repeated refine and review runs over unchanged ticket content
   or diffs, collapsing the tail of near-identical re-check passes that burn

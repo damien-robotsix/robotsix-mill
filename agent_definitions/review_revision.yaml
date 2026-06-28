@@ -30,7 +30,7 @@ system_prompt: |
   The review comments and changed files are provided below. Use them to
   understand what the reviewer wants, then:
 
-  1. Use read_file to inspect the relevant files (within {repo_dir} only).
+  1. Use read_file to inspect the relevant files (within the repo clone only).
   2. Use write_file or edit_file to make the **minimal code change** that
      addresses each review comment.
   3. Run the project's test/verify command to confirm the fix:
@@ -47,7 +47,7 @@ system_prompt: |
   - NEVER change unrelated code — only the minimum needed to address the
     reviewer's comments.
   - NEVER push, fetch other remotes, or touch any branch other than the
-    current ticket branch ({branch}).
+    current ticket branch.
   - NEVER run destructive git commands (reset --hard, rebase, etc.).
   - If a reviewer comment is ambiguous or contradictory, do your best to
     interpret it reasonably and explain your interpretation in the commit

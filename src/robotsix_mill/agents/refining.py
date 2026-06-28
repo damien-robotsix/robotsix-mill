@@ -817,34 +817,16 @@ def _build_refine_overrides(
     definition,
     settings: Settings,
     reviewer_comments: str | None,
-    language_instructions: str,
-    deployed_log_summary: str = "",
 ) -> dict:
     """Assemble the ``build_agent_from_definition`` overrides for refine:
-    the reviewer-sendback prompt + thread flags when handling feedback, the
-    per-language ``## Language conventions`` block, and the ``## Deployed
-    system logs`` block (when configured). The model comes from the
-    definition's ``level`` (refine is level 3 → Claude Opus)."""
+    the reviewer-sendback prompt + thread flags when handling feedback.
+    The model comes from the definition's ``level`` (refine is level 3
+    → Claude Opus)."""
     overrides: dict = {}
     if reviewer_comments:
         overrides["system_prompt"] = REVIEWER_SENDBACK_PROMPT
         overrides["reply_to_thread"] = True
         overrides["close_thread"] = True
-    if language_instructions:
-        base_prompt = overrides.get("system_prompt", definition.system_prompt)
-        overrides["system_prompt"] = (
-            base_prompt + "\n\n## Language conventions\n\n" + language_instructions
-        )
-    if deployed_log_summary:
-        base_prompt = overrides.get("system_prompt", definition.system_prompt)
-        overrides["system_prompt"] = (
-            base_prompt
-            + "\n\n## Deployed system logs\n\n"
-            + deployed_log_summary
-            + "\n\nYou may also call `query_app_logs` with keywords drawn "
-            "from the ticket and a recency window (`since_hours`) to pull "
-            "relevant log excerpts instead of reading whole files."
-        )
     return overrides
 
 
@@ -1045,8 +1027,6 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
         definition,
         settings,
         reviewer_comments,
-        language_instructions,
-        deployed_log_summary,
     )
 
     # When a cheap triage classifier rules the ticket trivial-scope,
@@ -1097,6 +1077,16 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
 
     # Build user prompt: title, draft, memory, and optionally reviewer feedback.
     user_prompt = ""
+    if language_instructions:
+        user_prompt += "## Language conventions\n\n" + language_instructions + "\n\n"
+    if deployed_log_summary:
+        user_prompt += (
+            "## Deployed system logs\n\n"
+            + deployed_log_summary
+            + "\n\nYou may also call `query_app_logs` with keywords drawn "
+            "from the ticket and a recency window (`since_hours`) to pull "
+            "relevant log excerpts instead of reading whole files.\n\n"
+        )
     if epic_context:
         user_prompt += f"{epic_context}\n\n"
     user_prompt += (

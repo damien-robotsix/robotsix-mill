@@ -252,12 +252,6 @@ def run_coordinator(
     if level is not None:
         overrides["level"] = level
 
-    prompt = definition.system_prompt
-    if language_instructions:
-        prompt += "\n\n## Language conventions\n\n" + language_instructions
-    prompt += f"\n\nThe repository root (CWD for all run_command calls) is: {repo_dir}"
-    overrides["system_prompt"] = prompt
-
     from .consult_expert import make_consult_expert_tool
     from .post_comment import make_post_comment_tool
     from .spawn_subtask import make_spawn_subtask_tool
@@ -307,6 +301,13 @@ def run_coordinator(
             tool_calls_limit=settings.coordinator_max_tool_calls,
         )
         user_prompt = ""
+        if language_instructions:
+            user_prompt += (
+                "## Language conventions\n\n" + language_instructions + "\n\n"
+            )
+        user_prompt += (
+            f"The repository root (CWD for all run_command calls) is: {repo_dir}\n\n"
+        )
         if epic_context:
             user_prompt += f"{epic_context}\n\n"
         user_prompt += (
