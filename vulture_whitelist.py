@@ -192,6 +192,8 @@ CommentRead
 # -- forge -------------------------------------------------------------------
 list_pr_reviews
 list_review_comments
+close_pr
+post_pr_comment
 
 # -- langfuse ----------------------------------------------------------------
 
