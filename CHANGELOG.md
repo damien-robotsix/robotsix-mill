@@ -7,6 +7,11 @@
   the system prompt after the first call, reducing per-call input token
   cost for the pay-per-token orchestrator trace and lowering the per-call
   floor across all subscription agent calls.
+- **service**: `transition()` and `mark_done()` now refuse the `done` transition when
+  duplicate towncrier changelog fragments exist on the ticket's branch HEAD.
+  `mark_done()` also now rejects tickets in the `blocked` state (must be resumed
+  first).  This closes a bypass where `mark_done` could force-close a blocked
+  ticket without resolving the fragment conflict.
 
 - **stages**: add per-stage outcome cache (`_stage_cache.py`) keyed on input hash
   to short-circuit repeated refine and review runs over unchanged ticket content

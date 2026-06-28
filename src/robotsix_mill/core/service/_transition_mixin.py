@@ -25,7 +25,6 @@ from ._helpers import (
 
 log = logging.getLogger("robotsix_mill.service")
 
-
 # A ticket auto-unblocks its ``unblocks`` targets when it reaches one of
 # these completion states (DONE = merged/auto-merged; CLOSED = retrospected;
 # EPIC_CLOSED = all epic children done). Firing on both DONE and CLOSED is
@@ -138,6 +137,63 @@ def _verify_citations(note: str, repo_dir: Path | None) -> str:
     return note.rstrip() + "\n\n" + "\n".join(lines)
 
 
+def _check_changelog_duplicates(repo_dir: Path | None, ticket_id: str) -> list[str]:
+    """Check *repo_dir*'s HEAD for duplicate towncrier fragments for
+    *ticket_id*.  Returns a list of the duplicate fragment basenames
+    (empty when there are 0 or 1 fragments — no problem).
+
+    Best-effort: returns ``[]`` when *repo_dir* is ``None``, the repo
+    has no ``pyproject.toml``, no ``[tool.towncrier]`` config, or any
+    git / parsing error occurs.  Never raises.
+    """
+    if repo_dir is None:
+        return []
+
+    pp = repo_dir / "pyproject.toml"
+    if not pp.is_file():
+        return []
+
+    try:
+        import tomllib
+
+        data = tomllib.loads(pp.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+    tc = (data.get("tool", {}) or {}).get("towncrier")
+    if not tc:
+        return []
+
+    directory = str(tc.get("directory") or "changes").rstrip("/")
+
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_dir), "ls-tree", "HEAD", "--", f"{directory}/"],
+            capture_output=True,
+            text=True,
+        )
+    except Exception:
+        return []
+
+    if result.returncode != 0:
+        return []
+
+    fragments: list[str] = []
+    prefix = f"{ticket_id}."
+    for line in result.stdout.splitlines():
+        # git ls-tree output: <mode> <type> <sha>\t<path>
+        if "\t" not in line:
+            continue
+        path = line.split("\t", 1)[1]
+        name = Path(path).name
+        if name.startswith(prefix) and name.endswith(".md"):
+            fragments.append(name)
+
+    if len(fragments) > 1:
+        return fragments
+    return []
+
+
 class _TransitionMixin(_ServiceBase):
     """State transitions, resume, retry, request-changes, and mark-done."""
 
@@ -174,6 +230,19 @@ class _TransitionMixin(_ServiceBase):
                         f"{ticket_id}: cannot transition to {dst} while "
                         f"{len(open_threads)} [ASK_USER] thread(s) are "
                         f"open (IDs: {ids})"
+                    )
+            # Refuse transition to DONE when duplicate changelog
+            # fragments exist on the ticket's branch.  This gate
+            # prevents a BLOCKED ticket from being force-closed
+            # while the fragment conflict is still live on HEAD.
+            if dst is State.DONE:
+                repo_dir = self.workspace(ticket).repo_dir
+                dupes = _check_changelog_duplicates(repo_dir, ticket_id)
+                if dupes:
+                    raise TransitionError(
+                        f"{ticket_id}: cannot transition to {dst} — "
+                        f"duplicate changelog fragments on branch: "
+                        f"{', '.join(sorted(dupes))}"
                     )
             # Record originating state when blocking; clear when leaving
             # BLOCKED (regardless of resume or override path).
@@ -362,6 +431,7 @@ class _TransitionMixin(_ServiceBase):
             State.ANSWERED,
             State.EPIC_CLOSED,
             State.EPIC_OPEN,
+            State.BLOCKED,
         }
         try:
             board = self._board_for(ticket_id)
@@ -374,8 +444,17 @@ class _TransitionMixin(_ServiceBase):
                     f"{ticket_id}: cannot mark done — "
                     f"state {ticket.state} is not eligible for mark-done"
                 )
-            # Augment the note with citation warnings before persisting.
+            # Refuse mark-done when duplicate changelog fragments
+            # exist on the ticket's branch.
             repo_dir = self.workspace(ticket).repo_dir
+            dupes = _check_changelog_duplicates(repo_dir, ticket_id)
+            if dupes:
+                raise TransitionError(
+                    f"{ticket_id}: cannot mark done — "
+                    f"duplicate changelog fragments on branch: "
+                    f"{', '.join(sorted(dupes))}"
+                )
+            # Augment the note with citation warnings before persisting.
             note = _verify_citations(note, repo_dir)
             comment = None
             if note.strip():
