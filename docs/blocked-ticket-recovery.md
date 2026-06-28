@@ -26,11 +26,18 @@ was blocked *from* is recorded. You can recover in three ways:
   ```
   POST /tickets/{id}/mark-done  {"note": "abandoned: no longer needed"}
   ```
-  Transitions *any* non-terminal ticket directly to `DONE`, bypassing
-  the state machine's `can_transition()` rules.  This is an escape
-  hatch for stuck tickets (BLOCKED, ERRORED, etc.) or tickets that
+  Transitions eligible non-terminal tickets directly to `DONE`,
+  bypassing the state machine's `can_transition()` rules.  This is
+  an escape hatch for stuck tickets (ERRORED, etc.) or tickets that
   don't need the full pipeline.  Terminal states (DONE, CLOSED,
-  ANSWERED, EPIC_CLOSED, EPIC_OPEN) are rejected with 409.
+  ANSWERED, EPIC_CLOSED, EPIC_OPEN) and BLOCKED are rejected with
+  409 — a BLOCKED ticket must be resumed first (see **Resume to the
+  originating state** above).
+
+  `mark_done` also refuses to close a ticket whose branch HEAD
+  carries duplicate towncrier changelog fragments (more than one
+  `changelog.d/<ticket-id>.xxx.md` file).  Remove the extra fragment
+  and re-push, or resume the ticket first.
 
   Use the CLI or API — the board no longer exposes a dedicated button.
 
@@ -86,9 +93,9 @@ and surface as an opaque "no changes produced" failure at implement.
    (e.g. the manifest YAML, the board's own source code, configuration files).
 3. Let refine run again — the new spec will be checked against the gitignore rules.
 
-**Recovery option:** If re-drafting is not feasible, use `robotsix-mill ticket
-mark-done <id> --note "abandoned: target paths are vcs-imported"` to close the
-ticket and start fresh.
+**Recovery option:** If re-drafting is not feasible, resume the blocked ticket
+first (`resume-blocked`), then use `robotsix-mill ticket mark-done <id> --note
+"abandoned: target paths are vcs-imported"` to close the ticket and start fresh.
 
 ## Retrying tickets
 
