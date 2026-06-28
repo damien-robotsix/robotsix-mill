@@ -331,6 +331,7 @@ modules:
       - src/robotsix_mill/stages/pause.py
       - src/robotsix_mill/stages/retrospect.py
       - src/robotsix_mill/stages/short_circuit_verify.py
+      - src/robotsix_mill/stages/_stage_cache.py
       - src/robotsix_mill/stages/dependency_fix.py
       - tests/stages/test_dependency_fix.py
       - tests/stages/test_registry.py

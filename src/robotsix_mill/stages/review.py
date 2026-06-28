@@ -535,6 +535,20 @@ class ReviewStage(Stage):
             log.info("%s: empty diff — approving without review", ticket.id)
             return Outcome(State.DOCUMENTING, "empty diff (no-op implementation)")
 
+        # --- stage-outcome cache: short-circuit when input is unchanged ---
+        from ._stage_cache import _check, _update, review_input_hash
+
+        input_hash = review_input_hash(ws, diff)
+        cached = _check(ws, ReviewStage.name, input_hash)
+        if cached is not None:
+            log.info(
+                "%s: review cache hit (hash=%s…) → %s",
+                ticket.id,
+                input_hash[:12],
+                cached.next_state.value,
+            )
+            return cached
+
         # Derive modified paths, workflow refs, AND action refs from the
         # UNTRUNCATED diff so middle truncation (below) never drops a
         # ``+++ b/<path>`` header or a ``uses:`` line and silently shrinks
@@ -775,7 +789,10 @@ class ReviewStage(Stage):
         # Route based on verdict.
         if verdict.verdict == "APPROVE":
             ctx.service.set_review_rounds(ticket.id, 0)
-            return Outcome(State.DOCUMENTING, "review approved")
+            outcome = Outcome(State.DOCUMENTING, "review approved")
+            if input_hash:
+                _update(ws, ReviewStage.name, input_hash, outcome)
+            return outcome
         elif verdict.verdict == "REQUEST_CHANGES":
             rounds = ticket.review_rounds + 1
             ctx.service.set_review_rounds(ticket.id, rounds)
@@ -788,10 +805,13 @@ class ReviewStage(Stage):
                     author="review",
                 )
                 ctx.service.set_review_rounds(ticket.id, 0)
-                return Outcome(
+                outcome = Outcome(
                     State.DOCUMENTING,
                     f"review rounds exhausted ({rounds}/{s.review_max_rounds})",
                 )
+                if input_hash:
+                    _update(ws, ReviewStage.name, input_hash, outcome)
+                return outcome
             # --- convergence detection: repeated findings fingerprint ---
             # If the structured review asks are IDENTICAL to the previous
             # round's asks, implement is not making progress — escalate
@@ -823,10 +843,13 @@ class ReviewStage(Stage):
                     author="review",
                 )
                 ctx.service.set_review_rounds(ticket.id, 0)
-                return Outcome(
+                outcome = Outcome(
                     State.BLOCKED,
                     "convergence: repeated review findings — implement stuck",
                 )
+                if input_hash:
+                    _update(ws, ReviewStage.name, input_hash, outcome)
+                return outcome
             fp_path.parent.mkdir(parents=True, exist_ok=True)
             fp_path.write_text(fingerprint, encoding="utf-8")
             # Split asks against the ticket's file_map. An out-of-scope ask
@@ -917,7 +940,10 @@ class ReviewStage(Stage):
                         )
                     )
                 ctx.service.add_comment(ticket.id, body, author="review")
-                return Outcome(State.READY, verdict.comments)
+                outcome = Outcome(State.READY, verdict.comments)
+                if input_hash:
+                    _update(ws, ReviewStage.name, input_hash, outcome)
+                return outcome
 
             if still_out_of_scope:
                 # No in-scope changes: the ticket's own work is sound and the
@@ -925,29 +951,38 @@ class ReviewStage(Stage):
                 # can merge and release them — rather than parking it on work
                 # that cannot run until it merges.
                 ctx.service.set_review_rounds(ticket.id, 0)
-                return Outcome(
+                outcome = Outcome(
                     State.DOCUMENTING,
                     f"approved; {len(still_out_of_scope)} out-of-scope "
                     "ask(s) spawned as follow-ups",
                 )
+                if input_hash:
+                    _update(ws, ReviewStage.name, input_hash, outcome)
+                return outcome
 
             if already_addressed:
                 # Every out-of-scope ask was already addressed by the
                 # implementer — nothing to spawn, nothing in-scope to fix.
                 # Approve directly so the ticket can merge.
                 ctx.service.set_review_rounds(ticket.id, 0)
-                return Outcome(
+                outcome = Outcome(
                     State.DOCUMENTING,
                     f"approved; {len(already_addressed)} review gap(s) "
                     "already addressed in the implementer's commits",
                 )
+                if input_hash:
+                    _update(ws, ReviewStage.name, input_hash, outcome)
+                return outcome
 
             # REQUEST_CHANGES with no actionable asks — historical behaviour:
             # re-implement against the narrative comments.
             ctx.service.add_comment(
                 ticket.id, _sanitize_comments(verdict.comments), author="review"
             )
-            return Outcome(State.READY, verdict.comments)
+            outcome = Outcome(State.READY, verdict.comments)
+            if input_hash:
+                _update(ws, ReviewStage.name, input_hash, outcome)
+            return outcome
         else:  # NEEDS_DISCUSSION
             # A genuine human-decision verdict (e.g. "AC5 vs the 13
             # pre-existing bandit findings — pick one of 3 options").
@@ -966,7 +1001,10 @@ class ReviewStage(Stage):
                 f"[ASK_USER]\n\n{verdict.comments}",
                 author="review",
             )
-            return Outcome(
+            outcome = Outcome(
                 State.AWAITING_USER_REPLY,
                 verdict.comments,
             )
+            if input_hash:
+                _update(ws, ReviewStage.name, input_hash, outcome)
+            return outcome
