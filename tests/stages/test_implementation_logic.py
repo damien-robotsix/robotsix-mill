@@ -56,16 +56,22 @@ _Stage = ImplementStage
 
 
 class TestSelectAgentLevel:
+    @staticmethod
+    def _call(ic, settings=None, repo_dir=None, target_branch="main"):
+        if settings is None:
+            settings = _simple_namespace()
+        if repo_dir is None:
+            repo_dir = Path("/fake/repo")
+        return _Stage._select_agent_level(ic, settings, repo_dir, target_branch)
+
     def test_no_change_in_summary(self):
         ic = _ic(previous_attempt_summary="no change needed after inspection")
-        settings = _simple_namespace()
-        result = _Stage._select_agent_level(ic, settings)
+        result = self._call(ic)
         assert result == 1
 
     def test_no_change_in_feedback(self):
         ic = _ic(feedback="NO CHANGE NEEDED — already satisfied")
-        settings = _simple_namespace()
-        result = _Stage._select_agent_level(ic, settings)
+        result = self._call(ic)
         assert result == 1
 
     def test_no_change_in_both_fields(self):
@@ -73,8 +79,7 @@ class TestSelectAgentLevel:
             previous_attempt_summary="summary text",
             feedback="feedback with No Change Needed here",
         )
-        settings = _simple_namespace()
-        result = _Stage._select_agent_level(ic, settings)
+        result = self._call(ic)
         assert result == 1
 
     def test_no_phrase_returns_none(self):
@@ -82,21 +87,72 @@ class TestSelectAgentLevel:
             previous_attempt_summary="everything looks fine",
             feedback="tests pass",
         )
-        settings = _simple_namespace()
-        result = _Stage._select_agent_level(ic, settings)
+        result = self._call(ic)
         assert result is None
 
     def test_none_fields_returns_none(self):
         ic = _ic(previous_attempt_summary=None, feedback=None)
-        settings = _simple_namespace()
-        result = _Stage._select_agent_level(ic, settings)
+        result = self._call(ic)
         assert result is None
 
     def test_empty_strings_returns_none(self):
         ic = _ic(previous_attempt_summary="", feedback="")
-        settings = _simple_namespace()
-        result = _Stage._select_agent_level(ic, settings)
+        result = self._call(ic)
         assert result is None
+
+    def test_config_only_change_returns_level_1(self, tmp_path, monkeypatch):
+        """A ticket whose diff is all .md/.yaml gets level-1."""
+        import subprocess
+
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+
+        # Simulate git diff returning only config-only files.
+        def fake_run(cmd, *args, **kwargs):
+            return subprocess.CompletedProcess(
+                args=cmd, returncode=0, stdout="docs/readme.md\nconfig/settings.yaml\n"
+            )
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        ic = _ic()
+        result = self._call(ic, repo_dir=repo_dir)
+        assert result == 1
+
+    def test_py_file_in_diff_returns_none(self, tmp_path, monkeypatch):
+        """A ticket with a .py change still gets level-2 (None)."""
+        import subprocess
+
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+
+        def fake_run(cmd, *args, **kwargs):
+            return subprocess.CompletedProcess(
+                args=cmd, returncode=0, stdout="src/module.py\ndocs/readme.md\n"
+            )
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        ic = _ic()
+        result = self._call(ic, repo_dir=repo_dir)
+        assert result is None
+
+    def test_config_only_change_with_no_change_needed_returns_level_1(
+        self, tmp_path, monkeypatch
+    ):
+        """When both heuristics fire, config-only + no-change-needed still returns 1."""
+        import subprocess
+
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+
+        def fake_run(cmd, *args, **kwargs):
+            return subprocess.CompletedProcess(
+                args=cmd, returncode=0, stdout="docs/readme.md\n"
+            )
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        ic = _ic(previous_attempt_summary="no change needed after inspection")
+        result = self._call(ic, repo_dir=repo_dir)
+        assert result == 1
 
 
 # ---------------------------------------------------------------------------
