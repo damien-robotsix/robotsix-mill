@@ -5,6 +5,10 @@
   (PUT state_event=close, POST notes) implementations. Both return
   ``True``/``False`` and never raise, enabling the upcoming orphaned-PR
   cleanup periodic agent.
+- **docs**: fix 15 configuration-table rows that incorrectly showed `—`
+  (YAML-only) in the "Env var" column.  All 15 fields derive valid
+  `MILL_*` environment variables through Pydantic's `env_prefix="MILL_"`
+  setting; the docs now list the correct env-var name.
 
 - **agents**: add `triage_boilerplate` periodic agent (YAML definition +
   Python runner module) to identify recurring triage patterns and propose
