@@ -512,6 +512,7 @@ modules:
       - src/robotsix_mill/agents/retrospecting.py
       - src/robotsix_mill/agents/trace_inspector.py
       - src/robotsix_mill/agents/test_gap.py
+      - src/robotsix_mill/agents/triage_boilerplate.py
       - src/robotsix_mill/agents/test_scope.py
       - src/robotsix_mill/agents/bespoke.py
       - src/robotsix_mill/agents/bespoke_loader.py
