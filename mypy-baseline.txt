@@ -495,8 +495,6 @@ src/robotsix_mill/stages/implement/implementation_logic.py:0: error: "None" obje
 src/robotsix_mill/stages/implement/implementation_logic.py:0: error: Returning Any from function declared to return "_SinglePassResult"  [no-any-return]
 src/robotsix_mill/stages/implement/file_operations.py:0: error: Function is missing a type annotation  [no-untyped-def]
 src/robotsix_mill/stages/refine/core.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
-src/robotsix_mill/stages/refine/core.py:0: error: Returning Any from function declared to return "Path | Outcome | None"  [no-any-return]
-src/robotsix_mill/stages/refine/core.py:0: error: Returning Any from function declared to return "Path | Outcome | None"  [no-any-return]
 src/robotsix_mill/stages/merge/review_revision.py:0: error: Argument 1 to "head_sha" has incompatible type "str"; expected "Path"  [arg-type]
 src/robotsix_mill/stages/merge/review_revision.py:0: error: Argument 1 to "remote_branch_sha" has incompatible type "str"; expected "Path"  [arg-type]
 src/robotsix_mill/stages/merge/rebase.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]

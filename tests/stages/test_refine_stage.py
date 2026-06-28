@@ -3518,6 +3518,80 @@ def test_clone_target_re_resolved_from_ticket_board_id_after_migration(
     # The clone should target board B's repo URL (post-migration board),
     # not board A's (which is still in ctx.repo_config).
     assert clone_args["remote_url"] == "https://board-b.example.com/repo.git"
+    # Workspace dest must also be on board-b (not board-a).
+    assert "board-b" in str(clone_args.get("dest", ""))
+    assert "board-a" not in str(clone_args.get("dest", ""))
     assert result == (ws.dir / "repo")
+
+    _db.reset_engine()
+
+
+def test_clone_workspace_path_derived_from_migrated_board_not_stale_ws(
+    monkeypatch, tmp_path
+):
+    """Regression for d7f8/a214: ws pre-computed for board-a before migration;
+    _clone_or_resume must still clone into board-b workspace, not board-a."""
+    from robotsix_mill.config import RepoConfig, ReposRegistry, Settings
+    from robotsix_mill.core import db as _db
+    from robotsix_mill.core.service import TicketService
+    from robotsix_mill.stages.base import StageContext
+    from robotsix_mill.stages.refine.core import RefineStage
+
+    board_a_repo = RepoConfig(
+        repo_id="board-a-repo",
+        board_id="board-a",
+        langfuse_project_name="proj-a",
+        langfuse_public_key="pk-a",
+        langfuse_secret_key="sk-a",
+        forge_remote_url="https://board-a.example.com/repo.git",
+    )
+    board_b_repo = RepoConfig(
+        repo_id="board-b-repo",
+        board_id="board-b",
+        langfuse_project_name="proj-b",
+        langfuse_public_key="pk-b",
+        langfuse_secret_key="sk-b",
+        forge_remote_url="https://board-b.example.com/repo.git",
+    )
+    registry = ReposRegistry(
+        repos={"board-a-repo": board_a_repo, "board-b-repo": board_b_repo}
+    )
+
+    monkeypatch.setattr("robotsix_mill.config.get_repos_config", lambda: registry)
+
+    # Build ws while ticket.board_id is STILL "board-a" (pre-migration state).
+    s = Settings(data_dir=str(tmp_path / "data"), FORGE_REMOTE_URL="")
+    _db.init_db(s, board_id="board-a")
+    svc = TicketService(s, board_id="board-a")
+    t = svc.create("Migrated ticket", "body")
+    ws_stale = svc.workspace(t)  # pre-migration ws (board-a path)
+
+    # NOW simulate migration: update board_id in-memory (as DB would after migrate()).
+    t.board_id = "board-b"
+
+    ctx = StageContext(
+        settings=s,
+        service=svc,
+        repo_config=board_a_repo,  # ctx still has board-a's config
+    )
+
+    clone_args: dict = {}
+
+    def _capture(remote_url, dest, branch, token):
+        clone_args["remote_url"] = remote_url
+        clone_args["dest"] = str(dest)
+
+    monkeypatch.setattr("robotsix_mill.vcs.git_ops.clone", _capture)
+
+    result = RefineStage._clone_or_resume(ctx, t, ws_stale)
+
+    # URL must be board-b (re-resolution worked).
+    assert clone_args["remote_url"] == "https://board-b.example.com/repo.git"
+    # Workspace path must be board-b, NOT board-a (the fix).
+    assert "board-b" in clone_args["dest"]
+    assert "board-a" not in clone_args["dest"]
+    # Returned path is inside board-b workspace.
+    assert "board-b" in str(result)
+    assert "board-a" not in str(result)
 
     _db.reset_engine()
