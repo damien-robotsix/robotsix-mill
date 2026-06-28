@@ -406,6 +406,12 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.limits.maintenance_requests` | `MILL_MAINTENANCE_REQUEST_LIMIT` | `100` | Per-call request cap for the maintenance agent |
 | `core.limits.doc_requests` | `MILL_DOC_REQUEST_LIMIT` | `16` | Per-run request cap for the document agent |
 | `core.limits.doc_classifier_requests` | `MILL_DOC_CLASSIFIER_REQUEST_LIMIT` | `3` | Per-call request cap for the doc-classifier gate |
+| `core.limits.triage_requests` | — | `8` | Per-call cap for the pre-refine triage agent (main call + tool calls). Distinct from `scope_triage_requests` (which caps the scope-triage agent) |
+| `core.limits.already_done_requests` | — | `8` | Per-call cap for the already-done verifier sub-agent (short-circuits when a prior no-change-needed memory entry matches the draft) |
+| `core.limits.dedup_max_candidates` | — | `8` | Maximum candidates passed to the dedup LLM after similarity pre-filtering. Caps token budget regardless of repo size |
+| `core.limits.coordinator_max_tool_calls` | — | `300` | Hard cap on total tool calls per implement (coordinator) trace — runaway-loop backstop above the request budget |
+| `core.limits.max_refine_explore_calls` | — | `4` | Hard cap on explore/parallel_explore sub-agent calls per refine run. 0 disables exploration entirely |
+| `core.limits.max_refine_read_file_calls` | — | `10` | Hard cap on read_file calls per refine/triage agent run. 0 disables the cap (unbounded reads) |
 | `core.limits.review_requests` | `MILL_REVIEW_REQUEST_LIMIT` | `80` | Per-run request cap for the review agent |
 
 ### 3. Worker pool & retry
