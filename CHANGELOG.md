@@ -1,5 +1,11 @@
 ## 0.0.0 (unreleased)
 
+- **agents**: add `triage_boilerplate` periodic agent (YAML definition +
+  Python runner module) to identify recurring triage patterns and propose
+  boilerplate response templates. Follows the standard periodic-agent
+  pattern with structured output (`TriageBoilerplateResult`), memory
+  ledger round-tripping, and a ``STRUCTURED OUTPUT IS MANDATORY`` block.
+
 - **agents**: move per-call content (`repo_dir`, `language_instructions`,
   `deployed_log_summary`) from system prompt to user prompt so the static
   system preamble is identical across every agent call within a ticket
