@@ -43,8 +43,8 @@ def test_missing_repo_degrades_not_raises(tmp_path):
 
 
 def test_parallel_explore_fans_out_labeled(tmp_path, monkeypatch):
-    """parallel_explore runs one scout per question and returns every
-    answer labeled by question."""
+    """parallel_explore batches questions into a single run_explore
+    call and returns every answer labeled by question."""
     s = _settings(tmp_path)
 
     async def fake(*, settings, repo_dir, question, extra_roots=None):
@@ -53,43 +53,75 @@ def test_parallel_explore_fans_out_labeled(tmp_path, monkeypatch):
     monkeypatch.setattr(explore, "run_explore", fake)
     tool = explore.make_parallel_explore_tool(s, tmp_path)
     out = asyncio.run(tool(["q1", "q2", "q3"]))
-    assert "[1] q1" in out and "ANS:q1" in out
-    assert "[2] q2" in out and "[3] q3" in out
+    # All three question labels appear in the output.
+    assert "[1] q1" in out
+    assert "[2] q2" in out
+    assert "[3] q3" in out
+    # The batched question text is visible in the answer body
+    # (the fake echoes its prompt), and each original question
+    # appears inside the batched prompt.
+    assert "q1" in out and "q2" in out and "q3" in out
 
 
-def test_parallel_explore_bounds_concurrency(tmp_path, monkeypatch):
-    """No more than ``parallel_explore_max`` scouts run at once."""
-    s = _settings(tmp_path, parallel_explore_max=2)
-    state = {"cur": 0, "max": 0}
+def test_parallel_explore_single_question_no_batching(tmp_path, monkeypatch):
+    """A single question is delegated directly (no batch wrapper)."""
+    s = _settings(tmp_path)
+
+    seen = {}
 
     async def fake(*, settings, repo_dir, question, extra_roots=None):
-        state["cur"] += 1
-        state["max"] = max(state["max"], state["cur"])
-        await asyncio.sleep(0.02)
-        state["cur"] -= 1
-        return question
+        seen["question"] = question
+        return f"ANS:{question}"
+
+    monkeypatch.setattr(explore, "run_explore", fake)
+    tool = explore.make_parallel_explore_tool(s, tmp_path)
+    out = asyncio.run(tool(["just-one"]))
+    assert "[1] just-one" in out
+    assert "ANS:just-one" in out
+    # The question is passed verbatim — no batch wrapper.
+    assert seen["question"] == "just-one"
+
+
+def test_parallel_explore_batches_into_single_call(tmp_path, monkeypatch):
+    """Multiple questions are batched into a single run_explore call
+    (not fanned out concurrently), so the system prompt is sent once."""
+    s = _settings(tmp_path)
+    seen = {"calls": 0, "questions": []}
+
+    async def fake(*, settings, repo_dir, question, extra_roots=None):
+        seen["calls"] += 1
+        seen["questions"].append(question)
+        return "answer"
 
     monkeypatch.setattr(explore, "run_explore", fake)
     tool = explore.make_parallel_explore_tool(s, tmp_path)
     asyncio.run(tool([f"q{i}" for i in range(6)]))
-    assert state["max"] <= 2
+    # Exactly one call for all six questions (batched).
+    assert seen["calls"] == 1
+    # The single call's prompt contains every question.
+    prompt = seen["questions"][0]
+    for i in range(6):
+        assert f"q{i}" in prompt
 
 
-def test_parallel_explore_isolates_per_slot_failures(tmp_path, monkeypatch):
-    """One failing scout yields an error string for its slot; the rest
-    still return."""
+def test_parallel_explore_surface_failure(tmp_path, monkeypatch):
+    """When the single batched run_explore call raises, the failure is
+    surfaced as an error string while question labels are preserved."""
     s = _settings(tmp_path)
 
     async def fake(*, settings, repo_dir, question, extra_roots=None):
-        if question == "boom":
-            raise RuntimeError("nope")
-        return f"ok:{question}"
+        raise RuntimeError("batch failed")
 
     monkeypatch.setattr(explore, "run_explore", fake)
     tool = explore.make_parallel_explore_tool(s, tmp_path)
-    out = asyncio.run(tool(["a", "boom", "c"]))
-    assert "ok:a" in out and "ok:c" in out
-    assert "explore failed" in out and "nope" in out
+    out = asyncio.run(tool(["a", "b", "c"]))
+    # Question labels still appear in the output.
+    assert "[1] a" in out
+    assert "[2] b" in out
+    assert "[3] c" in out
+    # The failure is captured.
+    assert "explore failed" in out
+    assert "batch failed" in out
 
 
 def test_parallel_explore_empty_questions(tmp_path):
@@ -615,11 +647,12 @@ def test_trace_stage_parallel_explore_nests_under_parent(tmp_path, monkeypatch):
     s = _settings(tmp_path)
     tool = explore.make_parallel_explore_tool(s, tmp_path)
     out = asyncio.run(tool(["q1", "q2"]))
-    assert "ANS:q1" in out
+    # The batched prompt contains both questions.
+    assert "q1" in out and "q2" in out
     assert "parallel_explore" in spans
-    # Each scout also opens its own "explore" span via run_explore, but
-    # we've monkeypatched run_explore away for this test — those inner
-    # spans are not recorded here. We only verify the outer wrapper.
+    # The single inner explore call also opens its own "explore" span,
+    # but we've monkeypatched run_explore away — inner spans are not
+    # recorded here. We only verify the outer wrapper.
 
 
 # --- finish_reason == 'length' continuation tests ------------------------

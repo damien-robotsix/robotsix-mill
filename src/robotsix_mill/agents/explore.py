@@ -13,8 +13,6 @@ network), like the other agent seams.
 
 from __future__ import annotations
 
-import asyncio
-
 from pathlib import Path
 
 from ..config import Settings, get_secrets
@@ -482,53 +480,71 @@ def make_repo_scoped_explore_tool(settings: Settings, repo_clones: dict[str, Pat
 def make_parallel_explore_tool(
     settings: Settings, repo_dir: Path, extra_roots: list[Path] | None = None
 ):
-    """Return a ``parallel_explore(questions)`` closure that fans out.
+    """Return a ``parallel_explore(questions)`` closure that batches
+    questions into a single scout call.
 
-    Spawns one independent :func:`run_explore` scout per question and runs
-    them **concurrently** (bounded by ``settings.parallel_explore_max``),
-    returning all answers labeled by question. Each scout has its own fresh
-    context + read-only repo tools (incl. the isolated, concurrency-safe
-    sandbox ``run_command``), so genuinely long work splits across subagents
-    instead of running serially in one agent and blowing the stage timeout
-    (e.g. enumerating warnings by partitioning the test suite across scouts).
-
-    Scouts run on the cheap OpenRouter explore model, so the fan-out is true
-    concurrency (not bounded by the Claude subprocess cap). A failing scout
-    yields an error string for its slot rather than failing the whole batch.
+    Instead of spawning one independent :func:`run_explore` scout per
+    question (each re-sending the ~68k-char system prompt), all questions
+    are batched into a single explore call so the system prompt is sent
+    only once.  The scout answers every question in one response, labeled
+    by number.  This cuts the input-token cost by a factor of N for N
+    questions.
     """
-    cap = max(1, settings.parallel_explore_max)
 
     async def parallel_explore(questions: list[str]) -> str:
-        """Run SEVERAL independent investigations CONCURRENTLY — one fresh
-        scout sub-agent per question. Use this (instead of many serial
-        ``explore`` calls) for long, splittable work: e.g. partition a big
-        task into independent slices ("enumerate warnings in tests/core",
-        "...in tests/agents", …) and pass them all at once. Each scout can
-        read files and run sandboxed commands in the repo. Returns every
-        answer, labeled by its question. Keep each question self-contained;
-        they cannot see each other's results."""
+        """Batch SEVERAL independent questions into a single scout call.
+
+        Use this (instead of many serial ``explore`` calls) for long,
+        splittable work: e.g. partition a big task into independent slices
+        ("enumerate warnings in tests/core", "...in tests/agents", …) and
+        pass them all at once.  All questions are sent in one prompt so the
+        system context is loaded only once.  Returns every answer labeled by
+        its question.  Keep each question self-contained; the scout answers
+        them sequentially within the same call."""
         if not questions:
             return "parallel_explore: no questions provided"
-        sem = asyncio.Semaphore(cap)
 
-        async def _one(idx: int, q: str) -> str:
-            async with sem:
-                try:
-                    ans = await run_explore(
-                        settings=settings,
-                        repo_dir=repo_dir,
-                        question=q,
-                        extra_roots=extra_roots,
-                    )
-                except Exception as e:  # noqa: BLE001 — isolate per-slot failure
-                    ans = f"(explore failed: {e})"
-            return f"### [{idx + 1}] {q}\n{ans}"
+        if len(questions) == 1:
+            # Single question — no batching benefit; delegate directly.
+            with trace_stage("parallel_explore"):
+                ans = await run_explore(
+                    settings=settings,
+                    repo_dir=repo_dir,
+                    question=questions[0],
+                    extra_roots=extra_roots,
+                )
+            return f"### [1] {questions[0]}\n{ans}"
+
+        # Compose a batched prompt so the system prompt is sent only once.
+        numbered = "\n\n".join(
+            f"### Question {i + 1}: {q}" for i, q in enumerate(questions)
+        )
+        batch_prompt = (
+            "Answer ALL of the following independent questions. "
+            "For each question, start your answer with exactly "
+            '"### [N]" on its own line where N is the question number, '
+            "then provide your tight, concise answer following your "
+            "normal discipline. Do NOT combine answers — keep each "
+            "question's response separate.\n\n"
+            f"{numbered}"
+        )
 
         with trace_stage("parallel_explore"):
-            results = await asyncio.gather(
-                *(_one(i, q) for i, q in enumerate(questions))
-            )
-        return "\n\n".join(results)
+            try:
+                result = await run_explore(
+                    settings=settings,
+                    repo_dir=repo_dir,
+                    question=batch_prompt,
+                    extra_roots=extra_roots,
+                )
+            except Exception as e:  # noqa: BLE001 — degrade, don't break
+                result = f"(explore failed: {e})"
+
+        # Prepend question labels so the caller always sees which
+        # question each answer block belongs to — even when the scout
+        # omits or mis-formats the "### [N]" markers.
+        prefix = "\n\n".join(f"### [{i + 1}] {q}" for i, q in enumerate(questions))
+        return f"{prefix}\n\n{result}"
 
     from .tool_registry import ToolInfo, ToolRegistry
 
@@ -536,8 +552,8 @@ def make_parallel_explore_tool(
         ToolInfo(
             name="parallel_explore",
             description=(
-                "Run several independent explore investigations concurrently "
-                "(one scout per question) for long, splittable work."
+                "Run several independent explore investigations batched "
+                "into a single call — the system context is loaded only once."
             ),
             category="exploration",
             parameters={"questions": "list[str]"},
