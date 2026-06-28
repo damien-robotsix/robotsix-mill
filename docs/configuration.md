@@ -434,6 +434,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.requeue_batch_size` | — | `5` | Tickets enqueued per batch in the startup re-queue drip feed |
 | `core.requeue_batch_pause_seconds` | — | `2.0` | Pause (seconds) between startup re-queue batches |
 | `core.startup_jitter_seconds` | — | `30` | Max random jitter (seconds) added to the per-repo periodic pass first-tick delay |
+| `core.board_list_cache_ttl_seconds` | — | `3.0` | Short-TTL cache for board-poll GET /tickets endpoint (seconds). Repeated polls within this window return a cached snapshot to avoid stalling the event loop under load. 0.0 disables the cache. |
 
 ### 4. Memory
 
