@@ -1075,13 +1075,13 @@ def test_mark_done_from_draft(service):
 
 
 def test_mark_done_from_blocked(service):
-    """mark_done transitions a BLOCKED ticket to DONE."""
+    """mark_done rejects a BLOCKED ticket — blocked state must be
+    cleared (resumed) before the ticket can be closed."""
     t = service.create("blocked mark done")
     service.transition(t.id, State.READY)
     service.transition(t.id, State.BLOCKED, note="stuck")
-    comment, ticket = service.mark_done(t.id)
-    assert comment is None
-    assert ticket.state is State.DONE
+    with pytest.raises(TransitionError, match="not eligible"):
+        service.mark_done(t.id)
 
 
 def test_mark_done_with_note_creates_comment(service):
@@ -1279,6 +1279,140 @@ def test_mark_done_no_repo_clone_no_crash(service):
     assert ticket.state is State.DONE
     if comment is not None:
         assert comment.body == "Fixed in PR #9999"
+
+
+# -- Changelog duplicate fragment gate ---------------------------------
+
+
+def _setup_repo_with_towncrier(repo_dir, fragment_dir_name="changes"):
+    """Create a git repo with a pyproject.toml declaring towncrier config."""
+    import subprocess as _sp
+
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    _sp.run(["git", "-C", str(repo_dir), "init"], capture_output=True, text=True)
+    _sp.run(
+        ["git", "-C", str(repo_dir), "config", "user.email", "test@example.com"],
+        capture_output=True, text=True,
+    )
+    _sp.run(
+        ["git", "-C", str(repo_dir), "config", "user.name", "Test"],
+        capture_output=True, text=True,
+    )
+
+    pp = repo_dir / "pyproject.toml"
+    pp.write_text(f'[tool.towncrier]\ndirectory = "{fragment_dir_name}"\n')
+    _sp.run(["git", "-C", str(repo_dir), "add", "pyproject.toml"], capture_output=True, text=True)
+    _sp.run(
+        ["git", "-C", str(repo_dir), "commit", "-m", "init with towncrier"],
+        capture_output=True, text=True,
+    )
+
+
+def _add_fragment(repo_dir, fragment_dir_name, filename, content="fragment content"):
+    """Create a fragment file, stage and commit it."""
+    import subprocess as _sp
+
+    frag_dir = repo_dir / fragment_dir_name
+    frag_dir.mkdir(parents=True, exist_ok=True)
+    (frag_dir / filename).write_text(content)
+    _sp.run(
+        ["git", "-C", str(repo_dir), "add", f"{fragment_dir_name}/{filename}"],
+        capture_output=True, text=True,
+    )
+    _sp.run(
+        ["git", "-C", str(repo_dir), "commit", "-m", f"add {filename}"],
+        capture_output=True, text=True,
+    )
+
+
+def test_mark_done_rejects_duplicate_changelog_fragments(service, tmp_path):
+    """mark_done raises TransitionError when the branch HEAD has
+    >1 fragment for the ticket id."""
+    t = service.create("dupe frag test")
+    ws = service.workspace(t)
+    repo = ws.repo_dir
+
+    _setup_repo_with_towncrier(repo)
+    _add_fragment(repo, "changes", f"{t.id}.feature.md")
+    _add_fragment(repo, "changes", f"{t.id}.misc.md")
+
+    with pytest.raises(TransitionError, match="duplicate changelog fragments"):
+        service.mark_done(t.id)
+
+
+def test_mark_done_allows_single_changelog_fragment(service, tmp_path):
+    """mark_done succeeds when only one fragment exists for the ticket."""
+    t = service.create("single frag test")
+    ws = service.workspace(t)
+    repo = ws.repo_dir
+
+    _setup_repo_with_towncrier(repo)
+    _add_fragment(repo, "changes", f"{t.id}.misc.md")
+
+    comment, ticket = service.mark_done(t.id)
+    assert ticket.state is State.DONE
+
+
+def test_mark_done_allows_no_changelog_fragments(service, tmp_path):
+    """mark_done succeeds when no fragment exists for the ticket."""
+    t = service.create("no frag test")
+    ws = service.workspace(t)
+    repo = ws.repo_dir
+
+    _setup_repo_with_towncrier(repo)
+    # no fragment added
+
+    comment, ticket = service.mark_done(t.id)
+    assert ticket.state is State.DONE
+
+
+def test_mark_done_allows_no_towncrier_config(service, tmp_path):
+    """mark_done succeeds (best-effort) when pyproject.toml has no
+    [tool.towncrier] section."""
+    t = service.create("no tc config")
+    ws = service.workspace(t)
+    repo = ws.repo_dir
+
+    import subprocess as _sp
+
+    repo.mkdir(parents=True, exist_ok=True)
+    _sp.run(["git", "-C", str(repo), "init"], capture_output=True, text=True)
+    _sp.run(
+        ["git", "-C", str(repo), "config", "user.email", "test@example.com"],
+        capture_output=True, text=True,
+    )
+    _sp.run(
+        ["git", "-C", str(repo), "config", "user.name", "Test"],
+        capture_output=True, text=True,
+    )
+    (repo / "pyproject.toml").write_text('[project]\nname = "test"\n')
+    _sp.run(["git", "-C", str(repo), "add", "."], capture_output=True, text=True)
+    _sp.run(
+        ["git", "-C", str(repo), "commit", "-m", "init"],
+        capture_output=True, text=True,
+    )
+    # Add a fragment anyway (no towncrier config → gate should skip).
+    _add_fragment(repo, "changes", f"{t.id}.feature.md")
+
+    comment, ticket = service.mark_done(t.id)
+    assert ticket.state is State.DONE
+
+
+def test_transition_to_done_rejects_duplicate_changelog_fragments(service, tmp_path):
+    """transition(..., DONE) raises TransitionError when the branch HEAD
+    has >1 fragment for the ticket id."""
+    t = service.create("transition dupe frag test")
+    ws = service.workspace(t)
+    repo = ws.repo_dir
+
+    _setup_repo_with_towncrier(repo)
+    _add_fragment(repo, "changes", f"{t.id}.feature.md")
+    _add_fragment(repo, "changes", f"{t.id}.misc.md")
+
+    # DRAFT -> DONE is normally allowed; the fragment gate blocks it.
+    assert can_transition(t.state, State.DONE)
+    with pytest.raises(TransitionError, match="duplicate changelog fragments"):
+        service.transition(t.id, State.DONE)
 
 
 # --- Epic-priority propagation ----------------------------------------
