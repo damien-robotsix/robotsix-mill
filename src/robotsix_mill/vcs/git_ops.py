@@ -345,6 +345,27 @@ def commit_all(repo: Path, message: str) -> None:
     _git(repo, "commit", "-q", "-m", message)
 
 
+def commit_file(repo: Path, filename: str, message: str) -> bool:
+    """Stage ``filename`` and commit if it differs from HEAD.
+
+    Returns True when a commit was created, False when the file was
+    unchanged (nothing staged) — allowing callers to skip logging.
+
+    Raises ``subprocess.CalledProcessError`` on git failure (caller is
+    responsible for catching and warning).
+    """
+    _git(repo, "add", filename)
+    result = subprocess.run(
+        ["git", "-C", str(repo), "diff", "--cached", "--quiet", "--", filename],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return False
+    _git(repo, "commit", "-q", "-m", message)
+    return True
+
+
 def push(repo: Path, branch: str, remote_url: str, token: str | None) -> None:
     """Push ``branch`` to ``remote_url`` (token-auth for https). Uses
     ``--force`` so a re-delivery updates the bot-owned branch; pushes to
@@ -689,6 +710,26 @@ def branch_has_net_diff(repo: Path, target_branch: str = "main") -> bool:
     # Any other exit code is an error (bad ref, etc.) — assume a diff so we
     # don't wrongly route a real change to DONE.
     return True
+
+
+def changed_files_net(repo: Path, target_branch: str = "main") -> set[str]:
+    """Return relative paths of files changed in the net branch diff vs
+    ``origin/<target_branch>`` (three-dot merge-base comparison).
+
+    Uses ``git diff --name-only origin/<target_branch>...HEAD`` — the same
+    semantic as :func:`branch_has_net_diff` — so the set exactly mirrors what
+    the PR diff will show.
+
+    Returns an empty set on any git failure (treat as "no manifests changed"
+    → regen is skipped, CI remains the backstop).
+    """
+    try:
+        out = _git(repo, "diff", "--name-only", f"origin/{target_branch}...HEAD")
+    except subprocess.CalledProcessError:
+        return set()
+    if not out:
+        return set()
+    return {f for f in out.split("\n") if f}
 
 
 def branch_is_behind_main(repo: Path, target_branch: str = "main") -> bool:

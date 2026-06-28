@@ -188,6 +188,104 @@ def _write_pr_urls(artifacts_dir: Path, entries: list[dict]) -> None:
     os.replace(tmp, target)
 
 
+def _regen_uv_lock(repo_dir: Path, ticket_id: str) -> None:
+    """Run ``uv lock`` and commit uv.lock if changed. Warn-and-proceed on failure."""
+    try:
+        result = subprocess.run(
+            ["uv", "lock"],  # noqa: S607
+            cwd=repo_dir,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            check=False,
+        )
+    except Exception:
+        log.warning(
+            "%s: uv lock failed (uv not available); "
+            "proceeding with existing uv.lock — CI will catch a stale lock",
+            ticket_id,
+        )
+        return
+
+    if result.returncode != 0:
+        log.warning(
+            "%s: uv lock failed (exit %s); "
+            "proceeding with existing uv.lock — CI will catch a stale lock: %s",
+            ticket_id,
+            result.returncode,
+            (result.stderr or "")[:500],
+        )
+        return
+
+    try:
+        if git_ops.commit_file(repo_dir, "uv.lock", "chore(deps): sync uv.lock"):
+            log.info("%s: committed updated uv.lock", ticket_id)
+    except subprocess.CalledProcessError as e:
+        log.warning(
+            "%s: failed to commit uv.lock: %s",
+            ticket_id,
+            e,
+        )
+
+
+def _regen_npm_lock(repo_dir: Path, ticket_id: str) -> None:
+    """Run ``npm install --package-lock-only`` and commit package-lock.json
+    if changed. Warn-and-proceed on failure."""
+    try:
+        result = subprocess.run(
+            ["npm", "install", "--package-lock-only", "--no-audit", "--no-fund"],  # noqa: S607
+            cwd=repo_dir,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            check=False,
+        )
+    except Exception:
+        log.warning(
+            "%s: npm install failed (npm not available); "
+            "proceeding with existing package-lock.json — CI will catch a stale lock",
+            ticket_id,
+        )
+        return
+
+    if result.returncode != 0:
+        log.warning(
+            "%s: npm install failed (exit %s); "
+            "proceeding with existing package-lock.json — CI will catch a stale lock: %s",
+            ticket_id,
+            result.returncode,
+            (result.stderr or "")[:500],
+        )
+        return
+
+    try:
+        if git_ops.commit_file(
+            repo_dir, "package-lock.json", "chore(deps): sync package-lock.json"
+        ):
+            log.info("%s: committed updated package-lock.json", ticket_id)
+    except subprocess.CalledProcessError as e:
+        log.warning(
+            "%s: failed to commit package-lock.json: %s",
+            ticket_id,
+            e,
+        )
+
+
+def _regen_lockfiles(repo_dir: Path, target: str, ticket_id: str) -> None:
+    """Regenerate stale lockfiles on the branch before push.
+
+    Checks which manifest files are in the net branch diff and regenerates
+    only the corresponding lockfile when the lockfile already exists in the
+    repo. Failures are non-fatal: a warning is logged and delivery proceeds
+    (CI remains the backstop for a genuinely stale lock).
+    """
+    changed = git_ops.changed_files_net(repo_dir, target)
+    if "pyproject.toml" in changed and (repo_dir / "uv.lock").exists():
+        _regen_uv_lock(repo_dir, ticket_id)
+    if "package.json" in changed and (repo_dir / "package-lock.json").exists():
+        _regen_npm_lock(repo_dir, ticket_id)
+
+
 class DeliverStage(Stage):
     """Push the implemented branch to the remote forge for review."""
 
@@ -537,6 +635,9 @@ class DeliverStage(Stage):
                     State.BLOCKED,
                     f"auto-fork failed for {repo_label} — resumable: {e}",
                 )
+
+        # Regenerate stale lockfiles so the PR is born with a correct lock.
+        _regen_lockfiles(repo_dir, target, ticket.id)
 
         try:
             git_ops.push(repo_dir, branch, remote_url, token)

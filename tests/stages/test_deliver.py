@@ -11,6 +11,7 @@ from robotsix_mill.core.states import State
 from robotsix_mill.forge import github
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.deliver import DeliverStage
+from robotsix_mill.stages import deliver as deliver_module
 from robotsix_mill.vcs import git_ops
 
 
@@ -1070,3 +1071,182 @@ def test_meta_triage_fallback_allows_non_top_level_files(tmp_path, monkeypatch):
 
     assert out.next_state is State.IMPLEMENT_COMPLETE
     assert "https://github.com/o/a/pull/2" in out.note
+
+
+# --- lockfile regen tests -----------------------------------------------
+
+
+def test_lockfile_regen_uv_lock_called_when_pyproject_changed(tmp_path, monkeypatch):
+    """Regen is called when pyproject.toml is in the net diff and uv.lock exists."""
+    remote, _ = _bare(tmp_path)
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL=remote,
+        FORGE_TOKEN="t",
+    )
+    t = ctx.service.create("update deps", "bump deps")
+    ctx.service.transition(t.id, State.READY)
+    ctx.service.transition(t.id, State.DELIVERABLE)
+    repo = ctx.service.workspace(t).dir / "repo"
+    git_ops.clone(remote, repo, "main", None)
+    branch = f"mill/{t.id}"
+    git_ops.create_branch(repo, branch)
+    # Modify pyproject.toml and create uv.lock
+    (repo / "pyproject.toml").write_text("[project]\nname = 'test'\n")
+    (repo / "uv.lock").write_text("# lockfile\n")
+    git_ops.commit_all(repo, "add deps")
+    ctx.service.set_branch(t.id, branch)
+    t = ctx.service.get(t.id)
+
+    regen_calls = []
+    monkeypatch.setattr(
+        deliver_module,
+        "_regen_uv_lock",
+        lambda rd, tid: regen_calls.append(tid),
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "open_merge_request",
+        lambda self, *, source_branch, title, body: "https://github.com/o/r/pull/1",
+    )
+
+    DeliverStage().run(t, ctx)
+    assert len(regen_calls) == 1
+
+
+def test_lockfile_regen_not_called_when_manifest_unchanged(tmp_path, monkeypatch):
+    """No regen when the branch only touches a non-manifest file."""
+    remote, _ = _bare(tmp_path)
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL=remote,
+        FORGE_TOKEN="t",
+    )
+    t = ctx.service.create("doc update", "update readme")
+    ctx.service.transition(t.id, State.READY)
+    ctx.service.transition(t.id, State.DELIVERABLE)
+    repo = ctx.service.workspace(t).dir / "repo"
+    git_ops.clone(remote, repo, "main", None)
+    branch = f"mill/{t.id}"
+    git_ops.create_branch(repo, branch)
+    (repo / "README.md").write_text("updated\n")
+    (repo / "uv.lock").write_text("# lock\n")
+    git_ops.commit_all(repo, "docs")
+    ctx.service.set_branch(t.id, branch)
+    t = ctx.service.get(t.id)
+
+    uv_calls = []
+    npm_calls = []
+    monkeypatch.setattr(
+        deliver_module,
+        "_regen_uv_lock",
+        lambda rd, tid: uv_calls.append(tid),
+    )
+    monkeypatch.setattr(
+        deliver_module,
+        "_regen_npm_lock",
+        lambda rd, tid: npm_calls.append(tid),
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "open_merge_request",
+        lambda self, *, source_branch, title, body: "https://github.com/o/r/pull/2",
+    )
+
+    DeliverStage().run(t, ctx)
+    assert len(uv_calls) == 0
+    assert len(npm_calls) == 0
+
+
+def test_lockfile_regen_skipped_when_lockfile_absent(tmp_path, monkeypatch):
+    """No regen when pyproject.toml changed but uv.lock does not exist."""
+    remote, _ = _bare(tmp_path)
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL=remote,
+        FORGE_TOKEN="t",
+    )
+    t = ctx.service.create("add dep", "add dep")
+    ctx.service.transition(t.id, State.READY)
+    ctx.service.transition(t.id, State.DELIVERABLE)
+    repo = ctx.service.workspace(t).dir / "repo"
+    git_ops.clone(remote, repo, "main", None)
+    branch = f"mill/{t.id}"
+    git_ops.create_branch(repo, branch)
+    (repo / "pyproject.toml").write_text("[project]\nname = 'test'\n")
+    # uv.lock is deliberately absent
+    git_ops.commit_all(repo, "add pyproject.toml")
+    ctx.service.set_branch(t.id, branch)
+    t = ctx.service.get(t.id)
+
+    regen_calls = []
+    monkeypatch.setattr(
+        deliver_module,
+        "_regen_uv_lock",
+        lambda rd, tid: regen_calls.append(tid),
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "open_merge_request",
+        lambda self, *, source_branch, title, body: "https://github.com/o/r/pull/3",
+    )
+
+    DeliverStage().run(t, ctx)
+    assert len(regen_calls) == 0
+
+
+def test_regen_uv_lock_warn_and_proceed_on_failure(tmp_path, monkeypatch, caplog):
+    """uv lock failure logs a WARNING and does NOT raise or call commit_file."""
+    import logging
+    from subprocess import CompletedProcess
+
+    # Create a bare git repo so commit_file can be called if needed
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(
+        ["git", "init", "-q", str(repo)],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.email", "t@t"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.name", "t"],
+        check=True,
+        capture_output=True,
+    )
+    # Create uv.lock so commit_file would have something to stage
+    (repo / "uv.lock").write_text("# lock\n")
+    subprocess.run(
+        ["git", "-C", str(repo), "add", "uv.lock"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-q", "-m", "init"],
+        check=True,
+        capture_output=True,
+    )
+
+    def fake_run(cmd, *args, **kwargs):
+        if cmd[0] == "uv" and cmd[1] == "lock":
+            return CompletedProcess(cmd, 1, stdout="", stderr="simulated failure")
+        # Fall back to real subprocess for other calls (git ops in commit_file)
+        return subprocess.run(cmd, *args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    commit_calls = []
+    monkeypatch.setattr(git_ops, "commit_file", lambda *a, **k: commit_calls.append(1))
+
+    with caplog.at_level(logging.WARNING):
+        deliver_module._regen_uv_lock(repo, "test-ticket-id")
+
+    # Must not raise
+    assert len(commit_calls) == 0
+    assert any("uv lock failed" in record.message for record in caplog.records)
