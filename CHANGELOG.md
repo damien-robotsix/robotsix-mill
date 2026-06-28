@@ -1,5 +1,11 @@
 ## 0.0.0 (unreleased)
 
+- **explore**: optimize `parallel_explore` to batch all questions into a
+  single scout call instead of spawning one independent agent per question.
+  This sends the ~68k-char system prompt only once, cutting input-token
+  cost by a factor of N for N questions. Single-question calls are
+  delegated directly with no batch wrapper.
+
 - **forge**: add `close_pr()` and `post_pr_comment()` to the `Forge` ABC
   with GitHub (PATCH pull state, POST issues comment) and GitLab
   (PUT state_event=close, POST notes) implementations. Both return
