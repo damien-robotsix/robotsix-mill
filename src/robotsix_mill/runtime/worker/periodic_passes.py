@@ -540,7 +540,6 @@ class PeriodicPassesMixin(_WorkerBase):
             for repo_config in list(repos.repos.values()):
                 try:
                     result = run_orphaned_pr_check_pass(
-                        session_id=tracing.make_session_id("orphaned-pr-check"),
                         repo_config=repo_config,
                     )
                     log.info(

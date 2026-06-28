@@ -19,7 +19,6 @@ from ..core.models import SourceKind, Ticket
 from ..core.service import TicketService
 from ..core.states import State
 from ..forge import get_forge
-from ..runtime.tracing import make_session_id
 
 if TYPE_CHECKING:
     from ..forge.base import Forge
@@ -48,14 +47,11 @@ class OrphanedPrCheckResult:
 
 
 def run_orphaned_pr_check_pass(
-    session_id: str = "",
     repo_config: RepoConfig | None = None,
 ) -> OrphanedPrCheckResult:
     """Run one orphaned-PR check pass for *repo_config*.
 
     Args:
-        session_id: Tracing session id.  Generated automatically when
-            empty.
         repo_config: Managed repo to scan.  Required.
 
     Returns:
@@ -64,9 +60,6 @@ def run_orphaned_pr_check_pass(
     """
     if repo_config is None:
         raise ValueError("orphaned_pr_check requires a repo_config")
-
-    if not session_id:
-        session_id = make_session_id("orphaned-pr-check")
 
     settings = Settings()
     service = TicketService(settings, board_id=repo_config.board_id)

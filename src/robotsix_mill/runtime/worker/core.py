@@ -192,7 +192,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         self._run_health_task: asyncio.Task | None = None
         self._diagnostic_task: asyncio.Task[None] | None = None
         self._stale_branch_task: asyncio.Task | None = None
-        self._orphaned_pr_check_task: asyncio.Task | None = None
+        self._orphaned_pr_check_task: asyncio.Task[None] | None = None
         self._db_maintenance_task: asyncio.Task | None = None
         self._sandbox_reaper_task: asyncio.Task[None] | None = None
         self._credit_balance_task: asyncio.Task[None] | None = None
