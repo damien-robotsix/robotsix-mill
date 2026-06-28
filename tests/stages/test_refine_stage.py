@@ -3595,3 +3595,68 @@ def test_clone_workspace_path_derived_from_migrated_board_not_stale_ws(
     assert "board-a" not in str(result)
 
     _db.reset_engine()
+
+
+# ---------------------------------------------------------------------------
+# stage cache: unchanged input short-circuits re-refine
+# ---------------------------------------------------------------------------
+
+
+def test_refine_cache_hit_skips_agent(ctx_factory, monkeypatch):
+    """An unchanged draft is not re-refined — the cached outcome is returned."""
+    ctx = ctx_factory(require_approval="false")
+    t = _ticket(ctx, body="Add a feature to frobnicate the widget properly.")
+
+    refine_calls = []
+
+    def _fake_run_refine_agent(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        **kw,
+    ):
+        refine_calls.append(1)
+        return RefineResult(
+            spec_markdown="## Problem\nFrobnicate the widget.",
+        )
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_fake_run_refine_agent,
+        triage_refine=_mock_triage_refine(decision="REFINE", reason="needs refinement"),
+    )
+
+    # First run: refine rewrites description.md (draft → spec).
+    # Agent is called, outcome is cached with the ORIGINAL draft hash.
+    out1 = RefineStage().run(t, ctx)
+    assert out1.next_state is State.READY
+    assert len(refine_calls) == 1
+
+    # Second run: description.md now contains the spec (hash differs).
+    # Cache miss → agent runs again, outcome cached with the SPEC hash.
+    out2 = RefineStage().run(t, ctx)
+    assert out2.next_state is State.READY
+    assert len(refine_calls) == 2
+
+    # Third run: description.md unchanged from second run.
+    # Cache HIT → agent NOT called.
+    out3 = RefineStage().run(t, ctx)
+    assert out3.next_state is State.READY
+    assert len(refine_calls) == 2  # still 2 — cache hit on third run
+
+    # Change the draft body (simulates an operator edit).
+    ws = ctx.service.workspace(t)
+    ws.write_description(
+        "Add a feature to frobnicate the widget properly.\n\nUpdated: also spline the reticulator."
+    )
+    ctx.service.set_content_hash(t.id, ws.content_hash())
+
+    # Fourth run: cache miss because content changed, agent IS called.
+    out4 = RefineStage().run(t, ctx)
+    assert out4.next_state is State.READY
+    assert len(refine_calls) == 3  # agent called again

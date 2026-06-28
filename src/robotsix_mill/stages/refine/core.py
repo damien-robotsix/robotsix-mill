@@ -15,6 +15,7 @@ from ...config import target_branch_for
 from ...core.constants import NON_IMPLEMENTATION_CLOSE_PREFIXES
 from ...core.models import Ticket, TicketKind
 from ...core.states import State
+from ...core.workspace import Workspace
 from ...forge.auth import github_token
 from ...vcs import git_ops
 from ..base import Outcome, Stage, StageContext
@@ -51,6 +52,20 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
             return Outcome(State.DRAFT)
 
         s = ctx.settings
+
+        # --- stage-outcome cache: short-circuit when input is unchanged ---
+        from .._stage_cache import _check, refine_input_hash
+
+        input_hash = refine_input_hash(ws)
+        cached = _check(ws, RefineStage.name, input_hash)
+        if cached is not None:
+            log.info(
+                "%s: refine cache hit (hash=%s…) → %s",
+                ticket.id,
+                input_hash[:12],
+                cached.next_state.value,
+            )
+            return cached
 
         # --- triage phase 0: maintenance keyword check (before clone) ---
         # Deterministic, no LLM, no workspace.  When the draft requests
@@ -119,7 +134,9 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
         # dedup guard because it is deterministic (no LLM call).
         stale = RefineStage._run_freshness_gate(ctx, ticket, draft, repo_dir, s)
         if stale is not None:
-            return RefineStage._guard_implementation_done(ctx, ticket, stale)
+            return RefineStage._guard_implementation_done(
+                ctx, ticket, stale, ws, input_hash
+            )
 
         # Phase 2.1: mill-misroute gate — detect drafts that name
         # mill-specific source paths absent from this checkout and
@@ -127,7 +144,9 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
         # no LLM; runs before the first LLM-invoking gate.
         misrouted = RefineStage._run_mill_misroute_gate(ctx, ticket, draft, repo_dir, s)
         if misrouted is not None:
-            return RefineStage._guard_implementation_done(ctx, ticket, misrouted)
+            return RefineStage._guard_implementation_done(
+                ctx, ticket, misrouted, ws, input_hash
+            )
 
         # Phase 2.2: triage classifier — a single cheap LLM call that
         # classifies the draft as SKIP / NO_CHANGE / MAINTENANCE /
@@ -143,7 +162,9 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
             ctx, ticket, draft, repo_dir, extra_roots, title, ws, s, reviewer_comments
         )
         if triage is not None:
-            return RefineStage._guard_implementation_done(ctx, ticket, triage)
+            return RefineStage._guard_implementation_done(
+                ctx, ticket, triage, ws, input_hash
+            )
 
         # Phase 2.5: obsolescence gate — for *spawned* follow-up drafts,
         # re-evaluate (via a cheap LLM call) whether the cited gap was
@@ -152,12 +173,16 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
         # guard.
         obsolete = RefineStage._run_obsolescence_gate(ctx, ticket, draft, repo_dir, s)
         if obsolete is not None:
-            return RefineStage._guard_implementation_done(ctx, ticket, obsolete)
+            return RefineStage._guard_implementation_done(
+                ctx, ticket, obsolete, ws, input_hash
+            )
 
         # Phase 3: dedup guard
         dup = RefineStage._run_dedup_guard(ctx, ticket, draft, repo_dir, s)
         if dup is not None:
-            return RefineStage._guard_implementation_done(ctx, ticket, dup)
+            return RefineStage._guard_implementation_done(
+                ctx, ticket, dup, ws, input_hash
+            )
 
         # Phase 3.5: advisory dedup against CONCURRENT in-flight tickets.
         # The dedup guard above can only close against a genuinely-DONE
@@ -173,7 +198,9 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
             ctx, ticket, draft, repo_dir, ws, s
         )
         if isinstance(verified, Outcome):
-            return RefineStage._guard_implementation_done(ctx, ticket, verified)
+            return RefineStage._guard_implementation_done(
+                ctx, ticket, verified, ws, input_hash
+            )
         draft = verified
 
         # Phase 4: refine agent + result handling
@@ -182,7 +209,9 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
         )
         # Apply the implementation-DONE guard (defense-in-depth) and
         # clear the error-recovery checkpoint.
-        outcome = RefineStage._guard_implementation_done(ctx, ticket, outcome)
+        outcome = RefineStage._guard_implementation_done(
+            ctx, ticket, outcome, ws, input_hash
+        )
         if outcome.next_state not in (State.BLOCKED, State.AWAITING_USER_REPLY):
             from .orchestration import RefineAgentMixin
 
@@ -194,6 +223,8 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
         ctx: StageContext,
         ticket: Ticket,
         outcome: Outcome,
+        ws: Workspace | None = None,
+        input_hash: str | None = None,
     ) -> Outcome:
         """Guard: refuse to auto-close a TASK ticket without a branch.
 
@@ -225,11 +256,25 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
                     ticket.id,
                     outcome.note,
                 )
-                return Outcome(
+                outcome = Outcome(
                     State.READY,
                     f"refine guard: spec clear, routing to implement — "
                     f"(was: {outcome.note})",
                 )
+
+        # Persist to stage cache so repeated polls over unchanged input
+        # short-circuit.  Skip same-state (DRAFT) outcomes — they are
+        # deferrals whose external precondition (e.g. a dependency) may
+        # resolve without a content change.
+        if (
+            ws is not None
+            and input_hash is not None
+            and outcome.next_state != State.DRAFT
+        ):
+            from .._stage_cache import _update
+
+            _update(ws, RefineStage.name, input_hash, outcome)
+
         return outcome
 
     @staticmethod

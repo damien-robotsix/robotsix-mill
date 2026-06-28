@@ -1661,3 +1661,91 @@ def test_action_ref_no_violations_no_effect_on_verdict(ctx_factory, monkeypatch)
     comments = [c.body for c in ctx.service.list_comments(t.id)]
     assert not any("SHA-pin validation failed" in c for c in comments)
     assert any("fix feature.txt" in c for c in comments)
+
+
+# --- stage cache: unchanged input short-circuits re-review ------------
+
+
+def test_review_cache_hit_skips_agent(ctx_factory, monkeypatch):
+    """An unchanged ticket (same spec + same diff) is not re-audited."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx, body="Add feature.txt")
+
+    agent_calls = []
+
+    def _fake_review(
+        *,
+        settings,
+        diff,
+        spec,
+        model_name=None,
+        prior_context=None,
+        repo_dir=None,
+        reference_files=None,
+        screenshot_path=None,
+        extra_roots=None,
+    ):
+        agent_calls.append(1)
+        return ReviewVerdict(verdict="APPROVE", comments="looks good")
+
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
+
+    # First run: agent is called, outcome is cached.
+    out1 = ReviewStage().run(t, ctx)
+    assert out1.next_state is State.DOCUMENTING
+    assert len(agent_calls) == 1
+
+    # Second run with same spec + diff: cache hit, agent NOT called.
+    out2 = ReviewStage().run(t, ctx)
+    assert out2.next_state is State.DOCUMENTING
+    assert len(agent_calls) == 1  # still 1 — agent was not called again
+
+    # Change the ticket body (simulates spec update).
+    ws = ctx.service.workspace(t)
+    ws.write_description("Add feature.txt\n\nUpdated spec with new details.")
+
+    # Third run with changed spec: cache miss, agent IS called.
+    out3 = ReviewStage().run(t, ctx)
+    assert out3.next_state is State.DOCUMENTING
+    assert len(agent_calls) == 2  # agent called again
+
+
+def test_review_cache_different_diff_miss(ctx_factory, monkeypatch):
+    """A changed diff invalidates the review cache."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx, body="Add feature.txt")
+
+    agent_calls = []
+
+    def _fake_review(
+        *,
+        settings,
+        diff,
+        spec,
+        model_name=None,
+        prior_context=None,
+        repo_dir=None,
+        reference_files=None,
+        screenshot_path=None,
+        extra_roots=None,
+    ):
+        agent_calls.append(1)
+        return ReviewVerdict(verdict="APPROVE", comments="looks good")
+
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
+
+    # First run.
+    out1 = ReviewStage().run(t, ctx)
+    assert out1.next_state is State.DOCUMENTING
+    assert len(agent_calls) == 1
+
+    # Change the diff (add a new commit).
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    (repo_dir / "feature2.txt").write_text("new file")
+    _git(repo_dir, "add", "-A")
+    _git(repo_dir, "commit", "-q", "-m", "add feature2")
+
+    # Second run with changed diff: cache miss, agent IS called.
+    out2 = ReviewStage().run(t, ctx)
+    assert out2.next_state is State.DOCUMENTING
+    assert len(agent_calls) == 2  # agent called again
