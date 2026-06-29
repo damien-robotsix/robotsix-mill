@@ -579,6 +579,7 @@ class GitLabForge(Forge):
                 "conclusion": _PIPELINE_CONCLUSION_MAP.get(p.get("status", "")),
                 "html_url": p.get("web_url", ""),
                 "created_at": p.get("created_at", ""),
+                "path": "",
             }
             for p in raw
             if p.get("status") in terminal

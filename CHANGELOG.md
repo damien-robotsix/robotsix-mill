@@ -20,6 +20,16 @@
   (YAML-only) in the "Env var" column.  All 15 fields derive valid
   `MILL_*` environment variables through Pydantic's `env_prefix="MILL_"`
   setting; the docs now list the correct env-var name.
+- **ci-monitor**: add content-based deduplication for repeated CI failures.
+  Each CI-failure draft is now labelled with a `ci_fp:<hash>` fingerprint
+  derived from the error content (stripped of metadata, timestamps, and run
+  URLs).  Before filing a new draft, the CI monitor checks for a recent
+  (``dedup_lookback_days``, default 7 days) ticket with the same fingerprint
+  and consolidates the recurrence into a comment instead of filing a
+  duplicate.  This prevents the pipeline from filing a fresh ticket for every
+  push when the root cause is an ops-only blocker (e.g. a missing repository
+  secret).  The forge ``list_workflow_runs`` dict now includes a ``path`` key
+  (the workflow file path, e.g. ``.github/workflows/release-please.yml``).
 
 - **agents**: add `triage_boilerplate` periodic agent (YAML definition +
   Python runner module) to identify recurring triage patterns and propose

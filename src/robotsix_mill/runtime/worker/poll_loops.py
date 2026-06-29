@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ...config import RepoConfig, get_repos_config, target_branch_for
+from ...core.dedup import _ci_draft_fingerprint, find_prior_matching_ticket
 from ...core.models import Comment, SourceKind, Ticket
 from ..run_registry import RunRegistry
 
@@ -711,13 +712,72 @@ class PollLoopsMixin(_WorkerBase):
 
             body = "\n".join(body_parts)
 
+            # Content-based dedup: hash the error content (repo,
+            # workflow path, error message prefix, affected file)
+            # and check for a recent (≤ lookback_days) ticket with
+            # the same signature.  When matched, add a consolidation
+            # comment instead of filing a duplicate draft.
+            fingerprint = _ci_draft_fingerprint(body)
+            wf_path = run.get("path", "")
+            prior = find_prior_matching_ticket(
+                service,
+                rc.board_id,
+                target_files=[wf_path] if wf_path else [],
+                fingerprint_text=body,
+                settings=settings,
+                now=datetime.now(tz=timezone.utc),
+                sources=[SourceKind.CI],
+                lookback_days=settings.dedup_lookback_days,
+                dedup_labels=[f"ci_fp:{fingerprint}"],
+                suppress_title_only_match=True,
+            )
+            if prior is not None:
+                log.info(
+                    "CI monitor (%s): content-dedup match — %s "
+                    "(run %s) on %s, consolidating into %s "
+                    "(fingerprint %s)",
+                    repo_label,
+                    wf_name,
+                    run_id_val,
+                    target,
+                    prior.id,
+                    fingerprint,
+                )
+                comment_body = (
+                    f"Run [{run_id_val}]({run.get('html_url', '')}) "
+                    f"also failed at commit "
+                    f"`{run.get('head_sha', '')}` on "
+                    f"{run.get('created_at', '')} "
+                    f"({wf_name} on {target}).\n\n"
+                    f"_Fingerprint: `{fingerprint}`_"
+                )
+                try:
+                    service.add_comment(prior.id, body=comment_body)
+                except Exception:
+                    log.warning(
+                        "CI monitor: failed to add content-dedup "
+                        "consolidation comment to %s for run %s",
+                        prior.id,
+                        run_id_val,
+                    )
+                seen[key] = now
+                deferred.pop(key, None)
+                continue
+
             try:
-                service.create(
+                ticket = service.create(
                     title=title,
                     description=body,
                     source=SourceKind.CI,
                     priority=True,
                 )
+                try:
+                    service.set_labels(ticket.id, [f"ci_fp:{fingerprint}"])
+                except Exception:
+                    log.warning(
+                        "CI monitor: failed to set ci_fp label on %s",
+                        ticket.id,
+                    )
             except Exception:
                 log.exception(
                     "CI monitor: failed to create draft for run %s",
