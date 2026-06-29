@@ -4,7 +4,10 @@
   Conventional Commits, add `python-semantic-release` dev dependency
   for automated versioning and changelog generation, and replace
   manual GitHub Release workflow with a push-to-main semantic-release
-  pipeline.
+  pipeline that triggers PyPI publishing via the shared
+  `python-release.yml` reusable workflow on GitHub Release publish.
+  Set `build_command = "uv build"` so distributions are built and
+  attached to each release.
 - **refine**: add per-ticket refine-pass cap and convergence detection
   to prevent unbounded re-refinement loops that burn subscription
   quota.  A new `max_refine_passes_per_ticket` setting (default 3)

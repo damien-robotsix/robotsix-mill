@@ -3,13 +3,16 @@ name: Release
 on:
   push:
     branches: [main]
+  release:
+    types: [published]
 
 permissions:
   contents: write
   id-token: write
 
 jobs:
-  release:
+  semantic-release:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
@@ -27,3 +30,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           uv run semantic-release publish
+
+  pypi-publish:
+    if: github.event_name == 'release' && github.event.action == 'published'
+    permissions:
+      id-token: write
+      contents: read
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-release.yml@eeced1217f95cc04e514102571282a2ff2d1e3f1
+    with:
+      python-version: "3.14"
+      uv-version: "0.8.15"
+      github-release: false

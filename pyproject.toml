@@ -317,5 +317,5 @@ version_variables = [
     "src/robotsix_deploy/__init__.py:__version__",
 ]
 branch = "main"
-build_command = ""
+build_command = "uv build"
 changelog_folder = ""
