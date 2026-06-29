@@ -201,6 +201,9 @@ post_pr_comment
 
 # -- langfuse ----------------------------------------------------------------
 
+# -- runtime routes (FastAPI decorator-registered handlers) ------------------
+get_trace_detail
+
 # -- meta --------------------------------------------------------------------
 todo_drafts_created
 MARKERS

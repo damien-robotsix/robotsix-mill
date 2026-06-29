@@ -107,7 +107,7 @@ def _langfuse_api_get(
             return None
         return r.json()
     except Exception as e:
-        log.debug("Langfuse API GET %s failed: %s: %s", path, type(e).__name__, e)
+        log.debug("Langfuse API GET %s failed: %s: %s", repr(path), type(e).__name__, e)
         return None
 
 
@@ -524,9 +524,7 @@ def trace_observation_summary(trace: dict) -> dict:
 
         usage = obs.get("usage") or {}
         if isinstance(usage, dict):
-            input_tokens += int(
-                usage.get("input") or usage.get("promptTokens") or 0
-            )
+            input_tokens += int(usage.get("input") or usage.get("promptTokens") or 0)
             output_tokens += int(
                 usage.get("output") or usage.get("completionTokens") or 0
             )
