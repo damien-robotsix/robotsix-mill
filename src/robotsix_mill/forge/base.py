@@ -318,14 +318,26 @@ class Forge(ABC):
         empty set on any failure. Must NEVER raise."""
         return set()
 
-    def list_open_prs(self) -> list[dict]:
-        """Open PRs as list of dicts with 'branch' and 'author_login'.
-        Returns [] on any failure. Must NEVER raise."""
+    def list_open_prs(self) -> list[dict[str, Any]]:
+        """List open PRs with author metadata.
+
+        Returns a list of dicts, each with:
+        ``branch`` — head branch name (str)
+        ``author_login`` — PR author's login (str)
+
+        Default returns ``[]`` — only GitHub implements this.
+        Non-GitHub forges inherit the no-op, causing callers to fall
+        back to :meth:`list_open_pr_branches` without author filtering.
+        """
         return []
 
     def get_authenticated_user_login(self) -> str:
-        """Return the authenticated user/bot login for this forge connection.
-        Returns '' on failure. Must NEVER raise."""
+        """Return the login of the authenticated user/app.
+
+        Default returns ``""`` — only GitHub implements this.
+        Callers should treat ``""`` as "could not resolve" and choose
+        an appropriate fallback (e.g. author-guard bypass).
+        """
         return ""
 
 

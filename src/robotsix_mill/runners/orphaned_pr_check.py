@@ -19,7 +19,7 @@ import enum
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 from ..config import Settings
 from ..config import RepoConfig
@@ -300,7 +300,7 @@ def run_orphaned_pr_check_pass(
     # Prefer list_open_prs (new API with author metadata) for
     # author-guard filtering.  Fall back to list_open_pr_branches
     # (legacy, no author metadata) when list_open_prs returns nothing.
-    open_prs: list[dict] = forge.list_open_prs()
+    open_prs: list[dict[str, Any]] = forge.list_open_prs()
     if open_prs:
         mill_prs = [
             pr for pr in open_prs if pr["branch"].startswith(settings.branch_prefix)
