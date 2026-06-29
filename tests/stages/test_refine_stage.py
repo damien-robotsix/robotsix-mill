@@ -3848,9 +3848,7 @@ def test_refine_sendback_with_feedback_still_runs_agent(ctx_factory, monkeypatch
     ctx.service.transition(
         t.id, State.DRAFT, "changes requested: add error handling section"
     )
-    ctx.service.add_comment(
-        t.id, "please add an error handling section", author="user"
-    )
+    ctx.service.add_comment(t.id, "please add an error handling section", author="user")
     t = ctx.service.get(t.id)
 
     # Pass 2: reviewer_comments are non-empty → pre-refine guard skipped.
@@ -3906,9 +3904,7 @@ def test_refine_output_convergence_stops_counting(ctx_factory, monkeypatch):
     assert t.refine_passes == 1
 
     # Sendback.
-    ctx.service.transition(
-        t.id, State.DRAFT, "changes requested: add more detail"
-    )
+    ctx.service.transition(t.id, State.DRAFT, "changes requested: add more detail")
     ctx.service.add_comment(t.id, "add more detail please", author="user")
     t = ctx.service.get(t.id)
 
@@ -3917,7 +3913,9 @@ def test_refine_output_convergence_stops_counting(ctx_factory, monkeypatch):
     # Post-refine convergence check fires → pass counter stays at 1.
     out2 = RefineStage().run(t, ctx)
     assert out2.next_state is State.HUMAN_ISSUE_APPROVAL
-    assert call_count[0] == 2  # agent WAS called (pre-refine guard skipped due to feedback)
+    assert (
+        call_count[0] == 2
+    )  # agent WAS called (pre-refine guard skipped due to feedback)
     t = ctx.service.get(t.id)
     assert t.refine_passes == 1  # NOT incremented — convergence detected
 
@@ -3966,8 +3964,8 @@ def test_refine_pass_cap_disabled_when_zero(ctx_factory, monkeypatch):
             out = RefineStage().run(t, ctx)
             assert out.next_state is State.HUMAN_ISSUE_APPROVAL
             ctx.service.transition(t.id, out.next_state, out.note)
-        ctx.service.transition(t.id, State.DRAFT, f"changes requested: pass {i+1}")
-        ctx.service.add_comment(t.id, f"feedback pass {i+1}", author="user")
+        ctx.service.transition(t.id, State.DRAFT, f"changes requested: pass {i + 1}")
+        ctx.service.add_comment(t.id, f"feedback pass {i + 1}", author="user")
         t = ctx.service.get(t.id)
 
     assert call_count[0] == 5
