@@ -313,7 +313,8 @@ def run_orphaned_pr_check_pass(
 
     open_prs: list[dict] = forge.list_open_prs()
     mill_prs = [
-        pr for pr in open_prs if pr["branch"].startswith(settings.branch_prefix)
+        pr for pr in open_prs
+        if pr["branch"].startswith(settings.branch_prefix)
     ]
     result.total_scanned = len(mill_prs)
 
@@ -403,6 +404,7 @@ def _classify_branches(
         forge,
         repo_config,
         result,
+        open_orphan_titles,
     )
 
 
@@ -413,6 +415,7 @@ def _apply_classifications(
     forge: Forge,
     repo_config: RepoConfig,
     result: OrphanedPrCheckResult,
+    open_orphan_titles: frozenset[str] = frozenset(),
 ) -> None:
     """Act on each classification up to per-type and combined action caps."""
     max_actions = settings.orphaned_pr_max_actions_per_pass
@@ -423,9 +426,7 @@ def _apply_classifications(
     total_taken = 0
 
     for cpr in classifications:
-        if total_taken >= max_actions or (
-            closes_taken >= max_closes and files_taken >= max_files
-        ):
+        if total_taken >= max_actions or (closes_taken >= max_closes and files_taken >= max_files):
             remaining = len(classifications) - total_taken
             cap_msg = (
                 f"orphaned-pr-check: action cap reached "
@@ -438,23 +439,17 @@ def _apply_classifications(
             break
 
         should_close = cpr.classification in _CLOSE_CLASSIFICATIONS
-        # Per-type action caps (from this branch)
         if should_close:
             if closes_taken >= max_closes:
-                log.debug(
-                    "orphaned-pr-check: close cap reached, skipping %s", cpr.branch
-                )
+                log.debug("orphaned-pr-check: close cap reached, skipping %s", cpr.branch)
                 result.skipped += 1
                 continue
         else:
             if files_taken >= max_files:
-                log.debug(
-                    "orphaned-pr-check: file cap reached, skipping %s", cpr.branch
-                )
+                log.debug("orphaned-pr-check: file cap reached, skipping %s", cpr.branch)
                 result.skipped += 1
                 continue
 
-        # Dedup check (from origin/main)
         is_dedup = (
             not should_close
             and _orphan_ticket_title(repo_config, cpr.branch) in open_orphan_titles
