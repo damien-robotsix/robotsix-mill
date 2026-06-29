@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import Any
 
 from robotsix_llmio.core import LangfuseReadClient
 
@@ -107,7 +108,7 @@ def _langfuse_api_get(
             return None
         return r.json()
     except Exception as e:
-        log.debug("Langfuse API GET %s failed: %s: %s", path, type(e).__name__, e)
+        log.debug("Langfuse API GET failed: %s: %s", type(e).__name__, e)
         return None
 
 
@@ -492,6 +493,76 @@ def list_recent_traces(
     return filtered
 
 
+def trace_observation_summary(trace: dict) -> dict:
+    """Extract a compact observation summary from a Langfuse trace dict.
+
+    The Langfuse list-endpoint response includes an ``observations`` array
+    on each trace.  This helper distills it into a small summary suitable
+    for cost-attribution dashboards and the ``/traces/recent`` REST
+    endpoint — none of the full prompt/completion bodies, just the
+    aggregate numbers a fleet-level cost analyzer needs.
+
+    Returns a dict with:
+    - ``model``: trace-level model string, or the first GENERATION model (``""`` if absent)
+    - ``input_tokens``: total input/prompt tokens across all GENERATION observations
+    - ``output_tokens``: total output/completion tokens across all GENERATION observations
+    - ``total_tokens``: ``input_tokens + output_tokens``
+    - ``tool_calls``: sorted list of ``{name, count}`` for non-chat SPAN observations
+    - ``error_count``: number of ERROR-level observations
+    - ``warning_count``: number of WARNING-level observations
+    - ``observation_count``: total number of observations
+    """
+    observations = trace.get("observations") or []
+
+    input_tokens = 0
+    output_tokens = 0
+    tool_calls: dict[str, int] = {}
+    error_count = 0
+    warning_count = 0
+
+    for obs in observations:
+        name = obs.get("name") or ""
+
+        usage = obs.get("usage") or {}
+        if isinstance(usage, dict):
+            input_tokens += int(usage.get("input") or usage.get("promptTokens") or 0)
+            output_tokens += int(
+                usage.get("output") or usage.get("completionTokens") or 0
+            )
+
+        if name and not name.startswith("chat "):
+            tool_calls[name] = tool_calls.get(name, 0) + 1
+
+        level = obs.get("level")
+        if level == "ERROR":
+            error_count += 1
+        elif level == "WARNING":
+            warning_count += 1
+
+    model = trace.get("model") or ""
+    if not model:
+        for obs in observations:
+            if obs.get("type") == "GENERATION" and obs.get("model"):
+                model = obs.get("model") or ""
+                break
+
+    tool_call_list = [
+        {"name": k, "count": v}
+        for k, v in sorted(tool_calls.items(), key=lambda x: x[1], reverse=True)
+    ]
+
+    return {
+        "model": model,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": input_tokens + output_tokens,
+        "tool_calls": tool_call_list,
+        "error_count": error_count,
+        "warning_count": warning_count,
+        "observation_count": len(observations),
+    }
+
+
 def list_all_traces_since(
     settings: Settings,
     from_timestamp: str,
@@ -517,7 +588,7 @@ def list_all_traces_since(
     if client is None:
         return []
     try:
-        all_traces: list[dict] = []
+        all_traces: list[dict[str, Any]] = []
         for page in client.iter_pages(
             "/api/public/traces",
             params={

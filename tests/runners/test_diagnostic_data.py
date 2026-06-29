@@ -197,25 +197,24 @@ def test_repo_config_resolution_and_passthrough(tmp_path, monkeypatch):
     )
     assert captured["repo_config"] is repo
     assert captured["from_timestamp"] == "2026-06-01T00:00:00Z"
-    assert out == [
-        {
-            "trace_id": "t1",
-            "name": "refine",
-            "session_id": "s1",
-            "total_cost": 0.5,
-            "timestamp": None,
-        }
-    ]
+    assert len(out) == 1
+    assert out[0]["trace_id"] == "t1"
+    assert out[0]["name"] == "refine"
+    assert out[0]["session_id"] == "s1"
+    assert out[0]["total_cost"] == 0.5
+    assert out[0]["timestamp"] is None
+    assert "observation_summary" in out[0]
 
 
 def test_normalize_trace_missing_keys():
-    assert diagnostic_data._normalize_trace({}) == {
-        "trace_id": None,
-        "name": None,
-        "session_id": None,
-        "total_cost": None,
-        "timestamp": None,
-    }
+    norm = diagnostic_data._normalize_trace({})
+    assert norm["trace_id"] is None
+    assert norm["name"] is None
+    assert norm["session_id"] is None
+    assert norm["total_cost"] is None
+    assert norm["timestamp"] is None
+    assert "observation_summary" in norm
+    assert norm["observation_summary"]["observation_count"] == 0
 
 
 def test_query_recent_traces_passthrough_and_normalize(tmp_path, monkeypatch):
@@ -240,6 +239,7 @@ def test_query_recent_traces_passthrough_and_normalize(tmp_path, monkeypatch):
     assert out[0]["trace_id"] == "t9"
     assert out[0]["session_id"] == "sX"
     assert out[0]["name"] is None
+    assert "observation_summary" in out[0]
 
 
 def test_query_session_summary_passthrough(tmp_path, monkeypatch):

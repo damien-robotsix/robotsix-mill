@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -11,6 +12,8 @@ from ..deps import (
     get_settings,
     get_worker,
 )
+
+from ...config import Settings
 
 log = logging.getLogger(__name__)
 
@@ -117,8 +120,14 @@ def list_recent_traces(
 ) -> list[dict]:
     """Return recent Langfuse traces, filtered by cost and limited in
     count.  *limit* is clamped to 1–50; *min_cost* and *max_cost* are
-    inclusive USD filters on ``totalCost``."""
+    inclusive USD filters on ``totalCost``.
+
+    Each trace now includes an ``observationSummary`` with per-trace
+    token counts, model, tool-call list, and error/warning counts so
+    fleet-level cost analysis can attribute spend without fetching every
+    trace individually."""
     from ...langfuse.client import list_recent_traces as _list_recent
+    from ...langfuse.client import trace_observation_summary
 
     limit = max(1, min(limit, 50))
     traces = _list_recent(
@@ -135,6 +144,30 @@ def list_recent_traces(
             "sessionId": t.get("sessionId"),
             "totalCost": t.get("totalCost"),
             "userId": t.get("userId"),
+            "observationSummary": trace_observation_summary(t),
         }
         for t in traces
     ]
+
+
+@router.get("/traces/{trace_id}")
+def get_trace_detail(
+    trace_id: str,
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    """Return full Langfuse trace detail including all observations.
+
+    Callers that need the complete prompt/completion bodies, per-
+    observation token usage, or raw cost-details should use this
+    endpoint (one call per trace) rather than ``/traces/recent``,
+    which only returns aggregated summaries.
+    """
+    from ...langfuse.client import fetch_trace_detail
+
+    detail = fetch_trace_detail(settings, trace_id)
+    if detail is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Trace {trace_id!r} not found, or Langfuse is unconfigured / unreachable.",
+        )
+    return detail

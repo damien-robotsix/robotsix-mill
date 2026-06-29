@@ -415,6 +415,7 @@ def test_traces_recent_happy_path(client, monkeypatch):
             "totalCost": 0.01 * i,
             "userId": "user-1",
             "extraField": "should-be-stripped",
+            "observations": [],
         }
         for i in range(5)
     ]
@@ -434,6 +435,12 @@ def test_traces_recent_happy_path(client, monkeypatch):
         for key in ("id", "name", "timestamp", "sessionId", "totalCost"):
             assert key in t, f"trace missing key '{key}': {t}"
         assert "extraField" not in t, "unexpected key leaked through serialization"
+        assert "observationSummary" in t, "observation summary missing"
+        obs_sum = t["observationSummary"]
+        assert "model" in obs_sum
+        assert "input_tokens" in obs_sum
+        assert "output_tokens" in obs_sum
+        assert "tool_calls" in obs_sum
 
 
 def test_traces_recent_clamp_low(client, monkeypatch):
@@ -472,6 +479,53 @@ def test_traces_recent_clamp_high(client, monkeypatch):
     assert r.status_code == 200
     assert len(captured) == 1
     assert captured[0] == 50, f"expected clamped to 50, got {captured[0]}"
+
+
+def test_traces_detail_happy_path(client, monkeypatch):
+    """GET /traces/{trace_id} returns full trace detail with observations."""
+    fake_detail = {
+        "id": "trace-42",
+        "name": "refine",
+        "sessionId": "session-1",
+        "totalCost": 1.63,
+        "observations": [
+            {
+                "name": "chat completion",
+                "type": "GENERATION",
+                "model": "openai/gpt-4o",
+                "usage": {"input": 5000, "output": 1200},
+            },
+            {
+                "name": "read_file",
+                "type": "SPAN",
+                "level": "DEFAULT",
+            },
+        ],
+    }
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.fetch_trace_detail",
+        lambda settings, trace_id, repo_config=None: fake_detail,
+    )
+
+    r = client.get("/traces/trace-42")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["id"] == "trace-42"
+    assert data["name"] == "refine"
+    assert len(data["observations"]) == 2
+    assert data["observations"][0]["model"] == "openai/gpt-4o"
+
+
+def test_traces_detail_not_found(client, monkeypatch):
+    """GET /traces/{trace_id} returns 404 when Langfuse returns None."""
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse.client.fetch_trace_detail",
+        lambda settings, trace_id, repo_config=None: None,
+    )
+
+    r = client.get("/traces/nonexistent")
+    assert r.status_code == 404
 
 
 # -- POST /survey -------------------------------------------------------
