@@ -24,6 +24,12 @@
   SHA pinning.  Only commit SHAs that fail the existence check
   (`git ls-remote`) are now flagged.  Reusable-workflow refs
   (`.github/workflows/...`) are unaffected.
+- **deliver**: regenerate lockfiles whenever the lock and manifest
+  both exist, not only when the manifest changed.  A stale
+  `uv.lock` or `package-lock.json` paired with an unchanged
+  manifest now gets a consistency check at delivery — the
+  underlying helpers are already idempotent (commit only on
+  change), making this a cheap no-op for consistent locks.
 - **ci**: add `--ignore-decorators "@field_validator,@model_validator"` to
   vulture invocations in CI and pre-commit to eliminate false positives
   from Pydantic `@field_validator` and `@model_validator` decorators.

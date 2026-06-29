@@ -300,18 +300,21 @@ def _regen_npm_lock(repo_dir: Path, ticket_id: str) -> None:
         )
 
 
-def _regen_lockfiles(repo_dir: Path, target: str, ticket_id: str) -> None:
+def _regen_lockfiles(repo_dir: Path, ticket_id: str) -> None:
     """Regenerate stale lockfiles on the branch before push.
 
-    Checks which manifest files are in the net branch diff and regenerates
-    only the corresponding lockfile when the lockfile already exists in the
-    repo. Failures are non-fatal: a warning is logged and delivery proceeds
-    (CI remains the backstop for a genuinely stale lock).
+    Regenerates a lockfile whenever it and its manifest both exist in the
+    repo — regardless of whether the manifest changed.  The underlying
+    helpers commit only when the lock actually changes, so a consistent
+    lock is a cheap no-op.  Failures are non-fatal: a warning is logged
+    and delivery proceeds (CI remains the backstop for a genuinely stale
+    lock).
     """
-    changed = git_ops.changed_files_net(repo_dir, target)
-    if "pyproject.toml" in changed and (repo_dir / "uv.lock").exists():
+    if (repo_dir / "uv.lock").exists() and (repo_dir / "pyproject.toml").exists():
         _regen_uv_lock(repo_dir, ticket_id)
-    if "package.json" in changed and (repo_dir / "package-lock.json").exists():
+    if (repo_dir / "package-lock.json").exists() and (
+        repo_dir / "package.json"
+    ).exists():
         _regen_npm_lock(repo_dir, ticket_id)
 
 
@@ -731,7 +734,7 @@ class DeliverStage(Stage):
                 )
 
         # Regenerate stale lockfiles so the PR is born with a correct lock.
-        _regen_lockfiles(repo_dir, target, ticket.id)
+        _regen_lockfiles(repo_dir, ticket.id)
 
         try:
             git_ops.push(repo_dir, branch, remote_url, token)
