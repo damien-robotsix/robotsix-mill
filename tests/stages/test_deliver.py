@@ -1116,7 +1116,8 @@ def test_lockfile_regen_uv_lock_called_when_pyproject_changed(tmp_path, monkeypa
 
 
 def test_lockfile_regen_not_called_when_manifest_unchanged(tmp_path, monkeypatch):
-    """No regen when the branch only touches a non-manifest file."""
+    """No regen when the branch only touches a non-manifest file and
+    the manifest does not exist in the repo at all."""
     remote, _ = _bare(tmp_path)
     ctx = _ctx(
         tmp_path,
@@ -1158,6 +1159,132 @@ def test_lockfile_regen_not_called_when_manifest_unchanged(tmp_path, monkeypatch
     DeliverStage().run(t, ctx)
     assert len(uv_calls) == 0
     assert len(npm_calls) == 0
+
+
+def test_lockfile_regen_called_when_lock_stale_manifest_unchanged_uv(
+    tmp_path, monkeypatch
+):
+    """Regen is called even when pyproject.toml is unchanged — the lock
+    exists alongside its manifest, so it gets a consistency check."""
+    remote, _ = _bare(tmp_path)
+    # Put pyproject.toml + uv.lock on main so they exist but are NOT
+    # in the net diff of a branch that only changes a non-manifest file.
+    seed2 = tmp_path / "seed2"
+    seed2.mkdir()
+    _git(seed2, "init", "-q")
+    _git(seed2, "config", "user.email", "t@t")
+    _git(seed2, "config", "user.name", "t")
+    (seed2 / "README.md").write_text("seed\n")
+    (seed2 / "pyproject.toml").write_text("[project]\nname = 'test'\n")
+    (seed2 / "uv.lock").write_text("# lock\n")
+    _git(seed2, "add", "-A")
+    _git(seed2, "commit", "-q", "-m", "init with deps")
+    _git(seed2, "branch", "-M", "main")
+    bare2 = tmp_path / "remote2.git"
+    subprocess.run(
+        ["git", "clone", "--bare", "-q", str(seed2), str(bare2)],
+        check=True,
+        capture_output=True,
+    )
+    remote2 = f"file://{bare2}"
+
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL=remote2,
+        FORGE_TOKEN="t",
+    )
+    t = ctx.service.create("doc update", "update readme only")
+    ctx.service.transition(t.id, State.READY)
+    ctx.service.transition(t.id, State.DELIVERABLE)
+    repo = ctx.service.workspace(t).dir / "repo"
+    git_ops.clone(remote2, repo, "main", None)
+    branch = f"mill/{t.id}"
+    git_ops.create_branch(repo, branch)
+    # Only change a non-manifest file — pyproject.toml is untouched.
+    (repo / "README.md").write_text("updated\n")
+    git_ops.commit_all(repo, "docs")
+    ctx.service.set_branch(t.id, branch)
+    t = ctx.service.get(t.id)
+
+    uv_calls = []
+    monkeypatch.setattr(
+        deliver_module,
+        "_regen_uv_lock",
+        lambda rd, tid: uv_calls.append(tid),
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "open_merge_request",
+        lambda self, *, source_branch, title, body: "https://github.com/o/r/pull/2",
+    )
+
+    DeliverStage().run(t, ctx)
+    assert len(uv_calls) == 1, (
+        "uv lock should be regenerated even when manifest is unchanged"
+    )
+
+
+def test_lockfile_regen_called_when_lock_stale_manifest_unchanged_npm(
+    tmp_path, monkeypatch
+):
+    """Regen is called even when package.json is unchanged — same
+    consistency-check logic as the uv path."""
+    remote, _ = _bare(tmp_path)
+    # Put package.json + package-lock.json on main.
+    seed3 = tmp_path / "seed3"
+    seed3.mkdir()
+    _git(seed3, "init", "-q")
+    _git(seed3, "config", "user.email", "t@t")
+    _git(seed3, "config", "user.name", "t")
+    (seed3 / "README.md").write_text("seed\n")
+    (seed3 / "package.json").write_text('{"name": "test"}\n')
+    (seed3 / "package-lock.json").write_text('{"lock": true}\n')
+    _git(seed3, "add", "-A")
+    _git(seed3, "commit", "-q", "-m", "init with deps")
+    _git(seed3, "branch", "-M", "main")
+    bare3 = tmp_path / "remote3.git"
+    subprocess.run(
+        ["git", "clone", "--bare", "-q", str(seed3), str(bare3)],
+        check=True,
+        capture_output=True,
+    )
+    remote3 = f"file://{bare3}"
+
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL=remote3,
+        FORGE_TOKEN="t",
+    )
+    t = ctx.service.create("doc update", "update readme only")
+    ctx.service.transition(t.id, State.READY)
+    ctx.service.transition(t.id, State.DELIVERABLE)
+    repo = ctx.service.workspace(t).dir / "repo"
+    git_ops.clone(remote3, repo, "main", None)
+    branch = f"mill/{t.id}"
+    git_ops.create_branch(repo, branch)
+    (repo / "README.md").write_text("updated\n")
+    git_ops.commit_all(repo, "docs")
+    ctx.service.set_branch(t.id, branch)
+    t = ctx.service.get(t.id)
+
+    npm_calls = []
+    monkeypatch.setattr(
+        deliver_module,
+        "_regen_npm_lock",
+        lambda rd, tid: npm_calls.append(tid),
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "open_merge_request",
+        lambda self, *, source_branch, title, body: "https://github.com/o/r/pull/3",
+    )
+
+    DeliverStage().run(t, ctx)
+    assert len(npm_calls) == 1, (
+        "npm lock should be regenerated even when manifest is unchanged"
+    )
 
 
 def test_lockfile_regen_skipped_when_lockfile_absent(tmp_path, monkeypatch):
