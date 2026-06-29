@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- **cli**: add `robotsix-mill trace-review` subcommand, wiring the
+  periodic trace-review runner into the CLI so it is reachable the
+  same way sibling `schedule_only` passes are (`diagnostic`,
+  `config-sync`, `member-sync`).
 - **implement**: add explicit retry-loop pre-flight checks (ruff,
   mypy, deptry) before the agent emits `implement_complete`, with a
   3-cycle cap to prevent unbounded loops.  Replaces the advisory
