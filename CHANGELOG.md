@@ -1,5 +1,7 @@
 ## 0.0.0 (unreleased)
 
+- **config**: bump `dedup_request_limit` / `dedup_requests` from 6 to 12
+  to reduce budget-exhaustion failures during refine-stage dedup checks.
 - **agents**: remove the 30-row history cap and 15-row comment cap from
   the `read_ticket` agent tool so agents receive the complete history and
   comment log (the 6000-character overall output cap still guards against

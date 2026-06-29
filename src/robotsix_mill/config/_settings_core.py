@@ -236,7 +236,7 @@ class _CoreSettings(BaseModel):
     # ticket bodies to verify matches, so allow a slightly larger
     # budget than a naive single-call (bumped from 4 after the agent
     # exhausted its budget on narrow read_file slices).
-    dedup_request_limit: int = Field(default=6, ge=1)
+    dedup_request_limit: int = Field(default=12, ge=1)
     # Per-call cap for the obsolescence gate — the agent reads a few
     # cited files to verify the gap, so allow a slightly larger budget
     # than the dedup check.

@@ -47,7 +47,7 @@ core:
     refine_web_search_max_calls: 5     # per-refine-run cap on web_search invocations
     maintenance_requests: 100          # per-call request cap for the maintenance agent
     audit_requests: 80                 # per-call request cap for the periodic audit agent
-    dedup_requests: 6                  # per-call cap for dedup check
+    dedup_requests: 12                  # per-call cap for dedup check
     dedup_max_candidates: 8               # max candidates passed to dedup LLM (similarity pre-filter cap)
     dedup_skip_on_no_overlap: true        # skip dedup LLM call when draft shares no token overlap with any candidate
     dedup_candidate_body_max_chars: 4000  # cap each candidate body fed to dedup prompt (≤0 disables truncation)
