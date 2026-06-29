@@ -882,6 +882,7 @@ Both are off by default.
 | `board_manager.broker_token` | `MILL_BOARD_MANAGER_BROKER_TOKEN` | `""` | The manager's bearer token for the broker |
 | `board_manager.model` | `MILL_BOARD_MANAGER_MODEL` | `""` | Level-3 model (`""` → tier default) |
 | `board_manager.recall_model` | `MILL_BOARD_MANAGER_RECALL_MODEL` | `""` | Level-1 recall model (`""` → tier default) |
+| `board_manager.max_concurrent` | `MILL_BOARD_MANAGER_MAX_CONCURRENT` | `3` | Max simultaneous BoardManager LLM requests. Requires robotsix-board-agent with asyncio.to_thread concurrent dispatch support. |
 | `board_manager.max_conversations` | `MILL_BOARD_MANAGER_MAX_CONVERSATIONS` | `200` | Cap on retained question→answer turns |
 
 #### Component agent

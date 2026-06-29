@@ -1,5 +1,7 @@
 ## 0.0.0 (unreleased)
 
+- **docs**: add missing `board_manager.max_concurrent` row to the
+  configuration reference table.
 - **ci**: add `commitizen` commit-msg pre-commit hook to enforce
   Conventional Commits, add `python-semantic-release` dev dependency
   for automated versioning and changelog generation, and replace
