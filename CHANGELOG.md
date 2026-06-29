@@ -10,6 +10,9 @@
   SHA pinning.  Only commit SHAs that fail the existence check
   (`git ls-remote`) are now flagged.  Reusable-workflow refs
   (`.github/workflows/...`) are unaffected.
+- **ci**: add `--ignore-decorators "@field_validator,@model_validator"` to
+  vulture invocations in CI and pre-commit to eliminate false positives
+  from Pydantic `@field_validator` and `@model_validator` decorators.
 - **docs**: add missing `board_manager.max_concurrent` row to the
   configuration reference table.
 - **config**: align `periodic.langfuse_cleanup.max_traces` YAML

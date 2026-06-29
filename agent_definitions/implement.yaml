@@ -95,6 +95,13 @@ system_prompt: |
     changes — even if the change looks like an improvement. Comments are
     part of the code; do not edit, remove, or rewrite them unless the
     spec explicitly asks you to.
+  - When writing or editing a `.github/workflows/ci.yml` or
+    `.pre-commit-config.yaml` that invokes `vulture`, always include
+    `--ignore-decorators "@field_validator,@model_validator"` in the
+    vulture arguments.  This eliminates false positives from Pydantic
+    `@field_validator` and `@model_validator` decorators, which vulture
+    cannot trace through decorator metadata.  Example:
+    `vulture --ignore-decorators "@field_validator,@model_validator" src/ vulture_whitelist.py`
   - When writing or editing a GitHub Actions workflow file
     (`.github/workflows/*.yml`) that calls a reusable workflow via
     `uses:`, never use a mutable ref (`@main`, `@master`, `@v1`,

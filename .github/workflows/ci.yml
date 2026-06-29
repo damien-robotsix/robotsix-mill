@@ -105,7 +105,7 @@ jobs:
       - name: Vulture (dead code)
         env:
           UV_PROJECT_ENVIRONMENT: system
-        run: uv run vulture src/ vulture_whitelist.py
+        run: uv run vulture --ignore-decorators "@field_validator,@model_validator" src/ vulture_whitelist.py
 
       - name: Validate config sync
         env:
