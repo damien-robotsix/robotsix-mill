@@ -24,6 +24,11 @@
   orphaned when no active ticket drives them, and either auto-closes the PR
   (with a comment) or files a tracking ticket.  Defaults to dry-run mode;
   gated on `orphaned_pr_dry_run`, age, and per-pass action cap.
+  Includes a granular ``OrphanClassification`` enum (superseded,
+  conflicting-and-abandoned, ticket-done-unmerged, etc.) produced by the
+  ``classify_orphaned_prs()`` core algorithm, with the enumerated
+  classification list available on ``OrphanedPrCheckResult.classifications``
+  for downstream inspection.
 - **docs**: fix 15 configuration-table rows that incorrectly showed `—`
   (YAML-only) in the "Env var" column.  All 15 fields derive valid
   `MILL_*` environment variables through Pydantic's `env_prefix="MILL_"`
