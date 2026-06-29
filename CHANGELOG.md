@@ -2,6 +2,10 @@
 
 - **docs**: add missing `board_manager.max_concurrent` row to the
   configuration reference table.
+- **config**: align `periodic.langfuse_cleanup.max_traces` YAML
+  default from 1000 → 5000 to match the Pydantic model default and
+  documented default, fixing a silent drift introduced in the
+  langfuse-cleanup centralization refactor.
 - **ci**: add `commitizen` commit-msg pre-commit hook to enforce
   Conventional Commits, add `python-semantic-release` dev dependency
   for automated versioning and changelog generation, and replace
