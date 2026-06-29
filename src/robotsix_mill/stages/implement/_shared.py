@@ -296,6 +296,9 @@ def _is_config_only_change(repo_dir: Path, target_branch: str) -> bool:
     """True when every changed file (added, copied, modified, renamed)
     relative to origin/<target_branch> has a config-only extension.
 
+    Also checks the working tree diff so that unstaged edits from a prior
+    retry pass are detected before the author commits them.
+
     Fail-closed: returns False on any git error or when there is no diff
     yet, so the full test gate runs as the safe default.
     """
@@ -314,7 +317,17 @@ def _is_config_only_change(repo_dir: Path, target_branch: str) -> bool:
     )
     if result.returncode != 0:
         return False
-    changed = result.stdout.strip().splitlines()
+    changed: list[str] = result.stdout.strip().splitlines()
+
+    # Working tree: catches edits from a prior retry pass (unstaged).
+    wt = subprocess.run(
+        ["git", "-C", str(repo_dir), "diff", "--name-only"],
+        capture_output=True,
+        text=True,
+    )
+    if wt.returncode == 0 and wt.stdout.strip():
+        changed.extend(wt.stdout.strip().splitlines())
+
     if not changed:
         return False  # no diff yet — run tests
     return all(p.lower().endswith(CONFIG_ONLY_EXTENSIONS) for p in changed)
