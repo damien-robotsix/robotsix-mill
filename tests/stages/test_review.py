@@ -1452,8 +1452,8 @@ def test_action_ref_valid_sha_no_blocking(ctx_factory, monkeypatch):
 
 
 def test_action_ref_invalid_tag_blocks_approve(ctx_factory, monkeypatch):
-    """A version tag (``@v4``) triggers a blocking REQUEST_CHANGES even
-    when the LLM reviewer says APPROVE."""
+    """A version tag (``@v4``) is accepted for third-party actions —
+    Dependabot handles SHA pinning, so the LLM APPROVE is preserved."""
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
@@ -1468,17 +1468,17 @@ def test_action_ref_invalid_tag_blocks_approve(ctx_factory, monkeypatch):
     monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
 
     out = ReviewStage().run(t, ctx)
-    # Invalid ref → forced REQUEST_CHANGES → back to READY.
-    assert out.next_state is State.READY
+    # Tag ref is accepted → APPROVE preserved → DOCUMENTING.
+    assert out.next_state is State.DOCUMENTING
 
     comments = [c.body for c in ctx.service.list_comments(t.id)]
-    assert any("SHA-pin validation failed" in c for c in comments)
-    # The original LLM comment is preserved.
-    assert any("lgtm" in c for c in comments)
+    assert not any("commit SHA not found" in c for c in comments)
+    assert not any("SHA-pin" in c for c in comments)
 
 
 def test_action_ref_invalid_branch_blocks(ctx_factory, monkeypatch):
-    """A branch ref (``@main``) triggers a blocking REQUEST_CHANGES."""
+    """A branch ref (``@main``) is accepted for third-party actions —
+    Dependabot handles SHA pinning, so the LLM APPROVE is preserved."""
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
@@ -1493,17 +1493,16 @@ def test_action_ref_invalid_branch_blocks(ctx_factory, monkeypatch):
     monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
 
     out = ReviewStage().run(t, ctx)
-    assert out.next_state is State.READY
+    assert out.next_state is State.DOCUMENTING
 
     comments = [c.body for c in ctx.service.list_comments(t.id)]
-    assert any("SHA-pin validation failed" in c for c in comments)
-    # The original LLM comment is preserved.
-    assert any("lgtm" in c for c in comments)
+    assert not any("commit SHA not found" in c for c in comments)
+    assert not any("SHA-pin" in c for c in comments)
 
 
 def test_action_ref_subpath_invalid_tag_blocks(ctx_factory, monkeypatch):
     """A subpath action with a tag (``github/codeql-action/init@v3.29.2``)
-    triggers a blocking REQUEST_CHANGES."""
+    is accepted — Dependabot handles SHA pinning."""
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
@@ -1518,11 +1517,11 @@ def test_action_ref_subpath_invalid_tag_blocks(ctx_factory, monkeypatch):
     monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
 
     out = ReviewStage().run(t, ctx)
-    assert out.next_state is State.READY
+    assert out.next_state is State.DOCUMENTING
 
     comments = [c.body for c in ctx.service.list_comments(t.id)]
-    assert any("SHA-pin validation failed" in c for c in comments)
-    assert any("lgtm" in c for c in comments)
+    assert not any("commit SHA not found" in c for c in comments)
+    assert not any("SHA-pin" in c for c in comments)
 
 
 def test_action_ref_local_ignored(ctx_factory, monkeypatch):
@@ -1600,8 +1599,9 @@ def test_action_ref_violations_appended_to_existing_request_changes(
     ctx_factory,
     monkeypatch,
 ):
-    """When the LLM already returned REQUEST_CHANGES, action-ref violations
-    are prepended to the existing request_changes list."""
+    """When the LLM already returned REQUEST_CHANGES and action refs
+    are valid (tag refs accepted), the LLM verdict passes through
+    unchanged — no synthetic action-ref violations are added."""
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
@@ -1628,8 +1628,9 @@ def test_action_ref_violations_appended_to_existing_request_changes(
     assert out.next_state is State.READY
 
     comments = [c.body for c in ctx.service.list_comments(t.id)]
-    assert any("SHA-pin validation failed" in c for c in comments)
-    # The original LLM comment is preserved alongside the SHA-pin notice.
+    assert not any("commit SHA not found" in c for c in comments)
+    assert not any("SHA-pin" in c for c in comments)
+    # The original LLM comment is preserved.
     assert any("fix other things" in c for c in comments)
 
 
