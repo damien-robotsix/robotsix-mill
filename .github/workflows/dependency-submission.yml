@@ -1,0 +1,17 @@
+name: Dependency Submission
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  dependency-submission:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
+      - uses: rmuir/uv-dependency-submission@8c650a3e5e519b93e604e644f7a4a3953144babe  # v1.1.1

@@ -16,6 +16,10 @@
   default from 1000 → 5000 to match the Pydantic model default and
   documented default, fixing a silent drift introduced in the
   langfuse-cleanup centralization refactor.
+- **ci**: add manual `uv.lock` dependency-submission workflow
+  (`rmuir/uv-dependency-submission`) to override the native Dependabot
+  "Graph Update: uv in /" graph job that fails repeatedly on Python
+  3.14 lockfiles with git dependencies.
 - **ci**: add `commitizen` commit-msg pre-commit hook to enforce
   Conventional Commits, add `python-semantic-release` dev dependency
   for automated versioning and changelog generation, and replace
