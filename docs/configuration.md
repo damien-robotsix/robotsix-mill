@@ -405,6 +405,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.limits.maintenance_requests` | `MILL_MAINTENANCE_REQUEST_LIMIT` | `100` | Per-call request cap for the maintenance agent |
 | `core.limits.doc_requests` | `MILL_DOC_REQUEST_LIMIT` | `16` | Per-run request cap for the document agent |
 | `core.limits.doc_classifier_requests` | `MILL_DOC_CLASSIFIER_REQUEST_LIMIT` | `3` | Per-call request cap for the doc-classifier gate |
+| `core.limits.doc_classifier_diff_max_chars` | `MILL_DOC_CLASSIFIER_DIFF_MAX_CHARS` | `6000` | Caps the git diff (characters) fed to the doc-classifier gate; truncation is safe as the classifier is biased toward `user_facing=True`, and the full doc agent still receives the untruncated diff |
 | `core.limits.triage_requests` | `MILL_TRIAGE_REQUEST_LIMIT` | `8` | Per-call cap for the pre-refine triage agent (main call + tool calls). Distinct from `scope_triage_requests` (which caps the scope-triage agent) |
 | `core.limits.already_done_requests` | `MILL_ALREADY_DONE_REQUEST_LIMIT` | `8` | Per-call cap for the already-done verifier sub-agent (short-circuits when a prior no-change-needed memory entry matches the draft) |
 | `core.limits.dedup_max_candidates` | `MILL_DEDUP_MAX_CANDIDATES` | `8` | Maximum candidates passed to the dedup LLM after similarity pre-filtering. Caps token budget regardless of repo size |
@@ -440,6 +441,8 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.requeue_batch_pause_seconds` | `MILL_REQUEUE_BATCH_PAUSE_SECONDS` | `2.0` | Pause (seconds) between startup re-queue batches |
 | `core.startup_jitter_seconds` | `MILL_STARTUP_JITTER_SECONDS` | `30` | Max random jitter (seconds) added to the per-repo periodic pass first-tick delay |
 | `core.board_list_cache_ttl_seconds` | `MILL_BOARD_LIST_CACHE_TTL_SECONDS` | `3.0` | Short-TTL cache for board-poll GET /tickets endpoint (seconds). Repeated polls within this window return a cached snapshot to avoid stalling the event loop under load. 0.0 disables the cache. |
+| `core.limits.network_probe_host` | `MILL_NETWORK_PROBE_HOST` | `"github.com"` | Host probed to detect global network outage; when unreachable, stage failures don't consume retry attempts |
+| `core.limits.network_outage_retry_seconds` | `MILL_NETWORK_OUTAGE_RETRY_SECONDS` | `120` | Seconds between re-polls during a detected network outage |
 
 ### 4. Memory
 
@@ -456,6 +459,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `pipeline.review_revision_memory_path` | `MILL_REVIEW_REVISION_MEMORY_PATH` | `None` | Override path for review-revision memory; defaults to `<data_dir>/review_revision_memory.md` |
 | `pipeline.ci_patterns_path` | `MILL_CI_PATTERNS_PATH` | `None` | Override path for the ci-fix agent's structured pattern memory; defaults to `<data_dir>/ci_patterns.json` |
 | `pipeline.doc_memory_path` | `MILL_DOC_MEMORY_PATH` | `None` | Override path for the document agent's Markdown memory ledger; defaults to `<data_dir>/doc_memory.md` |
+| `core.memory.retrospect_candidates_max_entries` | `MILL_RETROSPECT_CANDIDATES_MAX_ENTRIES` | `100` | Max entries retained in `AGENT_CANDIDATES.md`; pending entries are always kept; resolved entries are pruned oldest-first. `0` disables pruning |
 
 ### 5. Dedup
 
@@ -484,6 +488,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `gates.auto_approve_enabled` | `MILL_AUTO_APPROVE_ENABLED` | `false` | Enable conservative auto-approve triage |
 | `gates.review_enabled` | `MILL_REVIEW_ENABLED` | `false` | Enable dual-model code review stage before deliver |
 | `gates.review_max_rounds` | `MILL_REVIEW_MAX_ROUNDS` | `3` | Max CODE_REVIEW round-trips before escalate |
+| `gates.max_implement_review_cycles` | `MILL_MAX_IMPLEMENT_REVIEW_CYCLES` | `10` | Backstop ceiling on total implement passes per ticket across all review rounds; `0` disables |
 | `gates.refine_triage_enabled` | `MILL_REFINE_TRIAGE_ENABLED` | `true` | Cheap triage before full refine (skip if precise) |
 | `gates.maintenance_triage_enabled` | `MILL_MAINTENANCE_TRIAGE_ENABLED` | `true` | Cheap triage before a full maintenance pass |
 | `gates.refine_advisory_dedup_enabled` | `MILL_REFINE_ADVISORY_DEDUP_ENABLED` | `true` | Cheap advisory-dedup-verification gate: resolves carried `Possible duplicate of <id>` advisory with a single cheapest-tier `run_dedup_check` |
@@ -560,6 +565,8 @@ the `claude` CLI in the container). These knobs govern that path:
 | `pipeline.ci_fix_max_attempts` | `MILL_CI_FIX_MAX_ATTEMPTS` | `2` | Multi-repo merge ci-fix only: max CI-fix LLM invocations before BLOCK |
 | `pipeline.ci_fix_max_cycles` | `MILL_CI_FIX_MAX_CYCLES` | `3` | Multi-repo merge ci-fix only: hard ceiling on total ci-fix cycles per repo (reset only when CI turns green). Set to 0 to disable. |
 | `pipeline.ci_fix_max_identical_failures` | `MILL_CI_FIX_MAX_IDENTICAL_FAILURES` | `2` | Max consecutive identical CI failure cycles before escalating to BLOCKED. When the same failure fingerprint repeats this many times without progress, the stage short-circuits. Set to 0 to disable. |
+| `pipeline.ci_fix_wait_poll_interval_s` | `MILL_CI_FIX_WAIT_POLL_INTERVAL_S` | `30.0` | How often `wait_for_ci` polls the forge for CI conclusion while a run is in progress |
+| `pipeline.ci_fix_wait_timeout_s` | `MILL_CI_FIX_WAIT_TIMEOUT_S` | `1500.0` | Max seconds a single `wait_for_ci` call blocks before returning a still-pending signal |
 | `pipeline.deliver_max_identical_blocks` | — | `2` | (YAML-only) Max consecutive identical merge-guard blocks before escalating the deliver stage's meta-triage-fallback guard to a stronger BLOCKED requiring human intervention. When the same brand-new top-level file fingerprint repeats this many times without progress (e.g. a deterministic resume→block loop), the stage escalates instead of burning cost. Set to 0 to disable. |
 | `pipeline.ci_fix_request_limit` | `MILL_CI_FIX_REQUEST_LIMIT` | `120` | Per-run request budget for the ci-fix agent (must cover ALL fix→push→verify iterations). When exhausted, pydantic-ai raises `UsageLimitExceeded`, which the retry layer catches and triggers the fallback model (if configured). Set to 0 to disable. |
 | `pipeline.review_revision_max_attempts` | `MILL_REVIEW_REVISION_MAX_ATTEMPTS` | `2` | Max review-revision LLM invocations before BLOCK |
