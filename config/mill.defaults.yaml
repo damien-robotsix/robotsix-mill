@@ -171,6 +171,7 @@ gates:
   pr_summary_enabled: false               # generate structured PR body from diff via cheap LLM (opt-in)
   refine_triage_enabled: true              # cheap triage before full refine (skip if precise)
   max_re_refine_cycles_before_cheap: 2     # force cheap model after this many "changes requested" send-backs; 0 = never
+  max_refine_passes_per_ticket: 3        # per-ticket ceiling on total refine passes before escalating to BLOCKED; 0 = disabled
   refine_trivial_routing_enabled: true     # route trivial-scope tickets to cheap model instead of Opus
   refine_trivial_model_level: 3            # model level for trivial-scope refines (3=flat-cost Claude subscription; 1/2=DeepSeek rollback)
   refine_trivial_subscription_model: sonnet  # Claude alias for trivial/forced-cheap refines routed to the level-3 subscription

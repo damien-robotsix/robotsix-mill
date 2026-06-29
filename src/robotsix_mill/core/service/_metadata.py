@@ -187,6 +187,31 @@ class _MetadataMixin(_ServiceBase):
             s.add(ticket)
             s.commit()
 
+    def set_refine_passes(self, ticket_id: str, value: int) -> None:
+        """Set the ``refine_passes`` counter on *ticket_id*.
+
+        Tracks total refine passes (ticket lifetime).  Used by the
+        refine convergence backstop — when this reaches
+        ``max_refine_passes_per_ticket`` without convergence, the
+        ticket is escalated to BLOCKED."""
+        with db.session(self.settings, self._board_for(ticket_id)) as s:
+            ticket = _get_ticket(s, ticket_id)
+            ticket.refine_passes = value
+            ticket.updated_at = datetime.now(timezone.utc)
+            s.add(ticket)
+            s.commit()
+
+    def set_refine_output_hash(self, ticket_id: str, output_hash: str) -> None:
+        """Record the hash of the description.md produced by the most recent
+        refine pass.  Compared against subsequent passes to detect
+        convergence (unchanged output → the refine loop has stabilised)."""
+        with db.session(self.settings, self._board_for(ticket_id)) as s:
+            ticket = _get_ticket(s, ticket_id)
+            ticket.refine_output_hash = output_hash
+            ticket.updated_at = datetime.now(timezone.utc)
+            s.add(ticket)
+            s.commit()
+
     def set_depends_on(self, ticket_id: str, depends_on_ids: list[str]) -> None:
         """Set the ``depends_on`` field for *ticket_id* to a JSON-encoded
         list of ticket IDs.  Raises :class:`ValueError` if *ticket_id*

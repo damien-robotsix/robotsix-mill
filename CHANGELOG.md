@@ -1,5 +1,17 @@
 ## 0.0.0 (unreleased)
 
+- **refine**: add per-ticket refine-pass cap and convergence detection
+  to prevent unbounded re-refinement loops that burn subscription
+  quota.  A new `max_refine_passes_per_ticket` setting (default 3)
+  escalates tickets to BLOCKED when the cap is exhausted without
+  convergence.  A pre-refine input-convergence guard skips the
+  expensive refine agent when the on-disk description is byte-identical
+  to the previous pass's output and no new reviewer comments exist.
+  A post-refine output-convergence check stops incrementing the pass
+  counter when successive passes produce identical results.  New
+  `refine_passes` and `refine_output_hash` fields on the Ticket model
+  persist the counter and hash across runs.
+
 - **ci-dedup**: include the workflow file path in CI failure fingerprint
   hashing so that the same error in different workflows produces
   distinct fingerprints.  `_ci_draft_fingerprint` now accepts an

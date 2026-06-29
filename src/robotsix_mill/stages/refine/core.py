@@ -204,9 +204,83 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
         draft = verified
 
         # Phase 4: refine agent + result handling
+
+        # --- refine pass-cap gate: escalate when the per-ticket ceiling
+        # is exhausted without convergence.  Guards against unbounded
+        # re-refinement loops burning subscription quota.
+        if (
+            s.max_refine_passes_per_ticket > 0
+            and ticket.refine_passes >= s.max_refine_passes_per_ticket
+        ):
+            log.warning(
+                "%s: refine pass cap reached (%d/%d) — escalating to BLOCKED",
+                ticket.id,
+                ticket.refine_passes,
+                s.max_refine_passes_per_ticket,
+            )
+            return Outcome(
+                State.BLOCKED,
+                "refine cap: "
+                f"{ticket.refine_passes} refine passes exhausted "
+                "without convergence — escalated for human review",
+            )
+
+        # --- pre-refine input-convergence guard: when the on-disk
+        # description.md is byte-identical to the previous refine pass's
+        # output AND there are no new open reviewer comment threads, the
+        # agent would produce the same result — skip the expensive call
+        # and return the ticket toward READY (or HUMAN_ISSUE_APPROVAL
+        # when gated).
+        current_content_hash = ws.content_hash()
+        has_new_feedback = bool(reviewer_comments and reviewer_comments.strip())
+        if (
+            ticket.refine_output_hash
+            and current_content_hash == ticket.refine_output_hash
+            and not has_new_feedback
+        ):
+            log.info(
+                "%s: refine input unchanged vs last output — convergence, "
+                "skipping refine agent",
+                ticket.id,
+            )
+            next_state = (
+                State.HUMAN_ISSUE_APPROVAL if s.require_approval else State.READY
+            )
+            outcome = Outcome(
+                next_state,
+                "refine convergence: input unchanged from previous "
+                "pass — spec is already refined",
+            )
+            return RefineStage._guard_implementation_done(
+                ctx, ticket, outcome, ws, input_hash
+            )
+
         outcome = RefineStage._run_refine_agent(
             ctx, ticket, draft, repo_dir, epic_ctx, title, ws, s, extra_roots
         )
+
+        # --- post-refine output-convergence check: compare the new
+        # description.md hash against the previous pass's output hash.
+        # When successive passes produce identical output the loop has
+        # stabilised — don't count this as a new pass.
+        new_output_hash = ws.content_hash()
+        if ticket.refine_output_hash and new_output_hash == ticket.refine_output_hash:
+            log.info(
+                "%s: refine output unchanged — convergence at pass %d",
+                ticket.id,
+                ticket.refine_passes,
+            )
+        else:
+            ctx.service.set_refine_output_hash(ticket.id, new_output_hash)
+            ctx.service.set_refine_passes(ticket.id, ticket.refine_passes + 1)
+            log.debug(
+                "%s: refine pass %d/%d complete (output hash=%s…)",
+                ticket.id,
+                ticket.refine_passes + 1,
+                s.max_refine_passes_per_ticket,
+                new_output_hash[:12],
+            )
+
         # Apply the implementation-DONE guard (defense-in-depth) and
         # clear the error-recovery checkpoint.
         outcome = RefineStage._guard_implementation_done(
