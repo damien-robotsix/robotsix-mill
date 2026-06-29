@@ -297,24 +297,25 @@ def run_orphaned_pr_check_pass(
         dry_run=settings.orphaned_pr_dry_run,
     )
 
-    # Resolve allowed bot logins for author guard
-    if settings.orphaned_pr_bot_logins:
-        allowed_logins: set[str] = set(settings.orphaned_pr_bot_logins)
-    else:
-        resolved = forge.get_authenticated_user_login()
-        if resolved:
-            allowed_logins = {resolved}
-        else:
-            allowed_logins = set()
-            log.warning(
-                "orphaned-pr-check: could not resolve forge bot login; "
-                "author guard is inactive for this pass (branch-prefix filter still active)"
-            )
-
+    # Prefer list_open_prs (new API with author metadata) for
+    # author-guard filtering.  Fall back to list_open_pr_branches
+    # (legacy, no author metadata) when list_open_prs returns nothing.
     open_prs: list[dict] = forge.list_open_prs()
-    mill_prs = [
-        pr for pr in open_prs if pr["branch"].startswith(settings.branch_prefix)
-    ]
+    if open_prs:
+        mill_prs = [
+            pr for pr in open_prs if pr["branch"].startswith(settings.branch_prefix)
+        ]
+        bot_logins = _resolve_bot_logins(settings, forge)
+        allowed_logins = bot_logins if bot_logins is not None else set()
+    else:
+        open_branches: set[str] = forge.list_open_pr_branches()
+        mill_branches = sorted(
+            b for b in open_branches if b.startswith(settings.branch_prefix)
+        )
+        mill_prs = [{"branch": b, "author_login": ""} for b in mill_branches]
+        allowed_logins = set()
+        _resolve_bot_logins(settings, forge)  # may log warning
+
     result.total_scanned = len(mill_prs)
 
     open_orphan_titles: frozenset[str] = (
@@ -334,6 +335,28 @@ def run_orphaned_pr_check_pass(
         open_orphan_titles,
     )
     return result
+
+
+def _resolve_bot_logins(settings: Settings, forge: Forge) -> set[str] | None:
+    """Resolve the set of bot author logins trusted for orphaned-PR actions.
+
+    Returns:
+        A set of login strings to trust, or ``None`` to signal fail-open
+        (bypass author guard entirely).
+    """
+    if settings.orphaned_pr_bot_logins:
+        return set(settings.orphaned_pr_bot_logins)
+
+    bot_login = forge.get_authenticated_user_login()
+    if bot_login:
+        return {bot_login}
+
+    log.warning(
+        "orphaned-pr-check: cannot determine bot login — "
+        "orphaned_pr_bot_logins is empty and forge returned empty string. "
+        "Author guard bypassed for this pass."
+    )
+    return None
 
 
 def _classify_branches(

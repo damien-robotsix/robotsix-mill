@@ -65,7 +65,8 @@ def _mock_forge(
     open_branches=None,
     pr_status=_PR_STATUS_NOT_SET,
     pr_files=None,
-    bot_login="mill-bot",
+    open_prs=None,
+    bot_login="mill-bot[bot]",
 ):
     """Build a mock forge object with configurable return values."""
     forge = MagicMock()
@@ -84,6 +85,8 @@ def _mock_forge(
         if pr_files is not None
         else [{"path": "a.py", "additions": 5, "deletions": 3}]
     )
+    forge.list_open_prs.return_value = open_prs if open_prs is not None else []
+    forge.get_authenticated_user_login.return_value = bot_login
     return forge
 
 
@@ -644,6 +647,122 @@ class TestHumanPrNotProcessed:
         assert result.total_scanned == 0
         assert result.closed == 0
         svc.get.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Integration tests — human author guard
+# ---------------------------------------------------------------------------
+
+HUMAN_BRANCH = "mill/20250101T000000Z-orphan-a1b2"
+BOT_BRANCH = "mill/20250101T000000Z-bot-c3d4"
+BOT_LOGIN = "mill-bot[bot]"
+HUMAN_LOGIN = "alice"
+
+
+class TestHumanAuthorGuard:
+    """Author-guard tests: human-authored mill/-prefixed PRs must be skipped.
+
+    Each test wires seams via ``_install_seams``.  The branch name used
+    in every scenario resolves to ``None`` from ``svc.get`` so the PR
+    would be classified and acted on if the author guard were absent.
+    """
+
+    def test_human_authored_mill_branch_skipped_by_default(self, monkeypatch):
+        """Human author on a mill/ branch → skipped when bot-login resolved from forge."""
+        s = _settings(orphaned_pr_bot_logins=[])
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(
+            open_prs=[{"branch": HUMAN_BRANCH, "author_login": HUMAN_LOGIN}],
+            bot_login=BOT_LOGIN,
+        )
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.closed == 0
+        assert result.filed == 0
+        forge.close_pr.assert_not_called()
+        svc.create.assert_not_called()
+        assert forge.get_authenticated_user_login.call_count >= 1
+
+    def test_bot_authored_mill_branch_is_processed(self, monkeypatch):
+        """Bot-authored mill/ branch → processed normally."""
+        s = _settings(orphaned_pr_bot_logins=[])
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(
+            open_prs=[{"branch": BOT_BRANCH, "author_login": BOT_LOGIN}],
+            bot_login=BOT_LOGIN,
+        )
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.filed + result.closed >= 1
+        assert svc.create.call_count + forge.close_pr.call_count >= 1
+
+    def test_explicit_bot_logins_config_excludes_human(self, monkeypatch):
+        """Explicit bot-login list → human excluded; forge login resolution skipped."""
+        s = _settings(
+            orphaned_pr_bot_logins=[BOT_LOGIN, "org-automation[bot]"],
+        )
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(
+            open_prs=[{"branch": HUMAN_BRANCH, "author_login": HUMAN_LOGIN}],
+        )
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.closed == 0
+        assert result.filed == 0
+        forge.get_authenticated_user_login.assert_not_called()
+
+    def test_fail_open_when_login_resolution_fails(self, monkeypatch):
+        """Empty bot-login list + forge returns '' → fail-open: branch IS processed."""
+        s = _settings(orphaned_pr_bot_logins=[])
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(
+            open_prs=[{"branch": HUMAN_BRANCH, "author_login": HUMAN_LOGIN}],
+            bot_login="",
+        )
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.filed + result.closed >= 1
+        assert svc.create.call_count + forge.close_pr.call_count >= 1
+
+    def test_sentinel_human_pr_not_acted_on_bot_pr_is(self, monkeypatch):
+        """Guard-removal sentinel: removing author check causes human PR to be
+        acted on, making filed+closed == 2 instead of 1."""
+        s = _settings(
+            orphaned_pr_bot_logins=[],
+            orphaned_pr_max_actions_per_pass=5,
+        )
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(
+            open_prs=[
+                {"branch": HUMAN_BRANCH, "author_login": HUMAN_LOGIN},
+                {"branch": BOT_BRANCH, "author_login": BOT_LOGIN},
+            ],
+            bot_login=BOT_LOGIN,
+        )
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.filed + result.closed == 1
+        assert svc.create.call_count + forge.close_pr.call_count == 1
 
 
 class TestIdempotentFileTicket:
