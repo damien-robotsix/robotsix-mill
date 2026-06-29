@@ -652,7 +652,7 @@ Additional fields:
 | `periodic.diagnostic.monitored_repo_ids` | `MILL_DIAGNOSTIC_MONITORED_REPO_IDS` | `[]` | Repos the diagnostic agent monitors each pass (JSON list); empty → falls back to `target_repo_id`. Add/remove repos here — no code change. See [diagnostic-agent.md](diagnostic-agent.md) |
 | `periodic.langfuse_cleanup.max_traces` | `MILL_LANGFUSE_CLEANUP_MAX_TRACES` | `5000` | Max traces retained in the shared workspace Langfuse project when `langfuse_cleanup_periodic` is enabled; oldest traces are deleted to stay under this cap. Centralized (global-only) — one pass per interval, not per-repo. |
 | `pipeline.retrospect_spawn_drafts` | `MILL_RETROSPECT_SPAWN_DRAFTS` | `true` | Allow retrospect to file improvement draft tickets |
-| `pipeline.retrospect_spawn_agented_proposals` | `MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS` | `true` | When True, retrospect may append AGENT.md proposals to AGENT_CANDIDATES.md for human review. |
+| `pipeline.retrospect_spawn_agented_proposals` | `MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS` | `true` | When True, retrospect files a draft ticket per AGENT.md proposal on the originating repo's board. |
 | `pipeline.retrospect_memory_path` | `MILL_RETROSPECT_MEMORY_PATH` | `None` | Override path for retrospect memory |
 | `pipeline.trace_inspector_memory_path` | `MILL_TRACE_INSPECTOR_MEMORY_PATH` | `None` | Override path for trace-inspector memory |
 
