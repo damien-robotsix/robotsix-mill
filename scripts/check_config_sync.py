@@ -145,6 +145,7 @@ _MODEL_FIELDS_NOT_IN_ALIAS: frozenset[str] = frozenset(
         "ci_fix_wait_timeout_s",
         "ticket_state_cycle_limit",
         "ci_fix_request_limit",
+        "deliver_max_identical_blocks",
         # periodic: toggles / limits
         "bespoke_periodic",
         "bespoke_discovery_interval_seconds",

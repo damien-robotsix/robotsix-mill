@@ -1250,3 +1250,194 @@ def test_regen_uv_lock_warn_and_proceed_on_failure(tmp_path, monkeypatch, caplog
     # Must not raise
     assert len(commit_calls) == 0
     assert any("uv lock failed" in record.message for record in caplog.records)
+
+
+# --- merge-guard loop detection (fingerprint + counter) -----------------
+
+
+def test_merge_guard_first_block_stores_fingerprint(tmp_path, monkeypatch):
+    """First merge-guard block stores the fingerprint + counter=1 and
+    returns a normal BLOCKED (not escalated)."""
+    remote, _ = _bare_in(tmp_path, "a")
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL=remote,
+        FORGE_TOKEN="t",
+    )
+    _install_repos_registry([("repo-a", remote)])
+
+    monkeypatch.setattr(git_ops, "push", lambda *a, **k: None)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "open_merge_request",
+        lambda self, *, source_branch, title, body: "https://github.com/o/a/pull/1",
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    ws = ctx.service.workspace(t)
+    entry = _make_repo_clone(ws.dir, "repo-a", remote, branch, with_commit=True)
+    _write_touched_repos(ctx, t, [entry])
+    _write_meta_triage(ctx, t, fallback=True, repo_ids=["repo-a"])
+
+    out = DeliverStage().run(t, ctx)
+
+    # First block: normal BLOCKED, not escalated.
+    assert out.next_state is State.BLOCKED
+    assert "could not be determined" in out.note
+    assert "escalated" not in out.note.lower()
+
+    # Artifacts written.
+    fp_path = ws.artifacts_dir / "deliver_merge_guard_fingerprint.txt"
+    counter_path = ws.artifacts_dir / "deliver_merge_guard_identical_count.txt"
+    assert fp_path.exists(), "fingerprint artifact must be written on first block"
+    assert counter_path.exists(), "counter artifact must be written on first block"
+    assert counter_path.read_text(encoding="utf-8").strip() == "1"
+
+
+def test_merge_guard_second_identical_block_escalates(tmp_path, monkeypatch):
+    """Second consecutive identical merge-guard block escalates to a
+    stronger BLOCKED with human-intervention directive."""
+    remote, _ = _bare_in(tmp_path, "a")
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL=remote,
+        FORGE_TOKEN="t",
+    )
+    _install_repos_registry([("repo-a", remote)])
+
+    monkeypatch.setattr(git_ops, "push", lambda *a, **k: None)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "open_merge_request",
+        lambda self, *, source_branch, title, body: "https://github.com/o/a/pull/1",
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    ws = ctx.service.workspace(t)
+    entry = _make_repo_clone(ws.dir, "repo-a", remote, branch, with_commit=True)
+    _write_touched_repos(ctx, t, [entry])
+    _write_meta_triage(ctx, t, fallback=True, repo_ids=["repo-a"])
+
+    # First run — normal BLOCKED.
+    out1 = DeliverStage().run(t, ctx)
+    assert out1.next_state is State.BLOCKED
+    assert "could not be determined" in out1.note
+
+    # Second run — same state, fingerprint matches → escalated.
+    out2 = DeliverStage().run(t, ctx)
+    assert out2.next_state is State.BLOCKED
+    assert "Manual intervention required" in out2.note
+    assert "2 consecutive" in out2.note
+    assert "could not be determined" in out2.note
+
+    # Counter incremented to 2.
+    counter_path = ws.artifacts_dir / "deliver_merge_guard_identical_count.txt"
+    assert counter_path.read_text(encoding="utf-8").strip() == "2"
+
+
+def test_merge_guard_fingerprint_change_resets_counter(tmp_path, monkeypatch):
+    """When the blocked files change (different fingerprint), the counter
+    resets to 1 and escalation does NOT trigger on the next identical block."""
+    remote, _ = _bare_in(tmp_path, "a")
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL=remote,
+        FORGE_TOKEN="t",
+    )
+    _install_repos_registry([("repo-a", remote)])
+
+    monkeypatch.setattr(git_ops, "push", lambda *a, **k: None)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "open_merge_request",
+        lambda self, *, source_branch, title, body: "https://github.com/o/a/pull/1",
+    )
+
+    # First block: feature-repo-a.txt is the new top-level file.
+    t1 = _make_meta_ticket(ctx)
+    branch1 = f"mill/{t1.id}"
+    ws1 = ctx.service.workspace(t1)
+    entry1 = _make_repo_clone(ws1.dir, "repo-a", remote, branch1, with_commit=True)
+    _write_touched_repos(ctx, t1, [entry1])
+    _write_meta_triage(ctx, t1, fallback=True, repo_ids=["repo-a"])
+
+    out1 = DeliverStage().run(t1, ctx)
+    assert out1.next_state is State.BLOCKED
+    fp1 = (
+        (ws1.artifacts_dir / "deliver_merge_guard_fingerprint.txt")
+        .read_text(encoding="utf-8")
+        .strip()
+    )
+
+    # Second block with a DIFFERENT top-level file: overwrite with a
+    # new file name so the fingerprint changes.
+    repo_dir = ws1.dir / "repos" / "repo-a"
+    (repo_dir / "different-file.txt").write_text("new")
+    git_ops.commit_all(repo_dir, "add different file")
+
+    out2 = DeliverStage().run(t1, ctx)
+    assert out2.next_state is State.BLOCKED
+    fp2 = (
+        (ws1.artifacts_dir / "deliver_merge_guard_fingerprint.txt")
+        .read_text(encoding="utf-8")
+        .strip()
+    )
+    assert fp2 != fp1, "fingerprint must change when blocked files differ"
+
+    # Counter reset to 1 (new fingerprint → first occurrence).
+    counter_path = ws1.artifacts_dir / "deliver_merge_guard_identical_count.txt"
+    assert counter_path.read_text(encoding="utf-8").strip() == "1"
+
+    # Third run with same files as second → should escalate (counter=2).
+    out3 = DeliverStage().run(t1, ctx)
+    assert out3.next_state is State.BLOCKED
+    assert "Manual intervention required" in out3.note
+    assert counter_path.read_text(encoding="utf-8").strip() == "2"
+
+
+def test_merge_guard_loop_detection_disabled_when_max_zero(tmp_path, monkeypatch):
+    """When deliver_max_identical_blocks=0, loop detection is disabled
+    and every block returns a normal BLOCKED (no escalation)."""
+    remote, _ = _bare_in(tmp_path, "a")
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL=remote,
+        FORGE_TOKEN="t",
+        deliver_max_identical_blocks="0",
+    )
+    _install_repos_registry([("repo-a", remote)])
+
+    monkeypatch.setattr(git_ops, "push", lambda *a, **k: None)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "open_merge_request",
+        lambda self, *, source_branch, title, body: "https://github.com/o/a/pull/1",
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    ws = ctx.service.workspace(t)
+    entry = _make_repo_clone(ws.dir, "repo-a", remote, branch, with_commit=True)
+    _write_touched_repos(ctx, t, [entry])
+    _write_meta_triage(ctx, t, fallback=True, repo_ids=["repo-a"])
+
+    # Run twice — both should be normal BLOCKED, no escalation.
+    out1 = DeliverStage().run(t, ctx)
+    assert out1.next_state is State.BLOCKED
+    assert "Manual intervention required" not in out1.note
+
+    out2 = DeliverStage().run(t, ctx)
+    assert out2.next_state is State.BLOCKED
+    assert "Manual intervention required" not in out2.note
+
+    # No fingerprint artifacts written (loop detection disabled).
+    fp_path = ws.artifacts_dir / "deliver_merge_guard_fingerprint.txt"
+    assert not fp_path.exists(), (
+        "fingerprint artifact must not be written when detection is disabled"
+    )

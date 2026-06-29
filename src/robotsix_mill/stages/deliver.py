@@ -48,6 +48,7 @@ can read.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -186,6 +187,34 @@ def _write_pr_urls(artifacts_dir: Path, entries: list[dict]) -> None:
     tmp = artifacts_dir / "pr_urls.json.tmp"
     tmp.write_text(json.dumps(entries, indent=2), encoding="utf-8")
     os.replace(tmp, target)
+
+
+# --- merge-guard loop detection (fingerprint + counter) ---
+
+_DELIVER_MERGE_GUARD_FINGERPRINT = "deliver_merge_guard_fingerprint.txt"
+_DELIVER_MERGE_GUARD_IDENTICAL_COUNT = "deliver_merge_guard_identical_count.txt"
+
+
+def _read_counter(path: Path) -> int:
+    try:
+        return int(path.read_text(encoding="utf-8").strip())
+    except FileNotFoundError, ValueError:
+        return 0
+
+
+def _write_counter(path: Path, value: int) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(str(value), encoding="utf-8")
+
+
+def _merge_guard_block_fingerprint(block_note: str, repo_ids: list[str]) -> str:
+    """Stable hex fingerprint for a merge-guard block reason.
+
+    Combines the sorted repo_ids with the block note text and hashes
+    with SHA-256; the first 16 hex digits become the fingerprint.
+    """
+    data = "\n".join(sorted(repo_ids)) + "\n" + block_note
+    return hashlib.sha256(data.encode("utf-8")).hexdigest()[:16]
 
 
 def _regen_uv_lock(repo_dir: Path, ticket_id: str) -> None:
@@ -435,7 +464,17 @@ class DeliverStage(Stage):
         # repo — they most likely belong to a repo that does not exist
         # yet.  Genuine all-repos tickets (the agent explicitly named
         # every repo) are not flagged as a fallback and proceed.
+        #
+        # Loop-detection: when the same merge-guard block fires
+        # consecutively without progress (the identical brand-new
+        # top-level file is detected each cycle), the fingerprint
+        # is unchanged.  After ``deliver_max_identical_blocks``
+        # consecutive identical blocks the stage escalates to a
+        # stronger BLOCKED that requires human intervention instead
+        # of burning cost on a deterministic resume→block loop.
         if _meta_triage_was_fallback(ws.artifacts_dir):
+            blocked_repo_ids: list[str] = []
+            blocked_files: dict[str, list[str]] = {}
             for entry in touched_repos:
                 repo_id = entry.get("repo_id", "")
                 repo_dir = Path(entry.get("repo_path", ""))
@@ -450,13 +489,68 @@ class DeliverStage(Stage):
                     f for f in git_ops.added_files(repo_dir, target) if "/" not in f
                 )
                 if new_top_level:
-                    return Outcome(
-                        State.BLOCKED,
-                        "meta target repo could not be determined — does it "
-                        "need a not-yet-created repo? Refusing to merge "
-                        f"brand-new top-level file(s) into {repo_id}: "
-                        f"{', '.join(new_top_level)}",
+                    blocked_repo_ids.append(repo_id)
+                    blocked_files[repo_id] = new_top_level
+
+            if blocked_repo_ids:
+                # Build the block note deterministically — the same
+                # set of repos + files must produce the same text so
+                # the fingerprint is stable across resume cycles.
+                detail_parts: list[str] = []
+                for rid in sorted(blocked_repo_ids):
+                    files = blocked_files[rid]
+                    detail_parts.append(f"{rid}: {', '.join(files)}")
+                block_note = (
+                    "meta target repo could not be determined — does it "
+                    "need a not-yet-created repo? Refusing to merge "
+                    f"brand-new top-level file(s): {'; '.join(detail_parts)}"
+                )
+
+                # Fingerprint-based loop detection.
+                max_identical = s.deliver_max_identical_blocks
+                if max_identical > 0:
+                    current_fp = _merge_guard_block_fingerprint(
+                        block_note, sorted(blocked_repo_ids)
                     )
+                    artifacts = ws.artifacts_dir
+                    fp_path = artifacts / _DELIVER_MERGE_GUARD_FINGERPRINT
+                    counter_path = artifacts / _DELIVER_MERGE_GUARD_IDENTICAL_COUNT
+
+                    stored_fp = ""
+                    try:
+                        stored_fp = fp_path.read_text(encoding="utf-8").strip()
+                    except FileNotFoundError:
+                        pass  # first cycle — no fingerprint stored yet
+
+                    if current_fp == stored_fp and stored_fp:
+                        # Same block as last cycle — increment counter.
+                        count = _read_counter(counter_path) + 1
+                        _write_counter(counter_path, count)
+                        if count >= max_identical:
+                            return Outcome(
+                                State.BLOCKED,
+                                f"Merge guard blocked {count} consecutive "
+                                "times with the same fingerprint "
+                                f"({current_fp}) — the same brand-new "
+                                "top-level file(s) were detected each "
+                                "cycle without progress. Manual "
+                                "intervention required: either create "
+                                "the target repo, move the files into a "
+                                "subdirectory, or add the files to an "
+                                "existing repo config.\n\n"
+                                f"Block reason: {block_note}",
+                            )
+                        # Below threshold — normal BLOCKED, will retry.
+                        return Outcome(State.BLOCKED, block_note)
+
+                    # Fingerprint changed (or first run) — store the
+                    # new fingerprint and reset counter to 1 (this is
+                    # the first occurrence of this particular block).
+                    fp_path.parent.mkdir(parents=True, exist_ok=True)
+                    fp_path.write_text(current_fp, encoding="utf-8")
+                    _write_counter(counter_path, 1)
+
+                return Outcome(State.BLOCKED, block_note)
 
         opened: list[dict] = []
         skipped: list[str] = []
