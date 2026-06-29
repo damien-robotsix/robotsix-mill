@@ -442,6 +442,9 @@ periodic:
     min_age_hours: 4                # minimum ticket age before PR is considered orphaned
     max_actions_per_pass: 5         # max combined close+file actions per pass
     dry_run: true                   # log intent only, no forge mutations
+    bot_logins: []                  # explicit allowlist of forge user logins; empty = auto-resolve via GET /user
+    max_closes_per_pass: 10         # max close actions per pass
+    max_files_per_pass: 5           # max file-ticket actions per pass
 
   # -- CI monitor — enabled/interval are now per-repo fields in repos.yaml --
   #    ci_log_max_bytes stays here as a global operational cap.

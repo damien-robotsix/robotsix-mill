@@ -396,6 +396,28 @@ class GitHubForgePRMixin:
         owner, repo = self._owner_repo  # type: ignore[attr-defined]
         return self._list_open_pr_branches(owner=owner, repo=repo)
 
+    def list_open_prs(self) -> list[dict]:
+        """Return [{branch, author_login}, ...] for all open PRs. Returns [] on failure."""
+        owner, repo = self._owner_repo  # type: ignore[attr-defined]
+        return self._list_open_prs(owner=owner, repo=repo)
+
+    def get_authenticated_user_login(self) -> str:
+        """Return the login of the GitHub user/app associated with the current token.
+
+        Calls GET /user. For GitHub Apps installations the login appears as
+        '<app-slug>[bot]'. Caches the result on the instance after the first call.
+        Returns '' on any failure (MUST NOT raise).
+        """
+        cached = getattr(self, "_cached_bot_login", None)
+        if cached is not None:
+            return cached
+        try:
+            login = self._get_authenticated_user_login()
+        except Exception:
+            login = ""
+        self._cached_bot_login = login
+        return login
+
     # --- HTTP seams (monkeypatched in tests) ---
 
     def _get_pr(self, *, owner: str, repo: str, head: str) -> dict | None:
@@ -679,6 +701,65 @@ class GitHubForgePRMixin:
             except Exception:
                 return set()
         return out
+
+    def _list_open_prs(self, *, owner: str, repo: str) -> list[dict]:
+        """Return [{'branch': str, 'author_login': str}, ...] for all open PRs.
+
+        Uses the same pagination and 401-retry logic as _list_open_pr_branches().
+        Returns [] on any failure (MUST NOT raise).
+        """
+        import time
+
+        from .auth import invalidate_github_token  # lazy: avoid import cycle
+
+        out: list[dict] = []
+        for retry in range(2):
+            hit_401 = False
+            try:
+                with self._http.client() as (c, api, headers):  # type: ignore[attr-defined]
+                    url = f"{api}/repos/{owner}/{repo}/pulls"
+                    page = 1
+                    while True:
+                        r = c.get(
+                            url,
+                            headers=headers,
+                            params={
+                                "state": "open",
+                                "per_page": 100,
+                                "page": page,
+                            },
+                        )
+                        if r.status_code == 401 and retry == 0:
+                            invalidate_github_token(self.settings, self._repo_config)  # type: ignore[attr-defined]
+                            time.sleep(2)
+                            hit_401 = True
+                            break
+                        r.raise_for_status()
+                        items = r.json()
+                        for pr in items:
+                            ref = (pr.get("head") or {}).get("ref")
+                            author = (pr.get("user") or {}).get("login", "")
+                            if ref:
+                                out.append({"branch": ref, "author_login": author})
+                        if len(items) < 100:
+                            break
+                        page += 1
+                if hit_401:
+                    out.clear()
+                    continue
+                break  # success
+            except Exception:
+                return []
+        return out
+
+    def _get_authenticated_user_login(self) -> str:
+        owner, repo = self._owner_repo  # type: ignore[attr-defined]
+        # unused but makes the HTTP seam consistent; actual call uses root /user
+        with self._http.client() as (c, api, headers):  # type: ignore[attr-defined]
+            r = c.get(f"{api}/user", headers=headers)
+            if r.status_code == 200:
+                return r.json().get("login", "")
+        return ""
 
     def _list_pr_reviews(
         self,

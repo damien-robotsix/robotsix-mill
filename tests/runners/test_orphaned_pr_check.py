@@ -31,6 +31,9 @@ def _settings(**overrides):
     overrides.setdefault("orphaned_pr_dry_run", False)
     overrides.setdefault("orphaned_pr_min_age_hours", 4)
     overrides.setdefault("orphaned_pr_max_actions_per_pass", 5)
+    overrides.setdefault("orphaned_pr_bot_logins", [])  # auto-resolve mode
+    overrides.setdefault("orphaned_pr_max_closes_per_pass", 10)
+    overrides.setdefault("orphaned_pr_max_files_per_pass", 5)
     overrides.setdefault("branch_prefix", "mill/")
     # Provide a data_dir so TicketService can instantiate its db.
     overrides.setdefault("data_dir", "/tmp/orphaned_pr_test")
@@ -57,10 +60,15 @@ def _ticket(ticket_id: str = "20250101T000000Z-test-ticket-a1b2", **kw):
 _PR_STATUS_NOT_SET = object()
 
 
-def _mock_forge(*, open_branches=None, pr_status=_PR_STATUS_NOT_SET, pr_files=None):
+def _mock_forge(*, open_branches=None, pr_status=_PR_STATUS_NOT_SET, pr_files=None, bot_login="mill-bot"):
     """Build a mock forge object with configurable return values."""
     forge = MagicMock()
-    forge.list_open_pr_branches.return_value = open_branches or set()
+    branches = open_branches or set()
+    forge.list_open_pr_branches.return_value = branches
+    forge.list_open_prs.return_value = [
+        {"branch": b, "author_login": bot_login} for b in branches
+    ]
+    forge.get_authenticated_user_login.return_value = bot_login
     if pr_status is _PR_STATUS_NOT_SET:
         forge.pr_status.return_value = {"state": "open"}
     else:
@@ -744,3 +752,175 @@ class TestRepoConfigNone:
     def test_raises_on_none_repo_config(self):
         with pytest.raises(ValueError, match="requires a repo_config"):
             run_orphaned_pr_check_pass(repo_config=None)
+
+
+# ---------------------------------------------------------------------------
+# Author-guard tests
+# ---------------------------------------------------------------------------
+
+
+class TestHumanPrAuthorSkipped:
+    def test_human_authored_mill_branch_skipped(self, monkeypatch):
+        """PR with mill/ branch but non-bot author is skipped entirely."""
+        s = _settings(orphaned_pr_dry_run=False)
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None  # would normally file a ticket
+        forge = _mock_forge(
+            open_branches={"mill/20250101T000000Z-human-branch-a1b2"},
+            bot_login="mill-bot",
+        )
+        # Override list_open_prs to return a human author on a mill-prefix branch
+        forge.list_open_prs.return_value = [
+            {"branch": "mill/20250101T000000Z-human-branch-a1b2", "author_login": "real-human"}
+        ]
+        forge.get_authenticated_user_login.return_value = "mill-bot"
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.total_scanned == 1
+        assert result.human_pr_skipped == 1
+        assert result.closed == 0
+        assert result.filed == 0
+        forge.close_pr.assert_not_called()
+        svc.create.assert_not_called()
+
+    def test_bot_authored_mill_branch_processed(self, monkeypatch):
+        """PR with mill/ branch and matching bot author is processed normally."""
+        s = _settings(orphaned_pr_dry_run=False)
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None  # orphan
+        forge = _mock_forge(
+            open_branches={"mill/20250101T000000Z-bot-branch-a1b2"},
+            bot_login="mill-bot",
+        )
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.human_pr_skipped == 0
+        # should have filed (non-empty diff from _mock_forge default)
+        assert result.filed == 1
+
+    def test_explicit_bot_logins_setting_used(self, monkeypatch):
+        """orphaned_pr_bot_logins overrides auto-resolve; login in list → processed."""
+        s = _settings(
+            orphaned_pr_dry_run=False,
+            orphaned_pr_bot_logins=["custom-bot"],
+        )
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(
+            open_branches={"mill/20250101T000000Z-custom-bot-a1b2"},
+            bot_login="custom-bot",
+        )
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.human_pr_skipped == 0
+        # get_authenticated_user_login should NOT be called (explicit override)
+        forge.get_authenticated_user_login.assert_not_called()
+        assert result.filed == 1
+
+    def test_explicit_bot_logins_setting_blocks_other_author(self, monkeypatch):
+        """Author not in orphaned_pr_bot_logins → skipped even if prefix matches."""
+        s = _settings(
+            orphaned_pr_dry_run=False,
+            orphaned_pr_bot_logins=["custom-bot"],
+        )
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(
+            open_branches={"mill/20250101T000000Z-other-a1b2"},
+        )
+        forge.list_open_prs.return_value = [
+            {"branch": "mill/20250101T000000Z-other-a1b2", "author_login": "someone-else"}
+        ]
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.human_pr_skipped == 1
+        assert result.filed == 0
+
+
+# ---------------------------------------------------------------------------
+# Split action-cap tests
+# ---------------------------------------------------------------------------
+
+
+class TestSplitActionCap:
+    def test_close_cap_does_not_block_file_actions(self, monkeypatch):
+        """Close cap=1, file cap=5: once close cap hit, file actions still proceed."""
+        s = _settings(
+            orphaned_pr_dry_run=False,
+            orphaned_pr_max_actions_per_pass=20,  # combined cap well above
+            orphaned_pr_max_closes_per_pass=1,
+            orphaned_pr_max_files_per_pass=5,
+        )
+        repo = _repo()
+        svc = MagicMock()
+        # 3 DONE tickets (→ close), 3 ERRORED tickets (→ file)
+        tickets = {
+            "mill/close-0001": _ticket("close-0001", state=State.DONE),
+            "mill/close-0002": _ticket("close-0002", state=State.DONE),
+            "mill/close-0003": _ticket("close-0003", state=State.DONE),
+            "mill/file-0001": _ticket("file-0001", state=State.ERRORED),
+            "mill/file-0002": _ticket("file-0002", state=State.ERRORED),
+            "mill/file-0003": _ticket("file-0003", state=State.ERRORED),
+        }
+        def _get(ticket_id):
+            branch = f"mill/{ticket_id}"
+            return tickets.get(branch)
+        svc.get.side_effect = _get
+        forge = _mock_forge(open_branches=set(tickets))
+        forge.list_open_prs.return_value = [
+            {"branch": b, "author_login": "mill-bot"} for b in tickets
+        ]
+        forge.pr_files.return_value = [{"path": "x.py", "additions": 1, "deletions": 0}]
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        # Only 1 close allowed, all 3 file-eligible ones proceed
+        assert result.closed == 1
+        assert result.filed == 3
+        assert result.total_scanned == 6
+
+    def test_file_cap_does_not_block_close_actions(self, monkeypatch):
+        """File cap=1: file actions stop at 1 while closes continue."""
+        s = _settings(
+            orphaned_pr_dry_run=False,
+            orphaned_pr_max_actions_per_pass=20,
+            orphaned_pr_max_closes_per_pass=10,
+            orphaned_pr_max_files_per_pass=1,
+        )
+        repo = _repo()
+        svc = MagicMock()
+        tickets = {
+            "mill/file-0001": _ticket("file-0001", state=State.ERRORED),
+            "mill/file-0002": _ticket("file-0002", state=State.ERRORED),
+            "mill/close-0001": _ticket("close-0001", state=State.DONE),
+            "mill/close-0002": _ticket("close-0002", state=State.DONE),
+        }
+        forge = _mock_forge(open_branches=set(tickets))
+        forge.list_open_prs.return_value = [
+            {"branch": b, "author_login": "mill-bot"} for b in tickets
+        ]
+        forge.pr_files.return_value = [{"path": "x.py", "additions": 1, "deletions": 0}]
+        def _get(ticket_id):
+            branch = f"mill/{ticket_id}"
+            return tickets.get(branch)
+        svc.get.side_effect = _get
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.filed == 1
+        assert result.closed == 2
+        assert result.total_scanned == 4
