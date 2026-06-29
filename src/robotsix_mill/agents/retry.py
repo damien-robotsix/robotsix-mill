@@ -122,11 +122,11 @@ def _try_record_step_usage(
                     if tool_name:
                         args_raw = getattr(part, "args", None)
                         args_str = str(args_raw)[:200] if args_raw else ""
-                        tool_calls.append(
-                            {"name": str(tool_name), "args": args_str}
-                        )
+                        tool_calls.append({"name": str(tool_name), "args": args_str})
         except Exception:
-            log.debug("_try_record_step_usage: tool-call extraction failed", exc_info=True)
+            log.debug(
+                "_try_record_step_usage: tool-call extraction failed", exc_info=True
+            )
 
         from ..runtime.tracing import record_step_usage as _record
 

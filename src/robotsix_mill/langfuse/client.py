@@ -533,9 +533,7 @@ def trace_observation_summary(trace: dict) -> dict:
         obs_output = 0
         if isinstance(usage, dict):
             obs_input = int(usage.get("input") or usage.get("promptTokens") or 0)
-            obs_output = int(
-                usage.get("output") or usage.get("completionTokens") or 0
-            )
+            obs_output = int(usage.get("output") or usage.get("completionTokens") or 0)
             input_tokens += obs_input
             output_tokens += obs_output
 
