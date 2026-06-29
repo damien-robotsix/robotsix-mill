@@ -138,7 +138,55 @@ cost for the current attempt.
   invocation (hung LLM call, runaway shell command, asyncio deadlock).
   Set to 0 to disable entirely.
 
-## See also
+## Trace observation data for cost attribution
+
+### Data source
+
+Every traced model call carries ``session.id = <ticket id>`` (set in
+``runtime/tracing.py``).  Langfuse stores the full observation tree — prompts,
+tool-call sequences, token counts, model identifiers, cost details, and
+error/warning levels — keyed by trace id.
+
+### REST API surface
+
+The mill exposes two trace endpoints:
+
+| Endpoint | Returns | Use case |
+|---|---|---|
+| ``GET /traces/recent`` | List of traces, each with an ``observationSummary`` field | Fleet-level cost discovery: pick the most expensive traces |
+| ``GET /traces/{trace_id}`` | Full trace detail including every observation | Deep-dive: inspect prompt bodies, per-call token counts, raw cost details |
+
+### ``observationSummary`` schema
+
+Each trace in ``/traces/recent`` carries:
+
+| Field | Type | Description |
+|---|---|---|
+| ``model`` | string | Trace-level model (e.g. ``"openai/gpt-4o"``), or first GENERATION model |
+| ``input_tokens`` | int | Total prompt/input tokens across all GENERATION observations |
+| ``output_tokens`` | int | Total completion/output tokens across all GENERATION observations |
+| ``total_tokens`` | int | ``input_tokens + output_tokens`` |
+| ``tool_calls`` | list[object] | Sorted ``[{name, count}]`` for non-chat SPAN observations |
+| ``error_count`` | int | Number of ERROR-level observations |
+| ``warning_count`` | int | Number of WARNING-level observations |
+| ``observation_count`` | int | Total observation count |
+
+The summary is computed by
+:func:`robotsix_mill.langfuse.client.trace_observation_summary` from the
+``observations`` array that Langfuse includes in every list-endpoint response.
+No separate detail fetch is required — the summary is available at list time.
+
+### Cost-attribution pipeline
+
+1. The **cost analyst** (``robotsix-cost-monitor``) calls ``/traces/recent`` to
+   discover the most expensive traces in the window.
+2. For each expensive trace, it reads ``observationSummary`` to attribute the
+   cost: which model tier, how many tokens, which tool-call pattern, and whether
+   errors inflated the spend.
+3. If deeper inspection is needed (e.g. to read the actual prompts), it calls
+   ``/traces/{trace_id}`` for the full observation tree.
+
+### See also
 
 - [index.md](index.md) — documentation home
 - [docs/configuration.md](configuration.md) — full env-var reference

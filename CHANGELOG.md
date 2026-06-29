@@ -12,6 +12,15 @@
   `ci_fix_wait_timeout_s`, `max_implement_review_cycles`,
   `retrospect_candidates_max_entries`, `doc_classifier_diff_max_chars`,
   `network_probe_host`, `network_outage_retry_seconds`).
+- **cost attribution**: add ``trace_observation_summary()`` helper in the
+  Langfuse client that distills per-trace observations into a compact summary
+  (model, token counts, tool-call list, error/warning counts).  Enrich
+  ``GET /traces/recent`` with an ``observationSummary`` field and add a new
+  ``GET /traces/{trace_id}`` endpoint returning full trace detail including all
+  observations.  The diagnostic data layer's ``_normalize_trace`` now also
+  carries the summary.  This lets the fleet-level cost analyst attribute
+  spend to model tier, token volume, and tool-call patterns instead of
+  receiving ``insufficient data`` for every trace.
 - **implement**: stop fabricating GitHub Action commit SHAs when writing
   workflow files.  The implement agent now emits tag references
   (e.g., `actions/setup-python@v5.4.0`) instead of attempting to resolve

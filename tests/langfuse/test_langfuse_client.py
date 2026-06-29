@@ -421,3 +421,111 @@ def test_cost_cache_key_consistent_between_blocking_and_cached(settings, monkeyp
     # The cache is keyed by the qualified id, not the bare ticket id.
     assert "robotsix-cost-monitor · ticket-123" in _cost_cache
     assert session_cost_cached("ticket-123") == 0.0  # bare key misses
+
+
+# ---------------------------------------------------------------------------
+# trace_observation_summary
+# ---------------------------------------------------------------------------
+
+
+from robotsix_mill.langfuse.client import trace_observation_summary  # noqa: E402
+
+
+def test_trace_observation_summary_empty():
+    """Empty trace → all defaults."""
+    s = trace_observation_summary({})
+    assert s == {
+        "model": "",
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "tool_calls": [],
+        "error_count": 0,
+        "warning_count": 0,
+        "observation_count": 0,
+    }
+
+
+def test_trace_observation_summary_token_aggregation():
+    """Token counts summed across GENERATION observations."""
+    trace = {
+        "model": "openai/gpt-4o",
+        "observations": [
+            {
+                "name": "chat completion",
+                "type": "GENERATION",
+                "usage": {"input": 100, "output": 50},
+                "level": "DEFAULT",
+            },
+            {
+                "name": "chat completion",
+                "type": "GENERATION",
+                "usage": {"promptTokens": 200, "completionTokens": 75},
+                "level": "DEFAULT",
+            },
+            {
+                "name": "read_file",
+                "type": "SPAN",
+                "usage": None,
+                "level": "DEFAULT",
+            },
+        ],
+    }
+    s = trace_observation_summary(trace)
+    assert s["model"] == "openai/gpt-4o"
+    assert s["input_tokens"] == 300  # 100 + 200
+    assert s["output_tokens"] == 125  # 50 + 75
+    assert s["total_tokens"] == 425
+    assert s["observation_count"] == 3
+
+
+def test_trace_observation_summary_tool_calls():
+    """Non-chat SPAN observations are counted as tool calls."""
+    trace = {
+        "observations": [
+            {"name": "chat completion", "type": "GENERATION", "level": "DEFAULT"},
+            {"name": "read_file", "type": "SPAN", "level": "DEFAULT"},
+            {"name": "read_file", "type": "SPAN", "level": "DEFAULT"},
+            {"name": "run_command", "type": "SPAN", "level": "DEFAULT"},
+            {"name": "explore run", "type": "SPAN", "level": "DEFAULT"},
+            {"name": "chat final synthesis", "type": "GENERATION", "level": "DEFAULT"},
+        ],
+    }
+    s = trace_observation_summary(trace)
+    assert s["tool_calls"] == [
+        {"name": "read_file", "count": 2},
+        {"name": "run_command", "count": 1},
+        {"name": "explore run", "count": 1},
+    ]
+
+
+def test_trace_observation_summary_error_warning_counts():
+    """ERROR and WARNING levels are counted separately."""
+    trace = {
+        "observations": [
+            {"name": "run_command", "type": "SPAN", "level": "ERROR"},
+            {"name": "run_command", "type": "SPAN", "level": "ERROR"},
+            {"name": "read_file", "type": "SPAN", "level": "WARNING"},
+            {"name": "chat completion", "type": "GENERATION", "level": "DEFAULT"},
+        ],
+    }
+    s = trace_observation_summary(trace)
+    assert s["error_count"] == 2
+    assert s["warning_count"] == 1
+
+
+def test_trace_observation_summary_model_fallback():
+    """When trace-level model is absent, fall back to first GENERATION model."""
+    trace = {
+        "observations": [
+            {"name": "read_file", "type": "SPAN", "level": "DEFAULT"},
+            {
+                "name": "chat completion",
+                "type": "GENERATION",
+                "model": "openai/gpt-4o-mini",
+                "level": "DEFAULT",
+            },
+        ],
+    }
+    s = trace_observation_summary(trace)
+    assert s["model"] == "openai/gpt-4o-mini"

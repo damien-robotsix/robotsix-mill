@@ -166,13 +166,19 @@ def _normalize_trace(raw: dict[str, Any]) -> dict[str, Any]:
     - ``session_id`` ← ``raw["sessionId"]``
     - ``total_cost`` ← ``raw["totalCost"]``
     - ``timestamp`` ← ``raw["timestamp"]``
+    - ``observation_summary`` — compact per-trace summary (model,
+      token counts, tool-call list, error/warning counts) sourced
+      from :func:`robotsix_mill.langfuse.client.trace_observation_summary`
     """
+    from ..langfuse.client import trace_observation_summary
+
     return {
         "trace_id": raw.get("id"),
         "name": raw.get("name"),
         "session_id": raw.get("sessionId"),
         "total_cost": raw.get("totalCost"),
         "timestamp": raw.get("timestamp"),
+        "observation_summary": trace_observation_summary(raw),
     }
 
 
