@@ -184,6 +184,7 @@ def run_coordinator(
     from .explore import make_explore_tool, make_parallel_explore_tool
     from .fs_tools import build_fs_tools
     from .retry import run_agent
+    from .changelog_tool import make_insert_changelog_entry_tool
 
     definition = load_agent_definition(
         Path(__file__).parent.parent.parent.parent
@@ -289,6 +290,7 @@ def run_coordinator(
             make_consult_expert_tool(settings, repo_dir, board_id=board_id),
             make_spawn_subtask_tool(settings, repo_dir),
             make_post_comment_tool(settings, agent_name="implement"),
+            make_insert_changelog_entry_tool(repo_dir),
             *fs_tools,
         ],
         **overrides,

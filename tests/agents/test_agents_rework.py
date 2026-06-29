@@ -73,6 +73,7 @@ def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
         "delete_file",
         "edit_file",
         "explore",
+        "insert_changelog_entry",
         "list_dir",
         "list_threads",
         "parallel_explore",
