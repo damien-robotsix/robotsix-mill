@@ -629,7 +629,7 @@ Each periodic agent shares this pattern:
 
 Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_monitor`, `config_sync`, `member_sync`, `bc_check`,
-`completeness_check`, `diagnostic`, `forge_parity`, `module_curator`,
+`completeness_check`, `diagnostic`, `forge_parity`, `module_curator`, `orphaned_pr_check`,
 `copy_paste`, `timeout_escalation`, `langfuse_cleanup`, `data_dir_audit`, `dependabot_ingest`, `run_health`, `stale_branch_cleanup`,
 `state_sync`, `env_doc_sync`, `db_maintenance`, `sandbox_reaper`.
 
@@ -807,6 +807,27 @@ budget and tool-call guardrails:
 | `MILL_TEST_GAP_REQUEST_LIMIT` | `80` | Per-call request cap for the test-gap agent |
 | `MILL_TEST_GAP_MAX_TOOL_CALLS` | `100` | Hard cap on total tool calls per test-gap trace |
 | `MILL_TEST_GAP_MAX_ERRORS` | `20` | Hard cap on tool-call errors before auto-termination |
+
+#### orphaned_pr_check
+
+The `orphaned_pr_check` periodic agent scans tickets for stale PRs whose
+branch has been deleted or whose associated ticket has been resolved, and
+either auto-closes the PR or files a tracking ticket. It defaults to `false`
+(opt-in) because closing PRs and filing tickets are destructive actions.
+It has no `memory_path` (it's a deterministic pass with no LLM agent).
+Configure via environment variables or YAML paths under
+`periodic.orphaned_pr_check.<field>`:
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| `periodic.orphaned_pr_check.enabled` | `MILL_ORPHANED_PR_CHECK_PERIODIC` | `false` | Master switch for the orphaned-PR check pass. Default `false` (opt-in) — closing PRs and filing tracking tickets are destructive actions. |
+| `periodic.orphaned_pr_check.interval_seconds` | `MILL_ORPHANED_PR_CHECK_INTERVAL_SECONDS` | `86400` | Seconds between orphaned-PR check passes. Minimum enforced at 3600 s (1 hour) in the worker loop. |
+| `periodic.orphaned_pr_check.min_age_hours` | `MILL_ORPHANED_PR_MIN_AGE_HOURS` | `4` | Minimum age (hours) of a ticket before its PR is considered for orphan classification. Skips tickets younger than this to avoid racing the deliver stage. |
+| `periodic.orphaned_pr_check.max_actions_per_pass` | `MILL_ORPHANED_PR_MAX_ACTIONS_PER_PASS` | `5` | Maximum number of combined close+file actions per pass run. Findings beyond this cap are deferred to the next scheduled pass. |
+| `periodic.orphaned_pr_check.dry_run` | `MILL_ORPHANED_PR_DRY_RUN` | `true` | Dry-run mode: log intent only, make zero forge mutations. Default `true` for safety — flip to `false` to enable real actions. |
+| `periodic.orphaned_pr_check.bot_logins` | `MILL_ORPHANED_PR_BOT_LOGINS` | `[]` | Bot author logins trusted for orphaned-PR actions. When non-empty, only PRs whose author is in this list are eligible. When empty, the runner resolves the bot login from the forge and uses that; if that also returns empty, the author guard is bypassed (fail-open). |
+| `periodic.orphaned_pr_check.max_closes_per_pass` | `MILL_ORPHANED_PR_MAX_CLOSES_PER_PASS` | `10` | Per-pass cap on PR close actions. Applied in addition to the combined `max_actions_per_pass` cap. |
+| `periodic.orphaned_pr_check.max_files_per_pass` | `MILL_ORPHANED_PR_MAX_FILES_PER_PASS` | `5` | Per-pass cap on tracking-ticket file actions. Applied in addition to the combined `max_actions_per_pass` cap. |
 
 #### Env-var-only periodic agents
 

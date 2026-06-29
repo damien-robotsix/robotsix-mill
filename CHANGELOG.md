@@ -5,6 +5,8 @@
   `FileNotFoundError`, which was recorded as an exception in
   OpenTelemetry traces and polluted observability for refine/review
   stages probing deleted paths.
+- **docs**: document the `orphaned_pr_check` periodic agent and its 8 env
+  vars in `docs/configuration.md` (previously entirely undocumented).
 - **refine**: add a deterministic code-block density check that skips the
   triage LLM and full refine agent when a ticket draft contains ≥50 lines
   inside fenced code blocks (prescriptive specs whose implementation is
