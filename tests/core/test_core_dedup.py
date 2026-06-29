@@ -1355,6 +1355,23 @@ def test_ci_draft_fingerprint_handles_metadata_only_body():
     assert _ci_draft_fingerprint(meta_only) == fp
 
 
+def test_ci_draft_fingerprint_path_differentiates_workflows():
+    """Same error in different workflows → different fingerprints."""
+    fp1 = _ci_draft_fingerprint(_DRAFT_BODY_SAMPLE, path=".github/workflows/ci.yml")
+    fp2 = _ci_draft_fingerprint(
+        _DRAFT_BODY_SAMPLE, path=".github/workflows/release.yml"
+    )
+    assert fp1 != fp2
+
+
+def test_ci_draft_fingerprint_path_default_empty():
+    """When no path is passed, fingerprint matches the no-path case
+    (backward compatibility)."""
+    fp1 = _ci_draft_fingerprint(_DRAFT_BODY_SAMPLE)
+    fp2 = _ci_draft_fingerprint(_DRAFT_BODY_SAMPLE, path="")
+    assert fp1 == fp2
+
+
 # ---------------------------------------------------------------------------
 # label-based dedup in find_prior_matching_ticket
 # ---------------------------------------------------------------------------

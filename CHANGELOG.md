@@ -1,5 +1,12 @@
 ## 0.0.0 (unreleased)
 
+- **ci-dedup**: include the workflow file path in CI failure fingerprint
+  hashing so that the same error in different workflows produces
+  distinct fingerprints.  `_ci_draft_fingerprint` now accepts an
+  optional `path` keyword; the CI monitor poll loop passes the
+  workflow's file path, and the refine gate extracts it from a new
+  `**Path:**` metadata line in the draft body.
+
 - **implement**: stop fabricating GitHub Action commit SHAs when writing
   workflow files.  The implement agent now emits tag references
   (e.g., `actions/setup-python@v5.4.0`) instead of attempting to resolve
