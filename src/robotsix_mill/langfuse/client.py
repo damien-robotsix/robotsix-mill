@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import Any
 
 from robotsix_llmio.core import LangfuseReadClient
 
@@ -545,10 +546,10 @@ def trace_observation_summary(trace: dict) -> dict:
                 model = obs.get("model") or ""
                 break
 
-    tool_call_list = sorted(
-        [{"name": k, "count": v} for k, v in tool_calls.items()],
-        key=lambda x: -x["count"],
-    )
+    tool_call_list = [
+        {"name": k, "count": v}
+        for k, v in sorted(tool_calls.items(), key=lambda x: x[1], reverse=True)
+    ]
 
     return {
         "model": model,
@@ -587,7 +588,7 @@ def list_all_traces_since(
     if client is None:
         return []
     try:
-        all_traces: list[dict] = []
+        all_traces: list[dict[str, Any]] = []
         for page in client.iter_pages(
             "/api/public/traces",
             params={

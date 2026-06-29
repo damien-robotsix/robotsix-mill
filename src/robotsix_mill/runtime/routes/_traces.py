@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -11,6 +12,8 @@ from ..deps import (
     get_settings,
     get_worker,
 )
+
+from ...config import Settings
 
 log = logging.getLogger(__name__)
 
@@ -150,8 +153,8 @@ def list_recent_traces(
 @router.get("/traces/{trace_id}")
 def get_trace_detail(
     trace_id: str,
-    settings=Depends(get_settings),
-) -> dict:
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
     """Return full Langfuse trace detail including all observations.
 
     Callers that need the complete prompt/completion bodies, per-
