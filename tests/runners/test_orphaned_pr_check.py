@@ -87,6 +87,7 @@ def _install_seams(monkeypatch, settings, forge, service):
         "robotsix_mill.runners.orphaned_pr_check.TicketService",
         lambda *a, **kw: service,
     )
+    service.recent_proposals_for.return_value = []
 
 
 # ---------------------------------------------------------------------------
@@ -632,8 +633,30 @@ class TestHumanPrNotProcessed:
 
 
 class TestIdempotentFileTicket:
-    def test_create_called_with_same_title(self, monkeypatch):
-        """Second call with same branch produces identical title."""
+    def test_creates_ticket_when_no_existing_orphan_ticket(self, monkeypatch):
+        """No prior orphan tickets → file a new tracking ticket."""
+        s = _settings(orphaned_pr_dry_run=False)
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(
+            open_branches={"mill/20250101T000000Z-orphan-a1b2"},
+        )
+        _install_seams(monkeypatch, s, forge, svc)
+        # recent_proposals_for already returns [] from _install_seams
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert svc.create.call_count == 1
+        assert result.filed == 1
+        assert result.skipped == 0
+        title = svc.create.call_args.kwargs["title"]
+        assert title == (
+            "Track orphaned PR: test-owner/test-repo/mill/20250101T000000Z-orphan-a1b2"
+        )
+
+    def test_second_pass_is_noop_when_open_ticket_exists(self, monkeypatch):
+        """When an open orphan ticket already exists → dedup skip, no create."""
         s = _settings(orphaned_pr_dry_run=False)
         repo = _repo()
         svc = MagicMock()
@@ -643,19 +666,57 @@ class TestIdempotentFileTicket:
         )
         _install_seams(monkeypatch, s, forge, svc)
 
-        # First pass
-        run_orphaned_pr_check_pass(repo_config=repo)
-        # Second pass
-        run_orphaned_pr_check_pass(repo_config=repo)
-
-        assert svc.create.call_count == 2
-        title1 = svc.create.call_args_list[0].kwargs["title"]
-        title2 = svc.create.call_args_list[1].kwargs["title"]
-        assert title1 == title2
-        assert (
-            title1 == "Track orphaned PR: test-owner/test-repo/"
-            "mill/20250101T000000Z-orphan-a1b2"
+        existing = _ticket(
+            ticket_id="20250101T000000Z-existing-a1b2",
+            title=(
+                "Track orphaned PR: test-owner/test-repo/"
+                "mill/20250101T000000Z-orphan-a1b2"
+            ),
+            state=State.READY,
         )
+        svc.recent_proposals_for.return_value = [existing]
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert svc.create.call_count == 0
+        assert result.skipped >= 1
+        assert result.filed == 0
+        assert any("DEDUP_SKIP" in a for a in result.actions)
+
+    def test_dedup_across_two_passes(self, monkeypatch):
+        """First pass creates ticket; second pass dedup skips."""
+        s = _settings(orphaned_pr_dry_run=False)
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(
+            open_branches={"mill/20250101T000000Z-orphan-a1b2"},
+        )
+        _install_seams(monkeypatch, s, forge, svc)
+
+        existing = _ticket(
+            ticket_id="20250101T000000Z-existing-a1b2",
+            title=(
+                "Track orphaned PR: test-owner/test-repo/"
+                "mill/20250101T000000Z-orphan-a1b2"
+            ),
+            state=State.READY,
+        )
+        # First call: no existing tickets → file
+        # Second call: existing ticket → dedup
+        svc.recent_proposals_for.side_effect = [[], [existing]]
+
+        # First pass
+        result1 = run_orphaned_pr_check_pass(repo_config=repo)
+        # Second pass
+        result2 = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert svc.create.call_count == 1
+        assert result1.filed == 1
+        assert result1.skipped == 0
+        assert result2.filed == 0
+        assert result2.skipped >= 1
+        assert any("DEDUP_SKIP" in a for a in result2.actions)
 
 
 class TestPrStatusNoneSkipped:
