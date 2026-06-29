@@ -443,6 +443,7 @@ def test_trace_observation_summary_empty():
         "error_count": 0,
         "warning_count": 0,
         "observation_count": 0,
+        "generations": [],
     }
 
 
@@ -529,3 +530,56 @@ def test_trace_observation_summary_model_fallback():
     }
     s = trace_observation_summary(trace)
     assert s["model"] == "openai/gpt-4o-mini"
+
+
+def test_trace_observation_summary_generations_per_turn():
+    """Per-turn breakdown lists every GENERATION observation with token counts."""
+    trace = {
+        "model": "openai/gpt-4o",
+        "observations": [
+            {
+                "name": "chat completion",
+                "type": "GENERATION",
+                "model": "openai/gpt-4o",
+                "usage": {"input": 500, "output": 200},
+                "startTime": "2026-01-01T00:00:00Z",
+                "level": "DEFAULT",
+            },
+            {
+                "name": "read_file",
+                "type": "SPAN",
+                "usage": None,
+                "level": "DEFAULT",
+            },
+            {
+                "name": "chat completion",
+                "type": "GENERATION",
+                "model": "openai/gpt-4o",
+                "usage": {"input": 300, "output": 100},
+                "startTime": "2026-01-01T00:00:05Z",
+                "level": "DEFAULT",
+            },
+        ],
+    }
+    s = trace_observation_summary(trace)
+    assert s["generations"] == [
+        {
+            "model": "openai/gpt-4o",
+            "input_tokens": 500,
+            "output_tokens": 200,
+            "name": "chat completion",
+            "startTime": "2026-01-01T00:00:00Z",
+        },
+        {
+            "model": "openai/gpt-4o",
+            "input_tokens": 300,
+            "output_tokens": 100,
+            "name": "chat completion",
+            "startTime": "2026-01-01T00:00:05Z",
+        },
+    ]
+    # Aggregates still correct
+    assert s["input_tokens"] == 800
+    assert s["output_tokens"] == 300
+    assert s["total_tokens"] == 1100
+    assert s["observation_count"] == 3

@@ -97,6 +97,52 @@ T = TypeVar("T")
 
 log = logging.getLogger("robotsix_mill.agents.retry")
 
+
+def _try_record_step_usage(
+    result: Any,
+    retry_count: int = 0,
+    retry_reason: str = "",
+) -> None:
+    """Extract per-step usage from a pydantic-ai result and record it as a
+    span attribute.  Best-effort: silently returns on any failure so a
+    non-pydantic-ai result or a missing OTel span never blocks the caller.
+    """
+    try:
+        usage = result.usage()
+        model_name: str = getattr(result.response, "model_name", "") or ""
+        request_count: int = usage.requests
+        input_tokens: int = usage.input_tokens
+        output_tokens: int = usage.output_tokens
+
+        tool_calls: list[dict[str, Any]] = []
+        try:
+            for msg in result.all_messages():
+                for part in msg.parts:
+                    tool_name = getattr(part, "tool_name", None)
+                    if tool_name:
+                        args_raw = getattr(part, "args", None)
+                        args_str = str(args_raw)[:200] if args_raw else ""
+                        tool_calls.append({"name": str(tool_name), "args": args_str})
+        except Exception:
+            log.debug(
+                "_try_record_step_usage: tool-call extraction failed", exc_info=True
+            )
+
+        from ..runtime.tracing import record_step_usage as _record
+
+        _record(
+            request_count=request_count,
+            model_name=model_name,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            tool_calls=tool_calls if tool_calls else None,
+            retry_count=retry_count,
+            retry_reason=retry_reason,
+        )
+    except Exception:
+        log.debug("_try_record_step_usage: failed to record step usage", exc_info=True)
+
+
 __all__ = [
     "call_with_retry",
     "acall_with_retry",
@@ -140,19 +186,30 @@ async def acall_with_retry(
     nested sub-agent tool retry ``await agent.run(...)`` on the coordinator's own
     running event loop, rather than calling ``asyncio.run`` (illegal inside the
     Claude SDK's already-running loop).
+
+    After a successful run, per-step usage data is recorded on the current OTel
+    span (same contract as :func:`run_agent`).
     """
     attempts = max(0, _constants.TRANSIENT_RETRIES)
     using_fallback = False
+    retry_count = 0
+    last_reason = ""
     for attempt in range(attempts + 1):
         try:
             if using_fallback:
                 assert fallback_fn is not None  # type-narrowing
-                return await fallback_fn()
-            return await fn()
+                result = await fallback_fn()
+            else:
+                result = await fn()
+            # Record per-step usage on success.
+            _try_record_step_usage(result, retry_count, last_reason)
+            return result
         except Exception as e:  # noqa: BLE001 — re-raised unless retryable
             if attempt >= attempts:
                 raise
             if is_transient(e):
+                retry_count += 1
+                last_reason = f"{type(e).__name__}: {e!s}"[:200]
                 delay = min(
                     _constants.TRANSIENT_BACKOFF_CAP,
                     _constants.TRANSIENT_BACKOFF_BASE * (2**attempt),
@@ -194,10 +251,35 @@ def run_agent(
     *make_run* takes a handle and performs the actual run, e.g.
     ``lambda h: h.run_sync(prompt, message_history=hist, usage_limits=limits)``.
     The transport is fixed by the agent's level (no cross-backend fallback);
-    transient errors retry on the same handle."""
-    return _lib_call_with_retry(
-        lambda: make_run(agent),
+    transient errors retry on the same handle.
+
+    After a successful run, per-step usage data (token counts, model name,
+    request count, tool calls, and retry info) is recorded as a span
+    attribute on the current OTel span so the trace inspector and
+    cost-analyst can attribute spend without fetching every Langfuse
+    observation.
+    """
+    retry_count = 0
+    last_reason = ""
+
+    def _tracking_wrapper() -> T:
+        nonlocal retry_count, last_reason
+        try:
+            return make_run(agent)
+        except Exception as e:
+            if is_transient(e):
+                retry_count += 1
+                last_reason = f"{type(e).__name__}: {e!s}"[:200]
+            raise
+
+    result = _lib_call_with_retry(
+        _tracking_wrapper,
         what=what,
         sleep=sleep,
         is_transient_fn=is_transient,
     )
+
+    # Record per-step usage as a span attribute when the result is a
+    # pydantic-ai AgentRunResult (has .usage() and .all_messages()).
+    _try_record_step_usage(result, retry_count, last_reason)
+    return result

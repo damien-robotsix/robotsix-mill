@@ -116,6 +116,9 @@ async def _handle_stage_error(
     classification = classify_stage_error(error)
     tracing.set_current_span_attribute("error.classification", classification)
     tracing.set_current_span_attribute("error.type", type(error).__name__)
+    tracing.set_current_span_attribute(
+        "retry.reason", f"{classification}: {type(error).__name__}: {error!s}"[:300]
+    )
     if classification == "transient":
         ticket = ctx.service.get(ticket_id)
         if ticket is None:

@@ -511,6 +511,10 @@ def trace_observation_summary(trace: dict) -> dict:
     - ``error_count``: number of ERROR-level observations
     - ``warning_count``: number of WARNING-level observations
     - ``observation_count``: total number of observations
+    - ``generations``: per-turn breakdown — list of ``{model, input_tokens,
+      output_tokens, name, startTime}`` for every GENERATION observation in
+      chronological order.  Enables distinguishing "one oversized prompt"
+      from "many redundant turns" without fetching the full trace detail.
     """
     observations = trace.get("observations") or []
 
@@ -519,15 +523,29 @@ def trace_observation_summary(trace: dict) -> dict:
     tool_calls: dict[str, int] = {}
     error_count = 0
     warning_count = 0
+    generations: list[dict] = []
 
     for obs in observations:
         name = obs.get("name") or ""
 
         usage = obs.get("usage") or {}
+        obs_input = 0
+        obs_output = 0
         if isinstance(usage, dict):
-            input_tokens += int(usage.get("input") or usage.get("promptTokens") or 0)
-            output_tokens += int(
-                usage.get("output") or usage.get("completionTokens") or 0
+            obs_input = int(usage.get("input") or usage.get("promptTokens") or 0)
+            obs_output = int(usage.get("output") or usage.get("completionTokens") or 0)
+            input_tokens += obs_input
+            output_tokens += obs_output
+
+        if obs.get("type") == "GENERATION":
+            generations.append(
+                {
+                    "model": obs.get("model") or "",
+                    "input_tokens": obs_input,
+                    "output_tokens": obs_output,
+                    "name": name,
+                    "startTime": obs.get("startTime") or "",
+                }
             )
 
         if name and not name.startswith("chat "):
@@ -560,6 +578,7 @@ def trace_observation_summary(trace: dict) -> dict:
         "error_count": error_count,
         "warning_count": warning_count,
         "observation_count": len(observations),
+        "generations": generations,
     }
 
 
@@ -569,7 +588,7 @@ def list_all_traces_since(
     repo_config: RepoConfig | None = None,
     *,
     max_traces: int | None = None,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Return traces created at or after *from_timestamp*, newest-first, by
     paginating the Langfuse public API.
 
