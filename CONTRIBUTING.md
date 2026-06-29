@@ -248,6 +248,38 @@ All enforced by [`.pre-commit-config.yaml`](.pre-commit-config.yaml):
 Install with `.venv/bin/pre-commit install`. Run manually:
 `pre-commit run --all-files`.
 
+Also install the commit-msg hook so `commitizen` validates every commit
+message against [Conventional Commits](https://www.conventionalcommits.org/):
+
+```bash
+.venv/bin/pre-commit install --hook-type commit-msg
+```
+
+## Commit messages
+
+This repo enforces [Conventional Commits](https://www.conventionalcommits.org/)
+via the `commitizen` commit-msg hook (see [`.pre-commit-config.yaml`](.pre-commit-config.yaml)).
+Every commit message must follow the format:
+
+```
+<type>(<scope>): <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+Where `<type>` is one of: `feat`, `fix`, `docs`, `style`, `refactor`,
+`perf`, `test`, `build`, `ci`, `chore`, `revert`. Breaking changes are
+signaled by appending `!` after the type/scope (e.g. `feat!: drop
+Python 3.13 support`) or by including `BREAKING CHANGE:` in the footer.
+
+Commit messages drive automated versioning and changelog generation via
+[`python-semantic-release`](https://python-semantic-release.readthedocs.io/):
+- `fix:` commits trigger a **patch** bump (0.0.x).
+- `feat:` commits trigger a **minor** bump (0.x.0).
+- `feat!:` or `BREAKING CHANGE:` footers trigger a **major** bump (x.0.0).
+
 ## PR checklist
 
 - [ ] Tests pass: `make test`
@@ -273,6 +305,7 @@ check.
 | [`ci.yml`](.github/workflows/ci.yml) | Push/PR to `main` | `uv sync --frozen` (committed-lock gate — fails on a stale `uv.lock`) → deptry → **dependency audit** (CVE scan via `uv audit --frozen --preview` / `pip-audit` fallback — **hard gate**) → module taxonomy → Ruff → mypy `--strict` (advisory) → Bandit MEDIUM+ (advisory; see `[tool.bandit]`) → pytest (70% cov) |
 | [`dependency-review.yml`](.github/workflows/dependency-review.yml) | PR to any branch | `actions/dependency-review-action@v5.0.0` with `fail-on-severity: moderate` — analyzes the *delta* of dependency manifests (e.g. `pyproject.toml`, `uv.lock`) between the PR and its base branch, blocking on new or upgraded dependencies that introduce vulnerabilities rated moderate or higher |
 | [`deps-bump.yml`](.github/workflows/deps-bump.yml) | Weekly cron + manual | `uv lock --upgrade` → opens a PR refreshing `uv.lock` (shared-lib `@main` bumps), gated by `ci.yml` on the PR — see [docs/dependencies.md](docs/dependencies.md) |
+| [`release.yml`](.github/workflows/release.yml) | Push to `main` | `uv run semantic-release publish` — parses conventional-commit history since the last tag, computes the next semver version, updates `pyproject.toml` and `__version__` variables, auto-generates `CHANGELOG.md`, creates a Git tag + GitHub Release with release notes, builds distributions, and publishes to PyPI via OIDC trusted publishing. Exits silently when no new version is needed. See [docs/publishing.md](docs/publishing.md). |
 
 **Note on the hadolint gate in `docker-publish.yml`:** hadolint runs with
 `failure-threshold: warning` on every push to `main`. Warnings are

@@ -4,14 +4,29 @@ Releases of the `robotsix-mill` distribution are published automatically.
 
 ## How releases publish
 
-Publishing is automated. Creating and **publishing a GitHub Release**
-triggers [`.github/workflows/release.yml`](https://github.com/robotsix/mill/blob/main/.github/workflows/release.yml),
-which calls the reusable `python-release.yml` workflow to:
+Publishing is fully automated via
+[`python-semantic-release`](https://python-semantic-release.readthedocs.io/).
+Every push to `main` triggers
+[`.github/workflows/release.yml`](../.github/workflows/release.yml), which runs
+`uv run semantic-release publish` to:
 
-1. Build the sdist + wheel (`uv build`).
-2. Attach the built distributions to the triggering GitHub Release.
-3. Upload them to PyPI as the `robotsix-mill` distribution via OIDC
-   **trusted publishing** (no API token).
+1. Parse conventional-commit history since the last tag.
+2. Compute the next version (major/minor/patch) from the commit types.
+3. Update `pyproject.toml`'s `[project].version` and the `__version__` variables
+   in `src/robotsix_mill/__init__.py` and `src/robotsix_deploy/__init__.py`.
+4. Auto-generate `CHANGELOG.md` from the commit messages.
+5. Create a Git tag and a GitHub Release with auto-generated release notes.
+6. Build the sdist + wheel (`uv build`).
+7. Upload the built distributions to PyPI as the `robotsix-mill` distribution
+   via OIDC **trusted publishing** (no API token).
+
+Commit messages must follow the [Conventional Commits](https://www.conventionalcommits.org/)
+format (enforced by the `commitizen` commit-msg pre-commit hook — see
+[`CONTRIBUTING.md`](../CONTRIBUTING.md)). The type determines the version bump:
+
+- `fix:` commits trigger a **patch** bump (0.0.x).
+- `feat:` commits trigger a **minor** bump (0.x.0).
+- `feat!:` or `BREAKING CHANGE:` footers trigger a **major** bump (x.0.0).
 
 ## Required one-time PyPI setup
 
@@ -27,22 +42,23 @@ by a human on the PyPI website** — the agent/CI cannot perform it:
 
 Until this is configured on PyPI, the `publish` job will fail.
 
-## Version-bump requirement
+## Versioning
 
-`pyproject.toml` carries a hardcoded `[project].version` (currently
-`0.0.1`); there is no dynamic/VCS version source. PyPI **rejects
-re-uploading an existing version**, so before each release maintainers
-MUST bump `[project].version` in `pyproject.toml` and commit it. The
-release tag/version should match the `pyproject.toml` version.
+Versioning is fully automated — **do not manually bump** `pyproject.toml`
+or the `__version__` variables. `python-semantic-release` reads the commit
+history since the last tag and derives the correct next version. The
+`pyproject.toml` version is a hardcoded starting point (currently `0.0.1`);
+semantic-release updates it on each publish.
 
 ## Maintainer step-by-step flow
 
-1. Bump `[project].version` in `pyproject.toml`.
-2. Commit and merge the bump to `main`.
-3. Create a GitHub Release (with a tag matching the new version) and
-   publish it.
-4. Automation builds the distributions, attaches them to the release,
-   and publishes to PyPI.
+1. Ensure commits on `main` follow [Conventional Commits](https://www.conventionalcommits.org/)
+   format (enforced by the `commitizen` pre-commit hook locally).
+2. Push to `main`.
+3. Automation handles version bump, CHANGELOG generation, GitHub Release
+   creation, and PyPI upload — no manual intervention needed.
+4. If no release is published (e.g. no new conventional commits since the
+   last tag), semantic-release simply exits without changes.
 
 ## Optional hardening
 
