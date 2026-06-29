@@ -1334,6 +1334,242 @@ def _add_fragment(repo_dir, fragment_dir_name, filename, content="fragment conte
     )
 
 
+def _setup_repo_with_branch(repo_dir, ticket_id, branch_prefix="mill/"):
+    """Create a git repo with an initial commit on origin/main and a
+    feature branch <branch_prefix><ticket_id>.
+
+    Returns (repo_dir, branch_name).
+    """
+    import subprocess as _sp
+
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    _sp.run(["git", "-C", str(repo_dir), "init"], capture_output=True, text=True)
+    _sp.run(
+        ["git", "-C", str(repo_dir), "config", "user.email", "test@example.com"],
+        capture_output=True,
+        text=True,
+    )
+    _sp.run(
+        ["git", "-C", str(repo_dir), "config", "user.name", "Test"],
+        capture_output=True,
+        text=True,
+    )
+    (repo_dir / "README.md").write_text("initial")
+    _sp.run(["git", "-C", str(repo_dir), "add", "."], capture_output=True, text=True)
+    _sp.run(
+        ["git", "-C", str(repo_dir), "commit", "-m", "initial commit"],
+        capture_output=True,
+        text=True,
+    )
+    # Create origin/main as a local ref (simulates remote tracking branch).
+    _sp.run(
+        ["git", "-C", str(repo_dir), "branch", "origin/main"],
+        capture_output=True,
+        text=True,
+    )
+    branch = f"{branch_prefix}{ticket_id}"
+    _sp.run(
+        ["git", "-C", str(repo_dir), "checkout", "-b", branch],
+        capture_output=True,
+        text=True,
+    )
+    return branch
+
+
+def _advance_origin_main(repo_dir):
+    """Point origin/main to the current HEAD."""
+    import subprocess as _sp
+
+    _sp.run(
+        ["git", "-C", str(repo_dir), "branch", "-f", "origin/main"],
+        capture_output=True,
+        text=True,
+    )
+
+
+# -- mark_done merge verification ---------------------------------------
+
+
+def test_mark_done_merge_ancestor_succeeds(service, tmp_path):
+    """When the feature branch tip is an ancestor of origin/main,
+    mark_done succeeds."""
+    t = service.create("merge ancestor test")
+    ws = service.workspace(t)
+    repo = ws.repo_dir
+
+    _setup_repo_with_branch(repo, t.id)
+
+    # Make a commit on the feature branch.
+    (repo / "file.txt").write_text("feature work")
+    import subprocess as _sp
+
+    _sp.run(["git", "-C", str(repo), "add", "."], capture_output=True, text=True)
+    _sp.run(
+        ["git", "-C", str(repo), "commit", "-m", "feature commit"],
+        capture_output=True,
+        text=True,
+    )
+
+    # Fast-forward origin/main to include the feature branch (simulate merge).
+    _advance_origin_main(repo)
+
+    comment, ticket = service.mark_done(t.id)
+    assert ticket.state is State.DONE
+
+
+def test_mark_done_merge_squash_detected(service, tmp_path):
+    """When the branch tip is NOT an ancestor but a squash-merge commit
+    referencing the ticket ID exists on origin/main, mark_done succeeds."""
+    t = service.create("squash merge test")
+    ws = service.workspace(t)
+    repo = ws.repo_dir
+
+    _setup_repo_with_branch(repo, t.id)
+
+    # Make a commit on the feature branch.
+    (repo / "file.txt").write_text("feature work")
+    import subprocess as _sp
+
+    _sp.run(["git", "-C", str(repo), "add", "."], capture_output=True, text=True)
+    _sp.run(
+        ["git", "-C", str(repo), "commit", "-m", "feature commit"],
+        capture_output=True,
+        text=True,
+    )
+
+    # Simulate squash-merge: create a new commit on origin/main that
+    # references the ticket ID but is NOT a merge of the feature branch.
+    _sp.run(
+        ["git", "-C", str(repo), "checkout", "origin/main"],
+        capture_output=True,
+        text=True,
+    )
+    (repo / "file.txt").write_text("feature work")  # same content
+    _sp.run(["git", "-C", str(repo), "add", "."], capture_output=True, text=True)
+    _sp.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "commit",
+            "-m",
+            f"Squash merge #{t.id} into main",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    _advance_origin_main(repo)
+
+    comment, ticket = service.mark_done(t.id)
+    assert ticket.state is State.DONE
+
+
+def test_mark_done_merge_content_match(service, tmp_path):
+    """When the branch tip is NOT an ancestor and no log grep match,
+    but a changed file on origin/main contains the ticket ID,
+    mark_done succeeds (content-level fallback)."""
+    t = service.create("content match test")
+    ws = service.workspace(t)
+    repo = ws.repo_dir
+
+    _setup_repo_with_branch(repo, t.id)
+
+    # Make a commit on the feature branch that includes the ticket ID
+    # in file content.
+    (repo / "changelog.md").write_text(f"## {t.id}\n\nFeature work done.")
+    import subprocess as _sp
+
+    _sp.run(["git", "-C", str(repo), "add", "."], capture_output=True, text=True)
+    _sp.run(
+        ["git", "-C", str(repo), "commit", "-m", "add changelog"],
+        capture_output=True,
+        text=True,
+    )
+
+    # Simulate a cherry-pick / rebase: apply the same content on
+    # origin/main without the ticket ID in the commit message.
+    _sp.run(
+        ["git", "-C", str(repo), "checkout", "origin/main"],
+        capture_output=True,
+        text=True,
+    )
+    (repo / "changelog.md").write_text(f"## {t.id}\n\nFeature work done.")
+    _sp.run(["git", "-C", str(repo), "add", "."], capture_output=True, text=True)
+    _sp.run(
+        ["git", "-C", str(repo), "commit", "-m", "apply changelog"],
+        capture_output=True,
+        text=True,
+    )
+    _advance_origin_main(repo)
+
+    comment, ticket = service.mark_done(t.id)
+    assert ticket.state is State.DONE
+
+
+def test_mark_done_merge_not_verified_raises(service, tmp_path):
+    """When all merge checks fail, mark_done raises TransitionError."""
+    t = service.create("not merged test")
+    ws = service.workspace(t)
+    repo = ws.repo_dir
+
+    _setup_repo_with_branch(repo, t.id)
+
+    # Make a commit on the feature branch that origin/main does NOT have.
+    (repo / "file.txt").write_text("unmerged work")
+    import subprocess as _sp
+
+    _sp.run(["git", "-C", str(repo), "add", "."], capture_output=True, text=True)
+    _sp.run(
+        ["git", "-C", str(repo), "commit", "-m", "unmerged commit"],
+        capture_output=True,
+        text=True,
+    )
+
+    # origin/main stays at the initial commit — no merge happened.
+
+    with pytest.raises(TransitionError, match="has not been merged"):
+        service.mark_done(t.id)
+
+
+def test_mark_done_merge_no_branch_skips_verification(service, tmp_path):
+    """When the feature branch doesn't exist locally, verification is
+    skipped and mark_done succeeds (best-effort)."""
+    t = service.create("no branch test")
+    ws = service.workspace(t)
+    repo = ws.repo_dir
+
+    # Create a repo with origin/main but NO feature branch.
+    import subprocess as _sp
+
+    repo.mkdir(parents=True, exist_ok=True)
+    _sp.run(["git", "-C", str(repo), "init"], capture_output=True, text=True)
+    _sp.run(
+        ["git", "-C", str(repo), "config", "user.email", "test@example.com"],
+        capture_output=True,
+        text=True,
+    )
+    _sp.run(
+        ["git", "-C", str(repo), "config", "user.name", "Test"],
+        capture_output=True,
+        text=True,
+    )
+    (repo / "README.md").write_text("initial")
+    _sp.run(["git", "-C", str(repo), "add", "."], capture_output=True, text=True)
+    _sp.run(
+        ["git", "-C", str(repo), "commit", "-m", "initial"],
+        capture_output=True,
+        text=True,
+    )
+    _sp.run(
+        ["git", "-C", str(repo), "branch", "origin/main"],
+        capture_output=True,
+        text=True,
+    )
+
+    comment, ticket = service.mark_done(t.id)
+    assert ticket.state is State.DONE
+
+
 def test_mark_done_rejects_duplicate_changelog_fragments(service, tmp_path):
     """mark_done raises TransitionError when the branch HEAD has
     >1 fragment for the ticket id."""

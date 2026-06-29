@@ -188,6 +188,12 @@
   `mark_done()` also now rejects tickets in the `blocked` state (must be resumed
   first).  This closes a bypass where `mark_done` could force-close a blocked
   ticket without resolving the fragment conflict.
+- **service**: `mark_done()` now verifies that the ticket's feature branch has been
+  merged to `origin/main` before allowing the transition.  A three-tier check is
+  used: ancestor fast-path, squash-merge log-grep fallback, and content-level grep
+  for the ticket ID.  When all checks fail the transition is refused with a
+  `TransitionError`.  Best-effort: verification is skipped when the workspace clone
+  or branch is unavailable.
 - **stages**: route config/docs-only tickets (`.md`, `.yaml`, `.toml`, etc.) to the
   cheaper level-1 (flash) model in `_select_agent_level`, avoiding overprovisioning on
   trivial single-file changes.
