@@ -1448,7 +1448,11 @@ def test_mark_done_merge_squash_detected(service, tmp_path):
     _sp.run(["git", "-C", str(repo), "add", "."], capture_output=True, text=True)
     _sp.run(
         [
-            "git", "-C", str(repo), "commit", "-m",
+            "git",
+            "-C",
+            str(repo),
+            "commit",
+            "-m",
             f"Squash merge #{t.id} into main",
         ],
         capture_output=True,

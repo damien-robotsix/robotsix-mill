@@ -445,15 +445,18 @@ class _TransitionMixin(_ServiceBase):
         try:
             subprocess.run(
                 [
-                    "git", "-C", str(repo_dir),
-                    "fetch", "origin",
+                    "git",
+                    "-C",
+                    str(repo_dir),
+                    "fetch",
+                    "origin",
                     self.settings.forge_target_branch,
                 ],
                 check=True,
                 capture_output=True,
                 text=True,
             )
-        except (subprocess.CalledProcessError, Exception):
+        except subprocess.CalledProcessError, Exception:
             pass  # best-effort: fetch failed, try with existing ref
 
         # Verify the target ref exists (local or remote-tracking).
@@ -472,8 +475,13 @@ class _TransitionMixin(_ServiceBase):
         try:
             anc = subprocess.run(
                 [
-                    "git", "-C", str(repo_dir),
-                    "merge-base", "--is-ancestor", branch_tip, target,
+                    "git",
+                    "-C",
+                    str(repo_dir),
+                    "merge-base",
+                    "--is-ancestor",
+                    branch_tip,
+                    target,
                 ],
                 capture_output=True,
                 text=True,
@@ -487,9 +495,14 @@ class _TransitionMixin(_ServiceBase):
         try:
             grep = subprocess.run(
                 [
-                    "git", "-C", str(repo_dir),
-                    "log", target,
-                    "--oneline", "--fixed-strings", f"--grep={ticket_id}",
+                    "git",
+                    "-C",
+                    str(repo_dir),
+                    "log",
+                    target,
+                    "--oneline",
+                    "--fixed-strings",
+                    f"--grep={ticket_id}",
                 ],
                 capture_output=True,
                 text=True,
@@ -503,8 +516,12 @@ class _TransitionMixin(_ServiceBase):
         try:
             diff_files = subprocess.run(
                 [
-                    "git", "-C", str(repo_dir),
-                    "diff", "--name-only", f"{target}..{branch_tip}",
+                    "git",
+                    "-C",
+                    str(repo_dir),
+                    "diff",
+                    "--name-only",
+                    f"{target}..{branch_tip}",
                 ],
                 capture_output=True,
                 text=True,
@@ -521,8 +538,11 @@ class _TransitionMixin(_ServiceBase):
             try:
                 show = subprocess.run(
                     [
-                        "git", "-C", str(repo_dir),
-                        "show", f"{target}:{path}",
+                        "git",
+                        "-C",
+                        str(repo_dir),
+                        "show",
+                        f"{target}:{path}",
                     ],
                     capture_output=True,
                     text=True,
@@ -530,7 +550,9 @@ class _TransitionMixin(_ServiceBase):
             except Exception:
                 log.debug(
                     "%s: git show %s:%s failed — skipping content check",
-                    ticket_id, target, path,
+                    ticket_id,
+                    target,
+                    path,
                 )
                 continue
             if show.returncode == 0 and ticket_id in show.stdout:
