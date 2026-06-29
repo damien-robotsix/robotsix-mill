@@ -1013,7 +1013,7 @@ class TestSplitActionCap:
         svc.get.side_effect = _get
         forge = _mock_forge(open_branches=set(tickets))
         forge.list_open_prs.return_value = [
-            {"branch": b, "author_login": "mill-bot"} for b in tickets
+            {"branch": b, "author_login": "mill-bot[bot]"} for b in tickets
         ]
         forge.pr_files.return_value = [{"path": "x.py", "additions": 1, "deletions": 0}]
         _install_seams(monkeypatch, s, forge, svc)
@@ -1043,7 +1043,7 @@ class TestSplitActionCap:
         }
         forge = _mock_forge(open_branches=set(tickets))
         forge.list_open_prs.return_value = [
-            {"branch": b, "author_login": "mill-bot"} for b in tickets
+            {"branch": b, "author_login": "mill-bot[bot]"} for b in tickets
         ]
         forge.pr_files.return_value = [{"path": "x.py", "additions": 1, "deletions": 0}]
 
