@@ -487,3 +487,14 @@ class _PeriodicSettings(BaseModel):
     # Dry-run mode: log intent only, make zero forge mutations.
     # Default True for safety — flip to False to enable real actions.
     orphaned_pr_dry_run: bool = Field(default=True)
+
+    # Explicit allowlist of forge user logins the mill treats as its own bot identity.
+    # When empty (default) the login is auto-resolved via GET /user on the forge
+    # connection. List multiple logins when using several tokens / apps on the
+    # same repo.
+    orphaned_pr_bot_logins: list[str] = Field(default_factory=list)
+
+    # Per-type action caps (applied in addition to orphaned_pr_max_actions_per_pass).
+    # Separate limits avoid a burst of close actions consuming all of the combined cap.
+    orphaned_pr_max_closes_per_pass: int = Field(default=10, ge=1)
+    orphaned_pr_max_files_per_pass: int = Field(default=5, ge=1)

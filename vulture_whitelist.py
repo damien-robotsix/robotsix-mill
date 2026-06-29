@@ -231,6 +231,7 @@ oversized_items
 query_traces_since
 query_recent_traces
 query_session_summary
+human_pr_skipped
 run_forge_parity_pass
 run_frontend_sync_pass
 run_health_pass

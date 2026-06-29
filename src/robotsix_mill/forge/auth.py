@@ -24,7 +24,6 @@ import logging
 import time
 
 from ..config import RepoConfig, Settings, get_secrets
-from .github import _parse_owner_repo
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +58,8 @@ def _mint_installation_token(
     """Returns (token, unix_expiry). Seam: tests monkeypatch this."""
     import httpx
     import jwt
+
+    from .github import _parse_owner_repo  # lazy: avoid import cycle
 
     api = settings.github_api_url.rstrip("/")
     remote_url = _resolve_remote_url(settings, repo_config)

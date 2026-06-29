@@ -318,6 +318,16 @@ class Forge(ABC):
         empty set on any failure. Must NEVER raise."""
         return set()
 
+    def list_open_prs(self) -> list[dict]:
+        """Open PRs as list of dicts with 'branch' and 'author_login'.
+        Returns [] on any failure. Must NEVER raise."""
+        return []
+
+    def get_authenticated_user_login(self) -> str:
+        """Return the authenticated user/bot login for this forge connection.
+        Returns '' on failure. Must NEVER raise."""
+        return ""
+
 
 def _detect_forge_kind(remote_url: str) -> Literal["github", "gitlab"]:
     """Inspect a remote URL and return ``"github"`` or ``"gitlab"``.

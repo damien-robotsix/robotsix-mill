@@ -208,6 +208,7 @@ class OrphanedPrCheckResult:
     closed: int = 0
     filed: int = 0
     skipped: int = 0
+    human_pr_skipped: int = 0  # PRs skipped because author is not the bot
     dry_run: bool = True
     actions: list[str] = field(default_factory=list)
     classifications: list[ClassifiedOrphanPr] = field(default_factory=list)
@@ -296,9 +297,25 @@ def run_orphaned_pr_check_pass(
         dry_run=settings.orphaned_pr_dry_run,
     )
 
-    open_branches: set[str] = forge.list_open_pr_branches()
-    mill_branches = {b for b in open_branches if b.startswith(settings.branch_prefix)}
-    result.total_scanned = len(mill_branches)
+    # Resolve allowed bot logins for author guard
+    if settings.orphaned_pr_bot_logins:
+        allowed_logins: set[str] = set(settings.orphaned_pr_bot_logins)
+    else:
+        resolved = forge.get_authenticated_user_login()
+        if resolved:
+            allowed_logins = {resolved}
+        else:
+            allowed_logins = set()
+            log.warning(
+                "orphaned-pr-check: could not resolve forge bot login; "
+                "author guard is inactive for this pass (branch-prefix filter still active)"
+            )
+
+    open_prs: list[dict] = forge.list_open_prs()
+    mill_prs = [
+        pr for pr in open_prs if pr["branch"].startswith(settings.branch_prefix)
+    ]
+    result.total_scanned = len(mill_prs)
 
     open_orphan_titles: frozenset[str] = (
         _load_open_orphan_titles(service)
@@ -307,7 +324,8 @@ def run_orphaned_pr_check_pass(
     )
 
     _classify_branches(
-        sorted(mill_branches),
+        sorted(mill_prs, key=lambda p: p["branch"]),
+        allowed_logins,
         settings,
         service,
         forge,
@@ -319,7 +337,8 @@ def run_orphaned_pr_check_pass(
 
 
 def _classify_branches(
-    mill_branches: list[str],
+    mill_prs: list[dict],
+    allowed_logins: set[str],
     settings: Settings,
     service: TicketService,
     forge: Forge,
@@ -327,18 +346,34 @@ def _classify_branches(
     result: OrphanedPrCheckResult,
     open_orphan_titles: frozenset[str] = frozenset(),
 ) -> None:
-    """Iterate sorted mill branches, classify each, and update *result*.
+    """Iterate sorted mill PRs, classify each, and update *result*.
 
-    Phase 1: age-filter branches, then delegate to
+    Phase 0a: author guard — skip PRs whose author_login is not a known bot.
+    Phase 0b: age-filter branches, then delegate to
     :func:`classify_orphaned_prs` for pure classification.
     Phase 2: act on each classification (close or file-ticket) up to
-    ``orphaned_pr_max_actions_per_pass``.
+    per-type and combined caps.
     """
-    max_actions = settings.orphaned_pr_max_actions_per_pass
 
-    # ---- phase 0: age-filter branches -------------------------------
+    # ---- phase 0a: author guard --------------------------------------
+    prs_after_author: list[dict] = []
+    for pr in mill_prs:
+        author = pr["author_login"]
+        if allowed_logins and author not in allowed_logins:
+            log.debug(
+                "orphaned-pr-check: %s/%s authored by %s (not bot) — skipping",
+                repo_config.repo_id,
+                pr["branch"],
+                author[:20],  # truncate to avoid leaking full handles in DEBUG logs
+            )
+            result.human_pr_skipped += 1
+            continue
+        prs_after_author.append(pr)
+
+    # ---- phase 0b: age-filter branches -------------------------------
     age_filtered: list[str] = []
-    for branch in mill_branches:
+    for pr in prs_after_author:
+        branch = pr["branch"]
         ticket_id = branch.removeprefix(settings.branch_prefix)
         ticket: Ticket | None = service.get(ticket_id)
         if ticket is not None:
@@ -361,13 +396,43 @@ def _classify_branches(
     result.classifications = classifications
 
     # ---- phase 2: act on classifications (capped) -------------------
-    actions_taken = 0
+    _apply_classifications(
+        classifications,
+        settings,
+        service,
+        forge,
+        repo_config,
+        result,
+        open_orphan_titles,
+    )
+
+
+def _apply_classifications(
+    classifications: list[ClassifiedOrphanPr],
+    settings: Settings,
+    service: TicketService,
+    forge: Forge,
+    repo_config: RepoConfig,
+    result: OrphanedPrCheckResult,
+    open_orphan_titles: frozenset[str] = frozenset(),
+) -> None:
+    """Act on each classification up to per-type and combined action caps."""
+    max_actions = settings.orphaned_pr_max_actions_per_pass
+    max_closes = settings.orphaned_pr_max_closes_per_pass
+    max_files = settings.orphaned_pr_max_files_per_pass
+    closes_taken = 0
+    files_taken = 0
+    total_taken = 0
+
     for cpr in classifications:
-        if actions_taken >= max_actions:
-            remaining = len(classifications) - actions_taken
+        if total_taken >= max_actions or (
+            closes_taken >= max_closes and files_taken >= max_files
+        ):
+            remaining = len(classifications) - total_taken
             cap_msg = (
-                f"orphaned-pr-check: action cap "
-                f"({max_actions}) reached — "
+                f"orphaned-pr-check: action cap reached "
+                f"(closes={closes_taken}/{max_closes}, files={files_taken}/{max_files}, "
+                f"total={total_taken}/{max_actions}) — "
                 f"{remaining} classification(s) remain unprocessed"
             )
             log.info(cap_msg)
@@ -375,6 +440,21 @@ def _classify_branches(
             break
 
         should_close = cpr.classification in _CLOSE_CLASSIFICATIONS
+        if should_close:
+            if closes_taken >= max_closes:
+                log.debug(
+                    "orphaned-pr-check: close cap reached, skipping %s", cpr.branch
+                )
+                result.skipped += 1
+                continue
+        else:
+            if files_taken >= max_files:
+                log.debug(
+                    "orphaned-pr-check: file cap reached, skipping %s", cpr.branch
+                )
+                result.skipped += 1
+                continue
+
         is_dedup = (
             not should_close
             and _orphan_ticket_title(repo_config, cpr.branch) in open_orphan_titles
@@ -402,10 +482,12 @@ def _classify_branches(
             forge.post_pr_comment(source_branch=cpr.branch, body=comment)
             forge.close_pr(source_branch=cpr.branch)
             result.closed += 1
+            closes_taken += 1
         else:
             _file_orphan_ticket(service, settings, repo_config, cpr)
             result.filed += 1
-        actions_taken += 1
+            files_taken += 1
+        total_taken += 1
 
 
 # ------------------------------------------------------------------ actions
