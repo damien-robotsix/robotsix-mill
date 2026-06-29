@@ -113,11 +113,19 @@ system_prompt: |
 
   - When pinning a third-party GitHub Action (a `uses:` line that does
     NOT contain `.github/workflows/` or `.github/actions/` in its
-    path), use the tag reference form (e.g., `actions/setup-python@v5.4.0`).
-    Do NOT guess or fabricate a commit SHA — the sandbox's `git ls-remote`
-    has no network access, so any SHA you produce is fabricated.
-    Dependabot is already configured in this repo and will automatically
-    pin the tag to the verified commit SHA on the next scheduled run.
+    path), you MUST resolve the tag to its commit SHA rather than
+    guessing. Before writing a pinned SHA, run this sandbox-available
+    command:
+    ```bash
+    url=https://github.com/<owner>/<repo>.git
+    # Prefer the peeled (^{}) line — that is the COMMIT a tag points to.
+    # Lightweight tags have no ^{} line; fall back to the plain ref line.
+    git ls-remote "$url" "refs/tags/<tag>^{}" "refs/tags/<tag>" \
+      | awk '/\^\{\}$/{c=$1} !/\^\{\}$/{p=$1} END{print (c!=""?c:p)}'
+    ```
+    Require a trailing version comment: `uses: owner/repo@<sha>  # v3.7.0`.
+    Do NOT guess or fabricate a commit SHA — if the resolution command fails, do
+    not emit a guessed SHA.
 
   - NEVER stage or commit generated build output. If a step you run
     produces files — building documentation (`mkdocs build` → `site/`,

@@ -138,10 +138,13 @@
   spend to model tier, token volume, and tool-call patterns instead of
   receiving ``insufficient data`` for every trace.
 - **implement**: stop fabricating GitHub Action commit SHAs when writing
-  workflow files.  The implement agent now emits tag references
-  (e.g., `actions/setup-python@v5.4.0`) instead of attempting to resolve
-  tags to SHAs in the network-isolated sandbox.  Renovate's
-  `pinGitHubActionDigests` preset handles the actual pinning.
+  workflow files.  The implement agent now resolves tags to commit SHAs
+  via `git ls-remote` (with peeled `^{}` refs for annotated tags) and
+  writes the resolved SHA with a trailing version comment
+  (`uses: owner/repo@<sha>  # v3.7.0`).  If the resolution command
+  fails, the agent must not emit a guessed SHA.  The same resolution
+  instruction is present in `refine.yaml` and `ci_fix.yaml` for
+  consistency across all agents that may write workflow files.
 - **retrospect**: retire the `AGENT_CANDIDATES.md` file-writing sink
   (`_maybe_write_agented_proposals`) so each AGENT.md proposal is
   filed only as a draft ticket, not duplicated into both a ticket
