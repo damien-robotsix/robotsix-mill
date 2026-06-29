@@ -88,6 +88,12 @@ ruff check . && ruff format .
 mypy .
 ```
 
+## Dependency checker
+
+```bash
+deptry .
+```
+
 ## CI steps that run a tool (vulture, bandit, pip-audit, etc.)
 
 When you add a CI job — or a pre-commit hook, or a `Makefile`
@@ -113,7 +119,7 @@ present, but its absence is a hard CI failure.
 
 ## Redundant checks
 
-- Never run `mypy`, `ruff`, or `pytest` twice against unchanged
+- Never run `mypy`, `ruff`, `deptry`, or `pytest` twice against unchanged
   code — re-running is pure waste.
 - Never wrap checks in `git stash`/`git stash pop` when the tree
   is clean (`git status --porcelain` is empty).

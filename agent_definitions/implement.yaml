@@ -269,6 +269,16 @@ system_prompt: |
 
   Before you issue your final stop and summary, run this self-check:
 
+  0. **Run the pre-flight toolchain.** Execute all three checks
+     against the whole project — fix any failures before proceeding:
+
+     ```bash
+     ruff check . && ruff format . --check
+     mypy .
+     deptry .
+     ```
+
+     These are hard gates; a clean run of all three is mandatory.
   1. **Re-read the spec.** Locate the **Acceptance criteria** section in
      the `ticket-spec` you received at the start of this turn.
   2. **Verify every criterion.** For each acceptance criterion, use
