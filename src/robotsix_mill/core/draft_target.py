@@ -255,6 +255,74 @@ def referenced_mill_paths_absent(
     return absent
 
 
+def _package_root(token: str) -> str | None:
+    """The package-root directory for a path token.
+
+    Only ``src/<pkg>/...`` paths have a meaningful package root —
+    generic directories (``tests/``, ``docs/``, etc.) are not
+    repo-specific and return ``None``.
+
+    ``src/robotsix_chat/chat/server/app.py`` → ``src/robotsix_chat``
+    ``tests/test_foo.py`` → ``None``
+    ``docs/guide.md`` → ``None``
+    ``foo.py`` → ``None`` (no directory component)
+    """
+    parts = token.split("/")
+    if len(parts) < 2:
+        return None
+    if parts[0] == "src" and len(parts) >= 2:
+        return f"src/{parts[1]}"
+    return None
+
+
+def has_unverifiable_cross_repo_refs(
+    title: str | None,
+    body: str | None,
+    repo_dir: pathlib.Path | None,
+) -> bool:
+    """Return True when *title*/*body* reference source paths whose
+    package root does not exist in *repo_dir* — i.e. the follow-up
+    describes work in a different repo that the current workspace
+    cannot verify.
+
+    Mill-internal paths (matching :data:`MILL_PATH_PREFIXES`) are
+    excluded — those are routed to the mill board separately by
+    :func:`looks_like_mill_internal`.
+
+    When *repo_dir* is ``None``, returns ``False`` (no filesystem
+    available to check).  Pure / read-only, must never raise.
+    """
+    if repo_dir is None:
+        return False
+    haystack = f"{title or ''}\n{body or ''}"
+    try:
+        candidates = paths_excluding_out_of_scope(haystack)
+    except Exception:
+        return False
+    for token in candidates:
+        try:
+            token_lower = token.lower()
+        except Exception:
+            log.debug(
+                "has_unverifiable_cross_repo_refs: token.lower() failed for %r", token
+            )
+            continue
+        if any(token_lower.startswith(prefix.lower()) for prefix in MILL_PATH_PREFIXES):
+            continue
+        pkg = _package_root(token)
+        if pkg is None:
+            continue
+        try:
+            if not (repo_dir / pkg).exists():
+                return True
+        except Exception:
+            log.debug(
+                "has_unverifiable_cross_repo_refs: exists check failed for %r", pkg
+            )
+            continue
+    return False
+
+
 def referenced_local_deliverable_paths(
     title: str | None,
     body: str | None,

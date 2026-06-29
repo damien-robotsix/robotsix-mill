@@ -4,6 +4,13 @@
   working tree diff so that unstaged config-only edits from a prior
   retry pass are detected before the full test gate runs, allowing
   docs-only tickets to use the level-1 flash model on retry-2+.
+- **retrospect**: add cross-repo guard that skips follow-up/draft tickets
+  whose body references source paths in a different repo (package root
+  absent from the current workspace).  Prevents the retrospect agent
+  from claiming consumer-side wiring is missing in a repo it cannot
+  read.  Mill-internal paths remain routed to the mill board separately;
+  only ``src/<pkg>/...`` paths where ``<pkg>`` doesn't exist locally
+  trigger the skip.
 
 - **modules**: consolidate `agent-infra`, `agent-tools`, and `agents`
   into a single `agents` module entry in `docs/modules.yaml`, using

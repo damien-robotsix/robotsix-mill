@@ -13,6 +13,7 @@ import logging
 from types import SimpleNamespace
 
 from robotsix_mill.core.draft_target import (
+    has_unverifiable_cross_repo_refs,
     referenced_local_deliverable_paths,
     referenced_mill_paths_absent,
     resolve_mill_service,
@@ -418,3 +419,105 @@ def test_referenced_local_deliverable_paths_non_src_package(tmp_path):
         repo_dir=tmp_path,
     )
     assert result == ["tests/core/test_foo.py"]
+
+
+# ---------------------------------------------------------------------------
+# Tests for ``has_unverifiable_cross_repo_refs``
+# ---------------------------------------------------------------------------
+
+
+def test_has_unverifiable_cross_repo_refs_none_repo_dir_returns_false():
+    """repo_dir=None → returns False (no filesystem to check)."""
+    assert not has_unverifiable_cross_repo_refs(
+        title="Wire build_refdocs_tools in create_agent_from_settings",
+        body="Add src/robotsix_chat/chat/server/app.py build_refdocs_tools call.",
+        repo_dir=None,
+    )
+
+
+def test_has_unverifiable_cross_repo_refs_all_local_paths_returns_false(tmp_path):
+    """All referenced paths have package roots present in repo_dir → False."""
+    (tmp_path / "src" / "robotsix_llmio").mkdir(parents=True)
+    assert not has_unverifiable_cross_repo_refs(
+        title="Fix src/robotsix_llmio/core/foo.py",
+        body="Also update src/robotsix_llmio/config.py",
+        repo_dir=tmp_path,
+    )
+
+
+def test_has_unverifiable_cross_repo_refs_cross_repo_package_returns_true(tmp_path):
+    """A path referencing a package root not in repo_dir → True."""
+    (tmp_path / "src" / "robotsix_llmio").mkdir(parents=True)
+    assert has_unverifiable_cross_repo_refs(
+        title="Wire build_refdocs_tools",
+        body="Add build_refdocs_tools call in src/robotsix_chat/chat/server/app.py",
+        repo_dir=tmp_path,
+    )
+
+
+def test_has_unverifiable_cross_repo_refs_mill_paths_excluded(tmp_path):
+    """Mill-prefixed paths are excluded from cross-repo detection."""
+    # Only the local package exists; no mill dir.
+    (tmp_path / "src" / "robotsix_llmio").mkdir(parents=True)
+    # src/robotsix_mill/... is mill-prefixed → excluded, so no cross-repo hit.
+    assert not has_unverifiable_cross_repo_refs(
+        title="Fix mill pipeline",
+        body="Update src/robotsix_mill/core/draft_target.py logic.",
+        repo_dir=tmp_path,
+    )
+
+
+def test_has_unverifiable_cross_repo_refs_agent_definitions_excluded(tmp_path):
+    """agent_definitions/ paths are mill-prefixed → excluded."""
+    (tmp_path / "src" / "robotsix_llmio").mkdir(parents=True)
+    assert not has_unverifiable_cross_repo_refs(
+        title="Update agent prompts",
+        body="Revise agent_definitions/retrospect.yaml.",
+        repo_dir=tmp_path,
+    )
+
+
+def test_has_unverifiable_cross_repo_refs_mixed_local_and_cross(tmp_path):
+    """Mixed local and cross-repo paths → True (cross-repo found)."""
+    (tmp_path / "src" / "robotsix_llmio").mkdir(parents=True)
+    assert has_unverifiable_cross_repo_refs(
+        title="Wire new module",
+        body="src/robotsix_llmio/core/new_module.py added; "
+        "need to wire in src/robotsix_chat/chat/server/app.py",
+        repo_dir=tmp_path,
+    )
+
+
+def test_has_unverifiable_cross_repo_refs_out_of_scope_excluded(tmp_path):
+    """Cross-repo paths in out-of-scope sections are excluded → False."""
+    (tmp_path / "src" / "robotsix_llmio").mkdir(parents=True)
+    body = (
+        "## Scope\n\n"
+        "Wire src/robotsix_llmio/core/new_module.py\n\n"
+        "## Out of scope\n\n"
+        "src/robotsix_chat/chat/server/app.py consumer wiring.\n"
+    )
+    assert not has_unverifiable_cross_repo_refs(
+        title="Wire new module",
+        body=body,
+        repo_dir=tmp_path,
+    )
+
+
+def test_has_unverifiable_cross_repo_refs_bare_filename_ignored(tmp_path):
+    """A bare filename (no directory component) is not treated as cross-repo."""
+    (tmp_path / "src" / "robotsix_llmio").mkdir(parents=True)
+    assert not has_unverifiable_cross_repo_refs(
+        title="Fix foo.py",
+        body="Update bar.py too.",
+        repo_dir=tmp_path,
+    )
+
+
+def test_has_unverifiable_cross_repo_refs_empty_title_body_returns_false(tmp_path):
+    """Empty title and body → False."""
+    assert not has_unverifiable_cross_repo_refs(
+        title=None,
+        body=None,
+        repo_dir=tmp_path,
+    )
