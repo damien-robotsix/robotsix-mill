@@ -52,10 +52,6 @@ class _CoreSettings(BaseModel):
     # once the bridge gains real image-input support (which also needs a
     # robotsix-llmio pin bump) to re-enable inline vision.
     claude_sdk_vision_enabled: bool = Field(default=False)
-    # Max concurrent scouts a single ``parallel_explore`` fan-out runs. Each
-    # scout may spin a sandbox container (~sandbox_memory each), so this
-    # bounds peak resource use while letting long splittable work parallelise.
-    parallel_explore_max: int = Field(default=4, ge=1)
     # Hard cap on explore/parallel_explore sub-agent calls per refine run.
     # Calls beyond this cap are rejected with a clear message. Default 4
     # mirrors the existing parallel_explore concurrency limit and bounds

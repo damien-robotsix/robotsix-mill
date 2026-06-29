@@ -388,7 +388,6 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.limits.subtask_request_limit` | — | `30` | Per-subtask request cap for `spawn_subtask` sub-agents delegated by the coordinator |
 | `core.limits.explore_requests` | `MILL_EXPLORE_REQUEST_LIMIT` | `100` | Per-call request cap for the explore sub-agent |
 | `core.limits.explore_max_tokens` | `MILL_EXPLORE_MAX_TOKENS` | `4096` | Output token cap for explore sub-agent responses |
-| `core.limits.parallel_explore_max` | — | `4` | Max concurrent scouts per `parallel_explore` fan-out |
 | `core.limits.consult_requests` | `MILL_CONSULT_REQUEST_LIMIT` | `15` | Per-call request cap for the domain-expert consultation sub-agent |
 | `core.limits.test_requests` | `MILL_TEST_REQUEST_LIMIT` | `30` | Per-call request cap for the test sub-agent |
 | `core.limits.web_research_requests` | `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `8` | Per-call request cap for the web-research sub-agent |
