@@ -137,6 +137,38 @@ class TestIsConfigOnlyChange:
         )
         assert _is_config_only_change(git_repo, "main") is False
 
+    # -- working-tree detection (unstaged edits from a prior retry) --
+
+    def test_working_tree_config_only(self, git_repo: Path) -> None:
+        """Unstaged config-only tracked files in the working tree → True."""
+        # Create and commit a config-only file, then modify it unstaged.
+        (git_repo / "config.yaml").write_text("key: v1")
+        subprocess.run(["git", "-C", str(git_repo), "add", "config.yaml"], check=True)
+        subprocess.run(
+            ["git", "-C", str(git_repo), "commit", "-m", "add config"],
+            check=True,
+        )
+        # Now modify it unstaged — working-tree diff sees the change.
+        (git_repo / "config.yaml").write_text("key: v2")
+        assert _is_config_only_change(git_repo, "main") is True
+
+    def test_working_tree_mixed_config_and_code(self, git_repo: Path) -> None:
+        """Unstaged mix of config-only and .py in working tree → False."""
+        # Commit a .py file, then modify both unstaged.
+        (git_repo / "src.py").write_text("x = 0")
+        subprocess.run(["git", "-C", str(git_repo), "add", "src.py"], check=True)
+        subprocess.run(
+            ["git", "-C", str(git_repo), "commit", "-m", "add py"],
+            check=True,
+        )
+        (git_repo / "config.yaml").write_text("key: v2")
+        (git_repo / "src.py").write_text("x = 1")
+        assert _is_config_only_change(git_repo, "main") is False
+
+    def test_working_tree_empty_no_commits(self, git_repo: Path) -> None:
+        """No working tree changes and no commits → False (fail-closed)."""
+        assert _is_config_only_change(git_repo, "main") is False
+
 
 # ---------------------------------------------------------------------------
 # _should_skip_test_gate truth table

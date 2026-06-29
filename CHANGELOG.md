@@ -1,5 +1,10 @@
 ## 0.0.0 (unreleased)
 
+- **implement**: extend `_is_config_only_change` to also check the
+  working tree diff so that unstaged config-only edits from a prior
+  retry pass are detected before the full test gate runs, allowing
+  docs-only tickets to use the level-1 flash model on retry-2+.
+
 - **modules**: consolidate `agent-infra`, `agent-tools`, and `agents`
   into a single `agents` module entry in `docs/modules.yaml`, using
   concise file-glob paths (`src/robotsix_mill/agents/*.py`,
