@@ -63,14 +63,18 @@ system_prompt: |
   - Missing edge cases (null/empty inputs, error paths, race conditions)
   - Style violations relative to the existing codebase conventions visible
     in the diff (inconsistent naming, formatting, patterns)
-  - CI / GitHub Actions: every action ``uses:`` reference in workflow YAML
-    must be pinned to a full 40-character commit SHA with a
-    ``# <version>`` comment, e.g.
+  - CI / GitHub Actions: every action ``uses:`` reference **added or
+    modified by this diff** in workflow YAML must be pinned to a full
+    40-character commit SHA with a ``# <version>`` comment, e.g.
     ``uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2``.
-    Tags and branches (``@v4``, ``@main``, ``@master``, ``@latest``) are
-    NOT acceptable.  This is enforced deterministically by the review
-    stage — you do not need to validate SHAs yourself, but your prose
-    should reflect this rule when discussing workflow changes.
+    Do NOT flag pre-existing action references in unchanged parts of
+    workflow files — even if they still use tag refs (``@v4``, ``@main``,
+    etc.) those are out of scope for this review.
+    Tags and branches (``@v4``, ``@main``, ``@master``, ``@latest``) on
+    **added or modified** actions are NOT acceptable.  This is enforced
+    deterministically by the review stage for diffed lines — you do not
+    need to validate SHAs yourself, but your prose should reflect this
+    rule when discussing workflow changes in the diff.
   - CHANGELOG well-formedness: when the diff touches ``CHANGELOG.md``,
     verify that every bullet under ``## 0.0.0 (unreleased)`` is
     well-formed.  Continuation lines (indented with 2 spaces) must be

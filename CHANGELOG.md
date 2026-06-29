@@ -5,6 +5,10 @@
 - **refine**: extract `_triage_outcome` helper from `_triage.py` to
   eliminate repeated draft-original.md + file_map.json + resolved_outcome
   boilerplate across five triage decision handlers.
+- **review**: scope the LLM reviewer's SHA-pin audit instruction to
+  only actions added or modified by the diff, preventing false-positive
+  REQUEST_CHANGES on pre-existing action refs in unchanged workflow
+  sections.
 - **agents**: remove the 30-row history cap and 15-row comment cap from
   the `read_ticket` agent tool so agents receive the complete history and
   comment log (the 6000-character overall output cap still guards against
