@@ -300,6 +300,26 @@ def run_coordinator(
             request_limit=settings.coordinator_request_limit,
             tool_calls_limit=settings.coordinator_max_tool_calls,
         )
+
+        # -- delta-context trimming: retry/audit/re-refine passes ----------
+        # When the stage re-invokes us with a failure diagnosis (feedback),
+        # this is a retry pass — the model already saw the full spec, epic
+        # context, and memory ledger on the first pass.  Re-sending them in
+        # full inflates every call by 20-40%+ with no marginal value.
+        # Instead, pass only the delta: a minimal spec reminder plus the
+        # feedback block itself.  Gated by delta_context_retry_enabled
+        # (default True) so operators can revert to full-context passes if
+        # a particular ticket class needs them.
+        _retry_spec = spec
+        _retry_epic = epic_context
+        _retry_memory = memory
+        if feedback and settings.delta_context_retry_enabled:
+            from ..core.delta_context import trim_spec_for_retry
+
+            _retry_spec = trim_spec_for_retry(spec)
+            _retry_epic = ""  # already injected on first pass
+            _retry_memory = ""  # board conventions unchanged since first pass
+
         user_prompt = ""
         if language_instructions:
             user_prompt += (
@@ -308,12 +328,12 @@ def run_coordinator(
         user_prompt += (
             f"The repository root (CWD for all run_command calls) is: {repo_dir}\n\n"
         )
-        if epic_context:
-            user_prompt += f"{epic_context}\n\n"
+        if _retry_epic:
+            user_prompt += f"{_retry_epic}\n\n"
         user_prompt += (
-            section("ticket-spec", spec)
+            section("ticket-spec", _retry_spec)
             + "\n\n"
-            + section("memory", memory or "(empty — start a new ledger)")
+            + section("memory", _retry_memory or "(empty — start a new ledger)")
         )
         if previous_attempt_summary:
             # Inject prior summary before the feedback block so the

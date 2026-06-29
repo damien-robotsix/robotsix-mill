@@ -380,6 +380,68 @@ class TestRunCoordinator:
         assert "reply_to_thread" in prompt
         assert "close_thread" not in prompt
 
+    # -- delta-context trimming on retry ---------------------------------
+
+    def test_delta_context_on_retry_trims_spec_drops_epic_and_memory(
+        self,
+        settings,
+        tmp_path,
+    ):
+        """On a retry pass (feedback present), delta_context_retry_enabled
+        trims the spec, drops epic context, and drops memory — passing
+        only the delta (failure diagnosis + minimal spec reminder)."""
+        long_spec = "do X\n\n" + ("padding line\n" * 200)
+        self._run(
+            settings,
+            tmp_path,
+            spec=long_spec,
+            feedback="test_x failed",
+            epic_context="## Epic goal\nepic text",
+            memory="board conventions ledger",
+        )
+        prompt: str = self.captured["user_prompt"]
+        # Delta trimming is active by default → spec should be truncated.
+        assert "spec truncated" in prompt
+        assert "you already read the full spec on the first pass" in prompt
+        # Full epic context must NOT appear.
+        assert "## Epic goal" not in prompt
+        # Full memory must NOT appear.
+        assert "board conventions ledger" not in prompt
+        # The failure diagnosis (delta) MUST appear.
+        assert "test_x failed" in prompt
+        assert "test-failure" in prompt
+
+    def test_delta_context_disabled_passes_full_context(
+        self,
+        settings,
+        tmp_path,
+    ):
+        """When delta_context_retry_enabled is False, retry passes still
+        receive the full spec, epic context, and memory."""
+        from robotsix_mill.config import Settings
+
+        # Build a settings instance with trimming disabled.
+        s = Settings(
+            data_dir=str(tmp_path),
+            require_approval="false",
+            delta_context_retry_enabled=False,
+        )
+        self._run(
+            s,
+            tmp_path,
+            spec="do X",
+            feedback="test_x failed",
+            epic_context="## Epic goal\nepic text",
+            memory="board conventions ledger",
+        )
+        prompt: str = self.captured["user_prompt"]
+        # Full spec should appear.
+        assert "do X" in prompt
+        # Epic context should appear.
+        assert "## Epic goal" in prompt
+        # Memory should appear.
+        assert "board conventions ledger" in prompt
+
     # -- epic_context ----------------------------------------------------
 
     def test_epic_context_prepended(self, settings, tmp_path):

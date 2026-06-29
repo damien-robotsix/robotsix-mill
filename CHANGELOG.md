@@ -11,6 +11,14 @@
   counter when successive passes produce identical results.  New
   `refine_passes` and `refine_output_hash` fields on the Ticket model
   persist the counter and hash across runs.
+- **delta-context**: retry/audit/re-refine passes now receive only the
+  delta (failing item + minimal spec reminder) instead of the full
+  accumulated lifecycle context.  Gated by the new
+  `delta_context_retry_enabled` setting (default `True`).  Applied
+  fleet-wide in both `run_coordinator` (implement retries) and
+  `run_refine_agent` (re-refine passes).  Reduces later-pass context
+  size by 20-40%, saving marginal tokens on OpenRouter-backed stages
+  and helping subscription stages stay under plan ceilings.
 
 - **ci-dedup**: include the workflow file path in CI failure fingerprint
   hashing so that the same error in different workflows produces
