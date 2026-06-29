@@ -107,7 +107,7 @@ def _langfuse_api_get(
             return None
         return r.json()
     except Exception as e:
-        log.debug("Langfuse API GET %s failed: %s: %s", repr(path), type(e).__name__, e)
+        log.debug("Langfuse API GET failed: %s: %s", type(e).__name__, e)
         return None
 
 
