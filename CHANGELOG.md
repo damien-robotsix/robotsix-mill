@@ -4,6 +4,9 @@
   the `read_ticket` agent tool so agents receive the complete history and
   comment log (the 6000-character overall output cap still guards against
   blowing the agent's context window).
+- **review**: restrict `_action_refs_from_diff` to `.github/` workflow
+  files only, preventing false-positive SHA-pin violations from
+  `uses:` documentation examples in non-workflow diffs.
 - **cli**: add `robotsix-mill trace-review` subcommand, wiring the
   periodic trace-review runner into the CLI so it is reachable the
   same way sibling `schedule_only` passes are (`diagnostic`,

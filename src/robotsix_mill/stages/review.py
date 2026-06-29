@@ -178,6 +178,8 @@ def _action_refs_from_diff(diff: str) -> list[tuple[str, str, str, str]]:
             continue
         if current_file is None:
             continue
+        if not current_file.startswith(".github/"):
+            continue  # Not a workflow file — skip matches
         m = _ACTION_USES_RE.search(line)
         if not m:
             continue
