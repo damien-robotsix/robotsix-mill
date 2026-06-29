@@ -143,10 +143,10 @@ def test_default_maintenance_requests():
 
 
 def test_default_doc_requests():
-    """doc_request_limit defaults to 16 (raised from 8 to prevent
+    """doc_request_limit defaults to 32 (raised from 16 to prevent
     UsageLimitExceeded on feature-sized tickets)."""
     s = Settings()
-    assert s.doc_request_limit == 16
+    assert s.doc_request_limit == 32
 
 
 def test_default_refine_requests():
