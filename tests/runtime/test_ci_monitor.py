@@ -844,6 +844,136 @@ def test_comment_refreshes_window_across_recurrences(tmp_path, monkeypatch):
     assert any("51" in c.body and "shaB" in c.body for c in comments)
 
 
+# === content-based fingerprint dedup =====================================
+
+
+def test_content_dedup_same_fingerprint_consolidates(tmp_path, monkeypatch):
+    """Cycle 1 creates a draft with a ci_fp label; cycle 2 with the same
+    fingerprint but different workflow → label match consolidates."""
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    forge = _make_fake_forge(monkeypatch, logs="error: division by zero\n")
+
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    if state_path.exists():
+        state_path.unlink()
+
+    # Cycle 1: workflow "Build"
+    forge.runs = [
+        {
+            "id": 1,
+            "name": "Build",
+            "workflow_id": 100,
+            "head_sha": "abc",
+            "conclusion": "failure",
+            "html_url": "http://run/1",
+            "created_at": "2025-01-01T00:00:00Z",
+        },
+    ]
+
+    worker = Worker(ctx)
+    worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
+    _run_one_cycle(worker, monkeypatch)
+
+    # Verify draft created with ci_fp label.
+    tickets = [t for t in ctx.service.list() if t.source == "ci"]
+    assert len(tickets) == 1
+    labels = json.loads(tickets[0].labels or "[]")
+    assert any(label.startswith("ci_fp:") for label in labels)
+
+    # Cycle 2: different workflow ("Test") but same log content →
+    # same fingerprint → label match consolidates instead of new ticket.
+    forge.runs = [
+        {
+            "id": 2,
+            "name": "Test",
+            "workflow_id": 200,
+            "head_sha": "def",
+            "conclusion": "failure",
+            "html_url": "http://run/2",
+            "created_at": "2025-01-01T00:00:00Z",
+        },
+    ]
+    _run_one_cycle(worker, monkeypatch)
+
+    # No second ticket created.
+    tickets = [t for t in ctx.service.list() if t.source == "ci"]
+    assert len(tickets) == 1
+
+    # Consolidation comment references the new run/commit.
+    comments = ctx.service.list_comments(tickets[0].id)
+    assert any("2" in c.body and "def" in c.body for c in comments)
+
+
+def test_content_dedup_different_fingerprint_new_ticket(tmp_path, monkeypatch):
+    """Cycle 1 creates a draft with fingerprint A; cycle 2 with genuinely
+    different error content (fingerprint B) creates a second ticket."""
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    forge = _make_fake_forge(monkeypatch, logs="error: division by zero\n")
+
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    if state_path.exists():
+        state_path.unlink()
+
+    # Cycle 1: workflow "Build", fingerprint A.
+    forge.runs = [
+        {
+            "id": 1,
+            "name": "Build",
+            "workflow_id": 100,
+            "head_sha": "abc",
+            "conclusion": "failure",
+            "html_url": "http://run/1",
+            "created_at": "2025-01-01T00:00:00Z",
+        },
+    ]
+
+    worker = Worker(ctx)
+    worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
+    _run_one_cycle(worker, monkeypatch)
+
+    tickets = [t for t in ctx.service.list() if t.source == "ci"]
+    assert len(tickets) == 1
+
+    # Cycle 2: different workflow, different log content → fingerprint B.
+    forge.logs = "error: index out of bounds in module X\n"
+    forge.runs = [
+        {
+            "id": 2,
+            "name": "Test",
+            "workflow_id": 200,
+            "head_sha": "def",
+            "conclusion": "failure",
+            "html_url": "http://run/2",
+            "created_at": "2025-01-01T00:00:00Z",
+        },
+    ]
+    _run_one_cycle(worker, monkeypatch)
+
+    # Second ticket created — fingerprints differ.
+    tickets = [t for t in ctx.service.list() if t.source == "ci"]
+    assert len(tickets) == 2
+
+    # Labels differ between the two tickets.
+    all_labels = [json.loads(t.labels or "[]") for t in tickets]
+    fp_labels = [
+        [label for label in ls if label.startswith("ci_fp:")] for ls in all_labels
+    ]
+    assert all(len(fp) == 1 for fp in fp_labels)
+    assert fp_labels[0] != fp_labels[1]
+
+
 def _run_ci_poll_cycle(worker, ctx, monkeypatch):
     """Drive a single ``_poll_one_repo_ci`` call deterministically."""
     import asyncio
