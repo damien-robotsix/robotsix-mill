@@ -141,6 +141,9 @@ db_maintenance_periodic
 sandbox_reaper_periodic
 dependabot_ingest_periodic
 orphaned_pr_check_periodic
+# board_manager_max_concurrent — config field added; upstream robotsix-board-agent
+# BoardManager doesn't yet accept max_concurrent; will be wired once upstream supports it.
+board_manager_max_concurrent
 scope_triage_request_limit
 already_done_request_limit
 langfuse_cleanup_periodic
