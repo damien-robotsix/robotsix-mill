@@ -37,6 +37,55 @@ from .helpers import (
 _MIGRATE_NOTE_PREFIX = "migrated from board "
 
 
+def _triage_outcome(
+    ctx: StageContext,
+    ws: Workspace,
+    draft: str,
+    ticket_id: str,
+    reason: str,
+    *,
+    source: str | None = None,
+    triage_note: str | None = None,
+    write_file_map_args: list[dict[str, str]] | None = None,
+    extract_paths_from_draft: bool = False,
+) -> Outcome:
+    """Write draft-original.md and file_map.json, then return a resolved Outcome.
+
+    Encapsulates the repeated 3-statement pattern found across triage
+    decision handlers: write draft-original.md, write file_map.json,
+    and return a ``resolved_outcome``.
+    """
+    (ws.artifacts_dir / "draft-original.md").write_text(
+        draft if draft else "(title-only ticket, no body provided)",
+        encoding="utf-8",
+    )
+
+    if extract_paths_from_draft:
+        _PATH_RE = re.compile(r"`([^`]*/[^`]*\.[a-zA-Z]{1,10})`")
+        extracted = _PATH_RE.findall(draft)
+        if extracted:
+            _reconcile.write_file_map(
+                ws,
+                [{"file": p, "note": "from draft"} for p in extracted],
+                only_if_absent=True,
+            )
+        else:
+            _reconcile.write_file_map(ws, [], only_if_absent=True)
+    elif write_file_map_args is not None:
+        _reconcile.write_file_map(ws, write_file_map_args, only_if_absent=True)
+    else:
+        _reconcile.write_file_map(ws, [], only_if_absent=True)
+
+    return _result_paths.resolved_outcome(
+        ctx,
+        draft,
+        ticket_id,
+        reason,
+        source=source,
+        triage_note=triage_note,
+    )
+
+
 def _parse_prior_boards(service: TicketService, ticket_id: str) -> tuple[set[str], int]:
     """Parse migration-history events to find boards this ticket has been on.
 
@@ -89,13 +138,9 @@ def _anti_bounce_escalate(
             ticket.id,
             exc_info=True,
         )
-        (ws.artifacts_dir / "draft-original.md").write_text(
-            draft if draft else "(title-only ticket, no body provided)",
-            encoding="utf-8",
-        )
-        _reconcile.write_file_map(ws, [], only_if_absent=True)
-        return _result_paths.resolved_outcome(
+        return _triage_outcome(
             ctx,
+            ws,
             draft,
             ticket.id,
             f"triage MIGRATE anti-bounce error: {triage.reason}",
@@ -112,13 +157,9 @@ def _anti_bounce_escalate(
             prior_boards,
             migration_count,
         )
-        (ws.artifacts_dir / "draft-original.md").write_text(
-            draft if draft else "(title-only ticket, no body provided)",
-            encoding="utf-8",
-        )
-        _reconcile.write_file_map(ws, [], only_if_absent=True)
-        return _result_paths.resolved_outcome(
+        return _triage_outcome(
             ctx,
+            ws,
             draft,
             ticket.id,
             f"triage MIGRATE anti-bounce blocked: {triage.reason}",
@@ -199,15 +240,9 @@ def split_child_fast_path(
     spec = draft
     if not spec.strip():
         return Outcome(State.BLOCKED, "split child has empty description")
-    draft_original = ws.artifacts_dir / "draft-original.md"
-    if not draft_original.exists():
-        draft_original.write_text(
-            "(split child — spec written by parent's refine agent)",
-            encoding="utf-8",
-        )
-    _reconcile.write_file_map(ws, [], only_if_absent=True)
-    return _result_paths.resolved_outcome(
+    return _triage_outcome(
         ctx,
+        ws,
         spec,
         ticket.id,
         "split child — spec already refined",
@@ -275,11 +310,6 @@ def triage_skip(
                 f"maintenance triage (LLM): {triage.reason} — {title}",
             )
         if triage.decision == "NO_CHANGE":
-            (ws.artifacts_dir / "draft-original.md").write_text(
-                draft if draft else "(title-only ticket, no body provided)",
-                encoding="utf-8",
-            )
-            _reconcile.write_file_map(ws, [], only_if_absent=True)
             short_reason = triage.reason[:400] + (
                 "…" if len(triage.reason) > 400 else ""
             )
@@ -288,40 +318,34 @@ def triage_skip(
             # so implement can verify the "no change" claim against the
             # live tree.
             if ticket.kind == TicketKind.TASK and not ticket.branch:
-                return _result_paths.resolved_outcome(
+                return _triage_outcome(
                     ctx,
+                    ws,
                     draft,
                     ticket.id,
                     f"triage NO_CHANGE — routing to implement: {short_reason}",
                     source=ticket.source,
                     triage_note=triage.reason,
                 )
+            (ws.artifacts_dir / "draft-original.md").write_text(
+                draft if draft else "(title-only ticket, no body provided)",
+                encoding="utf-8",
+            )
+            _reconcile.write_file_map(ws, [], only_if_absent=True)
             return Outcome(
                 State.DONE,
                 f"triage NO_CHANGE: {short_reason}",
             )
         if triage.decision == "SKIP":
-            (ws.artifacts_dir / "draft-original.md").write_text(
-                draft if draft else "(title-only ticket, no body provided)",
-                encoding="utf-8",
-            )
-            _PATH_RE = re.compile(r"`([^`]*/[^`]*\.[a-zA-Z]{1,10})`")
-            extracted = _PATH_RE.findall(draft)
-            if extracted:
-                _reconcile.write_file_map(
-                    ws,
-                    [{"file": p, "note": "from draft"} for p in extracted],
-                    only_if_absent=True,
-                )
-            else:
-                _reconcile.write_file_map(ws, [], only_if_absent=True)
-            return _result_paths.resolved_outcome(
+            return _triage_outcome(
                 ctx,
+                ws,
                 draft,
                 ticket.id,
                 f"triage SKIP: {triage.reason}",
                 source=ticket.source,
                 triage_note=triage.reason,
+                extract_paths_from_draft=True,
             )
 
         if triage.decision == "MIGRATE":
