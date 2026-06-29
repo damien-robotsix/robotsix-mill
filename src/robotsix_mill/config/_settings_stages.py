@@ -146,6 +146,12 @@ class _StagesSettings(BaseModel):
     # implementation-ready skip the full refine — saving cost & latency.
     # Set False to force full refine for all tickets without a deploy.
     refine_triage_enabled: bool = Field(default=True)
+    # When a ticket draft contains more than this many lines of code
+    # inside fenced code blocks (triple backticks), the draft is
+    # treated as a prescriptive spec — the ticket skips the refine
+    # LLM entirely and routes directly to implement.  Set to 0 to
+    # disable the deterministic shortcut.  Default 50.
+    refine_prescriptive_spec_code_lines_threshold: int = Field(default=50)
     # When True (default), a pre-Opus guard checks whether the reviewer's
     # feedback on a sendback ticket already agrees with the draft's
     # no-change-needed conclusion.  When the reviewer confirms, the

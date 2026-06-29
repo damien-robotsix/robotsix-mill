@@ -36,6 +36,34 @@ from .helpers import (
 
 _MIGRATE_NOTE_PREFIX = "migrated from board "
 
+# Regex that matches a fenced code block line — three or more backticks
+# optionally followed by a language hint.  Used by
+# :func:`_count_code_block_lines` to count lines inside code fences.
+_CODE_FENCE_RE = re.compile(r"^\s*```")
+
+
+def _count_code_block_lines(text: str) -> int:
+    """Return the number of lines inside fenced code blocks in *text*.
+
+    Tracks open/closed state across triple-backtick fences.  Only
+    counts lines between a `` ``` `` opener and its matching closer.
+    Consecutive openers without an intervening closer are treated as
+    nested (inner fences are part of the outer block's content).
+    """
+    if not text:
+        return 0
+    count = 0
+    depth = 0
+    for line in text.splitlines():
+        if _CODE_FENCE_RE.match(line):
+            if depth == 0:
+                depth = 1  # entering a code block
+            else:
+                depth = 0  # leaving a code block
+        elif depth > 0:
+            count += 1
+    return count
+
 
 def _triage_outcome(
     ctx: StageContext,
@@ -286,6 +314,34 @@ def triage_skip(
     """
     if not (s.refine_triage_enabled and not reviewer_comments):
         return None
+
+    # Deterministic pre-check: when the draft contains a large number of
+    # code-block lines (prescriptive spec — the author already wrote the
+    # implementation in fenced code blocks), skip the triage LLM call and
+    # route directly to implement.  The expensive refine agent adds no
+    # value on a spec that is already code-complete.
+    threshold = s.refine_prescriptive_spec_code_lines_threshold
+    if threshold > 0:
+        code_lines = _count_code_block_lines(draft)
+        if code_lines >= threshold:
+            log.info(
+                "%s: prescriptive spec — code blocks contain %d lines "
+                "(threshold %d), skipping triage + refine",
+                ticket.id,
+                code_lines,
+                threshold,
+            )
+            return _triage_outcome(
+                ctx,
+                ws,
+                draft,
+                ticket.id,
+                "prescriptive spec — code blocks constitute "
+                "implementation-ready spec, skipping refine",
+                source=ticket.source,
+                extract_paths_from_draft=True,
+            )
+
     try:
         triage = refining.triage_refine(
             settings=s,
