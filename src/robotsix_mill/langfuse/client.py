@@ -588,7 +588,7 @@ def list_all_traces_since(
     repo_config: RepoConfig | None = None,
     *,
     max_traces: int | None = None,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Return traces created at or after *from_timestamp*, newest-first, by
     paginating the Langfuse public API.
 

@@ -114,7 +114,7 @@ def _try_record_step_usage(
         input_tokens: int = usage.input_tokens
         output_tokens: int = usage.output_tokens
 
-        tool_calls: list[dict] = []
+        tool_calls: list[dict[str, Any]] = []
         try:
             for msg in result.all_messages():
                 for part in msg.parts:

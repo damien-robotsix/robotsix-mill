@@ -21,7 +21,7 @@ import logging
 import uuid
 from contextlib import ExitStack, contextmanager, nullcontext
 from datetime import datetime, timezone
-from typing import Iterator
+from typing import Any, Iterator
 
 from ..config import RepoConfig, get_secrets
 
@@ -533,7 +533,7 @@ def record_step_usage(
     model_name: str = "",
     input_tokens: int = 0,
     output_tokens: int = 0,
-    tool_calls: list[dict] | None = None,
+    tool_calls: list[dict[str, Any]] | None = None,
     retry_count: int = 0,
     retry_reason: str = "",
 ) -> None:
@@ -549,7 +549,7 @@ def record_step_usage(
     """
     import json as _json
 
-    data: dict = {
+    data: dict[str, Any] = {
         "request_count": request_count,
         "model_name": model_name,
         "input_tokens": input_tokens,
@@ -560,7 +560,7 @@ def record_step_usage(
         data["retry_reason"] = retry_reason
     if tool_calls:
         # Truncate args to keep the attribute within OTel size bounds.
-        trimmed: list[dict] = []
+        trimmed: list[dict[str, Any]] = []
         for tc in tool_calls:
             entry = {"name": tc.get("name", "")}
             args = tc.get("args", "")
