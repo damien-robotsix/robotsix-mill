@@ -202,6 +202,7 @@ stages:
     prior_context_max_chars: 8000          # max chars of re-review prior-context (comments + rebuttal); 0 = no cap
     diff_max_chars: 200000                 # max chars of combined git diff injected into review prompt; 0 = unbounded
     output_token_budget: 65536            # output token budget for review agent retry on max_tokens exhaustion; 0 = disabled
+    delta_context_retry_enabled: true            # retry/audit/re-refine passes get delta-only context to save tokens
 
 # ---------------------------------------------------------------------------
 #  ci — CI retry ceiling for flake-storm prevention

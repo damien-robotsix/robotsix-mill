@@ -434,6 +434,13 @@ class _StagesSettings(BaseModel):
     # re-deriving the spec from the original draft. Set False to always refine
     # from scratch.
     refine_delta_reuse_enabled: bool = Field(default=True)
+    # When True, retry/audit/re-refine passes on the same ticket receive
+    # only the delta (failing item + minimal spec) rather than the full
+    # accumulated lifecycle context.  Applied fleet-wide — both
+    # subscription and OpenRouter-backed stages.  Reduces late-pass
+    # context size 20-40% vs the first pass, saving marginal tokens on
+    # OpenRouter and helping subscription stages stay under plan ceilings.
+    delta_context_retry_enabled: bool = Field(default=True)
     # ---------- trace inspector dynamic budget ----------
     # Floor for the tools-on request budget.  Even a tiny trace gets
     # enough requests to read at least one code locus and emit a

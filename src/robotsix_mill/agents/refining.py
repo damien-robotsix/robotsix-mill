@@ -1075,6 +1075,22 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
         **overrides,
     )
 
+    # -- delta-context trimming: re-refine passes ------------------------
+    # When the stage re-invokes us with reviewer_comments (sendback),
+    # this is a re-refine pass — the model already saw the full draft,
+    # epic context, and memory ledger on the first pass.  Re-sending
+    # them in full inflates every call.  Pass only the delta: a minimal
+    # draft reminder plus the reviewer comments themselves.
+    _re_refine_draft = draft
+    _re_refine_epic = epic_context
+    _re_refine_memory = memory
+    if reviewer_comments and settings.delta_context_retry_enabled:
+        from ..core.delta_context import trim_draft_for_re_refine
+
+        _re_refine_draft = trim_draft_for_re_refine(draft)
+        _re_refine_epic = ""
+        _re_refine_memory = ""
+
     # Build user prompt: title, draft, memory, and optionally reviewer feedback.
     user_prompt = ""
     if language_instructions:
@@ -1087,14 +1103,14 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
             "from the ticket and a recency window (`since_hours`) to pull "
             "relevant log excerpts instead of reading whole files.\n\n"
         )
-    if epic_context:
-        user_prompt += f"{epic_context}\n\n"
+    if _re_refine_epic:
+        user_prompt += f"{_re_refine_epic}\n\n"
     user_prompt += (
         section("title", title)
         + "\n"
-        + section("draft", draft)
+        + section("draft", _re_refine_draft)
         + "\n\n"
-        + section("memory", memory or "(empty — start a new ledger)")
+        + section("memory", _re_refine_memory or "(empty — start a new ledger)")
     )
     if triage_findings:
         user_prompt += "\n\n" + section("triage-findings", triage_findings)
