@@ -148,6 +148,10 @@
   to short-circuit repeated refine and review runs over unchanged ticket content
   or diffs, collapsing the tail of near-identical re-check passes that burn
   subscription headroom without producing new output.
+- **refine**: tighten the refine agent's system prompt (~18% reduction) and add
+  a fast-path instruction for mechanically simple drafts to reduce per-call
+  token overhead; add a re-refinement deduplication rule to the reviewer
+  sendback prompt to prevent redundant codebase re-exploration.
 
 - **dev**: add `.git-blame-ignore-revs` listing the five largest bulk-format/restructure
   commits so `git blame` (and GitHub's blame UI) skip them and attribute lines to the
