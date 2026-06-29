@@ -29,9 +29,6 @@ _TICKET_ID_RE = re.compile(r"^\d{8}T\d{6}Z-[a-z0-9-]+-[a-f0-9]{4}$")
 # can't blow the agent's context.
 _DESC_CAP = 3000
 _RESULT_CAP = 6000
-# History/comment row limits (most-recent-first; older rows summarised).
-_HISTORY_ROWS = 30
-_COMMENT_ROWS = 15
 
 
 def _truncate_at_boundary(text: str, cap: int, markers: tuple[str, ...]) -> str:
@@ -77,35 +74,27 @@ def _description_section(desc: str) -> list[str]:
 
 
 def _history_section(history) -> list[str]:
-    """``### History`` block — newest ``_HISTORY_ROWS`` events, most recent first."""
+    """``### History`` block — all events, most recent first."""
     n = len(history)
     lines = [f"### History ({n} events)", ""]
     if not history:
         lines.append("(no history)")
         lines.append("")
         return lines
-    if n > _HISTORY_ROWS:
-        lines.append(f"... [{n - _HISTORY_ROWS} earlier events omitted]")
-        lines.append("")
-    shown = reversed(history[-_HISTORY_ROWS:] if n > _HISTORY_ROWS else history)
-    for ev in shown:
+    for ev in reversed(history):
         lines.append(f"- [{ev.state.value}] {ev.at} — {ev.note or '(no note)'}")
     lines.append("")
     return lines
 
 
 def _comments_section(comments) -> list[str]:
-    """``### Comments`` block — newest ``_COMMENT_ROWS`` comments, most recent first."""
+    """``### Comments`` block — all comments, most recent first."""
     n = len(comments)
     lines = [f"### Comments ({n})", ""]
     if not comments:
         lines.append("(no comments)")
         return lines
-    if n > _COMMENT_ROWS:
-        lines.append(f"... [{n - _COMMENT_ROWS} earlier comments omitted]")
-        lines.append("")
-    shown = reversed(comments[-_COMMENT_ROWS:] if n > _COMMENT_ROWS else comments)
-    for c in shown:
+    for c in reversed(comments):
         lines.append(f"**{c.author}** ({c.created_at}, id={c.id}):")
         lines.append(c.body)
         lines.append("")

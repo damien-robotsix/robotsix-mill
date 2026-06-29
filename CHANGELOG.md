@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- **agents**: remove the 30-row history cap and 15-row comment cap from
+  the `read_ticket` agent tool so agents receive the complete history and
+  comment log (the 6000-character overall output cap still guards against
+  blowing the agent's context window).
 - **cli**: add `robotsix-mill trace-review` subcommand, wiring the
   periodic trace-review runner into the CLI so it is reachable the
   same way sibling `schedule_only` passes are (`diagnostic`,
