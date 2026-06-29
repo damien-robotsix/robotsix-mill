@@ -1,22 +1,29 @@
 name: Release
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
 
 permissions:
-  contents: read
+  contents: write
+  id-token: write
 
 jobs:
   release:
-    permissions:
-      # Bounded by the caller: grant what the reusable workflow's jobs request.
-      # `publish` needs id-token for OIDC trusted publishing; `github-release`
-      # needs contents:write to attach the built distributions to the release.
-      id-token: write
-      contents: write
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-release.yml@5cd8c1facb02299da618979e7a55f1953f9c075a
-    with:
-      python-version: "3.14"
-      uv-version: "0.8.15"
-      github-release: true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.14"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
+        with:
+          version: "0.8.15"
+      - name: Python Semantic Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          uv run semantic-release publish

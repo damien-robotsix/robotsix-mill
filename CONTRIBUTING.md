@@ -248,6 +248,38 @@ All enforced by [`.pre-commit-config.yaml`](.pre-commit-config.yaml):
 Install with `.venv/bin/pre-commit install`. Run manually:
 `pre-commit run --all-files`.
 
+Also install the commit-msg hook so `commitizen` validates every commit
+message against [Conventional Commits](https://www.conventionalcommits.org/):
+
+```bash
+.venv/bin/pre-commit install --hook-type commit-msg
+```
+
+## Commit messages
+
+This repo enforces [Conventional Commits](https://www.conventionalcommits.org/)
+via the `commitizen` commit-msg hook (see [`.pre-commit-config.yaml`](.pre-commit-config.yaml)).
+Every commit message must follow the format:
+
+```
+<type>(<scope>): <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+Where `<type>` is one of: `feat`, `fix`, `docs`, `style`, `refactor`,
+`perf`, `test`, `build`, `ci`, `chore`, `revert`. Breaking changes are
+signaled by appending `!` after the type/scope (e.g. `feat!: drop
+Python 3.13 support`) or by including `BREAKING CHANGE:` in the footer.
+
+Commit messages drive automated versioning and changelog generation via
+[`python-semantic-release`](https://python-semantic-release.readthedocs.io/):
+- `fix:` commits trigger a **patch** bump (0.0.x).
+- `feat:` commits trigger a **minor** bump (0.x.0).
+- `feat!:` or `BREAKING CHANGE:` footers trigger a **major** bump (x.0.0).
+
 ## PR checklist
 
 - [ ] Tests pass: `make test`
