@@ -456,7 +456,7 @@ class _TransitionMixin(_ServiceBase):
                 capture_output=True,
                 text=True,
             )
-        except subprocess.CalledProcessError, Exception:
+        except (subprocess.CalledProcessError, Exception):
             pass  # best-effort: fetch failed, try with existing ref
 
         # Verify the target ref exists (local or remote-tracking).
