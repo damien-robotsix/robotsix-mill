@@ -108,6 +108,7 @@ h1 {
 .src-copy-paste      { background: #4a0d2e; color: #ec4899; }
 .src-data-dir-audit  { background: #312e81; color: #a5b4fc; }
 .src-meta            { background: #3b0764; color: #a855f7; }
+.src-orphaned-pr-check { background: #3b0764; color: #a855f7; }
 .src-run-health      { background: #1e3a5f; color: #3b82f6; }
 .src-ci-fix-dependency              { background: #422006; color: #fdba74; }
 .src-dependabot-alerts              { background: #422006; color: #fdba74; }

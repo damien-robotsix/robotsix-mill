@@ -106,6 +106,7 @@
     ci_fix_dependency: "ci-fix-dependency",
     dependabot_alerts: "dependabot-alerts",
     implement_baseline_dependency: "implement-baseline-dependency",
+    orphaned_pr_check: "orphaned-pr-check",
   };
 
   const STATE_ARTIFACT = {
