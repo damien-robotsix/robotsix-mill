@@ -1,5 +1,11 @@
 ## 0.0.0 (unreleased)
 
+- **modules**: consolidate `agent-infra`, `agent-tools`, and `agents`
+  into a single `agents` module entry in `docs/modules.yaml`, using
+  concise file-glob paths (`src/robotsix_mill/agents/*.py`,
+  `tests/agents/*.py`) to replace 169 individual path entries.  No
+  files are moved; only the taxonomy manifest is updated.
+
 - **config**: bump `dedup_request_limit` / `dedup_requests` from 6 to 12
   to reduce budget-exhaustion failures during refine-stage dedup checks.
 - **refine**: extract `_triage_outcome` helper from `_triage.py` to

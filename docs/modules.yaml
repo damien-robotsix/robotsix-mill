@@ -374,205 +374,25 @@ modules:
   # Agents
   # -------------------------------------------------------------------
 
-  - id: agent-infra
-    description: >-
-      Agent infrastructure: agent-builder (build_agent_from_definition),
-      YAML definition loader, expert definition loader, expert manager,
-      tool registry, prompt-block helpers, retry logic, and the
-      cost-tracked OpenRouter model wrapper.
-    paths:
-      - src/robotsix_mill/agents/__init__.py
-      - src/robotsix_mill/agents/base.py
-      - src/robotsix_mill/agents/bridged_git_tools.py
-      - src/robotsix_mill/agents/claude_concurrency.py
-      - src/robotsix_mill/agents/yaml_loader.py
-      - src/robotsix_mill/agents/expert_loader.py
-      - src/robotsix_mill/agents/expert_manager.py
-      - src/robotsix_mill/agents/tool_registry.py
-      - src/robotsix_mill/agents/prompt_blocks.py
-      - src/robotsix_mill/agents/prompt_tool_consistency.py
-      - src/robotsix_mill/agents/retry.py
-      - src/robotsix_mill/agents/structured_output_guard.py
-      - src/robotsix_mill/agents/overlays.py
-      - src/robotsix_mill/agents/periodic_base.py
-      - tests/agents/test_agent_definitions_validation.py
-      - tests/agents/test_base.py
-      - tests/agents/test_build_agent_from_definition.py
-      - tests/agents/test_yaml_loader.py
-      - tests/agents/test_expert_loader.py
-      - tests/agents/test_expert_manager.py
-      - tests/agents/test_tool_registry.py
-      - tests/agents/test_retry.py
-      - tests/agents/test_structured_output_guard.py
-      - tests/agents/test_claude_concurrency.py
-      - tests/agents/test_prompt_hygiene.py
-      - tests/agents/test_prompt_tool_consistency.py
-      - tests/agents/test_skills.py
-      - tests/agents/test_agent_double_emit.py
-      - tests/agents/test_agents_rework.py
-      - tests/agents/test_overlays.py
-      - tests/agents/test_periodic_base.py
-      - tests/agents/test_prompt_blocks.py
-    dependencies: [config, core, sandbox]
-
-  - id: agent-tools
-    description: >-
-      Tool factories that build the LLM-callable tools injected into every
-      agent: filesystem tools (read_file, list_dir, write_file, edit_file,
-      run_command, delete_file), web tools, explore sub-agent, web research,
-      report_issue, jscpd copy-paste detection, CI-pattern memory, and the
-      library/expert consultation entry points.
-    paths:
-      - src/robotsix_mill/agents/fs_tools.py
-      - src/robotsix_mill/agents/web_tools.py
-      - src/robotsix_mill/agents/explore.py
-      - src/robotsix_mill/agents/web_research.py
-      - src/robotsix_mill/agents/web_knowledge.py
-      - src/robotsix_mill/agents/report_issue.py
-      - src/robotsix_mill/agents/jscpd_tool.py
-      - src/robotsix_mill/agents/workflow_caller_audit.py
-      - src/robotsix_mill/agents/validate_artifact_tool.py
-      - src/robotsix_mill/agents/langfuse_tools.py
-      - src/robotsix_mill/agents/log_tools.py
-      - src/robotsix_mill/agents/list_threads.py
-      - src/robotsix_mill/agents/ci_patterns.py
-      - src/robotsix_mill/agents/changelog_tool.py
-      - src/robotsix_mill/agents/ci_wait_tool.py
-      - src/robotsix_mill/agents/ci_log_fetch_tool.py
-      - src/robotsix_mill/agents/consult_expert.py
-      - src/robotsix_mill/agents/read_ticket.py
-      - src/robotsix_mill/agents/list_epic_children.py
-      - src/robotsix_mill/agents/reply_thread.py
-      - src/robotsix_mill/agents/close_thread.py
-      - src/robotsix_mill/agents/ask_user.py
-      - src/robotsix_mill/agents/spawn_subtask.py
-      - src/robotsix_mill/agents/post_comment.py
-      - src/robotsix_mill/agents/copy_pasting.py
-      - src/robotsix_mill/agents/forge_parity.py
-      - tests/agents/test_fs_tools.py
-      - tests/agents/test_web.py
-      - tests/agents/test_explore.py
-      - tests/agents/test_report_issue.py
-      - tests/agents/test_read_ticket.py
-      - tests/agents/test_list_epic_children.py
-      - tests/agents/test_ask_user.py
-      - tests/agents/test_consult_expert.py
-      - tests/agents/test_bridged_git_tools.py
-      - tests/agents/test_ci_patterns.py
-      - tests/agents/test_changelog_tool.py
-      - tests/agents/test_ci_wait_tool.py
-      - tests/agents/test_ci_log_fetch_tool.py
-      - tests/agents/test_jscpd_tool.py
-      - tests/agents/test_workflow_caller_audit.py
-      - tests/agents/test_validate_artifact_tool.py
-      - tests/agents/test_langfuse_tools.py
-      - tests/agents/test_log_tools.py
-      - tests/agents/test_list_threads.py
-      - tests/agents/test_spawn_subtask.py
-      - tests/agents/test_post_comment.py
-      - tests/agents/test_close_thread.py
-      - tests/agents/test_reply_thread.py
-      - tests/agents/test_copy_pasting.py
-      - tests/agents/test_web_knowledge.py
-      - tests/agents/test_forge_parity.py
-    dependencies: [config, core, agent-infra, sandbox, langfuse]
-
   - id: agents
     description: >-
-      Domain agent modules that implement specific ticket-processing roles.
-      Includes the orchestrator (coordinating), coding, testing, reviewing,
-      auditing, refining, documenting, answering, dedup, CI-fixing, rebasing,
-      review-revision checking, surveying, health checking, agent-check,
-      backwards-compatibility check, completeness check, scope triage,
-      epic breakdown/status, environment sync,
-      and retrospect.
+      Agent infrastructure, tool factories, and domain agent modules that
+      implement specific ticket-processing roles.  Provides agent-builder
+      (build_agent_from_definition), YAML/expert definition loading,
+      tool registry, prompt-block helpers, retry logic, cost-tracked
+      OpenRouter model wrapper, filesystem/web tools, explore sub-agent,
+      web research, report_issue, jscpd copy-paste detection, CI-pattern
+      memory, library/expert consultation entry points, and all domain
+      agents: orchestrator (coordinating), coding, testing, reviewing,
+      auditing, refining, documenting, answering, dedup, CI-fixing,
+      rebasing, review-revision checking, surveying, health checking,
+      agent-check, backwards-compatibility check, completeness check,
+      scope triage, epic breakdown/status, environment sync, and
+      retrospect.
     paths:
-      - src/robotsix_mill/agents/_repo_tools.py
-      - src/robotsix_mill/agents/_ticket_context.py
-      - src/robotsix_mill/agents/coordinating.py
-      - src/robotsix_mill/agents/coding.py
-      - src/robotsix_mill/agents/testing.py
-      - src/robotsix_mill/agents/reviewing.py
-      - src/robotsix_mill/agents/ask_to_ticket.py
-      - src/robotsix_mill/agents/auditing.py
-      - src/robotsix_mill/agents/refining.py
-      - src/robotsix_mill/agents/documenting.py
-      - src/robotsix_mill/agents/answering.py
-      - src/robotsix_mill/agents/dedup.py
-      - src/robotsix_mill/agents/obsolescence.py
-      - src/robotsix_mill/agents/ci_fixing.py
-      - src/robotsix_mill/agents/codeql_fp_triage.py
-      - src/robotsix_mill/agents/rebasing.py
-      - src/robotsix_mill/agents/review_revision.py
-      - src/robotsix_mill/agents/surveying.py
-      - src/robotsix_mill/agents/health.py
-      - src/robotsix_mill/agents/run_health.py
-      - src/robotsix_mill/agents/agent_check.py
-      - src/robotsix_mill/agents/bc_check.py
-      - src/robotsix_mill/agents/completeness_check.py
-      - src/robotsix_mill/agents/scope_triage.py
-      - src/robotsix_mill/agents/epic_breakdown.py
-      - src/robotsix_mill/agents/epic_status.py
-      - src/robotsix_mill/agents/config_syncing.py
-      - src/robotsix_mill/agents/retrospecting.py
-      - src/robotsix_mill/agents/trace_inspector.py
-      - src/robotsix_mill/agents/test_gap.py
-      - src/robotsix_mill/agents/triage_boilerplate.py
-      - src/robotsix_mill/agents/test_scope.py
-      - src/robotsix_mill/agents/bespoke.py
-      - src/robotsix_mill/agents/bespoke_loader.py
-      - src/robotsix_mill/agents/maintenance.py
-      - src/robotsix_mill/agents/module_curator.py
-      - src/robotsix_mill/agents/freshness.py
-      - src/robotsix_mill/agents/prerequisite.py
-      - src/robotsix_mill/agents/periodic_loader.py
-      - src/robotsix_mill/agents/candidates.py
-      - tests/agents/test_coordinating.py
-      - tests/agents/test_candidates.py
-      - tests/agents/test_maintenance_agent.py
-      - tests/agents/test_module_curator.py
-      - tests/agents/test_periodic_loader.py
-      - tests/agents/test_documenting.py
-      - tests/agents/test_answering.py
-      - tests/agents/test_review_revision.py
-      - tests/agents/test_coding.py
-      - tests/agents/test_reviewing.py
-      - tests/agents/test_ask_to_ticket.py
-      - tests/agents/test_audit.py
-      - tests/agents/test_refine.py
-      - tests/agents/test_refine_screenshots.py
-      - tests/agents/test_dedup.py
-      - tests/agents/test_obsolescence.py
-      - tests/agents/test_ci_fixing.py
-      - tests/agents/test_rebasing.py
-      - tests/agents/test_survey.py
-      - tests/agents/test_health.py
-      - tests/agents/test_run_health.py
-      - tests/agents/test_agent_check.py
-      - tests/agents/test_bc_check.py
-      - tests/agents/test_completeness_check.py
-      - tests/agents/test_scope_triage.py
-      - tests/agents/test_epic_breakdown.py
-      - tests/agents/test_freshness.py
-      - tests/agents/test_prerequisite.py
-      - tests/agents/test_config_syncing.py
-      - tests/agents/test_retrospect.py
-      - tests/agents/test_trace_inspector.py
-      - tests/agents/test_test_gap.py
-      - tests/agents/test_testing.py
-      - tests/agents/test_test_scope.py
-      - tests/agents/test_timeout_escalation.py
-      - tests/agents/test_cost.py
-      - tests/agents/test_bespoke_loader.py
-      - tests/agents/test_bespoke.py
-      - tests/agents/test_epic_status.py
-      - src/robotsix_mill/agents/env_doc_syncing.py
-      - src/robotsix_mill/agents/frontend_syncing.py
-      - src/robotsix_mill/agents/state_syncing.py
-      - tests/agents/test_env_doc_syncing.py
-      - tests/agents/test_frontend_syncing.py
-      - tests/agents/test_state_syncing.py
-    dependencies: [config, core, agent-infra, agent-tools, forge, vcs, runners, langfuse, sandbox]
+      - src/robotsix_mill/agents/*.py
+      - tests/agents/*.py
+    dependencies: [config, core, sandbox, langfuse, forge, vcs, runners]
 
   # -------------------------------------------------------------------
   # Meta-pass (cross-repo analysis)
@@ -601,7 +421,7 @@ modules:
       - tests/meta/test_triage.py
       - tests/meta/test_runner.py
       - tests/meta/test_meta_workspace.py
-    dependencies: [config, core, agent-infra, agent-tools, forge, vcs, runners, runtime]
+    dependencies: [config, core, agents, forge, vcs, runners, runtime]
 
   # -------------------------------------------------------------------
   # Support services
@@ -638,7 +458,7 @@ modules:
     description: >-
       Isolated subprocess execution environment.  Provides a safe sandbox
       for running agent tools (explore, tests, web requests) with resource
-      limits.  Consumed by agent-tools, not by agents directly.
+      limits.  Consumed by agents.
     paths:
       - src/robotsix_mill/sandbox/**/*.py
       - tests/sandbox/test_sandbox.py
