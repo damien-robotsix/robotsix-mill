@@ -1,5 +1,12 @@
 ## 0.0.0 (unreleased)
 
+- **cost-observability**: per-step usage instrumentation — each trace now
+  records per-turn token counts, model id, tool calls (with truncated
+  args), and retry count/reason. `trace_observation_summary` returns a
+  `generations` list with per-turn breakdown so the cost-analyst can
+  distinguish "one oversized prompt" from "many redundant turns."
+  Stage-level retries stamp `retry.reason` on the root span; call-level
+  retries in `run_agent` and `acall_with_retry` stamp `mill.step_usage`.
 - **fs_tools**: `list_dir` returns a graceful error message for
   non-existent directories instead of letting `iterdir()` raise
   `FileNotFoundError`, which was recorded as an exception in

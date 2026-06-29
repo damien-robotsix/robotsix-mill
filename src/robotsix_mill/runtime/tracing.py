@@ -527,6 +527,52 @@ def start_ticket_root_span(
             yield _RootIO(span)
 
 
+def record_step_usage(
+    *,
+    request_count: int,
+    model_name: str = "",
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    tool_calls: list[dict] | None = None,
+    retry_count: int = 0,
+    retry_reason: str = "",
+) -> None:
+    """Record per-step usage data as span attributes on the current span.
+
+    Call after every model invocation (pydantic-ai ``run_sync``) to
+    stamp the trace with per-turn aggregates so the trace inspector and
+    cost-analyst can distinguish "one oversized prompt" from "many
+    redundant turns" without fetching every Langfuse observation.
+
+    All parameters are keyword-only to keep call sites self-documenting.
+    No-op when tracing is disabled or no span is recording.
+    """
+    import json as _json
+
+    data: dict = {
+        "request_count": request_count,
+        "model_name": model_name,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "retry_count": retry_count,
+    }
+    if retry_reason:
+        data["retry_reason"] = retry_reason
+    if tool_calls:
+        # Truncate args to keep the attribute within OTel size bounds.
+        trimmed: list[dict] = []
+        for tc in tool_calls:
+            entry = {"name": tc.get("name", "")}
+            args = tc.get("args", "")
+            if args:
+                entry["args"] = str(args)[:200]
+            trimmed.append(entry)
+        data["tool_calls"] = trimmed
+    set_current_span_attribute(
+        "mill.step_usage", _json.dumps(data, default=str, ensure_ascii=False)
+    )
+
+
 @contextmanager
 def trace_stage(
     stage_name: str, repo_config: RepoConfig | None = None
