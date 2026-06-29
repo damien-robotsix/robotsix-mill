@@ -5,6 +5,11 @@
   3-cycle cap to prevent unbounded loops.  Replaces the advisory
   "Pre-Stop Self-Check" with mandatory "Pre-flight checks" that
   gate the agent's stop.
+- **review**: accept tag references (e.g. `@v4`, `@v5.4.0`) for
+  third-party GitHub Actions in workflow files — Dependabot handles
+  SHA pinning.  Only commit SHAs that fail the existence check
+  (`git ls-remote`) are now flagged.  Reusable-workflow refs
+  (`.github/workflows/...`) are unaffected.
 - **docs**: add missing `board_manager.max_concurrent` row to the
   configuration reference table.
 - **config**: align `periodic.langfuse_cleanup.max_traces` YAML

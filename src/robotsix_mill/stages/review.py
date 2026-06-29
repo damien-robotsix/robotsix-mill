@@ -244,12 +244,19 @@ def _verify_action_sha(owner_repo: str, sha: str) -> bool | None:
 def _validate_action_refs(
     action_refs: list[tuple[str, str, str, str]],
 ) -> list[dict[str, str]]:
-    """Check each action ref for a valid 40-char hex SHA (format-only).
+    """Check each action ref for format validity (no-op: tag refs are OK).
+
+    Third-party action refs (the only kind reaching this function —
+    reusable-workflow refs are filtered by :func:`_action_refs_from_diff`)
+    may use tag references (e.g. ``@v4``, ``@v5.4.0``).  Dependabot
+    handles SHA pinning, so we no longer require a full 40-char hex
+    commit SHA at the format level.
 
     Returns a list of violation dicts with keys: ``file``, ``slug``,
-    ``ref``, ``comment``.  Does NOT perform an existence check — that is
-    done separately (and optionally) by the caller via
-    :func:`_verify_action_sha`.
+    ``ref``, ``comment``.  Currently always returns an empty list.
+
+    The caller may still perform an optional existence check on refs that
+    ARE 40-char hex SHAs via :func:`_verify_action_sha`.
 
     >>> _validate_action_refs([])
     []
@@ -263,15 +270,9 @@ def _validate_action_refs(
     >>> _validate_action_refs([
     ...     ('.github/workflows/ci.yml', 'actions/checkout', 'v4', ''),
     ... ])
-    [{'file': '.github/workflows/ci.yml', 'slug': 'actions/checkout', 'ref': 'v4', 'comment': ''}]
+    []
     """
-    violations: list[dict[str, str]] = []
-    for file_path, slug, ref, comment in action_refs:
-        if not _SHA_RE.match(ref):
-            violations.append(
-                {"file": file_path, "slug": slug, "ref": ref, "comment": comment}
-            )
-    return violations
+    return []
 
 
 def _load_file_map(ws) -> set[str] | None:
@@ -728,18 +729,22 @@ class ReviewStage(Stage):
                 f"review agent error — resumable: {e}",
             )
 
-        # ── action-ref SHA-pin validation ─────────────────────────────
-        # Deterministic stage-side check: every action ``uses:``
-        # reference in the diff must be pinned to a full 40-char commit
-        # SHA.  The LLM reviewer cannot validate SHAs (no network /
-        # run_command tools), so we enforce this here and inject any
-        # violations as synthetic REQUEST_CHANGES entries.
+        # ── action-ref validation ──────────────────────────────────────
+        # Third-party action refs may use tag references (e.g. @v4) —
+        # Dependabot handles SHA pinning.  The format-level check
+        # (_validate_action_refs) is a no-op for this reason.
+        # We still perform an optional best-effort existence check on
+        # refs that ARE 40-char hex SHAs: confirm they exist in the
+        # upstream repo via ``git ls-remote``.  The LLM reviewer cannot
+        # do this (no network / run_command tools), so we enforce it
+        # here and inject any violations as synthetic REQUEST_CHANGES.
         action_violations = _validate_action_refs(action_refs)
 
-        # Optional best-effort existence check for format-valid SHAs:
+        # Optional best-effort existence check for SHA refs:
         # for each ref that IS a 40-char hex SHA, confirm it exists via
         # ``git ls-remote``.  Any failure (network error, timeout,
         # non-zero exit) degrades gracefully — the SHA is not flagged.
+        # Tag references (e.g. @v4) are skipped here.
         for file_path, slug, ref, comment in action_refs:
             if _SHA_RE.match(ref):
                 parts = slug.split("/")
@@ -760,15 +765,13 @@ class ReviewStage(Stage):
             synthetic_asks: list[ReviewAsk] = []
             for v in action_violations:
                 comment_part = f" # {v['comment']}" if v["comment"] else ""
-                title = (
-                    f"Pin {v['slug']} to a full 40-char commit SHA in {v['file']}"
-                )[:80]
+                title = (f"Verify commit SHA for {v['slug']} in {v['file']}")[:80]
                 description = (
-                    f"Action `{v['slug']}@{v['ref']}{comment_part}` in "
-                    f"`{v['file']}` is not pinned to a full 40-character "
-                    f"commit SHA. Replace `@{v['ref']}` with a real 40-char "
-                    f"commit SHA and add a `# <version>` comment, e.g. "
-                    f"`uses: {v['slug']}@<full-40-char-sha> # <version>`."
+                    f"Commit SHA `{v['ref']}` for action "
+                    f"`{v['slug']}{comment_part}` in `{v['file']}` "
+                    f"was not found in the upstream repository. "
+                    f"Verify the SHA is correct or replace it with a "
+                    f"valid 40-char commit SHA."
                 )
                 synthetic_asks.append(
                     ReviewAsk(
@@ -778,20 +781,22 @@ class ReviewStage(Stage):
                     )
                 )
 
-            # Force REQUEST_CHANGES regardless of LLM verdict.  SHA-pin
-            # format is a hard rule — not a discussion topic.
+            # Force REQUEST_CHANGES regardless of LLM verdict.
+            # Non-existent commit SHAs are a hard correctness issue.
             verdict.verdict = "REQUEST_CHANGES"
             verdict.auto_merge_eligible = False
             verdict.request_changes = synthetic_asks + list(verdict.request_changes)
             if verdict.comments:
                 verdict.comments = (
-                    "Action SHA-pin validation failed (see request_changes "
-                    "entries below).\n\n" + verdict.comments
+                    "Action ref validation failed: commit SHA not found "
+                    "in upstream repo (see request_changes entries "
+                    "below).\n\n" + verdict.comments
                 )
             else:
                 verdict.comments = (
-                    "Action SHA-pin validation failed (see request_changes "
-                    "entries below)."
+                    "Action ref validation failed: commit SHA not found "
+                    "in upstream repo (see request_changes entries "
+                    "below)."
                 )
 
         # Persist review artifact for downstream consumers (e.g. auto-merge).
