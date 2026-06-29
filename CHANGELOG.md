@@ -7,6 +7,11 @@
   workflow's file path, and the refine gate extracts it from a new
   `**Path:**` metadata line in the draft body.
 
+- **docs**: add missing entries for 7 stage/core env vars in
+  `docs/configuration.md` (`ci_fix_wait_poll_interval_s`,
+  `ci_fix_wait_timeout_s`, `max_implement_review_cycles`,
+  `retrospect_candidates_max_entries`, `doc_classifier_diff_max_chars`,
+  `network_probe_host`, `network_outage_retry_seconds`).
 - **implement**: stop fabricating GitHub Action commit SHAs when writing
   workflow files.  The implement agent now emits tag references
   (e.g., `actions/setup-python@v5.4.0`) instead of attempting to resolve
