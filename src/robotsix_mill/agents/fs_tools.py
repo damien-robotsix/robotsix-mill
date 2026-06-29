@@ -839,7 +839,13 @@ def build_fs_tools(
                                 f"package paths live under the src/ namespace)\n"
                                 f"{listing}"
                             )
-                    # No fallback found — let iterdir() raise.
+                    # No fallback found — return a graceful message
+                    # instead of letting iterdir() raise FileNotFoundError,
+                    # which wastes tokens and pollutes trace observability.
+                    return (
+                        f"error: {path!r} does not exist — "
+                        f"try list_dir('.') to find the correct path"
+                    )
                 if d.is_file():
                     return (
                         f"error: '{path}' is a file, not a directory"
