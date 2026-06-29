@@ -31,7 +31,7 @@ jobs:
     permissions:
       contents: read
       security-events: write
-    uses: ./.github/workflows/python-ci.yml
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-ci.yml@5cd8c1facb02299da618979e7a55f1953f9c075a
     with:
       python-version: "3.14"
       uv-version: "0.8.15"

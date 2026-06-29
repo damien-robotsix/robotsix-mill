@@ -19,6 +19,6 @@ jobs:
       packages: write
       id-token: write
       attestations: write
-    uses: ./.github/workflows/docker-release.yml
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml@5cd8c1facb02299da618979e7a55f1953f9c075a
     with:
       dockerfile: "./Dockerfile.deploy"
