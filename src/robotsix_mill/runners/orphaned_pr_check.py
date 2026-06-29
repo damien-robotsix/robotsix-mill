@@ -468,7 +468,7 @@ def _orphan_ticket_title(repo_config: RepoConfig, branch: str) -> str:
 
 def _load_open_orphan_titles(service: TicketService) -> frozenset[str]:
     """Return titles of all non-terminal orphaned-PR tracking tickets."""
-    tickets = service.recent_proposals_for(
+    tickets: list[Ticket] = service.recent_proposals_for(
         source=SourceKind.ORPHANED_PR_CHECK, limit=500
     )
     return frozenset(t.title for t in tickets if t.state not in _ORPHAN_STATES)
