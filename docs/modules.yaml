@@ -435,6 +435,7 @@ modules:
       - src/robotsix_mill/agents/log_tools.py
       - src/robotsix_mill/agents/list_threads.py
       - src/robotsix_mill/agents/ci_patterns.py
+      - src/robotsix_mill/agents/changelog_tool.py
       - src/robotsix_mill/agents/ci_wait_tool.py
       - src/robotsix_mill/agents/ci_log_fetch_tool.py
       - src/robotsix_mill/agents/consult_expert.py
@@ -457,6 +458,7 @@ modules:
       - tests/agents/test_consult_expert.py
       - tests/agents/test_bridged_git_tools.py
       - tests/agents/test_ci_patterns.py
+      - tests/agents/test_changelog_tool.py
       - tests/agents/test_ci_wait_tool.py
       - tests/agents/test_ci_log_fetch_tool.py
       - tests/agents/test_jscpd_tool.py
