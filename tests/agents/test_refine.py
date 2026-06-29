@@ -3328,6 +3328,73 @@ def test_triage_skip_skips_full_refine(ctx, service, monkeypatch):
     assert "doc-only change" in out.note
 
 
+def test_prescriptive_spec_deterministic_skip(ctx, service, monkeypatch):
+    """When a draft contains >50 lines of fenced code blocks, triage_skip
+    short-circuits WITHOUT calling triage_refine — the draft is treated as
+    an already-implementation-ready prescriptive spec."""
+    from robotsix_mill.agents.refining import TriageResult
+    from robotsix_mill.stages.refine._triage import _count_code_block_lines
+
+    refine_called = False
+    triage_called = False
+
+    def fake_refine(**kw):
+        nonlocal refine_called
+        refine_called = True
+        return _single("should not be called")
+
+    def fake_triage(**kw):
+        nonlocal triage_called
+        triage_called = True
+        return TriageResult(decision="REFINE", reason="should not be called")
+
+    monkeypatch.setattr(refining, "run_refine_agent", fake_refine)
+    monkeypatch.setattr(refining, "triage_refine", fake_triage)
+
+    # Build a draft with exactly 50 code-block lines (at threshold).
+    code_body = "\n".join(f"    line_{i:03d}()" for i in range(50))
+    draft = f"## Problem\n\nExact implementation:\n\n```python\n{code_body}\n```"
+
+    assert _count_code_block_lines(draft) == 50
+
+    t = service.create("Add feature", draft)
+    # Use the default ctx (require_approval=False) so the ticket
+    # routes to READY, not HUMAN_ISSUE_APPROVAL.
+    out = RefineStage().run(t, ctx)
+
+    assert not triage_called, "triage_refine should NOT have been called"
+    assert not refine_called, "run_refine_agent should NOT have been called"
+    assert out.next_state is State.READY
+    assert "prescriptive spec" in out.note
+
+
+def test_prescriptive_spec_below_threshold_still_triages(ctx, service, monkeypatch):
+    """A draft with <50 code-block lines should still go through triage."""
+    from robotsix_mill.agents.refining import TriageResult
+    from robotsix_mill.stages.refine._triage import _count_code_block_lines
+
+    triage_called = False
+
+    def fake_triage(**kw):
+        nonlocal triage_called
+        triage_called = True
+        return TriageResult(decision="SKIP", reason="already precise enough")
+
+    monkeypatch.setattr(refining, "triage_refine", fake_triage)
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **kw: _single("unused"))
+
+    # Build a draft with only 3 code-block lines (small snippet).
+    draft = "## Problem\n\nExample:\n\n```python\nx = 1\ny = 2\nz = 3\n```"
+
+    assert _count_code_block_lines(draft) == 3
+
+    t = service.create("Small snippet", draft)
+    out = RefineStage().run(t, ctx)
+
+    assert triage_called, "triage_refine SHOULD have been called"
+    assert "triage SKIP" in out.note
+
+
 def test_triage_skip_goes_to_human_issue_approval_when_gated(
     ctx, service, monkeypatch, repo_config
 ):

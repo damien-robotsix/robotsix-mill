@@ -1,5 +1,13 @@
 ## 0.0.0 (unreleased)
 
+- **refine**: add a deterministic code-block density check that skips the
+  triage LLM and full refine agent when a ticket draft contains ≥50 lines
+  inside fenced code blocks (prescriptive specs whose implementation is
+  already spelled out).  Configurable via
+  `gates.refine_prescriptive_spec_code_lines_threshold` (default 50, set to
+  0 to disable).  Saves ~$0.45–0.69 per prescriptive-spec ticket by routing
+  directly to implement.
+
 - **implement**: extend `_is_config_only_change` to also check the
   working tree diff so that unstaged config-only edits from a prior
   retry pass are detected before the full test gate runs, allowing
