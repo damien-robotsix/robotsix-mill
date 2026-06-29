@@ -753,8 +753,6 @@ class GitHubForgePRMixin:
         return out
 
     def _get_authenticated_user_login(self) -> str:
-        _owner, _repo = self._owner_repo  # type: ignore[attr-defined]
-        # unused but makes the HTTP seam consistent; actual call uses root /user
         with self._http.client() as (c, api, headers):  # type: ignore[attr-defined]
             r = c.get(f"{api}/user", headers=headers)
             if r.status_code == 200:

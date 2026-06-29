@@ -313,8 +313,7 @@ def run_orphaned_pr_check_pass(
 
     open_prs: list[dict] = forge.list_open_prs()
     mill_prs = [
-        pr for pr in open_prs
-        if pr["branch"].startswith(settings.branch_prefix)
+        pr for pr in open_prs if pr["branch"].startswith(settings.branch_prefix)
     ]
     result.total_scanned = len(mill_prs)
 
@@ -426,7 +425,9 @@ def _apply_classifications(
     total_taken = 0
 
     for cpr in classifications:
-        if total_taken >= max_actions or (closes_taken >= max_closes and files_taken >= max_files):
+        if total_taken >= max_actions or (
+            closes_taken >= max_closes and files_taken >= max_files
+        ):
             remaining = len(classifications) - total_taken
             cap_msg = (
                 f"orphaned-pr-check: action cap reached "
@@ -441,12 +442,16 @@ def _apply_classifications(
         should_close = cpr.classification in _CLOSE_CLASSIFICATIONS
         if should_close:
             if closes_taken >= max_closes:
-                log.debug("orphaned-pr-check: close cap reached, skipping %s", cpr.branch)
+                log.debug(
+                    "orphaned-pr-check: close cap reached, skipping %s", cpr.branch
+                )
                 result.skipped += 1
                 continue
         else:
             if files_taken >= max_files:
-                log.debug("orphaned-pr-check: file cap reached, skipping %s", cpr.branch)
+                log.debug(
+                    "orphaned-pr-check: file cap reached, skipping %s", cpr.branch
+                )
                 result.skipped += 1
                 continue
 
