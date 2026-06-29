@@ -502,6 +502,7 @@ board_manager:
   model: ""                                 # level-3 model ("" → llmio tier-3 default)
   recall_model: ""                          # level-1 recall model ("" → tier-1 default)
   max_conversations: 200                    # cap on retained question→answer turns
+  max_concurrent: 3                         # max simultaneous BoardManager LLM requests
 
 # ---------------------------------------------------------------------------
 #  component_agent — generic monitor/config responder on the agent-comm broker.

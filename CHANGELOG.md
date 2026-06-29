@@ -3,6 +3,10 @@
 - **implement**: add `deptry .` to the pre-flight toolchain run before
   marking `implement_complete`, alongside the existing ruff and mypy
   checks (Pre-Stop Self-Check step 0 + language instruction section).
+- **config**: add `board_manager_max_concurrent` setting (default 3) to
+  control max simultaneous BoardManager LLM requests. Wired through
+  YAML defaults, loader alias mapping, lifespan `BoardManager()`
+  constructor, and config test.
 
 - **config**: remove zombie `core.limits.parallel_explore_max` setting (
   Pydantic field, YAML default, loader mapping, docs, vulture whitelist);

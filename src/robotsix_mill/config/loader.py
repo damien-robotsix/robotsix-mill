@@ -563,6 +563,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "board_manager.model": "board_manager_model",
     "board_manager.recall_model": "board_manager_recall_model",
     "board_manager.max_conversations": "board_manager_max_conversations",
+    "board_manager.max_concurrent": "board_manager_max_concurrent",
     # -- component_agent (monitor/config responder on the broker) --
     "component_agent.enabled": "component_agent_enabled",
     "component_agent.agent_id": "component_agent_agent_id",

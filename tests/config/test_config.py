@@ -530,6 +530,12 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "100",
         100,
     ),
+    (
+        "board_manager_max_concurrent",
+        "MILL_BOARD_MANAGER_MAX_CONCURRENT",
+        "3",
+        3,
+    ),
     # --- claude sdk vision ---
     ("claude_sdk_vision_enabled", "MILL_CLAUDE_SDK_VISION_ENABLED", "1", True),
     # --- review stage tuning ---
