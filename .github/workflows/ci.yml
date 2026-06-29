@@ -17,7 +17,7 @@ jobs:
     permissions:
       contents: read
       security-events: write
-    uses: ./.github/workflows/python-ci.yml
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-ci.yml@5cd8c1facb02299da618979e7a55f1953f9c075a
     with:
       python-version: "3.14"
       uv-version: "0.8.15"
@@ -55,6 +55,11 @@ jobs:
         run: uv sync --frozen --extra tracing
         env:
           UV_PROJECT_ENVIRONMENT: system
+
+      - name: Reject bare string TicketKind literals
+        # Mill-domain check (TicketKind) — kept here, not in the shared
+        # python-ci.yml that every member repo calls.
+        run: python scripts/check_kind_literals.py
 
       - name: Validate module taxonomy
         env:
