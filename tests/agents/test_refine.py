@@ -3328,12 +3328,11 @@ def test_triage_skip_skips_full_refine(ctx, service, monkeypatch):
     assert "doc-only change" in out.note
 
 
-def test_prescriptive_spec_deterministic_skip(
-    ctx, service, monkeypatch
-):
+def test_prescriptive_spec_deterministic_skip(ctx, service, monkeypatch):
     """When a draft contains >50 lines of fenced code blocks, triage_skip
     short-circuits WITHOUT calling triage_refine — the draft is treated as
     an already-implementation-ready prescriptive spec."""
+    from robotsix_mill.agents.refining import TriageResult
     from robotsix_mill.stages.refine._triage import _count_code_block_lines
 
     refine_called = False
@@ -3369,9 +3368,7 @@ def test_prescriptive_spec_deterministic_skip(
     assert "prescriptive spec" in out.note
 
 
-def test_prescriptive_spec_below_threshold_still_triages(
-    ctx, service, monkeypatch
-):
+def test_prescriptive_spec_below_threshold_still_triages(ctx, service, monkeypatch):
     """A draft with <50 code-block lines should still go through triage."""
     from robotsix_mill.agents.refining import TriageResult
     from robotsix_mill.stages.refine._triage import _count_code_block_lines
