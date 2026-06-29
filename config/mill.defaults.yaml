@@ -463,7 +463,7 @@ periodic:
   langfuse_cleanup:
     enabled: true                   # enable periodic Langfuse trace cleanup
     interval_seconds: 86400         # seconds between sweeps
-    max_traces: 1000                # per-project cap; oldest are deleted
+    max_traces: 5000                # per-project cap; oldest are deleted
 
 # ---------------------------------------------------------------------------
 #  service — management-plane API and data directory
