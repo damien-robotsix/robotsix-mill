@@ -8,10 +8,15 @@ from unittest.mock import MagicMock
 import pytest
 
 from robotsix_mill.config import RepoConfig, Settings
-from robotsix_mill.core.models import SourceKind, Ticket
+from robotsix_mill.core.models import Ticket
 from robotsix_mill.core.states import State
 from robotsix_mill.runners.orphaned_pr_check import (
+    OrphanClassification,
+    ClassifiedOrphanPr,
+    classify_orphaned_prs,
     _pr_has_empty_diff,
+    _pr_has_conflicts,
+    _determine_classification,
     _build_close_comment,
     run_orphaned_pr_check_pass,
 )
@@ -121,19 +126,245 @@ class TestPrHasEmptyDiff:
         assert _pr_has_empty_diff(forge, "mill/abc") is True
 
 
+class TestPrHasConflicts:
+    def test_mergeable_true(self):
+        forge = _mock_forge(pr_status={"state": "open", "mergeable": True})
+        assert _pr_has_conflicts(forge, "mill/abc") is False
+
+    def test_conflicts(self):
+        forge = _mock_forge(pr_status={"state": "open", "mergeable": False})
+        assert _pr_has_conflicts(forge, "mill/abc") is True
+
+    def test_unknown_treated_as_no_conflict(self):
+        forge = _mock_forge(pr_status={"state": "open", "mergeable": None})
+        assert _pr_has_conflicts(forge, "mill/abc") is False
+
+    def test_no_pr_status(self):
+        forge = _mock_forge(pr_status=None)
+        assert _pr_has_conflicts(forge, "mill/abc") is False
+
+
+class TestDetermineClassification:
+    def test_no_ticket_empty_diff(self):
+        c = _determine_classification(None, empty_diff=True, has_conflicts=False)
+        assert c == OrphanClassification.NO_TICKET_EMPTY_DIFF
+
+    def test_no_ticket_nonempty(self):
+        c = _determine_classification(None, empty_diff=False, has_conflicts=False)
+        assert c == OrphanClassification.NO_TICKET
+
+    def test_no_ticket_conflicting(self):
+        c = _determine_classification(None, empty_diff=False, has_conflicts=True)
+        assert c == OrphanClassification.NO_TICKET_CONFLICTING
+
+    def test_done_nonempty_no_conflict(self):
+        t = _ticket(state=State.DONE)
+        c = _determine_classification(t, empty_diff=False, has_conflicts=False)
+        assert c == OrphanClassification.TICKET_DONE_UNMERGED
+
+    def test_done_empty_diff(self):
+        t = _ticket(state=State.DONE)
+        c = _determine_classification(t, empty_diff=True, has_conflicts=False)
+        assert c == OrphanClassification.SUPERSEDED
+
+    def test_done_conflicting(self):
+        t = _ticket(state=State.DONE)
+        c = _determine_classification(t, empty_diff=False, has_conflicts=True)
+        assert c == OrphanClassification.TICKET_DONE_CONFLICTING
+
+    def test_closed_nonempty_no_conflict(self):
+        t = _ticket(state=State.CLOSED)
+        c = _determine_classification(t, empty_diff=False, has_conflicts=False)
+        assert c == OrphanClassification.TICKET_CLOSED_UNMERGED
+
+    def test_closed_conflicting(self):
+        t = _ticket(state=State.CLOSED)
+        c = _determine_classification(t, empty_diff=False, has_conflicts=True)
+        assert c == OrphanClassification.TICKET_CLOSED_CONFLICTING
+
+    def test_errored_nonempty_no_conflict(self):
+        t = _ticket(state=State.ERRORED)
+        c = _determine_classification(t, empty_diff=False, has_conflicts=False)
+        assert c == OrphanClassification.TICKET_ERRORED
+
+    def test_errored_empty_diff(self):
+        t = _ticket(state=State.ERRORED)
+        c = _determine_classification(t, empty_diff=True, has_conflicts=False)
+        assert c == OrphanClassification.TICKET_ERRORED_EMPTY_DIFF
+
+    def test_errored_conflicting(self):
+        t = _ticket(state=State.ERRORED)
+        c = _determine_classification(t, empty_diff=False, has_conflicts=True)
+        assert c == OrphanClassification.TICKET_ERRORED_CONFLICTING
+
+
 class TestBuildCloseComment:
-    def test_with_ticket(self):
-        t = _ticket("20250101T000000Z-test-ticket-a1b2", state=State.DONE)
-        comment = _build_close_comment(
-            "owner/repo", "mill/20250101T000000Z-test-ticket-a1b2", t
+    def test_with_ticket_done(self):
+        cpr = ClassifiedOrphanPr(
+            branch="mill/20250101T000000Z-test-ticket-a1b2",
+            ticket_id="20250101T000000Z-test-ticket-a1b2",
+            classification=OrphanClassification.TICKET_DONE_UNMERGED,
+            ticket_state="done",
         )
+        comment = _build_close_comment(cpr, "owner/repo")
         assert "20250101T000000Z-test-ticket-a1b2" in comment
         assert "done" in comment
         assert "orphaned-pr" in comment.lower()
 
-    def test_without_ticket(self):
-        comment = _build_close_comment("owner/repo", "mill/unknown", None)
+    def test_without_ticket_empty_diff(self):
+        cpr = ClassifiedOrphanPr(
+            branch="mill/unknown",
+            ticket_id="unknown",
+            classification=OrphanClassification.NO_TICKET_EMPTY_DIFF,
+            ticket_state=None,
+        )
+        comment = _build_close_comment(cpr, "owner/repo")
         assert "empty diff" in comment.lower()
+
+
+# ---------------------------------------------------------------------------
+# Unit tests — classify_orphaned_prs (core algorithm)
+# ---------------------------------------------------------------------------
+
+
+class TestClassifyOrphanedPrs:
+    def test_known_linked_pr_excluded(self):
+        """Active ticket (READY) → not classified as orphaned."""
+        s = _settings()
+        svc = MagicMock()
+        svc.get.return_value = _ticket(
+            "20250101T000000Z-test-ticket-a1b2", state=State.READY
+        )
+        forge = _mock_forge(pr_status={"state": "open", "mergeable": True})
+        result = classify_orphaned_prs(
+            ["mill/20250101T000000Z-test-ticket-a1b2"],
+            settings=s,
+            service=svc,
+            forge=forge,
+        )
+        assert result == []
+
+    def test_unlinked_pr_included(self):
+        """No ticket → classified as orphaned."""
+        s = _settings()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(pr_status={"state": "open", "mergeable": True})
+        result = classify_orphaned_prs(
+            ["mill/20250101T000000Z-orphan-a1b2"],
+            settings=s,
+            service=svc,
+            forge=forge,
+        )
+        assert len(result) == 1
+        assert result[0].classification == OrphanClassification.NO_TICKET
+
+    def test_multiple_branches_mixed(self):
+        """Active + orphan → only orphan returned."""
+        s = _settings()
+        svc = MagicMock()
+
+        def _get(tid):
+            if tid == "20250101T000000Z-active-b1b2":
+                return _ticket("20250101T000000Z-active-b1b2", state=State.READY)
+            return None
+
+        svc.get.side_effect = _get
+        forge = _mock_forge(pr_status={"state": "open", "mergeable": True})
+        result = classify_orphaned_prs(
+            [
+                "mill/20250101T000000Z-active-b1b2",
+                "mill/20250101T000000Z-orphan-c1d2",
+            ],
+            settings=s,
+            service=svc,
+            forge=forge,
+        )
+        assert len(result) == 1
+        assert result[0].ticket_id == "20250101T000000Z-orphan-c1d2"
+
+    def test_no_orphan_scenario(self):
+        """All tickets active → empty list."""
+        s = _settings()
+        svc = MagicMock()
+        svc.get.return_value = _ticket(
+            "20250101T000000Z-test-ticket-a1b2", state=State.READY
+        )
+        forge = _mock_forge(pr_status={"state": "open", "mergeable": True})
+        result = classify_orphaned_prs(
+            ["mill/20250101T000000Z-test-ticket-a1b2"],
+            settings=s,
+            service=svc,
+            forge=forge,
+        )
+        assert result == []
+
+    def test_done_ticket_classified_as_orphan(self):
+        """DONE ticket → orphaned with TICKET_DONE_UNMERGED."""
+        s = _settings()
+        svc = MagicMock()
+        svc.get.return_value = _ticket(
+            "20250101T000000Z-test-ticket-a1b2", state=State.DONE
+        )
+        forge = _mock_forge(pr_status={"state": "open", "mergeable": True})
+        result = classify_orphaned_prs(
+            ["mill/20250101T000000Z-test-ticket-a1b2"],
+            settings=s,
+            service=svc,
+            forge=forge,
+        )
+        assert len(result) == 1
+        assert result[0].classification == OrphanClassification.TICKET_DONE_UNMERGED
+
+    def test_conflicting_pr_flag(self):
+        """Conflicting PR → classification includes conflict marker."""
+        s = _settings()
+        svc = MagicMock()
+        svc.get.return_value = _ticket(
+            "20250101T000000Z-test-ticket-a1b2", state=State.DONE
+        )
+        forge = _mock_forge(pr_status={"state": "open", "mergeable": False})
+        result = classify_orphaned_prs(
+            ["mill/20250101T000000Z-test-ticket-a1b2"],
+            settings=s,
+            service=svc,
+            forge=forge,
+        )
+        assert len(result) == 1
+        assert result[0].classification == OrphanClassification.TICKET_DONE_CONFLICTING
+
+    def test_pr_already_closed_excluded(self):
+        """PR state=closed → not classified."""
+        s = _settings()
+        svc = MagicMock()
+        svc.get.return_value = _ticket(
+            "20250101T000000Z-test-ticket-a1b2", state=State.DONE
+        )
+        forge = _mock_forge(pr_status={"state": "closed"})
+        result = classify_orphaned_prs(
+            ["mill/20250101T000000Z-test-ticket-a1b2"],
+            settings=s,
+            service=svc,
+            forge=forge,
+        )
+        assert result == []
+
+    def test_classification_includes_ticket_state(self):
+        """ClassifiedOrphanPr carries the ticket_state string."""
+        s = _settings()
+        svc = MagicMock()
+        svc.get.return_value = _ticket(
+            "20250101T000000Z-test-ticket-a1b2", state=State.ERRORED
+        )
+        forge = _mock_forge(pr_status={"state": "open", "mergeable": True})
+        result = classify_orphaned_prs(
+            ["mill/20250101T000000Z-test-ticket-a1b2"],
+            settings=s,
+            service=svc,
+            forge=forge,
+        )
+        assert len(result) == 1
+        assert result[0].ticket_state == "errored"
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +388,7 @@ class TestActiveTicketNotOrphaned:
         assert result.total_scanned == 1
         assert result.closed == 0
         assert result.filed == 0
+        assert result.classifications == []
         forge.close_pr.assert_not_called()
         forge.post_pr_comment.assert_not_called()
 
@@ -178,6 +410,11 @@ class TestTicketDoneOpenPrClose:
 
         assert result.closed == 1
         assert result.filed == 0
+        assert len(result.classifications) == 1
+        assert (
+            result.classifications[0].classification
+            == OrphanClassification.TICKET_DONE_UNMERGED
+        )
         forge.post_pr_comment.assert_called_once()
         forge.close_pr.assert_called_once_with(
             source_branch="mill/20250101T000000Z-test-ticket-a1b2"
@@ -221,13 +458,12 @@ class TestTicketErroredNonemptyDiffFile:
 
         assert result.filed == 1
         assert result.closed == 0
-        svc.create.assert_called_once()
-        call_args = svc.create.call_args
-        assert call_args.kwargs["title"] == (
-            "Track orphaned PR: test-owner/test-repo/"
-            "mill/20250101T000000Z-test-ticket-a1b2"
+        assert len(result.classifications) == 1
+        assert (
+            result.classifications[0].classification
+            == OrphanClassification.TICKET_ERRORED
         )
-        assert call_args.kwargs["source"] == SourceKind.ORPHANED_PR_CHECK
+        svc.create.assert_called_once()
 
 
 class TestNoTicketEmptyDiffClose:
@@ -246,6 +482,11 @@ class TestNoTicketEmptyDiffClose:
         result = run_orphaned_pr_check_pass(repo_config=repo)
 
         assert result.closed == 1
+        assert len(result.classifications) == 1
+        assert (
+            result.classifications[0].classification
+            == OrphanClassification.NO_TICKET_EMPTY_DIFF
+        )
         forge.close_pr.assert_called_once()
 
 
@@ -264,6 +505,10 @@ class TestNoTicketNonemptyDiffFile:
         result = run_orphaned_pr_check_pass(repo_config=repo)
 
         assert result.filed == 1
+        assert len(result.classifications) == 1
+        assert (
+            result.classifications[0].classification == OrphanClassification.NO_TICKET
+        )
         svc.create.assert_called_once()
 
 
@@ -293,6 +538,7 @@ class TestAgeGuardSkipsYoungTicket:
         assert result.skipped == 1
         assert result.closed == 0
         assert result.filed == 0
+        assert result.classifications == []
         forge.close_pr.assert_not_called()
 
 
@@ -315,15 +561,15 @@ class TestActionCapStopsEarly:
         # All no-ticket orphans with non-empty diff → filed
         assert result.filed == 3
         assert result.total_scanned == 10
-        # Check cap message in actions
+        assert len(result.classifications) == 10
         cap_lines = [a for a in result.actions if "action cap" in a]
         assert len(cap_lines) == 1
-        assert "7 branch(es) remain unprocessed" in cap_lines[0]
+        assert "7 classification(s) remain unprocessed" in cap_lines[0]
 
 
 class TestDryRunNoMutations:
     def test_dry_run_no_forge_calls(self, monkeypatch):
-        """dry_run=True (default) → no forge mutations."""
+        """dry_run=True → no forge mutations but classifications populated."""
         s = _settings(orphaned_pr_dry_run=True)
         repo = _repo()
         ticket = _ticket("20250101T000000Z-test-ticket-a1b2", state=State.DONE)
@@ -338,6 +584,7 @@ class TestDryRunNoMutations:
 
         assert result.skipped == 1
         assert result.dry_run is True
+        assert len(result.classifications) == 1
         forge.close_pr.assert_not_called()
         forge.post_pr_comment.assert_not_called()
         svc.create.assert_not_called()
@@ -362,6 +609,7 @@ class TestPrAlreadyClosedSkipped:
         assert result.total_scanned == 1
         assert result.closed == 0
         assert result.filed == 0
+        assert result.classifications == []
         forge.close_pr.assert_not_called()
 
 
@@ -397,17 +645,16 @@ class TestIdempotentFileTicket:
 
         # First pass
         run_orphaned_pr_check_pass(repo_config=repo)
-        # Second pass — same branch still open
+        # Second pass
         run_orphaned_pr_check_pass(repo_config=repo)
 
         assert svc.create.call_count == 2
-        # Both calls use the same deterministic title
         title1 = svc.create.call_args_list[0].kwargs["title"]
         title2 = svc.create.call_args_list[1].kwargs["title"]
         assert title1 == title2
         assert (
-            title1
-            == "Track orphaned PR: test-owner/test-repo/mill/20250101T000000Z-orphan-a1b2"
+            title1 == "Track orphaned PR: test-owner/test-repo/"
+            "mill/20250101T000000Z-orphan-a1b2"
         )
 
 
@@ -428,6 +675,7 @@ class TestPrStatusNoneSkipped:
         result = run_orphaned_pr_check_pass(repo_config=repo)
 
         assert result.closed == 0
+        assert result.classifications == []
         forge.close_pr.assert_not_called()
 
 

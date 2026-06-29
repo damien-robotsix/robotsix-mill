@@ -4,10 +4,18 @@ Lists open PRs for a managed repo, classifies mill-authored ones as
 orphaned when no active ticket drives them, and either auto-closes the
 PR (with a comment) or files a tracking ticket so the work is picked
 back up.  No LLM agent — pure Python.
+
+Core algorithm: ``classify_orphaned_prs`` consumes the forge's
+``list_open_pr_branches`` and the ``TicketService``, reuses the
+existing PR↔ticket linkage (branch-naming convention), and produces
+a list of :class:`ClassifiedOrphanPr` entries.  Each entry carries an
+:class:`OrphanClassification` that drives the downstream action
+(close vs file-ticket).
 """
 
 from __future__ import annotations
 
+import enum
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -25,12 +33,170 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+
+class OrphanClassification(enum.Enum):
+    """Granular reason *why* a mill PR is orphaned.
+
+    Maps to downstream actions: close (C) or file-ticket (F).
+    """
+
+    # -- close-eligible (clearly obsolete) --------------------------------
+    SUPERSEDED = "superseded"
+    """Empty diff — the PR carries no effective file changes."""
+
+    TICKET_DONE_UNMERGED = "ticket_done_unmerged"
+    """Ticket is DONE but the PR was never merged.  Non-empty diff, no
+    merge conflicts detected."""
+
+    TICKET_CLOSED_UNMERGED = "ticket_closed_unmerged"
+    """Ticket is CLOSED but the PR was never merged.  Non-empty diff, no
+    merge conflicts detected."""
+
+    TICKET_DONE_CONFLICTING = "ticket_done_conflicting"
+    """Ticket is DONE, PR is open but has merge conflicts — abandoned."""
+
+    TICKET_CLOSED_CONFLICTING = "ticket_closed_conflicting"
+    """Ticket is CLOSED, PR is open but has merge conflicts — abandoned."""
+
+    NO_TICKET_EMPTY_DIFF = "no_ticket_empty_diff"
+    """No mill ticket drives this branch and the diff is empty."""
+
+    # -- file-ticket-eligible (worth picking up) --------------------------
+    TICKET_ERRORED = "ticket_errored"
+    """Ticket is in ERRORED state.  PR has non-empty diff with no
+    conflicts detected — worth filing a tracking ticket."""
+
+    TICKET_ERRORED_EMPTY_DIFF = "ticket_errored_empty_diff"
+    """Ticket is in ERRORED state but the PR has an empty diff.
+    Close-eligible."""
+
+    TICKET_ERRORED_CONFLICTING = "ticket_errored_conflicting"
+    """Ticket is in ERRORED state and PR has merge conflicts.
+    Close-eligible (abandoned)."""
+
+    NO_TICKET = "no_ticket"
+    """No mill ticket drives this branch.  PR has non-empty diff with no
+    conflicts detected — worth picking up by filing a tracking ticket."""
+
+    NO_TICKET_CONFLICTING = "no_ticket_conflicting"
+    """No mill ticket drives this branch and PR has merge conflicts.
+    Close-eligible."""
+
+
+# ------------------------------------------------------------------ helpers
+
+
+def _pr_has_empty_diff(forge: Forge, branch: str) -> bool:
+    """Return True when the PR for *branch* has no effective file changes."""
+    files = forge.pr_files(source_branch=branch)
+    if not files:
+        return True
+    return all(f.get("additions", 0) + f.get("deletions", 0) == 0 for f in files)
+
+
+def _pr_has_conflicts(forge: Forge, branch: str) -> bool:
+    """Return True when the PR for *branch* has merge conflicts."""
+    pr_info = forge.pr_status(source_branch=branch)
+    if pr_info is None:
+        return False
+    # mergeable: True→mergeable, False→conflicts, None→unknown (treat
+    # as mergeable — the forge hasn't computed yet).
+    return pr_info.get("mergeable") is False
+
+
+def _determine_classification(
+    ticket: Ticket | None,
+    empty_diff: bool,
+    has_conflicts: bool,
+) -> OrphanClassification:
+    """Map (ticket, diff, conflicts) → granular orphan classification."""
+    if ticket is None:
+        return _classify_no_ticket(empty_diff, has_conflicts)
+    return _classify_with_ticket(ticket.state, empty_diff, has_conflicts)
+
+
+def _classify_no_ticket(empty_diff: bool, has_conflicts: bool) -> OrphanClassification:
+    if empty_diff:
+        return OrphanClassification.NO_TICKET_EMPTY_DIFF
+    if has_conflicts:
+        return OrphanClassification.NO_TICKET_CONFLICTING
+    return OrphanClassification.NO_TICKET
+
+
+def _classify_with_ticket(
+    state: State, empty_diff: bool, has_conflicts: bool
+) -> OrphanClassification:
+    if state == State.ERRORED:
+        return _classify_errored(empty_diff, has_conflicts)
+    if state == State.DONE:
+        return _classify_done(empty_diff, has_conflicts)
+    if state == State.CLOSED:
+        return _classify_closed(empty_diff, has_conflicts)
+    raise ValueError(f"Unexpected orphan ticket state: {state}")
+
+
+def _classify_errored(empty_diff: bool, has_conflicts: bool) -> OrphanClassification:
+    if empty_diff:
+        return OrphanClassification.TICKET_ERRORED_EMPTY_DIFF
+    if has_conflicts:
+        return OrphanClassification.TICKET_ERRORED_CONFLICTING
+    return OrphanClassification.TICKET_ERRORED
+
+
+def _classify_done(empty_diff: bool, has_conflicts: bool) -> OrphanClassification:
+    if empty_diff:
+        return OrphanClassification.SUPERSEDED
+    if has_conflicts:
+        return OrphanClassification.TICKET_DONE_CONFLICTING
+    return OrphanClassification.TICKET_DONE_UNMERGED
+
+
+def _classify_closed(empty_diff: bool, has_conflicts: bool) -> OrphanClassification:
+    if empty_diff:
+        return OrphanClassification.SUPERSEDED
+    if has_conflicts:
+        return OrphanClassification.TICKET_CLOSED_CONFLICTING
+    return OrphanClassification.TICKET_CLOSED_UNMERGED
+
+
+# ------------------------------------------------------------------ data
+
+
+@dataclass
+class ClassifiedOrphanPr:
+    """One orphaned PR with its classification reason."""
+
+    branch: str
+    """Full branch name (includes branch-prefix)."""
+
+    ticket_id: str | None
+    """Recovered ticket id (prefix stripped), or ``None`` when the
+    branch name doesn't parse to a ticket id."""
+
+    classification: OrphanClassification
+    """Why this PR was classified as orphaned."""
+
+    ticket_state: str | None = None
+    """``ticket.state.value`` when a ticket was found, else ``None``."""
+
+
 # Ticket states that cause a PR to be classified as orphaned.
 _ORPHAN_STATES: frozenset[State] = frozenset({State.DONE, State.CLOSED, State.ERRORED})
 
-# Subset of orphan states that trigger an auto-close (DONE/CLOSED).
-# ERRORED tickets with a non-empty diff get a tracking ticket instead.
-_CLOSE_ON_STATES: frozenset[State] = frozenset({State.DONE, State.CLOSED})
+# Classifications that mandate auto-close (vs file-ticket).
+_CLOSE_CLASSIFICATIONS: frozenset[OrphanClassification] = frozenset(
+    {
+        OrphanClassification.SUPERSEDED,
+        OrphanClassification.TICKET_DONE_UNMERGED,
+        OrphanClassification.TICKET_CLOSED_UNMERGED,
+        OrphanClassification.TICKET_DONE_CONFLICTING,
+        OrphanClassification.TICKET_CLOSED_CONFLICTING,
+        OrphanClassification.NO_TICKET_EMPTY_DIFF,
+        OrphanClassification.TICKET_ERRORED_EMPTY_DIFF,
+        OrphanClassification.TICKET_ERRORED_CONFLICTING,
+        OrphanClassification.NO_TICKET_CONFLICTING,
+    }
+)
 
 
 @dataclass
@@ -43,7 +209,68 @@ class OrphanedPrCheckResult:
     filed: int = 0
     skipped: int = 0
     dry_run: bool = True
-    actions: list[str] = field(default_factory=list)  # log lines for audit trail
+    actions: list[str] = field(default_factory=list)
+    classifications: list[ClassifiedOrphanPr] = field(default_factory=list)
+    """Enumerated list of every classified orphaned PR from this pass.
+    Filled in before any action is taken — safe for dry-run inspection
+    and downstream consumers."""
+
+
+# ------------------------------------------------------------------ core
+
+
+def classify_orphaned_prs(
+    mill_branches: list[str],
+    settings: Settings,
+    service: TicketService,
+    forge: Forge,
+) -> list[ClassifiedOrphanPr]:
+    """Core algorithm: classify each mill branch as orphaned or not.
+
+    Reuses the existing PR↔ticket linkage (branch naming convention).
+    Branches with an active, in-progress ticket are excluded; the rest
+    receive a granular :class:`OrphanClassification` that drives the
+    downstream action (close vs file-ticket).
+
+    Age-guard filtering is NOT done here — callers should pre-filter
+    young tickets before calling this function.  Branches whose PR is
+    already closed on the forge side are also excluded.
+
+    Returns:
+        A list of :class:`ClassifiedOrphanPr` — one per orphaned PR.
+    """
+    result: list[ClassifiedOrphanPr] = []
+
+    for branch in mill_branches:
+        ticket_id = branch.removeprefix(settings.branch_prefix)
+        ticket: Ticket | None = service.get(ticket_id)
+
+        # --- Active ticket drives this PR → not orphaned ---
+        if ticket is not None and ticket.state not in _ORPHAN_STATES:
+            continue
+
+        # --- PR already closed/merged on forge → skip ---
+        pr_info = forge.pr_status(source_branch=branch)
+        if pr_info is None or pr_info.get("state") != "open":
+            continue
+
+        empty_diff = _pr_has_empty_diff(forge, branch)
+        has_conflicts = _pr_has_conflicts(forge, branch)
+        classification = _determine_classification(ticket, empty_diff, has_conflicts)
+
+        result.append(
+            ClassifiedOrphanPr(
+                branch=branch,
+                ticket_id=ticket_id,
+                classification=classification,
+                ticket_state=ticket.state.value if ticket else None,
+            )
+        )
+
+    return result
+
+
+# ------------------------------------------------------------------ runner
 
 
 def run_orphaned_pr_check_pass(
@@ -88,29 +315,23 @@ def _classify_branches(
     mill_branches: list[str],
     settings: Settings,
     service: TicketService,
-    forge: "Forge",
+    forge: Forge,
     repo_config: RepoConfig,
     result: OrphanedPrCheckResult,
 ) -> None:
-    """Iterate sorted mill branches, classify each, and update *result*."""
-    actions_taken = 0
+    """Iterate sorted mill branches, classify each, and update *result*.
+
+    Phase 1: age-filter branches, then delegate to
+    :func:`classify_orphaned_prs` for pure classification.
+    Phase 2: act on each classification (close or file-ticket) up to
+    ``orphaned_pr_max_actions_per_pass``.
+    """
     max_actions = settings.orphaned_pr_max_actions_per_pass
 
+    # ---- phase 0: age-filter branches -------------------------------
+    age_filtered: list[str] = []
     for branch in mill_branches:
-        if actions_taken >= max_actions:
-            remaining = len(mill_branches) - actions_taken
-            cap_msg = (
-                f"orphaned-pr-check: action cap "
-                f"({max_actions}) reached — "
-                f"{remaining} branch(es) remain unprocessed"
-            )
-            log.info(cap_msg)
-            result.actions.append(cap_msg)
-            break
-
         ticket_id = branch.removeprefix(settings.branch_prefix)
-
-        # --- Age guard ---
         ticket: Ticket | None = service.get(ticket_id)
         if ticket is not None:
             age = datetime.now(timezone.utc) - ticket.created_at
@@ -123,26 +344,35 @@ def _classify_branches(
                 )
                 result.skipped += 1
                 continue
+        age_filtered.append(branch)
 
-        # --- Orphan classification ---
-        is_orphan = (ticket is None) or (ticket.state in _ORPHAN_STATES)
-        if not is_orphan:
-            continue  # mill is actively driving this PR
+    # ---- phase 1: classify all eligible branches --------------------
+    classifications = classify_orphaned_prs(
+        age_filtered, settings=settings, service=service, forge=forge
+    )
+    result.classifications = classifications
 
-        # --- Guard: PR may already be closed on forge ---
-        pr_info = forge.pr_status(source_branch=branch)
-        if pr_info is None or pr_info.get("state") != "open":
-            continue  # already closed/merged
+    # ---- phase 2: act on classifications (capped) -------------------
+    actions_taken = 0
+    for cpr in classifications:
+        if actions_taken >= max_actions:
+            remaining = len(classifications) - actions_taken
+            cap_msg = (
+                f"orphaned-pr-check: action cap "
+                f"({max_actions}) reached — "
+                f"{remaining} classification(s) remain unprocessed"
+            )
+            log.info(cap_msg)
+            result.actions.append(cap_msg)
+            break
 
-        # --- Action decision ---
-        should_close = (
-            ticket is not None and ticket.state in _CLOSE_ON_STATES
-        ) or _pr_has_empty_diff(forge, branch)
+        should_close = cpr.classification in _CLOSE_CLASSIFICATIONS
         action = "CLOSE" if should_close else "FILE_TICKET"
-        state_label = ticket.state.value if ticket else "NOT_FOUND"
+        state_label = cpr.ticket_state or "NOT_FOUND"
         log_line = (
-            f"repo={repo_config.repo_id} branch={branch} "
+            f"repo={repo_config.repo_id} branch={cpr.branch} "
             f"ticket_state={state_label} action={action} "
+            f"classification={cpr.classification.value} "
             f"dry_run={settings.orphaned_pr_dry_run}"
         )
         log.info("orphaned-pr-check: %s", log_line)
@@ -153,40 +383,61 @@ def _classify_branches(
             continue
 
         if should_close:
-            comment = _build_close_comment(repo_config.repo_id, branch, ticket)
-            forge.post_pr_comment(source_branch=branch, body=comment)
-            forge.close_pr(source_branch=branch)
+            comment = _build_close_comment(cpr, repo_config.repo_id)
+            forge.post_pr_comment(source_branch=cpr.branch, body=comment)
+            forge.close_pr(source_branch=cpr.branch)
             result.closed += 1
         else:
-            _file_orphan_ticket(service, settings, repo_config, branch, ticket)
+            _file_orphan_ticket(service, settings, repo_config, cpr)
             result.filed += 1
         actions_taken += 1
 
 
-# ------------------------------------------------------------------ helpers
+# ------------------------------------------------------------------ actions
 
 
-def _pr_has_empty_diff(forge: "Forge", branch: str) -> bool:
-    """Return True when the PR for *branch* has no effective file changes."""
-    files = forge.pr_files(source_branch=branch)
-    if not files:
-        return True
-    return all(f.get("additions", 0) + f.get("deletions", 0) == 0 for f in files)
-
-
-def _build_close_comment(
-    repo_id: str,
-    branch: str,
-    ticket: Ticket | None,
-) -> str:
+def _build_close_comment(cpr: ClassifiedOrphanPr, repo_id: str) -> str:
     """Build a Markdown comment explaining the auto-close."""
-    if ticket is not None:
-        reason = (
-            f"tracking ticket `{ticket.id}` reached state "
-            f"`{ticket.state.value}` and this PR was never merged."
-        )
-    else:
-        reason = "the PR has an empty diff (no file changes)."
+    classification_reasons: dict[OrphanClassification, str] = {
+        OrphanClassification.SUPERSEDED: (
+            "the PR has an empty diff (no effective file changes)."
+        ),
+        OrphanClassification.TICKET_DONE_UNMERGED: (
+            f"tracking ticket `{cpr.ticket_id}` reached state `done` "
+            f"and this PR was never merged.  No merge conflicts detected."
+        ),
+        OrphanClassification.TICKET_CLOSED_UNMERGED: (
+            f"tracking ticket `{cpr.ticket_id}` reached state `closed` "
+            f"and this PR was never merged.  No merge conflicts detected."
+        ),
+        OrphanClassification.TICKET_DONE_CONFLICTING: (
+            f"tracking ticket `{cpr.ticket_id}` reached state `done`, "
+            f"the PR has merge conflicts, and appears abandoned."
+        ),
+        OrphanClassification.TICKET_CLOSED_CONFLICTING: (
+            f"tracking ticket `{cpr.ticket_id}` reached state `closed`, "
+            f"the PR has merge conflicts, and appears abandoned."
+        ),
+        OrphanClassification.NO_TICKET_EMPTY_DIFF: (
+            "the PR has an empty diff (no file changes) and no "
+            "tracking ticket was found."
+        ),
+        OrphanClassification.TICKET_ERRORED_EMPTY_DIFF: (
+            f"tracking ticket `{cpr.ticket_id}` is in `errored` state "
+            f"and the PR has an empty diff."
+        ),
+        OrphanClassification.TICKET_ERRORED_CONFLICTING: (
+            f"tracking ticket `{cpr.ticket_id}` is in `errored` state "
+            f"and the PR has merge conflicts — abandoned."
+        ),
+        OrphanClassification.NO_TICKET_CONFLICTING: (
+            "the PR has merge conflicts and no tracking ticket was found — abandoned."
+        ),
+    }
+    reason = classification_reasons.get(
+        cpr.classification,
+        f"classification: {cpr.classification.value}.",
+    )
     return (
         f"This PR was automatically closed by the mill's orphaned-PR "
         f"cleanup pass.\n\n"
@@ -199,21 +450,21 @@ def _file_orphan_ticket(
     service: TicketService,
     settings: Settings,
     repo_config: RepoConfig,
-    branch: str,
-    ticket: Ticket | None,
+    cpr: ClassifiedOrphanPr,
 ) -> None:
     """File a tracking ticket for an orphaned PR.
 
     Uses a deterministic title so the mill's BoardManager deduplicates
     against existing open tickets with the same title.
     """
-    title = f"Track orphaned PR: {repo_config.repo_id}/{branch}"
+    title = f"Track orphaned PR: {repo_config.repo_id}/{cpr.branch}"
     body = (
-        f"An open PR on branch `{branch}` has no active tracking ticket.\n\n"
+        f"An open PR on branch `{cpr.branch}` has no active tracking ticket.\n\n"
         f"- Repo: `{repo_config.repo_id}`\n"
-        f"- Branch: `{branch}`\n"
+        f"- Branch: `{cpr.branch}`\n"
+        f"- Classification: `{cpr.classification.value}`\n"
         f"- Prior ticket state: "
-        f"{ticket.state.value if ticket else 'NOT_FOUND'}\n\n"
+        f"{cpr.ticket_state or 'NOT_FOUND'}\n\n"
         f"Please review and either close the PR or continue the work."
     )
     service.create(
