@@ -336,7 +336,6 @@ async def _start_board_manager(
         manager_model=settings.board_manager_model or None,
         recall_model=settings.board_manager_recall_model or None,
         max_conversations=settings.board_manager_max_conversations,
-        max_concurrent=settings.board_manager_max_concurrent,
     )
     await asyncio.to_thread(manager.start)
     app.state.board_manager = manager
