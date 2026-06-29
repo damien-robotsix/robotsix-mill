@@ -712,26 +712,6 @@ def branch_has_net_diff(repo: Path, target_branch: str = "main") -> bool:
     return True
 
 
-def changed_files_net(repo: Path, target_branch: str = "main") -> set[str]:
-    """Return relative paths of files changed in the net branch diff vs
-    ``origin/<target_branch>`` (three-dot merge-base comparison).
-
-    Uses ``git diff --name-only origin/<target_branch>...HEAD`` — the same
-    semantic as :func:`branch_has_net_diff` — so the set exactly mirrors what
-    the PR diff will show.
-
-    Returns an empty set on any git failure (treat as "no manifests changed"
-    → regen is skipped, CI remains the backstop).
-    """
-    try:
-        out = _git(repo, "diff", "--name-only", f"origin/{target_branch}...HEAD")
-    except subprocess.CalledProcessError:
-        return set()
-    if not out:
-        return set()
-    return {f for f in out.split("\n") if f}
-
-
 def branch_is_behind_main(repo: Path, target_branch: str = "main") -> bool:
     """Return True when ``origin/main`` has commits not on HEAD.
 
