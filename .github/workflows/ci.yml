@@ -52,7 +52,7 @@ jobs:
       - name: Install dev deps
         # `dev` is a PEP 735 dependency-group pulled in automatically via
         # `[tool.uv] default-groups = ["dev"]`; only `tracing` stays an extra.
-        run: uv sync --frozen --extra tracing
+        run: uv sync --locked --extra tracing
         env:
           UV_PROJECT_ENVIRONMENT: system
 

@@ -30,7 +30,7 @@ jobs:
           python-version: "3.14"
 
       - name: Install project + tracing extras
-        run: uv sync --frozen --extra tracing
+        run: uv sync --locked --extra tracing
 
       - name: Install pip-audit
         run: uv pip install "pip-audit[cyclonedx]>=2.5.6"
@@ -95,7 +95,7 @@ jobs:
           python-version: "3.14"
 
       - name: Install project + tracing extras
-        run: uv sync --frozen --extra tracing
+        run: uv sync --locked --extra tracing
 
       - name: Install pip-licenses
         run: uv pip install "pip-licenses>=5"
