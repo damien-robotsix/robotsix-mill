@@ -4,6 +4,9 @@
   periodic trace-review runner into the CLI so it is reachable the
   same way sibling `schedule_only` passes are (`diagnostic`,
   `config-sync`, `member-sync`).
+- **agents**: extract shared gate-runner logic from `run_test_agent`
+  and `run_smoke_agent` into a private `_run_gate_agent` helper to
+  eliminate ~80 lines of intra-file duplication in `testing.py`.
 - **implement**: add explicit retry-loop pre-flight checks (ruff,
   mypy, deptry) before the agent emits `implement_complete`, with a
   3-cycle cap to prevent unbounded loops.  Replaces the advisory

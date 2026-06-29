@@ -260,6 +260,70 @@ def _evaluate_gate_result(
     return False, _distill_failure(settings, repo_dir, rc, out, file_map=file_map)
 
 
+def _run_gate_agent(
+    *,
+    settings: Settings,
+    repo_dir: Path,
+    repo_config: RepoConfig | None = None,
+    retry_on_failure: bool = False,
+    file_map: list[str] | None = None,
+    cmd: str,
+    success_msg: str,
+    gate_name: str,
+    is_test_gate: bool = False,
+) -> tuple[bool, str]:
+    """Shared gate-runner for test and smoke agents.
+
+    Resolves the file_map, runs *cmd* in the sandbox (with
+    ``install_project=True``), and delegates to
+    :func:`_evaluate_gate_result`.  *cmd* must already be resolved
+    and stripped; callers handle empty-command short-circuit.
+    """
+    if file_map is None:
+        file_map = _load_file_map(repo_dir)
+
+    from .. import sandbox
+
+    toml_err = _check_pyproject_toml(repo_dir)
+    if toml_err is not None:
+        return False, toml_err
+
+    image = repo_config.sandbox_image if repo_config else None
+    try:
+        # install_project: install the repo's DECLARED deps before the
+        # gate runs. Without this the gate tests against the image's
+        # frozen site-packages, so any ticket adding a new third-party
+        # runtime dep fails forever with ModuleNotFoundError.
+        rc, out = sandbox.run(
+            cmd,
+            repo_dir=repo_dir,
+            settings=settings,
+            install_project=True,
+            sandbox_image=image,
+        )
+    except sandbox.SandboxError as e:
+        return False, f"sandbox unavailable: {e}"
+
+    retry_success_msg = (
+        f"{gate_name} passed on re-run (first run failed rc={rc} — flaky); "
+        "treated as passing"
+    )
+
+    return _evaluate_gate_result(
+        settings=settings,
+        repo_dir=repo_dir,
+        cmd=cmd,
+        rc=rc,
+        out=out,
+        retry_on_failure=retry_on_failure,
+        sandbox_image=image,
+        file_map=file_map,
+        success_msg=success_msg,
+        retry_success_msg=retry_success_msg,
+        is_test_gate=is_test_gate,
+    )
+
+
 def run_test_agent(
     *,
     settings: Settings,
@@ -302,49 +366,19 @@ def run_test_agent(
     suite (doc-only, etc.) need no opt-out flag. (``repo_config`` no
     longer carries a per-repo ``test_command``; it moved to the repo's
     own ``.robotsix-mill/config.yaml``.)"""
-    if file_map is None:
-        file_map = _load_file_map(repo_dir)
-
-    from .. import sandbox
-
     cmd = ((load_repo_test_command(repo_dir) or "") or settings.test_command).strip()
     if not cmd:
         return True, "no test gate configured (treated as passing)"
 
-    toml_err = _check_pyproject_toml(repo_dir)
-    if toml_err is not None:
-        return False, toml_err
-
-    image = repo_config.sandbox_image if repo_config else None
-    try:
-        # install_project: install the repo's DECLARED deps before the
-        # gate runs. Without this the gate tests against the image's
-        # frozen site-packages, so any ticket adding a new third-party
-        # runtime dep fails forever with ModuleNotFoundError.
-        rc, out = sandbox.run(
-            cmd,
-            repo_dir=repo_dir,
-            settings=settings,
-            install_project=True,
-            sandbox_image=image,
-        )
-    except sandbox.SandboxError as e:
-        return False, f"sandbox unavailable: {e}"
-
-    return _evaluate_gate_result(
+    return _run_gate_agent(
         settings=settings,
         repo_dir=repo_dir,
-        cmd=cmd,
-        rc=rc,
-        out=out,
+        repo_config=repo_config,
         retry_on_failure=retry_on_failure,
-        sandbox_image=image,
         file_map=file_map,
+        cmd=cmd,
         success_msg="all tests passed",
-        retry_success_msg=(
-            f"tests passed on re-run (first run failed rc={rc} — flaky); "
-            "treated as passing"
-        ),
+        gate_name="tests",
         is_test_gate=True,
     )
 
@@ -405,45 +439,19 @@ def run_smoke_agent(
 
     ``file_map``: mirrors :func:`run_test_agent` — auto-discovered from
     the sibling ``artifacts/file_map.json`` when ``None``."""
-    if file_map is None:
-        file_map = _load_file_map(repo_dir)
-
-    from .. import sandbox
-
     cmd = ((load_repo_smoke_command(repo_dir) or "") or settings.smoke_command).strip()
     if not cmd:
         return True, "no smoke gate configured (treated as passing)"
 
-    toml_err = _check_pyproject_toml(repo_dir)
-    if toml_err is not None:
-        return False, toml_err
-
-    image = repo_config.sandbox_image if repo_config else None
-    try:
-        rc, out = sandbox.run(
-            cmd,
-            repo_dir=repo_dir,
-            settings=settings,
-            install_project=True,
-            sandbox_image=image,
-        )
-    except sandbox.SandboxError as e:
-        return False, f"sandbox unavailable: {e}"
-
-    return _evaluate_gate_result(
+    return _run_gate_agent(
         settings=settings,
         repo_dir=repo_dir,
-        cmd=cmd,
-        rc=rc,
-        out=out,
+        repo_config=repo_config,
         retry_on_failure=retry_on_failure,
-        sandbox_image=image,
         file_map=file_map,
+        cmd=cmd,
         success_msg="smoke passed",
-        retry_success_msg=(
-            f"smoke passed on re-run (first run failed rc={rc} — flaky); "
-            "treated as passing"
-        ),
+        gate_name="smoke",
         is_test_gate=False,
     )
 
