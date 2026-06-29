@@ -127,6 +127,12 @@ def init_db(settings: Settings, board_id: str) -> None:
                 # all review rounds (ticket lifetime). Feeds the
                 # implement↔review convergence backstop.
                 ("ticket", "implement_cycles INTEGER NOT NULL DEFAULT 0"),
+                # refine_passes column: count of refine passes per ticket
+                # (lifetime). Feeds the refine convergence backstop.
+                ("ticket", "refine_passes INTEGER NOT NULL DEFAULT 0"),
+                # refine_output_hash column: hash of description.md output
+                # from the most recent refine pass, for convergence detection.
+                ("ticket", "refine_output_hash TEXT NOT NULL DEFAULT ''"),
                 # Hash-chain integrity columns for TicketEvent.
                 ("ticketevent", "prev_hash TEXT"),
                 ("ticketevent", "hash TEXT NOT NULL DEFAULT ''"),

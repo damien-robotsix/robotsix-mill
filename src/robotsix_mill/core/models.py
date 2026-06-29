@@ -170,6 +170,14 @@ class Ticket(SQLModel, table=True):
     # Used by the implement↔review convergence backstop to catch a ticket
     # that keeps re-running implement without converging.
     implement_cycles: int = Field(default=0)
+    # count of refine passes for this ticket (lifetime). Feeds the
+    # refine convergence backstop — when this reaches max_refine_passes_per_ticket
+    # without convergence, the ticket is escalated to BLOCKED.
+    refine_passes: int = Field(default=0)
+    # hash of description.md output from the most recent refine pass.
+    # Compared against the next pass's output to detect convergence
+    # (unchanged output → the loop has stabilised).
+    refine_output_hash: str = ""
     # transient-error retry state (stage-runner level, not LLM-call level)
     retry_attempt: int = Field(default=0)
     last_transient_error: str | None = Field(default=None)

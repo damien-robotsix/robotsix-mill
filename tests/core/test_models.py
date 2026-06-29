@@ -771,9 +771,11 @@ def _raw_insert_ticket(settings, board_id: str, ticket_id: str, kind: str) -> No
             INSERT INTO ticket (id, title, state, kind, workspace_path, content_hash,
                                 source, cost_usd, pre_redraft_cost_usd, review_rounds,
                                 retry_attempt, board_id, priority, implement_cycles,
+                                refine_passes, refine_output_hash,
                                 created_at, updated_at)
             VALUES ('{ticket_id}', 'Test title', 'DRAFT', '{kind}', '/tmp/{ticket_id}', '',
-                    'user', 0.0, 0.0, 0, 0, '', 0, 0, '{now}', '{now}')
+                    'user', 0.0, 0.0, 0, 0, '', 0, 0, 0, '',
+                    '{now}', '{now}')
             """
         )
 

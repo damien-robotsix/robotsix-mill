@@ -3636,18 +3636,24 @@ def test_refine_cache_hit_skips_agent(ctx_factory, monkeypatch):
     out1 = RefineStage().run(t, ctx)
     assert out1.next_state is State.READY
     assert len(refine_calls) == 1
+    # Reload ticket so refine_output_hash / refine_passes are current.
+    t = ctx.service.get(t.id)
 
-    # Second run: description.md now contains the spec (hash differs).
-    # Cache miss → agent runs again, outcome cached with the SPEC hash.
+    # Second run: description.md now contains the spec (hash differs from
+    # the ORIGINAL draft, so the stage cache misses).  However, the
+    # pre-refine input-convergence guard fires because the on-disk
+    # content matches the stored refine_output_hash from pass 1 → agent
+    # skipped → convergence.
     out2 = RefineStage().run(t, ctx)
     assert out2.next_state is State.READY
-    assert len(refine_calls) == 2
+    assert len(refine_calls) == 1  # guard skipped the agent
 
     # Third run: description.md unchanged from second run.
-    # Cache HIT → agent NOT called.
+    # The stage cache now has an entry for the spec hash (persisted
+    # during the guard's _guard_implementation_done call) → cache hit.
     out3 = RefineStage().run(t, ctx)
     assert out3.next_state is State.READY
-    assert len(refine_calls) == 2  # still 2 — cache hit on third run
+    assert len(refine_calls) == 1  # still 1 — cache hit on third run
 
     # Change the draft body (simulates an operator edit).
     ws = ctx.service.workspace(t)
@@ -3659,4 +3665,309 @@ def test_refine_cache_hit_skips_agent(ctx_factory, monkeypatch):
     # Fourth run: cache miss because content changed, agent IS called.
     out4 = RefineStage().run(t, ctx)
     assert out4.next_state is State.READY
-    assert len(refine_calls) == 3  # agent called again
+    assert len(refine_calls) == 2  # agent called again (first run + fourth run)
+
+
+# ---------------------------------------------------------------------------
+# refine pass cap + convergence gate
+# ---------------------------------------------------------------------------
+
+
+def test_refine_pass_cap_escalates_on_exhaustion(ctx_factory, monkeypatch):
+    """After max_refine_passes_per_ticket refine passes without convergence,
+    the ticket escalates to BLOCKED."""
+    ctx = ctx_factory(
+        require_approval="true",
+        max_refine_passes_per_ticket=3,
+    )
+    t = _ticket(ctx, body="Add frobnicate feature v1.")
+
+    # Mock the refine agent to produce a DIFFERENT spec each time so
+    # the output-convergence check doesn't fire and the pass counter
+    # increments.
+    call_count = [0]
+
+    def _varying_refine(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        **kw,
+    ):
+        call_count[0] += 1
+        return RefineResult(
+            spec_markdown=f"## Problem\nFix it (pass {call_count[0]})",
+        )
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_varying_refine,
+        triage_refine=_mock_triage_refine(decision="REFINE", reason="needs refinement"),
+    )
+
+    # Pass 1: refine rewrites description.md → output differs → pass counter = 1.
+    out1 = RefineStage().run(t, ctx)
+    assert out1.next_state is State.HUMAN_ISSUE_APPROVAL
+    assert call_count[0] == 1
+    # Apply the stage outcome to move the ticket out of DRAFT.
+    ctx.service.transition(t.id, out1.next_state, out1.note)
+
+    # Sendback simulation: HUMAN_ISSUE_APPROVAL → DRAFT.
+    ctx.service.transition(t.id, State.DRAFT, "changes requested: please improve")
+    # Add reviewer comment (simulating operator feedback on the board).
+    ctx.service.add_comment(t.id, "please improve the spec", author="user")
+    # Reload ticket to pick up updated refine_passes.
+    t = ctx.service.get(t.id)
+    assert t.refine_passes == 1
+
+    # Pass 2: description.md still contains the spec from pass 1, but
+    # reviewer_comments are present so the pre-refine input guard
+    # doesn't fire.  Agent runs again, produces different output.
+    out2 = RefineStage().run(t, ctx)
+    assert out2.next_state is State.HUMAN_ISSUE_APPROVAL
+    assert call_count[0] == 2
+    ctx.service.transition(t.id, out2.next_state, out2.note)
+
+    ctx.service.transition(t.id, State.DRAFT, "changes requested: one more try")
+    ctx.service.add_comment(t.id, "one more try please", author="user")
+    t = ctx.service.get(t.id)
+    assert t.refine_passes == 2
+
+    # Pass 3: agent runs again, pass counter reaches 3.
+    out3 = RefineStage().run(t, ctx)
+    assert out3.next_state is State.HUMAN_ISSUE_APPROVAL
+    assert call_count[0] == 3
+    ctx.service.transition(t.id, out3.next_state, out3.note)
+
+    ctx.service.transition(t.id, State.DRAFT, "changes requested: again")
+    ctx.service.add_comment(t.id, "try again", author="user")
+    t = ctx.service.get(t.id)
+    assert t.refine_passes == 3
+
+    # Pass 4: cap reached (3/3) — escalate to BLOCKED without calling agent.
+    out4 = RefineStage().run(t, ctx)
+    assert out4.next_state is State.BLOCKED
+    assert "refine cap" in (out4.note or "").lower()
+    assert call_count[0] == 3  # agent NOT called on fourth pass
+
+
+def test_refine_convergence_skips_agent_when_input_unchanged(ctx_factory, monkeypatch):
+    """When the description.md hasn't changed since the last refine output
+    AND there are no new reviewer comments, the refine agent is skipped
+    entirely (pre-refine input-convergence guard fires)."""
+    ctx = ctx_factory(
+        require_approval="true",
+        max_refine_passes_per_ticket=3,
+    )
+    t = _ticket(ctx, body="Add frobnicate feature.")
+
+    refine_calls = []
+
+    def _tracking_refine(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        **kw,
+    ):
+        refine_calls.append(1)
+        return RefineResult(spec_markdown="## Problem\nFrobnicate the widget properly.")
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_tracking_refine,
+        triage_refine=_mock_triage_refine(decision="REFINE", reason="needs refinement"),
+    )
+
+    # Pass 1: refine agent runs, writes spec, pass counter = 1.
+    out1 = RefineStage().run(t, ctx)
+    assert out1.next_state is State.HUMAN_ISSUE_APPROVAL
+    assert len(refine_calls) == 1
+    ctx.service.transition(t.id, out1.next_state, out1.note)
+
+    # Sendback without actual new feedback (empty reviewer_comments).
+    ctx.service.transition(t.id, State.DRAFT, "changes requested: ")
+    t = ctx.service.get(t.id)
+
+    # Pass 2: description.md is still the refined spec from pass 1.
+    # No new reviewer comments → pre-refine input-convergence guard fires,
+    # agent is skipped.
+    out2 = RefineStage().run(t, ctx)
+    assert out2.next_state is State.HUMAN_ISSUE_APPROVAL
+    assert len(refine_calls) == 1  # agent NOT called
+    assert "convergence" in (out2.note or "").lower()
+
+
+def test_refine_sendback_with_feedback_still_runs_agent(ctx_factory, monkeypatch):
+    """When a sendback includes substantive reviewer feedback, the
+    pre-refine input-convergence guard does NOT fire — the agent gets
+    a chance to address the feedback."""
+    ctx = ctx_factory(
+        require_approval="true",
+        max_refine_passes_per_ticket=3,
+    )
+    t = _ticket(ctx, body="Add frobnicate feature.")
+
+    refine_calls = []
+
+    def _tracking_refine(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        **kw,
+    ):
+        refine_calls.append(1)
+        return RefineResult(spec_markdown="## Problem\nFrobnicate the widget.")
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_tracking_refine,
+        triage_refine=_mock_triage_refine(decision="REFINE", reason="needs refinement"),
+    )
+
+    # Pass 1: refine runs normally.
+    out1 = RefineStage().run(t, ctx)
+    assert out1.next_state is State.HUMAN_ISSUE_APPROVAL
+    assert len(refine_calls) == 1
+    ctx.service.transition(t.id, out1.next_state, out1.note)
+
+    # Sendback with substantive feedback.
+    ctx.service.transition(
+        t.id, State.DRAFT, "changes requested: add error handling section"
+    )
+    ctx.service.add_comment(
+        t.id, "please add an error handling section", author="user"
+    )
+    t = ctx.service.get(t.id)
+
+    # Pass 2: reviewer_comments are non-empty → pre-refine guard skipped.
+    # Agent runs again.
+    out2 = RefineStage().run(t, ctx)
+    assert out2.next_state is State.HUMAN_ISSUE_APPROVAL
+    assert len(refine_calls) == 2  # agent WAS called
+
+
+def test_refine_output_convergence_stops_counting(ctx_factory, monkeypatch):
+    """When the refine agent produces the SAME output as the previous pass,
+    the post-refine convergence check fires — pass counter is NOT incremented."""
+    ctx = ctx_factory(
+        require_approval="true",
+        max_refine_passes_per_ticket=3,
+    )
+    t = _ticket(ctx, body="Add frobnicate feature.")
+
+    call_count = [0]
+    # The mock produces the same output every time — the stage-cache
+    # path (which stores the OUTCOME keyed by the INPUT hash) won't
+    # fire across passes because the description.md changes (draft→spec),
+    # but the post-refine convergence check compares the NEW output hash
+    # against refine_output_hash on the ticket and should detect no change.
+    SPEC = "## Problem\nFrobnicate the widget."
+
+    def _same_refine(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        **kw,
+    ):
+        call_count[0] += 1
+        return RefineResult(spec_markdown=SPEC)
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_same_refine,
+        triage_refine=_mock_triage_refine(decision="REFINE", reason="needs refinement"),
+    )
+
+    # Pass 1: refine runs, output hash stored, pass counter = 1.
+    out1 = RefineStage().run(t, ctx)
+    assert out1.next_state is State.HUMAN_ISSUE_APPROVAL
+    assert call_count[0] == 1
+    ctx.service.transition(t.id, out1.next_state, out1.note)
+    t = ctx.service.get(t.id)
+    assert t.refine_passes == 1
+
+    # Sendback.
+    ctx.service.transition(
+        t.id, State.DRAFT, "changes requested: add more detail"
+    )
+    ctx.service.add_comment(t.id, "add more detail please", author="user")
+    t = ctx.service.get(t.id)
+
+    # Pass 2: agent runs (because reviewer_comments are non-empty,
+    # the pre-refine guard is skipped).  It produces the SAME output.
+    # Post-refine convergence check fires → pass counter stays at 1.
+    out2 = RefineStage().run(t, ctx)
+    assert out2.next_state is State.HUMAN_ISSUE_APPROVAL
+    assert call_count[0] == 2  # agent WAS called (pre-refine guard skipped due to feedback)
+    t = ctx.service.get(t.id)
+    assert t.refine_passes == 1  # NOT incremented — convergence detected
+
+
+def test_refine_pass_cap_disabled_when_zero(ctx_factory, monkeypatch):
+    """When max_refine_passes_per_ticket is 0, the cap is disabled and
+    the ticket is never escalated on pass count."""
+    ctx = ctx_factory(
+        require_approval="true",
+        max_refine_passes_per_ticket=0,
+    )
+    t = _ticket(ctx, body="Add frobnicate feature.")
+
+    call_count = [0]
+
+    def _varying_refine(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        **kw,
+    ):
+        call_count[0] += 1
+        return RefineResult(
+            spec_markdown=f"## Problem\nFix it (pass {call_count[0]})",
+        )
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_varying_refine,
+        triage_refine=_mock_triage_refine(decision="REFINE", reason="needs refinement"),
+    )
+
+    # Run refine many times — cap is disabled so agent always called.
+    for i in range(5):
+        if i == 0:
+            # First pass: ticket is already DRAFT.
+            out = RefineStage().run(t, ctx)
+            assert out.next_state is State.HUMAN_ISSUE_APPROVAL
+            ctx.service.transition(t.id, out.next_state, out.note)
+        else:
+            out = RefineStage().run(t, ctx)
+            assert out.next_state is State.HUMAN_ISSUE_APPROVAL
+            ctx.service.transition(t.id, out.next_state, out.note)
+        ctx.service.transition(t.id, State.DRAFT, f"changes requested: pass {i+1}")
+        ctx.service.add_comment(t.id, f"feedback pass {i+1}", author="user")
+        t = ctx.service.get(t.id)
+
+    assert call_count[0] == 5

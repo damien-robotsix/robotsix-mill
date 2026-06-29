@@ -423,6 +423,11 @@ class _StagesSettings(BaseModel):
     # the counter-forced downgrade entirely — every sendback runs at full
     # Opus unless already caught by trivial-scope routing.
     max_re_refine_cycles_before_cheap: int = Field(default=2, ge=0)
+    # Per-ticket ceiling on total refine passes before escalating to BLOCKED
+    # for human review.  Guards against unbounded re-refinement loops (e.g.
+    # operator sendback → refine → sendback → ...) that burn subscription
+    # quota without converging.  Set to 0 to disable the cap entirely.
+    max_refine_passes_per_ticket: int = Field(default=3, ge=0)
     # When True, a refine run re-entered after an operator sendback
     # ("changes requested:") reuses the prior refined description.md as the
     # agent's starting point and applies only the operator's delta, instead of
