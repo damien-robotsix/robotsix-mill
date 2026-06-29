@@ -224,9 +224,9 @@ def test_default_obsolescence_requests():
 
 
 def test_default_dedup_requests():
-    """dedup_request_limit defaults to 6."""
+    """dedup_request_limit defaults to 12."""
     s = Settings()
-    assert s.dedup_request_limit == 6
+    assert s.dedup_request_limit == 12
 
 
 def test_default_dedup_skip_on_no_overlap():
