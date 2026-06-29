@@ -1,5 +1,10 @@
 ## 0.0.0 (unreleased)
 
+- **implement**: add explicit retry-loop pre-flight checks (ruff,
+  mypy, deptry) before the agent emits `implement_complete`, with a
+  3-cycle cap to prevent unbounded loops.  Replaces the advisory
+  "Pre-Stop Self-Check" with mandatory "Pre-flight checks" that
+  gate the agent's stop.
 - **docs**: add missing `board_manager.max_concurrent` row to the
   configuration reference table.
 - **config**: align `periodic.langfuse_cleanup.max_traces` YAML
