@@ -771,6 +771,36 @@ pattern control its tool-call and web-fetch budgets:
 | `MILL_SURVEY_WEB_FETCH_MAX_TOTAL_BYTES` | `500000` | Cumulative ceiling on returned fetch bytes per survey run |
 | `MILL_SURVEY_WEB_SEARCH_MAX_CALLS` | `5` | Max web_search invocations per survey run |
 
+#### audit
+
+The `audit` periodic agent performs broad repository audits (license
+scanning, pip-audit, coverage introspection) and files draft tickets
+with findings. One extra field beyond the generic periodic pattern
+controls its request budget:
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `MILL_AUDIT_PERIODIC` | `true` | Enable periodic audit passes |
+| `MILL_AUDIT_INTERVAL_SECONDS` | `86400` | Seconds between audit passes |
+| `MILL_AUDIT_MEMORY_PATH` | `None` | Override path for audit memory; defaults to `<data_dir>/audit_memory.md` |
+| `MILL_AUDIT_REQUEST_LIMIT` | `80` | Per-call request cap for the audit agent |
+
+#### test_gap
+
+The `test_gap` periodic agent scans the repository for test-coverage
+gaps and files draft tickets when coverage is insufficient. Three
+extra fields beyond the generic periodic pattern control its request
+budget and tool-call guardrails:
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `MILL_TEST_GAP_PERIODIC` | `true` | Enable periodic test-gap passes |
+| `MILL_TEST_GAP_INTERVAL_SECONDS` | `86400` | Seconds between test-gap passes |
+| `MILL_TEST_GAP_MEMORY_PATH` | `None` | Override path for test-gap memory; defaults to `<data_dir>/test_gap_memory.md` |
+| `MILL_TEST_GAP_REQUEST_LIMIT` | `80` | Per-call request cap for the test-gap agent |
+| `MILL_TEST_GAP_MAX_TOOL_CALLS` | `100` | Hard cap on total tool calls per test-gap trace |
+| `MILL_TEST_GAP_MAX_ERRORS` | `20` | Hard cap on tool-call errors before auto-termination |
+
 #### Env-var-only periodic agents
 
 `bc_check` and `completeness_check` enabled, interval, and memory_path
