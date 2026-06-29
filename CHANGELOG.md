@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- **implement**: add `deptry .` to the pre-flight toolchain run before
+  marking `implement_complete`, alongside the existing ruff and mypy
+  checks (Pre-Stop Self-Check step 0 + language instruction section).
+
 - **config**: remove zombie `core.limits.parallel_explore_max` setting (
   Pydantic field, YAML default, loader mapping, docs, vulture whitelist);
   no longer consumed after the `parallel_explore` batching refactor.
