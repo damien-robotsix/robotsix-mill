@@ -787,6 +787,7 @@ modules:
       - LICENSE
       - SECURITY.md
       - AGENT.md
+      - CLAUDE.md
       - CHANGELOG.md
       - .gitignore
       - .gitmodules
