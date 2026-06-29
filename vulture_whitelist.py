@@ -29,7 +29,6 @@ code_fix_description
 run_agent_check_agent
 run_audit_agent
 run_bc_check_agent
-_validate_name
 reset_for_tests
 run_completeness_check_agent
 run_config_sync_agent
@@ -57,7 +56,6 @@ model_config
 chunk_size
 max_chunks
 extras
-_validate_domain_slug
 create_expert
 match_module_paths
 get_expert
@@ -65,11 +63,7 @@ remove_expert
 close_all
 run_forge_parity_agent
 run_health_agent
-_coerce_redirect_to
 run_module_curator_agent
-_interval_xor
-_prompt_xor
-_name_slug
 _absorb_spec_markdown_typos
 output_context
 run_survey_agent
@@ -147,11 +141,6 @@ board_manager_max_concurrent
 scope_triage_request_limit
 already_done_request_limit
 langfuse_cleanup_periodic
-_validate_non_empty
-_validate_ci_monitor_interval_seconds
-_validate_max_concurrency
-_validate_max_inflight_prs
-_validate_keys_match_repo_ids
 settings_customise_sources
 dotenv_settings
 retrospect_memory_file
@@ -172,9 +161,6 @@ doc_memory_file
 ci_fix_memory_file
 rebase_memory_file
 ci_patterns_file
-_validate_trace_health_interval
-_validate_trace_review_interval
-_validate_cross_field
 get_field_value
 
 # -- core --------------------------------------------------------------------
