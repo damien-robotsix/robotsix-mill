@@ -1,5 +1,10 @@
 ## 0.0.0 (unreleased)
 
+- **ci**: remove `github-actions` ecosystem from Dependabot config to
+  silence failing graph-submission check, triggered by external
+  reusable workflow references (`.github/workflows/` in cross-org
+  `uses:` lines) that Dependabot cannot handle.  The `uv` ecosystem was
+  previously removed for the same class of failure.
 - **implement**: add `deptry .` to the pre-flight toolchain run before
   marking `implement_complete`, alongside the existing ruff and mypy
   checks (Pre-Stop Self-Check step 0 + language instruction section).
