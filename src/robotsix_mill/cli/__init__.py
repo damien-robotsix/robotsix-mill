@@ -76,6 +76,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Trace-health check",
         "format": "trace_health",
     },
+    "trace-review": {
+        "module": "runners.trace_review_runner",
+        "function": "run_trace_review_pass",
+        "label": "Trace-review pass",
+        "format": "trace_review",
+    },
     "langfuse-cleanup": {
         "module": "runners.langfuse_cleanup_runner",
         "function": "run_langfuse_cleanup_pass",
@@ -208,6 +214,33 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
             else:
                 rc = repos.repos[repo_id]
             result = func(session_id=session_id, repo_config=rc)
+        elif cmd == "trace-review":
+            from ..runtime.tracing import make_session_id
+            from ..config import get_repos_config
+
+            session_id = make_session_id(cmd)
+            repos = get_repos_config()
+            repo_id = getattr(args, "repo_id", None)
+            if repo_id is None:
+                if len(repos.repos) == 1:
+                    rc = next(iter(repos.repos.values()))
+                else:
+                    print(
+                        "trace-review: --repo-id is required (multiple repos "
+                        f"configured). Known repos: {sorted(repos.repos.keys())}",
+                        file=sys.stderr,
+                    )
+                    return 2
+            elif repo_id not in repos.repos:
+                print(
+                    f"trace-review: unknown repo '{repo_id}'. "
+                    f"Known repos: {sorted(repos.repos.keys())}",
+                    file=sys.stderr,
+                )
+                return 2
+            else:
+                rc = repos.repos[repo_id]
+            result = func(session_id=session_id, repo_config=rc)
         else:
             from ..runtime.tracing import make_session_id
 
@@ -263,6 +296,20 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                         "flagged_for_removal": result.flagged_for_removal,
                         "filed_tickets": result.filed_tickets,
                         "skipped": result.skipped,
+                    },
+                    indent=2,
+                )
+            )
+        elif entry["format"] == "trace_review":
+            print(
+                json.dumps(
+                    {
+                        "summary": result.summary,
+                        "drafts_created": result.drafts_created,
+                        "traces_scanned": result.traces_scanned,
+                        "traces_flagged": result.traces_flagged,
+                        "window_start": result.window_start,
+                        "window_end": result.window_end,
                     },
                     indent=2,
                 )
@@ -335,6 +382,20 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
             if result.filed_tickets:
                 for rid, tid in result.filed_tickets.items():
                     print(f"  Build-out ticket {tid} filed for {rid}")
+        elif entry["format"] == "trace_review":
+            print(f"{entry['label']} complete.")
+            print(
+                f"Traces scanned: {result.traces_scanned} | "
+                f"flagged: {result.traces_flagged} | "
+                f"drafts: {len(result.drafts_created)}"
+            )
+            print(f"Window: {result.window_start} → {result.window_end}")
+            if result.drafts_created:
+                print(f"Draft tickets created: {len(result.drafts_created)}")
+                for d in result.drafts_created:
+                    print(f"  - {d['id']}: {d.get('title', '')}")
+            else:
+                print("No new draft tickets created.")
         elif entry["format"] == "drafts":
             print(f"{entry['label']} complete.")
             print(result.summary)
@@ -644,6 +705,21 @@ def main(argv: list[str] | None = None) -> int:
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",
+    )
+
+    # --- trace-review command ---
+    p_trace_review = sub.add_parser(
+        "trace-review",
+        help="run a trace-review pass over recent Langfuse traces",
+    )
+    p_trace_review.add_argument(
+        "--json",
+        action="store_true",
+        help="output raw JSON instead of human-friendly text",
+    )
+    p_trace_review.add_argument(
+        "--repo-id",
+        help="repository to run trace-review for (required if multiple repos)",
     )
 
     # --- module-curator command ---
