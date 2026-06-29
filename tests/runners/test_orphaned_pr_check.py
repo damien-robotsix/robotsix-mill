@@ -60,7 +60,13 @@ def _ticket(ticket_id: str = "20250101T000000Z-test-ticket-a1b2", **kw):
 _PR_STATUS_NOT_SET = object()
 
 
-def _mock_forge(*, open_branches=None, pr_status=_PR_STATUS_NOT_SET, pr_files=None, bot_login="mill-bot"):
+def _mock_forge(
+    *,
+    open_branches=None,
+    pr_status=_PR_STATUS_NOT_SET,
+    pr_files=None,
+    bot_login="mill-bot",
+):
     """Build a mock forge object with configurable return values."""
     forge = MagicMock()
     branches = open_branches or set()
@@ -772,7 +778,10 @@ class TestHumanPrAuthorSkipped:
         )
         # Override list_open_prs to return a human author on a mill-prefix branch
         forge.list_open_prs.return_value = [
-            {"branch": "mill/20250101T000000Z-human-branch-a1b2", "author_login": "real-human"}
+            {
+                "branch": "mill/20250101T000000Z-human-branch-a1b2",
+                "author_login": "real-human",
+            }
         ]
         forge.get_authenticated_user_login.return_value = "mill-bot"
         _install_seams(monkeypatch, s, forge, svc)
@@ -839,7 +848,10 @@ class TestHumanPrAuthorSkipped:
             open_branches={"mill/20250101T000000Z-other-a1b2"},
         )
         forge.list_open_prs.return_value = [
-            {"branch": "mill/20250101T000000Z-other-a1b2", "author_login": "someone-else"}
+            {
+                "branch": "mill/20250101T000000Z-other-a1b2",
+                "author_login": "someone-else",
+            }
         ]
         _install_seams(monkeypatch, s, forge, svc)
 
@@ -874,9 +886,11 @@ class TestSplitActionCap:
             "mill/file-0002": _ticket("file-0002", state=State.ERRORED),
             "mill/file-0003": _ticket("file-0003", state=State.ERRORED),
         }
+
         def _get(ticket_id):
             branch = f"mill/{ticket_id}"
             return tickets.get(branch)
+
         svc.get.side_effect = _get
         forge = _mock_forge(open_branches=set(tickets))
         forge.list_open_prs.return_value = [
@@ -913,9 +927,11 @@ class TestSplitActionCap:
             {"branch": b, "author_login": "mill-bot"} for b in tickets
         ]
         forge.pr_files.return_value = [{"path": "x.py", "additions": 1, "deletions": 0}]
+
         def _get(ticket_id):
             branch = f"mill/{ticket_id}"
             return tickets.get(branch)
+
         svc.get.side_effect = _get
         _install_seams(monkeypatch, s, forge, svc)
 
