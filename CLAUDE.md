@@ -13,17 +13,17 @@ registered repo.  Each pass is config-gated and respects dry-run mode.
 
 ### Orphaned-PR check
 
-Detects open PRs on managed repos that have no active mill ticket driving
-them and either auto-closes obsolete ones or files a tracking ticket.
+Detects open PRs on managed repos with no active mill ticket driving them
+and either auto-closes obsolete ones or files a tracking ticket.
 
 **Enabling.**  Opt-in — default `false`.  Set `orphaned_pr_check_periodic`
 (env `MILL_ORPHANED_PR_CHECK_PERIODIC`) or YAML `orphaned_pr_check.enabled`
 to `true`.
 
-**Dry-run.**  Default `true` (safe).  All actions are logged but no forge
-mutations occur.  Set `orphaned_pr_dry_run` (YAML
-`orphaned_pr_check.dry_run`) to `false` for real closes and ticket filing.
-Every log line carries `dry_run=true/false`.
+**Dry-run.**  Default `true` (safe).  Logs all actions but makes no forge
+mutations.  Set `orphaned_pr_dry_run` (YAML `orphaned_pr_check.dry_run`)
+to `false` for real closes and ticket filing.  Every log line carries
+`dry_run=true/false`.
 
 **Age guard.**  A PR whose tracking ticket was created within
 `orphaned_pr_min_age_hours` (YAML `orphaned_pr_check.min_age_hours`,
@@ -35,8 +35,7 @@ close + file-ticket actions per pass.  Findings beyond the cap are
 deferred to the next pass; the remaining count is logged at `INFO`.
 The sibling dep (`20260628T233938Z`) adds per-type sub-caps
 `orphaned_pr_max_closes_per_pass` and `orphaned_pr_max_files_per_pass`
-that enforce independently while the combined cap also applies
-(not yet in the settings file).
+that enforce independently alongside the combined cap (not yet in code).
 
 **Author & branch guard.**  Only branches matching `settings.branch_prefix`
 are evaluated.  **Human-authored PRs are never touched.**  The author
@@ -44,7 +43,7 @@ check uses `orphaned_pr_bot_logins` (explicit bot login list) or falls
 back to `get_authenticated_user_login()`; when both resolve empty the
 author check is skipped with a `WARNING` (fail-open) while the
 branch-prefix filter remains active.  `orphaned_pr_bot_logins` is added
-by the sibling dep and not yet in the settings file.
+by the sibling dep and not yet in the codebase.
 
 **Classification & actions.**  Each orphaned mill PR lands in one of
 two buckets:
