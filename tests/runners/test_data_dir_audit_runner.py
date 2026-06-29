@@ -1476,6 +1476,24 @@ def test_scan_board_sizes_files_and_dirs(tmp_path):
     assert sizes["sub/"]["size_bytes"] == 6
 
 
+def test_scan_board_sizes_excludes_sqlite_transient_sidecars(tmp_path):
+    """SQLite WAL/SHM/journal sidecars are skipped so their normal
+    checkpoint fluctuation never produces growth findings."""
+    board = tmp_path / "board"
+    board.mkdir()
+    (board / "mill.db").write_bytes(b"x" * 100)
+    (board / "mill.db-wal").write_bytes(b"x" * 5000)
+    (board / "mill.db-shm").write_bytes(b"x" * 3000)
+    (board / "mill.db-journal").write_bytes(b"x" * 2000)
+
+    sizes = _scan_board_sizes(board)
+
+    assert sizes["mill.db"]["size_bytes"] == 100
+    assert "mill.db-wal" not in sizes
+    assert "mill.db-shm" not in sizes
+    assert "mill.db-journal" not in sizes
+
+
 def test_scan_board_sizes_deep_nesting_no_double_count(tmp_path):
     """Verify the double-counting bug is fixed: parent directories sum
     each file exactly once."""

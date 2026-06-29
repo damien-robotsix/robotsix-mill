@@ -174,15 +174,27 @@ def _enumerate_boards(settings: Settings) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+# SQLite transient sidecar suffixes excluded from growth tracking (they
+# fluctuate with checkpoints and are not real disk growth).
+_SQLITE_TRANSIENT_SUFFIXES = (".db-wal", ".db-shm", ".db-journal")
+
+
 def _record_entry(
     entry: Path, board_dir: Path, result: dict[str, dict[str, Any]]
 ) -> None:
     """Add a single filesystem *entry* to *result* if it qualifies.
 
-    Symlinks, unreadable entries, and the audit state file itself are
-    skipped silently.
+    Symlinks, unreadable entries, the audit state file, and SQLite's
+    transient sidecar files are skipped silently.
     """
     if entry.is_symlink():
+        return
+    # SQLite's transient sidecars (WAL / shared-memory / rollback journal)
+    # fluctuate normally with checkpoints — a growing ``.db-wal`` is buffered
+    # writes pending a checkpoint, not a disk leak. Tracking them produces
+    # recurring false-positive "growth mill.db-wal" findings, so skip them
+    # (the backing ``.db`` is still tracked).
+    if entry.name.endswith(_SQLITE_TRANSIENT_SUFFIXES):
         return
     try:
         stat = entry.stat()
