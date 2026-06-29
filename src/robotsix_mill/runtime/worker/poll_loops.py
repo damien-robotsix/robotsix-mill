@@ -570,6 +570,7 @@ class PollLoopsMixin(_WorkerBase):
                 continue
 
             wf_name = run.get("name", "unknown")
+            wf_path = run.get("path", "")
             run_id_val = run.get("id")
             title = f"CI failure: {wf_name} on {target}"
 
@@ -685,6 +686,7 @@ class PollLoopsMixin(_WorkerBase):
             # Build draft body.
             body_parts = [
                 f"**Workflow:** {wf_name}",
+                f"**Path:** {wf_path}",
                 f"**Branch:** {target}",
                 f"**Run:** [{run_id_val}]({run.get('html_url', '')})",
                 f"**Commit:** `{run.get('head_sha', '')}`",
@@ -717,8 +719,7 @@ class PollLoopsMixin(_WorkerBase):
             # and check for a recent (≤ lookback_days) ticket with
             # the same signature.  When matched, add a consolidation
             # comment instead of filing a duplicate draft.
-            fingerprint = _ci_draft_fingerprint(body)
-            wf_path = run.get("path", "")
+            fingerprint = _ci_draft_fingerprint(body, path=wf_path)
             prior = find_prior_matching_ticket(
                 service,
                 rc.board_id,

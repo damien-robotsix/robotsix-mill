@@ -716,6 +716,7 @@ def test_obsolescence_gate_check_raises_is_swallowed(ctx_factory, monkeypatch):
 
 _CI_DRAFT_BODY = """\
 **Workflow:** CI
+**Path:** .github/workflows/ci.yml
 **Branch:** main
 **Run:** [1234567890](https://github.com/owner/repo/actions/runs/1234567890)
 **Commit:** `abc123def456`
@@ -905,6 +906,7 @@ def test_inflight_advisory_ci_different_fingerprint_no_overlap(
     # Second CI ticket with DIFFERENT error.
     different_body = """\
 **Workflow:** CI
+**Path:** .github/workflows/ci.yml
 **Branch:** main
 **Run:** [5555555555](https://github.com/owner/repo/actions/runs/5555555555)
 **Commit:** `ccccddddeeee`

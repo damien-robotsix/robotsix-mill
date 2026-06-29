@@ -488,7 +488,14 @@ class RefineGatesMixin:
         if ticket.source == SourceKind.CI:
             from ...core.dedup import _ci_draft_fingerprint
 
-            fp = _ci_draft_fingerprint(draft)
+            # Extract workflow file path from the **Path:** metadata line.
+            _wf_path = ""
+            for line in draft.splitlines():
+                if line.strip().startswith("**Path:**"):
+                    _wf_path = line.strip()[len("**Path:**") :].strip()
+                    break
+
+            fp = _ci_draft_fingerprint(draft, path=_wf_path)
             label = f"ci_fp:{fp}"
             dedup_labels = [label]
             # Store fingerprint label on THIS ticket for future dedup checks.

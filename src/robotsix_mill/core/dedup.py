@@ -42,6 +42,7 @@ def normalize(s: str) -> str:
 # Metadata line prefixes from CI monitor draft bodies.
 _CI_DRAFT_META_PREFIXES = (
     "**Workflow:**",
+    "**Path:**",
     "**Branch:**",
     "**Run:**",
     "**Commit:**",
@@ -60,12 +61,15 @@ _ISO8601_RE = re.compile(
 _GH_RUN_URL_RE = re.compile(r"https?://github\.com/[^/\s]+/[^/\s]+/actions/runs/\d+\S*")
 
 
-def _ci_draft_fingerprint(body: str) -> str:
+def _ci_draft_fingerprint(body: str, *, path: str = "") -> str:
     """Compute a stable hex fingerprint from a CI monitor draft *body*.
 
     Strips metadata lines, run-specific data (URLs, commit SHAs,
     timestamps), and ANSI escapes so the fingerprint reflects the
-    ERROR CONTENT only.  Returns the first 16 hex digits of SHA-256.
+    ERROR CONTENT only.  When *path* is non-empty (the workflow file
+    path, e.g. ``.github/workflows/ci.yml``), it is prepended so
+    that the same error in different workflows produces distinct
+    fingerprints.  Returns the first 16 hex digits of SHA-256.
     """
     lines: list[str] = []
     for line in body.splitlines():
@@ -84,6 +88,8 @@ def _ci_draft_fingerprint(body: str) -> str:
 
     # Collapse remaining whitespace.
     collapsed = re.sub(r"\s+", " ", " ".join(lines)).strip()
+    if path:
+        collapsed = path + "\n" + collapsed
     return hashlib.sha256(collapsed.encode("utf-8")).hexdigest()[:16]
 
 
