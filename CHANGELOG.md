@@ -2,6 +2,9 @@
 
 - **config**: bump `dedup_request_limit` / `dedup_requests` from 6 to 12
   to reduce budget-exhaustion failures during refine-stage dedup checks.
+- **refine**: extract `_triage_outcome` helper from `_triage.py` to
+  eliminate repeated draft-original.md + file_map.json + resolved_outcome
+  boilerplate across five triage decision handlers.
 - **agents**: remove the 30-row history cap and 15-row comment cap from
   the `read_ticket` agent tool so agents receive the complete history and
   comment log (the 6000-character overall output cap still guards against
