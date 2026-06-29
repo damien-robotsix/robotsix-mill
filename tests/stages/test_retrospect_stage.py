@@ -1415,12 +1415,13 @@ def test_is_noop_draft():
 # ------------------------------------------------------------------
 
 
-def test_agented_proposals_written_to_candidates_file(ctx_factory, monkeypatch):
-    """When agent returns agented_md_proposals, they are appended to
-    AGENT_CANDIDATES.md in the persistent per-board data directory
-    (outside the ephemeral clone)."""
+def test_agented_proposals_file_tickets_not_candidates_file(ctx_factory, monkeypatch):
+    """When agent returns agented_md_proposals, draft tickets are filed
+    on the originating board — but AGENT_CANDIDATES.md is NOT written by
+    the stage (the candidates file is no longer a stage sink)."""
     from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.runners import pass_runner
+    from robotsix_mill.core.models import SourceKind
 
     ctx = ctx_factory()
 
@@ -1466,15 +1467,21 @@ def test_agented_proposals_written_to_candidates_file(ctx_factory, monkeypatch):
 
     assert out.next_state is State.CLOSED
 
-    # AGENT_CANDIDATES.md in persistent per-board data dir, NOT in the
-    # ephemeral clone that prune_clone would wipe.
+    # AGENT_CANDIDATES.md must NOT be written by the stage.
     s = ctx.settings
     candidates_path = s.data_dir / "test-board" / "AGENT_CANDIDATES.md"
-    assert candidates_path.exists()
-    content = candidates_path.read_text()
-    assert "### Proposed addition to ## Board UI" in content
-    assert "Always update board.js when adding new UI elements" in content
-    assert "Observed on T-abc, T-def, T-ghi" in content
+    assert not candidates_path.exists()
+
+    # A draft ticket for the proposal must be filed.
+    spawned = [tk for tk in ctx.service.list() if tk.id != t.id]
+    assert len(spawned) == 1
+    assert spawned[0].state is State.DRAFT
+    assert spawned[0].source == SourceKind.RETROSPECT
+    assert spawned[0].parent_id == t.id
+    assert "Board UI" in spawned[0].title
+    body = ctx.service.workspace(spawned[0]).read_description()
+    assert "Always update board.js when adding new UI elements" in body
+    assert "Observed on T-abc, T-def, T-ghi" in body
 
 
 def test_agented_proposals_none_no_file_created(ctx_factory, monkeypatch):
@@ -1570,25 +1577,20 @@ def test_agented_proposals_empty_list_no_file_created(ctx_factory, monkeypatch):
     assert not candidates_path.exists()
 
 
-def test_agented_proposals_append_only(ctx_factory, monkeypatch):
-    """When AGENT_CANDIDATES.md already exists in the persistent data dir,
-    new proposals are appended without overwriting."""
+def test_agented_proposals_second_run_files_distinct_ticket(ctx_factory, monkeypatch):
+    """When a prior run already filed a proposal ticket, a second run
+    with a DISTINCT proposal files a new ticket (no candidates file
+    written by the stage)."""
     from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.runners import pass_runner
+    from robotsix_mill.core.models import SourceKind
 
     ctx = ctx_factory()
 
-    # Pre-populate the persistent candidates file for this board.
-    s = ctx.settings
-    candidates_path = s.data_dir / "test-board" / "AGENT_CANDIDATES.md"
-    candidates_path.parent.mkdir(parents=True, exist_ok=True)
-    candidates_path.write_text(
-        "### Proposed addition to ## Prior Section\n\n"
-        "> **Rule:** Old rule.\n\n"
-        "**Rationale:** prior rationale.\n\n"
-        "**Proposed:** 2026-05-30 10:00 UTC (from 20260530T100000Z-prior-aaaa)\n\n"
-        "---\n",
-        encoding="utf-8",
+    # Pre-populate a prior proposal ticket on the board.
+    ctx.service.create(
+        "AGENT.md: Prior Section — Old rule.",
+        "prior proposal body",
     )
 
     monkeypatch.setattr(
@@ -1633,13 +1635,20 @@ def test_agented_proposals_append_only(ctx_factory, monkeypatch):
 
     assert out.next_state is State.CLOSED
 
-    content = candidates_path.read_text()
-    # Old content is preserved
-    assert "### Proposed addition to ## Prior Section" in content
-    assert "Old rule" in content
-    # New content is appended after
-    assert "### Proposed addition to ## Board UI" in content
-    assert "Always update board.js" in content
+    # Stage does NOT write AGENT_CANDIDATES.md.
+    candidates_path = ctx.settings.data_dir / "test-board" / "AGENT_CANDIDATES.md"
+    assert not candidates_path.exists()
+
+    # A new distinct proposal ticket is filed alongside the pre-existing one.
+    spawned = [
+        tk
+        for tk in ctx.service.list()
+        if tk.id != t.id and tk.title.startswith("AGENT.md: Board UI")
+    ]
+    assert len(spawned) == 1
+    assert spawned[0].state is State.DRAFT
+    assert spawned[0].source == SourceKind.RETROSPECT
+    assert "Always update board.js" in spawned[0].title
 
 
 def test_agented_proposals_gated_by_setting(ctx_factory, monkeypatch):
@@ -1695,10 +1704,12 @@ def test_agented_proposals_gated_by_setting(ctx_factory, monkeypatch):
     s = ctx.settings
     candidates_path = s.data_dir / "test-board" / "AGENT_CANDIDATES.md"
     assert not candidates_path.exists()
+    # No proposal tickets filed either.
+    assert [tk.id for tk in ctx.service.list()] == [t.id]
 
 
 # ------------------------------------------------------------------
-# 18. AGENT.md proposal ticket filing (in addition to the candidates file)
+# 18. AGENT.md proposal ticket filing
 # ------------------------------------------------------------------
 
 
@@ -1869,8 +1880,7 @@ def test_agented_proposal_tickets_dedup_on_repeat(ctx_factory, monkeypatch):
 
 def test_agented_proposal_suppressed_vs_inflight_draft(ctx_factory, monkeypatch):
     """A scope-equivalent proposal whose matching ticket is already in
-    flight (DRAFT) is suppressed before BOTH sinks: no new proposal
-    ticket is filed, nothing is appended to AGENT_CANDIDATES.md, and the
+    flight (DRAFT) is suppressed: no new proposal ticket is filed, and the
     suppression is recorded in res.findings / retrospect.md."""
     ctx = ctx_factory()
     _agented_seams(monkeypatch)
@@ -1961,7 +1971,7 @@ def test_agented_proposal_suppressed_vs_done(ctx_factory, monkeypatch):
 
 def test_agented_proposal_distinct_not_suppressed(ctx_factory, monkeypatch):
     """A genuinely new proposal (distinct section/rule, no prior match)
-    is filed normally and written to the candidates file."""
+    is filed normally."""
     ctx = ctx_factory()
     _agented_seams(monkeypatch)
 
@@ -1996,11 +2006,6 @@ def test_agented_proposal_distinct_not_suppressed(ctx_factory, monkeypatch):
         if tk.id != t.id and tk.title.startswith("AGENT.md: Board UI")
     ]
     assert len(spawned) == 1
-
-    candidates_path = ctx.settings.data_dir / "test-board" / "AGENT_CANDIDATES.md"
-    assert candidates_path.exists()
-    ctext = candidates_path.read_text()
-    assert "Always update board.js when adding new UI." in ctext
 
 
 # ---------------------------------------------------------------------------

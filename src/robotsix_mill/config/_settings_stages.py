@@ -327,8 +327,8 @@ class _StagesSettings(BaseModel):
     # human-gate-after-refine exists, that draft auto-flows to done and
     # is retrospected again — set False to analyse without spawning.
     retrospect_spawn_drafts: bool = Field(default=True)
-    # When True, retrospect may append AGENT.md proposals to
-    # AGENT_CANDIDATES.md for human review.
+    # When True, retrospect files a draft ticket per AGENT.md
+    # proposal on the originating repo's board.
     retrospect_spawn_agented_proposals: bool = Field(
         default=True, alias="MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS"
     )

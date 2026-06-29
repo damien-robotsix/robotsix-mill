@@ -445,12 +445,11 @@ class RetrospectStage(Stage):
         ctx: StageContext,
     ) -> None:
         """Drop AGENT.md proposals that duplicate a recently-filed or
-        in-flight proposal before either sink (AGENT_CANDIDATES.md or
-        the direct ticket-filing path) writes.
+        in-flight proposal before the ticket-filing sink writes.
 
         Runs once over ``res.agented_md_proposals`` and reassigns it to
-        the surviving (non-duplicate) proposals so BOTH downstream
-        ``_maybe_*`` calls see only the survivors. Each suppression is
+        the surviving (non-duplicate) proposals so the downstream
+        ticket-filing call sees only the survivors. Each suppression is
         recorded in ``res.findings`` (persisted into retrospect.md).
 
         Reuses the shared
@@ -502,87 +501,6 @@ class RetrospectStage(Stage):
             )
         res.agented_md_proposals = kept
 
-    def _maybe_write_agented_proposals(
-        self,
-        res: RetrospectResult,
-        ticket: Ticket,
-        settings: Settings,
-        ctx: StageContext,
-    ) -> None:
-        """Conditionally append AGENT.md proposals to AGENT_CANDIDATES.md.
-
-        Only writes when the setting is enabled and proposals are non-empty.
-        Appends only — never overwrites existing proposals.
-
-        Written outside the ephemeral clone to a persistent per-board
-        location that survives ``prune_clone``, following the same
-        pattern as the memory ledger
-        (``<data_dir>/<board_id>/retrospect_memory.md``).
-        """
-        if not settings.retrospect_spawn_agented_proposals:
-            return
-        proposals = res.agented_md_proposals
-        if not proposals:
-            return
-
-        from datetime import datetime, timezone
-
-        board_id = ctx.repo_config.board_id if ctx.repo_config else ""
-        candidates_path = (
-            settings.data_dir / board_id / "AGENT_CANDIDATES.md"
-            if board_id
-            else settings.data_dir / "AGENT_CANDIDATES.md"
-        )
-        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-
-        blocks: list[str] = []
-        # If the file exists, prepend a blank newline before the first new block.
-        if candidates_path.exists():
-            blocks.append("")
-        else:
-            candidates_path.parent.mkdir(parents=True, exist_ok=True)
-
-        for prop in proposals:
-            section = prop.get("section", "")
-            rule = prop.get("rule", "")
-            rationale = prop.get("rationale", "")
-            block = (
-                f"### Proposed addition to {section}\n\n"
-                f"> **Rule:** {rule}\n\n"
-                f"**Rationale:** {rationale}\n\n"
-                f"**Proposed:** {timestamp} (from {ticket.id})\n\n"
-                f"---\n"
-            )
-            blocks.append(block)
-
-        content = "\n".join(blocks) + "\n"
-        mode = "a" if candidates_path.exists() else "w"
-        with open(candidates_path, mode, encoding="utf-8") as fh:
-            fh.write(content)
-
-        log.info(
-            "%s: wrote %d AGENT.md proposal(s) to %s",
-            ticket.id,
-            len(proposals),
-            candidates_path,
-        )
-
-        # Bounded-retention sweep: prune resolved entries and cap total
-        # size so this append-only file can't grow without bound. The
-        # helper no-ops when the cap is disabled (<= 0).
-        from ..agents.candidates import prune_candidates
-
-        dropped = prune_candidates(
-            candidates_path, settings.retrospect_candidates_max_entries
-        )
-        if dropped > 0:
-            log.info(
-                "%s: pruned %d resolved AGENT.md candidate(s) from %s",
-                ticket.id,
-                dropped,
-                candidates_path,
-            )
-
     def _maybe_spawn_agented_proposal_tickets(
         self,
         res: RetrospectResult,
@@ -593,17 +511,13 @@ class RetrospectStage(Stage):
         """File a draft ticket per AGENT.md proposal on the originating
         repo's board.
 
-        Gated by the same ``retrospect_spawn_agented_proposals`` flag as
-        the AGENT_CANDIDATES.md write. AGENT.md proposals are always
+        Gated by the ``retrospect_spawn_agented_proposals`` flag.
+        AGENT.md proposals are always
         relative to the repo retrospect just audited, so they are filed
         on ``ctx.service`` — for a registered-repo run
         ``ctx.service.board_id == ctx.repo_config.board_id``, i.e. *this*
         repo's board. No mill-routing is applied: a proposal made for
         repo X must land on repo X's board, never on mill.
-
-        (This direct-filing path makes the manual AGENT_CANDIDATES.md
-        validation gate partly redundant; retiring that path is a
-        deliberate follow-up, not this ticket.)
 
         Returns the list of filed draft IDs (possibly empty).
         """
@@ -894,10 +808,9 @@ class RetrospectStage(Stage):
         spawned = self._maybe_spawn_draft(res, ticket, s, ctx)
         follow_up = self._maybe_spawn_follow_up(res, ticket, s, ctx)
         self._suppress_duplicate_agented_proposals(res, ticket, s, ctx)
-        self._maybe_write_agented_proposals(res, ticket, s, ctx)
-        # In addition to the candidates file, file a draft ticket per
-        # AGENT.md proposal on the originating repo's board so the change
-        # enters the normal refine → implement pipeline.
+        # File a draft ticket per AGENT.md proposal on the originating
+        # repo's board so the change enters the normal refine → implement
+        # pipeline.
         self._maybe_spawn_agented_proposal_tickets(res, ticket, s, ctx)
 
         (ws.artifacts_dir / "retrospect.md").write_text(
