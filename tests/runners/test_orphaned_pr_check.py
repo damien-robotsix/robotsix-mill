@@ -652,8 +652,7 @@ class TestIdempotentFileTicket:
         assert result.skipped == 0
         title = svc.create.call_args.kwargs["title"]
         assert title == (
-            "Track orphaned PR: test-owner/test-repo/"
-            "mill/20250101T000000Z-orphan-a1b2"
+            "Track orphaned PR: test-owner/test-repo/mill/20250101T000000Z-orphan-a1b2"
         )
 
     def test_second_pass_is_noop_when_open_ticket_exists(self, monkeypatch):

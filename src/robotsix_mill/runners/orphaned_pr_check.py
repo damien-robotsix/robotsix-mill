@@ -380,7 +380,9 @@ def _classify_branches(
             and _orphan_ticket_title(repo_config, cpr.branch) in open_orphan_titles
         )
 
-        action = "CLOSE" if should_close else ("DEDUP_SKIP" if is_dedup else "FILE_TICKET")
+        action = (
+            "CLOSE" if should_close else ("DEDUP_SKIP" if is_dedup else "FILE_TICKET")
+        )
         state_label = cpr.ticket_state or "NOT_FOUND"
         log_line = (
             f"repo={repo_config.repo_id} branch={cpr.branch} "
