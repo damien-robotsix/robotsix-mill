@@ -1,5 +1,10 @@
 ## 0.0.0 (unreleased)
 
+- **fs_tools**: `list_dir` returns a graceful error message for
+  non-existent directories instead of letting `iterdir()` raise
+  `FileNotFoundError`, which was recorded as an exception in
+  OpenTelemetry traces and polluted observability for refine/review
+  stages probing deleted paths.
 - **refine**: add a deterministic code-block density check that skips the
   triage LLM and full refine agent when a ticket draft contains ≥50 lines
   inside fenced code blocks (prescriptive specs whose implementation is
