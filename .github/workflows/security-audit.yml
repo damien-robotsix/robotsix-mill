@@ -141,6 +141,7 @@ jobs:
             robotsix-yaml-config  # first-party MIT lib, git dep (git+https://github.com/damien-robotsix/robotsix-yaml-config)
             robotsix-modules      # first-party MIT lib, transitive git dep of robotsix-llmio / robotsix-mill
             tiktoken              # MIT (OpenAI; verified license text in metadata) but ships full MIT text as License field w/ no classifier, so --from=mixed reports the whole blob and the allowlist tokens can't match
+            python-gitlab         # LGPLv3; transitive dev-only dep of python-semantic-release (release automation tooling). Never distributed — installed only in CI/dev environments as a build-time helper. LGPL copyleft scope is limited to the library itself; mill does not link against or redistribute python-gitlab.
           )
           uv run pip-licenses \
             --from=mixed \
