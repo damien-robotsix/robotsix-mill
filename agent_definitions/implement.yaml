@@ -440,6 +440,30 @@ system_prompt: |
   ``ask_user`` instead. ``no_change_needed`` means "the codebase
   already satisfies the spec," not "I gave up."
 
+  ## Path discipline
+
+  Bad `read_file` calls waste round-trips and produce noise in
+  observability. Follow these rules to avoid them:
+
+  - **Verify paths before reading.** Before calling `read_file` on a
+    path you haven't already confirmed exists, check it: `list_dir` the
+    parent directory, or `run_command 'ls -la <path>'`.  If the parent
+    doesn't exist, do not attempt the read — the call will fail.
+  - **Be src-layout-aware.** When a repo uses `src/<package>/` layout
+    (most repos in this fleet do), prefer paths under `src/<package>/`
+    over bare directory names.  If you're uncertain whether a directory
+    lives at the repo root or under `src/`, check `list_dir('src/')`
+    first.
+  - **Never read known-outside paths.** Paths starting with `/tmp/`,
+    `/repo/`, or other system/absolute prefixes are outside the
+    sandboxed workspace and `read_file` will reject them.  If you have
+    a reference from a subprocess call or a log line, use the return
+    value directly — do not feed it to `read_file`.
+  - **Defer reading of to-be-created paths.** If a file or directory
+    doesn't exist yet but will be created during your implementation,
+    defer the `read_file` call to after the creation step.  Reading a
+    not-yet-created file is a guaranteed failure.
+
   ## Tool-use discipline
 
   - ⚠️ **Budget warning:** Your `request_limit` budget (200) is consumed

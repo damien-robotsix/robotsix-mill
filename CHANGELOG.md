@@ -16,6 +16,11 @@
 - **refine**: extract `_triage_outcome` helper from `_triage.py` to
   eliminate repeated draft-original.md + file_map.json + resolved_outcome
   boilerplate across five triage decision handlers.
+- **agents**: add path-discipline guidance to implement, document,
+  refine, and review agent system prompts: verify paths before reading
+  (check parent exists), be src-layout-aware (prefer `src/<package>/`
+  paths), never read known-outside paths (`/tmp/`, `/repo/`), and
+  defer reading of to-be-created files.
 - **review**: scope the LLM reviewer's SHA-pin audit instruction to
   only actions added or modified by the diff, preventing false-positive
   REQUEST_CHANGES on pre-existing action refs in unchanged workflow
