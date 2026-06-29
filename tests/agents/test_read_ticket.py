@@ -248,11 +248,11 @@ def test_truncation_long_description(settings, service):
 
 
 def test_truncation_many_history_events(settings, service, monkeypatch):
-    """When there are > 30 history events, only the last 30 are shown
-    and an omission note appears."""
+    """When there are many history events, all are shown (no row cap).
+    The overall _RESULT_CAP may still truncate at the character level."""
     t = service.create("Many-events ticket")
 
-    # Build 35 synthetic events (more than the 30 limit)
+    # Build 35 synthetic events (more than the old 30 limit)
     now = datetime.now(timezone.utc)
     events = []
     for i in range(35):
@@ -277,14 +277,16 @@ def test_truncation_many_history_events(settings, service, monkeypatch):
     tool = make_read_ticket_tool(settings)
     result = tool(t.id)
 
-    assert "5 earlier events omitted" in result
-    # Only 30 events shown — "event 0" through "event 4" should be omitted
-    assert "event 0" not in result
-    assert "event 34" in result  # most recent should be shown first
+    # No omission note — all events are shown
+    assert "earlier events omitted" not in result
+    # All events should be present (35 events × ~50 chars ≈ 1750 < 6000 cap)
+    assert "event 0" in result
+    assert "event 34" in result
 
 
 def test_truncation_many_comments(settings, service):
-    """When there are > 15 comments, only the last 15 are shown."""
+    """When there are many comments, all are shown (no row cap).
+    The overall _RESULT_CAP may still truncate at the character level."""
     t = service.create("Many-comments ticket")
 
     for i in range(20):
@@ -293,9 +295,10 @@ def test_truncation_many_comments(settings, service):
     tool = make_read_ticket_tool(settings)
     result = tool(t.id)
 
-    assert "5 earlier comments omitted" in result
-    # Oldest comments omitted, newest shown
-    assert "Comment 0" not in result
+    # No omission note — all comments shown
+    assert "earlier comments omitted" not in result
+    # All comments present
+    assert "Comment 0" in result
     assert "Comment 19" in result
 
 
