@@ -24,7 +24,11 @@ from ..core.states import State
 from ..core.text_noop import is_noop_report
 from ..core.text_utils import truncate_at_boundary
 from ..core.workspace import prune_clone
-from ..core.draft_target import looks_like_mill_internal, resolve_mill_service
+from ..core.draft_target import (
+    has_unverifiable_cross_repo_refs,
+    looks_like_mill_internal,
+    resolve_mill_service,
+)
 from ..forge import get_forge
 from ..runtime.tracing import current_session
 from .base import Outcome, Stage, StageContext
@@ -804,6 +808,51 @@ class RetrospectStage(Stage):
 
         if persisted:
             persist_memory(memory_file, persisted, max_chars=s.max_memory_chars)
+
+        # Guard against unverifiable cross-repo follow-ups: when the
+        # agent proposes a draft or follow-up whose body references
+        # source paths in a different repo (package root absent from
+        # the current clone), skip it — the agent cannot verify the
+        # consumer repo's current state from this workspace.
+        if repo_dir is not None:
+            cross_repo_notes: list[str] = []
+
+            if (
+                res.follow_up_title
+                and res.follow_up_target == "current"
+                and has_unverifiable_cross_repo_refs(
+                    res.follow_up_title, res.follow_up_body, repo_dir
+                )
+            ):
+                cross_repo_notes.append(
+                    f"Skipped unverifiable cross-repo follow-up: "
+                    f"{res.follow_up_title}. The follow-up references "
+                    f"code in a different repo — consumer-side wiring "
+                    f"must be verified manually."
+                )
+                res.follow_up_title = None
+                res.follow_up_body = None
+
+            if (
+                res.draft_title
+                and res.draft_target == "current"
+                and has_unverifiable_cross_repo_refs(
+                    res.draft_title, res.draft_body, repo_dir
+                )
+            ):
+                cross_repo_notes.append(
+                    f"Skipped unverifiable cross-repo draft: {res.draft_title}"
+                )
+                res.draft_title = None
+                res.draft_body = None
+                res.propose_draft = False
+
+            if cross_repo_notes:
+                res.findings += "\n\n## Cross-repo guard\n\n" + "\n\n".join(
+                    cross_repo_notes
+                )
+                for note in cross_repo_notes:
+                    log.info("%s: %s", ticket.id, note)
 
         spawned = self._maybe_spawn_draft(res, ticket, s, ctx)
         follow_up = self._maybe_spawn_follow_up(res, ticket, s, ctx)

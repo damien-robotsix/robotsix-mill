@@ -1426,3 +1426,185 @@ def test_guard_does_not_fire_when_langfuse_present(tmp_path, monkeypatch):
     )
     assert isinstance(out, RetrospectResult)
     assert calls, "the agent path must be taken when Langfuse data is present"
+
+
+# ---------------------------------------------------------------------------
+# Cross-repo guard tests
+# ---------------------------------------------------------------------------
+
+
+def test_cross_repo_follow_up_skipped(tmp_path, monkeypatch):
+    """A follow-up whose body references a package not in the
+    workspace is skipped and a note is added to findings."""
+    ctx = _ctx(tmp_path)
+    _no_langfuse(monkeypatch)
+
+    # Create a fake workspace repo_dir with only the local package.
+    repo_dir = tmp_path / "repo"
+    (repo_dir / "src" / "robotsix_llmio").mkdir(parents=True)
+    # But NOT src/robotsix_chat — that's the cross-repo reference.
+
+    # Monkeypatch workspace to return our fake repo_dir.
+    orig_workspace = ctx.service.workspace
+
+    class _FakeWorkspace:
+        def __init__(self, ws):
+            self._ws = ws
+
+        @property
+        def repo_dir(self):
+            return repo_dir
+
+        @property
+        def artifacts_dir(self):
+            return self._ws.artifacts_dir
+
+        def __getattr__(self, name):
+            return getattr(self._ws, name)
+
+    def fake_workspace(ticket):
+        return _FakeWorkspace(orig_workspace(ticket))
+
+    monkeypatch.setattr(ctx.service, "workspace", fake_workspace)
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _default_result(
+            findings="new module found",
+            conclusion="follow-up proposed",
+            follow_up_title="Wire build_refdocs_tools in create_agent_from_settings",
+            follow_up_body=(
+                "Add call in src/robotsix_chat/chat/server/app.py "
+                "line 381 — build_refdocs_tools(settings.refdocs)"
+            ),
+            follow_up_target="current",
+        ),
+    )
+
+    t = _done(ctx)
+    out = RetrospectStage().run(t, ctx)
+    assert out.next_state is State.CLOSED
+
+    # No draft should have been spawned (title/body cleared).
+    drafts = [x for x in ctx.service.list() if x.state is State.DRAFT]
+    assert len(drafts) == 0
+
+    # Findings should include the cross-repo guard note.
+    artifact = (ctx.service.workspace(t).artifacts_dir / "retrospect.md").read_text()
+    assert "Cross-repo guard" in artifact
+    assert "unverifiable cross-repo" in artifact
+    assert "follow-up:" in artifact
+    assert "—" in artifact.split("follow-up:")[1].split("\n")[0]  # no follow-up ID
+
+
+def test_cross_repo_guard_does_not_block_local_follow_up(tmp_path, monkeypatch):
+    """A follow-up whose body only references local paths is NOT
+    blocked by the cross-repo guard."""
+    ctx = _ctx(tmp_path)
+    _no_langfuse(monkeypatch)
+
+    # Create a fake workspace repo_dir with the local package.
+    repo_dir = tmp_path / "repo"
+    (repo_dir / "src" / "robotsix_llmio").mkdir(parents=True)
+
+    orig_workspace = ctx.service.workspace
+
+    class _FakeWorkspace:
+        def __init__(self, ws):
+            self._ws = ws
+
+        @property
+        def repo_dir(self):
+            return repo_dir
+
+        @property
+        def artifacts_dir(self):
+            return self._ws.artifacts_dir
+
+        def __getattr__(self, name):
+            return getattr(self._ws, name)
+
+    def fake_workspace(ticket):
+        return _FakeWorkspace(orig_workspace(ticket))
+
+    monkeypatch.setattr(ctx.service, "workspace", fake_workspace)
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _default_result(
+            findings="stub found",
+            conclusion="follow-up filed",
+            follow_up_title="Fix stub in src/robotsix_llmio/core/foo.py",
+            follow_up_body="The method is a no-op stub. Wire the real implementation.",
+            follow_up_target="current",
+        ),
+    )
+
+    t = _done(ctx)
+    out = RetrospectStage().run(t, ctx)
+    assert out.next_state is State.CLOSED
+
+    # Draft should have been spawned normally.
+    drafts = [x for x in ctx.service.list() if x.state is State.DRAFT]
+    assert len(drafts) == 1
+    assert drafts[0].title == "Fix stub in src/robotsix_llmio/core/foo.py"
+
+    # Artifact should NOT contain cross-repo guard note.
+    artifact = (ctx.service.workspace(t).artifacts_dir / "retrospect.md").read_text()
+    assert "Cross-repo guard" not in artifact
+    assert "follow-up:" in artifact
+    assert drafts[0].id in artifact
+
+
+def test_cross_repo_mill_target_not_blocked(tmp_path, monkeypatch):
+    """A follow-up with follow_up_target='mill' is NOT blocked by
+    the cross-repo guard even if it references mill paths."""
+    ctx = _ctx(tmp_path)
+    _no_langfuse(monkeypatch)
+
+    # Create a fake workspace repo_dir with only the local package.
+    repo_dir = tmp_path / "repo"
+    (repo_dir / "src" / "robotsix_llmio").mkdir(parents=True)
+
+    orig_workspace = ctx.service.workspace
+
+    class _FakeWorkspace:
+        def __init__(self, ws):
+            self._ws = ws
+
+        @property
+        def repo_dir(self):
+            return repo_dir
+
+        @property
+        def artifacts_dir(self):
+            return self._ws.artifacts_dir
+
+        def __getattr__(self, name):
+            return getattr(self._ws, name)
+
+    def fake_workspace(ticket):
+        return _FakeWorkspace(orig_workspace(ticket))
+
+    monkeypatch.setattr(ctx.service, "workspace", fake_workspace)
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _default_result(
+            findings="mill-internal gap found",
+            conclusion="mill follow-up filed",
+            follow_up_title="Fix agent_definitions/retrospect.yaml prompt",
+            follow_up_body="The prompt needs cross-repo guard instructions.",
+            follow_up_target="mill",
+        ),
+    )
+
+    t = _done(ctx)
+    out = RetrospectStage().run(t, ctx)
+    assert out.next_state is State.CLOSED
+
+    # Follow-up should be spawned on the same board (mill resolves to
+    # ctx.service when trace_review_target_repo_id is unset).
+    drafts = [x for x in ctx.service.list() if x.state is State.DRAFT]
+    assert len(drafts) == 1
+    assert "retrospect.yaml" in drafts[0].title
