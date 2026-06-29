@@ -1,5 +1,10 @@
 ## 0.0.0 (unreleased)
 
+- **implement**: stop fabricating GitHub Action commit SHAs when writing
+  workflow files.  The implement agent now emits tag references
+  (e.g., `actions/setup-python@v5.4.0`) instead of attempting to resolve
+  tags to SHAs in the network-isolated sandbox.  Renovate's
+  `pinGitHubActionDigests` preset handles the actual pinning.
 - **ci**: remove `github-actions` ecosystem from Dependabot config to
   silence failing graph-submission check, triggered by external
   reusable workflow references (`.github/workflows/` in cross-org
