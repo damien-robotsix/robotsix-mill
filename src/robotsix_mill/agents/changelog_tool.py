@@ -13,6 +13,7 @@ The tool handles:
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -77,7 +78,7 @@ def _insert_changelog_entry(repo_dir: Path, entry_text: str) -> str:
     return "changelog_insert: inserted entry before existing top entry"
 
 
-def make_insert_changelog_entry_tool(repo_dir: Path):
+def make_insert_changelog_entry_tool(repo_dir: Path) -> Callable[[str], str]:
     """Return the ``insert_changelog_entry`` closure bound to *repo_dir*.
 
     The returned function is synchronous (file I/O only) so it works
