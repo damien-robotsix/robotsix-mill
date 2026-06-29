@@ -1709,7 +1709,7 @@ def test_agented_proposals_gated_by_setting(ctx_factory, monkeypatch):
 
 
 # ------------------------------------------------------------------
-# 18. AGENT.md proposal ticket filing (in addition to the candidates file)
+# 18. AGENT.md proposal ticket filing
 # ------------------------------------------------------------------
 
 

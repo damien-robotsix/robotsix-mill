@@ -5,6 +5,11 @@
   (e.g., `actions/setup-python@v5.4.0`) instead of attempting to resolve
   tags to SHAs in the network-isolated sandbox.  Renovate's
   `pinGitHubActionDigests` preset handles the actual pinning.
+- **retrospect**: retire the `AGENT_CANDIDATES.md` file-writing sink
+  (`_maybe_write_agented_proposals`) so each AGENT.md proposal is
+  filed only as a draft ticket, not duplicated into both a ticket
+  and the candidates review file.  The candidates file and its HTTP
+  routes remain for manual review of externally-added entries.
 - **ci**: remove `github-actions` ecosystem from Dependabot config to
   silence failing graph-submission check, triggered by external
   reusable workflow references (`.github/workflows/` in cross-org

@@ -448,8 +448,8 @@ class RetrospectStage(Stage):
         in-flight proposal before the ticket-filing sink writes.
 
         Runs once over ``res.agented_md_proposals`` and reassigns it to
-        the surviving (non-duplicate) proposals so BOTH downstream
-        ``_maybe_*`` calls see only the survivors. Each suppression is
+        the surviving (non-duplicate) proposals so the downstream
+        ticket-filing call sees only the survivors. Each suppression is
         recorded in ``res.findings`` (persisted into retrospect.md).
 
         Reuses the shared
