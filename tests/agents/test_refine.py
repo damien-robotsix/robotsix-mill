@@ -5185,7 +5185,7 @@ class TestRefineRunawayLoopGuard:
 
 
 def test_max_refine_explore_calls_default():
-    """Default max_refine_explore_calls is 4 (mirrors parallel_explore_max)."""
+    """Default max_refine_explore_calls is 4."""
     s = Settings(data_dir="/tmp")
     assert s.max_refine_explore_calls == 4
 

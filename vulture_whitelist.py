@@ -84,11 +84,6 @@ correct_form
 returncode_on_failure
 
 # -- config ------------------------------------------------------------------
-# parallel_explore_max — Pydantic field, formerly consumed by make_parallel_explore_tool
-# in explore.py; the tool was refactored to batch questions into a single call instead
-# of fanning out across concurrent scouts.  Kept for backward-compat with existing
-# config files that set core.limits.parallel_explore_max.
-parallel_explore_max
 transient_retries
 transient_backoff_base
 transient_backoff_cap

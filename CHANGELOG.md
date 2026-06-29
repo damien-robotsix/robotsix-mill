@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- **config**: remove zombie `core.limits.parallel_explore_max` setting (
+  Pydantic field, YAML default, loader mapping, docs, vulture whitelist);
+  no longer consumed after the `parallel_explore` batching refactor.
+
 - **explore**: optimize `parallel_explore` to batch all questions into a
   single scout call instead of spawning one independent agent per question.
   This sends the ~68k-char system prompt only once, cutting input-token

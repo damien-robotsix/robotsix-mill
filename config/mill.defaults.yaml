@@ -36,7 +36,6 @@ core:
     consult_requests: 15               # per-call cap for domain-expert consultation sub-agent
     explore_requests: 100              # per-call cap for explore sub-agent
     explore_max_tokens: 4096              # output token cap for explore sub-agent responses
-    parallel_explore_max: 4               # max concurrent scouts per parallel_explore fan-out
     max_refine_explore_calls: 4            # hard cap on explore/parallel_explore sub-agent calls per refine run (0 disables)
     max_refine_read_file_calls: 10         # hard cap on read_file calls per refine/triage agent run (0 disables)
     refine_requests: 80                # per-call request cap for the refine agent
