@@ -309,7 +309,7 @@ _module_curator_task
 _test_gap_task
 _survey_task
 _config_sync_task
-_data_dir_audit_task
+_data_dir_gc_task
 _langfuse_cleanup_task
 _timeout_escalation_task
 _meta_task

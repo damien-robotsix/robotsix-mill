@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from ...config import Settings
+from ...config import RepoConfig, Settings
 
 from .orphans import (
     _prune_archived_db_rows,
@@ -36,11 +36,17 @@ class DataDirGcPassResult:
 
 
 def run_data_dir_gc_pass(  # noqa: C901
+    session_id: str = "",
+    repo_config: RepoConfig | None = None,
     settings: Settings | None = None,
 ) -> DataDirGcPassResult:
     """Execute one data-dir GC pass — 5 reclaim steps, no audit.
 
     Args:
+        session_id: Langfuse session id from the poll loop (unused —
+            the GC pass iterates every board on disk independently).
+        repo_config: Per-repo configuration from the poll loop (unused
+            for the same reason — the pass is board-agnostic).
         settings: Settings instance (optional; instantiated here if None,
             so tests can monkeypatch).
 
