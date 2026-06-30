@@ -110,6 +110,7 @@ BOARD_HTML = """<!doctype html><html><head><meta charset="utf-8">
     <button onclick="runStateSync()" data-agent="state_sync">State Sync</button>
     <button onclick="runEnvDocSync()" data-agent="env_doc_sync">Env Doc Sync</button>
     <button onclick="runFrontendSync()" data-agent="frontend_sync">Frontend Sync</button>
+    <button onclick="runSecurityPosture()" data-agent="security_posture">Security Posture</button>
     <button onclick="runMeta()" data-agent="meta" class="meta-only">Meta</button>
   </div>
 </div>

@@ -3,6 +3,11 @@
 - **audit**: remove `.env`/`.env.example` from the config-sync fragility
   example in the audit agent prompt — the canonical configuration surface
   is now config YAML + docs only.
+- **security-posture**: add CLI `_RUNNERS` entry, POST route, board button,
+  JS runner function, and `AGENT_COLORS` entry so the security-posture
+  periodic agent can be triggered on-demand via CLI, HTTP API, and board UI
+  (matching all 13 `llm_agent` peers).
+
 - **config**: align `doc_request_limit` model default with YAML and docs
   at `32` (was `16` in the Field default, masked by the YAML layer at
   `32`).  No behavioral change — the effective value was already `32`.

@@ -154,6 +154,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Module-curator pass",
         "format": "memory_drafts",
     },
+    "security-posture": {
+        "module": "runners.security_posture_runner",
+        "function": "run_security_posture_pass",
+        "label": "Security-posture pass",
+        "format": "memory_drafts",
+    },
     "verify": {
         "module": "runners.verify_runner",
         "function": "run_verify_pass",

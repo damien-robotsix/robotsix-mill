@@ -357,6 +357,20 @@ frontend_sync_pass = _make_background_pass(
 router.post("/frontend-sync", status_code=202)(frontend_sync_pass)
 
 
+security_posture_pass = _make_background_pass(
+    kind="security_posture",
+    runner_module="robotsix_mill.runners.security_posture_runner",
+    runner_func="run_security_posture_pass",
+    docstring="""Kick off a security-posture pass in the BACKGROUND and return at once.
+
+    The security-posture agent reviews the codebase for security
+    weaknesses, dependency vulnerabilities, and configuration gaps,
+    filing draft tickets for each finding. New drafts appear on the
+    board when it finishes.""",
+)
+router.post("/security-posture", status_code=202)(security_posture_pass)
+
+
 # -- handlers with custom summary builders -------------------------------
 
 trace_review_pass = _make_background_pass(
