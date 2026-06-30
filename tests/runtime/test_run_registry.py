@@ -384,12 +384,15 @@ class TestAuditTraceHealthEndpoints:
         assert r.status_code == 202
         assert r.json() == {"status": "started"}
 
-        # Wait for the daemon thread to finish
-        import time
+        # Wait for the daemon thread to finish (poll to avoid races)
+        deadline = time.monotonic() + 5.0
+        runs: list[dict] = []
+        while time.monotonic() < deadline:
+            runs = client.get("/runs").json()
+            if runs and runs[0]["status"] != "running":
+                break
+            time.sleep(0.05)
 
-        time.sleep(0.1)
-
-        runs = client.get("/runs").json()
         assert len(runs) >= 1
         run = runs[0]
         assert run["kind"] == "audit"
@@ -415,11 +418,15 @@ class TestAuditTraceHealthEndpoints:
         assert r.status_code == 202
         assert r.json() == {"status": "started"}
 
-        import time
+        # Poll for the background thread to finish
+        deadline = time.monotonic() + 5.0
+        runs: list[dict] = []
+        while time.monotonic() < deadline:
+            runs = client.get("/runs").json()
+            if runs and runs[0]["status"] != "running":
+                break
+            time.sleep(0.05)
 
-        time.sleep(0.1)
-
-        runs = client.get("/runs").json()
         assert len(runs) >= 1
         run = runs[0]
         assert run["kind"] == "trace-health"
@@ -438,11 +445,15 @@ class TestAuditTraceHealthEndpoints:
         r = client.post("/audit")
         assert r.status_code == 202
 
-        import time
+        # Poll for the background thread to finish
+        deadline = time.monotonic() + 5.0
+        runs: list[dict] = []
+        while time.monotonic() < deadline:
+            runs = client.get("/runs").json()
+            if runs and runs[0]["status"] != "running":
+                break
+            time.sleep(0.05)
 
-        time.sleep(0.1)
-
-        runs = client.get("/runs").json()
         assert len(runs) >= 1
         run = runs[0]
         assert run["kind"] == "audit"
