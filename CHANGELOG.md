@@ -4,6 +4,10 @@
   ruff/mypy checks across all Python sources (``src/``, ``tests/``,
   ``scripts/``, ``vulture_whitelist.py``, ``deploy/split_config.py``,
   ``dev/``).  ``lint`` is check-only; ``format`` auto-fixes.
+- **deps**: update robotsix-board-agent pin to commit adding
+  ``handle_wrapper`` param to ``BoardManager.__init__`` (Step 0 of
+  board-manager fast-lane epic).  Push of the upstream commit requires
+  human GitHub credentials; ``uv lock`` must be re-run afterwards.
 
 - **git**: fix ``git_push_with_lease`` for first-push branches (no remote
   counterpart yet).  The pre-push fetch now tolerates "couldn't find remote

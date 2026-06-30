@@ -34,3 +34,5 @@ docker-compose.override.yml
 =8
 # actionlint binary downloaded by security-audit.yml at runtime
 actionlint
+# Sandbox workspace clones of external repos
+.work/

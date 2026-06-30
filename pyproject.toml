@@ -75,7 +75,7 @@ default-groups = ["dev"]
 [tool.uv.sources]
 robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "28b23a84800366d8a6dfe97f04354100c248298f" }
 robotsix-yaml-config = { git = "https://github.com/damien-robotsix/robotsix-yaml-config.git", rev = "d302ee4ada88905efa48333894ed19519f9f7920" }
-robotsix-board-agent = { git = "https://github.com/damien-robotsix/robotsix-board-agent.git", rev = "3b999fc697fd1112024160f6f5ba45bd89e7f5d0" }  # TODO: update rev to the commit that adds BoardManager handle_wrapper param (Step 0 of board-manager fast-lane epic)
+robotsix-board-agent = { git = "https://github.com/damien-robotsix/robotsix-board-agent.git", rev = "741e16ab2d20ca5db2f43b5d9ee3f951792d7240" }
 robotsix-agent-comm = { git = "https://github.com/damien-robotsix/robotsix-agent-comm.git", rev = "87bb25cde8176cbf4f7136f8c8254f27ff75aecd" }
 robotsix-board = { git = "https://github.com/damien-robotsix/robotsix-board.git", rev = "338cf1698b5f9db9afa232445fb39e298d80ce17" }
 robotsix-modules = { git = "https://github.com/damien-robotsix/robotsix-modules.git", rev = "d56fd5d0ae36e2226a471ef276a38faa5d611e6b" }
