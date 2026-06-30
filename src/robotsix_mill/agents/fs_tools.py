@@ -10,7 +10,10 @@ hints + docstrings — pydantic-ai derives the schema from those.
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
+
+import yaml
 
 from pydantic_ai import RunContext
 
@@ -18,8 +21,13 @@ from ..config import Settings
 from ..core.repo_layout import src_path_candidates
 from .. import sandbox
 from ..runtime.tracing import trace_stage
+from .periodic_loader import validate_periodic_file_content
 
 log = logging.getLogger(__name__)
+
+_PERIODIC_PATH_RE = re.compile(
+    r"(^|[\\/])\.robotsix-mill[\\/]periodic[\\/][^\\/]+\.yaml$"
+)
 
 # Placeholder swapped in for a now-stale read_file result in the live
 # pydantic-ai message history once the same file is read fresh again.
@@ -748,6 +756,21 @@ def build_fs_tools(
         syntax_error = _check_python_syntax(path, content)
         if syntax_error is not None:
             return syntax_error
+        if _PERIODIC_PATH_RE.search(path):
+            parsed: object = None
+            try:
+                parsed = yaml.safe_load(content)
+            except yaml.YAMLError:
+                pass
+            if isinstance(parsed, dict):
+                _name = parsed.get("name") or Path(path).stem
+                _sp = parsed.get("system_prompt")
+                _errs = validate_periodic_file_content(_name, _sp)
+                if _errs:
+                    return (
+                        "PERIODIC FILE REJECTED — do not retry without fixing the issue:\n"
+                        + "\n".join(f"  • {e}" for e in _errs)
+                    )
         try:
             with trace_stage("write_file"):
                 p = _safe(root, path, extra_roots=extra_roots)

@@ -520,6 +520,78 @@ class TestWriteFile:
         assert "wrote" in result
         assert (root / "mod.py").read_text() == bad
 
+    # --- periodic file guard -----------------------------------------------
+
+    def test_write_file_rejects_bespoke_name_only(self, tmp_path, settings):
+        """A periodic file with an unrecognised name and no system_prompt is rejected."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+        result = tools["write_file"](
+            ".robotsix-mill/periodic/board_cleanup.yaml",
+            "name: board_cleanup\n",
+        )
+        assert result.startswith("PERIODIC FILE REJECTED")
+        assert not (root / ".robotsix-mill/periodic/board_cleanup.yaml").exists()
+
+    def test_write_file_allows_bespoke_with_prompt(self, tmp_path, settings):
+        """A periodic file with an unrecognised name BUT a system_prompt succeeds."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+        result = tools["write_file"](
+            ".robotsix-mill/periodic/my_bespoke.yaml",
+            "name: my_bespoke\nsystem_prompt: Does X.\n",
+        )
+        assert "wrote" in result
+        assert (root / ".robotsix-mill/periodic/my_bespoke.yaml").exists()
+
+    def test_write_file_allows_invalid_yaml_for_periodic(self, tmp_path, settings):
+        """Malformed YAML at a periodic path must NOT raise; write proceeds."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+        result = tools["write_file"](
+            ".robotsix-mill/periodic/broken.yaml",
+            '"unclosed\n',  # unclosed quote → YAMLError
+        )
+        assert "wrote" in result
+        assert (root / ".robotsix-mill/periodic/broken.yaml").exists()
+
+    def test_write_file_rejects_global_only_periodic(self, tmp_path, settings):
+        """A periodic file for a global_only name is rejected."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+        result = tools["write_file"](
+            ".robotsix-mill/periodic/langfuse_cleanup.yaml",
+            "name: langfuse_cleanup\nsystem_prompt: x\n",
+        )
+        assert result.startswith("PERIODIC FILE REJECTED")
+        assert not (root / ".robotsix-mill/periodic/langfuse_cleanup.yaml").exists()
+
+    def test_write_file_allows_known_builtin_name_only(self, tmp_path, settings):
+        """A periodic file for a known built-in (e.g. audit) with just a name succeeds."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+        result = tools["write_file"](
+            ".robotsix-mill/periodic/audit.yaml",
+            "name: audit\n",
+        )
+        assert "wrote" in result
+        assert (root / ".robotsix-mill/periodic/audit.yaml").exists()
+
+    def test_write_file_periodic_guard_only_triggers_on_periodic_paths(
+        self, tmp_path, settings
+    ):
+        """Non-periodic paths are unaffected by the guard."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+        result = tools["write_file"]("random.yaml", "name: board_cleanup\n")
+        assert "wrote" in result
+
 
 # ===================================================================
 # edit_file

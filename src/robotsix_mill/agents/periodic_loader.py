@@ -101,6 +101,33 @@ def kind_for(name: str) -> str:
     return _BUILTIN_KINDS.get(name, "bespoke")
 
 
+def validate_periodic_file_content(
+    name: str,
+    system_prompt: str | None,
+) -> list[str]:
+    """Return a list of human-readable error strings for a proposed presence file.
+
+    Empty list → valid.  Callers MUST NOT write the file when errors are returned.
+    """
+    kind = kind_for(name)
+    if kind == "global_only":
+        return [
+            f"'{name}' is a global/cross-repo periodic and cannot be "
+            "per-repo presence-managed. Remove this file."
+        ]
+    if kind == "bespoke" and (system_prompt is None or not system_prompt.strip()):
+        valid_builtins = sorted(
+            k for k, v in _BUILTIN_KINDS.items() if v != "global_only"
+        )
+        return [
+            f"'{name}' is not a recognised built-in periodic name. "
+            "Either use one of the valid built-in names "
+            f"({', '.join(valid_builtins)}) or include a non-empty "
+            "`system_prompt` field to define a new bespoke agent."
+        ]
+    return []
+
+
 # ---------------------------------------------------------------------------
 # Per-repo override file schema
 # ---------------------------------------------------------------------------

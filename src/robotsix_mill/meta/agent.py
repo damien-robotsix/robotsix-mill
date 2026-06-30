@@ -112,6 +112,13 @@ def _available_periodic_catalog() -> str:
             except Exception:  # noqa: BLE001 — best-effort catalogue
                 desc = ""
         lines.append(f"- `{name}`: {desc or '(periodic schedule/maintenance task)'}")
+    lines.append("")
+    lines.append(
+        "**Rule**: the names above are the ONLY valid built-in periodic names. "
+        "A presence file for any other name is a *bespoke* agent and MUST "
+        "include a `system_prompt:` field. Name-only files for unknown names "
+        "are silently rejected by the loader."
+    )
     return "\n".join(lines)
 
 

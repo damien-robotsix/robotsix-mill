@@ -1,5 +1,12 @@
 ## 0.0.0 (unreleased)
 
+- **periodic-loader**: add `validate_periodic_file_content()` callable
+  that rejects name-only stubs for unrecognized periodic names and
+  global-only names. The `write_file` tool now guards
+  `.robotsix-mill/periodic/<name>.yaml` writes with this validation,
+  blocking LLM agents from creating dead stub files. The meta agent's
+  system prompt and periodic-workflow catalog now explicitly forbid
+  proposing name-only stubs for unknown names.
 - **implement**: use mypy-baseline filter in pre-flight type check so only
   **new** type errors block the agent, not pre-existing baseline entries.
 - **cost-observability**: per-step usage instrumentation — each trace now

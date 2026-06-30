@@ -215,3 +215,41 @@ def test_discover_name_defaults_to_stem(tmp_path):
     out = pl.discover_periodic_workflows(tmp_path)
     assert len(out) == 1 and out[0].name == "health" and out[0].kind == "llm_agent"
     assert out[0].interval_seconds == 600
+
+
+# --- validate_periodic_file_content ----------------------------------------
+
+
+def test_validate_bespoke_name_without_prompt_rejected():
+    errs = pl.validate_periodic_file_content("board_cleanup", None)
+    assert len(errs) > 0
+    assert "board_cleanup" in errs[0]
+    # Must list valid built-in names
+    assert "audit" in errs[0] or any("audit" in e for e in errs)
+
+
+def test_validate_known_builtin_name_only_is_valid():
+    errs = pl.validate_periodic_file_content("audit", None)
+    assert errs == []
+
+
+def test_validate_bespoke_with_prompt_is_valid():
+    errs = pl.validate_periodic_file_content("my_bespoke", "Do something useful.")
+    assert errs == []
+
+
+def test_validate_global_only_rejected():
+    errs = pl.validate_periodic_file_content("langfuse_cleanup", None)
+    assert len(errs) > 0
+    assert "global" in errs[0].lower() or "cross-repo" in errs[0].lower()
+
+
+def test_validate_bespoke_blank_prompt_rejected():
+    errs = pl.validate_periodic_file_content("unknown_thing", "   \n  ")
+    assert len(errs) > 0
+    assert "unknown_thing" in errs[0]
+
+
+def test_validate_known_schedule_only_is_valid():
+    errs = pl.validate_periodic_file_content("trace_review", None)
+    assert errs == []
