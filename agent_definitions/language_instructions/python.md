@@ -85,7 +85,7 @@ ruff check . && ruff format .
 ## Type checker
 
 ```bash
-mypy .
+uv run mypy src/ --strict | uv run --with mypy-baseline mypy-baseline filter
 ```
 
 ## Dependency checker
