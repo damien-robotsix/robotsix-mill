@@ -555,7 +555,7 @@ def run_periodic_pass_entry(
 # ---------------------------------------------------------------------------
 
 
-def _make_entry(key: str):
+def _make_entry(key: str) -> Callable[[str, RepoConfig | None], PeriodicPassResult]:
     """Return a callable ``(session_id, repo_config=None) -> PeriodicPassResult``
     with a descriptive ``__name__`` for each periodic pass key."""
 
