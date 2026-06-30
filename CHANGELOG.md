@@ -7,6 +7,10 @@
 - **periodic-loader**: add `validate_periodic_file_content()` callable
   that rejects name-only stubs for unrecognized periodic names and
   global-only names. The `write_file` tool now guards
+- **security-posture agent**: new periodic agent that inspects CI
+  workflows and pre-commit config, compares against OWASP/OpenSSF/SLSA
+  best practices, and proposes draft tickets for missing security
+  scanning layers and outdated tool versions. Runs weekly by default.
   `.robotsix-mill/periodic/<name>.yaml` writes with this validation,
   blocking LLM agents from creating dead stub files. The meta agent's
   system prompt and periodic-workflow catalog now explicitly forbid

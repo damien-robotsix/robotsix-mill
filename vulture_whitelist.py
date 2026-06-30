@@ -33,6 +33,7 @@ reset_for_tests
 run_completeness_check_agent
 run_config_sync_agent
 run_env_doc_sync_agent
+run_security_posture_agent
 _absorb_summary_typos
 best_k
 failure_summary
@@ -52,6 +53,7 @@ StateSyncResult
 SurveyResult
 TestGapResult
 TriageBoilerplateResult
+SecurityPostureResult
 model_config
 chunk_size
 max_chunks
@@ -127,6 +129,9 @@ env_doc_sync_periodic
 env_doc_sync_interval_seconds
 member_sync_interval_seconds
 meta_periodic
+security_posture_memory_path
+security_posture_periodic
+security_posture_interval_seconds
 run_health_periodic
 run_health_memory_path
 diagnostic_periodic
@@ -213,6 +218,8 @@ run_completeness_check_pass
 run_config_sync_pass
 run_env_doc_sync_pass
 run_copy_paste_pass
+run_security_posture_pass
+SecurityPosturePassResult
 oversized_items
 query_traces_since
 query_recent_traces

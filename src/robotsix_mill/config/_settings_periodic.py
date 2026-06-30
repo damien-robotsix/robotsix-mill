@@ -403,6 +403,22 @@ class _PeriodicSettings(BaseModel):
     # enforced at 60s in the worker loop.
     env_doc_sync_interval_seconds: int = Field(default=86400)
 
+    # --- security-posture agent (continuous security-scanning coverage) ---
+    # Model for the security-posture agent. Defaults to the same capable
+    # model as audit/health.  Override with MILL_SECURITY_POSTURE_MODEL.
+    # Path to the security-posture agent's Markdown memory ledger.
+    # Override to pin a specific path; unset (default) derives
+    # <data_dir>/security_posture_memory.md.
+    security_posture_memory_path: Path | None = Field(default=None)
+    # Opt-in periodic security-posture pass. Defaults to True (opt-out);
+    # set false to disable the weekly security-scanning coverage audit.
+    security_posture_periodic: bool = Field(default=True)
+    # Seconds between periodic security-posture passes when
+    # MILL_SECURITY_POSTURE_PERIODIC=true. Default 604800 (1 week). Minimum
+    # enforced at 60s in the worker loop.
+    security_posture_interval_seconds: int = Field(default=604800)
+    security_posture_request_limit: int = Field(default=80)
+
     # --- config-sync agent (config ↔ .env ↔ docs drift detection) ---
     # Model for the config-sync agent. Defaults to a cheap model (read-only
     # file parsing — no web research or code generation).

@@ -49,6 +49,7 @@ class SourceKind(StrEnum):
     STATE_SYNC = "state_sync"
     ENV_DOC_SYNC = "env_doc_sync"
     FRONTEND_SYNC = "frontend_sync"
+    SECURITY_POSTURE = "security_posture"
     META = "meta"
     RUN_HEALTH = "run-health"
     CI_FIX_DEPENDENCY = "ci_fix_dependency"

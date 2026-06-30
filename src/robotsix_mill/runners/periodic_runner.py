@@ -56,6 +56,7 @@ ConfigSyncPassResult = PeriodicPassResult
 HealthPassResult = PeriodicPassResult
 ModuleCuratorPassResult = PeriodicPassResult
 TestGapPassResult = PeriodicPassResult
+SecurityPosturePassResult = PeriodicPassResult
 # Prevent pytest from collecting ``TestGapPassResult`` as a test class.
 TestGapPassResult.__test__ = False  # type: ignore[attr-defined]
 
@@ -477,6 +478,17 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         agent_fn_name="run_frontend_sync_agent",
         memory_filename="frontend_sync_memory.md",
         workspace_subdir="frontend_sync_workspace",
+        result_dataclass=PeriodicPassResult,
+        clone_token_fn=None,  # uses forge_token (raises on missing)
+        requires_repo=True,
+    ),
+    "security_posture": PeriodicPassConfig(
+        label="security_posture",
+        source_kind=SourceKind.SECURITY_POSTURE,
+        agent_module_attr="security_posturing",
+        agent_fn_name="run_security_posture_agent",
+        memory_filename="security_posture_memory.md",
+        workspace_subdir="security_posture_workspace",
         result_dataclass=PeriodicPassResult,
         clone_token_fn=None,  # uses forge_token (raises on missing)
         requires_repo=True,

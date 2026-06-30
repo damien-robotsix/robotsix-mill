@@ -152,6 +152,10 @@ _MODEL_FIELDS_NOT_IN_ALIAS: frozenset[str] = frozenset(
         "survey_request_limit",
         "module_curator_request_limit",
         "completeness_check_request_limit",
+        "security_posture_memory_path",
+        "security_posture_periodic",
+        "security_posture_interval_seconds",
+        "security_posture_request_limit",
         # Belt-and-suspenders: fields that DO have YAML entries today
         # but are listed here in case those entries are ever removed.
         # Having them in the exception set is harmless — the invariant

@@ -81,6 +81,7 @@ _BUILTIN_KINDS: dict[str, str] = {
     "state_sync": "llm_agent",
     "env_doc_sync": "llm_agent",
     "frontend_sync": "llm_agent",
+    "security_posture": "llm_agent",
     # Schedule-only passes (no prompt yaml / deterministic runner).
     "diagnostic": "schedule_only",
     "trace_review": "schedule_only",
