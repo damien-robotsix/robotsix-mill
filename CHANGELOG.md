@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- **config**: align `doc_request_limit` model default with YAML and docs
+  at `32` (was `16` in the Field default, masked by the YAML layer at
+  `32`).  No behavioral change — the effective value was already `32`.
+
 - **refine-stage**: enable prompt-cache observability — per-step usage
   spans now record cache-read and cache-write tokens from the Claude
   SDK (which auto-caches system prompts ≥1024 chars) and OpenRouter
