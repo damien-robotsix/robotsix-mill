@@ -28,6 +28,8 @@ repos:
     #                             #   Defaults to None → fork's default branch.
     langfuse:
       project_name: "example-repo"
+      # project_id: ""            # optional — explicit Langfuse project ID
+      #                           #   (distinct from project_name). Default "".
       public_key: "pk-lf-..."
       secret_key: "sk-lf-..."
       base_url: "https://cloud.langfuse.com"  # optional — defaults to cloud
@@ -36,6 +38,11 @@ repos:
     #   When set, OMIT the `langfuse:` block above: a repo with
     #   `langfuse_from` MUST NOT carry its own keys. Set automatically
     #   for auto-registered workspace members.
+    # openrouter_api_key: ""      # optional — per-repo OpenRouter API
+    #                             #   key override. When set, overrides
+    #                             #   the global OPENROUTER_API_KEY for
+    #                             #   LLM calls scoped to this repo.
+    #                             #   Default None (use global key).
     # ci_monitor:                 # optional — per-repo CI failure monitoring
     #   enabled: true             #   default: true
     #   interval_seconds: 900     #   default: 900 (15 min)
@@ -44,6 +51,12 @@ repos:
     #                             #   Per-repo isolation: each repo
     #                             #   gets its own consumer pool, so a
     #                             #   busy repo can't block another.
+    # max_inflight_prs: 3         # optional — max concurrent in-flight
+    #                             #   PR tickets (DELIVERABLE through
+    #                             #   ADDRESSING_REVIEW) before the worker
+    #                             #   stops dispatching new work for this
+    #                             #   repo. Merge-pipeline tickets are
+    #                             #   always processed. Default 3.
     # sandbox_image: "ros:rolling-ros-base"   # optional — per-repo sandbox
     #   image for this repo's gates + interactive commands. Default:
     #   MILL_SANDBOX_IMAGE / Settings.sandbox_image (python:3.14-slim).

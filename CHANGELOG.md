@@ -7,6 +7,9 @@
   (`6` → `12`, matching the Pydantic model and YAML defaults).
 - **docs**: add `core.limits.audit_requests` to the configuration
   reference Request limits table.
+- **config-sync**: add `langfuse.project_id`, `max_inflight_prs`, and
+  `openrouter_api_key` to `config/repos.example.yaml` — three valid
+  `RepoConfig` model fields that were missing from the example template.
 
 - **refine-stage**: enable prompt-cache observability — per-step usage
   spans now record cache-read and cache-write tokens from the Claude
