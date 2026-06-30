@@ -269,8 +269,7 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
                 )
                 draft = trimmed
                 log.info(
-                    "%s: trimmed large artifacts from draft "
-                    "(%d → %d chars)",
+                    "%s: trimmed large artifacts from draft (%d → %d chars)",
                     ticket.id,
                     len(original_draft),
                     len(draft),

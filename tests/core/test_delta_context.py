@@ -48,7 +48,7 @@ class TestTrimLargeArtifacts:
 
     def test_no_signal_passes_through(self):
         """A large draft without lockfile or CI-log signals is unchanged."""
-        draft = ("ordinary prose text\n" * 500)  # well over 4000 chars
+        draft = "ordinary prose text\n" * 500  # well over 4000 chars
         assert trim_large_artifacts(draft) == draft
 
     def test_lockfile_diff_trimmed(self):
@@ -75,10 +75,7 @@ class TestTrimLargeArtifacts:
     def test_ci_log_trimmed(self):
         """A CI log dump block is summarised."""
         padding = "ordinary prose text\n" * 200
-        ci_block = (
-            "= FAILURES =\n"
-            + "test_x failed\n" * 250
-        )
+        ci_block = "= FAILURES =\n" + "test_x failed\n" * 250
         draft = padding + "\n\n" + ci_block
         result = trim_large_artifacts(draft)
         assert "CI log output truncated" in result

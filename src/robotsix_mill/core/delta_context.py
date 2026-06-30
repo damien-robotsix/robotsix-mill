@@ -155,8 +155,7 @@ def _trim_ci_log_blocks(draft: str, max_chars: int) -> str:
             kept = block[:500]
             omitted_chars = len(block) - 500
             trimmed_blocks.append(
-                kept
-                + f"\n\n[... {omitted_chars} chars of CI log output truncated — "
+                kept + f"\n\n[... {omitted_chars} chars of CI log output truncated — "
                 "the full log is preserved in draft-original.md]"
             )
         else:
