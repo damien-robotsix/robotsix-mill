@@ -22,9 +22,11 @@ a ticket's tests/commands cannot read or corrupt the management plane.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
+import socket
 import subprocess
 import uuid
 from datetime import datetime, timezone
@@ -45,6 +47,162 @@ log = logging.getLogger("robotsix_mill.sandbox")
 class SandboxError(RuntimeError):
     """Infrastructure failure (no Docker, daemon/image error) — distinct
     from the command itself exiting non-zero."""
+
+
+# Deploy-mode (central-deploy) helpers --------------------------------------
+#
+# Under central-deploy the mill talks to a REMOTE Docker daemon through the
+# hardened socket-proxy (``DOCKER_HOST``). central-deploy's contract ignores
+# the dev stack's compose-declared ``networks:`` block and does not wire the
+# data volume into the sandbox config, so two things the dev stack handles
+# statically must be established at runtime:
+#
+#   * the internal egress network + ``sandbox-proxy`` attachment, and
+#   * the host-side mount backing ``MILL_DATA_DIR`` (named volume or bind).
+#
+# Every helper below is best-effort and never raises, and the call sites are
+# gated on ``DOCKER_HOST`` being set so the dev stack path is unchanged.
+
+# One-shot guard so :func:`run` establishes the egress network at most once
+# per process (only relevant in deploy mode — the dev stack's compose creates
+# the network up-front).
+_SANDBOX_NET_READY = False
+
+
+def ensure_sandbox_network(settings: Settings) -> bool:
+    """Create the internal egress network and attach the egress proxy.
+
+    Returns ``True`` when the ``sandbox-proxy`` container is attached to the
+    network — including the no-op case where no proxy is configured (then
+    sandboxes run ``--network none`` and there is nothing to do). Returns
+    ``False`` on any Docker CLI failure.
+
+    Idempotent: an already-existing network and an already-attached proxy
+    are both treated as success. Best-effort — never raises; failures are
+    logged and surfaced via the return value so the caller can continue.
+    """
+    if not settings.sandbox_proxy_url:
+        return True
+    net = settings.sandbox_network
+    # Create the internal network (idempotent — "already exists" is success).
+    try:
+        create = subprocess.run(
+            ["docker", "network", "create", "--internal", net],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except OSError, subprocess.SubprocessError:
+        log.warning("ensure_sandbox_network: `docker network create %s` failed", net)
+        return False
+    if create.returncode != 0 and "already exists" not in create.stderr:
+        log.warning(
+            "ensure_sandbox_network: `docker network create %s` failed: %s",
+            net,
+            create.stderr.strip()[:200],
+        )
+        return False
+    # Attach the egress proxy (idempotent — already-connected is success).
+    try:
+        connect = subprocess.run(
+            ["docker", "network", "connect", net, "sandbox-proxy"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except OSError, subprocess.SubprocessError:
+        log.warning(
+            "ensure_sandbox_network: `docker network connect %s sandbox-proxy` failed",
+            net,
+        )
+        return False
+    if connect.returncode == 0 or "already exists in network" in connect.stderr:
+        log.info("ensure_sandbox_network: %s ready (proxy attached)", net)
+        return True
+    log.warning(
+        "ensure_sandbox_network: `docker network connect %s sandbox-proxy` failed: %s",
+        net,
+        connect.stderr.strip()[:200],
+    )
+    return False
+
+
+def resolve_data_volume(settings: Settings) -> None:
+    """Resolve the host-side mount backing ``MILL_DATA_DIR`` and record it.
+
+    The sandbox mounts a ticket's repo subtree using a path/volume the HOST
+    daemon understands (``-v``/``--mount`` resolve on the host, not inside
+    the mill container). The dev stack wires this statically; under
+    central-deploy the mill must discover it by inspecting its OWN container.
+
+    Inspects ``<hostname>`` (the container id) for the mount whose
+    ``Destination`` equals the resolved ``settings.data_dir`` and mutates
+    *settings* in place:
+
+    * named volume → set ``data_volume`` to the volume name and clear
+      ``sandbox_data_mount``;
+    * bind mount → set ``sandbox_data_mount`` to the host source path.
+
+    Best-effort — never raises; any failure leaves *settings* unchanged.
+    """
+    cid = socket.gethostname()
+    try:
+        ins = subprocess.run(
+            ["docker", "inspect", "--format", "{{json .Mounts}}", cid],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except OSError, subprocess.SubprocessError:
+        log.warning("resolve_data_volume: `docker inspect %s` failed to run", cid)
+        return
+    if ins.returncode != 0:
+        log.warning(
+            "resolve_data_volume: `docker inspect %s` failed: %s",
+            cid,
+            ins.stderr.strip()[:200],
+        )
+        return
+    try:
+        mounts = json.loads(ins.stdout)
+    except ValueError, TypeError:
+        log.warning("resolve_data_volume: could not parse docker inspect Mounts JSON")
+        return
+    if not isinstance(mounts, list):
+        return
+    target = str(Path(settings.data_dir).resolve())
+    for m in mounts:
+        if not isinstance(m, dict) or m.get("Destination") != target:
+            continue
+        mtype = m.get("Type")
+        if mtype == "volume" and m.get("Name"):
+            settings.data_volume = m["Name"]
+            settings.sandbox_data_mount = None
+            log.info("resolve_data_volume: data volume resolved to %s", m["Name"])
+        elif mtype == "bind" and m.get("Source"):
+            settings.sandbox_data_mount = m["Source"]
+            log.info(
+                "resolve_data_volume: data bind source resolved to %s", m["Source"]
+            )
+        return
+    log.warning(
+        "resolve_data_volume: no mount matched data_dir %s; leaving config unchanged",
+        target,
+    )
+
+
+def _ensure_sandbox_network_once(settings: Settings) -> None:
+    """Call :func:`ensure_sandbox_network` at most once per process.
+
+    Used by :func:`run` (deploy mode only) to establish the internal egress
+    network lazily on the first sandbox spawn. The flag is set only on
+    success, so a transient failure is retried on the next sandbox run.
+    """
+    global _SANDBOX_NET_READY
+    if _SANDBOX_NET_READY:
+        return
+    if ensure_sandbox_network(settings):
+        _SANDBOX_NET_READY = True
 
 
 def _truncate(out: str) -> str:
@@ -288,6 +446,13 @@ def run(  # noqa: C901 — extra-packages loading adds one branch; tightly-coupl
     # an absolute path because Docker's `-w` rejects relative arguments
     # (see _repo_mount for the same reason).
     repo_dir = Path(repo_dir).resolve()
+    # Deploy mode only (DOCKER_HOST points at central-deploy's socket-proxy):
+    # central-deploy ignores the dev stack's `networks:` block, so the
+    # internal egress network + proxy attachment must be established at
+    # runtime. The once-guard means this runs at most once per process; the
+    # dev stack (no DOCKER_HOST) skips it entirely and is unchanged.
+    if os.environ.get("DOCKER_HOST") and settings.sandbox_proxy_url:
+        _ensure_sandbox_network_once(settings)
     # Load extra sandbox packages declared in the repo's config.
     extra_packages = load_extra_sandbox_packages(repo_dir)
     extra_prefix, needs_write_access = _build_extra_packages_prefix(extra_packages)

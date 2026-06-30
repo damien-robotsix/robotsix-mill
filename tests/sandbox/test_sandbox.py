@@ -1108,3 +1108,229 @@ def test_parse_docker_started_at():
     assert sandbox._parse_docker_started_at("0001-01-01T00:00:00Z") is None
     assert sandbox._parse_docker_started_at("") is None
     assert sandbox._parse_docker_started_at("not-a-date") is None
+
+
+# ---------------------------------------------------------------------------
+# Deploy-mode helpers: ensure_sandbox_network / resolve_data_volume /
+# the run() once-guard. All best-effort; gated on DOCKER_HOST at the
+# call sites so the dev stack path is unchanged.
+# ---------------------------------------------------------------------------
+
+
+def test_ensure_sandbox_network_noop_without_proxy(tmp_path, monkeypatch):
+    """No proxy configured → nothing to wire; returns True without docker."""
+    s = _settings(tmp_path, sandbox_proxy_url="")
+
+    def boom(*a, **k):
+        raise AssertionError("docker must not be invoked when no proxy is set")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", boom)
+    assert sandbox.ensure_sandbox_network(s) is True
+
+
+def test_ensure_sandbox_network_creates_and_connects(tmp_path, monkeypatch):
+    """Happy path: create the internal network then attach the proxy."""
+    s = _settings(
+        tmp_path,
+        sandbox_proxy_url="http://sandbox-proxy:8888",
+        sandbox_network="mill-sandbox-net",
+    )
+    calls = []
+
+    def fake_run(argv, **kw):
+        calls.append(argv)
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    assert sandbox.ensure_sandbox_network(s) is True
+    assert calls[0] == [
+        "docker",
+        "network",
+        "create",
+        "--internal",
+        "mill-sandbox-net",
+    ]
+    assert calls[1] == [
+        "docker",
+        "network",
+        "connect",
+        "mill-sandbox-net",
+        "sandbox-proxy",
+    ]
+
+
+def test_ensure_sandbox_network_idempotent_already_exists(tmp_path, monkeypatch):
+    """Existing network + already-attached proxy are treated as success."""
+    s = _settings(tmp_path, sandbox_proxy_url="http://sandbox-proxy:8888")
+
+    def fake_run(argv, **kw):
+        if argv[:3] == ["docker", "network", "create"]:
+            return subprocess.CompletedProcess(
+                argv, 1, stdout="", stderr="network mill-sandbox-net already exists"
+            )
+        return subprocess.CompletedProcess(
+            argv,
+            1,
+            stdout="",
+            stderr="endpoint with name sandbox-proxy already exists in network",
+        )
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    assert sandbox.ensure_sandbox_network(s) is True
+
+
+def test_ensure_sandbox_network_connect_failure_returns_false(tmp_path, monkeypatch):
+    """A genuine connect failure (proxy not attached) returns False."""
+    s = _settings(tmp_path, sandbox_proxy_url="http://sandbox-proxy:8888")
+
+    def fake_run(argv, **kw):
+        if argv[:3] == ["docker", "network", "create"]:
+            return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+        return subprocess.CompletedProcess(
+            argv, 1, stdout="", stderr="No such container: sandbox-proxy"
+        )
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    assert sandbox.ensure_sandbox_network(s) is False
+
+
+def test_ensure_sandbox_network_never_raises(tmp_path, monkeypatch):
+    """A Docker CLI OSError is swallowed and reported as False."""
+    s = _settings(tmp_path, sandbox_proxy_url="http://sandbox-proxy:8888")
+
+    def boom(*a, **k):
+        raise OSError("docker missing")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", boom)
+    assert sandbox.ensure_sandbox_network(s) is False
+
+
+def test_resolve_data_volume_named_volume(tmp_path, monkeypatch):
+    """A named-volume mount sets data_volume and clears sandbox_data_mount."""
+    s = _settings(tmp_path, data_dir="/data", sandbox_data_mount="/old/path")
+    mounts = (
+        '[{"Type":"volume","Name":"mill-data","Destination":"/data"},'
+        '{"Type":"bind","Source":"/etc/x","Destination":"/app/config"}]'
+    )
+    monkeypatch.setattr(sandbox.socket, "gethostname", lambda: "abc123")
+
+    def fake_run(argv, **kw):
+        return subprocess.CompletedProcess(argv, 0, stdout=mounts, stderr="")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    sandbox.resolve_data_volume(s)
+    assert s.data_volume == "mill-data"
+    assert s.sandbox_data_mount is None
+
+
+def test_resolve_data_volume_bind_mount(tmp_path, monkeypatch):
+    """A bind mount at data_dir sets sandbox_data_mount to the host source."""
+    s = _settings(tmp_path, data_dir="/data")
+    mounts = '[{"Type":"bind","Source":"/srv/mill/.data","Destination":"/data"}]'
+    monkeypatch.setattr(sandbox.socket, "gethostname", lambda: "abc123")
+
+    def fake_run(argv, **kw):
+        return subprocess.CompletedProcess(argv, 0, stdout=mounts, stderr="")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    sandbox.resolve_data_volume(s)
+    assert s.sandbox_data_mount == "/srv/mill/.data"
+
+
+def test_resolve_data_volume_no_match_leaves_unchanged(tmp_path, monkeypatch):
+    """No mount matching data_dir → settings untouched."""
+    s = _settings(tmp_path, data_dir="/data", data_volume="mill_data")
+    mounts = '[{"Type":"volume","Name":"other","Destination":"/somewhere-else"}]'
+    monkeypatch.setattr(sandbox.socket, "gethostname", lambda: "abc123")
+
+    def fake_run(argv, **kw):
+        return subprocess.CompletedProcess(argv, 0, stdout=mounts, stderr="")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    sandbox.resolve_data_volume(s)
+    assert s.data_volume == "mill_data"
+    assert s.sandbox_data_mount is None
+
+
+def test_resolve_data_volume_never_raises(tmp_path, monkeypatch):
+    """A docker inspect failure is swallowed and leaves settings unchanged."""
+    s = _settings(tmp_path, data_dir="/data", data_volume="mill_data")
+    monkeypatch.setattr(sandbox.socket, "gethostname", lambda: "abc123")
+
+    def boom(*a, **k):
+        raise OSError("docker missing")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", boom)
+    sandbox.resolve_data_volume(s)  # must not raise
+    assert s.data_volume == "mill_data"
+
+
+def test_run_skips_network_setup_in_dev_mode(tmp_path, monkeypatch):
+    """Without DOCKER_HOST, run() never touches the network once-guard —
+    the dev stack path is unchanged."""
+    monkeypatch.delenv("DOCKER_HOST", raising=False)
+    monkeypatch.setattr(sandbox, "_SANDBOX_NET_READY", False)
+    called = {"n": 0}
+
+    def spy(settings):
+        called["n"] += 1
+
+    monkeypatch.setattr(sandbox, "_ensure_sandbox_network_once", spy)
+    s = _settings(tmp_path, data_dir="/data", sandbox_proxy_url="http://p:8888")
+    monkeypatch.setattr(
+        sandbox, "_repo_mount", lambda repo_dir, settings: ["--mount", "x"]
+    )
+    monkeypatch.setattr(
+        sandbox.subprocess,
+        "run",
+        lambda argv, **kw: subprocess.CompletedProcess(argv, 0, stdout=b"", stderr=b""),
+    )
+    sandbox.run("echo hi", repo_dir="/data/work/repo", settings=s)
+    assert called["n"] == 0
+
+
+def test_run_triggers_network_setup_in_deploy_mode(tmp_path, monkeypatch):
+    """With DOCKER_HOST set and a proxy configured, run() invokes the
+    once-guard."""
+    monkeypatch.setenv("DOCKER_HOST", "tcp://mill-socket-proxy:2375")
+    monkeypatch.setattr(sandbox, "_SANDBOX_NET_READY", False)
+    called = {"n": 0}
+
+    def spy(settings):
+        called["n"] += 1
+
+    monkeypatch.setattr(sandbox, "_ensure_sandbox_network_once", spy)
+    s = _settings(tmp_path, data_dir="/data", sandbox_proxy_url="http://p:8888")
+    monkeypatch.setattr(
+        sandbox, "_repo_mount", lambda repo_dir, settings: ["--mount", "x"]
+    )
+    monkeypatch.setattr(
+        sandbox.subprocess,
+        "run",
+        lambda argv, **kw: subprocess.CompletedProcess(argv, 0, stdout=b"", stderr=b""),
+    )
+    sandbox.run("echo hi", repo_dir="/data/work/repo", settings=s)
+    assert called["n"] == 1
+
+
+def test_ensure_sandbox_network_once_sets_flag_only_on_success(tmp_path, monkeypatch):
+    """The once-guard sets the flag only on success and never re-runs after."""
+    monkeypatch.setattr(sandbox, "_SANDBOX_NET_READY", False)
+    s = _settings(tmp_path, sandbox_proxy_url="http://p:8888")
+    results = iter([False, True])
+    runs = {"n": 0}
+
+    def fake_ensure(settings):
+        runs["n"] += 1
+        return next(results)
+
+    monkeypatch.setattr(sandbox, "ensure_sandbox_network", fake_ensure)
+    # First call fails → flag stays False, retried next time.
+    sandbox._ensure_sandbox_network_once(s)
+    assert sandbox._SANDBOX_NET_READY is False
+    # Second call succeeds → flag set.
+    sandbox._ensure_sandbox_network_once(s)
+    assert sandbox._SANDBOX_NET_READY is True
+    # Third call is a no-op (no further ensure invocation).
+    sandbox._ensure_sandbox_network_once(s)
+    assert runs["n"] == 2

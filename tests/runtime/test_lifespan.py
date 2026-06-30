@@ -261,3 +261,50 @@ async def test_create_lifespan_per_repo_run_registries(
     assert any(
         str(p).endswith("meta/runs.json") and p.name == "runs.json" for p in paths
     )
+
+
+# ---------------------------------------------------------------------------
+# Deploy-mode sandbox wiring (DOCKER_HOST gate)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_deploy_mode_wires_network_and_volume(
+    settings, repos_registry, lifespan_mocks, monkeypatch
+):
+    """With DOCKER_HOST set, startup resolves the data volume and creates
+    the egress network before the worker starts."""
+    monkeypatch.setenv("DOCKER_HOST", "tcp://mill-socket-proxy:2375")
+    resolve = MagicMock()
+    ensure = MagicMock(return_value=True)
+    monkeypatch.setattr("robotsix_mill.sandbox.resolve_data_volume", resolve)
+    monkeypatch.setattr("robotsix_mill.sandbox.ensure_sandbox_network", ensure)
+
+    lifespan = create_lifespan(settings, repos_registry)
+    app = FastAPI()
+    async with lifespan(app):
+        pass
+
+    resolve.assert_called_once_with(settings)
+    ensure.assert_called_once_with(settings)
+
+
+@pytest.mark.asyncio
+async def test_dev_mode_skips_network_and_volume(
+    settings, repos_registry, lifespan_mocks, monkeypatch
+):
+    """Without DOCKER_HOST (dev stack), startup never touches the deploy
+    helpers — the dev path is unchanged."""
+    monkeypatch.delenv("DOCKER_HOST", raising=False)
+    resolve = MagicMock()
+    ensure = MagicMock(return_value=True)
+    monkeypatch.setattr("robotsix_mill.sandbox.resolve_data_volume", resolve)
+    monkeypatch.setattr("robotsix_mill.sandbox.ensure_sandbox_network", ensure)
+
+    lifespan = create_lifespan(settings, repos_registry)
+    app = FastAPI()
+    async with lifespan(app):
+        pass
+
+    resolve.assert_not_called()
+    ensure.assert_not_called()
