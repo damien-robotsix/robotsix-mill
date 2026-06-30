@@ -606,8 +606,8 @@ def test_run_periodic_pass_requires_repo_short_circuit_logs_warning(
 # ------------------------------------------------------------------ PERIODIC_PASS_CONFIGS registry
 
 
-def test_periodic_pass_configs_registry_has_all_fourteen_entries():
-    """All 14 periodic passes are registered."""
+def test_periodic_pass_configs_registry_has_all_fifteen_entries():
+    """All 15 periodic passes are registered."""
     expected = {
         "audit",
         "agent_check",
@@ -623,19 +623,21 @@ def test_periodic_pass_configs_registry_has_all_fourteen_entries():
         "state_sync",
         "env_doc_sync",
         "frontend_sync",
+        "security_posture",
     }
     assert set(PERIODIC_PASS_CONFIGS.keys()) == expected
 
 
 def test_periodic_pass_configs_requires_repo():
-    """Only module_curator, test_gap, state_sync, env_doc_sync, and
-    frontend_sync set requires_repo=True (all need a clone to inspect files).
-    All other registry entries keep the default False."""
+    """Only module_curator, test_gap, state_sync, env_doc_sync,
+    frontend_sync, and security_posture set requires_repo=True (all need a
+    clone to inspect files). All other registry entries keep the default False."""
     assert PERIODIC_PASS_CONFIGS["module_curator"].requires_repo is True
     assert PERIODIC_PASS_CONFIGS["test_gap"].requires_repo is True
     assert PERIODIC_PASS_CONFIGS["state_sync"].requires_repo is True
     assert PERIODIC_PASS_CONFIGS["env_doc_sync"].requires_repo is True
     assert PERIODIC_PASS_CONFIGS["frontend_sync"].requires_repo is True
+    assert PERIODIC_PASS_CONFIGS["security_posture"].requires_repo is True
     for key, cfg in PERIODIC_PASS_CONFIGS.items():
         if key in (
             "module_curator",
@@ -643,6 +645,7 @@ def test_periodic_pass_configs_requires_repo():
             "state_sync",
             "env_doc_sync",
             "frontend_sync",
+            "security_posture",
         ):
             continue
         assert cfg.requires_repo is False, f"{key}.requires_repo should be False"

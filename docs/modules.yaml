@@ -232,6 +232,7 @@ modules:
       - src/robotsix_mill/runners/bc_check_runner.py
       - src/robotsix_mill/runners/completeness_check_runner.py
       - src/robotsix_mill/runners/run_health_runner.py
+      - src/robotsix_mill/runners/security_posture_runner.py
       - src/robotsix_mill/runners/state_sync_runner.py
       - src/robotsix_mill/runners/diagnostic_runner.py
       - src/robotsix_mill/runners/diagnostic_checks.py
