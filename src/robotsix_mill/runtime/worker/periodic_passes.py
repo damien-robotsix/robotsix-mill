@@ -838,7 +838,7 @@ class PeriodicPassesMixin(_WorkerBase):
                     for wf in discover_periodic_workflows(clone_dir):
                         if not wf.enabled:
                             continue
-                        if wf.kind in ("llm_agent", "schedule_only"):
+                        if wf.kind in ("llm_agent", "schedule_only", "mill_only"):
                             # Global per-agent kill-switch (fleet-wide off).
                             if not getattr(settings, f"{wf.name}_periodic", True):
                                 continue
