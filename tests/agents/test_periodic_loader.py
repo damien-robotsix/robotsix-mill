@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from robotsix_mill.agents.periodic_loader import (
+    kind_for,
+    validate_periodic_file_content,
+)
 from robotsix_mill.agents import periodic_loader as pl
 
 
@@ -253,3 +257,25 @@ def test_validate_bespoke_blank_prompt_rejected():
 def test_validate_known_schedule_only_is_valid():
     errs = pl.validate_periodic_file_content("trace_review", None)
     assert errs == []
+
+
+# --- mill_only guard -------------------------------------------------------
+
+
+def test_validate_mill_only_env_doc_sync_rejected():
+    """env_doc_sync is mill-internal and must be rejected for managed repos."""
+    errs = validate_periodic_file_content("env_doc_sync", None)
+    assert errs, "expected validation errors for mill-only agent"
+    assert "mill-internal" in errs[0].lower() or "mill_only" in errs[0].lower()
+
+
+def test_validate_mill_only_frontend_sync_rejected():
+    """frontend_sync is mill-internal and must be rejected for managed repos."""
+    errs = validate_periodic_file_content("frontend_sync", None)
+    assert errs, "expected validation errors for mill-only agent"
+
+
+def test_kind_for_mill_only():
+    """env_doc_sync and frontend_sync must resolve to mill_only kind."""
+    assert kind_for("env_doc_sync") == "mill_only"
+    assert kind_for("frontend_sync") == "mill_only"

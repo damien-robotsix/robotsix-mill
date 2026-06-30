@@ -141,11 +141,11 @@ def test_env_doc_sync_in_periodic_pass_configs():
 
 
 def test_env_doc_sync_in_builtin_kinds():
-    """env_doc_sync is listed in _BUILTIN_KINDS as llm_agent."""
+    """env_doc_sync is listed in _BUILTIN_KINDS as mill_only."""
     from robotsix_mill.agents.periodic_loader import _BUILTIN_KINDS
 
     assert "env_doc_sync" in _BUILTIN_KINDS
-    assert _BUILTIN_KINDS["env_doc_sync"] == "llm_agent"
+    assert _BUILTIN_KINDS["env_doc_sync"] == "mill_only"
 
 
 def test_env_doc_sync_presence_file(tmp_path):
