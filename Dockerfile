@@ -201,20 +201,25 @@ USER root
 # Copy the full source tree for sandbox test runs.
 COPY . /app
 
-# Layer dev tooling (pytest, mypy, ruff, bandit) on top of the
-# site-packages inherited from base.
-# Plain pip here (not uv): the base stage copies the builder's site-packages
-# but NOT its /usr/local/bin/uv launcher, so a fresh `pip install uv` sees uv
-# already satisfied and never recreates the binary → "uv: not found". pip is
-# present and the editable install over inherited deps is cheap. (See PR #491.)
-# Dev tooling moved from the `dev` extra to PEP 735 [dependency-groups]
-# (#1166); `pip install ".[dev,...]"` then silently installed NOTHING for the
-# vanished extra, shipping a :dev image without pytest — which is the
-# sandbox image (config.yaml pins sandbox.image: robotsix/mill:dev), so
-# every board's test gate broke at once (2026-06-11). `--group dev` is the
-# pip ≥25.1 way to install a dependency-group; the group's
-# `robotsix-modules` git dependency resolves natively (git in base stage).
-RUN pip install --no-cache-dir --root-user-action=ignore -e ".[tracing]" --group dev \
+# Layer dev tooling (pytest, mypy, ruff, bandit, robotsix-modules) on top of
+# the site-packages inherited from base.
+#
+# Use uv (not pip): the `dev` dependency-group includes git-only deps
+# (robotsix-modules, robotsix-agent-comm) declared in [tool.uv.sources].
+# pip does NOT read [tool.uv.sources], so `pip install --group dev` resolves
+# the bare name `robotsix-modules` to an unrelated PyPI squatter (pinned to
+# Python <3.11) and fails with "no matching distribution" — which silently
+# broke every :dev image build from 2026-06-26. uv reads [tool.uv.sources]
+# and resolves them from the frozen lockfile, exactly like the builder stage.
+# The base stage carries the builder's site-packages but not the uv launcher,
+# so copy the binary across before using it.
+COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
+# hadolint ignore=SC2086
+RUN uv export --frozen --no-emit-project --extra tracing --group dev \
+        --format requirements-txt -o /tmp/dev-requirements.txt \
+    && uv pip install --system --no-cache -r /tmp/dev-requirements.txt \
+    && uv pip install --system --no-cache --no-deps -e . \
+    && rm -f /tmp/dev-requirements.txt \
     && chown -R mill:mill /app
 
 # Entrypoint runs as root, joins the host's docker.sock group, then
