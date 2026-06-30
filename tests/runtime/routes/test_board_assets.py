@@ -12,7 +12,7 @@ from __future__ import annotations
 import pathlib
 
 BOARD_MILL_CSS = (
-    pathlib.Path(__file__).resolve().parents[2]
+    pathlib.Path(__file__).resolve().parents[3]
     / "src/robotsix_mill/runtime/static/board-mill.css"
 )
 

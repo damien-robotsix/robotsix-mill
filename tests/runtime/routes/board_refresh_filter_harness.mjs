@@ -32,7 +32,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Resolve the real board-mill.js relative to this harness — never duplicate it.
 const BOARD_JS = path.resolve(
   __dirname,
-  "../../src/robotsix_mill/runtime/static/board-mill.js",
+  "../../../src/robotsix_mill/runtime/static/board-mill.js",
 );
 const source = fs.readFileSync(BOARD_JS, "utf8");
 
