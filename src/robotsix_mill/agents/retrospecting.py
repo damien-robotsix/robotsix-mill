@@ -301,6 +301,10 @@ def run_retrospect_agent(
             t for t in build_fs_tools(repo_dir, settings) if t.__name__ in ro_tool_names
         ]
 
+        from ..core.tool_wrappers import wrap_read_tools_with_consecutive_error_guard
+
+        tools = wrap_read_tools_with_consecutive_error_guard(tools)
+
     # PromptedOutput (not the default ToolOutput): the cheap driver
     # model has no OpenRouter endpoint for the forced `tool_choice`
     # ToolOutput needs (404), and it doesn't support NativeOutput

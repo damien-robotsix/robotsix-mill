@@ -335,6 +335,10 @@ def run_review_agent(
         readonly_names = {"read_file", "list_dir"}
         tools = [t for t in all_fs_tools if t.__name__ in readonly_names]
 
+        from ..core.tool_wrappers import wrap_read_tools_with_consecutive_error_guard
+
+        tools = wrap_read_tools_with_consecutive_error_guard(tools)
+
     overrides: dict[str, Any] = {}
     if level is not None:
         overrides["level"] = level

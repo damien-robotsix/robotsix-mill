@@ -1,5 +1,14 @@
 ## 0.0.0 (unreleased)
 
+- **pipeline**: add consecutive-same-error guard to ``read_file`` and
+  ``list_dir`` tools across all pipeline stages.  When the same path
+  returns the same error class 3 times consecutively, the tool raises
+  ``ModelRetry`` with an instruction to abandon the path — instead of
+  returning the raw error string and wasting further tool calls.
+  The guard lives in ``src/robotsix_mill/core/tool_wrappers.py`` and is
+  applied at agent construction time in ``coordinating.py``,
+  ``documenting.py``, ``reviewing.py``, and ``retrospecting.py``.
+
 - **core**: extract `_verify_merge_before_done` from `_TransitionMixin`
   into a standalone `verify_merge_before_done()` in `_helpers.py` —
   decouples git merge verification from the state-transition mixin
