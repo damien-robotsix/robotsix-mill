@@ -12,7 +12,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import AsyncContextManager, Callable
+from typing import Any, AsyncContextManager, Callable
 
 from fastapi import FastAPI
 from robotsix_llmio.logging import setup_logging as llmio_setup_logging
@@ -326,7 +326,7 @@ async def _start_board_manager(
         board_repo_id=board_repo_id,
         enable_write_ops=settings.board_agent_write_ops,
     )
-    manager_kwargs: dict = dict(
+    manager_kwargs: dict[str, Any] = dict(
         broker_host=settings.board_agent_broker_host,
         broker_port=settings.board_agent_broker_port,
         broker_scheme=settings.board_agent_broker_scheme,
