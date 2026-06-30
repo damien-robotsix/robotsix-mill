@@ -377,7 +377,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `core.claude_max_concurrency` | `MILL_CLAUDE_MAX_CONCURRENCY` | `4` | Process-wide cap on concurrent Claude SDK runs (each spawns a `claude` CLI subprocess) |
-| `core.claude_sdk_vision_enabled` | — | `false` | Allow inline image (screenshot/vision) input on the Claude SDK path. **Default off**: the installed llmio bridge cannot consume `BinaryContent` image parts — it stringifies them into a useless repr that hangs the `claude` CLI until the 1200s per-call cap fires. While off, the refine/review screenshot paths degrade to a text note. Flip to `true` (a one-line change) once the bridge gains real image-input support |
+| `core.claude_sdk_vision_enabled` | `MILL_CLAUDE_SDK_VISION_ENABLED` | `false` | Allow inline image (screenshot/vision) input on the Claude SDK path. **Default off**: the installed llmio bridge cannot consume `BinaryContent` image parts — it stringifies them into a useless repr that hangs the `claude` CLI until the 1200s per-call cap fires. While off, the refine/review screenshot paths degrade to a text note. Flip to `true` (a one-line change) once the bridge gains real image-input support |
 | `core.investigation_workspace` | `MILL_INVESTIGATION_WORKSPACE` | `None` | Path to a directory containing clones of registered repos for cross-repo investigation by the maintenance agent. When set, the agent's read-only tools are scoped to this directory. When None, falls back to the ticket's own workspace repo_dir. |
 
 ### 2. Request limits
@@ -385,7 +385,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `core.limits.coordinator_requests` | `MILL_PER_PASS_REQUEST_BUDGET` | `500` | Per-pass request budget for the implement (coordinator) agent. Resets each pass; normal tickets fit in one pass. Hard upper bound 5000 |
-| `core.limits.subtask_request_limit` | — | `30` | Per-subtask request cap for `spawn_subtask` sub-agents delegated by the coordinator |
+| `core.limits.subtask_request_limit` | `MILL_SUBTASK_REQUEST_LIMIT` | `30` | Per-subtask request cap for `spawn_subtask` sub-agents delegated by the coordinator |
 | `core.limits.explore_requests` | `MILL_EXPLORE_REQUEST_LIMIT` | `100` | Per-call request cap for the explore sub-agent |
 | `core.limits.explore_max_tokens` | `MILL_EXPLORE_MAX_TOKENS` | `4096` | Output token cap for explore sub-agent responses |
 | `core.limits.consult_requests` | `MILL_CONSULT_REQUEST_LIMIT` | `15` | Per-call request cap for the domain-expert consultation sub-agent |
@@ -397,8 +397,8 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.limits.scope_triage_max_files` | `MILL_SCOPE_TRIAGE_MAX_FILES` | `50` | Max out-of-scope text files before the scope-triage flood guard blocks (0 disables) |
 | `core.limits.refine_requests` | `MILL_REFINE_REQUEST_LIMIT` | `80` | Per-call request cap for the refine agent |
 | `core.limits.refine_requests_simple` | `MILL_REFINE_REQUEST_LIMIT_SIMPLE` | `40` | Per-call request cap for simple/sonnet refine runs (lower because explore tools are gated off) |
-| `core.limits.refine_max_tool_calls` | — | `120` | (YAML-only) Hard cap on total tool calls per refine trace (runaway-loop backstop) |
-| `core.limits.refine_max_errors` | — | `20` | (YAML-only) Max tool-call errors per refine trace before auto-termination |
+| `core.limits.refine_max_tool_calls` | `MILL_REFINE_MAX_TOOL_CALLS` | `120` | (YAML-only) Hard cap on total tool calls per refine trace (runaway-loop backstop) |
+| `core.limits.refine_max_errors` | `MILL_REFINE_MAX_ERRORS` | `20` | (YAML-only) Max tool-call errors per refine trace before auto-termination |
 | `core.limits.refine_web_fetch_max_calls` | — | `5` | (YAML-only) Max real (cache-miss) `web_fetch` calls across one whole refine trace (cross-consult) |
 | `core.limits.refine_web_fetch_max_total_bytes` | — | `500000` | (YAML-only) Cumulative fetch-bytes ceiling across one refine trace; `0` disables |
 | `core.limits.refine_web_search_max_calls` | — | `5` | (YAML-only) Max `web_search` calls across one whole refine trace (cross-consult) |
@@ -409,9 +409,9 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.limits.triage_requests` | `MILL_TRIAGE_REQUEST_LIMIT` | `8` | Per-call cap for the pre-refine triage agent (main call + tool calls). Distinct from `scope_triage_requests` (which caps the scope-triage agent) |
 | `core.limits.already_done_requests` | `MILL_ALREADY_DONE_REQUEST_LIMIT` | `8` | Per-call cap for the already-done verifier sub-agent (short-circuits when a prior no-change-needed memory entry matches the draft) |
 | `core.limits.dedup_max_candidates` | `MILL_DEDUP_MAX_CANDIDATES` | `8` | Maximum candidates passed to the dedup LLM after similarity pre-filtering. Caps token budget regardless of repo size |
-| `core.limits.coordinator_max_tool_calls` | — | `300` | Hard cap on total tool calls per implement (coordinator) trace — runaway-loop backstop above the request budget |
-| `core.limits.max_refine_explore_calls` | — | `4` | Hard cap on explore/parallel_explore sub-agent calls per refine run. 0 disables exploration entirely |
-| `core.limits.max_refine_read_file_calls` | — | `10` | Hard cap on read_file calls per refine/triage agent run. 0 disables the cap (unbounded reads) |
+| `core.limits.coordinator_max_tool_calls` | `MILL_COORDINATOR_MAX_TOOL_CALLS` | `300` | Hard cap on total tool calls per implement (coordinator) trace — runaway-loop backstop above the request budget |
+| `core.limits.max_refine_explore_calls` | `MILL_MAX_REFINE_EXPLORE_CALLS` | `4` | Hard cap on explore/parallel_explore sub-agent calls per refine run. 0 disables exploration entirely |
+| `core.limits.max_refine_read_file_calls` | `MILL_MAX_REFINE_READ_FILE_CALLS` | `10` | Hard cap on read_file calls per refine/triage agent run. 0 disables the cap (unbounded reads) |
 | `core.limits.review_requests` | `MILL_REVIEW_REQUEST_LIMIT` | `80` | Per-run request cap for the review agent |
 
 ### 3. Worker pool & retry
