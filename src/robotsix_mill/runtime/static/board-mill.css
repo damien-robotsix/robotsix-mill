@@ -110,6 +110,7 @@ h1 {
 .src-meta            { background: #3b0764; color: #a855f7; }
 .src-orphaned-pr-check { background: #3b0764; color: #a855f7; }
 .src-run-health      { background: #1e3a5f; color: #3b82f6; }
+.src-security-posture { background: #4a1a2e; color: #f472b6; }
 .src-ci-fix-dependency              { background: #422006; color: #fdba74; }
 .src-dependabot-alerts              { background: #422006; color: #fdba74; }
 .src-implement-baseline-dependency  { background: #1e293b; color: #94a3b8; }
