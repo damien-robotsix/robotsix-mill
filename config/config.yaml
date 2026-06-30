@@ -13,9 +13,11 @@
 #  and forces the deploy invariants service.api_host=0.0.0.0 and
 #  service.data_dir=/data.  The mill itself NEVER reads this file directly.
 #
-#  Secret convention (central-deploy §8): a leaf with value "" or null is a
-#  masked password input, stored encrypted and never echoed back.  Keep
-#  secret leaves blank.  Non-empty leaves render as plain, editable defaults.
+#  Secret convention (central-deploy §8): a leaf whose value is the literal
+#  sentinel "SECRET" renders as a masked password input — stored encrypted,
+#  never echoed back, and stripped to "" before the form is deployed if left
+#  unfilled.  Detection is by this explicit marker ONLY (no name heuristic):
+#  any other value (incl. "") renders as a plain, editable field.
 #
 #  The managed fleet (config/repos.yaml) is NOT part of this form — it is
 #  managed in-band, not at deploy time.  All other tunables keep their
@@ -33,10 +35,13 @@ gates:
   review_enabled: true          # dual-model code review before deliver
   auto_merge_enabled: false     # auto-merge green PRs after review approves
 
-# Credentials.  Blank => masked password input in the dashboard; fill them
-# in there, not here.  These map 1:1 to config/secrets.yaml field names.
+# Credentials.  Secret leaves carry the literal "SECRET" sentinel => masked
+# password input in the dashboard; fill them in there, not here.  These map
+# 1:1 to config/secrets.yaml field names.  langfuse_public_key is NOT a
+# secret (it is the public half of the Langfuse key pair) so it stays a
+# plain editable field.
 secrets:
-  openrouter_api_key: ""        # required — all LLM calls route via OpenRouter
-  forge_token: ""               # forge PAT (push / PR / merge)
-  langfuse_public_key: ""       # observability (optional)
-  langfuse_secret_key: ""       # observability (optional)
+  openrouter_api_key: SECRET    # required — all LLM calls route via OpenRouter  # pragma: allowlist secret
+  forge_token: SECRET           # forge PAT (push / PR / merge)  # pragma: allowlist secret
+  langfuse_public_key: ""       # observability (optional, non-secret public key)
+  langfuse_secret_key: SECRET   # observability (optional)  # pragma: allowlist secret
