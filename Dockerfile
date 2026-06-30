@@ -231,5 +231,14 @@ FROM base AS production
 # pyproject.toml.
 COPY entrypoint.sh /app/entrypoint.sh
 
+# central-deploy support (inert in the dev stack / under the host config
+# bind-mount). The deploy entrypoint seeds the committed config defaults
+# into the otherwise-empty mill-config named volume, and splits the
+# central-deploy config-target into the loader's secrets.yaml + overlay.
+# Both files live OUTSIDE /app/config so the named volume does not shadow
+# them. See deploy/docker-compose.yml and config/config.yaml.
+COPY config/mill.defaults.yaml /opt/robotsix-mill/config-defaults/mill.defaults.yaml
+COPY deploy/split_config.py /app/deploy/split_config.py
+
 # Entrypoint runs as root, joins the host's docker.sock group, then
 # drops to mill via runuser. (No USER mill here.)

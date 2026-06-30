@@ -13,7 +13,35 @@ set -euo pipefail
 # When NOT root (legacy image with USER mill baked in), assume the
 # group_add path in docker-compose still applies and just exec.
 if [[ "$(id -u)" == "0" ]]; then
-  if [[ -S /var/run/docker.sock ]]; then
+  if [[ -n "${DOCKER_HOST:-}" ]]; then
+    # ---- central-deploy mode -------------------------------------------
+    # Docker is reached over TCP (a socket-proxy sibling), so there is NO
+    # host docker.sock to join — skip the GID step entirely. Instead,
+    # reconcile the config volume that central-deploy populated.
+    #
+    # 1. Seed the committed defaults. The named mill-config volume mounts
+    #    over the image's /app/config and (because central-deploy writes
+    #    config.yaml into it first) is never auto-populated from the image,
+    #    so the loader's REQUIRED config/mill.defaults.yaml would be
+    #    missing. The production image bakes a copy outside the volume.
+    if [[ ! -f /app/config/mill.defaults.yaml \
+          && -f /opt/robotsix-mill/config-defaults/mill.defaults.yaml ]]; then
+      cp /opt/robotsix-mill/config-defaults/mill.defaults.yaml \
+         /app/config/mill.defaults.yaml
+    fi
+    # 2. Split the central-deploy-written config-target into the flat
+    #    secrets.yaml + the mill.local.yaml overlay the loader reads.
+    #    Idempotent; safe when config.yaml / its secrets block is absent.
+    if [[ -f /app/config/config.yaml ]]; then
+      python /app/deploy/split_config.py \
+        /app/config/config.yaml /app/config \
+        || echo "WARNING: deploy config split failed" >&2
+    fi
+    # 3. Hand the (root-written) config + data to the unprivileged runtime
+    #    user so it can read secrets.yaml (0600) and write its DB.
+    chown -R mill:mill /app/config 2>/dev/null || true
+    chown mill:mill /data 2>/dev/null || true
+  elif [[ -S /var/run/docker.sock ]]; then
     SOCK_GID="$(stat -c '%g' /var/run/docker.sock)"
     if [[ "$SOCK_GID" =~ ^[0-9]+$ ]] && [[ "$SOCK_GID" -gt 0 ]]; then
       if ! getent group "$SOCK_GID" >/dev/null; then
