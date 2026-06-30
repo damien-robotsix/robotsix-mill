@@ -1,5 +1,10 @@
 ## 0.0.0 (unreleased)
 
+- **dev**: add ``make format`` and ``make lint`` targets for quick local
+  ruff/mypy checks across all Python sources (``src/``, ``tests/``,
+  ``scripts/``, ``vulture_whitelist.py``, ``deploy/split_config.py``,
+  ``dev/``).  ``lint`` is check-only; ``format`` auto-fixes.
+
 - **git**: fix ``git_push_with_lease`` for first-push branches (no remote
   counterpart yet).  The pre-push fetch now tolerates "couldn't find remote
   ref" and falls through to ``push_with_lease`` which already handles

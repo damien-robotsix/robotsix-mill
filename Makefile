@@ -4,7 +4,9 @@ PYTHON ?= python3.14
 VENV   := .venv
 BIN    := $(VENV)/bin
 
-.PHONY: install test serve dev docker clean docs-serve docs-build
+SOURCES ?= src/ tests/ scripts/ vulture_whitelist.py deploy/split_config.py dev/
+
+.PHONY: install test format lint serve dev docker clean docs-serve docs-build
 
 $(BIN)/activate:
 	$(PYTHON) -m venv $(VENV)
@@ -16,6 +18,17 @@ install:
 
 test: install
 	$(BIN)/python -m pytest -q --cov=robotsix_mill --cov-report=term-missing --cov-fail-under=70
+
+.PHONY: format  ## Auto-format Python source files
+format: install
+	uv run ruff check --fix $(SOURCES)
+	uv run ruff format $(SOURCES)
+
+.PHONY: lint  ## Lint Python source files (check only)
+lint: install
+	uv run ruff check $(SOURCES)
+	uv run ruff format --check $(SOURCES)
+	uv run mypy src/ --strict
 
 # Run the service as it runs in prod/Docker (reads ./.env and ./secrets.env, data in
 # ./.mill-data). Ctrl-C to stop.
