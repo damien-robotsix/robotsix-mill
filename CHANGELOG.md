@@ -9,11 +9,14 @@
   distinguish "one oversized prompt" from "many redundant turns."
   Stage-level retries stamp `retry.reason` on the root span; call-level
   retries in `run_agent` and `acall_with_retry` stamp `mill.step_usage`.
+- **docs**: document `MILL_META_PERIODIC` and `MILL_META_INTERVAL_SECONDS`
+  env vars for the meta periodic agent in `configuration.md`, and add
+  `meta` to the periodic agents roster.
 - **fs_tools**: `list_dir` returns a graceful error message for
   non-existent directories instead of letting `iterdir()` raise
   `FileNotFoundError`, which was recorded as an exception in
   OpenTelemetry traces and polluted observability for refine/review
-  stages probing deleted paths.
+  stages probing deleted paths.)
 - **docs**: document the `orphaned_pr_check` periodic agent and its 8 env
   vars in `docs/configuration.md` (previously entirely undocumented).
 - **refine**: add a deterministic code-block density check that skips the

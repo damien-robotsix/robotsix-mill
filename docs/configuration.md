@@ -628,7 +628,7 @@ Each periodic agent shares this pattern:
 | `periodic.<name>.memory_path` | `MILL_<NAME>_MEMORY_PATH` | `None` | Override path for memory ledger ² ³ |
 
 Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
-`agent_check`, `survey`, `ci_monitor`, `config_sync`, `member_sync`, `bc_check`,
+`agent_check`, `survey`, `ci_monitor`, `config_sync`, `member_sync`, `meta`, `bc_check`,
 `completeness_check`, `diagnostic`, `forge_parity`, `module_curator`, `orphaned_pr_check`,
 `copy_paste`, `timeout_escalation`, `langfuse_cleanup`, `data_dir_audit`, `dependabot_ingest`, `run_health`, `stale_branch_cleanup`,
 `state_sync`, `env_doc_sync`, `db_maintenance`, `sandbox_reaper`.
@@ -749,6 +749,19 @@ The `db_maintenance` periodic agent runs SQLite maintenance (`VACUUM`,
 |---------|---------|-------------|
 | `MILL_DB_MAINTENANCE_PERIODIC` | `true` | Enable periodic database maintenance passes |
 | `MILL_DB_MAINTENANCE_INTERVAL_SECONDS` | `86400` | Seconds between database maintenance passes |
+
+#### meta
+
+The `meta` periodic agent is a cross-repo survey agent that clones all
+registered repositories, compares their codebases, and files extraction
+and alignment proposals.  It runs as a single global pass per interval
+(not per-repo).  In addition to the standard `periodic` fields above,
+these agent-specific settings are available:
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `MILL_META_PERIODIC` | `false` | Master switch for the daily meta-agent pass. Default `false` (off) — the operator must register the meta board in `repos.yaml` first. Flip to `true` to enable the global daily schedule. |
+| `MILL_META_INTERVAL_SECONDS` | `86400` | Seconds between automatic meta-agent passes. Minimum enforced at 60 s in the worker loop. |
 
 #### sandbox_reaper
 
