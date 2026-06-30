@@ -1,0 +1,42 @@
+# =============================================================================
+#  central-deploy operator config form for robotsix-mill.
+#
+#  This file is read ONLY by central-deploy: it is fetched at onboarding,
+#  rendered as the dashboard config form, and the operator-edited result is
+#  written back into the mill-config volume at the config-target path
+#  (/app/config/config.yaml — see deploy/docker-compose.yml).
+#
+#  At container start, entrypoint.sh (deploy mode) SPLITS this file into the
+#  two files the mill's config loader actually reads:
+#    * the `secrets:` sub-map -> config/secrets.yaml (flat, 0600)
+#    * everything else        -> config/mill.local.yaml (overlay)
+#  and forces the deploy invariants service.api_host=0.0.0.0 and
+#  service.data_dir=/data.  The mill itself NEVER reads this file directly.
+#
+#  Secret convention (central-deploy §8): a leaf with value "" or null is a
+#  masked password input, stored encrypted and never echoed back.  Keep
+#  secret leaves blank.  Non-empty leaves render as plain, editable defaults.
+#
+#  The managed fleet (config/repos.yaml) is NOT part of this form — it is
+#  managed in-band, not at deploy time.  All other tunables keep their
+#  config/mill.defaults.yaml values unless added here.
+# =============================================================================
+
+# Forge backend the mill delivers PRs to.
+forge:
+  kind: github                  # github | gitlab | none
+  remote_url: https://github.com  # base remote URL (edit for self-hosted / GitLab)
+
+# A couple of high-level pipeline gates an operator may want to flip at
+# deploy time.  See config/mill.defaults.yaml (gates:) for the full set.
+gates:
+  review_enabled: true          # dual-model code review before deliver
+  auto_merge_enabled: false     # auto-merge green PRs after review approves
+
+# Credentials.  Blank => masked password input in the dashboard; fill them
+# in there, not here.  These map 1:1 to config/secrets.yaml field names.
+secrets:
+  openrouter_api_key: ""        # required — all LLM calls route via OpenRouter
+  forge_token: ""               # forge PAT (push / PR / merge)
+  langfuse_public_key: ""       # observability (optional)
+  langfuse_secret_key: ""       # observability (optional)

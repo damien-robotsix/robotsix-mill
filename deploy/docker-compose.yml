@@ -1,0 +1,146 @@
+# central-deploy-contract-version: 1
+#
+# robotsix-mill deploy compose — consumed ONLY by central-deploy
+# (https://deploy.robotsix.net).  The repo-root docker-compose.yml is the
+# dev stack and is ignored by central-deploy; this file is the
+# deploy-contract-compliant compose (pre-built images, named volumes only,
+# no host bind-mounts, no build:).
+#
+# Docker access (decision): the mill spawns disposable sibling sandbox
+# containers via the Docker CLI, which honours DOCKER_HOST.  Instead of
+# bind-mounting the host docker socket (root-equivalent), the mill talks to
+# a hardened tecnativa/docker-socket-proxy sibling over TCP.  DOCKER_HOST
+# points the CLI at that proxy.
+#
+# Secrets (decision): central-deploy writes the operator form (config.yaml,
+# see config/config.yaml) into the mill-config volume at the
+# config-target path.  entrypoint.sh (deploy mode, keyed off DOCKER_HOST)
+# splits it into the files the loader actually reads — config/secrets.yaml
+# (flat secret map) and config/mill.local.yaml (the non-secret overlay) —
+# and seeds the committed config/mill.defaults.yaml that the named volume
+# would otherwise shadow.
+#
+# NOTE — params the v1 contract does NOT model (present in the dev compose,
+# NOT reproducible here): `init: true`, `stop_grace_period: 30m`,
+# `ulimits.nofile`, `mem_limit: 4g`, `cpus: 2`.  entrypoint.sh already
+# raises the soft nofile limit at start; the rest must be baked into the
+# image or added to a future contract version.  They are not required for a
+# healthy deploy.
+#
+# FOLLOW-UPS:
+#   1. socket-proxy host socket — ADDRESSED.  The docker-socket-proxy needs
+#      the host /var/run/docker.sock, and the v1 contract forbids host
+#      bind-mounts in this file.  The socket is now injected out-of-band by
+#      central-deploy in response to the `robotsix.deploy.host-docker-sock`
+#      label on the socket-proxy service below (the way claude-mount is
+#      injected) — paired with the central-deploy PR adding that label's
+#      support.  The proxy is now live and the mill can spawn sandboxes.
+#   2. mill-sandbox-net — ADDRESSED (auto-handled at mill startup).  The dev
+#      stack puts the sandbox-proxy and the spawned mill-sbx-* sandboxes on
+#      an internal Docker network; the contract ignores `networks:`, so
+#      central-deploy does not create it.  In deploy mode (DOCKER_HOST set)
+#      the mill now creates that internal network and attaches the
+#      sandbox-proxy to it at startup (and lazily on first sandbox run),
+#      via runtime.lifespan + sandbox.ensure_sandbox_network.
+#   3. sandbox.data_mount / sandbox.data_volume — ADDRESSED (auto-handled at
+#      mill startup).  The sandbox mounts a ticket's repo subtree on the HOST
+#      daemon's filesystem, so it needs the real host path (or volume name)
+#      of the mill-data volume.  In deploy mode the mill now discovers this
+#      at startup by inspecting its own container's mounts
+#      (sandbox.resolve_data_volume), so no host-specific config is required.
+#   4. claude-mount targets /root/.claude, but the mill runs as uid 1000
+#      with HOME=/home/mill.  The default LLM path (OpenRouter via
+#      openrouter_api_key) is unaffected; the subscription-auth Claude SDK
+#      transport would need HOME/symlink wiring.
+
+services:
+  mill:
+    image: robotsix/mill:latest
+    labels:
+      robotsix.deploy.primary: "true"
+      robotsix.deploy.claude-mount: "true"
+      robotsix.deploy.config-target: "/app/config/config.yaml"
+    environment:
+      # Reach the Docker daemon through the hardened socket-proxy sibling
+      # rather than a mounted socket.  The Docker CLI (which the sandbox
+      # uses) honours DOCKER_HOST.  entrypoint.sh also keys its deploy-mode
+      # behaviour (config split, defaults seeding, no socket-GID join) off
+      # the presence of this variable.
+      DOCKER_HOST: "tcp://mill-socket-proxy:2375"
+    volumes:
+      - mill-data:/data
+      - mill-config:/app/config
+    ports:
+      - "8077:8077"
+    healthcheck:
+      # Mirrors the image HEALTHCHECK — Python stdlib, no curl needed.
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://localhost:8077/health/live')"]
+      interval: 30s
+      timeout: 25s
+      retries: 3
+      start_period: 15s
+
+  socket-proxy:
+    # Hardened Docker API gateway.  Container name is fixed so DOCKER_HOST
+    # above resolves regardless of the operator-chosen component id.
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: mill-socket-proxy
+    labels:
+      # central-deploy binds the host /var/run/docker.sock into this
+      # container in response to this label (paired with the central-deploy
+      # PR adding host-docker-sock support).  This gives the proxy the host
+      # socket WITHOUT a contract-forbidden host bind-mount in this file —
+      # the way claude-mount injects /root/.claude into the mill container.
+      robotsix.deploy.host-docker-sock: "true"
+    environment:
+      # Grant exactly the API surface the sandbox CLI calls:
+      #   docker run  -> POST /containers/create + /containers/{id}/start
+      #   docker ps   -> GET  /containers/json
+      #   docker insp -> GET  /containers/{id}/json
+      #   docker rm -f-> DELETE /containers/{id}
+      #   image pull  -> /images/*   (sandbox image may need pulling)
+      #   --network / --mount type=volume reference networks + volumes
+      CONTAINERS: "1"
+      IMAGES: "1"
+      NETWORKS: "1"
+      VOLUMES: "1"
+      POST: "1"     # allow create/start (mutating POST methods)
+      DELETE: "1"   # allow container removal (docker rm -f / sandbox reaper)
+      # Everything else OFF (the sandbox never uses exec/build/swarm/etc.):
+      AUTH: "0"
+      BUILD: "0"
+      COMMIT: "0"
+      CONFIGS: "0"
+      DISTRIBUTION: "0"
+      EXEC: "0"
+      INFO: "0"
+      NODES: "0"
+      PLUGINS: "0"
+      SECRETS: "0"
+      SERVICES: "0"
+      SESSION: "0"
+      SWARM: "0"
+      SYSTEM: "0"
+      TASKS: "0"
+    # This proxy needs the host /var/run/docker.sock to function.  The v1
+    # contract forbids host bind-mounts in this file, so central-deploy
+    # injects the socket out-of-band in response to the
+    # `robotsix.deploy.host-docker-sock` label above (see FOLLOW-UP #1).
+
+  sandbox-proxy:
+    # Egress allow-list proxy for the disposable sandboxes.  The internal
+    # network connecting this to the spawned mill-sbx-* containers is not
+    # created by central-deploy (networks: ignored); the mill creates it and
+    # attaches this container at startup (see FOLLOW-UP #2).
+    image: robotsix/mill-sandbox-proxy:latest
+    container_name: sandbox-proxy
+
+volumes:
+  mill-data:
+    driver: local
+    labels:
+      robotsix.deploy.stateful: "true"
+  mill-config:
+    driver: local
+    labels:
+      robotsix.deploy.stateful: "true"

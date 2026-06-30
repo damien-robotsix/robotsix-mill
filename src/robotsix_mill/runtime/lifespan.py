@@ -195,6 +195,34 @@ def create_lifespan(
         except Exception:
             logging.getLogger(__name__).exception("startup sandbox reap failed")
 
+        # Deploy mode only (central-deploy): the mill talks to a REMOTE
+        # Docker daemon via the socket-proxy (DOCKER_HOST is set), and
+        # central-deploy does NOT create the dev stack's `networks:` block
+        # nor wire the data volume into the sandbox config. Resolve the
+        # host-side data mount and create the internal egress network at
+        # startup so spawned sandboxes can mount repos and reach PyPI/GitHub.
+        # `settings` is the mutable Settings instance on app.state — mutating
+        # it in place is fine. The dev stack (no DOCKER_HOST) skips this
+        # entirely; its compose handles both, so its path is unchanged.
+        if os.environ.get("DOCKER_HOST"):
+            try:
+                from ..sandbox import ensure_sandbox_network, resolve_data_volume
+
+                await asyncio.to_thread(resolve_data_volume, settings)
+                logging.getLogger(__name__).info(
+                    "deploy startup: data_volume=%s sandbox_data_mount=%s",
+                    settings.data_volume,
+                    settings.sandbox_data_mount,
+                )
+                net_ready = await asyncio.to_thread(ensure_sandbox_network, settings)
+                logging.getLogger(__name__).info(
+                    "deploy startup: sandbox egress network ready=%s", net_ready
+                )
+            except Exception:
+                logging.getLogger(__name__).exception(
+                    "deploy startup sandbox wiring failed"
+                )
+
         worker.start()
         worker.requeue_unfinished()  # resume anything left mid-pipeline
 

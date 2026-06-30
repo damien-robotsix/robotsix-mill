@@ -25,6 +25,7 @@ modules:
       - config/mill.local.example.yaml
       - config/repos.example.yaml
       - config/secrets.example.yaml
+      - config/config.yaml
       - .robotsix-mill/config.yaml
       - .robotsix-mill/periodic/*.yaml
       - tests/config/test_config.py
@@ -550,6 +551,8 @@ modules:
       - entrypoint.sh
       - docker-compose.yml
       - docker-compose.override.example.yml
+      - deploy/docker-compose.yml
+      - deploy/split_config.py
       - .dockerignore
       - .hadolint.yaml
       - pyproject.toml
