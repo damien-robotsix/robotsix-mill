@@ -2028,12 +2028,15 @@ def test_re_refine_counter_forces_cheap_after_threshold(
         f"Expected refine_model={ctx.settings.refine_trivial_subscription_model!r} "
         f"on forced-cheap route, got {refine_kwargs.get('refine_model')!r}"
     )
-    assert (
-        refine_kwargs.get("request_limit_override")
-        == ctx.settings.refine_request_limit_simple
+    assert refine_kwargs.get("request_limit_override") == max(
+        int(
+            ctx.settings.refine_request_limit_simple
+            * ctx.settings.refine_dynamic_limit_multiplier
+        ),
+        ctx.settings.refine_dynamic_limit_min,
     ), (
-        f"Expected request_limit_override={ctx.settings.refine_request_limit_simple} "
-        f"on forced-cheap route, got {refine_kwargs.get('request_limit_override')!r}"
+        f"Expected dynamic request_limit_override for forced-cheap route, "
+        f"got {refine_kwargs.get('request_limit_override')!r}"
     )
     # Exploration sub-agents must be disabled on sendback.
     assert refine_kwargs.get("include_explore") is False
@@ -2838,9 +2841,14 @@ def test_subscription_tier_routing_needs_exploration_uses_opus(
     assert refine_kwargs.get("refine_level") is None, (
         "Expected no refine_level downgrade for non-trivial ticket"
     )
-    assert refine_kwargs.get("request_limit_override") is None, (
-        "Expected no request_limit_override for needs-exploration path"
-    )
+    # Dynamic limit fires for non-simple complexity: base=80, ×1.5 → 120.
+    assert refine_kwargs.get("request_limit_override") == max(
+        int(
+            ctx.settings.refine_request_limit
+            * ctx.settings.refine_dynamic_limit_multiplier
+        ),
+        ctx.settings.refine_dynamic_limit_min,
+    ), "Expected dynamic request_limit_override for needs-exploration path"
 
 
 def test_subscription_tier_routing_disabled_no_alias(
@@ -2879,6 +2887,50 @@ def test_subscription_tier_routing_disabled_no_alias(
     )
     assert refine_kwargs.get("request_limit_override") is None, (
         "Expected no request_limit_override when feature flag is off"
+    )
+
+
+def test_dynamic_limit_fires_on_large_draft(ctx_factory, monkeypatch, tmp_path):
+    """When the draft exceeds refine_dynamic_limit_spec_chars, the dynamic
+    request_limit_override is applied even for simple-complexity tickets."""
+    ctx = ctx_factory()
+
+    # Build a draft > 3000 chars so the length trigger fires.
+    long_draft = "x" * (ctx.settings.refine_dynamic_limit_spec_chars + 1)
+    t = _ticket(ctx, body=long_draft)
+
+    refine_kwargs: dict = {}
+
+    def _run(**kw):
+        refine_kwargs.update(kw)
+        return RefineResult(spec_markdown=_REAL_SPEC)
+
+    _apply_default_mocks(
+        monkeypatch,
+        triage_refine=lambda **kw: TriageResult(
+            decision="REFINE",
+            reason="simple change",
+            complexity="simple",
+            trivial_scope=False,
+        ),
+        run_refine_agent=_run,
+    )
+
+    _run_agent(ctx, t, tmp_path, draft=long_draft)
+
+    # Even though complexity is "simple" (which normally sets
+    # request_limit_override to refine_request_limit_simple via the
+    # tier-routing path), the large draft triggers the dynamic override.
+    expected = max(
+        int(
+            ctx.settings.refine_request_limit_simple
+            * ctx.settings.refine_dynamic_limit_multiplier
+        ),
+        ctx.settings.refine_dynamic_limit_min,
+    )
+    assert refine_kwargs.get("request_limit_override") == expected, (
+        f"Expected dynamic request_limit_override={expected} for large draft, "
+        f"got {refine_kwargs.get('request_limit_override')!r}"
     )
 
 

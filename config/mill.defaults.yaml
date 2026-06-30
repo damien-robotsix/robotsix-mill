@@ -42,6 +42,10 @@ core:
     refine_requests_simple: 40            # per-call request cap for simple/sonnet refine runs (lower because explore tools are gated off)
     refine_max_tool_calls: 120         # hard cap on total tool calls per refine trace (runaway-loop backstop)
     refine_max_errors: 20              # max tool-call errors before aborting a refine trace
+    refine_dynamic_limit_multiplier: 1.5   # multiplier applied to request_limit for large/complex specs
+    refine_dynamic_limit_min: 12           # floor for dynamic request_limit (never lower than this even if base * multiplier is lower)
+    refine_dynamic_limit_spec_chars: 3000  # draft char threshold above which dynamic limit fires
+    refine_usage_warning_threshold: 0.8    # log a warning when > this fraction of request_limit is consumed
     refine_web_fetch_max_calls: 5      # per-refine-run cap on web_fetch calls (across all ask_web_knowledge consults)
     refine_web_fetch_max_total_bytes: 500000  # per-refine-run cap on fetch bytes (0 disables)
     refine_web_search_max_calls: 5     # per-refine-run cap on web_search invocations

@@ -456,6 +456,30 @@ class RefineAgentMixin:
                 else:
                     refine_model = s.refine_subscription_model_complex
 
+            # Dynamic limit: increase budget for large or complex specs.
+            # Triggered when the draft exceeds the character threshold
+            # or when scope-triage complexity is non-trivial (proxied by
+            # non-simple triage complexity, which indicates the scope-triage
+            # agent needed significant budget to classify the ticket).
+            base_limit = (
+                request_limit_override
+                if request_limit_override is not None
+                else s.refine_request_limit
+            )
+            dynamic_triggered = len(draft) > s.refine_dynamic_limit_spec_chars
+            if not dynamic_triggered and triage_complexity not in (None, "simple"):
+                dynamic_triggered = True
+            if dynamic_triggered:
+                request_limit_override = max(
+                    int(base_limit * s.refine_dynamic_limit_multiplier),
+                    s.refine_dynamic_limit_min,
+                )
+                set_current_span_attribute("refine.dynamic_limit", True)
+                set_current_span_attribute("refine.dynamic_limit_base", base_limit)
+                set_current_span_attribute(
+                    "refine.dynamic_limit_effective", request_limit_override
+                )
+
             if resolved_level == 3:
                 set_current_span_attribute(
                     "refine.model_alias", refine_model if refine_model else "opus"
