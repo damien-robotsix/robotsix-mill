@@ -9,6 +9,11 @@
   applied at agent construction time in ``coordinating.py``,
   ``documenting.py``, ``reviewing.py``, and ``retrospecting.py``.
 
+- **ci**: remove dead `dependency-submission.yml` workflow (native
+  Dependabot `uv` graph job pre-empts custom workflows) and restore
+  `uv` ecosystem to `.github/dependabot.yml` with `open-pull-requests-limit: 0`
+  — upstream Dependabot fixes (Python 3.14 version-list, git-dep lockfile
+  parsing) allow the native `Graph Update: uv in /` check to pass.
 - **core**: extract `_verify_merge_before_done` from `_TransitionMixin`
   into a standalone `verify_merge_before_done()` in `_helpers.py` —
   decouples git merge verification from the state-transition mixin
