@@ -1041,7 +1041,7 @@ async def test_periodic_pass_opens_root_span_before_runner(ctx, monkeypatch):
     def fake_runner(session_id=None):
         captured["session_id"] = session_id
         captured["root_was_opened"] = seen.get("root_opened", False)
-        from robotsix_mill.runners.audit_runner import AuditPassResult
+        from robotsix_mill.runners.periodic_runner import AuditPassResult
 
         return AuditPassResult(
             updated_memory="",
@@ -1230,7 +1230,7 @@ async def test_periodic_pass_per_repo_forwards_repo_config_to_span(ctx, monkeypa
 
     def fake_runner(session_id=None, repo_config=None):
         captured_repo_config["value"] = repo_config
-        from robotsix_mill.runners.audit_runner import AuditPassResult
+        from robotsix_mill.runners.periodic_runner import AuditPassResult
 
         return AuditPassResult(
             updated_memory="",
@@ -2754,7 +2754,7 @@ async def test_periodic_pass_per_repo_first_tick_jittered(ctx, monkeypatch):
     w = Worker(ctx)
 
     def fake_runner(session_id=None, repo_config=None):
-        from robotsix_mill.runners.audit_runner import AuditPassResult
+        from robotsix_mill.runners.periodic_runner import AuditPassResult
 
         return AuditPassResult(
             updated_memory="",

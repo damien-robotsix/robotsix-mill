@@ -75,7 +75,7 @@ class TestRunSpawnSubtask:
                 repo_dir=repo_dir,
                 name="move-runners",
                 prompt="Move every *_runner.py into runners/.",
-                files_in_scope=["src/robotsix_mill/runners/audit_runner.py"],
+                files_in_scope=["src/robotsix_mill/runners/periodic_runner.py"],
             )
         )
 
@@ -85,7 +85,7 @@ class TestRunSpawnSubtask:
         assert captured["usage_limits"].request_limit == 7
         # files_in_scope landed in the user prompt as a hint block.
         assert "files-in-scope" in captured["user_prompt"]
-        assert "audit_runner.py" in captured["user_prompt"]
+        assert "periodic_runner.py" in captured["user_prompt"]
 
     def test_budget_cap_returns_structured_string(
         self,

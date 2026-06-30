@@ -369,13 +369,13 @@ class TestAuditTraceHealthEndpoints:
             yield c
 
     def test_audit_records_run(self, client, monkeypatch):
-        from robotsix_mill.runners import audit_runner
+        from robotsix_mill.runners import periodic_runner
 
         class _R:
             drafts_created: list = [{"id": "abc", "title": "x"}]
 
         monkeypatch.setattr(
-            audit_runner,
+            periodic_runner,
             "run_audit_pass",
             lambda session_id=None, repo_config=None: _R(),
         )
@@ -435,12 +435,12 @@ class TestAuditTraceHealthEndpoints:
         assert "draft created" in run["summary"]
 
     def test_error_run_recorded(self, client, monkeypatch):
-        from robotsix_mill.runners import audit_runner
+        from robotsix_mill.runners import periodic_runner
 
         def _fail(session_id=None, repo_config=None):
             raise RuntimeError("simulated failure")
 
-        monkeypatch.setattr(audit_runner, "run_audit_pass", _fail)
+        monkeypatch.setattr(periodic_runner, "run_audit_pass", _fail)
 
         r = client.post("/audit")
         assert r.status_code == 202

@@ -17,7 +17,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable
 
-from ..config import RepoConfig, get_secrets, target_branch_for
+from ..config import RepoConfig, Settings, get_secrets, target_branch_for
 from ..core.models import SourceKind
 from ..core.service import TicketService
 from ..forge.auth import github_token, gitlab_token
@@ -494,3 +494,94 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         requires_repo=True,
     ),
 }
+
+
+# ---------------------------------------------------------------------------
+# Single entry point — replaces 15 structurally-identical stub files
+# ---------------------------------------------------------------------------
+
+
+def run_periodic_pass_entry(
+    key: str,
+    session_id: str,
+    repo_config: RepoConfig | None = None,
+) -> PeriodicPassResult:
+    """Execute a periodic pass identified by *key* (a ``PERIODIC_PASS_CONFIGS`` key).
+
+    This is the single implementation behind every ``run_*_pass()`` stub.
+    The ``Settings`` seam is preserved here so that tests can monkeypatch
+    ``robotsix_mill.runners.periodic_runner.Settings``.
+
+    Args:
+        key: Config key in ``PERIODIC_PASS_CONFIGS`` (e.g. ``"audit"``).
+        session_id: Langfuse session id.
+        repo_config: Optional per-repo configuration.
+
+    Returns:
+        A ``PeriodicPassResult`` with ``updated_memory``, ``drafts_created``,
+        and ``session_id``.
+    """
+    if key not in PERIODIC_PASS_CONFIGS:
+        raise KeyError(
+            f"Unknown periodic pass key {key!r}. "
+            f"Known: {sorted(PERIODIC_PASS_CONFIGS.keys())}"
+        )
+
+    settings = Settings()
+
+    # Survey pass resets web-fetch / web-search budgets before running.
+    if key == "survey":
+        from ..agents.web_tools import reset_trace_web_fetch_budget
+        from ..agents.web_knowledge import reset_trace_web_search_budget
+
+        reset_trace_web_fetch_budget(
+            settings.survey_web_fetch_max_calls,
+            settings.survey_web_fetch_max_total_bytes,
+        )
+        reset_trace_web_search_budget(settings.survey_web_search_max_calls)
+
+    return run_periodic_pass(
+        session_id,
+        repo_config,
+        config=PERIODIC_PASS_CONFIGS[key],
+        settings=settings,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Factory-generated entry points — one module-level name per pass key so
+# that CLI `_RUNNERS`, `_make_background_pass`, and test imports all resolve
+# to a real callable via `getattr(periodic_runner, "run_audit_pass")`.
+# ---------------------------------------------------------------------------
+
+
+def _make_entry(key: str) -> Callable[[str, RepoConfig | None], PeriodicPassResult]:
+    """Return a callable ``(session_id, repo_config=None) -> PeriodicPassResult``
+    with a descriptive ``__name__`` for each periodic pass key."""
+
+    def _entry(
+        session_id: str,
+        repo_config: RepoConfig | None = None,
+    ) -> PeriodicPassResult:
+        return run_periodic_pass_entry(key, session_id, repo_config)
+
+    _entry.__name__ = key  # e.g. "audit", "health", …
+    _entry.__qualname__ = f"run_{key}_pass"
+    return _entry
+
+
+run_audit_pass = _make_entry("audit")
+run_agent_check_pass = _make_entry("agent_check")
+run_bc_check_pass = _make_entry("bc_check")
+run_survey_pass = _make_entry("survey")
+run_completeness_check_pass = _make_entry("completeness_check")
+run_copy_paste_pass = _make_entry("copy_paste")
+run_forge_parity_pass = _make_entry("forge_parity")
+run_config_sync_pass = _make_entry("config_sync")
+run_health_pass = _make_entry("health")
+run_module_curator_pass = _make_entry("module_curator")
+run_test_gap_pass = _make_entry("test_gap")
+run_state_sync_pass = _make_entry("state_sync")
+run_env_doc_sync_pass = _make_entry("env_doc_sync")
+run_frontend_sync_pass = _make_entry("frontend_sync")
+run_security_posture_pass = _make_entry("security_posture")

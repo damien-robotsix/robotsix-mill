@@ -534,7 +534,7 @@ def test_traces_detail_not_found(client, monkeypatch):
 def test_survey_fire_and_forget(client, monkeypatch):
     """POST /survey returns 202 immediately and runs the survey in a
     background thread — must not block on the LLM call."""
-    from robotsix_mill.runners import survey_runner
+    from robotsix_mill.runners import periodic_runner
 
     ran = threading.Event()
     release = threading.Event()
@@ -547,7 +547,7 @@ def test_survey_fire_and_forget(client, monkeypatch):
         release.wait(5)
         return _R()
 
-    monkeypatch.setattr(survey_runner, "run_survey_pass", slow_survey)
+    monkeypatch.setattr(periodic_runner, "run_survey_pass", slow_survey)
 
     r = client.post("/survey")
     assert r.status_code == 202
@@ -562,7 +562,7 @@ def test_survey_fire_and_forget(client, monkeypatch):
 def test_module_curator_fire_and_forget(client, monkeypatch):
     """POST /module-curator returns 202 immediately and runs the pass in
     a background thread (run-now surface for the daily module-curator)."""
-    from robotsix_mill.runners import module_curator_runner
+    from robotsix_mill.runners import periodic_runner
 
     ran = threading.Event()
     release = threading.Event()
@@ -575,7 +575,7 @@ def test_module_curator_fire_and_forget(client, monkeypatch):
         release.wait(5)
         return _R()
 
-    monkeypatch.setattr(module_curator_runner, "run_module_curator_pass", slow_curator)
+    monkeypatch.setattr(periodic_runner, "run_module_curator_pass", slow_curator)
 
     r = client.post("/module-curator")
     assert r.status_code == 202
@@ -1284,33 +1284,33 @@ class _FakePassResult:
 # (route_path, dotted_module_to_patch, attr_name_to_patch)
 BG_PASS_ROUTES = [
     # -- 13 factory-based routes (all use _make_background_pass) ----------
-    ("/audit", "robotsix_mill.runners.audit_runner", "run_audit_pass"),
-    ("/bc-check", "robotsix_mill.runners.bc_check_runner", "run_bc_check_pass"),
+    ("/audit", "robotsix_mill.runners.periodic_runner", "run_audit_pass"),
+    ("/bc-check", "robotsix_mill.runners.periodic_runner", "run_bc_check_pass"),
     (
         "/completeness-check",
-        "robotsix_mill.runners.completeness_check_runner",
+        "robotsix_mill.runners.periodic_runner",
         "run_completeness_check_pass",
     ),
     (
         "/agent-check",
-        "robotsix_mill.runners.agent_check_runner",
+        "robotsix_mill.runners.periodic_runner",
         "run_agent_check_pass",
     ),
-    ("/health-check", "robotsix_mill.runners.health_runner", "run_health_pass"),
-    ("/test-gap", "robotsix_mill.runners.test_gap_runner", "run_test_gap_pass"),
+    ("/health-check", "robotsix_mill.runners.periodic_runner", "run_health_pass"),
+    ("/test-gap", "robotsix_mill.runners.periodic_runner", "run_test_gap_pass"),
     (
         "/copy-paste",
-        "robotsix_mill.runners.copy_paste_runner",
+        "robotsix_mill.runners.periodic_runner",
         "run_copy_paste_pass",
     ),
     (
         "/forge-parity",
-        "robotsix_mill.runners.forge_parity_runner",
+        "robotsix_mill.runners.periodic_runner",
         "run_forge_parity_pass",
     ),
     (
         "/config-sync",
-        "robotsix_mill.runners.config_sync_runner",
+        "robotsix_mill.runners.periodic_runner",
         "run_config_sync_pass",
     ),
     (
@@ -1347,12 +1347,12 @@ BG_PASS_ROUTES = [
     ),
     (
         "/state-sync",
-        "robotsix_mill.runners.state_sync_runner",
+        "robotsix_mill.runners.periodic_runner",
         "run_state_sync_pass",
     ),
     (
         "/env-doc-sync",
-        "robotsix_mill.runners.env_doc_sync_runner",
+        "robotsix_mill.runners.periodic_runner",
         "run_env_doc_sync_pass",
     ),
 ]

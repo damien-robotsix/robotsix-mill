@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from robotsix_mill.agents import agent_check
-from robotsix_mill.runners.agent_check_runner import (
+from robotsix_mill.runners.periodic_runner import (
     run_agent_check_pass,
     AgentCheckPassResult,
 )
@@ -177,7 +177,7 @@ def test_run_agent_check_pass_empty_memory(tmp_path, monkeypatch):
 
     monkeypatch.setattr(agent_check, "run_agent_check_agent", mock_agent)
     monkeypatch.setattr(
-        "robotsix_mill.runners.agent_check_runner.Settings", lambda: settings
+        "robotsix_mill.runners.periodic_runner.Settings", lambda: settings
     )
 
     run_agent_check_pass(session_id="test-sid", repo_config=_test_repo_config())
@@ -199,7 +199,7 @@ def test_run_agent_check_pass_reads_existing_memory(tmp_path, monkeypatch):
 
     monkeypatch.setattr(agent_check, "run_agent_check_agent", mock_agent)
     monkeypatch.setattr(
-        "robotsix_mill.runners.agent_check_runner.Settings", lambda: settings
+        "robotsix_mill.runners.periodic_runner.Settings", lambda: settings
     )
 
     run_agent_check_pass(session_id="test-sid", repo_config=_test_repo_config())
@@ -221,7 +221,7 @@ def test_run_agent_check_pass_writes_memory_verbatim(tmp_path, monkeypatch):
 
     monkeypatch.setattr(agent_check, "run_agent_check_agent", mock_agent)
     monkeypatch.setattr(
-        "robotsix_mill.runners.agent_check_runner.Settings", lambda: settings
+        "robotsix_mill.runners.periodic_runner.Settings", lambda: settings
     )
 
     run_agent_check_pass(session_id="test-sid", repo_config=_test_repo_config())
@@ -247,7 +247,7 @@ def test_run_agent_check_pass_creates_draft_tickets(tmp_path, monkeypatch):
 
     monkeypatch.setattr(agent_check, "run_agent_check_agent", mock_agent)
     monkeypatch.setattr(
-        "robotsix_mill.runners.agent_check_runner.Settings", lambda: settings
+        "robotsix_mill.runners.periodic_runner.Settings", lambda: settings
     )
 
     result = run_agent_check_pass(
@@ -276,7 +276,7 @@ def test_run_agent_check_pass_no_drafts_when_empty(tmp_path, monkeypatch):
 
     monkeypatch.setattr(agent_check, "run_agent_check_agent", mock_agent)
     monkeypatch.setattr(
-        "robotsix_mill.runners.agent_check_runner.Settings", lambda: settings
+        "robotsix_mill.runners.periodic_runner.Settings", lambda: settings
     )
 
     result = run_agent_check_pass(
@@ -300,7 +300,7 @@ def test_run_agent_check_pass_missing_memory_file(tmp_path, monkeypatch):
 
     monkeypatch.setattr(agent_check, "run_agent_check_agent", mock_agent)
     monkeypatch.setattr(
-        "robotsix_mill.runners.agent_check_runner.Settings", lambda: settings
+        "robotsix_mill.runners.periodic_runner.Settings", lambda: settings
     )
 
     run_agent_check_pass(session_id="test-sid", repo_config=_test_repo_config())
@@ -321,7 +321,7 @@ def test_agent_check_pass_result_structure(tmp_path, monkeypatch):
 
     monkeypatch.setattr(agent_check, "run_agent_check_agent", mock_agent)
     monkeypatch.setattr(
-        "robotsix_mill.runners.agent_check_runner.Settings", lambda: settings
+        "robotsix_mill.runners.periodic_runner.Settings", lambda: settings
     )
 
     result = run_agent_check_pass(
@@ -348,7 +348,7 @@ def test_run_agent_check_pass_skips_empty_title_or_body(tmp_path, monkeypatch):
 
     monkeypatch.setattr(agent_check, "run_agent_check_agent", mock_agent)
     monkeypatch.setattr(
-        "robotsix_mill.runners.agent_check_runner.Settings", lambda: settings
+        "robotsix_mill.runners.periodic_runner.Settings", lambda: settings
     )
 
     result = run_agent_check_pass(
@@ -395,7 +395,7 @@ def test_agent_check_cli_command(capsys, tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(
-        "robotsix_mill.runners.agent_check_runner.run_agent_check_pass", mock_run
+        "robotsix_mill.runners.periodic_runner.run_agent_check_pass", mock_run
     )
 
     result = main(["agent-check"])
@@ -416,7 +416,7 @@ def test_agent_check_cli_json_output(capsys, tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(
-        "robotsix_mill.runners.agent_check_runner.run_agent_check_pass", mock_run
+        "robotsix_mill.runners.periodic_runner.run_agent_check_pass", mock_run
     )
 
     result = main(["agent-check", "--json"])
@@ -439,7 +439,7 @@ def test_agent_check_cli_no_drafts(capsys, tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(
-        "robotsix_mill.runners.agent_check_runner.run_agent_check_pass", mock_run
+        "robotsix_mill.runners.periodic_runner.run_agent_check_pass", mock_run
     )
 
     result = main(["agent-check"])
@@ -456,7 +456,7 @@ def test_agent_check_cli_failure(capsys, monkeypatch):
         raise RuntimeError("agent exploded")
 
     monkeypatch.setattr(
-        "robotsix_mill.runners.agent_check_runner.run_agent_check_pass", mock_run
+        "robotsix_mill.runners.periodic_runner.run_agent_check_pass", mock_run
     )
 
     result = main(["agent-check"])
@@ -481,7 +481,7 @@ def test_run_agent_check_pass_opens_langfuse_session(tmp_path, monkeypatch):
 
     monkeypatch.setattr(agent_check, "run_agent_check_agent", mock_agent)
     monkeypatch.setattr(
-        "robotsix_mill.runners.agent_check_runner.Settings", lambda: settings
+        "robotsix_mill.runners.periodic_runner.Settings", lambda: settings
     )
 
     res = run_agent_check_pass(session_id="test-sid", repo_config=_test_repo_config())
@@ -498,7 +498,7 @@ def test_agent_check_session_ids_are_unique_per_run(tmp_path, monkeypatch):
         lambda **k: _empty_result(),
     )
     monkeypatch.setattr(
-        "robotsix_mill.runners.agent_check_runner.Settings", lambda: settings
+        "robotsix_mill.runners.periodic_runner.Settings", lambda: settings
     )
     a = run_agent_check_pass(
         session_id="test-sid", repo_config=_test_repo_config()
@@ -533,7 +533,7 @@ def test_run_agent_check_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(git_ops, "clone", fake_clone)
     monkeypatch.setattr(agent_check, "run_agent_check_agent", mock_agent)
     monkeypatch.setattr(
-        "robotsix_mill.runners.agent_check_runner.Settings", lambda: settings
+        "robotsix_mill.runners.periodic_runner.Settings", lambda: settings
     )
 
     run_agent_check_pass(session_id="test-sid", repo_config=_test_repo_config())
@@ -615,7 +615,7 @@ def test_run_agent_check_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
         lambda **k: got.__setitem__("repo_dir", k.get("repo_dir")) or _empty_result(),
     )
     monkeypatch.setattr(
-        "robotsix_mill.runners.agent_check_runner.Settings", lambda: settings
+        "robotsix_mill.runners.periodic_runner.Settings", lambda: settings
     )
     run_agent_check_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert got["repo_dir"] is None

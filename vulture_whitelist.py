@@ -221,6 +221,18 @@ run_copy_paste_pass
 run_security_posture_pass
 run_data_dir_gc_pass
 dir_size_bytes
+# Consumed by tests through imports and isinstance checks.
+AuditPassResult
+AgentCheckPassResult
+BcCheckPassResult
+SurveyPassResult
+CompletenessCheckPassResult
+CopyPastePassResult
+ForgeParityPassResult
+ConfigSyncPassResult
+HealthPassResult
+ModuleCuratorPassResult
+TestGapPassResult
 SecurityPosturePassResult
 oversized_items
 query_traces_since
@@ -232,6 +244,7 @@ run_frontend_sync_pass
 run_health_pass
 run_module_curator_pass
 __test__
+__qualname__
 raw_span
 run_roadmap_sync_pass
 run_state_sync_pass
