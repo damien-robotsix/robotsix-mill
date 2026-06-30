@@ -1,5 +1,8 @@
 ## 0.0.0 (unreleased)
 
+- **audit**: remove `.env`/`.env.example` from the config-sync fragility
+  example in the audit agent prompt — the canonical configuration surface
+  is now config YAML + docs only.
 - **config**: align `doc_request_limit` model default with YAML and docs
   at `32` (was `16` in the Field default, masked by the YAML layer at
   `32`).  No behavioral change — the effective value was already `32`.
