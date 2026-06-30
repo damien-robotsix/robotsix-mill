@@ -117,7 +117,7 @@ class _CoreSettings(BaseModel):
     # sources, and name the failing test; 16 was observed to run out
     # before producing a usable diagnosis on multi-test failures.
     # Cost-bounded by the ticket-level cap. Aligned with
-    # config/mill.defaults.yaml's core.limits.test_requests (30). The
+    # config/config.example.yaml's core.limits.test_requests (30). The
     # yaml value wins at runtime via _YAML_PATH_TO_ALIAS; this just stops
     # the dry-Settings() default from contradicting it on machines without
     # a yaml override.
@@ -169,7 +169,7 @@ class _CoreSettings(BaseModel):
     # snapshot (≤ this many seconds stale). 0.0 disables the cache.
     # Field default is 0.0 (disabled) so unit tests that construct Settings()
     # directly see immediate list consistency (create-then-list); the live
-    # mill enables it via config/mill.defaults.yaml (3.0s).
+    # mill enables it via config/config.example.yaml (3.0s).
     board_list_cache_ttl_seconds: float = Field(default=0.0, ge=0.0)
 
     transient_retries: int = Field(default=4, ge=0)
@@ -340,13 +340,13 @@ class _CoreSettings(BaseModel):
     # parallel_explore) are scoped to this directory.  When None, the
     # agent falls back to the ticket's own workspace repo_dir.
     # Configurable via MILL_INVESTIGATION_WORKSPACE env var or
-    # config/mill.local.yaml.
+    # config/config.yaml.
     investigation_workspace: Path | None = Field(
         default=None, alias="MILL_INVESTIGATION_WORKSPACE"
     )
 
     # Default repo ID for legacy tickets that lack a board_id.
-    # Set in config/mill.local.yaml.  When empty (default), accessing
+    # Set in config/config.yaml.  When empty (default), accessing
     # a legacy ticket without a board_id raises an error telling the
     # operator to configure this.
     default_repo_id: str = Field(default="")

@@ -44,7 +44,7 @@ Langfuse; mill reads and briefly caches it.
 ### Graceful degradation
 
 When Langfuse is unconfigured (Langfuse secrets absent from
-`config/secrets.yaml`) or unreachable, `session_cost()` returns `0.0`
+the `config/config.yaml` `secrets:` block) or unreachable, `session_cost()` returns `0.0`
 — no errors, no blocked pipeline. The board displays `$0.0000`.
 
 ### Accuracy requirement

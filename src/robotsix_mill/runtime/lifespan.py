@@ -83,7 +83,7 @@ _process_started_at: datetime | None = None
 def _export_openrouter_key_to_env() -> None:
     """Surface the configured OpenRouter key into ``OPENROUTER_API_KEY``.
 
-    The mill stores the key in ``secrets.yaml`` and passes it *explicitly*
+    The mill stores the key in the config.yaml ``secrets:`` block and passes it *explicitly*
     to its own provider, so it is never exported to the process env. But
     in-process llmio consumers that go through ``build_agent_for_level``
     construct ``OpenRouterDeepseekProvider()`` with no key, so the provider

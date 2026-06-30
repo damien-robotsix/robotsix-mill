@@ -49,6 +49,7 @@ nav:
       - Notifications: notifications.md
       - Ticket provenance: ticket-provenance.md
       - Workspace cleanup: workspace-cleanup.md
+      - Orphaned-PR check: orphaned-pr-check.md
       - Attaching screenshots: screenshots.md
   - Design:
       - Cost indicators: design/cost-indicators.md

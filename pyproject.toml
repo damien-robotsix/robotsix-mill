@@ -229,7 +229,6 @@ max-complexity = 10
 "src/robotsix_mill/stages/pause.py" = ["C901"]
 # Migration / one-shot helper scripts — complexity is acceptable
 # because they're throwaway scripts, not library code.
-"dev/migrate-env-to-yaml.py" = ["C901", "E402"]
 "scripts/verify_repos_config.py" = ["C901"]
 
 # --- src/ flake8-bandit (S) legacy hot spots --------------------------------

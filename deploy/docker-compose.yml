@@ -12,13 +12,13 @@
 # a hardened tecnativa/docker-socket-proxy sibling over TCP.  DOCKER_HOST
 # points the CLI at that proxy.
 #
-# Secrets (decision): central-deploy writes the operator form (config.yaml,
-# see config/config.yaml) into the mill-config volume at the
-# config-target path.  entrypoint.sh (deploy mode, keyed off DOCKER_HOST)
-# splits it into the files the loader actually reads — config/secrets.yaml
-# (flat secret map) and config/mill.local.yaml (the non-secret overlay) —
-# and seeds the committed config/mill.defaults.yaml that the named volume
-# would otherwise shadow.
+# Secrets (decision): central-deploy writes the single config file
+# (config.yaml — see config/config.example.yaml for its structure) into the
+# mill-config volume at the config-target path.  The mill reads that one
+# file directly (every non-secret knob plus a top-level `secrets:` block);
+# entrypoint.sh (deploy mode, keyed off DOCKER_HOST) just chmod 600's it
+# (it holds real credentials) and hands it to the runtime user.  No split /
+# overlay reconstruction is needed.
 #
 # NOTE — params the v1 contract does NOT model (present in the dev compose,
 # NOT reproducible here): `init: true`, `stop_grace_period: 30m`,

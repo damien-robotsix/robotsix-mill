@@ -2,9 +2,9 @@
 
 Covers:
     * Happy path against the real on-disk surfaces — zero drift across
-      ``_YAML_PATH_TO_ALIAS`` / ``config/mill.defaults.yaml`` /
-      ``config/secrets.example.yaml`` / the ``Settings`` & ``Secrets``
-      models.
+      ``_YAML_PATH_TO_ALIAS`` / ``config/config.example.yaml`` (its
+      non-secret leaves + ``secrets:`` block) / the ``Settings`` &
+      ``Secrets`` models.
     * Each deterministic invariant detects a synthetic violation when
       fed crafted inputs (no monkeypatching of imports — the pure
       functions take their inputs as parameters).

@@ -173,13 +173,13 @@ def test_referenced_mill_paths_absent_non_mill_prefixed_paths_ignored(tmp_path):
 
 
 def test_referenced_mill_paths_absent_config_mill_prefix(tmp_path):
-    """Path starting with ``config/mill.`` prefix and absent → returned."""
+    """Path starting with ``config/config.`` prefix and absent → returned."""
     result = referenced_mill_paths_absent(
-        title="Tweak config/mill.settings.yaml",
+        title="Tweak config/config.example.yaml",
         body="",
         repo_dir=tmp_path,
     )
-    assert result == ["config/mill.settings.yaml"]
+    assert result == ["config/config.example.yaml"]
 
 
 # ---------------------------------------------------------------------------

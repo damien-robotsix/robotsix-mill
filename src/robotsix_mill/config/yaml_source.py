@@ -16,7 +16,7 @@ class YamlSettingsSource(PydanticBaseSettingsSource):
     ``load_yaml_config()`` + ``flatten_yaml_config()`` pipeline.
 
     Called at ``Settings()`` construction time (not import time), so
-    test monkeypatching of ``_DEFAULTS_FILE`` / ``_LOCAL_FILE`` /
+    test monkeypatching of ``_CONFIG_FILE`` / ``_EXAMPLE_FILE`` /
     ``MILL_CONFIG_FILE`` works reliably.
 
     Returns an alias-keyed ``{alias: value}`` dict (e.g.

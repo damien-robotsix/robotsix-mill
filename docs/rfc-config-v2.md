@@ -1,9 +1,17 @@
 # RFC: Configuration System v2
 
+> **SUPERSEDED (historical).** This RFC describes the multi-file YAML
+> design (`mill.defaults.yaml` + `mill.local.yaml` + `mill.production.yaml`
+> + `secrets.yaml`). The mill has since consolidated to a SINGLE file —
+> `config/config.yaml` (else the committed `config/config.example.yaml`),
+> with secrets under a top-level `secrets:` block. See
+> `docs/configuration.md` for the current model. Kept for historical
+> rationale only.
+
 > **Status:** Draft — peer review pending
 > **Date:** 2026-05-23
 > **Supersedes:** `docs/config-audit.md` (analysis phase)
-> **PoC template:** `config/mill.defaults.yaml`
+> **PoC template:** `config/config.example.yaml`
 
 ---
 

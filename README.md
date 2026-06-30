@@ -45,21 +45,19 @@ pragmatic security stance.
 Settings are managed through a YAML pipeline (see
 [docs/configuration.md](docs/configuration.md) for full details):
 
-- **`config/mill.defaults.yaml`** — committed canonical defaults (the
-  single source of truth for every configurable knob).
-- **`config/mill.local.yaml`** — your per-developer overrides
-  (gitignored, create it if you need custom settings).
-- **`config/mill.production.yaml`** — deployment-specific overrides
-  (gitignored, path set via `MILL_CONFIG_FILE` env var).
+- **`config/config.yaml`** — THE single config file (gitignored): every
+  non-secret knob plus a top-level `secrets:` block (API keys, tokens).
+- **`config/config.example.yaml`** — committed template (safe defaults +
+  `SECRET` sentinel placeholders); the source of truth for every
+  configurable knob.
 - **Environment variables** — any `MILL_*` variable overrides the
   YAML value (e.g. `MILL_MODEL=anthropic/claude-sonnet-4`).
-- **`config/secrets.yaml`** — credentials (API keys, tokens).
-  Template at `config/secrets.example.yaml`.
 - **`config/repos.yaml`** — per-repo board & Langfuse project config.
   Template at `config/repos.example.yaml`.
 
-The loading order is: YAML defaults → YAML local → YAML production →
-environment variables (highest).
+The loading order is: `config/config.yaml` (else the committed
+`config/config.example.yaml`) → environment variables (highest). The
+loader falls back to the committed example when `config.yaml` is absent.
 
 ## Getting started
 
@@ -73,7 +71,7 @@ environment variables (highest).
 ```sh
 git clone https://github.com/damien-robotsix/robotsix-mill.git
 cd robotsix-mill
-cp config/secrets.example.yaml config/secrets.yaml       # set openrouter_api_key
+cp config/config.example.yaml config/config.yaml         # set secrets.openrouter_api_key + any overrides
 cp config/repos.example.yaml config/repos.yaml           # edit: add your repo
 ```
 

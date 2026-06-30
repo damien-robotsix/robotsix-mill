@@ -12,10 +12,8 @@ htmlcov/
 .venv/
 venv/
 .env
-config/secrets.yaml
+config/config.yaml
 config/repos.yaml
-config/mill.local.yaml
-config/mill.production.yaml
 .mill-data/
 .data/
 # Ephemeral runtime symlink the orchestrating mill drops here to point

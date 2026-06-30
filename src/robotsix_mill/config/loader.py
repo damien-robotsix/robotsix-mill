@@ -1,11 +1,12 @@
-"""YAML configuration loader and deep-merge for robotsix-mill.
+"""YAML configuration loader for robotsix-mill.
 
-Loads the layered YAML config files (defaults → local → production) and
-deep-merges them into a single dict that pydantic-settings can use as
-field defaults.  Also loads ``config/secrets.yaml`` into a flat dict for
-the ``Secrets`` model.
-
-Design: `docs/rfc-config-v2.md` §6 (Load order and precedence).
+The mill reads a SINGLE config file: ``config/config.yaml`` (gitignored)
+when present, else the committed ``config/config.example.yaml`` template
+(so CI / tests without a ``config.yaml`` still get the committed
+defaults).  The file holds every non-secret knob plus a top-level
+``secrets:`` block; :func:`load_yaml_config` returns the non-secret part
+(for the ``Settings`` model) and :func:`load_secrets_yaml` returns the
+``secrets:`` sub-map (for the ``Secrets`` model).
 """
 
 from __future__ import annotations
@@ -17,7 +18,6 @@ from pathlib import Path
 from robotsix_yaml_config import (
     YamlConfigError,
     flatten_config,
-    load_yaml_cascade,
     read_yaml_file,
 )
 
@@ -40,82 +40,102 @@ class ConfigError(YamlConfigError):
 # ---------------------------------------------------------------------------
 
 _YAML_DIR = Path("config")
-_DEFAULTS_FILE = _YAML_DIR / "mill.defaults.yaml"
-_LOCAL_FILE = _YAML_DIR / "mill.local.yaml"
+_CONFIG_FILE = _YAML_DIR / "config.yaml"
+_EXAMPLE_FILE = _YAML_DIR / "config.example.yaml"
+
+# Literal placeholder used for every secret in ``config.example.yaml``.
+# A secret leaf equal to this is treated as UNSET (the field falls back
+# to its ``None`` default), so example / CI runs behave like "no secret
+# configured".
+_SECRET_SENTINEL = "SECRET"  # noqa: S105 — sentinel, not a real credential
+
+
+def _resolve_config_path(config_file: str | None) -> Path:
+    """Resolve the single config file to read.
+
+    Precedence: explicit *config_file* arg > ``MILL_CONFIG_FILE`` env >
+    default resolution (``config/config.yaml`` if it exists, else the
+    committed ``config/config.example.yaml`` template).  An explicit
+    empty string ``""`` means "use the committed example" — the hermetic
+    choice used by the test suite (its secrets are all-``SECRET`` → unset).
+    """
+    if config_file is not None:
+        explicit: str | None = config_file
+    else:
+        explicit = os.environ.get("MILL_CONFIG_FILE")
+
+    if explicit:  # non-empty explicit path
+        return Path(explicit)
+    if explicit == "":  # explicit empty → committed example (hermetic)
+        return _EXAMPLE_FILE
+    # explicit is None → default resolution.
+    return _CONFIG_FILE if _CONFIG_FILE.exists() else _EXAMPLE_FILE
 
 
 def load_yaml_config(config_file: str | None = None, skip_local: bool = False) -> dict:
-    """Load and deep-merge YAML config files in RFC §6 precedence order.
+    """Load the single mill config file and return its non-secret part.
 
-    1. ``config/mill.defaults.yaml`` (always, committed)
-    2. ``config/mill.local.yaml`` if present (gitignored, optional)
-       — skipped when *skip_local* is ``True``
-    3. ``config/mill.production.yaml`` if *config_file* (or
-       ``MILL_CONFIG_FILE`` env var) points to it.  An explicit empty
-       string ``""`` means "no production file" (used by the test suite).
+    Reads ``config/config.yaml`` when present, else the committed
+    ``config/config.example.yaml`` (overridable via the *config_file* arg
+    or the ``MILL_CONFIG_FILE`` env var; ``""`` forces the committed
+    example).  The top-level ``secrets:`` block is stripped — it is
+    consumed separately by :func:`load_secrets_yaml` / the ``Secrets``
+    model, never merged into ``Settings``.
 
     Returns a nested dict mirroring the YAML structure
-    (e.g. ``{"core": {"models": {"coordinator": "deepseek/..."}, ...}}``).
+    (e.g. ``{"core": {"limits": {"test_requests": 30}, ...}}``).
 
-    Raises ``ConfigError`` if ``config/mill.defaults.yaml`` is missing
-    or any file contains malformed YAML.
+    *skip_local* is accepted for backward compatibility and ignored —
+    there is no longer a separate local overlay layer.
+
+    Raises ``ConfigError`` if the resolved file is missing or contains
+    malformed YAML.
     """
-    if not _DEFAULTS_FILE.exists():
+    del skip_local  # no-op: single-file model has no separate overlay
+    path = _resolve_config_path(config_file)
+    if not path.exists():
         raise ConfigError(
-            f"Required config file not found: {_DEFAULTS_FILE}. "
-            "This file is committed to the repo and must always be present."
+            f"Required config file not found: {path}. Copy "
+            "config/config.example.yaml to config/config.yaml, or point "
+            "MILL_CONFIG_FILE at a config file."
         )
-
-    # Resolve the production overlay path (explicit arg > env var). An
-    # explicit empty string means "no production file".
-    prod_path: str = ""
-    if config_file is not None:
-        prod_path = config_file
-    else:
-        prod_path = os.environ.get("MILL_CONFIG_FILE", "")
-
-    # Build the ordered layer list at call time (reading the current
-    # module-level _DEFAULTS_FILE / _LOCAL_FILE values so test
-    # monkeypatching applies). Precedence is later-overrides-earlier:
-    # defaults → local → production. Each layer is a ``(path, required)``
-    # tuple consumed by ``load_yaml_cascade``; only the local overlay is
-    # optional.
-    layers: list[tuple[Path, bool]] = [(_DEFAULTS_FILE, True)]
-    if not skip_local:
-        layers.append((_LOCAL_FILE, False))
-    if prod_path:
-        layers.append((Path(prod_path), True))
-
     try:
-        return load_yaml_cascade(layers)
+        data = read_yaml_file(path)
     except YamlConfigError as exc:
         raise ConfigError(str(exc)) from exc
+    result = dict(data) if isinstance(data, dict) else {}
+    result.pop("secrets", None)
+    return result
 
 
 def load_secrets_yaml(secrets_file: str | None = None) -> dict:
-    """Read ``config/secrets.yaml`` (or ``MILL_SECRETS_FILE`` if set).
+    """Return the ``secrets:`` sub-map of the single mill config file.
 
-    Returns a flat dict keyed by the YAML field names
-    (e.g. ``{"openrouter_api_key": "sk-...", ...}``).
+    Path resolution mirrors :func:`load_yaml_config`: explicit
+    *secrets_file* arg > ``MILL_SECRETS_FILE`` env > default
+    (``config/config.yaml`` if present, else ``config/config.example.yaml``).
+    An explicit empty string ``""`` forces the committed example (used by
+    the test suite).
 
-    Missing file → returns an empty dict (not an error — secrets are
-    optional for CI / mocked tests).
+    Returns a flat dict keyed by the secret field names
+    (e.g. ``{"openrouter_api_key": "sk-...", ...}``).  Blank values and
+    leaves equal to the ``SECRET`` sentinel are dropped so unset secrets
+    fall back to the ``Secrets`` model's ``None`` defaults.
 
-    Malformed YAML → raises ``ConfigError`` with the file path and
-    parse error details.
+    Missing file → empty dict (not an error — secrets are optional for
+    CI / mocked tests).  Malformed YAML → ``ConfigError``.
     """
-    # Determine the path: explicit arg > env var > default.
-    # An explicit empty string means "no file" (used by the test suite).
     if secrets_file is not None:
-        path_str = secrets_file
+        explicit: str | None = secrets_file
     else:
-        path_str = os.environ.get("MILL_SECRETS_FILE")
+        explicit = os.environ.get("MILL_SECRETS_FILE")
 
-    if path_str is None:
-        path_str = str(_YAML_DIR / "secrets.yaml")
-    elif path_str == "":
-        return {}
-    path = Path(path_str)
+    if explicit:
+        path = Path(explicit)
+    elif explicit == "":
+        path = _EXAMPLE_FILE
+    else:  # None → default resolution
+        path = _CONFIG_FILE if _CONFIG_FILE.exists() else _EXAMPLE_FILE
 
     if not path.exists():
         return {}
@@ -124,7 +144,18 @@ def load_secrets_yaml(secrets_file: str | None = None) -> dict:
         data = read_yaml_file(path)
     except YamlConfigError as exc:
         raise ConfigError(str(exc)) from exc
-    return dict(data)
+
+    raw = data.get("secrets", {}) if isinstance(data, dict) else {}
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        key: value
+        for key, value in raw.items()
+        if not (
+            value is None
+            or (isinstance(value, str) and value.strip() in ("", _SECRET_SENTINEL))
+        )
+    }
 
 
 def _load_repos_document(file_path: str | None = None) -> dict:
@@ -194,7 +225,7 @@ def load_repos_yaml(file_path: str | None = None) -> dict:
 # Maps ``"group.subgroup.field"`` YAML paths to the env-var alias
 # (the ``Field(alias=...)`` value) on the ``Settings`` model.  Built
 # from the RFC §4.2 mapping table and kept in sync with
-# ``config/mill.defaults.yaml``.
+# ``config/config.example.yaml``.
 #
 # We use env-var aliases (not Python field names) because
 # ``Settings(extra="ignore")`` silently drops kwargs keyed by the

@@ -344,7 +344,7 @@ Secrets.forge_token  = "<PAT or access token>"
 - GitLab: sent as `PRIVATE-TOKEN: {token}`.
 
 The token is read from `Secrets.forge_token` (populated from
-`config/secrets.yaml`).  `Settings.forge_token` (aliased `FORGE_TOKEN`
+the `config/config.yaml` `secrets:` block).  `Settings.forge_token` (aliased `FORGE_TOKEN`
 env var) exists in the Settings model but is **not** the runtime source
 — the code always calls `get_secrets().forge_token`.
 
@@ -421,7 +421,7 @@ abstraction): `stale_branch_cleanup_periodic`, `stale_branch_cleanup_interval_se
 ### 5.2 `Secrets` fields
 
 All fields are in `src/robotsix_mill/config.py`, class `Secrets`.
-Loaded from `config/secrets.yaml` (overridable via `MILL_SECRETS_FILE`).
+Loaded from the `config/config.yaml` `secrets:` block (overridable via `MILL_SECRETS_FILE`).
 Singleton, accessed via `get_secrets()`.
 
 | Field | Type | Default | Purpose |
@@ -463,7 +463,7 @@ GitLab instance by hostname alone. The operator must set
 
 ### 5.5 YAML defaults — `forge:` block
 
-In `config/mill.defaults.yaml`:
+In `config/config.example.yaml`:
 
 ```yaml
 forge:
@@ -477,7 +477,7 @@ forge:
 ```
 
 `github_app_id` and `github_app_private_key` are **not** in the YAML
-defaults — they are secrets and belong in `secrets.yaml`.
+defaults — they are secrets and belong in the `config.yaml` `secrets:` block.
 
 `ci_log_max_bytes` is under `periodic.ci_monitor.log_max_bytes` in the
 YAML (used by the CI-monitor periodic agent as well as by
@@ -537,7 +537,7 @@ earliest `##[error]`, `FATAL`, `Error:`, `exit code [1-9]`, or
 
 `Settings.forge_token` (aliased `FORGE_TOKEN`) allows environment-level
 overrides through the standard YAML pipeline.  `Secrets.forge_token` is
-the canonical runtime source (loaded from `secrets.yaml`).  All forge
+the canonical runtime source (loaded from the `config.yaml` `secrets:` block).  All forge
 code calls `get_secrets().forge_token` — the `Settings` field is for
 configuration ergonomics but is not the runtime read path.
 
