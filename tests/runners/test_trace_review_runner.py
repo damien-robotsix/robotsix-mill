@@ -408,6 +408,26 @@ class TestClassifier:
         flags = _classify_trace(_trace(), settings, observations=obs)
         assert any("tool_errors" in f for f in flags.flags)
 
+    # -- ticket_description carve-out -----------------------------------------
+
+    def test_ticket_description_skips_error_regex(self, settings):
+        """A ticket_description observation whose output contains an error
+        token (e.g. "UsageLimitExceeded") that originates from the body of
+        an existing ticket being read — NOT from a tool failure — must NOT
+        produce a tool_errors flag."""
+        obs = [
+            _obs(
+                "ticket_description",
+                output=(
+                    "## Symptom\n\n"
+                    "The tool_errors flag fired because "
+                    "UsageLimitExceeded appeared in the output...\n\n"
+                ),
+            )
+        ]
+        flags = _classify_trace(_trace(), settings, observations=obs)
+        assert not any("tool_errors" in f for f in flags.flags)
+
     # -- run_command empty-output carve-out (defensive) -----------------------
 
     def test_run_command_empty_output_skips_error_regex(self, settings):
