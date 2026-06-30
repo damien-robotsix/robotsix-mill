@@ -1,34 +1,35 @@
 # Configuration reference
 
-robotsix-mill uses a **YAML-first configuration pipeline**. Settings
-are loaded from committed defaults, optional local/production overlay
-files, and environment variables (highest priority). Secrets (API keys,
-tokens) live in a **separate** YAML file loaded by a dedicated
-`Secrets` model — they are never logged and their values are redacted
-in diagnostics.
+robotsix-mill uses a **single YAML config file**. Every non-secret knob
+plus a top-level `secrets:` block (API keys, tokens) live in one
+`config/config.yaml`. The committed `config/config.example.yaml`
+documents the full structure with safe defaults and `SECRET` sentinel
+placeholders. Secrets are loaded by a dedicated `Secrets` model — they
+are never logged and their values are redacted in diagnostics.
 
 ---
 
 ## Configuration loading order
 
-Settings are resolved from five layers (highest priority first):
+Settings are resolved from these layers (highest priority first):
 
 | Priority | Source | Description |
 |----------|--------|-------------|
 | 1 (highest) | Explicit `Settings(k=v)` kwargs | Programmatic overrides from callers |
 | 2 | `os.environ` | Any `MILL_*` or unprefixed variable set in the environment |
-| 3 | YAML overlays | `config/mill.production.yaml` then `config/mill.local.yaml` (optional) |
-| 4 | YAML defaults | `config/mill.defaults.yaml` (always loaded, committed) |
-| 5 (lowest) | `Field(default=...)` | Static Python defaults in the Pydantic model |
+| 3 | The config file | `config/config.yaml` if present, else the committed `config/config.example.yaml` |
+| 4 (lowest) | `Field(default=...)` | Static Python defaults in the Pydantic model |
 
-YAML files are merged recursively: later layers overlay deeper keys
-without replacing entire sections. The effective configuration is the
-deep-merge of defaults → local → production, with environment variables
-winning over any YAML value.
+The non-secret part of the file feeds the `Settings` model; environment
+variables win over any YAML value. Point `MILL_CONFIG_FILE` at a
+specific file to override the default resolution (an empty string forces
+the committed example, the hermetic choice used by the test suite).
 
-**Secrets** are loaded **separately** from `config/secrets.yaml`
-(path overridable via `MILL_SECRETS_FILE` env var). They never
-participate in the Settings merge; access them via `get_secrets()`.
+**Secrets** are loaded from the `secrets:` block of the same file
+(path overridable via `MILL_SECRETS_FILE`). They never participate in
+the Settings merge; access them via `get_secrets()`. A secret whose
+value is the literal `SECRET` sentinel (as in `config.example.yaml`) is
+treated as unset.
 
 ---
 
@@ -36,39 +37,26 @@ participate in the Settings merge; access them via `get_secrets()`.
 
 ```
 config/
-  mill.defaults.yaml       # committed: canonical defaults (~115 fields)
-  mill.local.yaml          # gitignored: your per-developer overrides
-  mill.production.yaml     # gitignored: deployment overrides
-  secrets.yaml             # gitignored: credentials (API keys, tokens)
-  secrets.example.yaml     # committed: template for secrets.yaml
-  repos.yaml               # per-repo board & Langfuse config (create from example)
+  config.yaml              # gitignored: THE single config — all knobs + a secrets: block
+  config.example.yaml      # committed: template (safe defaults + SECRET sentinels)
+  repos.yaml               # gitignored: per-repo board & Langfuse config (create from example)
   repos.example.yaml       # committed: template for repos.yaml
 ```
 
-### Migration from `.env`
+### Getting started
 
-If you are upgrading from an older version that used `.env` and
-`secrets.env` files, run the one-shot migration script:
-
-```sh
-python scripts/migrate-config
-```
-
-This reads your existing `.env` and `secrets.env` (if present), maps
-each variable to its YAML dotted path per the configuration reference,
-and writes:
-
-- `config/mill.production.yaml` — non-secret overrides (only values that
-  differ from the committed defaults in `config/mill.defaults.yaml`)
-- `config/secrets.yaml` — all secret values (API keys, tokens, etc.)
-
-The original `.env` and `secrets.env` files are left untouched — you
-can remove them after verifying the migration. Use `--dry-run` to see
-what would be written without modifying disk:
+Copy the committed template and fill in your real values:
 
 ```sh
-python scripts/migrate-config --dry-run
+cp config/config.example.yaml config/config.yaml
+# edit config/config.yaml — set the secrets: block and any host overrides
+chmod 600 config/config.yaml          # it now holds real credentials
 ```
+
+`config/config.yaml` is gitignored and never committed. If it is absent
+(CI, a fresh checkout), the loader falls back to the committed
+`config/config.example.yaml`, whose all-`SECRET` secrets resolve to
+"unset".
 
 ---
 
@@ -86,7 +74,7 @@ what a level maps to, change the defaults in robotsix-llmio.
 ### Use a different database URL / data directory
 
 ```yaml
-# config/mill.local.yaml
+# config/config.yaml
 service:
   data_dir: /data/mill-prod
 ```
@@ -94,7 +82,7 @@ service:
 ### Enable periodic audit and trace-health checks
 
 ```yaml
-# config/mill.local.yaml
+# config/config.yaml
 periodic:
   audit:
     enabled: true
@@ -106,10 +94,11 @@ periodic:
 
 ### Deploy to production with overrides
 
-Point the `MILL_CONFIG_FILE` env var at your production overlay:
+Put deployment values directly in `config/config.yaml` (or point
+`MILL_CONFIG_FILE` at an alternative single file):
 
 ```yaml
-# config/mill.production.yaml
+# config/config.yaml
 core:
   limits:
     max_concurrency: 2
@@ -253,7 +242,7 @@ repo cannot break mill by committing a broken config file.
 Then run:
 
 ```sh
-MILL_CONFIG_FILE=config/mill.production.yaml docker compose up -d
+docker compose up -d   # reads config/config.yaml (or set MILL_CONFIG_FILE)
 ```
 
 ### Deployed log folder (`deployed_log_folder`)
@@ -285,31 +274,29 @@ repos:
 
 ### Set up secrets
 
-```sh
-cp config/secrets.example.yaml config/secrets.yaml
-# Edit config/secrets.yaml — fill in your credentials:
-```
+Fill in the `secrets:` block of `config/config.yaml` (replace each
+`SECRET` sentinel with a real value):
 
 ```yaml
-# config/secrets.yaml
-openrouter_api_key: "sk-or-..."
-forge_token: "ghp_..."
+# config/config.yaml
+secrets:
+  openrouter_api_key: "sk-or-..."
+  forge_token: "ghp_..."
 ```
 
-File permissions should be `0600` (the YAML loader enforces a warning
-if the file is group/other-readable).
+File permissions should be `0600` (it holds real credentials).
 
 ### Add a new setting
 
 1. Add the field to the Pydantic model in `src/robotsix_mill/config/`
    (in the appropriate group class if grouped, or on `Settings` directly).
-2. Add the default value to `config/mill.defaults.yaml` under the
+2. Add the default value to `config/config.example.yaml` under the
    correct YAML key path.
 3. Add the dotted-path → env-var alias mapping to
    `_YAML_PATH_TO_ALIAS` in `src/robotsix_mill/config_loader.py`.
    Without this, the setting will be silently ignored when read from YAML.
-4. If it's a secret, add it to the `Secrets` model and to
-   `config/secrets.example.yaml` instead.
+4. If it's a secret, add it to the `Secrets` model and to the `secrets:`
+   block of `config/config.example.yaml` (as a `SECRET` sentinel) instead.
 5. Access it in code: `settings.my_new_field` for settings,
    `get_secrets().my_new_secret` for secrets.
 
@@ -317,8 +304,8 @@ Steps 2–4 are enforced deterministically by
 `scripts/check_config_sync.py`, which runs as a blocking CI step
 ("Validate config sync") and as the `validate-config-sync` pre-commit
 hook. It fails if a `_YAML_PATH_TO_ALIAS` key has no matching
-`mill.defaults.yaml` leaf (or vice-versa), if a mapping value names a
-non-existent `Settings` field/alias, or if `secrets.example.yaml`
+`config.example.yaml` leaf (or vice-versa), if a mapping value names a
+non-existent `Settings` field/alias, or if the `config.example.yaml`
 drifts from the `Secrets` model. Intentional gaps live in the script's
 inline-commented exception sets. (Doc-table drift is not gated here —
 the heuristic `config_sync` agent still covers that.)
@@ -333,7 +320,7 @@ double-underscore convention.
 
 **Rule:** Every new Pydantic settings field added to
 `_settings_periodic.py` or `settings.py` MUST have a corresponding
-entry in BOTH `config/mill.defaults.yaml` (under the appropriate
+entry in BOTH `config/config.example.yaml` (under the appropriate
 agent/feature block) AND `_YAML_PATH_TO_ALIAS` in
 `src/robotsix_mill/config/loader.py` in the same commit. Fields
 omitted from both surfaces are invisible to `check_config_sync.py` —
@@ -352,7 +339,7 @@ the same commit" discipline.
 ## Full setting reference
 
 Every setting below shows:
-- **YAML path** — the key in `config/mill.defaults.yaml`
+- **YAML path** — the key in `config/config.example.yaml`
 - **Env var** — the environment variable override
 - **Default** — the committed default value
 - **Description** — what it controls
@@ -930,9 +917,11 @@ The component agent is a generic monitor/config responder on the agent-comm brok
 
 ## Secrets reference
 
-Secrets are loaded from `config/secrets.yaml` by a separate `Secrets`
-Pydantic model. They are **not** merged into `Settings` — access them
-via `get_secrets()`.
+Secrets are loaded from the `secrets:` block of `config/config.yaml` by
+a separate `Secrets` Pydantic model. They are **not** merged into
+`Settings` — access them via `get_secrets()`. A value equal to the
+literal `SECRET` sentinel (as in `config.example.yaml`) is treated as
+unset.
 
 | YAML key | Env var override | Description |
 |----------|-----------------|-------------|
@@ -951,11 +940,12 @@ via `get_secrets()`.
 | `ntfy_url` | `NTFY_URL` | ntfy.sh topic URL for notifications |
 | `ntfy_token` | `NTFY_TOKEN` | ntfy.sh bearer token (optional) |
 
-Secrets file path: `config/secrets.yaml` (overridable via
-`MILL_SECRETS_FILE` env var). Template: `config/secrets.example.yaml`.
+Secrets live in the `secrets:` block of `config/config.yaml` (overridable
+via `MILL_SECRETS_FILE` env var). Template: the `secrets:` block of
+`config/config.example.yaml`.
 
 > ¹ The `langfuse_*` fields on `Secrets` are **not** user-configurable
-> via `secrets.yaml` or environment variables.  They exist on the model
+> via the `secrets:` block or environment variables.  They exist on the model
 > for backward compatibility but are no longer populated at startup —
 > per-repo Langfuse credentials are read directly from ``RepoConfig``
 > at call time.  See [Repos registry](#repos-registry) above.
@@ -1182,5 +1172,4 @@ files use the legacy flat path (`<data_dir>/audit_memory.md`).
 - [observability.md](observability.md) — per-repo Langfuse + deployed-log config the refine agent consults
 - [deployment.md](deployment.md) — continuous deployment guide
 - [config-audit.md](config-audit.md) — complete inventory of every config value and its source
-- [`config/mill.defaults.yaml`](../config/mill.defaults.yaml) — committed canonical defaults
-- [`config/secrets.example.yaml`](../config/secrets.example.yaml) — secrets template
+- [`config/config.example.yaml`](../config/config.example.yaml) — committed single-file config template (defaults + `secrets:` block)

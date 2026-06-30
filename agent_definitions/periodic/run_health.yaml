@@ -84,7 +84,7 @@ system_prompt: |
   - Each draft must name: which run/agent (kind) and board, when it last
     occurred and how many times in the window, the error/summary signature,
     and a FIRST HYPOTHESIS for the cause (e.g. "transient broken clone —
-    config/mill.defaults.yaml failed to parse", "OpenRouter key missing in
+    config/config.yaml failed to parse", "OpenRouter key missing in
     the mill environment").
 
   CONSULTING PRIOR PROPOSALS:

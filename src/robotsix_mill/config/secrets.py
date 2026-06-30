@@ -18,11 +18,14 @@ logger = logging.getLogger(__name__)
 
 
 class Secrets(BaseModel):
-    """Secrets loaded from ``config/secrets.yaml``.
+    """Secrets loaded from the ``secrets:`` block of the single mill
+    config file (``config/config.yaml``, else ``config/config.example.yaml``).
 
     Never merged into ``Settings`` — secrets are kept in a separate
     model with redacted ``repr`` / ``model_dump`` and debug-logged
-    attribute access.
+    attribute access.  A value equal to the literal ``SECRET`` sentinel
+    (used throughout ``config.example.yaml``) is treated as unset, so the
+    field falls back to its ``None`` default.
     """
 
     openrouter_api_key: str | None = None
@@ -50,9 +53,10 @@ class Secrets(BaseModel):
         """Construct a ``Secrets`` instance.
 
         If ``_secrets_file`` is provided it is used as the YAML source;
-        otherwise ``MILL_SECRETS_FILE`` is consulted, falling back to
-        ``config/secrets.yaml``.  YAML values are passed as field
-        defaults, which explicit ``**data`` kwargs can override.
+        otherwise ``MILL_SECRETS_FILE`` is consulted, falling back to the
+        single mill config file (``config/config.yaml``, else
+        ``config/config.example.yaml``).  Its ``secrets:`` block is passed
+        as field defaults, which explicit ``**data`` kwargs can override.
         """
         from .loader import load_secrets_yaml
 
@@ -116,8 +120,9 @@ def load_secrets(secrets_file: str | None = None) -> Secrets:
     """Load and return a :class:`Secrets` instance from YAML.
 
     If *secrets_file* is provided it is used as the YAML source;
-    otherwise ``MILL_SECRETS_FILE`` is consulted, falling back to
-    ``config/secrets.yaml``.
+    otherwise ``MILL_SECRETS_FILE`` is consulted, falling back to the
+    single mill config file (``config/config.yaml``, else
+    ``config/config.example.yaml``).
     """
     return Secrets(_secrets_file=secrets_file)
 

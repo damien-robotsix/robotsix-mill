@@ -104,7 +104,7 @@ RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
 
 # GitHub CLI (`gh`) for driving contribution workflows (push -> PR -> merge)
 # from inside the sandbox. `gh` lives in the app image too because the
-# dev-pinned sandbox runs `robotsix/mill:dev` (config/mill.local.yaml
+# dev-pinned sandbox runs `robotsix/mill:dev` (config/config.yaml
 # `sandbox.image`), not `robotsix/mill-sandbox`, so it must be in the `base`
 # stage to reach that path; every image derived from base (dev, production)
 # inherits it. `gh` is not in Debian's default apt repos, so add the official
@@ -170,9 +170,9 @@ ENV MILL_BUILD_SHA=${MILL_BUILD_SHA}
 
 # Runtime config used to be set here via MILL_* env vars (data_dir,
 # api_host, api_url). The MILL_* alias surface was retired in
-# 9cd2630; the equivalent settings now live in config/mill.local.yaml
+# 9cd2630; the equivalent settings now live in config/config.yaml
 # (data_dir, api_host, api_url) and ship to the container via the
-# config/ bind-mount in docker-compose.yml. See config/mill.local.example.yaml
+# config/ bind-mount in docker-compose.yml. See config/config.example.yaml
 # for the canonical operator surface.
 EXPOSE 8077
 
@@ -210,7 +210,7 @@ COPY . /app
 # Dev tooling moved from the `dev` extra to PEP 735 [dependency-groups]
 # (#1166); `pip install ".[dev,...]"` then silently installed NOTHING for the
 # vanished extra, shipping a :dev image without pytest — which is the
-# sandbox image (mill.local.yaml pins sandbox.image: robotsix/mill:dev), so
+# sandbox image (config.yaml pins sandbox.image: robotsix/mill:dev), so
 # every board's test gate broke at once (2026-06-11). `--group dev` is the
 # pip ≥25.1 way to install a dependency-group; the group's
 # `robotsix-modules` git dependency resolves natively (git in base stage).
@@ -231,14 +231,12 @@ FROM base AS production
 # pyproject.toml.
 COPY entrypoint.sh /app/entrypoint.sh
 
-# central-deploy support (inert in the dev stack / under the host config
-# bind-mount). The deploy entrypoint seeds the committed config defaults
-# into the otherwise-empty mill-config named volume, and splits the
-# central-deploy config-target into the loader's secrets.yaml + overlay.
-# Both files live OUTSIDE /app/config so the named volume does not shadow
-# them. See deploy/docker-compose.yml and config/config.yaml.
-COPY config/mill.defaults.yaml /opt/robotsix-mill/config-defaults/mill.defaults.yaml
-COPY deploy/split_config.py /app/deploy/split_config.py
+# central-deploy support: the mill now reads a SINGLE config file,
+# /app/config/config.yaml, which central-deploy writes into the
+# mill-config named volume (every non-secret knob plus a top-level
+# `secrets:` block). The deploy entrypoint just chmod 600's it and hands
+# it to the runtime user — no defaults-seeding or split step. See
+# deploy/docker-compose.yml and config/config.example.yaml.
 
 # Entrypoint runs as root, joins the host's docker.sock group, then
 # drops to mill via runuser. (No USER mill here.)

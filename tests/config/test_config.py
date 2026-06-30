@@ -25,8 +25,14 @@ def _clean_env() -> Generator[None, None, None]:
     The conftest-level _no_dotenv fixture handles ``.env`` / YAML file
     blocking; this fixture additionally wipes  **individual env vars**
     that may have leaked from prior runs or IDE shell config.
+
+    The single-file config pins (``MILL_CONFIG_FILE`` / ``MILL_SECRETS_FILE``
+    / ``MILL_REPOS_FILE``, set to ``""`` by the conftest ``_no_dotenv``
+    fixture) are preserved — clearing them would let the loader fall back to
+    a developer's gitignored ``config/config.yaml`` and break hermeticity.
     """
-    to_clear = [k for k in os.environ if k.startswith("MILL_")]
+    _pins = {"MILL_CONFIG_FILE", "MILL_SECRETS_FILE", "MILL_REPOS_FILE"}
+    to_clear = [k for k in os.environ if k.startswith("MILL_") and k not in _pins]
     stash = {k: os.environ.pop(k) for k in to_clear}
     # Also clear FORGE_* vars that alias to Settings fields
     for k in list(os.environ):

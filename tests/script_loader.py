@@ -1,9 +1,9 @@
 """Canonical helper for loading files under ``scripts/`` in tests.
 
 This is the one place tests should reach for when they need to import a
-file from ``scripts/`` — including **extensionless** scripts such as
-``scripts/migrate-config``. Python's ``importlib`` cannot infer a
-``SourceFileLoader`` from an empty file suffix, so loading an
+file from ``scripts/`` — including **extensionless** scripts (a bare
+``scripts/<name>`` with no suffix). Python's ``importlib`` cannot infer
+a ``SourceFileLoader`` from an empty file suffix, so loading an
 extensionless file via a bare ``spec_from_file_location()`` (no
 ``loader=``) fails. Supplying an explicit
 ``importlib.machinery.SourceFileLoader`` makes the helper work

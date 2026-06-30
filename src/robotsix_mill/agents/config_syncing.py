@@ -1,17 +1,15 @@
 """The config-sync agent: config-drift detection across the YAML layers.
 
-The authoritative config source is no longer .env / docs — it's
-``config/mill.defaults.yaml`` (canonical defaults), layered with the
-gitignored ``mill.local.yaml`` / ``mill.production.yaml`` overrides
-and the separate ``secrets.yaml``. This agent cross-references those
-files against ``src/robotsix_mill/config.py`` (the Pydantic model
-that consumes them) and ``docs/configuration.md`` (when present) to
-catch drift: settings declared in code but missing from the YAML
-template, YAML keys with no matching field, documented defaults that
-disagree with the model defaults, etc.
-
-Despite the historical name, this is a "config-sync" pass — `.env`
-is a legacy fallback and only secrets that bypass YAML live there.
+The authoritative config source is the single committed template
+``config/config.example.yaml`` (every non-secret knob with its default,
+plus a ``secrets:`` block of ``SECRET`` sentinels).  The live file
+``config/config.yaml`` (gitignored) is its real-valued counterpart.
+This agent cross-references the template against
+``src/robotsix_mill/config.py`` (the Pydantic model that consumes it)
+and ``docs/configuration.md`` (when present) to catch drift: settings
+declared in code but missing from the YAML template, YAML keys with no
+matching field, documented defaults that disagree with the model
+defaults, etc.
 
 Seam: tests monkeypatch ``run_config_sync_agent``.  Structured output so
 the runner has a clear result to work with.
@@ -36,12 +34,12 @@ AUTHORITATIVE FILES (read these, in order):
   ``Secrets`` classes are the source of truth for what knobs exist.
   Extract every field: name, type, default, and YAML key path (the
   YAML→env mapping is in ``src/robotsix_mill/config/loader.py``).
-- ``config/mill.defaults.yaml`` — canonical YAML defaults committed
-  to the repo. Every model field that has a YAML mapping should
-  appear here with a default that matches the model.
-- ``config/secrets.example.yaml`` — schema template for the
-  ``Secrets`` class. Every secret field should appear here as a
-  documented key (with a placeholder value).
+- ``config/config.example.yaml`` — the committed single-file config
+  template. Its non-secret leaves are the canonical defaults (every
+  model field with a YAML mapping should appear here with a matching
+  default); its ``secrets:`` block is the schema template for the
+  ``Secrets`` class (every secret field should appear as a key with the
+  ``SECRET`` sentinel value).
 - ``config/repos.example.yaml`` — schema template for per-repo
   config (``RepoConfig`` fields).
 - ``docs/configuration.md`` — operator-facing documentation. When
@@ -50,9 +48,8 @@ AUTHORITATIVE FILES (read these, in order):
 
 NOT AUTHORITATIVE (do NOT flag these as drift sources):
 
-- ``config/mill.local.yaml`` and ``config/mill.production.yaml`` —
-  gitignored host-specific overrides; their absence is normal.
-- ``config/secrets.yaml`` — gitignored real secrets; never inspect.
+- ``config/config.yaml`` — gitignored live config with real secrets +
+  host-specific overrides; never inspect.
 - ``config/repos.yaml`` — gitignored per-deployment repo registry.
 - ``.env`` — legacy fallback. Settings still accept ``MILL_*`` env
   vars, but YAML is the documented surface. Don't file "missing
@@ -61,9 +58,9 @@ NOT AUTHORITATIVE (do NOT flag these as drift sources):
 CLASSIFY FINDINGS:
 
 - **missing-from-yaml**: a field exists in ``config.py`` with a
-  YAML mapping but no corresponding key in ``mill.defaults.yaml`` /
-  ``secrets.example.yaml`` / ``repos.example.yaml`` (as appropriate
-  for which class it lives on).
+  YAML mapping but no corresponding key in ``config.example.yaml``
+  (its non-secret section or its ``secrets:`` block) /
+  ``repos.example.yaml`` (as appropriate for which class it lives on).
 - **stale-yaml-key**: a YAML key exists in one of the example /
   defaults files but no matching field in the model.
 - **default-mismatch**: the YAML default disagrees with the model
@@ -77,8 +74,8 @@ CLASSIFY FINDINGS:
 DRAFT FORMAT:
 
 - **Title**: ``config drift: <field> missing from
-  mill.defaults.yaml``, ``config drift: stale key
-  ``<key>`` in mill.defaults.yaml``, ``config drift: <field> default
+  config.example.yaml``, ``config drift: stale key
+  ``<key>`` in config.example.yaml``, ``config drift: <field> default
   mismatch (model=X, yaml=Y)``, or ``config drift: docs default
   mismatch for <field>``.
 - **Body**: field name + YAML key path + model default + observed

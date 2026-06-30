@@ -1,5 +1,5 @@
-"""Langfuse is configured in ONE place — the ``langfuse_*`` keys in
-secrets.yaml (``Secrets``). ``load_repos_config`` populates every repo and
+"""Langfuse is configured in ONE place — the ``langfuse_*`` keys in the
+config.yaml ``secrets:`` block (``Secrets``). ``load_repos_config`` populates every repo and
 the meta board from them. There is no per-repo Langfuse config — a
 ``langfuse`` block on an individual repo entry is ignored."""
 

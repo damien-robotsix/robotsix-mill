@@ -1,14 +1,28 @@
 # =============================================================================
-#  Canonical defaults for every configurable knob in robotsix-mill.
+#  robotsix-mill — committed config TEMPLATE (config.example.yaml).
+#
+#  The mill now reads ONE config file: config/config.yaml (gitignored).  It
+#  holds every non-secret knob PLUS a top-level `secrets:` block with the
+#  real credential values.  This file — config.example.yaml — is the
+#  committed template documenting that single-file structure: every
+#  non-secret field carries its safe default, and every secret is the
+#  literal sentinel `SECRET` (treated as "unset" by the loader).
+#
+#  To deploy:
+#    cp config/config.example.yaml config/config.yaml
+#    # edit config/config.yaml — set the secrets and any host overrides
+#    chmod 600 config/config.yaml          # it now holds real credentials
+#
+#  The loader reads config/config.yaml when present, else falls back to
+#  this committed config.example.yaml (so CI / tests with no config.yaml
+#  still get the committed defaults; the all-`SECRET` secrets resolve to
+#  None).  The managed fleet (config/repos.yaml) stays a separate file.
 #
 #  This is the SINGLE SOURCE OF TRUTH for "what is configurable" and what
-#  the safe default value is.  It is committed to the repo; local overrides
-#  go in config/mill.local.yaml (gitignored); production overrides go in
-#  config/mill.production.yaml (host-mounted, gitignored).  Secrets live in
-#  config/secrets.yaml (separate file, separate model).
+#  the safe default value is.
 #
-#  Field count: 133 unique values across 17 logical groups.
-#  See docs/rfc-config-v2.md for architecture rationale.
+#  Field count: 133 non-secret values across 17 logical groups, plus the
+#  `secrets:` block at the end.
 # =============================================================================
 
 # ---------------------------------------------------------------------------
@@ -526,3 +540,28 @@ component_agent:
   broker_port: 443                          # broker port
   broker_scheme: https                      # broker scheme (http/https)
   broker_token: ""                          # bearer token for the broker
+
+# ---------------------------------------------------------------------------
+#  secrets — credentials read by the separate `Secrets` model (NOT merged
+#  into Settings).  In config.yaml these hold REAL values; here every leaf
+#  is the literal sentinel `SECRET`, which the loader treats as "unset"
+#  (the field falls back to its None default).  Replace each `SECRET` with
+#  a real value in your config/config.yaml.  Keys map 1:1 to the fields on
+#  src/robotsix_mill/config/secrets.py.
+# ---------------------------------------------------------------------------
+
+secrets:
+  openrouter_api_key: SECRET  # pragma: allowlist secret   # required — all LLM calls route via OpenRouter
+  openrouter_management_key: SECRET  # pragma: allowlist secret   # credit-balance checks (GET /api/v1/activity); optional
+  forge_token: SECRET  # pragma: allowlist secret   # forge PAT (push / PR / merge) — alternative to GitHub App
+  forge_repo_create_token: SECRET  # pragma: allowlist secret   # PAT used ONLY for new-repo creation; falls back to forge_token
+  github_app_id: SECRET  # pragma: allowlist secret   # GitHub App identity (auth_mode=app)
+  github_app_private_key: SECRET  # pragma: allowlist secret   # inline PEM; newlines as \n
+  github_app_private_key_path: SECRET  # pragma: allowlist secret   # alternative: path to PEM file on disk (not strictly secret)
+  langfuse_public_key: SECRET  # pragma: allowlist secret   # observability (optional)
+  langfuse_secret_key: SECRET  # pragma: allowlist secret   # observability (optional)
+  langfuse_base_url: SECRET  # pragma: allowlist secret   # leave SECRET for Langfuse Cloud (default)
+  langfuse_project_id: SECRET  # pragma: allowlist secret   # observability project id (optional)
+  langfuse_project_name: SECRET  # pragma: allowlist secret   # observability project name (optional)
+  ntfy_url: SECRET  # pragma: allowlist secret   # ntfy.sh notification URL (optional)
+  ntfy_token: SECRET  # pragma: allowlist secret   # ntfy.sh bearer token (optional)

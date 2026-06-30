@@ -1,7 +1,7 @@
 # Delivery identity: GitHub App bot (recommended) or PAT
 
 The `deliver` stage pushes the ticket branch and opens a Pull Request.
-Two ways to authenticate, set via `FORGE_AUTH` in `config/mill.local.yaml`
+Two ways to authenticate, set via `FORGE_AUTH` in `config/config.yaml`
 (or as an environment variable):
 
 | `FORGE_AUTH` | Identity on the PR/commits | Setup |
@@ -19,7 +19,7 @@ identity as robotsix-project.
 ## Common forge settings
 
 ```yaml
-# config/mill.local.yaml
+# config/config.yaml
 forge:
   kind: github
   remote_url: https://github.com/<owner>/<repo>.git
@@ -29,8 +29,9 @@ forge:
 ## Option A — PAT (quick, for testing)
 
 ```yaml
-# config/secrets.yaml
-forge_token: <token>
+# config/config.yaml
+secrets:
+  forge_token: <token>
 ```
 With `forge.auth_mode: token` (the default) in your settings.
 
@@ -89,18 +90,19 @@ installation automatically from `FORGE_REMOTE_URL`.)
 ### 4. Configure settings and secrets
 
 ```yaml
-# config/mill.local.yaml
+# config/config.yaml
 forge:
   auth_mode: app
 ```
 
 ```yaml
-# config/secrets.yaml
-github_app_id: "<the integer App ID>"
-# Either point at the .pem file (recommended via bind mount):
-# github_app_private_key: ""  # leave empty when using path
-# …or inline the PEM (newlines as literal \n):
-github_app_private_key: "-----BEGIN RSA PRIVATE KEY-----\n...\n-----END..."
+# config/config.yaml
+secrets:
+  github_app_id: "<the integer App ID>"
+  # Either point at the .pem file (recommended via bind mount):
+  # github_app_private_key: ""  # leave empty when using path
+  # …or inline the PEM (newlines as literal \n):
+  github_app_private_key: "-----BEGIN RSA PRIVATE KEY-----\n...\n-----END..."
 ```
 
 If using a `.pem` **file**, set `GITHUB_APP_PRIVATE_KEY_PATH`
@@ -149,7 +151,7 @@ if the operator registers separate credentials.
 > **Different Apps per repo**: if repos need separate GitHub App
 > identities, register each App, install it on the relevant repo, and
 > provide per-App credentials. Currently the mill uses a single
-> `GITHUB_APP_ID` / private key pair (from `secrets.yaml`); per-repo
+> `GITHUB_APP_ID` / private key pair (from the `config.yaml` `secrets:` block); per-repo
 > App credentials are a future enhancement. For most deployments, one
 > App installed on all repos is sufficient.
 
@@ -164,7 +166,7 @@ compatibility with single-repo deployments.
   implement agent runs in the separate `--network none` sandbox and
   cannot read it (see [docker-architecture.md](docker-architecture.md)).
 - `GITHUB_APP_PRIVATE_KEY*` and `FORGE_TOKEN` are secrets — keep them in
-  the gitignored `config/secrets.yaml` (or a mounted file); never commit them.
+  the gitignored `config/config.yaml` `secrets:` block (or a mounted file); never commit them.
 - GitHub Enterprise: set `MILL_GITHUB_API_URL=https://<host>/api/v3`.
 - Bot commit authorship: the PR is authored by the bot; commit author
   is mill's git identity. Setting commits to the bot too is a future

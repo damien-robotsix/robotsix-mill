@@ -14,7 +14,7 @@
 #    colliding with Hub's :latest (so a stray pull / watchtower can
 #    never swap your build out from under you).
 #  - The implement test-gate sandbox must run the SAME local build, so
-#    pin `sandbox.image: robotsix/mill:dev` in config/mill.local.yaml
+#    pin `sandbox.image: robotsix/mill:dev` in config/config.yaml
 #    alongside the other host-local YAML overrides (no env vars — the
 #    MILL_* aliases were retired with 9cd2630).
 #

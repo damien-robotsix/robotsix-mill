@@ -32,7 +32,7 @@ requires a code change.
 Append its `repo_id` (as it appears in `config/repos.yaml`) to the list:
 
 ```yaml
-# config/mill.local.yaml
+# config/config.yaml
 periodic:
   diagnostic:
     monitored_repo_ids:

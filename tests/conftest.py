@@ -77,16 +77,17 @@ def _no_dotenv(monkeypatch):
     every ticket. The suite must be identical green on a clean machine
     and inside the container.
 
-    Also blocks YAML overlay files (``config/mill.local.yaml``,
-    ``config/mill.production.yaml``, ``config/secrets.yaml``) by
-    setting ``MILL_CONFIG_FILE`` and ``MILL_SECRETS_FILE`` to empty
-    so only the committed ``config/mill.defaults.yaml`` is loaded."""
+    Pins the config loader to the committed ``config/config.example.yaml``
+    template (never the gitignored, host-specific ``config/config.yaml``)
+    by setting ``MILL_CONFIG_FILE`` and ``MILL_SECRETS_FILE`` to empty —
+    the loader treats ``""`` as "use the committed example", whose
+    secrets are all the ``SECRET`` sentinel (i.e. unset)."""
     monkeypatch.setenv("MILL_CONFIG_FILE", "")
     monkeypatch.setenv("MILL_SECRETS_FILE", "")
     monkeypatch.setenv("MILL_REPOS_FILE", "")
     # Disable the board-poll list cache by default in tests so GET /tickets
     # is always immediately consistent (create-then-list). The committed
-    # mill.defaults.yaml enables it (3.0s) in real deployments; env beats
+    # config.example.yaml enables it (3.0s) in real deployments; env beats
     # YAML, so this override is inert in production. Tests that exercise the
     # cache opt in explicitly via Settings(board_list_cache_ttl_seconds=…)
     # (a kwarg, which beats env). Also clear the module-global cache so no
@@ -95,12 +96,6 @@ def _no_dotenv(monkeypatch):
     from robotsix_mill.runtime.routes import _tickets as _tickets_routes
 
     _tickets_routes._LIST_CACHE.clear()
-    # Patch _LOCAL_FILE to a nonexistent path so no local overlay
-    # leaks into any test, even when Settings.__init__ calls
-    # load_yaml_config directly.
-    import robotsix_mill.config.loader as _cl
-
-    monkeypatch.setattr(_cl, "_LOCAL_FILE", _cl.Path("/nonexistent/mill.local.yaml"))
     for var in (
         "OPENROUTER_API_KEY",
         "LANGFUSE_PUBLIC_KEY",

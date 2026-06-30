@@ -21,18 +21,14 @@ modules:
       - src/robotsix_mill/config/*.py
       - src/robotsix_mill/__init__.py
       - src/robotsix_mill/py.typed
-      - config/mill.defaults.yaml
-      - config/mill.local.example.yaml
+      - config/config.example.yaml
       - config/repos.example.yaml
-      - config/secrets.example.yaml
-      - config/config.yaml
       - .robotsix-mill/config.yaml
       - .robotsix-mill/periodic/*.yaml
       - tests/config/test_config.py
       - tests/config/test_repo_settings.py
       - tests/config/test_workspace_members.py
       - tests/config/test_member_sync_config.py
-      - tests/config/test_migrate_config.py
       - tests/config/test_cross_repo_target.py
       - tests/config/test_global_langfuse.py
       - tests/config/test_target_branch_for.py
@@ -552,7 +548,6 @@ modules:
       - docker-compose.yml
       - docker-compose.override.example.yml
       - deploy/docker-compose.yml
-      - deploy/split_config.py
       - .dockerignore
       - .hadolint.yaml
       - pyproject.toml
@@ -576,7 +571,6 @@ modules:
       - tests/dev-tooling/test_docs_nav.py
       - tests/dev-tooling/test_modules_yaml_paths.py
       - tests/dev-tooling/test_check_config_sync.py
-      - tests/dev-tooling/test_split_config.py
     dependencies: []
 
   # -------------------------------------------------------------------
@@ -595,7 +589,6 @@ modules:
       - LICENSE
       - SECURITY.md
       - AGENT.md
-      - CLAUDE.md
       - CHANGELOG.md
       - .gitignore
       - .gitmodules
