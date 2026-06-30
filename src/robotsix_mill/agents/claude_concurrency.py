@@ -18,6 +18,14 @@ Only the synchronous, top-level ``run_sync()`` path is bounded:
   async ``run()`` path, which is intentionally left unbounded (a parent holding
   a permit while waiting on a child that needs one would otherwise deadlock once
   the cap is reached).
+
+Two independent semaphores:
+
+- **heavy-work** (``get_claude_run_semaphore``) — bounds implement/audit/refine
+  Claude runs, sized by ``claude_max_concurrency``.
+- **board-manager** (``get_board_manager_semaphore``) — bounds interactive board
+  reads, sized by ``board_manager_max_concurrent``.  Separated so a saturated
+  heavy-work cap never gates interactive board responses.
 """
 
 from __future__ import annotations
@@ -25,8 +33,10 @@ from __future__ import annotations
 import threading
 from typing import Any
 
-# Process-wide, lazily sized from the first caller's limit. The worker builds
-# every agent from one ``Settings``, so the limit is stable across callers.
+# ---------------------------------------------------------------------------
+# Heavy-work semaphore (implement / audit / refine)
+# ---------------------------------------------------------------------------
+
 _lock = threading.Lock()
 _semaphore: threading.BoundedSemaphore | None = None
 _configured_limit: int | None = None
@@ -81,3 +91,41 @@ def bound_claude_handle(handle: Any, limit: int) -> _BoundedClaudeHandle:
     """Wrap *handle* so its top-level ``run_sync`` calls share the process-wide
     Claude-run semaphore sized to *limit*."""
     return _BoundedClaudeHandle(handle, get_claude_run_semaphore(limit))
+
+
+# ---------------------------------------------------------------------------
+# Board-manager semaphore — dedicated lane, independent of heavy-work cap
+# ---------------------------------------------------------------------------
+
+_board_manager_lock = threading.Lock()
+_board_manager_semaphore: threading.BoundedSemaphore | None = None
+_board_manager_configured_limit: int | None = None
+
+
+def get_board_manager_semaphore(limit: int) -> threading.BoundedSemaphore:
+    """Return the process-wide semaphore bounding concurrent board-manager
+    Claude runs.  Sized once to ``max(1, limit)`` on first use; later calls
+    reuse the existing semaphore and ignore a differing *limit*.
+    :func:`reset_board_manager_for_tests` clears it between tests."""
+    global _board_manager_semaphore, _board_manager_configured_limit
+    with _board_manager_lock:
+        if _board_manager_semaphore is None:
+            _board_manager_configured_limit = max(1, limit)
+            _board_manager_semaphore = threading.BoundedSemaphore(
+                _board_manager_configured_limit
+            )
+        return _board_manager_semaphore
+
+
+def reset_board_manager_for_tests() -> None:
+    """Drop the cached board-manager semaphore. Tests only."""
+    global _board_manager_semaphore, _board_manager_configured_limit
+    with _board_manager_lock:
+        _board_manager_semaphore = None
+        _board_manager_configured_limit = None
+
+
+def bound_board_manager_handle(handle: Any, limit: int) -> _BoundedClaudeHandle:
+    """Wrap *handle* so its ``run_sync`` acquires the dedicated board-manager
+    semaphore — independent of the heavy-work ``get_claude_run_semaphore``."""
+    return _BoundedClaudeHandle(handle, get_board_manager_semaphore(limit))

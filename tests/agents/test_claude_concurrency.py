@@ -14,8 +14,11 @@ from pydantic import ValidationError
 from robotsix_mill.agents import base
 from robotsix_mill.agents.claude_concurrency import (
     _BoundedClaudeHandle,
+    bound_board_manager_handle,
     bound_claude_handle,
+    get_board_manager_semaphore,
     get_claude_run_semaphore,
+    reset_board_manager_for_tests,
     reset_for_tests,
 )
 from robotsix_mill.config import Settings
@@ -221,3 +224,133 @@ def test_live_bound_serializes_real_claude_runs():
 
     # The real run holds the only permit for its whole duration → no overlap.
     assert state["peak"] == 1, f"real runs overlapped (peak={state['peak']})"
+
+
+# ============================================================================
+# Board-manager semaphore — independent dedicated lane
+# ============================================================================
+
+
+@pytest.fixture(autouse=True)
+def _fresh_board_manager_semaphore():
+    """Isolate the board-manager semaphore between tests."""
+    reset_board_manager_for_tests()
+    yield
+    reset_board_manager_for_tests()
+
+
+# NOTE: the ``_fresh_semaphore`` fixture (defined above) also calls
+# ``reset_for_tests()`` on the heavy-work semaphore.  The board-manager
+# semaphore is a separate singleton; resetting one does not affect the other.
+# The two autouse fixtures coexist safely (order is deterministic in pytest
+# but immaterial — the fixtures touch different global state).
+
+
+def test_get_board_manager_semaphore_singleton():
+    """Calling twice with the same limit returns the same object."""
+    s1 = get_board_manager_semaphore(3)
+    s2 = get_board_manager_semaphore(3)
+    assert s1 is s2
+
+
+def test_get_board_manager_semaphore_ignores_later_limit():
+    """Second call with a different limit is silently ignored; size stays at
+    first-call value."""
+    s1 = get_board_manager_semaphore(2)
+    s2 = get_board_manager_semaphore(99)
+    assert s1 is s2
+    # Size was set on first call (2); second call must not resize.
+    assert s1.acquire(blocking=False) is True
+    assert s1.acquire(blocking=False) is True  # both permits taken
+    assert s1.acquire(blocking=False) is False  # third blocks
+    s1.release()
+    s1.release()
+
+
+def test_get_board_manager_semaphore_min_one():
+    """``limit=0`` → semaphore sized to 1."""
+    sem = get_board_manager_semaphore(0)
+    assert sem.acquire(blocking=False) is True
+    assert sem.acquire(blocking=False) is False
+    sem.release()
+
+
+def test_bound_board_manager_handle_delegates_run_sync():
+    """Wraps a fake handle; ``run_sync`` is called through and the return value
+    passes unchanged."""
+    inner = _RecordingHandle()
+    wrapped = bound_board_manager_handle(inner, limit=2)
+
+    out = wrapped.run_sync("prompt", extra="val")
+
+    assert out == "OUT"
+    assert inner.calls == [(("prompt",), {"extra": "val"})]
+
+
+def test_bound_board_manager_handle_blocks_when_full():
+    """With ``limit=1``, a second concurrent ``run_sync`` blocks until the first
+    releases."""
+    limit = 1
+    lock = threading.Lock()
+    state = {"current": 0, "peak": 0}
+
+    class _SlowHandle:
+        def run_sync(self, *args, **kwargs):
+            with lock:
+                state["current"] += 1
+                state["peak"] = max(state["peak"], state["current"])
+            time.sleep(0.05)
+            with lock:
+                state["current"] -= 1
+            return "ok"
+
+    wrapped = bound_board_manager_handle(_SlowHandle(), limit=limit)
+
+    threads = [
+        threading.Thread(target=wrapped.run_sync, args=("go",)) for _ in range(4)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert state["peak"] == 1, f"board-manager runs overlapped (peak={state['peak']})"
+
+
+def test_reset_board_manager_for_tests_allows_resize():
+    """After reset, ``get_board_manager_semaphore`` accepts a new limit."""
+    s1 = get_board_manager_semaphore(5)
+    assert s1 is not None
+
+    reset_board_manager_for_tests()
+
+    s2 = get_board_manager_semaphore(3)
+    assert s2 is not s1
+    # The new semaphore is sized to 3, not 5.
+    for _ in range(3):
+        assert s2.acquire(blocking=False) is True
+    assert s2.acquire(blocking=False) is False
+    for _ in range(3):
+        s2.release()
+
+
+def test_board_manager_semaphore_independent_of_heavy_work():
+    """The two semaphores are distinct objects; acquiring one does not affect
+    the other."""
+    bm = get_board_manager_semaphore(1)
+    hw = get_claude_run_semaphore(4)
+    assert bm is not hw
+
+    # Acquire the board-manager's only permit — does NOT consume heavy-work.
+    assert bm.acquire(blocking=False) is True
+
+    # Heavy-work permits are still fully available.
+    for _ in range(4):
+        assert hw.acquire(blocking=False) is True
+    assert hw.acquire(blocking=False) is False  # all 4 taken
+
+    # Release board-manager; heavy-work stays saturated.
+    bm.release()
+    assert hw.acquire(blocking=False) is False  # still full
+    for _ in range(4):
+        hw.release()

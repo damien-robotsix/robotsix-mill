@@ -37,9 +37,12 @@ class _BoardAgentSettings(BaseModel):
     board_manager_recall_model: str = Field(default="")  # level-1; "" → default
     board_manager_max_conversations: int = Field(default=200)
     board_manager_max_concurrent: int = Field(
-        default=3,
+        default=1,
         description=(
-            "Max simultaneous BoardManager LLM requests. Requires robotsix-board-agent "
-            "with asyncio.to_thread concurrent dispatch support."
+            "Max concurrent board-manager Claude SDK runs. Bounded by a dedicated "
+            "semaphore independent of claude_max_concurrency so board reads are never "
+            "gated by heavy implement/audit/refine work. Default 1 matches the "
+            "serial request-handling loop; increase only if robotsix-board-agent "
+            "gains concurrent dispatch support."
         ),
     )
