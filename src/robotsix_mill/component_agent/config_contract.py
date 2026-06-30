@@ -76,7 +76,7 @@ SETTABLE_KEYS: frozenset[str] = frozenset(
         "test_gap_periodic",  # test-gap toggle
         "survey_periodic",  # survey toggle
         "config_sync_periodic",  # config-sync toggle
-        "data_dir_audit_periodic",  # data-dir audit toggle
+        "data_dir_gc_periodic",  # data-dir gc toggle
         "langfuse_cleanup_periodic",  # Langfuse cleanup toggle
         "timeout_escalation_periodic",  # timeout escalation toggle
         "meta_periodic",  # meta-agent toggle

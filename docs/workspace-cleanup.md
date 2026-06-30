@@ -20,18 +20,18 @@ never raised.
 Set to `false` if you need to inspect the final repository state after a
 ticket is finished (for post-mortem debugging).
 
-## Default-on GC: pruning terminal-ticket clones during the data-dir audit
+## Default-on GC: pruning terminal-ticket clones
 
 `prune_clone_on_close` is best-effort and only fires on the retrospect
 path, so clones leak: tickets that end terminal without that path,
 multi-repo `repos/` trees (meta tickets), and workspaces orphaned by
-restarts. The data-dir audit pass closes the gap with a backstop GC
-that runs **at the start of each pass, before size measurement**.
+restarts. The data-dir GC pass closes the gap with a backstop GC
+that runs at the start of each pass.
 
 | Variable | Default | Description |
 |---|---|---|
-| `MILL_DATA_DIR_AUDIT_PRUNE_TERMINAL_CLONES` | `true` | Prune `repo/` + `repos/` inside terminal-ticket workspaces during the audit pass |
-| `MILL_DATA_DIR_AUDIT_PRUNE_TERMINAL_CLONES_AGE_SECONDS` | `86400` (1 day) | Minimum age (since terminal state) before clones are pruned |
+| `MILL_DATA_DIR_GC_PRUNE_TERMINAL_CLONES` | `true` | Prune `repo/` + `repos/` inside terminal-ticket workspaces during the GC pass |
+| `MILL_DATA_DIR_GC_PRUNE_TERMINAL_CLONES_AGE_SECONDS` | `86400` (1 day) | Minimum age (since terminal state) before clones are pruned |
 
 Only the reproducible git clones are removed; `description.md`,
 `artifacts/` and `screenshots/` are always preserved for post-mortems.
@@ -40,76 +40,35 @@ be in a terminal state (`CLOSED`, `EPIC_CLOSED`, `ANSWERED`), and have
 been terminal for at least the configured age. Best-effort per board —
 failures are logged, never raised.
 
-## Opt-in GC: pruning closed-ticket workspaces during the data-dir audit
+## Opt-in GC: pruning closed-ticket workspaces
 
 The per-ticket `prune_clone_on_close` above only removes the `repo/`
 clone; the rest of a closed ticket's workspace (`description.md`,
 `artifacts/`, …) accumulates on disk. Over time the bulk of `.data/`
 bytes belong to **terminal-state** tickets whose workspaces are no
-longer needed. The periodic data-dir audit pass can garbage-collect
+longer needed. The periodic data-dir GC pass can garbage-collect
 them.
 
 | Variable | Default | Description |
 |---|---|---|
-| `MILL_DATA_DIR_AUDIT_PRUNE_CLOSED` | `false` | Prune workspaces of terminal-state tickets during the data-dir audit pass |
-| `MILL_DATA_DIR_AUDIT_PRUNE_CLOSED_AGE_SECONDS` | `604800` (7 days) | Minimum age (since terminal state) before a workspace is eligible |
+| `MILL_DATA_DIR_GC_PRUNE_CLOSED` | `false` | Prune workspaces of terminal-state tickets during the data-dir GC pass |
+| `MILL_DATA_DIR_GC_PRUNE_CLOSED_AGE_SECONDS` | `604800` (7 days) | Minimum age (since terminal state) before a workspace is eligible |
 
-When `MILL_DATA_DIR_AUDIT_PRUNE_CLOSED` is `true`, the data-dir audit
-pass runs a GC step **at the start of each pass, before size
-measurement**. It removes the workspace directories of tickets in a
-terminal state (`CLOSED`, `EPIC_CLOSED`, `ANSWERED`) whose close time is
-older than `MILL_DATA_DIR_AUDIT_PRUNE_CLOSED_AGE_SECONDS`. Close time is
-derived from the most recent terminal `TicketEvent` (falling back to the
-ticket-ID timestamp). Recent closures are kept so they remain available
-for post-mortems.
+When `MILL_DATA_DIR_GC_PRUNE_CLOSED` is `true`, the data-dir GC
+pass runs a GC step at the start of each pass. It removes the workspace
+directories of tickets in a terminal state (`CLOSED`, `EPIC_CLOSED`,
+`ANSWERED`) whose close time is older than
+`MILL_DATA_DIR_GC_PRUNE_CLOSED_AGE_SECONDS`. Close time is derived from
+the most recent terminal `TicketEvent` (falling back to the ticket-ID
+timestamp). Recent closures are kept so they remain available for
+post-mortems.
 
 Pruning is **opt-in** (default `false` for one release cycle) and
 **best-effort**: a failed delete is logged and never aborts the pass,
 and a board whose DB is unreachable is skipped without failing the rest
 of the pass. Non-terminal tickets (including `DONE`) and orphan
 directories (no matching ticket row) are never touched — orphans are
-left to the existing orphan detector.
-
-Because the GC runs before measurement, every oversized/growth alert the
-pass files reflects the **post-GC** state. **Operator playbook:** with
-pruning enabled, an oversized/growth data-dir alert now means **real
-residual growth** — live tickets, large artifacts, or non-terminal
-accumulation — rather than churn residue from already-closed tickets, so
-it warrants investigation instead of a routine acknowledge.
-
-## Automatic suppression of self-healing growth flags
-
-Workspace churn is expected: active tickets grow their `repo/` clones
-as agents commit work, periodic-pass clones are wiped and re-cloned
-every pass, and terminal/orphan workspaces are reclaimed or reported by
-the GCs and the orphan check above. Filing growth tickets for any of
-those would be noise — no agent has host data-dir access, so such
-tickets used to dead-end at `maintenance → BLOCKED ("needs a human")`.
-
-The data-dir audit pass suppresses growth-delta flags whose path is
-**self-healing** (always-on, each suppression logged at INFO):
-
-- inside an **active** ticket workspace — transient runtime data;
-- inside a **terminal** ticket workspace, when the terminal-clone GC is
-  enabled — it reclaims the growth on the next pass;
-- inside an **orphan** workspace — the orphan check files its own
-  finding with the full directory size;
-- a **periodic-pass clone** (`health_workspace/repo/`, …) — re-cloned
-  every pass by design;
-- an **aggregate directory** (e.g. `workspaces/` itself) whose growth is
-  ≥90% attributable to the categories above via its immediate children
-  — the parent dir accumulates the growth of individually-suppressed
-  children and must not re-file it.
-
-A flag that survives suppression is filed **with a classified
-breakdown**: the top contributing sub-paths, each labelled with its
-category, plus the fraction of growth already explained. The ticket is
-self-diagnosing — refine can spec a code fix when the breakdown points
-at an unbounded writer, without anyone needing data-dir access.
-
-The state snapshot written to `data_dir_audit_state.json` is unaffected
-by suppression — all paths are recorded regardless; suppression only
-filters which flags are returned/filed.
+handled by the dedicated orphan pruning step.
 
 ## See also
 

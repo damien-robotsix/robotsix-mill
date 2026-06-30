@@ -100,7 +100,7 @@
     copy_paste: "copy-paste",
     state_sync: "state-sync",
     env_doc_sync: "env-doc-sync",
-    data_dir_audit: "data-dir-audit",
+    data_dir_gc: "data-dir-gc",
     meta: "meta",
     "run-health": "run-health",
     security_posture: "security-posture",

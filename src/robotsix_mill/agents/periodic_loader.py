@@ -87,7 +87,7 @@ _BUILTIN_KINDS: dict[str, str] = {
     "trace_review": "schedule_only",
     "config_sync": "schedule_only",
     "member_sync": "schedule_only",
-    "data_dir_audit": "schedule_only",
+    "data_dir_gc": "schedule_only",
     # Recognized but NOT per-repo-presence managed (cross-repo / always-on).
     "langfuse_cleanup": "global_only",
     "meta": "global_only",
