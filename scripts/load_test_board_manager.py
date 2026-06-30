@@ -364,14 +364,14 @@ def _extract_board_traces(
 
     latencies_s: list[float] = []
     for t in board_traces:
-        lat_ms = t.get("latency")  # Langfuse latency is in seconds (float)
-        if lat_ms is None:
+        lat = t.get("latency")
+        # Langfuse latency is always in seconds (float).
+        # A heuristic like `if lat > 1000: lat /= 1000` would mask genuine
+        # slow traces — e.g. a 2000 s trace would be reported as 2 s.
+        if lat is None:
             lat_s = 0.0
-        elif lat_ms > 1000:
-            # Some Langfuse versions report latency in ms; normalize.
-            lat_s = lat_ms / 1000.0
         else:
-            lat_s = float(lat_ms)
+            lat_s = float(lat)
         latencies_s.append(lat_s)
 
     latencies_s.sort()
