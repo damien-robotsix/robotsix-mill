@@ -8,6 +8,10 @@
   The guard lives in ``src/robotsix_mill/core/tool_wrappers.py`` and is
   applied at agent construction time in ``coordinating.py``,
   ``documenting.py``, ``reviewing.py``, and ``retrospecting.py``.
+- **agents**: wire the ``triage_boilerplate`` periodic agent into the
+  scheduler — add ``SourceKind.TRIAGE_BOILERPLATE``, a ``PeriodicPassConfig``
+  entry, and the ``llm_agent`` builtin-kind mapping so the agent can
+  actually run.
 
 - **ci**: remove dead `dependency-submission.yml` workflow (native
   Dependabot `uv` graph job pre-empts custom workflows) and restore

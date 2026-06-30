@@ -493,6 +493,16 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         clone_token_fn=None,  # uses forge_token (raises on missing)
         requires_repo=True,
     ),
+    "triage_boilerplate": PeriodicPassConfig(
+        label="triage_boilerplate",
+        source_kind=SourceKind.TRIAGE_BOILERPLATE,
+        agent_module_attr="triage_boilerplate",
+        agent_fn_name="run_triage_boilerplate_agent",
+        memory_filename="triage_boilerplate_memory.md",
+        workspace_subdir="triage_boilerplate_workspace",
+        result_dataclass=PeriodicPassResult,
+        clone_token_fn=None,  # uses forge_token (raises on missing)
+    ),
 }
 
 
@@ -585,3 +595,4 @@ run_state_sync_pass = _make_entry("state_sync")
 run_env_doc_sync_pass = _make_entry("env_doc_sync")
 run_frontend_sync_pass = _make_entry("frontend_sync")
 run_security_posture_pass = _make_entry("security_posture")
+run_triage_boilerplate_pass = _make_entry("triage_boilerplate")

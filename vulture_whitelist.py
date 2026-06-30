@@ -121,6 +121,9 @@ copy_paste_memory_path
 copy_paste_periodic
 state_sync_model
 copy_paste_interval_seconds
+triage_boilerplate_memory_path
+triage_boilerplate_periodic
+triage_boilerplate_interval_seconds
 config_sync_periodic
 config_sync_interval_seconds
 env_doc_sync_model
@@ -252,6 +255,7 @@ run_roadmap_sync_pass
 run_state_sync_pass
 run_survey_pass
 run_test_gap_pass
+run_triage_boilerplate_pass
 traces_scanned
 traces_flagged
 run_trace_review_pass

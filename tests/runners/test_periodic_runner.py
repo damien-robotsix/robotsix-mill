@@ -606,8 +606,8 @@ def test_run_periodic_pass_requires_repo_short_circuit_logs_warning(
 # ------------------------------------------------------------------ PERIODIC_PASS_CONFIGS registry
 
 
-def test_periodic_pass_configs_registry_has_all_fifteen_entries():
-    """All 15 periodic passes are registered."""
+def test_periodic_pass_configs_registry_has_all_sixteen_entries():
+    """All 16 periodic passes are registered."""
     expected = {
         "audit",
         "agent_check",
@@ -624,6 +624,7 @@ def test_periodic_pass_configs_registry_has_all_fifteen_entries():
         "env_doc_sync",
         "frontend_sync",
         "security_posture",
+        "triage_boilerplate",
     }
     assert set(PERIODIC_PASS_CONFIGS.keys()) == expected
 
