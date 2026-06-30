@@ -423,7 +423,9 @@ def test_health_cli_command(capsys, tmp_path, monkeypatch):
             drafts_created=[{"id": "123", "title": "Fix gap"}],
         )
 
-    monkeypatch.setattr("robotsix_mill.runners.periodic_runner.run_health_pass", mock_run)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.run_health_pass", mock_run
+    )
 
     result = main(["health"])
     assert result == 0
@@ -442,7 +444,9 @@ def test_health_cli_json_output(capsys, tmp_path, monkeypatch):
             drafts_created=[{"id": "123", "title": "Fix gap"}],
         )
 
-    monkeypatch.setattr("robotsix_mill.runners.periodic_runner.run_health_pass", mock_run)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.run_health_pass", mock_run
+    )
 
     result = main(["health", "--json"])
     assert result == 0
@@ -463,7 +467,9 @@ def test_health_cli_no_drafts(capsys, tmp_path, monkeypatch):
             drafts_created=[],
         )
 
-    monkeypatch.setattr("robotsix_mill.runners.periodic_runner.run_health_pass", mock_run)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.run_health_pass", mock_run
+    )
 
     result = main(["health"])
     assert result == 0
@@ -478,7 +484,9 @@ def test_health_cli_failure(capsys, monkeypatch):
     def mock_run(session_id=None):
         raise RuntimeError("agent exploded")
 
-    monkeypatch.setattr("robotsix_mill.runners.periodic_runner.run_health_pass", mock_run)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.run_health_pass", mock_run
+    )
 
     result = main(["health"])
     assert result == 1
@@ -658,7 +666,9 @@ def test_post_health_check_returns_202(tmp_path, monkeypatch, repos_registry):
             drafts_created=[],
         )
 
-    monkeypatch.setattr("robotsix_mill.runners.periodic_runner.run_health_pass", slow_run)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.run_health_pass", slow_run
+    )
 
     from robotsix_mill.runtime.api import create_app
 
@@ -698,7 +708,9 @@ def test_post_health_check_runs_in_background(tmp_path, monkeypatch, repos_regis
             drafts_created=[{"id": "test-id", "title": "Health draft"}],
         )
 
-    monkeypatch.setattr("robotsix_mill.runners.periodic_runner.run_health_pass", mock_run)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.run_health_pass", mock_run
+    )
 
     from robotsix_mill.runtime.api import create_app
 

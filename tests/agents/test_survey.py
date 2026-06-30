@@ -421,7 +421,9 @@ def test_survey_cli_command(capsys, tmp_path, monkeypatch):
             drafts_created=[{"id": "123", "title": "Adopt pattern X"}],
         )
 
-    monkeypatch.setattr("robotsix_mill.runners.periodic_runner.run_survey_pass", mock_run)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.run_survey_pass", mock_run
+    )
 
     result = main(["survey"])
     assert result == 0
@@ -440,7 +442,9 @@ def test_survey_cli_json_output(capsys, tmp_path, monkeypatch):
             drafts_created=[{"id": "123", "title": "Adopt pattern X"}],
         )
 
-    monkeypatch.setattr("robotsix_mill.runners.periodic_runner.run_survey_pass", mock_run)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.run_survey_pass", mock_run
+    )
 
     result = main(["survey", "--json"])
     assert result == 0
@@ -461,7 +465,9 @@ def test_survey_cli_no_drafts(capsys, tmp_path, monkeypatch):
             drafts_created=[],
         )
 
-    monkeypatch.setattr("robotsix_mill.runners.periodic_runner.run_survey_pass", mock_run)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.run_survey_pass", mock_run
+    )
 
     result = main(["survey"])
     assert result == 0
@@ -476,7 +482,9 @@ def test_survey_cli_failure(capsys, monkeypatch):
     def mock_run(session_id=None):
         raise RuntimeError("agent exploded")
 
-    monkeypatch.setattr("robotsix_mill.runners.periodic_runner.run_survey_pass", mock_run)
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.run_survey_pass", mock_run
+    )
 
     result = main(["survey"])
     assert result == 1
