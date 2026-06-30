@@ -522,6 +522,10 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.timeout_escalation.enabled": "timeout_escalation_periodic",
     "periodic.timeout_escalation.interval_seconds": "timeout_escalation_interval_seconds",
     "periodic.timeout_escalation.threshold_seconds": "timeout_escalation_threshold_seconds",
+    # -- periodic.triage_boilerplate --
+    "periodic.triage_boilerplate.enabled": "triage_boilerplate_periodic",
+    "periodic.triage_boilerplate.interval_seconds": "triage_boilerplate_interval_seconds",
+    "periodic.triage_boilerplate.memory_path": "triage_boilerplate_memory_path",
     # -- periodic.langfuse_cleanup --
     "periodic.langfuse_cleanup.enabled": "langfuse_cleanup_periodic",
     "periodic.langfuse_cleanup.interval_seconds": "langfuse_cleanup_interval_seconds",

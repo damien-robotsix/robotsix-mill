@@ -77,6 +77,7 @@ def test_sourcekind_member_count():
         "ENV_DOC_SYNC",
         "FRONTEND_SYNC",
         "SECURITY_POSTURE",
+        "TRIAGE_BOILERPLATE",
         "META",
         "RUN_HEALTH",
         "CI_FIX_DEPENDENCY",

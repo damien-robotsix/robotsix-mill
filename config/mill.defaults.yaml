@@ -459,6 +459,12 @@ periodic:
     interval_seconds: 86400         # seconds between sweeps
     max_traces: 5000                # per-project cap; oldest are deleted
 
+  # -- triage-boilerplate -- determines boilerplate for new ticket triage ---
+  triage_boilerplate:
+    enabled: true                   # enable periodic triage-boilerplate passes
+    interval_seconds: 604800        # seconds between passes (604800 = 1 week)
+    memory_path: null               # defaults to <data_dir>/triage_boilerplate_memory.md
+
 # ---------------------------------------------------------------------------
 #  service — management-plane API and data directory
 # ---------------------------------------------------------------------------

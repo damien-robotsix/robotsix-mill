@@ -386,6 +386,19 @@ class _PeriodicSettings(BaseModel):
     security_posture_interval_seconds: int = Field(default=604800)
     security_posture_request_limit: int = Field(default=80)
 
+    # --- triage-boilerplate agent (recurring triage pattern detection) ---
+    # Path to the triage-boilerplate agent's Markdown memory ledger.
+    # Override to pin a specific path; unset (default) derives
+    # <data_dir>/triage_boilerplate_memory.md.
+    triage_boilerplate_memory_path: Path | None = Field(default=None)
+    # Opt-in periodic triage-boilerplate pass. Defaults to True (opt-out);
+    # set false to disable the weekly triage-pattern scan.
+    triage_boilerplate_periodic: bool = Field(default=True)
+    # Seconds between periodic triage-boilerplate passes when
+    # MILL_TRIAGE_BOILERPLATE_PERIODIC=true. Default 604800 (1 week). Minimum
+    # enforced at 60s in the worker loop.
+    triage_boilerplate_interval_seconds: int = Field(default=604800)
+
     # --- config-sync agent (config ↔ .env ↔ docs drift detection) ---
     # Model for the config-sync agent. Defaults to a cheap model (read-only
     # file parsing — no web research or code generation).
