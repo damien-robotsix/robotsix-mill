@@ -389,7 +389,11 @@ def _extract_board_traces(
             lat_s = float(lat)
         latencies_s.append(lat_s)
 
-    latencies_s.sort()
+    # Sort latencies and board_traces in lockstep so the per-trace table
+    # pairs each trace ID with its own latency, not a mis-indexed one.
+    sorted_pairs = sorted(zip(latencies_s, board_traces, strict=True))
+    latencies_s = [lat for lat, _ in sorted_pairs]
+    board_traces = [t for _, t in sorted_pairs]
     n = len(latencies_s)
 
     def _pct(p: float) -> float:

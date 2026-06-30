@@ -5,6 +5,10 @@
   ref" and falls through to ``push_with_lease`` which already handles
   first-push via ``--force``.  Genuine network/auth fetch errors still
   surface as ``PUSH_ERROR``.
+- **scripts**: fix misaligned trace-ID↔latency pairs in
+  ``_extract_board_traces()`` per-trace table by sorting
+  ``board_traces`` and ``latencies_s`` in lockstep instead of sorting
+  only latencies in-place before the display loop.
 
 - **pipeline**: add consecutive-same-error guard to ``read_file`` and
   ``list_dir`` tools across all pipeline stages.  When the same path
