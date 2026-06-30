@@ -27,6 +27,7 @@ log = logging.getLogger("robotsix_mill.langfuse.client")
 _COST_TTL_SECONDS = 60.0
 _cost_cache: dict[str, tuple[float, float]] = {}  # id -> (cost, monotonic)
 
+
 def _qualified(session_id: str, repo_config: RepoConfig | None) -> str:
     """Repo-qualify a ticket/session id so cost + trace lookups query the
     same Langfuse ``sessionId`` the tracer stamps (``<repo> · <id>``).

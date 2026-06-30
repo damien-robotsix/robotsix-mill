@@ -412,4 +412,6 @@ def test_board_manager_not_blocked_by_saturated_heavy_work():
         for t in threads:
             t.join(timeout=5)
 
-    assert elapsed < 0.5, f"board-manager blocked by heavy-work semaphore ({elapsed:.3f}s)"
+    assert elapsed < 0.5, (
+        f"board-manager blocked by heavy-work semaphore ({elapsed:.3f}s)"
+    )

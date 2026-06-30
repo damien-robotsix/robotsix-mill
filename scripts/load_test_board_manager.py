@@ -160,7 +160,7 @@ def _preflight(mill_url: str, token: str) -> dict[str, Any]:
     print(f"  status = {data.get('status', '?')}")
     uptime = data.get("uptime_seconds")
     if uptime is not None:
-        print(f"  uptime  = {uptime}s ({uptime/3600:.1f}h)")
+        print(f"  uptime  = {uptime}s ({uptime / 3600:.1f}h)")
 
     # Try /health/ready for more detail.
     ready_url = mill_url.rstrip("/") + "/health/ready"
@@ -219,9 +219,7 @@ def _check_handle_wrapper() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _create_load_tickets(
-    mill_url: str, token: str, count: int
-) -> list[dict[str, Any]]:
+def _create_load_tickets(mill_url: str, token: str, count: int) -> list[dict[str, Any]]:
     """POST *count* draft tickets and return their parsed JSON bodies."""
     requests = _requests()
     url = mill_url.rstrip("/") + "/tickets"
@@ -257,8 +255,10 @@ def _poll_until_implement_complete(
     requests = _requests()
     url = mill_url.rstrip("/") + "/tickets"
     deadline = time.monotonic() + timeout_s
-    print(f"  Polling {url}?state=implement_complete "
-          f"(want ≥{min_count}, timeout={timeout_s}s)")
+    print(
+        f"  Polling {url}?state=implement_complete "
+        f"(want ≥{min_count}, timeout={timeout_s}s)"
+    )
     while time.monotonic() < deadline:
         try:
             r = requests.get(
@@ -276,8 +276,10 @@ def _poll_until_implement_complete(
         if isinstance(tickets, list) and len(tickets) >= min_count:
             print(f"  OK — {len(tickets)} tickets in IMPLEMENT_COMPLETE state")
             return tickets
-        print(f"  {len(tickets) if isinstance(tickets, list) else '?'} "
-              f"implement_complete tickets — waiting 5s …")
+        print(
+            f"  {len(tickets) if isinstance(tickets, list) else '?'} "
+            f"implement_complete tickets — waiting 5s …"
+        )
         time.sleep(5)
     sys.exit(
         f"Timed out after {timeout_s}s waiting for {min_count} tickets "
@@ -304,8 +306,7 @@ def _langfuse_measure(
     try:
         return _langfuse_via_mill_client(session_id, max_latency_s)
     except Exception as exc:
-        print(f"  Mill Langfuse client unavailable ({exc}); "
-              "trying direct REST API …")
+        print(f"  Mill Langfuse client unavailable ({exc}); trying direct REST API …")
 
     # -- fallback: direct Langfuse REST call --
     return _langfuse_direct(session_id, max_latency_s)
@@ -347,14 +348,13 @@ def _langfuse_direct(
 
     public_key = os.environ.get("LANGFUSE_PUBLIC_KEY", "")
     secret_key = os.environ.get("LANGFUSE_SECRET_KEY", "")
-    base_url = os.environ.get(
-        "LANGFUSE_BASE_URL", "https://cloud.langfuse.com"
-    ).rstrip("/")
+    base_url = os.environ.get("LANGFUSE_BASE_URL", "https://cloud.langfuse.com").rstrip(
+        "/"
+    )
 
     if not public_key or not secret_key:
         raise RuntimeError(
-            "Set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY "
-            "in the environment."
+            "Set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY in the environment."
         )
 
     auth = requests.auth.HTTPBasicAuth(public_key, secret_key)
@@ -403,9 +403,7 @@ def _extract_board_traces(
         "median_s": _pct(50),
         "p95_s": _pct(95),
         "max_latency_s": latencies_s[-1] if latencies_s else 0.0,
-        "failures": sum(
-            1 for lat in latencies_s if lat > max_latency_s
-        ),
+        "failures": sum(1 for lat in latencies_s if lat > max_latency_s),
     }
 
     # Per-trace table
@@ -446,9 +444,7 @@ def _inline_timing_stub(mill_url: str, token: str, reads: int) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _report(
-    stats: dict[str, float], max_latency_s: float, method: str
-) -> int:
+def _report(stats: dict[str, float], max_latency_s: float, method: str) -> int:
     """Print summary and return exit code (0 = pass, 1 = fail)."""
     print()
     print("=" * 60)
@@ -513,7 +509,9 @@ def main(argv: list[str] | None = None) -> int:
     # 3. Load generation
     print("--- Creating load tickets")
     _create_load_tickets(mill_url, token, ticket_count)
-    _poll_until_implement_complete(mill_url, token, min_count=3, timeout_s=poll_timeout_s)
+    _poll_until_implement_complete(
+        mill_url, token, min_count=3, timeout_s=poll_timeout_s
+    )
     print()
 
     # 4/5. Measurement
@@ -525,9 +523,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         _inline_timing_stub(mill_url, token, reads)
         print()
-        print(
-            "Re-run with --langfuse-session <ID> to measure via Langfuse traces."
-        )
+        print("Re-run with --langfuse-session <ID> to measure via Langfuse traces.")
         return 2  # no measurement possible
 
     return _report(stats, max_latency_s, method)
