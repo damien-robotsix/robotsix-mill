@@ -21,6 +21,7 @@ from ._helpers import (
     _get_ticket,
     _make_event,
     _parse_depends_on_str,
+    verify_merge_before_done,
 )
 
 log = logging.getLogger("robotsix_mill.service")
@@ -406,164 +407,6 @@ class _TransitionMixin(_ServiceBase):
                 self._on_transition(ticket)
             return comment, ticket
 
-    def _verify_merge_before_done(
-        self, ticket_id: str, repo_dir: Path | None, *, branch_name: str | None = None
-    ) -> None:
-        """Verify that the ticket's branch has been merged to origin/main.
-
-        Fast path: ``git merge-base --is-ancestor``.  Fallback 1: log
-        grep for the ticket ID on origin/main (squash-merge detection).
-        Fallback 2: content-level — diff the branch tip against
-        origin/main, and for each changed file grep for the ticket ID
-        in the file on origin/main.
-
-        Raises ``TransitionError`` with a descriptive message when
-        the merge cannot be confirmed.  Best-effort: returns silently
-        when the repo is unavailable or git commands fail (do not
-        block on transient tooling issues).
-        """
-        if repo_dir is None or not repo_dir.exists():
-            return  # no workspace clone — can't verify, allow
-
-        branch = branch_name or f"{self.settings.branch_prefix}{ticket_id}"
-        target = f"origin/{self.settings.forge_target_branch}"
-
-        # Resolve the branch tip.
-        try:
-            result = subprocess.run(
-                ["git", "-C", str(repo_dir), "rev-parse", "--verify", branch],
-                capture_output=True,
-                text=True,
-            )
-        except Exception:
-            return  # best-effort: git unavailable
-        if result.returncode != 0:
-            return  # branch doesn't exist locally — can't verify, allow
-        branch_tip = result.stdout.strip()
-
-        # Fetch the latest merge target (best-effort).
-        try:
-            subprocess.run(
-                [
-                    "git",
-                    "-C",
-                    str(repo_dir),
-                    "fetch",
-                    "origin",
-                    self.settings.forge_target_branch,
-                ],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-        except (subprocess.CalledProcessError, Exception):  # fmt: skip
-            pass  # best-effort: fetch failed, try with existing ref
-
-        # Verify the target ref exists (local or remote-tracking).
-        try:
-            ref_check = subprocess.run(
-                ["git", "-C", str(repo_dir), "rev-parse", "--verify", target],
-                capture_output=True,
-                text=True,
-            )
-        except Exception:
-            return  # best-effort: git unavailable
-        if ref_check.returncode != 0:
-            return  # target ref not available — can't verify, allow
-
-        # Fast path: ancestor check.
-        try:
-            anc = subprocess.run(
-                [
-                    "git",
-                    "-C",
-                    str(repo_dir),
-                    "merge-base",
-                    "--is-ancestor",
-                    branch_tip,
-                    target,
-                ],
-                capture_output=True,
-                text=True,
-            )
-        except Exception:
-            return
-        if anc.returncode == 0:
-            return  # branch tip is an ancestor
-
-        # Fallback 1: squash-merge detection via log grep.
-        try:
-            grep = subprocess.run(
-                [
-                    "git",
-                    "-C",
-                    str(repo_dir),
-                    "log",
-                    target,
-                    "--oneline",
-                    "--fixed-strings",
-                    f"--grep={ticket_id}",
-                ],
-                capture_output=True,
-                text=True,
-            )
-        except Exception:
-            return
-        if grep.returncode == 0 and grep.stdout.strip():
-            return  # squash-merge commit found
-
-        # Fallback 2: content-level verification.
-        try:
-            diff_files = subprocess.run(
-                [
-                    "git",
-                    "-C",
-                    str(repo_dir),
-                    "diff",
-                    "--name-only",
-                    f"{target}..{branch_tip}",
-                ],
-                capture_output=True,
-                text=True,
-            )
-        except Exception:
-            return
-        if diff_files.returncode != 0:
-            return
-        changed = [f for f in diff_files.stdout.strip().split("\n") if f]
-        if not changed:
-            return  # no diff — content already on target
-
-        for path in changed:
-            try:
-                show = subprocess.run(
-                    [
-                        "git",
-                        "-C",
-                        str(repo_dir),
-                        "show",
-                        f"{target}:{path}",
-                    ],
-                    capture_output=True,
-                    text=True,
-                )
-            except Exception:
-                log.debug(
-                    "%s: git show %s:%s failed — skipping content check",
-                    ticket_id,
-                    target,
-                    path,
-                )
-                continue
-            if show.returncode == 0 and ticket_id in show.stdout:
-                return  # content evidence found
-
-        raise TransitionError(
-            f"{ticket_id}: cannot mark done — "
-            f"branch {branch} has not been merged to {target}. "
-            f"Merge the PR first, then retry."
-        )
-
     def mark_done(
         self, ticket_id: str, note: str = "", author: str = "user"
     ) -> tuple[Comment | None, Ticket]:
@@ -619,8 +462,12 @@ class _TransitionMixin(_ServiceBase):
             # Refuse mark-done when the ticket's branch hasn't been
             # merged to origin/main (best-effort — skipped when the
             # workspace clone or branch isn't available).
-            self._verify_merge_before_done(
-                ticket_id, repo_dir, branch_name=ticket.branch
+            verify_merge_before_done(
+                ticket_id=ticket_id,
+                repo_dir=repo_dir,
+                branch_prefix=self.settings.branch_prefix,
+                forge_target_branch=self.settings.forge_target_branch,
+                branch_name=ticket.branch,
             )
             # Augment the note with citation warnings before persisting.
             note = _verify_citations(note, repo_dir)

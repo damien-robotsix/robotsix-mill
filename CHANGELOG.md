@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- **core**: extract `_verify_merge_before_done` from `_TransitionMixin`
+  into a standalone `verify_merge_before_done()` in `_helpers.py` —
+  decouples git merge verification from the state-transition mixin
+  and improves testability.
 - **audit**: remove `.env`/`.env.example` from the config-sync fragility
   example in the audit agent prompt — the canonical configuration surface
   is now config YAML + docs only.
