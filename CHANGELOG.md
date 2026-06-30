@@ -1,5 +1,12 @@
 ## 0.0.0 (unreleased)
 
+- **board-manager**: complete Step 0 of the board-manager fast-lane epic —
+  add ``handle_wrapper`` parameter to ``BoardManager.__init__`` in
+  ``robotsix-board-agent`` and update the ``pyproject.toml`` git pin to
+  point to that commit.  The ``inspect.signature`` guard in
+  ``lifespan.py`` now activates, passing the dedicated concurrency
+  wrapper to the board manager.
+
 - **pipeline**: add consecutive-same-error guard to ``read_file`` and
   ``list_dir`` tools across all pipeline stages.  When the same path
   returns the same error class 3 times consecutively, the tool raises
