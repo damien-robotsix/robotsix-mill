@@ -27,13 +27,6 @@ log = logging.getLogger("robotsix_mill.langfuse.client")
 _COST_TTL_SECONDS = 60.0
 _cost_cache: dict[str, tuple[float, float]] = {}  # id -> (cost, monotonic)
 
-# Hard cap to prevent unbounded growth under heavy test suites (each
-# test creates unique session IDs).  When exceeded the oldest N entries
-# (by insertion order — Python 3.7+ dict preserves order) are evicted.
-_COST_CACHE_MAX_SIZE = 1024
-_COST_CACHE_EVICT_CHUNK = 256
-
-
 def _qualified(session_id: str, repo_config: RepoConfig | None) -> str:
     """Repo-qualify a ticket/session id so cost + trace lookups query the
     same Langfuse ``sessionId`` the tracer stamps (``<repo> · <id>``).
@@ -230,19 +223,8 @@ def session_cost(
         # last known value if we have one, else 0.0 (uncached so the
         # next read retries Langfuse).
         return hit[0] if hit is not None else 0.0
-    # Evict oldest entries when the cache exceeds the size cap, so
-    # long-running processes and heavy test suites don't OOM from
-    # unbounded growth (each unique session ID adds an entry).
-    if len(_cost_cache) >= _COST_CACHE_MAX_SIZE:
-        _evict_cost_cache(_COST_CACHE_EVICT_CHUNK)
     _cost_cache[session_id] = (cost, now)
     return cost
-
-
-def _evict_cost_cache(n: int) -> None:
-    """Drop the oldest *n* entries from ``_cost_cache`` (by insertion order)."""
-    for _ in range(min(n, len(_cost_cache))):
-        _cost_cache.pop(next(iter(_cost_cache)))
 
 
 def effective_cost(total: float, baseline: float) -> float:

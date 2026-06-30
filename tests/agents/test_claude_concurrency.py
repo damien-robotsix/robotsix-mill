@@ -361,7 +361,10 @@ def test_board_manager_semaphore_independent_of_heavy_work():
 # ============================================================================
 
 
-@pytest.mark.skip(reason="awaiting robotsix-board-agent release with handle_wrapper")
+@pytest.mark.xfail(
+    strict=True,
+    reason="handle_wrapper not yet in robotsix-board-agent; remove this marker when child #2 lands",
+)
 def test_handle_wrapper_present_in_board_manager():
     """Gate: lifespan.py's inject guard checks inspect.signature at startup.
     If handle_wrapper is absent the board-manager semaphore is silently bypassed.

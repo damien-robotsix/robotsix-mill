@@ -14,6 +14,21 @@ board-manager broker endpoint, which uses the agent-comm pull/mailbox
 protocol — not a simple HTTP request/response endpoint.  When the
 broker is not externally scriptable the Langfuse path (``--langfuse-session``)
 is the primary measurement method.
+
+Known divergences from the spec:
+
+- **Pre-flight ``board_manager_enabled`` check**: the spec requires aborting
+  when the setting is false, but ``board_manager_enabled`` is not exposed via
+  any HTTP endpoint.  ``_preflight()`` prints what it can discover from
+  ``/health``, ``/health/ready``, and ``/gates``, but cannot assert the
+  boolean.  The operator must confirm the setting manually.
+
+- **Poll state**: the spec says poll for ``state=implement``; the
+  implementation polls for ``state=implement_complete``.  The mill's ticket
+  state machine uses ``implement_complete`` as the terminal state of the
+  implement stage, so this is the correct predicate for "the ticket has been
+  picked up by an implement agent."  The docstring and code are internally
+  consistent.
 """
 
 from __future__ import annotations
