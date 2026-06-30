@@ -261,7 +261,7 @@ def test_get_board_manager_semaphore_ignores_later_limit():
     assert s1 is s2
     # Size was set on first call (2); second call must not resize.
     assert s1.acquire(blocking=False) is True
-    assert s1.acquire(blocking=False) is True   # both permits taken
+    assert s1.acquire(blocking=False) is True  # both permits taken
     assert s1.acquire(blocking=False) is False  # third blocks
     s1.release()
     s1.release()

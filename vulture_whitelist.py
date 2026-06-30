@@ -30,6 +30,7 @@ run_agent_check_agent
 run_audit_agent
 run_bc_check_agent
 reset_for_tests
+reset_board_manager_for_tests
 run_completeness_check_agent
 run_config_sync_agent
 run_env_doc_sync_agent
