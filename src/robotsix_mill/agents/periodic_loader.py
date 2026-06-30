@@ -66,6 +66,10 @@ _NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 #   "global_only"   — recognized built-in that is NOT per-repo presence
 #                     managed (cross-repo or always-on infra); a per-repo
 #                     file for it is ignored with a warning.
+#   "mill_only"     — recognized built-in that is ONLY valid for the
+#                     robotsix-mill repo itself; its system prompt is
+#                     hardcoded to mill's own source paths. A per-repo
+#                     presence file for it on any OTHER repo is rejected.
 _BUILTIN_KINDS: dict[str, str] = {
     # LLM periodic agents (prompt yaml + partial-merge override).
     "audit": "llm_agent",
@@ -79,8 +83,8 @@ _BUILTIN_KINDS: dict[str, str] = {
     "module_curator": "llm_agent",
     "forge_parity": "llm_agent",
     "state_sync": "llm_agent",
-    "env_doc_sync": "llm_agent",
-    "frontend_sync": "llm_agent",
+    "env_doc_sync": "mill_only",
+    "frontend_sync": "mill_only",
     "security_posture": "llm_agent",
     # Schedule-only passes (no prompt yaml / deterministic runner).
     "diagnostic": "schedule_only",
@@ -115,6 +119,13 @@ def validate_periodic_file_content(
         return [
             f"'{name}' is a global/cross-repo periodic and cannot be "
             "per-repo presence-managed. Remove this file."
+        ]
+    if kind == "mill_only":
+        return [
+            f"'{name}' is a mill-internal periodic agent (its prompt is "
+            "hardcoded to robotsix-mill's own source paths) and cannot "
+            "be enabled on managed repos via a presence file. Remove this "
+            "file — it will not be loaded."
         ]
     if kind == "bespoke" and (system_prompt is None or not system_prompt.strip()):
         valid_builtins = sorted(
