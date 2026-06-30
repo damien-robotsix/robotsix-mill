@@ -1788,3 +1788,399 @@ class TestInspectionCapAndCostOrdering:
         # carry the cost_outlier marker with the $0.90 value.
         flags = inspector_calls[0]["classifier_flags"]
         assert any("cost_outlier" in f and "$0.90" in f for f in flags)
+
+
+# ---------------------------------------------------------------------------
+# Noise suppression (self-referential skip, per-obs-cost, REQUIRES_HUMAN_REVIEW)
+# ---------------------------------------------------------------------------
+
+
+class TestNoiseSuppression:
+    """Acceptance tests for the three noise-suppression guards:
+
+    1. Self-referential trace skip: a flagged trace named
+       ``trace_inspector`` is skipped before the LLM inspector runs.
+    2. Per-observation cost-outlier suppression: ``optimization``
+       findings whose symptom matches the token-count regex produce no
+       draft.
+    3. ``REQUIRES_HUMAN_REVIEW:`` suppression: ``optimization``
+       findings with a non-concrete proposed_solution prefix produce no
+       draft.
+    Plus two regression guards confirming that legitimate tool_error
+    and concrete optimization findings still file.
+    """
+
+    @staticmethod
+    def _patch_seams(monkeypatch, traces, detail_dict, inspector_results):
+        """Wire up the Langfuse client + inspector seams for a single run.
+
+        *traces*: list of trace dicts for ``list_all_traces_since``.
+        *detail_dict*: dict returned by ``fetch_trace_detail`` for every
+            trace.
+        *inspector_results*: list of ``TraceInspectResult`` returned by
+            ``run_trace_inspector`` in call order.
+        """
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.list_all_traces_since",
+            lambda *a, **kw: traces,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
+            lambda *a, **kw: detail_dict,
+        )
+
+        calls: list[dict] = []
+
+        def _fake_inspector(**kw):
+            idx = len(calls)
+            calls.append(kw)
+            if idx < len(inspector_results):
+                return inspector_results[idx]
+            return TraceInspectResult()
+
+        monkeypatch.setattr(
+            "robotsix_mill.agents.trace_inspector.run_trace_inspector",
+            _fake_inspector,
+        )
+        return calls  # inspector-call log for assertions
+
+    # -- self-referential ---------------------------------------------------
+
+    def test_self_referential_trace_skipped(self, settings, monkeypatch):
+        """AC1: a flagged trace with name="trace_inspector" causes the
+        inspector to be skipped and zero drafts filed."""
+        inspector_calls = self._patch_seams(
+            monkeypatch,
+            traces=[_trace(id="t-self", name="trace_inspector", totalCost=0.10)],
+            detail_dict={
+                "observations": [
+                    _obs("run_command", output="error: command failed"),
+                ]
+            },
+            inspector_results=[
+                TraceInspectResult(
+                    findings=[
+                        TraceFinding(
+                            category="tool_error",
+                            symptom="The trace inspector agent … hit a UsageLimitExceeded …",
+                            root_cause="budget",
+                            proposed_solution="increase budget",
+                            confidence="low",
+                        )
+                    ]
+                )
+            ],
+        )
+        result = run_trace_review_pass(
+            session_id="sess-self-ref", repo_config=_test_repo_config()
+        )
+        # The trace WAS flagged (tool error in observations) …
+        assert result.traces_flagged == 1
+        # … but the inspector was never called (continue before the call).
+        assert len(inspector_calls) == 0
+        # … and no draft was created.
+        assert result.drafts_created == []
+
+    def test_non_inspector_trace_not_skipped(self, settings, monkeypatch):
+        """Guard: a flagged trace whose name is NOT in the self-referential
+        set still proceeds to inspection."""
+        inspector_calls = self._patch_seams(
+            monkeypatch,
+            traces=[_trace(id="t-ok", name="implement", totalCost=0.10)],
+            detail_dict={
+                "observations": [
+                    _obs("run_command", output="error: command failed"),
+                ]
+            },
+            inspector_results=[
+                TraceInspectResult(
+                    findings=[
+                        TraceFinding(
+                            category="tool_error",
+                            symptom="run_command failed",
+                            root_cause="x",
+                            proposed_solution="y",
+                            confidence="high",
+                        )
+                    ]
+                )
+            ],
+        )
+        result = run_trace_review_pass(
+            session_id="sess-not-self", repo_config=_test_repo_config()
+        )
+        assert result.traces_flagged == 1
+        assert len(inspector_calls) == 1
+        assert len(result.drafts_created) == 1
+
+    # -- per-obs-cost -------------------------------------------------------
+
+    def test_per_obs_cost_optimization_suppressed(self, settings, monkeypatch):
+        """AC2: an optimization finding whose symptom matches the
+        per-observation token-count pattern produces no draft."""
+        self._patch_seams(
+            monkeypatch,
+            traces=[_trace(id="t-cost", name="implement", totalCost=0.10)],
+            detail_dict={
+                "observations": [
+                    _obs("run_command", output="error: command failed"),
+                ]
+            },
+            inspector_results=[
+                TraceInspectResult(
+                    findings=[
+                        TraceFinding(
+                            category="optimization",
+                            symptom="Observation chat-4o consumed 12000 input tokens",
+                            root_cause="large context window",
+                            proposed_solution="trim context",
+                            confidence="low",
+                        )
+                    ]
+                )
+            ],
+        )
+        result = run_trace_review_pass(
+            session_id="sess-per-obs-cost", repo_config=_test_repo_config()
+        )
+        assert result.traces_flagged == 1
+        assert result.drafts_created == []
+
+    def test_per_obs_cost_pattern_case_insensitive(self, settings, monkeypatch):
+        """The regex is case-insensitive — 'OBSERVATION' and 'Tokens'
+        still match."""
+        self._patch_seams(
+            monkeypatch,
+            traces=[_trace(id="t-cost2", name="implement", totalCost=0.10)],
+            detail_dict={
+                "observations": [
+                    _obs("run_command", output="error: command failed"),
+                ]
+            },
+            inspector_results=[
+                TraceInspectResult(
+                    findings=[
+                        TraceFinding(
+                            category="optimization",
+                            symptom="OBSERVATION explore run CONSUMED 500 output Tokens",
+                            root_cause="x",
+                            proposed_solution="y",
+                            confidence="low",
+                        )
+                    ]
+                )
+            ],
+        )
+        result = run_trace_review_pass(
+            session_id="sess-per-obs-cost-ci", repo_config=_test_repo_config()
+        )
+        assert result.traces_flagged == 1
+        assert result.drafts_created == []
+
+    def test_per_obs_cost_only_suppresses_optimization_category(
+        self, settings, monkeypatch
+    ):
+        """The regex guard only fires when category == 'optimization'.
+        A tool_error finding with the same symptom text still files."""
+        self._patch_seams(
+            monkeypatch,
+            traces=[_trace(id="t-err", name="implement", totalCost=0.10)],
+            detail_dict={
+                "observations": [
+                    _obs("run_command", output="error: command failed"),
+                ]
+            },
+            inspector_results=[
+                TraceInspectResult(
+                    findings=[
+                        TraceFinding(
+                            category="tool_error",
+                            symptom="Observation chat-4o consumed 12000 input tokens",
+                            root_cause="x",
+                            proposed_solution="y",
+                            confidence="high",
+                        )
+                    ]
+                )
+            ],
+        )
+        result = run_trace_review_pass(
+            session_id="sess-per-obs-not-opt", repo_config=_test_repo_config()
+        )
+        assert result.traces_flagged == 1
+        assert len(result.drafts_created) == 1
+
+    # -- REQUIRES_HUMAN_REVIEW ----------------------------------------------
+
+    def test_requires_human_review_optimization_suppressed(self, settings, monkeypatch):
+        """AC3: an optimization finding whose proposed_solution starts
+        with 'REQUIRES_HUMAN_REVIEW:' produces no draft."""
+        self._patch_seams(
+            monkeypatch,
+            traces=[_trace(id="t-hr", name="implement", totalCost=0.10)],
+            detail_dict={
+                "observations": [
+                    _obs("run_command", output="error: command failed"),
+                ]
+            },
+            inspector_results=[
+                TraceInspectResult(
+                    findings=[
+                        TraceFinding(
+                            category="optimization",
+                            symptom="excessive sub-agent calls",
+                            root_cause="no batching",
+                            proposed_solution="REQUIRES_HUMAN_REVIEW: needs architecture decision",
+                            confidence="low",
+                        )
+                    ]
+                )
+            ],
+        )
+        result = run_trace_review_pass(
+            session_id="sess-requires-human", repo_config=_test_repo_config()
+        )
+        assert result.traces_flagged == 1
+        assert result.drafts_created == []
+
+    def test_requires_human_review_only_suppresses_optimization(
+        self, settings, monkeypatch
+    ):
+        """The REQUIRES_HUMAN_REVIEW guard only fires for optimization
+        category. A tool_error with the same prefix still files."""
+        self._patch_seams(
+            monkeypatch,
+            traces=[_trace(id="t-hr-err", name="implement", totalCost=0.10)],
+            detail_dict={
+                "observations": [
+                    _obs("run_command", output="error: command failed"),
+                ]
+            },
+            inspector_results=[
+                TraceInspectResult(
+                    findings=[
+                        TraceFinding(
+                            category="tool_error",
+                            symptom="run_command failed",
+                            root_cause="x",
+                            proposed_solution="REQUIRES_HUMAN_REVIEW: needs ops",
+                            confidence="high",
+                        )
+                    ]
+                )
+            ],
+        )
+        result = run_trace_review_pass(
+            session_id="sess-requires-human-toolerr", repo_config=_test_repo_config()
+        )
+        assert result.traces_flagged == 1
+        assert len(result.drafts_created) == 1
+
+    # -- regression guards --------------------------------------------------
+
+    def test_tool_error_still_files_regression(self, settings, monkeypatch):
+        """AC4: a tool_error finding with a concrete proposed_solution
+        still files a draft (existing path, regression guard)."""
+        self._patch_seams(
+            monkeypatch,
+            traces=[_trace(id="t-reg", name="implement", totalCost=0.10)],
+            detail_dict={
+                "observations": [
+                    _obs("run_command", output="error: command failed"),
+                ]
+            },
+            inspector_results=[
+                TraceInspectResult(
+                    findings=[
+                        TraceFinding(
+                            category="tool_error",
+                            symptom="run_command kept failing on uv lock",
+                            root_cause="sandbox has no network",
+                            proposed_solution="put uv sync in CI",
+                            confidence="high",
+                        )
+                    ]
+                )
+            ],
+        )
+        result = run_trace_review_pass(
+            session_id="sess-reg-toolerr", repo_config=_test_repo_config()
+        )
+        assert result.traces_flagged == 1
+        assert len(result.drafts_created) == 1
+        assert "tool_error" in result.drafts_created[0]["title"]
+
+    def test_observation_storm_still_files_regression(self, settings, monkeypatch):
+        """An observation_storm trace flagged via the relative baseline
+        still produces a draft when the inspector returns a concrete
+        finding — the new noise guards don't suppress it."""
+        # Batch of 5 traces so the baseline machinery activates.
+        traces = [_trace(id=f"t{i}", totalCost=0.10) for i in range(4)] + [
+            _trace(id="t-storm", totalCost=0.10),
+        ]
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.list_all_traces_since",
+            lambda *a, **kw: traces,
+        )
+
+        # t-storm has 50 observations; the other 4 have 5 each.
+        # Median = 5, threshold = 5 × 3.0 = 15 → 50 > 15 flagged.
+        def _detail(_s, trace_id, **kw):
+            n = 50 if trace_id == "t-storm" else 5
+            return {"observations": [_obs("read_file") for _ in range(n)]}
+
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
+            _detail,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.trace_inspector.run_trace_inspector",
+            lambda **kw: TraceInspectResult(
+                findings=[
+                    TraceFinding(
+                        category="optimization",
+                        symptom="trace generated 50 observations vs baseline 15 — excessive tool calls",
+                        root_cause="excessive tool calls",
+                        proposed_solution="batch reads",
+                        confidence="medium",
+                    )
+                ]
+            ),
+        )
+        result = run_trace_review_pass(
+            session_id="sess-reg-obsstorm", repo_config=_test_repo_config()
+        )
+        assert result.traces_flagged == 1
+        assert len(result.drafts_created) == 1
+
+    def test_concrete_optimization_still_files(self, settings, monkeypatch):
+        """AC5: an optimization finding with a symptom unrelated to
+        token counts and a concrete proposed_solution still files."""
+        self._patch_seams(
+            monkeypatch,
+            traces=[_trace(id="t-conc", name="implement", totalCost=0.10)],
+            detail_dict={
+                "observations": [
+                    _obs("run_command", output="error: command failed"),
+                ]
+            },
+            inspector_results=[
+                TraceInspectResult(
+                    findings=[
+                        TraceFinding(
+                            category="optimization",
+                            symptom="excessive sub-agent calls in the loop",
+                            root_cause="no batching of explore calls",
+                            proposed_solution="batch explore calls into parallel_explore",
+                            confidence="medium",
+                        )
+                    ]
+                )
+            ],
+        )
+        result = run_trace_review_pass(
+            session_id="sess-conc-opt", repo_config=_test_repo_config()
+        )
+        assert result.traces_flagged == 1
+        assert len(result.drafts_created) == 1
+        assert "optimization" in result.drafts_created[0]["title"]
