@@ -1,11 +1,10 @@
-"""Tests for the thin :mod:`robotsix_mill.runners.copy_paste_runner` stub.
+"""Tests for the copy-paste entry point on :mod:`robotsix_mill.runners.periodic_runner`.
 
-The module is a ~10-line backward-compat shim that constructs a fresh
-``Settings()`` and delegates to ``run_periodic_pass`` with the
-``"copy_paste"`` periodic-pass config. The deeper runner logic is
-covered by ``tests/runners/test_periodic_runner.py``; this file just
-pins the stub's contract: which config it selects, that ``repo_config``
-flows through unmodified, and that ``repo_config=None`` raises the
+The ``run_copy_paste_pass`` callable (and all other ``run_*_pass``
+callables) are factory-generated wrappers around the single
+``run_periodic_pass_entry`` entry point.  This file pins the
+contract: which config it selects, that ``repo_config`` flows
+through unmodified, and that ``repo_config=None`` raises the
 ValueError dictated by the periodic-runner contract.
 """
 
@@ -13,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from robotsix_mill.runners import copy_paste_runner
+from robotsix_mill.runners import periodic_runner
 from robotsix_mill.config import RepoConfig
 from robotsix_mill.runners.periodic_runner import (
     CopyPastePassResult,
@@ -49,9 +48,9 @@ def test_run_copy_paste_pass_delegates_to_run_periodic_pass(monkeypatch):
             session_id=session_id,
         )
 
-    monkeypatch.setattr(copy_paste_runner, "run_periodic_pass", fake_run_periodic_pass)
+    monkeypatch.setattr(periodic_runner, "run_periodic_pass", fake_run_periodic_pass)
 
-    result = copy_paste_runner.run_copy_paste_pass(session_id="s1", repo_config=rc)
+    result = periodic_runner.run_copy_paste_pass(session_id="s1", repo_config=rc)
 
     assert isinstance(result, CopyPastePassResult)
     assert result.session_id == "s1"
@@ -76,9 +75,9 @@ def test_run_copy_paste_pass_passes_repo_config_through(monkeypatch):
             session_id=session_id,
         )
 
-    monkeypatch.setattr(copy_paste_runner, "run_periodic_pass", fake_run_periodic_pass)
+    monkeypatch.setattr(periodic_runner, "run_periodic_pass", fake_run_periodic_pass)
 
-    copy_paste_runner.run_copy_paste_pass(session_id="s", repo_config=rc)
+    periodic_runner.run_copy_paste_pass(session_id="s", repo_config=rc)
     assert captured["repo_config"] is rc
 
 
@@ -92,7 +91,7 @@ def test_run_copy_paste_pass_repo_config_none_raises(monkeypatch):
     # never reach the clone/network seam because the ValueError is
     # raised first.
     with pytest.raises(ValueError, match="required"):
-        copy_paste_runner.run_copy_paste_pass(session_id="s", repo_config=None)
+        periodic_runner.run_copy_paste_pass(session_id="s", repo_config=None)
 
 
 def test_run_copy_paste_pass_constructs_settings_via_default(monkeypatch):
@@ -111,7 +110,7 @@ def test_run_copy_paste_pass_constructs_settings_via_default(monkeypatch):
             session_id=session_id,
         )
 
-    monkeypatch.setattr(copy_paste_runner, "run_periodic_pass", fake_run_periodic_pass)
+    monkeypatch.setattr(periodic_runner, "run_periodic_pass", fake_run_periodic_pass)
 
-    copy_paste_runner.run_copy_paste_pass(session_id="s", repo_config=_repo_config())
+    periodic_runner.run_copy_paste_pass(session_id="s", repo_config=_repo_config())
     assert isinstance(captured["settings"], Settings)

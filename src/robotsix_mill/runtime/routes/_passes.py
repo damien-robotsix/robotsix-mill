@@ -79,7 +79,7 @@ def _make_background_pass(
         and (when tracing is enabled) the Langfuse session / span stage.
     runner_module:
         Absolute dotted module path of the runner (e.g.
-        ``"robotsix_mill.runners.audit_runner"``).  Imported lazily inside the
+        ``"robotsix_mill.runners.periodic_runner"``).  Imported lazily inside the
         background thread so that ``monkeypatch.setattr`` in tests can
         intercept it.
     runner_func:
@@ -160,7 +160,7 @@ def _make_background_pass(
 
 audit_pass = _make_background_pass(
     kind="audit",
-    runner_module="robotsix_mill.runners.audit_runner",
+    runner_module="robotsix_mill.runners.periodic_runner",
     runner_func="run_audit_pass",
     docstring="""Kick off an audit pass in the BACKGROUND and return at once.
 
@@ -173,7 +173,7 @@ router.post("/audit", status_code=202)(audit_pass)
 
 bc_check_pass = _make_background_pass(
     kind="bc-check",
-    runner_module="robotsix_mill.runners.bc_check_runner",
+    runner_module="robotsix_mill.runners.periodic_runner",
     runner_func="run_bc_check_pass",
     docstring="""Kick off a bc-check pass in the BACKGROUND and return at once.
 
@@ -187,7 +187,7 @@ router.post("/bc-check", status_code=202)(bc_check_pass)
 
 completeness_check_pass = _make_background_pass(
     kind="completeness-check",
-    runner_module="robotsix_mill.runners.completeness_check_runner",
+    runner_module="robotsix_mill.runners.periodic_runner",
     runner_func="run_completeness_check_pass",
     docstring="""Kick off a completeness-check pass in the BACKGROUND and return at once.""",
 )
@@ -196,7 +196,7 @@ router.post("/completeness-check", status_code=202)(completeness_check_pass)
 
 agent_check_pass = _make_background_pass(
     kind="agent_check",
-    runner_module="robotsix_mill.runners.agent_check_runner",
+    runner_module="robotsix_mill.runners.periodic_runner",
     runner_func="run_agent_check_pass",
     docstring="""Kick off an agent-check pass in the BACKGROUND and return at
     once. The agent inspects every agent's prompt, tools, and
@@ -209,7 +209,7 @@ router.post("/agent-check", status_code=202)(agent_check_pass)
 
 health_check_pass = _make_background_pass(
     kind="health",
-    runner_module="robotsix_mill.runners.health_runner",
+    runner_module="robotsix_mill.runners.periodic_runner",
     runner_func="run_health_pass",
     docstring="""Kick off a codebase-health pass in the BACKGROUND and return at
     once.
@@ -229,7 +229,7 @@ router.post("/health-check", status_code=202)(health_check_pass)
 
 test_gap_pass = _make_background_pass(
     kind="test-gap",
-    runner_module="robotsix_mill.runners.test_gap_runner",
+    runner_module="robotsix_mill.runners.periodic_runner",
     runner_func="run_test_gap_pass",
     docstring="""Kick off a test-gap inspection pass in the BACKGROUND.""",
 )
@@ -238,7 +238,7 @@ router.post("/test-gap", status_code=202)(test_gap_pass)
 
 survey_pass = _make_background_pass(
     kind="survey",
-    runner_module="robotsix_mill.runners.survey_runner",
+    runner_module="robotsix_mill.runners.periodic_runner",
     runner_func="run_survey_pass",
     docstring="""Kick off a survey pass in the BACKGROUND and return at once.
 
@@ -251,7 +251,7 @@ router.post("/survey", status_code=202)(survey_pass)
 
 copy_paste_pass = _make_background_pass(
     kind="copy-paste",
-    runner_module="robotsix_mill.runners.copy_paste_runner",
+    runner_module="robotsix_mill.runners.periodic_runner",
     runner_func="run_copy_paste_pass",
     docstring="""Kick off a copy-paste pass in the BACKGROUND and return at once.
 
@@ -264,7 +264,7 @@ router.post("/copy-paste", status_code=202)(copy_paste_pass)
 
 module_curator_pass = _make_background_pass(
     kind="module_curator",
-    runner_module="robotsix_mill.runners.module_curator_runner",
+    runner_module="robotsix_mill.runners.periodic_runner",
     runner_func="run_module_curator_pass",
     docstring="""Kick off a module-curator pass in the BACKGROUND and return at once.
 
@@ -278,7 +278,7 @@ router.post("/module-curator", status_code=202)(module_curator_pass)
 
 forge_parity_pass = _make_background_pass(
     kind="forge-parity",
-    runner_module="robotsix_mill.runners.forge_parity_runner",
+    runner_module="robotsix_mill.runners.periodic_runner",
     runner_func="run_forge_parity_pass",
     docstring="""Kick off a forge-parity pass in the BACKGROUND and return at once.
 
@@ -292,7 +292,7 @@ router.post("/forge-parity", status_code=202)(forge_parity_pass)
 
 config_sync_pass = _make_background_pass(
     kind="config-sync",
-    runner_module="robotsix_mill.runners.config_sync_runner",
+    runner_module="robotsix_mill.runners.periodic_runner",
     runner_func="run_config_sync_pass",
     docstring="""Kick off a config-sync drift detection pass in the BACKGROUND.""",
 )
@@ -319,7 +319,7 @@ router.post("/member-sync", status_code=202)(member_sync_pass)
 
 state_sync_pass = _make_background_pass(
     kind="state-sync",
-    runner_module="robotsix_mill.runners.state_sync_runner",
+    runner_module="robotsix_mill.runners.periodic_runner",
     runner_func="run_state_sync_pass",
     docstring="""Kick off a state-sync pass in the BACKGROUND and return at once.
 
@@ -332,7 +332,7 @@ router.post("/state-sync", status_code=202)(state_sync_pass)
 
 env_doc_sync_pass = _make_background_pass(
     kind="env-doc-sync",
-    runner_module="robotsix_mill.runners.env_doc_sync_runner",
+    runner_module="robotsix_mill.runners.periodic_runner",
     runner_func="run_env_doc_sync_pass",
     docstring="""Kick off an env-doc-sync pass in the BACKGROUND and return at once.
 
@@ -345,7 +345,7 @@ router.post("/env-doc-sync", status_code=202)(env_doc_sync_pass)
 
 frontend_sync_pass = _make_background_pass(
     kind="frontend-sync",
-    runner_module="robotsix_mill.runners.frontend_sync_runner",
+    runner_module="robotsix_mill.runners.periodic_runner",
     runner_func="run_frontend_sync_pass",
     docstring="""Kick off a frontend-sync pass in the BACKGROUND and return at once.
 

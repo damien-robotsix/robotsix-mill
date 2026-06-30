@@ -273,7 +273,7 @@ def test_create_epic_on_meta_board(multi_repo_client):
 
 def test_audit_repo_isolation(settings, monkeypatch, tmp_path):
     """Audit pass for repo A writes sentinel only under repo A's dir."""
-    from robotsix_mill.runners import audit_runner
+    from robotsix_mill.runners import periodic_runner
     from robotsix_mill.core import db as _db
 
     _db.reset_engine()
@@ -313,10 +313,10 @@ def test_audit_repo_isolation(settings, monkeypatch, tmp_path):
             (repo_dir / "audit_sentinel").write_text("audit ran")
         return _FakeResult()
 
-    monkeypatch.setattr(audit_runner, "run_audit_pass", fake_audit)
+    monkeypatch.setattr(periodic_runner, "run_audit_pass", fake_audit)
 
     # Run audit for repo A.
-    audit_runner.run_audit_pass("test-session", repo_config=repo_a)
+    periodic_runner.run_audit_pass("test-session", repo_config=repo_a)
 
     sentinel_a = data_dir / "repo-a" / "audit_sentinel"
     sentinel_b = data_dir / "repo-b" / "audit_sentinel"
@@ -326,7 +326,7 @@ def test_audit_repo_isolation(settings, monkeypatch, tmp_path):
     )
 
     # Now run audit for repo B.
-    audit_runner.run_audit_pass("test-session", repo_config=repo_b)
+    periodic_runner.run_audit_pass("test-session", repo_config=repo_b)
     assert sentinel_b.exists(), "repo-b sentinel should exist after repo-b audit"
 
     _db.reset_engine()
@@ -334,7 +334,7 @@ def test_audit_repo_isolation(settings, monkeypatch, tmp_path):
 
 def test_bc_check_repo_isolation(settings, monkeypatch, tmp_path):
     """BC check pass for repo A writes sentinel only under repo A's dir."""
-    from robotsix_mill.runners import bc_check_runner
+    from robotsix_mill.runners import periodic_runner
     from robotsix_mill.core import db as _db
 
     _db.reset_engine()
@@ -370,10 +370,10 @@ def test_bc_check_repo_isolation(settings, monkeypatch, tmp_path):
             (repo_dir / "bc_check_sentinel").write_text("bc_check ran")
         return _FakeResult()
 
-    monkeypatch.setattr(bc_check_runner, "run_bc_check_pass", fake_bc_check)
+    monkeypatch.setattr(periodic_runner, "run_bc_check_pass", fake_bc_check)
 
     # Run bc-check for repo A only.
-    bc_check_runner.run_bc_check_pass("test-session", repo_config=repo_a)
+    periodic_runner.run_bc_check_pass("test-session", repo_config=repo_a)
 
     sentinel_a = data_dir / "repo-a" / "bc_check_sentinel"
     sentinel_b = data_dir / "repo-b" / "bc_check_sentinel"

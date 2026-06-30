@@ -1009,7 +1009,7 @@ def test_audit_endpoint_is_fire_and_forget(client, monkeypatch):
     must return 202 immediately and run the audit in the background."""
     import threading
 
-    from robotsix_mill.runners import audit_runner
+    from robotsix_mill.runners import periodic_runner
 
     ran = threading.Event()
     release = threading.Event()
@@ -1022,7 +1022,7 @@ def test_audit_endpoint_is_fire_and_forget(client, monkeypatch):
         release.wait(5)  # simulate a minutes-long run
         return _R()
 
-    monkeypatch.setattr(audit_runner, "run_audit_pass", slow_audit)
+    monkeypatch.setattr(periodic_runner, "run_audit_pass", slow_audit)
 
     r = client.post("/audit")  # must NOT block on slow_audit
     assert r.status_code == 202
@@ -1037,7 +1037,7 @@ def test_agent_check_endpoint_is_fire_and_forget(client, monkeypatch):
     contract as /audit, /health-check, /trace-health."""
     import threading
 
-    from robotsix_mill.runners import agent_check_runner
+    from robotsix_mill.runners import periodic_runner
 
     ran = threading.Event()
     release = threading.Event()
@@ -1050,7 +1050,7 @@ def test_agent_check_endpoint_is_fire_and_forget(client, monkeypatch):
         release.wait(5)
         return _R()
 
-    monkeypatch.setattr(agent_check_runner, "run_agent_check_pass", slow_agent_check)
+    monkeypatch.setattr(periodic_runner, "run_agent_check_pass", slow_agent_check)
 
     r = client.post("/agent-check")
     assert r.status_code == 202
