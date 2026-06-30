@@ -6,6 +6,11 @@
   backends.  The refine agent logs cache-hit percentage after each run
   so the static system-prompt prefix savings are measurable.
 
+- **data-dir-gc**: replace `data_dir_audit` runner with a lean `data_dir_gc`
+  periodic that runs deterministic disk GC (terminal clone pruning, orphan
+  workspace pruning, closed workspace pruning, DB row purging, memory
+  ledger truncation) with no size scanning, growth deltas, or ticket filing.
+  Growth-reporting and audit logic migrate to `robotsix-central-deploy`.
 - **review-stage**: route doc-only changes (`.md`, `.yaml`, `.toml`,
   etc.) to the cheap level-1 review model via `_is_config_only_change`.
 - **trace-review**: add `ticket_description` carve-out to the tool-error

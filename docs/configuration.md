@@ -630,7 +630,7 @@ Each periodic agent shares this pattern:
 Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_monitor`, `config_sync`, `member_sync`, `meta`, `bc_check`,
 `completeness_check`, `diagnostic`, `forge_parity`, `module_curator`, `orphaned_pr_check`,
-`copy_paste`, `timeout_escalation`, `langfuse_cleanup`, `data_dir_audit`, `dependabot_ingest`, `run_health`, `stale_branch_cleanup`,
+`copy_paste`, `timeout_escalation`, `langfuse_cleanup`, `data_dir_gc`, `dependabot_ingest`, `run_health`, `stale_branch_cleanup`,
 `state_sync`, `env_doc_sync`, `db_maintenance`, `sandbox_reaper`.
 
 > ¹ Most agents default to `enabled: true`. Exceptions: `diagnostic`, `stale_branch_cleanup`, and `meta_periodic` default to `false`.
@@ -696,31 +696,24 @@ variable and its dotted YAML path.
 | `periodic.trace_review.dedup_lookback_days` | `MILL_TRACE_REVIEW_DEDUP_LOOKBACK_DAYS` | `7` | Recency window (days) for pre-filing duplicate check |
 | `pipeline.trace_review_target_repo_id` | `MILL_TRACE_REVIEW_TARGET_REPO_ID` | `""` | Target repo for trace-review drafts; empty → source-repo routing |
 
-#### data_dir_audit
+#### data_dir_gc
 
-The `data_dir_audit` periodic agent surveys the mill's data directory for
-monotonic growth and files findings when storage crosses configured
-thresholds. In addition to the standard `periodic` fields above, these
-agent-specific settings are available:
+The `data_dir_gc` periodic agent reclaims disk space through deterministic GC steps (terminal clone pruning, orphan workspace pruning, closed workspace pruning, DB row purging, and memory ledger truncation). No size scanning or ticket filing — those concerns live in robotsix-central-deploy.
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `periodic.data_dir_audit.enabled` | `MILL_DATA_DIR_AUDIT_PERIODIC` | `true` | Master switch for the periodic data-dir audit pass. Default `true` — the agent is harmless when idle (no findings). |
-| `periodic.data_dir_audit.interval_seconds` | `MILL_DATA_DIR_AUDIT_INTERVAL_SECONDS` | `86400` | Seconds between periodic data-dir audit passes. Minimum enforced at 60 s in the worker loop. |
-| `periodic.data_dir_audit.memory_path` | `MILL_DATA_DIR_AUDIT_MEMORY_PATH` | `None` | Override path for the data-dir audit memory ledger; defaults to `<data_dir>/data_dir_audit_memory.md`. |
-| `periodic.data_dir_audit.size_threshold_bytes` | `MILL_DATA_DIR_AUDIT_SIZE_THRESHOLD_BYTES` | `104857600` | Threshold (bytes) for the top-N largest-items check. Files and directories whose cumulative size reaches this threshold are reported as oversized. Default 100 MiB. |
-| `periodic.data_dir_audit.growth_delta_bytes` | `MILL_DATA_DIR_AUDIT_GROWTH_DELTA_BYTES` | `10485760` | If a file or directory grew by at least this many bytes since the last audit pass, flag it for growth. Default 10 MiB. |
-| `periodic.data_dir_audit.growth_delta_pct` | `MILL_DATA_DIR_AUDIT_GROWTH_DELTA_PCT` | `20` | If a file or directory grew by at least this percentage since the last audit pass, flag it for growth. |
-| `periodic.data_dir_audit.growth_delta_pct_min_bytes` | `MILL_DATA_DIR_AUDIT_GROWTH_DELTA_PCT_MIN_BYTES` | `1048576` | Minimum absolute growth (bytes) required for the percentage threshold to fire. Suppresses tiny-baseline false positives. Gates only the pct contributor; the bytes contributor is unaffected. Default 1 MiB. |
-| `periodic.data_dir_audit.max_drafts_per_pass` | `MILL_DATA_DIR_AUDIT_MAX_DRAFTS_PER_PASS` | `5` | Maximum number of drafts created per data-dir audit pass. Findings beyond this cap are dropped and re-considered on the next scheduled pass. |
-| `periodic.data_dir_audit.prune_closed` | `MILL_DATA_DIR_AUDIT_PRUNE_CLOSED` | `false` | Opt-in GC: prune workspace directories of tickets in a terminal state (CLOSED / EPIC_CLOSED / ANSWERED) during the data-dir audit pass, before size measurement. Default `false`. |
-| `periodic.data_dir_audit.prune_closed_age_seconds` | `MILL_DATA_DIR_AUDIT_PRUNE_CLOSED_AGE_SECONDS` | `604800` | Minimum age (seconds since the ticket entered its terminal state) before its workspace becomes eligible for prune_closed GC. Recent closures are kept for post-mortems. Default 7 days. |
-| `periodic.data_dir_audit.prune_terminal_clones` | `MILL_DATA_DIR_AUDIT_PRUNE_TERMINAL_CLONES` | `true` | Default-on GC: prune the reproducible git clones (`repo/` and `repos/`) inside workspaces of terminal-state tickets at the start of each data-dir audit pass, before size measurement. |
-| `periodic.data_dir_audit.prune_terminal_clones_age_seconds` | `MILL_DATA_DIR_AUDIT_PRUNE_TERMINAL_CLONES_AGE_SECONDS` | `86400` | Minimum age (seconds since the ticket entered its terminal state) before its clones are pruned. Clones are cheap to recreate, so the guard is short. Default 1 day. |
-| `periodic.data_dir_audit.prune_db_rows` | `MILL_DATA_DIR_AUDIT_PRUNE_DB_ROWS` | `true` | Default-on DB row GC: purge oldest terminal-ticket rows (and their associated events, comments, and proposed actions) when the count of terminal tickets exceeds `max_archived_tickets`. |
-| `periodic.data_dir_audit.prune_memory_ledgers` | `MILL_DATA_DIR_AUDIT_PRUNE_MEMORY_LEDGERS` | `true` | Default-on GC: truncate over-cap `*_memory.md` files on disk before size measurement, using the same tail_keep primitive the agent already uses at read/write time. |
-| `periodic.data_dir_audit.prune_orphans` | `MILL_DATA_DIR_AUDIT_PRUNE_ORPHANS` | `true` | Default-on GC: prune orphan workspace directories (ticket absent from the board DB) older than the configured age at the start of each data-dir audit pass, before size measurement. |
-| `periodic.data_dir_audit.prune_orphans_age_seconds` | `MILL_DATA_DIR_AUDIT_PRUNE_ORPHANS_AGE_SECONDS` | `86400` | Minimum age (seconds since the ticket-ID timestamp) before an orphan workspace becomes eligible for GC. Default 1 day. |
+| `periodic.data_dir_gc.enabled` | `MILL_DATA_DIR_GC_PERIODIC` | `true` | Master switch for the periodic data-dir GC pass. Default `true` — the agent is harmless when idle (nothing to reclaim). |
+| `periodic.data_dir_gc.interval_seconds` | `MILL_DATA_DIR_GC_INTERVAL_SECONDS` | `86400` | Seconds between periodic data-dir GC passes. Minimum enforced at 60 s in the worker loop. |
+| `periodic.data_dir_gc.prune_closed` | `MILL_DATA_DIR_GC_PRUNE_CLOSED` | `false` | Opt-in GC: prune workspace directories of terminal-state tickets during the data-dir GC pass. Default `false`. |
+| `periodic.data_dir_gc.prune_closed_age_seconds` | `MILL_DATA_DIR_GC_PRUNE_CLOSED_AGE_SECONDS` | `604800` | Minimum age (seconds since the ticket entered its terminal state) before its workspace becomes eligible for prune_closed GC. Recent closures are kept for post-mortems. Default 7 days. |
+| `periodic.data_dir_gc.prune_terminal_clones` | `MILL_DATA_DIR_GC_PRUNE_TERMINAL_CLONES` | `true` | Default-on GC: prune the reproducible git clones (`repo/` and `repos/`) inside workspaces of terminal-state tickets at the start of each data-dir GC pass. |
+| `periodic.data_dir_gc.prune_terminal_clones_age_seconds` | `MILL_DATA_DIR_GC_PRUNE_TERMINAL_CLONES_AGE_SECONDS` | `86400` | Minimum age (seconds since the ticket entered its terminal state) before its clones are pruned. Clones are cheap to recreate, so the guard is short. Default 1 day. |
+| `periodic.data_dir_gc.prune_db_rows` | `MILL_DATA_DIR_GC_PRUNE_DB_ROWS` | `true` | Default-on DB row GC: purge oldest terminal-ticket rows (and their associated events, comments, and proposed actions) when the count of terminal tickets exceeds `max_archived_tickets`. |
+| `periodic.data_dir_gc.prune_memory_ledgers` | `MILL_DATA_DIR_GC_PRUNE_MEMORY_LEDGERS` | `true` | Default-on GC: truncate over-cap `*_memory.md` files on disk, using the same tail_keep primitive the agent already uses at read/write time. |
+| `periodic.data_dir_gc.prune_orphans` | `MILL_DATA_DIR_GC_PRUNE_ORPHANS` | `true` | Default-on GC: prune orphan workspace directories (ticket absent from the board DB) older than the configured age at the start of each data-dir GC pass. |
+| `periodic.data_dir_gc.prune_orphans_age_seconds` | `MILL_DATA_DIR_GC_PRUNE_ORPHANS_AGE_SECONDS` | `86400` | Minimum age (seconds since the ticket-ID timestamp) before an orphan workspace becomes eligible for GC. Default 1 day. |
+
+User agent-config YAMLs that set `periodic.data_dir_audit.*` must be updated to `periodic.data_dir_gc.*`; unknown keys are silently ignored by the loader.
 
 #### run_health
 

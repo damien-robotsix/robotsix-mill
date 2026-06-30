@@ -247,7 +247,7 @@ test("the original five Runs kinds keep their colors", () => {
 });
 
 test("unknown / unmapped kinds fall back to grey without throwing", () => {
-  for (const k of ["epic-breakdown", "data_dir_audit", "some-yaml-stem", "", null, undefined]) {
+  for (const k of ["epic-breakdown", "data_dir_gc", "some-yaml-stem", "", null, undefined]) {
     assert.equal(agentColor(k), "#6b7280", `unknown kind ${String(k)} → grey`);
   }
 });

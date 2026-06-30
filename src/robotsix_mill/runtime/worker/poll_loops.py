@@ -274,9 +274,7 @@ class PollLoopsMixin(_WorkerBase):
         "trace_review": "robotsix_mill.runners.trace_review_runner:run_trace_review_pass",
         "config_sync": "robotsix_mill.runners.config_sync_runner:run_config_sync_pass",
         "member_sync": "robotsix_mill.runners.member_sync_runner:run_member_sync_pass",
-        "data_dir_audit": (
-            "robotsix_mill.runners.data_dir_audit_runner:run_data_dir_audit_pass"
-        ),
+        "data_dir_gc": ("robotsix_mill.runners.data_dir_gc:run_data_dir_gc_pass"),
         "credit_balance": (
             "robotsix_mill.runners.credit_balance_runner:run_credit_balance_check"
         ),

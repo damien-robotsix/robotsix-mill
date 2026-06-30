@@ -213,97 +213,65 @@ class _PeriodicSettings(BaseModel):
     # MILL_MODULE_CURATOR_REQUEST_LIMIT if a board outgrows it.
     module_curator_request_limit: int = Field(default=120, ge=1)
 
-    # --- data-dir audit agent (.data/ monotonic growth survey) ---
-    # Model for the data-dir audit agent. Defaults to flash —
-    # the agent does file listing + size checks, not deep reasoning.
-    # Override with MILL_DATA_DIR_AUDIT_MODEL.
-    # Path to the data-dir audit agent's Markdown memory ledger.
-    # Override to pin a specific path; unset (default) derives
-    # <data_dir>/data_dir_audit_memory.md.
-    data_dir_audit_memory_path: Path | None = Field(default=None)
-    # Master switch for the periodic data-dir audit pass.
+    # --- data-dir GC — deterministic periodic disk reclamation ---
+    # Master switch for the periodic data-dir GC pass.
     # Default True — the agent is harmless when idle (no findings).
-    data_dir_audit_periodic: bool = Field(default=True)
-    # Seconds between periodic data-dir audit passes when
-    # MILL_DATA_DIR_AUDIT_PERIODIC=true. Minimum enforced at 60 s
+    data_dir_gc_periodic: bool = Field(default=True)
+    # Seconds between periodic data-dir GC passes when
+    # MILL_DATA_DIR_GC_PERIODIC=true. Minimum enforced at 60 s
     # in the worker loop.
-    data_dir_audit_interval_seconds: int = Field(default=86400)
-    # Threshold (bytes) for the top-N largest-items check.
-    # Files and directories whose cumulative size reaches this
-    # threshold are reported as oversized.  Default 100 MiB.
-    # Override with MILL_DATA_DIR_AUDIT_SIZE_THRESHOLD_BYTES.
-    data_dir_audit_size_threshold_bytes: int = Field(default=104_857_600, ge=0)
-    # If a file or directory grew by at least this many bytes since
-    # the last audit pass, flag it for growth.  Default 10 MiB.
-    # Override with MILL_DATA_DIR_AUDIT_GROWTH_DELTA_BYTES.
-    data_dir_audit_growth_delta_bytes: int = Field(default=10485760)
-    # If a file or directory grew by at least this percentage since
-    # the last audit pass, flag it for growth.  Default 20 (%).
-    # Override with MILL_DATA_DIR_AUDIT_GROWTH_DELTA_PCT.
-    data_dir_audit_growth_delta_pct: int = Field(default=20)
-    # Minimum absolute growth (bytes) required for the percentage
-    # threshold to fire. Suppresses tiny-baseline false positives
-    # (e.g. a small state file growing a few bytes trips the pct
-    # threshold). Gates ONLY the pct contributor; the bytes
-    # contributor is unaffected. Default 1 MiB.
-    # Override with MILL_DATA_DIR_AUDIT_GROWTH_DELTA_PCT_MIN_BYTES.
-    data_dir_audit_growth_delta_pct_min_bytes: int = Field(default=1048576, ge=0)
-    # Maximum number of drafts created per data-dir audit pass.
-    # Findings beyond this cap are dropped and re-considered on the
-    # next scheduled pass. Mirrors trace_review_max_drafts_per_run.
-    # Override with MILL_DATA_DIR_AUDIT_MAX_DRAFTS_PER_PASS.
-    data_dir_audit_max_drafts_per_pass: int = Field(default=5)
+    data_dir_gc_interval_seconds: int = Field(default=86400)
     # Opt-in GC: prune workspace directories of tickets in a terminal
-    # state (CLOSED / EPIC_CLOSED / ANSWERED) during the data-dir audit
+    # state (CLOSED / EPIC_CLOSED / ANSWERED) during the data-dir GC
     # pass, before size measurement. Default False for one release
     # cycle; flip to True in a follow-up once observed clean.
-    # Override with MILL_DATA_DIR_AUDIT_PRUNE_CLOSED.
-    data_dir_audit_prune_closed: bool = Field(default=False)
+    # Override with MILL_DATA_DIR_GC_PRUNE_CLOSED.
+    data_dir_gc_prune_closed: bool = Field(default=False)
     # Minimum age (seconds since the ticket entered its terminal state)
     # before its workspace becomes eligible for prune_closed GC. Recent
     # closures are kept for post-mortems. Default 7 days.
-    # Override with MILL_DATA_DIR_AUDIT_PRUNE_CLOSED_AGE_SECONDS.
-    data_dir_audit_prune_closed_age_seconds: int = Field(default=604_800, ge=0)
+    # Override with MILL_DATA_DIR_GC_PRUNE_CLOSED_AGE_SECONDS.
+    data_dir_gc_prune_closed_age_seconds: int = Field(default=604_800, ge=0)
     # Default-on GC: prune the reproducible git clones (``repo/`` and
     # ``repos/``) inside workspaces of terminal-state tickets at the
-    # start of each data-dir audit pass, before size measurement.
+    # start of each data-dir GC pass, before size measurement.
     # Clones are the heavy tail of workspaces/ growth; description.md,
     # artifacts/ and screenshots/ are preserved for post-mortems
     # (unlike the whole-workspace prune_closed above).
-    # Override with MILL_DATA_DIR_AUDIT_PRUNE_TERMINAL_CLONES.
-    data_dir_audit_prune_terminal_clones: bool = Field(default=True)
+    # Override with MILL_DATA_DIR_GC_PRUNE_TERMINAL_CLONES.
+    data_dir_gc_prune_terminal_clones: bool = Field(default=True)
     # Minimum age (seconds since the ticket entered its terminal state)
     # before its clones are pruned. Clones are cheap to recreate, so
     # the guard is short. Default 1 day.
-    # Override with MILL_DATA_DIR_AUDIT_PRUNE_TERMINAL_CLONES_AGE_SECONDS.
-    data_dir_audit_prune_terminal_clones_age_seconds: int = Field(default=86_400, ge=0)
+    # Override with MILL_DATA_DIR_GC_PRUNE_TERMINAL_CLONES_AGE_SECONDS.
+    data_dir_gc_prune_terminal_clones_age_seconds: int = Field(default=86_400, ge=0)
     # Default-on DB row GC: purge oldest terminal-ticket rows (and their
     # associated events, comments, and proposed actions) when the count
     # of terminal tickets exceeds max_archived_tickets. This is a
     # periodic safety net — the reactive trigger on transition still
     # fires, but this ensures stalled boards (e.g. tickets piling up in
     # DONE, which is not an archivable state) eventually get cleaned.
-    # Override with MILL_DATA_DIR_AUDIT_PRUNE_DB_ROWS=false.
-    data_dir_audit_prune_db_rows: bool = Field(default=True)
+    # Override with MILL_DATA_DIR_GC_PRUNE_DB_ROWS=false.
+    data_dir_gc_prune_db_rows: bool = Field(default=True)
     # Default-on GC: truncate over-cap *_memory.md files on disk
     # before size measurement, using the same tail_keep primitive
     # the agent already uses at read/write time.  Eliminates recurring
     # unbounded: tickets for memory ledgers that grew under old code
     # paths and are rarely re-written.
-    # Override with MILL_DATA_DIR_AUDIT_PRUNE_MEMORY_LEDGERS=false.
-    data_dir_audit_prune_memory_ledgers: bool = Field(default=True)
+    # Override with MILL_DATA_DIR_GC_PRUNE_MEMORY_LEDGERS=false.
+    data_dir_gc_prune_memory_ledgers: bool = Field(default=True)
     # Default-on GC: prune orphan workspace directories (ticket absent
     # from the board DB) older than the configured age at the start of
-    # each data-dir audit pass, before size measurement. Orphans are
+    # each data-dir GC pass, before size measurement. Orphans are
     # never filed as tickets — they are GC'd silently.
-    # Override with MILL_DATA_DIR_AUDIT_PRUNE_ORPHANS=false.
-    data_dir_audit_prune_orphans: bool = Field(default=True)
+    # Override with MILL_DATA_DIR_GC_PRUNE_ORPHANS=false.
+    data_dir_gc_prune_orphans: bool = Field(default=True)
     # Minimum age (seconds since the ticket-ID timestamp) before an
     # orphan workspace becomes eligible for GC. Default 1 day — long
     # enough to never race a just-created workspace whose ticket row
     # hasn't been committed yet.
-    # Override with MILL_DATA_DIR_AUDIT_PRUNE_ORPHANS_AGE_SECONDS.
-    data_dir_audit_prune_orphans_age_seconds: int = Field(default=86_400, ge=0)
+    # Override with MILL_DATA_DIR_GC_PRUNE_ORPHANS_AGE_SECONDS.
+    data_dir_gc_prune_orphans_age_seconds: int = Field(default=86_400, ge=0)
 
     # --- dependabot-alert ingest (deterministic cross-repo poll) ---
     # Master switch for the Dependabot vulnerability-alert ingest poll loop.
@@ -319,8 +287,7 @@ class _PeriodicSettings(BaseModel):
     dependabot_ingest_interval_seconds: int = Field(default=86_400)
     # Maximum number of Dependabot drafts created per ingest pass (across all
     # repos in that pass). Findings beyond this cap are dropped and
-    # re-considered on the next scheduled pass — mirrors
-    # data_dir_audit_max_drafts_per_pass.
+    # re-considered on the next scheduled pass.
     # Override with MILL_DEPENDABOT_INGEST_MAX_DRAFTS_PER_PASS.
     dependabot_ingest_max_drafts_per_pass: int = Field(default=5, ge=0)
 

@@ -253,13 +253,8 @@ modules:
       - src/robotsix_mill/runners/bespoke_runner.py
       - src/robotsix_mill/runners/copy_paste_runner.py
       - src/robotsix_mill/runners/forge_parity_runner.py
-      - src/robotsix_mill/runners/data_dir_audit_runner.py
-      - src/robotsix_mill/runners/data_dir_audit/__init__.py
-      - src/robotsix_mill/runners/data_dir_audit/finders.py
-      - src/robotsix_mill/runners/data_dir_audit/growth.py
-      - src/robotsix_mill/runners/data_dir_audit/orphans.py
-      - src/robotsix_mill/runners/data_dir_audit/filing.py
-      - src/robotsix_mill/runners/data_dir_audit/summary.py
+      - src/robotsix_mill/runners/data_dir_gc/__init__.py
+      - src/robotsix_mill/runners/data_dir_gc/orphans.py
       - src/robotsix_mill/runners/module_curator_runner.py
       - src/robotsix_mill/runners/orphaned_pr_check.py
       - src/robotsix_mill/runners/periodic_runner.py
@@ -278,7 +273,7 @@ modules:
       - tests/runners/test_trace_review_runner.py
       - tests/runners/test_langfuse_cleanup_runner.py
       - tests/runners/test_bespoke_runner.py
-      - tests/runners/test_data_dir_audit_runner.py
+      - tests/runners/test_data_dir_gc_runner.py
       - tests/runners/test_credit_balance_runner.py
       - tests/runners/test_verify_runner.py
       - tests/runners/test_copy_paste_runner.py

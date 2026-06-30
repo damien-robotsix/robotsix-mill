@@ -8,6 +8,7 @@ terminal-clone GC.
 from __future__ import annotations
 
 import logging
+import re
 import shutil
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -19,10 +20,19 @@ from sqlmodel import select
 from ...config import Settings
 from ...core import db
 from ...core.models import Comment, Ticket, TicketEvent, _now
+from ...core.states import State
 
-from .growth import _TICKET_ID_PREFIX_RE, _BATCH_SIZE, _TERMINAL_STATES
+log = logging.getLogger("robotsix_mill.data_dir_gc")
 
-log = logging.getLogger("robotsix_mill.data_dir_audit")
+# Lenient ticket-ID prefix check: only the leading timestamp is
+# validated (``YYYYmmddTHHMMSSZ-``).
+_TICKET_ID_PREFIX_RE = re.compile(r"^\d{8}T\d{6}Z-")
+
+# Maximum number of ticket IDs per SELECT ... WHERE id IN (...) batch.
+_BATCH_SIZE = 500
+
+# Terminal ticket states: those with empty outgoing transition sets.
+_TERMINAL_STATES = {State.CLOSED, State.EPIC_CLOSED, State.ANSWERED}
 
 
 @dataclass
@@ -116,7 +126,7 @@ def find_orphan_workspaces(
             name = child.name
             if not _TICKET_ID_PREFIX_RE.match(name):
                 log.warning(
-                    "data_dir_audit: board=%r — skipping non-ticket-ID "
+                    "data_dir_gc: board=%r — skipping non-ticket-ID "
                     "directory %r in workspaces/",
                     board_id,
                     name,
@@ -268,14 +278,14 @@ def _prune_board_workspaces(
         if not path.exists():
             removed += 1
             log.info(
-                "data_dir_audit: pruned closed workspace board=%r ticket=%s path=%s",
+                "data_dir_gc: pruned closed workspace board=%r ticket=%s path=%s",
                 board_id,
                 name,
                 path,
             )
     if removed:
         log.info(
-            "data_dir_audit: board=%r pruned %d closed workspace(s)",
+            "data_dir_gc: board=%r pruned %d closed workspace(s)",
             board_id,
             removed,
         )
@@ -286,7 +296,7 @@ def _prune_closed_workspaces(settings: Settings) -> int:
     """Remove workspace dirs of terminal-state tickets older than the
     configured age. Returns the number of directories removed."""
     now = _now()
-    age_threshold_seconds = settings.data_dir_audit_prune_closed_age_seconds
+    age_threshold_seconds = settings.data_dir_gc_prune_closed_age_seconds
     total_removed = 0
     for board_id in _boards_from_disk(settings):
         try:
@@ -295,7 +305,7 @@ def _prune_closed_workspaces(settings: Settings) -> int:
             )
         except Exception:
             log.warning(
-                "data_dir_audit: board=%r — closed-workspace prune failed",
+                "data_dir_gc: board=%r — closed-workspace prune failed",
                 board_id,
                 exc_info=True,
             )
@@ -325,8 +335,7 @@ def _remove_workspace_clones(board_id: str, ticket_id: str, ws_path: Path) -> in
         if not clone.exists():
             removed += 1
             log.info(
-                "data_dir_audit: pruned terminal-ticket clone "
-                "board=%r ticket=%s path=%s",
+                "data_dir_gc: pruned terminal-ticket clone board=%r ticket=%s path=%s",
                 board_id,
                 ticket_id,
                 clone,
@@ -369,7 +378,7 @@ def _prune_board_terminal_clones(
         removed += _remove_workspace_clones(board_id, name, path)
     if removed:
         log.info(
-            "data_dir_audit: board=%r pruned %d terminal-ticket clone(s)",
+            "data_dir_gc: board=%r pruned %d terminal-ticket clone(s)",
             board_id,
             removed,
         )
@@ -381,7 +390,7 @@ def _prune_terminal_clones(settings: Settings) -> int:
     workspaces across all boards. Returns the number of clone dirs
     removed."""
     now = _now()
-    age_threshold_seconds = settings.data_dir_audit_prune_terminal_clones_age_seconds
+    age_threshold_seconds = settings.data_dir_gc_prune_terminal_clones_age_seconds
     total_removed = 0
     for board_id in _boards_from_disk(settings):
         try:
@@ -390,7 +399,7 @@ def _prune_terminal_clones(settings: Settings) -> int:
             )
         except Exception:
             log.warning(
-                "data_dir_audit: board=%r — terminal-clone prune failed",
+                "data_dir_gc: board=%r — terminal-clone prune failed",
                 board_id,
                 exc_info=True,
             )
@@ -475,7 +484,7 @@ def _purge_board_archived_rows(
         _cascade_delete_ticket(settings, board_id, ticket.id)
         deleted += 1
         log.info(
-            "data_dir_audit: purged archived ticket board=%r ticket=%s",
+            "data_dir_gc: purged archived ticket board=%r ticket=%s",
             board_id,
             ticket.id,
         )
@@ -486,7 +495,7 @@ def _purge_board_archived_rows(
             s.execute(text("VACUUM"))
             s.commit()
         log.info(
-            "data_dir_audit: board=%r — VACUUM complete "
+            "data_dir_gc: board=%r — VACUUM complete "
             "after purging %d terminal ticket(s)",
             board_id,
             deleted,
@@ -517,7 +526,7 @@ def _prune_archived_db_rows(settings: Settings) -> int:
             )
         except Exception:
             log.warning(
-                "data_dir_audit: board=%r — archived DB row purge failed",
+                "data_dir_gc: board=%r — archived DB row purge failed",
                 board_id,
                 exc_info=True,
             )
@@ -559,14 +568,14 @@ def _prune_board_orphan_workspaces(
         if not orphan.path.exists():
             removed += 1
             log.info(
-                "data_dir_audit: pruned orphan workspace board=%r ticket=%s path=%s",
+                "data_dir_gc: pruned orphan workspace board=%r ticket=%s path=%s",
                 board_id,
                 orphan.ticket_id,
                 orphan.path,
             )
     if removed:
         log.info(
-            "data_dir_audit: board=%r pruned %d orphan workspace(s)",
+            "data_dir_gc: board=%r pruned %d orphan workspace(s)",
             board_id,
             removed,
         )
@@ -580,11 +589,11 @@ def _prune_orphan_workspaces(settings: Settings) -> int:
     :func:`_prune_board_orphan_workspaces`.  Returns the total number
     of directories removed across all boards.
 
-    The knob ``settings.data_dir_audit_prune_orphans`` is NOT checked
+    The knob ``settings.data_dir_gc_prune_orphans`` is NOT checked
     here — the call site must guard the invocation.
     """
     now = _now()
-    age_threshold_seconds = settings.data_dir_audit_prune_orphans_age_seconds
+    age_threshold_seconds = settings.data_dir_gc_prune_orphans_age_seconds
     total_removed = 0
     for board_id in _boards_from_disk(settings):
         try:
@@ -593,7 +602,7 @@ def _prune_orphan_workspaces(settings: Settings) -> int:
             )
         except Exception:
             log.warning(
-                "data_dir_audit: board=%r — orphan workspace prune failed",
+                "data_dir_gc: board=%r — orphan workspace prune failed",
                 board_id,
                 exc_info=True,
             )
@@ -653,7 +662,7 @@ def _prune_oversized_memory_ledgers(settings: Settings) -> int:
             text = mem_file.read_text(encoding="utf-8")
         except OSError:
             log.warning(
-                "data_dir_audit: cannot read memory ledger %s — skipping",
+                "data_dir_gc: cannot read memory ledger %s — skipping",
                 mem_file,
             )
             continue
@@ -672,47 +681,7 @@ def _prune_oversized_memory_ledgers(settings: Settings) -> int:
 
     if truncated:
         log.info(
-            "data_dir_audit: truncated %d oversized memory ledger(s)",
+            "data_dir_gc: truncated %d oversized memory ledger(s)",
             truncated,
         )
     return truncated
-
-
-# ---------------------------------------------------------------------------
-# Runner helper — scans orphans across all boards
-# ---------------------------------------------------------------------------
-
-
-def _scan_orphan_workspaces(
-    settings: Settings,
-) -> tuple[dict[str, list[OrphanWorkspace]], int]:
-    """Scan every board with a ``mill.db`` for orphan workspaces.
-
-    Returns ``(orphans_by_board, total_orphans)``. Per-board failures
-    are logged and skipped (the pass continues across boards).
-    """
-    orphans_by_board: dict[str, list[OrphanWorkspace]] = {}
-    total_orphans = 0
-    for board_id in _boards_from_disk(settings):
-        try:
-            found = find_orphan_workspaces(settings, board_id)
-        except Exception:
-            log.warning(
-                "data_dir_audit: board=%r — orphan workspace scan failed",
-                board_id,
-                exc_info=True,
-            )
-            continue
-        if not found:
-            continue
-        orphans_by_board[board_id] = found
-        total_orphans += len(found)
-        for o in found:
-            log.info(
-                "data_dir_audit: orphan workspace board=%r ticket=%s path=%s size=%dB",
-                board_id,
-                o.ticket_id,
-                o.path,
-                o.dir_size_bytes,
-            )
-    return orphans_by_board, total_orphans

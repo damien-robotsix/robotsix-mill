@@ -185,7 +185,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         self._test_gap_task: asyncio.Task | None = None
         self._survey_task: asyncio.Task | None = None
         self._config_sync_task: asyncio.Task | None = None
-        self._data_dir_audit_task: asyncio.Task | None = None
+        self._data_dir_gc_task: asyncio.Task | None = None
         self._langfuse_cleanup_task: asyncio.Task | None = None
         self._timeout_escalation_task: asyncio.Task | None = None
         self._meta_task: asyncio.Task | None = None
@@ -257,7 +257,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             ("_test_gap_task", "test-gap"),
             ("_survey_task", "survey"),
             ("_config_sync_task", "config-sync"),
-            ("_data_dir_audit_task", "data-dir-audit"),
+            ("_data_dir_gc_task", "data-dir-gc"),
             ("_langfuse_cleanup_task", "langfuse-cleanup"),
             ("_timeout_escalation_task", "timeout-escalation"),
             ("_meta_task", "meta"),
@@ -938,7 +938,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             "_test_gap_task",
             "_survey_task",
             "_config_sync_task",
-            "_data_dir_audit_task",
+            "_data_dir_gc_task",
             "_langfuse_cleanup_task",
             "_timeout_escalation_task",
             "_meta_task",

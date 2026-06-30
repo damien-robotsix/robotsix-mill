@@ -650,19 +650,13 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "deepseek/deepseek-v4-pro",
         "deepseek/deepseek-v4-pro",
     ),
-    # --- data_dir_audit ---
-    ("data_dir_audit_periodic", "MILL_DATA_DIR_AUDIT_PERIODIC", "0", False),
+    # --- data_dir_gc ---
+    ("data_dir_gc_periodic", "MILL_DATA_DIR_GC_PERIODIC", "0", False),
     (
-        "data_dir_audit_interval_seconds",
-        "MILL_DATA_DIR_AUDIT_INTERVAL_SECONDS",
+        "data_dir_gc_interval_seconds",
+        "MILL_DATA_DIR_GC_INTERVAL_SECONDS",
         "43200",
         43200,
-    ),
-    (
-        "data_dir_audit_memory_path",
-        "MILL_DATA_DIR_AUDIT_MEMORY_PATH",
-        "/mem/data_dir_audit.md",
-        Path("/mem/data_dir_audit.md"),
     ),
     # --- copy_paste ---
     ("copy_paste_periodic", "MILL_COPY_PASTE_PERIODIC", "0", False),

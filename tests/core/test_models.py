@@ -64,7 +64,7 @@ def test_sourcekind_member_count():
         "TEST_GAP",
         "AGENT_CHECK",
         "BC_CHECK",
-        "DATA_DIR_AUDIT",
+        "DATA_DIR_GC",
         "DEPENDABOT_ALERTS",
         "COMPLETENESS_CHECK",
         "COPY_PASTE",

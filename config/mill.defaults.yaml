@@ -370,17 +370,10 @@ periodic:
     interval_seconds: 604800        # seconds between passes (604800 = 1 week)
     memory_path: null               # defaults to <data_dir>/forge_parity_memory.md
 
-  # -- data-dir audit — scans data_dir for oversized files, growth deltas,
-  #    and prunes terminal-ticket clone directories ------------------------
-  data_dir_audit:
-    enabled: true                   # enable periodic data-dir audit passes
+  # -- data-dir GC — deterministic periodic disk reclamation ------------------------
+  data_dir_gc:
+    enabled: true                   # enable periodic data-dir GC passes
     interval_seconds: 86400         # seconds between passes
-    memory_path: null               # defaults to <data_dir>/data_dir_audit_memory.md
-    size_threshold_bytes: 104857600  # 100 MiB — threshold for oversized files/dirs
-    growth_delta_bytes: 10485760    # 10 MiB — growth since last pass
-    growth_delta_pct: 20            # 20% — growth percentage threshold
-    growth_delta_pct_min_bytes: 1048576   # 1 MiB
-    max_drafts_per_pass: 5          # max findings drafted per pass
     prune_closed: false             # opt-in: prune terminal-ticket workspace dirs
     prune_closed_age_seconds: 604800  # 7 days — min age for prune_closed
     prune_terminal_clones: true     # prune repo/ clones in terminal workspaces
