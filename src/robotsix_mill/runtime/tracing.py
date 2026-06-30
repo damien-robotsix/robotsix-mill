@@ -536,6 +536,8 @@ def record_step_usage(
     tool_calls: list[dict[str, Any]] | None = None,
     retry_count: int = 0,
     retry_reason: str = "",
+    cache_read_input_tokens: int = 0,
+    cache_creation_input_tokens: int = 0,
 ) -> None:
     """Record per-step usage data as span attributes on the current span.
 
@@ -543,6 +545,12 @@ def record_step_usage(
     stamp the trace with per-turn aggregates so the trace inspector and
     cost-analyst can distinguish "one oversized prompt" from "many
     redundant turns" without fetching every Langfuse observation.
+
+    ``cache_read_input_tokens`` and ``cache_creation_input_tokens`` are
+    non-zero only when the underlying provider supports prompt caching
+    (Claude SDK / OpenRouter with Anthropic-style cache_control). They
+    are extracted from pydantic-ai's ``RunUsage`` and recorded as OTel
+    span attributes for cost-attribution visibility.
 
     All parameters are keyword-only to keep call sites self-documenting.
     No-op when tracing is disabled or no span is recording.
@@ -568,6 +576,10 @@ def record_step_usage(
                 entry["args"] = str(args)[:200]
             trimmed.append(entry)
         data["tool_calls"] = trimmed
+    if cache_read_input_tokens:
+        data["cache_read_input_tokens"] = cache_read_input_tokens
+    if cache_creation_input_tokens:
+        data["cache_creation_input_tokens"] = cache_creation_input_tokens
     set_current_span_attribute(
         "mill.step_usage", _json.dumps(data, default=str, ensure_ascii=False)
     )

@@ -113,6 +113,8 @@ def _try_record_step_usage(
         request_count: int = usage.requests
         input_tokens: int = usage.input_tokens
         output_tokens: int = usage.output_tokens
+        cache_read_tokens: int = getattr(usage, "cache_read_tokens", 0) or 0
+        cache_write_tokens: int = getattr(usage, "cache_write_tokens", 0) or 0
 
         tool_calls: list[dict[str, Any]] = []
         try:
@@ -138,6 +140,8 @@ def _try_record_step_usage(
             tool_calls=tool_calls if tool_calls else None,
             retry_count=retry_count,
             retry_reason=retry_reason,
+            cache_read_input_tokens=cache_read_tokens,
+            cache_creation_input_tokens=cache_write_tokens,
         )
     except Exception:
         log.debug("_try_record_step_usage: failed to record step usage", exc_info=True)
