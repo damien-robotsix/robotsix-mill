@@ -189,6 +189,34 @@ class TestTokenNeverLeaked:
         assert "***" in result
         assert result.startswith("error: fetch before remote_sha failed:")
 
+    # -- first-push (remote branch doesn't exist yet) -----------------------
+
+    def test_git_push_with_lease_first_push(self, tmp_path):
+        """When the remote branch doesn't exist, the fetch raises
+        'couldn't find remote ref'.  The tool should tolerate that and
+        proceed to push_with_lease (which first-pushes via --force)."""
+        _, _, git_push_with_lease, _ = self._build(tmp_path)
+
+        missing_ref_exc = subprocess.CalledProcessError(
+            128,
+            ["git", "fetch", "..."],
+            output="",
+            stderr="fatal: couldn't find remote ref refs/heads/mill/t-1\n",
+        )
+
+        with (
+            patch("robotsix_mill.agents.bridged_git_tools.git_ops.fetch") as mock_fetch,
+            patch(
+                "robotsix_mill.agents.bridged_git_tools.git_ops.push_with_lease",
+            ) as mock_push,
+        ):
+            mock_fetch.side_effect = missing_ref_exc
+            result = git_push_with_lease("mill/t-1")
+
+        assert result == "PUSH_OK"
+        mock_fetch.assert_called_once()
+        mock_push.assert_called_once()
+
     # -- error: git_push_with_lease ----------------------------------------
 
     def test_git_push_with_lease_error_redacted(self, tmp_path):

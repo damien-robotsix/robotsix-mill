@@ -1,5 +1,11 @@
 ## 0.0.0 (unreleased)
 
+- **git**: fix ``git_push_with_lease`` for first-push branches (no remote
+  counterpart yet).  The pre-push fetch now tolerates "couldn't find remote
+  ref" and falls through to ``push_with_lease`` which already handles
+  first-push via ``--force``.  Genuine network/auth fetch errors still
+  surface as ``PUSH_ERROR``.
+
 - **pipeline**: add consecutive-same-error guard to ``read_file`` and
   ``list_dir`` tools across all pipeline stages.  When the same path
   returns the same error class 3 times consecutively, the tool raises

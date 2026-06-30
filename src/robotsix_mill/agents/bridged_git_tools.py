@@ -123,7 +123,17 @@ def build_bridged_git_tools(  # noqa: C901 — four inner closures, each ~20 lin
                     branch=branch_name,
                 )
             except subprocess.CalledProcessError as e:
-                return f"PUSH_ERROR: fetch before push failed: {git_ops.redact_credentials(str(e))}"
+                stderr = (
+                    e.stderr.decode("utf-8", errors="replace")
+                    if isinstance(e.stderr, bytes)
+                    else str(e.stderr or "")
+                )
+                # First-push: remote branch doesn't exist yet.
+                # push_with_lease already handles this via --force;
+                # don't abort the push for a missing remote ref.
+                if "couldn't find remote ref" not in stderr.lower():
+                    return f"PUSH_ERROR: fetch before push failed: {git_ops.redact_credentials(str(e))}"
+                # else: remote branch absent — fall through to push_with_lease
             try:
                 git_ops.push_with_lease(repo_dir, branch_name, remote_url, token)
                 return "PUSH_OK"
