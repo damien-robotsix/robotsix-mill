@@ -1,5 +1,7 @@
 ## 0.0.0 (unreleased)
 
+- **implement**: use mypy-baseline filter in pre-flight type check so only
+  **new** type errors block the agent, not pre-existing baseline entries.
 - **cost-observability**: per-step usage instrumentation — each trace now
   records per-turn token counts, model id, tool calls (with truncated
   args), and retry count/reason. `trace_observation_summary` returns a
