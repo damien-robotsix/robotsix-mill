@@ -317,6 +317,8 @@ async def _start_board_manager(
         )
         return
 
+    import inspect
+
     board_repo_id = settings.board_agent_repo_id or repo_id
     agent_settings = BoardAgentSettings(
         board_api_url=settings.board_agent_api_url,
@@ -324,8 +326,7 @@ async def _start_board_manager(
         board_repo_id=board_repo_id,
         enable_write_ops=settings.board_agent_write_ops,
     )
-    manager = BoardManager(
-        agent_settings,
+    manager_kwargs: dict = dict(
         broker_host=settings.board_agent_broker_host,
         broker_port=settings.board_agent_broker_port,
         broker_scheme=settings.board_agent_broker_scheme,
@@ -337,6 +338,17 @@ async def _start_board_manager(
         recall_model=settings.board_manager_recall_model or None,
         max_conversations=settings.board_manager_max_conversations,
     )
+    # Inject the dedicated board-manager concurrency wrapper if the external
+    # ``robotsix-board-agent`` package supports it (Step 0 of the board-manager
+    # fast-lane epic).  Remove the ``inspect`` guard once the pin in
+    # pyproject.toml references a commit that includes ``handle_wrapper``.
+    if "handle_wrapper" in inspect.signature(BoardManager.__init__).parameters:
+        from ..agents.claude_concurrency import bound_board_manager_handle
+
+        manager_kwargs["handle_wrapper"] = lambda h: bound_board_manager_handle(
+            h, settings.board_manager_max_concurrent
+        )
+    manager = BoardManager(agent_settings, **manager_kwargs)
     await asyncio.to_thread(manager.start)
     app.state.board_manager = manager
 
