@@ -281,8 +281,8 @@ system_prompt: |
   # 1. Lint + format
   ruff check . && ruff format . --check
 
-  # 2. Type check
-  mypy .
+  # 2. Type check (baseline-filtered: only NEW errors)
+  uv run mypy src/ --strict | uv run --with mypy-baseline mypy-baseline filter
 
   # 3. Import / dependency hygiene
   deptry .
