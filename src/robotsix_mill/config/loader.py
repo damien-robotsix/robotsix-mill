@@ -430,6 +430,8 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.trace_review.initial_lookback_hours": "trace_review_initial_lookback_hours",
     "periodic.trace_review.restart_correlation_window_seconds": "trace_review_restart_correlation_window_seconds",
     "periodic.trace_review.dedup_lookback_days": "trace_review_dedup_lookback_days",
+    # -- periodic.trace_review (refine cost alert) --
+    "periodic.trace_review.refine_cost_alert_threshold": "refine_cost_alert_threshold",
     # -- periodic.stale_branch_cleanup --
     "periodic.stale_branch_cleanup.enabled": "stale_branch_cleanup_periodic",
     "periodic.stale_branch_cleanup.interval_seconds": "stale_branch_cleanup_interval_seconds",

@@ -360,6 +360,14 @@ class _StagesSettings(BaseModel):
     trace_review_obs_multiplier: float = Field(
         default=3.0,
     )
+    # Absolute cost threshold for a single refine trace.  When a trace
+    # named "refine" exceeds this USD amount it gets a ``refine_cost_alert``
+    # flag in the periodic trace-review pass.  Default $0.50 — a single
+    # refine call above this is unusual and warrants operator attention.
+    # Set to 0.0 to disable.
+    refine_cost_alert_threshold: float = Field(
+        default=0.50,
+    )
     # ``repeated_tool`` stays an absolute threshold because each tool
     # has its own "normal" usage profile — making it relative would
     # require a per-tool batch median, which is too noisy with small

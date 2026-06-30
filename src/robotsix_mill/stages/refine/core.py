@@ -13,6 +13,7 @@ from pathlib import Path
 from ...agents import refining
 from ...config import target_branch_for
 from ...core.constants import NON_IMPLEMENTATION_CLOSE_PREFIXES
+from ...core.delta_context import trim_large_artifacts
 from ...core.models import Ticket, TicketKind
 from ...core.states import State
 from ...core.workspace import Workspace
@@ -254,6 +255,26 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
             return RefineStage._guard_implementation_done(
                 ctx, ticket, outcome, ws, input_hash
             )
+
+        # --- Pre-refine artifact trimming: trim lockfile diffs and CI log
+        # dumps from the draft before sending to the expensive refine agent.
+        # The full original draft is preserved in draft-original.md so the
+        # agent can still ``read_file`` it when it needs the complete context.
+        original_draft = draft
+        if len(draft) > 4000:
+            trimmed = trim_large_artifacts(draft)
+            if trimmed != draft:
+                (ws.artifacts_dir / "draft-original.md").write_text(
+                    draft, encoding="utf-8"
+                )
+                draft = trimmed
+                log.info(
+                    "%s: trimmed large artifacts from draft "
+                    "(%d → %d chars)",
+                    ticket.id,
+                    len(original_draft),
+                    len(draft),
+                )
 
         outcome = RefineStage._run_refine_agent(
             ctx, ticket, draft, repo_dir, epic_ctx, title, ws, s, extra_roots

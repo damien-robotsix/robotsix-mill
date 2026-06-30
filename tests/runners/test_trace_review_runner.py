@@ -642,6 +642,71 @@ class TestClassifier:
         assert "incomplete_trace" not in flags.flags
         assert "restart_correlated" not in flags.flags
 
+    # -- refine_cost_alert -------------------------------------------------
+
+    def test_refine_cost_alert_above_threshold(self, settings):
+        """A refine trace exceeding the absolute threshold is flagged."""
+        settings.refine_cost_alert_threshold = 0.50
+        obs = [_obs("chat gpt-4")]
+        flags = _classify_trace(
+            _trace(name="refine", totalCost=2.82),
+            settings,
+            observations=obs,
+        )
+        assert any("refine_cost_alert" in f for f in flags.flags)
+        assert "$2.82" in " ".join(flags.flags)
+        assert "$0.50" in " ".join(flags.flags)
+
+    def test_refine_cost_alert_below_threshold_not_flagged(self, settings):
+        """A refine trace under the threshold is not flagged."""
+        settings.refine_cost_alert_threshold = 0.50
+        obs = [_obs("chat gpt-4")]
+        flags = _classify_trace(
+            _trace(name="refine", totalCost=0.12),
+            settings,
+            observations=obs,
+        )
+        assert not any("refine_cost_alert" in f for f in flags.flags)
+
+    def test_refine_cost_alert_non_refine_trace_ignored(self, settings):
+        """Only traces named 'refine' are checked — other names are ignored."""
+        settings.refine_cost_alert_threshold = 0.50
+        obs = [_obs("chat gpt-4")]
+        flags = _classify_trace(
+            _trace(name="implement", totalCost=5.00),
+            settings,
+            observations=obs,
+        )
+        assert not any("refine_cost_alert" in f for f in flags.flags)
+
+    def test_refine_cost_alert_zero_threshold_disables(self, settings):
+        """A zero threshold disables the alert entirely."""
+        settings.refine_cost_alert_threshold = 0.0
+        obs = [_obs("chat gpt-4")]
+        flags = _classify_trace(
+            _trace(name="refine", totalCost=100.0),
+            settings,
+            observations=obs,
+        )
+        assert not any("refine_cost_alert" in f for f in flags.flags)
+
+    def test_refine_cost_alert_coexists_with_cost_outlier(self, settings):
+        """Both flags can fire on the same trace."""
+        settings.refine_cost_alert_threshold = 0.50
+        baselines = self._baselines(
+            cost_threshold=1.00,
+            cost_median=0.30,
+        )
+        obs = [_obs("chat gpt-4")]
+        flags = _classify_trace(
+            _trace(name="refine", totalCost=2.82),
+            settings,
+            observations=obs,
+            baselines=baselines,
+        )
+        assert any("refine_cost_alert" in f for f in flags.flags)
+        assert any("cost_outlier" in f for f in flags.flags)
+
 
 # ---------------------------------------------------------------------------
 # Watermark

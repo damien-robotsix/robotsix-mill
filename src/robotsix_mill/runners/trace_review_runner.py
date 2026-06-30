@@ -218,6 +218,22 @@ def _classify_trace(
             f"median ${baselines.cost_median:.2f})"
         )
 
+    # Absolute refine cost alert: flag any refine trace exceeding the
+    # per-trace dollar threshold.  The relative cost_outlier above
+    # catches batch-on-batch spikes; this catches the absolute case
+    # (a single massive refine call that dwarfs the batch median but
+    # is itself worth operator attention regardless of peers).
+    trace_name = trace.get("name") or ""
+    if (
+        settings.refine_cost_alert_threshold > 0
+        and "refine" in trace_name.lower()
+        and total_cost > settings.refine_cost_alert_threshold
+    ):
+        flags.append(
+            f"refine_cost_alert (${total_cost:.2f} > "
+            f"threshold ${settings.refine_cost_alert_threshold:.2f})"
+        )
+
     if observations is None:
         # No detail fetch — check the summary output field for
         # incomplete traces (root span output is null when the agent

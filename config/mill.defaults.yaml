@@ -298,6 +298,7 @@ periodic:
     initial_lookback_hours: 24      # first-run lookback window (hours) when no watermark exists
     restart_correlation_window_seconds: 60  # window for correlating incomplete trace with process restart
     dedup_lookback_days: 7          # recency window (days) for pre-filing duplicate check
+    refine_cost_alert_threshold: 0.50  # absolute USD threshold per refine trace before flagging; 0.0 = disabled
     inspector_min_requests: 20         # floor for tools-on request budget (even tiny traces get enough)
     inspector_max_requests: 80         # ceiling for tools-on request budget
     inspector_requests_per_obs: 0.1    # requests granted per observation (before min/max clamp)

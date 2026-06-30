@@ -1,5 +1,13 @@
 ## 0.0.0 (unreleased)
 
+- **refine**: add `trim_large_artifacts()` to `delta_context.py` that
+  trims lockfile diffs (>50 lines) and CI log dumps (>3000 chars) from
+  drafts before they reach the expensive refine agent. The full original
+  is preserved in `draft-original.md`. Wired into `RefineStage.run()`.
+- **trace-review**: add absolute `refine_cost_alert_threshold` setting
+  (default $0.50) that flags any single refine trace exceeding the
+  threshold with a `refine_cost_alert` flag in the periodic trace-review
+  pass, catching CI-failure refine blowups like the $2.82 trace.
 - **review-stage**: route doc-only changes (`.md`, `.yaml`, `.toml`,
   etc.) to the cheap level-1 review model via `_is_config_only_change`.
 - **trace-review**: add `ticket_description` carve-out to the tool-error
