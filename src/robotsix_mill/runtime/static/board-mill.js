@@ -103,6 +103,7 @@
     data_dir_audit: "data-dir-audit",
     meta: "meta",
     "run-health": "run-health",
+    security_posture: "security-posture",
     ci_fix_dependency: "ci-fix-dependency",
     dependabot_alerts: "dependabot-alerts",
     implement_baseline_dependency: "implement-baseline-dependency",

@@ -13,6 +13,10 @@
   workflows and pre-commit config, compares against OWASP/OpenSSF/SLSA
   best practices, and proposes draft tickets for missing security
   scanning layers and outdated tool versions. Runs weekly by default.
+- **board-ui**: add missing `SOURCE_CLASS` entry and CSS badge for
+  `security_posture` source kind so security-posture tickets render
+  with a distinct purple-pink badge instead of falling back to
+  `.src-user`.
   `.robotsix-mill/periodic/<name>.yaml` writes with this validation,
   blocking LLM agents from creating dead stub files. The meta agent's
   system prompt and periodic-workflow catalog now explicitly forbid
