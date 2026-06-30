@@ -53,7 +53,6 @@ EnvDocSyncResult
 StateSyncResult
 SurveyResult
 TestGapResult
-TriageBoilerplateResult
 SecurityPostureResult
 model_config
 chunk_size
