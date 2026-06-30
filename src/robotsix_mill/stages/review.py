@@ -27,6 +27,7 @@ from ..forge.github import _parse_owner_repo
 from ..vcs import git_ops
 from ._implemented_repos import combined_diff, implemented_repos
 from .base import Outcome, Stage, StageContext
+from .implement._shared import _is_config_only_change
 
 log = logging.getLogger("robotsix_mill.stages.review")
 
@@ -695,12 +696,22 @@ class ReviewStage(Stage):
 
         # ── end cross-repo setup ─────────────────────────────────────
 
+        # Route doc-only changes to the cheap level-1 model.  This is a
+        # fail-closed check — any git error or empty diff returns False,
+        # so the safe default is always the current level-2 behaviour.
+        in_review: bool = target_branch is not None
+        config_only: bool = (
+            _is_config_only_change(repo_dir, target_branch) if in_review else False
+        )
+        level: int | None = 1 if in_review and config_only else None
+
         # Run the blind review agent.
         try:
             verdict: ReviewVerdict = run_review_agent(
                 settings=s,
                 diff=diff,
                 spec=spec,
+                level=level,
                 prior_context=prior_context,
                 repo_dir=repo_dir,
                 reference_files=modified_paths,
