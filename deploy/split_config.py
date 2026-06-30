@@ -33,8 +33,20 @@ from typing import Any
 import yaml
 
 
+# central-deploy marks a sensitive leaf with this literal sentinel in the
+# onboarding template (config/config.yaml). The deployed config it writes back
+# never contains the sentinel (central-deploy resolves it to the real value or
+# ""), but treat it as blank here as a defensive last line of defense so a
+# stray "SECRET" can never be ingested as a real credential.
+_CONFIG_SECRET_SENTINEL = "SECRET"  # noqa: S105 — sentinel marker, not a credential
+
+
 def _is_blank(value: Any) -> bool:
-    return value is None or (isinstance(value, str) and value.strip() == "")
+    return (
+        value is None
+        or value == _CONFIG_SECRET_SENTINEL
+        or (isinstance(value, str) and value.strip() == "")
+    )
 
 
 def split_config(config_path: str, config_dir: str) -> None:
