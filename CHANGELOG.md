@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- **trace-review**: add `ticket_description` carve-out to the tool-error
+  regex classifier so that `UsageLimitExceeded` tokens in the body of
+  existing tickets (read by `ticket_description`) are not mistaken for
+  live tool failures.
 - **periodic-loader**: add `validate_periodic_file_content()` callable
   that rejects name-only stubs for unrecognized periodic names and
   global-only names. The `write_file` tool now guards

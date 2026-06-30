@@ -329,6 +329,12 @@ def _classify_trace(
             # is expected git output, not a tool failure.
             elif name == "run_command" and "error: could not apply" in out_s:
                 pass
+            # ticket_description retrieves the body text of existing
+            # tickets, which may legitimately describe past tool errors
+            # (e.g. "UsageLimitExceeded").  The tool itself succeeded
+            # when it returned content; skip the error-pattern regex.
+            elif name == "ticket_description":
+                pass
             elif _TOOL_ERR_PATTERNS.search(out_s) or _TOOL_ERR_PATTERNS.search(
                 status_msg
             ):
