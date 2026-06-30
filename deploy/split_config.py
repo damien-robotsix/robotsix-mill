@@ -10,8 +10,12 @@ and a non-secret YAML overlay ``config/mill.local.yaml`` layered over
 Behaviour (idempotent; safe to run on every container start):
 
 * The ``secrets:`` sub-map is written to ``<config_dir>/secrets.yaml``
-  (mode 0600), dropping blank/None leaves so unset secrets fall back to
-  the Secrets model's ``None`` defaults rather than empty strings.
+  (mode 0600), dropping blank/None leaves — and the literal central-deploy
+  ``"SECRET"`` sentinel — so unset secrets fall back to the Secrets model's
+  ``None`` defaults rather than empty strings or the sentinel itself.  (The
+  sentinel is normally stripped to ``""`` by central-deploy on save; this is
+  defence-in-depth so a residual sentinel is never ingested as a real
+  credential.)
 * Everything else is written to ``<config_dir>/mill.local.yaml`` as the
   operator overlay.
 * Two deploy invariants are forced into the overlay regardless of the
@@ -33,8 +37,15 @@ from typing import Any
 import yaml
 
 
+# central-deploy's masked-secret sentinel (config/config.yaml). A residual
+# sentinel must never reach the mill as a literal credential.
+_SECRET_SENTINEL = "SECRET"  # noqa: S105 — masking sentinel, not a credential
+
+
 def _is_blank(value: Any) -> bool:
-    return value is None or (isinstance(value, str) and value.strip() == "")
+    return value is None or (
+        isinstance(value, str) and value.strip() in ("", _SECRET_SENTINEL)
+    )
 
 
 def split_config(config_path: str, config_dir: str) -> None:
