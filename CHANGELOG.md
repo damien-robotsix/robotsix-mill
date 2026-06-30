@@ -1,5 +1,7 @@
 ## 0.0.0 (unreleased)
 
+- **review-stage**: route doc-only changes (`.md`, `.yaml`, `.toml`,
+  etc.) to the cheap level-1 review model via `_is_config_only_change`.
 - **trace-review**: add `ticket_description` carve-out to the tool-error
   regex classifier so that `UsageLimitExceeded` tokens in the body of
   existing tickets (read by `ticket_description`) are not mistaken for
