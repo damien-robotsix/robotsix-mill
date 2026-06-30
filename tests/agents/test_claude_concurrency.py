@@ -354,3 +354,64 @@ def test_board_manager_semaphore_independent_of_heavy_work():
     assert hw.acquire(blocking=False) is False  # still full
     for _ in range(4):
         hw.release()
+
+
+# ============================================================================
+# Fast-lane gate — handle_wrapper must be present on BoardManager.__init__
+# ============================================================================
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="handle_wrapper not yet in robotsix-board-agent; remove this marker when child #2 lands",
+)
+def test_handle_wrapper_present_in_board_manager():
+    """Gate: lifespan.py's inject guard checks inspect.signature at startup.
+    If handle_wrapper is absent the board-manager semaphore is silently bypassed.
+    Failure here means child #2 (cross-repo) has not been merged and pinned."""
+    import inspect
+
+    from robotsix_board_agent.board_manager import BoardManager
+
+    assert "handle_wrapper" in inspect.signature(BoardManager.__init__).parameters, (
+        "handle_wrapper missing from BoardManager.__init__ — "
+        "child #2 cross-repo change not yet merged and pinned in pyproject.toml"
+    )
+
+
+def test_board_manager_not_blocked_by_saturated_heavy_work():
+    """Board-manager run_sync completes in < 0.5 s even when all heavy-work
+    semaphore slots are permanently held by blocked threads."""
+    gate = threading.Event()
+
+    class _GatedHandle:
+        def run_sync(self, *args, **kwargs):
+            gate.wait()  # hold slot until released
+            return "ok"
+
+    # Saturate heavy-work semaphore (limit=4) with 4 blocked threads.
+    hw_wrapped = bound_claude_handle(_GatedHandle(), limit=4)
+    threads = [
+        threading.Thread(target=hw_wrapped.run_sync, args=("go",)) for _ in range(4)
+    ]
+    for t in threads:
+        t.start()
+    # Give threads time to acquire their permits.
+    time.sleep(0.05)
+
+    # Board-manager run should complete immediately — independent lane.
+    bm_wrapped = bound_board_manager_handle(_RecordingHandle(), limit=1)
+    t_start = time.perf_counter()
+    try:
+        bm_wrapped.run_sync("probe")
+        elapsed = time.perf_counter() - t_start
+    finally:
+        # Always release threads — even if the probe fails — to prevent
+        # leaked threads accumulating across tests and triggering OOM/SIGKILL.
+        gate.set()
+        for t in threads:
+            t.join(timeout=5)
+
+    assert elapsed < 0.5, (
+        f"board-manager blocked by heavy-work semaphore ({elapsed:.3f}s)"
+    )
