@@ -198,6 +198,15 @@ def run_doc_agent(
         memory_text or "(empty — start a new ledger)",
     )
 
+    doc_fs_tools = [
+        t
+        for t in fs
+        if t.__name__ in ("read_file", "write_file", "list_dir", "edit_file")
+    ]
+    from ..core.tool_wrappers import wrap_read_tools_with_consecutive_error_guard
+
+    doc_fs_tools = wrap_read_tools_with_consecutive_error_guard(doc_fs_tools)
+
     agent = build_agent_from_definition(
         settings,
         definition,
@@ -216,11 +225,7 @@ def run_doc_agent(
                 repo_dir,
                 extra_roots=extra_roots,
             ),
-            *(
-                t
-                for t in fs
-                if t.__name__ in ("read_file", "write_file", "list_dir", "edit_file")
-            ),
+            *doc_fs_tools,
         ],
         **overrides,
     )

@@ -249,6 +249,10 @@ def run_coordinator(
         )
     ]
 
+    from ..core.tool_wrappers import wrap_read_tools_with_consecutive_error_guard
+
+    fs_tools = wrap_read_tools_with_consecutive_error_guard(fs_tools)
+
     overrides: dict[str, Any] = {}
     if level is not None:
         overrides["level"] = level
