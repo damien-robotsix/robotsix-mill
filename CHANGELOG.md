@@ -1,6 +1,8 @@
 ## 0.0.0 (unreleased)
 
 - Remove stale `.robotsix-board-agent-src` git submodule; the board-agent package is already managed by uv in `pyproject.toml` and the submodule reference pointed to a commit no longer reachable on the remote, breaking Dependabot's configured graph update
+- **cleanup**: remove unused ``SecurityPosturePassResult`` backward-compat
+  alias from ``periodic_runner.py`` and its vulture whitelist entry.
 - **dev**: add ``make format`` and ``make lint`` targets for quick local
   ruff/mypy checks across all Python sources (``src/``, ``tests/``,
   ``scripts/``, ``vulture_whitelist.py``, ``deploy/split_config.py``,
