@@ -101,6 +101,12 @@ system_prompt: |
      risk, what it ships), emit an alignment draft proposing to add that
      presence file. Justify each suggestion from the repo's actual context
      — skip workflows that don't apply; never propose blanket parity.
+     NEVER propose enabling a periodic workflow under a name absent from
+     `<available-periodic-workflows>` unless the presence YAML includes a
+     non-empty `system_prompt` field defining the new bespoke agent. A
+     name-only file (`name: <name>` with no `system_prompt`) for an
+     unrecognised name resolves to nothing at load time. When in doubt,
+     choose the closest valid name from the catalog above or omit the file.
 
   4. **RESOLVE OUTSTANDING TODOs (todo).** The `<outstanding-todos>` block
      already enumerates EVERY `TODO`/`FIXME`/`XXX`/`HACK` marker across all
