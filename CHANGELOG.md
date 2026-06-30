@@ -5,6 +5,8 @@
   `32`).  No behavioral change — the effective value was already `32`.
 - **docs**: fix stale `dedup_request_limit` default in configuration table
   (`6` → `12`, matching the Pydantic model and YAML defaults).
+- **docs**: add `core.limits.audit_requests` to the configuration
+  reference Request limits table.
 
 - **refine-stage**: enable prompt-cache observability — per-step usage
   spans now record cache-read and cache-write tokens from the Claude
