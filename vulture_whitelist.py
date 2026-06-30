@@ -107,9 +107,8 @@ bc_check_interval_seconds
 module_curator_memory_path
 module_curator_periodic
 module_curator_interval_seconds
-data_dir_audit_memory_path
-data_dir_audit_periodic
-data_dir_audit_interval_seconds
+data_dir_gc_periodic
+data_dir_gc_interval_seconds
 completeness_check_periodic
 completeness_check_interval_seconds
 forge_parity_memory_path
@@ -170,6 +169,7 @@ get_field_value
 
 # -- core --------------------------------------------------------------------
 _set_wal  # SQLAlchemy event listener registered via @event.listens_for decorator
+DATA_DIR_GC
 impl
 cache_ok
 process_bind_param
@@ -219,6 +219,8 @@ run_config_sync_pass
 run_env_doc_sync_pass
 run_copy_paste_pass
 run_security_posture_pass
+run_data_dir_gc_pass
+dir_size_bytes
 SecurityPosturePassResult
 oversized_items
 query_traces_since
