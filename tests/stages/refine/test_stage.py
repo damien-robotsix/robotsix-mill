@@ -44,14 +44,14 @@ from robotsix_mill.vcs import git_ops
 def ctx_factory(tmp_path, fake_sandbox):
     from robotsix_mill.config import Settings
 
-    created = []
+    counter = [0]
 
     def make(**env):
         db.reset_engine()
-        s = Settings(data_dir=str(tmp_path / f"data{len(created)}"), **env)
+        s = Settings(data_dir=str(tmp_path / f"data{counter[0]}"), **env)
         db.init_db(s, board_id="test-board")
         svc = TicketService(s, board_id="test-board")
-        created.append(s)
+        counter[0] += 1
         from robotsix_mill.config import RepoConfig
 
         return StageContext(

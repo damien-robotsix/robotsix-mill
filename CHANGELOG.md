@@ -8,6 +8,11 @@
   ``handle_wrapper`` param to ``BoardManager.__init__`` (Step 0 of
   board-manager fast-lane epic).  Push of the upstream commit requires
   human GitHub credentials; ``uv lock`` must be re-run afterwards.
+- **stages**: reorganize test layout to mirror source subdirectory structure.
+  Move refine tests to ``tests/stages/refine/`` and merge tests to
+  ``tests/stages/merge/``, matching the existing ``tests/stages/implement/``
+  pattern.  Add ``__init__.py`` files to new test subdirectories and update
+  ``docs/modules.yaml`` paths accordingly.
 
 - **git**: fix ``git_push_with_lease`` for first-push branches (no remote
   counterpart yet).  The pre-push fetch now tolerates "couldn't find remote
