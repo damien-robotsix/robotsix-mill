@@ -3,6 +3,9 @@
 - **core**: extract `_verify_merge_before_done` from `_TransitionMixin`
   into a standalone `verify_merge_before_done()` in `_helpers.py` —
   decouples git merge verification from the state-transition mixin
+- **worker**: include `"mill_only"` kind in the periodic supervisor's
+  workflow scheduling gate so that `env_doc_sync` and `frontend_sync`
+  are properly dispatched on the `robotsix-mill` repo
   and improves testability.
 - **runners**: consolidate 15 structurally-identical periodic-pass runner
   stub files into a single `run_periodic_pass_entry` entry point on
