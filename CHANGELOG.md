@@ -11,6 +11,11 @@
   `openrouter_api_key` to `config/repos.example.yaml` — three valid
   `RepoConfig` model fields that were missing from the example template.
 
+- **config**: add 6 missing `Secrets` fields to `config/secrets.example.yaml`
+  (`langfuse_*`, `github_app_private_key_path`) and remove the corresponding
+  entries from the `_SECRETS_NOT_IN_EXAMPLE` exception set in
+  `scripts/check_config_sync.py`.
+
 - **refine-stage**: enable prompt-cache observability — per-step usage
   spans now record cache-read and cache-write tokens from the Claude
   SDK (which auto-caches system prompts ≥1024 chars) and OpenRouter

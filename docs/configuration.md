@@ -942,10 +942,12 @@ via `get_secrets()`.
 | `forge_repo_create_token` | — | Fine-grained PAT used ONLY for repo creation. Falls back to `forge_token` if unset. |
 | `github_app_id` | `GITHUB_APP_ID` | GitHub App ID (when `FORGE_AUTH=app`) |
 | `github_app_private_key` | `GITHUB_APP_PRIVATE_KEY` | GitHub App private key (inline PEM, newlines as `\n`) |
+| `github_app_private_key_path` | `GITHUB_APP_PRIVATE_KEY_PATH` | Alternative: host path to GitHub App private-key `.pem` file |
 | `langfuse_public_key`¹ | — | Langfuse public key (populated from `RepoConfig` at startup) |
 | `langfuse_secret_key`¹ | — | Langfuse secret key (populated from `RepoConfig` at startup) |
 | `langfuse_base_url`¹ | — | Langfuse base URL (populated from `RepoConfig` at startup) |
 | `langfuse_project_id`¹ | — | Langfuse project ID (populated from `RepoConfig` at startup) |
+| `langfuse_project_name`¹ | — | Langfuse project name (populated from `RepoConfig` at startup) |
 | `ntfy_url` | `NTFY_URL` | ntfy.sh topic URL for notifications |
 | `ntfy_token` | `NTFY_TOKEN` | ntfy.sh bearer token (optional) |
 

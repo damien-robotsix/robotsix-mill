@@ -172,21 +172,7 @@ _MODEL_FIELDS_NOT_IN_ALIAS: frozenset[str] = frozenset(
 # ``Secrets`` fields that are intentionally NOT user-configurable via
 # ``config/secrets.yaml`` (invariant 4), so they never appear in
 # ``config/secrets.example.yaml``.
-_SECRETS_NOT_IN_EXAMPLE: frozenset[str] = frozenset(
-    {
-        # Populated from RepoConfig (per-repo Langfuse project), never
-        # from secrets.yaml — see docs/configuration.md.
-        "langfuse_public_key",
-        "langfuse_secret_key",
-        "langfuse_base_url",
-        "langfuse_project_id",
-        "langfuse_project_name",
-        # Non-secret host path; configured via
-        # forge.github_app_private_key_path in the main config, not via
-        # secrets.yaml.
-        "github_app_private_key_path",
-    }
-)
+_SECRETS_NOT_IN_EXAMPLE: frozenset[str] = frozenset()
 
 
 # ---------------------------------------------------------------------------
