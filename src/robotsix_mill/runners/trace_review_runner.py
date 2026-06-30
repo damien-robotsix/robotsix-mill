@@ -65,6 +65,17 @@ _TOOL_ERR_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
+# Langfuse trace names emitted by trace_review's own pipeline.
+# Traces with these names are silently skipped before phase-2 inspection.
+_SELF_REFERENTIAL_TRACE_NAMES: frozenset[str] = frozenset({"trace_inspector"})
+
+# Detects per-observation token-count symptoms that are not actionable on
+# their own (covered by the cost-analyst periodic instead).
+_PER_OBS_COST_RE = re.compile(
+    r"\bobservation\b.{0,100}\bconsumed\b.{0,50}\d+\b.{0,30}\btokens?\b",
+    re.IGNORECASE | re.DOTALL,
+)
+
 
 @dataclass
 class _Baselines:
@@ -745,6 +756,15 @@ def run_trace_review_pass(
 
         trace_id = flags.trace_id
 
+        if flags.trace_name in _SELF_REFERENTIAL_TRACE_NAMES:
+            log.info(
+                "trace-review: skipping self-referential trace %s "
+                "(name=%r) — trace_review pipeline traces are not filed",
+                trace_id[:8],
+                flags.trace_name,
+            )
+            continue
+
         # Phase 2: LLM inspection on the cheap model.
         result = run_trace_inspector(
             settings=settings,
@@ -790,6 +810,31 @@ def run_trace_review_pass(
                     ", ".join(missing),
                 )
                 continue
+
+            # Suppress per-observation cost-outlier noise (covered by cost-analyst).
+            if finding.category == "optimization" and _PER_OBS_COST_RE.search(
+                finding.symptom
+            ):
+                log.info(
+                    "trace-review: suppressing per-obs-cost optimization finding "
+                    "for trace %s — not actionable",
+                    trace_id[:8],
+                )
+                continue
+
+            # Suppress weak optimization findings the inspector itself marked as
+            # requiring human review (non-concrete proposed_solution).
+            if (
+                finding.category == "optimization"
+                and finding.proposed_solution.startswith("REQUIRES_HUMAN_REVIEW:")
+            ):
+                log.info(
+                    "trace-review: suppressing low-signal optimization finding "
+                    "for trace %s — proposed_solution not concrete",
+                    trace_id[:8],
+                )
+                continue
+
             title = f"{finding.category} — {finding.symptom[:90]}"
             prior = find_prior_matching_ticket(
                 service,
