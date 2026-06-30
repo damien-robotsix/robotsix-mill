@@ -269,6 +269,18 @@ class _CoreSettings(BaseModel):
     # test_gap/trace_inspector default; a healthy refine has near-zero
     # tool errors.
     refine_max_errors: int = Field(default=20, ge=0)
+    # Dynamic request-limit multiplier for large/complex specs.
+    # When the draft exceeds refine_dynamic_limit_spec_chars (default
+    # 3000) or the scope-triage agent's own budget was over 60% of
+    # the refine limit, the effective request_limit is multiplied by
+    # this factor (with a floor of refine_dynamic_limit_min).
+    refine_dynamic_limit_multiplier: float = Field(default=1.5, gt=1.0)
+    refine_dynamic_limit_min: int = Field(default=12, ge=1)
+    refine_dynamic_limit_spec_chars: int = Field(default=3000, ge=1)
+    # Emit a warning when the refine agent consumes more than this
+    # fraction (0.0–1.0) of its request_limit, so near-exhaustion
+    # patterns are observable even when the run doesn't crash.
+    refine_usage_warning_threshold: float = Field(default=0.8, gt=0.0, le=1.0)
     doc_request_limit: int = Field(default=32)
     doc_classifier_request_limit: int = Field(default=3)
     # Caps the git diff fed to the cheap doc-classifier gate. Truncation

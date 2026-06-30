@@ -18,6 +18,11 @@
   scheduler — add ``SourceKind.TRIAGE_BOILERPLATE``, a ``PeriodicPassConfig``
   entry, and the ``llm_agent`` builtin-kind mapping so the agent can
   actually run.
+- **refine**: add dynamic request-limit override for large specs (>3000 chars
+  or non-simple complexity) and a warning log when >80% of the limit is
+  consumed, to prevent silent near-exhaustion. New settings:
+  `refine_dynamic_limit_multiplier`, `refine_dynamic_limit_min`,
+  `refine_dynamic_limit_spec_chars`, `refine_usage_warning_threshold`.
 
 - **ci**: remove dead `dependency-submission.yml` workflow (native
   Dependabot `uv` graph job pre-empts custom workflows) and restore

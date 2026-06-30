@@ -1253,6 +1253,27 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
                     _total_in,
                     _pct,
                 )
+            # Warn when the refine pass consumed > threshold fraction of
+            # its request budget, so near-exhaustion patterns are observable
+            # even when the run doesn't hit UsageLimitExceeded.
+            _effective_limit = (
+                request_limit_override
+                if request_limit_override is not None
+                else settings.refine_request_limit
+            )
+            _requests_used = _u.requests
+            if (
+                _effective_limit > 0
+                and _requests_used / _effective_limit
+                > settings.refine_usage_warning_threshold
+            ):
+                log.warning(
+                    "refine agent used %d/%d requests (%.0f%%) — "
+                    "near request_limit exhaustion",
+                    _requests_used,
+                    _effective_limit,
+                    100 * _requests_used / _effective_limit,
+                )
         except Exception:
             log.debug("refine: cache-metric extraction failed", exc_info=True)
 

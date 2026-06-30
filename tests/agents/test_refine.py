@@ -4433,6 +4433,9 @@ class _FakeUsage:
     def __init__(self, requests: int = 0):
         self.requests = requests
 
+    def __call__(self):
+        return self
+
 
 class _FakeResponse:
     def __init__(self, finish_reason):
@@ -6199,6 +6202,92 @@ def test_run_refine_agent_no_request_limit_override_uses_default(
 
     assert captured["usage_limits"] is not None
     assert captured["usage_limits"].request_limit == 77
+
+
+def test_warning_logged_when_usage_exceeds_threshold(monkeypatch, settings, caplog):
+    """When the refine agent uses > refine_usage_warning_threshold of its
+    request_limit, a warning is logged."""
+    import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
+    import logging
+
+    effective_limit = settings.refine_request_limit
+    high_usage = int(effective_limit * 0.9)
+
+    class _MockAgent:
+        def run_sync(self, user_prompt, *, message_history=None, usage_limits=None):
+            return _FakeRunResult(
+                output=RefineResult(split=False, spec_markdown="## Problem\nok\n"),
+                finish_reason="stop",
+                all_messages=[],
+                usage=_FakeUsage(requests=high_usage),
+            )
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        base_module, "build_agent_from_definition", lambda *a, **kw: _MockAgent()
+    )
+    monkeypatch.setattr(
+        retry_module,
+        "run_agent",
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(agent),
+    )
+
+    with caplog.at_level(logging.WARNING):
+        refining.run_refine_agent(
+            settings=settings,
+            title="t",
+            draft="d",
+        )
+
+    assert any(
+        "near request_limit exhaustion" in rec.message for rec in caplog.records
+    ), "Expected warning about near-exhaustion but none logged"
+
+
+def test_no_warning_when_usage_below_threshold(monkeypatch, settings, caplog):
+    """When the refine agent uses ≤ refine_usage_warning_threshold of its
+    request_limit, no warning is logged."""
+    import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
+    import logging
+
+    effective_limit = settings.refine_request_limit
+    low_usage = int(effective_limit * 0.5)
+
+    class _MockAgent:
+        def run_sync(self, user_prompt, *, message_history=None, usage_limits=None):
+            return _FakeRunResult(
+                output=RefineResult(split=False, spec_markdown="## Problem\nok\n"),
+                finish_reason="stop",
+                all_messages=[],
+                usage=_FakeUsage(requests=low_usage),
+            )
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        base_module, "build_agent_from_definition", lambda *a, **kw: _MockAgent()
+    )
+    monkeypatch.setattr(
+        retry_module,
+        "run_agent",
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(agent),
+    )
+
+    with caplog.at_level(logging.WARNING):
+        refining.run_refine_agent(
+            settings=settings,
+            title="t",
+            draft="d",
+        )
+
+    assert not any(
+        "near request_limit exhaustion" in rec.message for rec in caplog.records
+    ), "Unexpected near-exhaustion warning for low usage"
 
 
 def test_split_child_fast_path_sets_simple_complexity(ctx, service, monkeypatch):
