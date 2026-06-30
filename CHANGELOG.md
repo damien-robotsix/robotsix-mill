@@ -17,6 +17,8 @@
   proposing name-only stubs for unknown names.
 - **implement**: use mypy-baseline filter in pre-flight type check so only
   **new** type errors block the agent, not pre-existing baseline entries.
+- **language-instructions**: sync `python.md` type-checker instruction to
+  match the implement-agent's mypy-baseline command (follow-up to PR #2041).
 - **docs**: fix 7 alias-mismatch entries in `docs/configuration.md` — the
   `claude_sdk_vision_enabled`, `subtask_request_limit`, `refine_max_tool_calls`,
   `refine_max_errors`, `coordinator_max_tool_calls`, `max_refine_explore_calls`,
