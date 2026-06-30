@@ -74,7 +74,7 @@ system_prompt: |
        into a frontend array or set of CSS classes, magic strings
        (kind/source pseudo-enums) duplicated across modules with no
        shared constant, or settings keys that must appear together in
-       config.py, .env, .env.example and docs.
+       config.py and docs.
      `detect_duplication` provides deterministic clone-pair data
      (file paths, line ranges, duplicated line/token counts) for
      copy-paste detection — do not rely on visual inspection alone.
