@@ -1236,6 +1236,26 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
                     )
                     result = continuation_result
 
+        # Log prompt-cache hit metrics when the provider supports it.
+        # Claude CLI auto-caches system prompts >= 1024 chars; OpenRouter
+        # reports cached_tokens when an upstream Anthropic cache is warm.
+        try:
+            _u = result.usage()
+            _cache_read = getattr(_u, "cache_read_tokens", 0) or 0
+            _cache_write = getattr(_u, "cache_write_tokens", 0) or 0
+            if _cache_read or _cache_write:
+                _total_in = _u.input_tokens
+                _pct = round(100 * _cache_read / _total_in, 1) if _total_in else 0.0
+                log.info(
+                    "refine prompt cache: read=%d write=%d input=%d (%.1f%% cached)",
+                    _cache_read,
+                    _cache_write,
+                    _total_in,
+                    _pct,
+                )
+        except Exception:
+            log.debug("refine: cache-metric extraction failed", exc_info=True)
+
         output: RefineResult = _coerce_refine_output(result.output)
 
         try:

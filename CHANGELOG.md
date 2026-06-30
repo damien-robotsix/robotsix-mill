@@ -1,5 +1,11 @@
 ## 0.0.0 (unreleased)
 
+- **refine-stage**: enable prompt-cache observability — per-step usage
+  spans now record cache-read and cache-write tokens from the Claude
+  SDK (which auto-caches system prompts ≥1024 chars) and OpenRouter
+  backends.  The refine agent logs cache-hit percentage after each run
+  so the static system-prompt prefix savings are measurable.
+
 - **review-stage**: route doc-only changes (`.md`, `.yaml`, `.toml`,
   etc.) to the cheap level-1 review model via `_is_config_only_change`.
 - **trace-review**: add `ticket_description` carve-out to the tool-error
