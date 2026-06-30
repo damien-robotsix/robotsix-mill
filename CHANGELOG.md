@@ -9,6 +9,11 @@
   proposing name-only stubs for unknown names.
 - **implement**: use mypy-baseline filter in pre-flight type check so only
   **new** type errors block the agent, not pre-existing baseline entries.
+- **docs**: fix 7 alias-mismatch entries in `docs/configuration.md` — the
+  `claude_sdk_vision_enabled`, `subtask_request_limit`, `refine_max_tool_calls`,
+  `refine_max_errors`, `coordinator_max_tool_calls`, `max_refine_explore_calls`,
+  and `max_refine_read_file_calls` rows now show their derived `MILL_*` env var
+  names instead of `—`.
 - **cost-observability**: per-step usage instrumentation — each trace now
   records per-turn token counts, model id, tool calls (with truncated
   args), and retry count/reason. `trace_observation_summary` returns a
