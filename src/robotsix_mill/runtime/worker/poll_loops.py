@@ -278,6 +278,7 @@ class PollLoopsMixin(_WorkerBase):
         "credit_balance": (
             "robotsix_mill.runners.credit_balance_runner:run_credit_balance_check"
         ),
+        "pin_bump": "robotsix_mill.runners.pin_bump_runner:run_pin_bump_pass",
     }
 
     def _build_periodic_workflow_runner(self, wf):

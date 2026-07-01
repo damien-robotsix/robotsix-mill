@@ -435,6 +435,11 @@ periodic:
     enabled: true                 # enable periodic member-sync passes
     interval_seconds: 86400       # seconds between passes (min 60 enforced in worker)
 
+  # -- pin-bump — coordinated internal git-rev pin update across stack
+  pin_bump:
+    enabled: true                 # enable weekly pin-bump passes (fleet-wide kill switch)
+    interval_seconds: 604800      # seconds between passes (7 days, min 3600 enforced in worker)
+
   # -- survey agent — discovers OSS projects; proposes improvements --------
   survey:
     enabled: true                   # enable periodic survey passes (on by default)

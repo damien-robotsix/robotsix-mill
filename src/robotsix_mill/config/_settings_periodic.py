@@ -423,6 +423,21 @@ class _PeriodicSettings(BaseModel):
     # enforced at 60s in the worker loop.
     member_sync_interval_seconds: int = Field(default=86400)
 
+    # --- pin-bump (coordinated internal git-rev pin update) ---
+    # Master switch for the weekly pin-bump pass. Default True: the
+    # pass runs for any repo that ships a
+    # ``.robotsix-mill/periodic/pin_bump.yaml`` presence file. Flip to
+    # False to disable fleet-wide (e.g. during an incident). The pass
+    # clones every registered repo, builds a dependency graph from
+    # ``[tool.uv.sources]``, computes coherent target SHAs empirically
+    # via ``uv lock``, and opens CI-gated PRs.
+    pin_bump_periodic: bool = Field(default=True)
+    # Seconds between automatic pin-bump passes when
+    # MILL_PIN_BUMP_PERIODIC=true. Default 604800 (7 days), aligned
+    # with Renovate's weekly cadence. Minimum enforced at 3600s (1h)
+    # in the worker loop.
+    pin_bump_interval_seconds: int = Field(default=604800)
+
     # --- meta-agent (cross-repo extraction/alignment survey) ---
     # Master switch for the daily meta-agent pass. Defaults to False
     # (off) — the operator must register the meta board in repos.yaml
