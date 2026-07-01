@@ -135,7 +135,7 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             if counter_path.exists():
                 try:
                     spawn_count = int(counter_path.read_text(encoding="utf-8").strip())
-                except ValueError, OSError:
+                except (ValueError, OSError):  # fmt: skip
                     spawn_count = 0
             if spawn_count >= spawn_limit:
                 return Outcome(
