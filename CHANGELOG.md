@@ -3,6 +3,7 @@
 - Add unit test coverage for ``MultiRepoCiFixMixin`` (``tests/stages/merge/test_ci_fix_mixin.py``) covering all three private methods with 29 test cases.
 - Add `.robotsix-mill/periodic/security_posture.yaml` trigger file to enable the security_posture periodic workflow in mill.
 - Broadened mandatory `read_file` verification in trace inspector from optimization-only to ALL finding categories when `root_cause` or `proposed_solution` makes a mechanistic claim about code behaviour.
+- web_knowledge: add `last_verified` frontmatter field (bumped on every `update_library`), `stale` boolean field, and cache TTL (`web_knowledge_cache_ttl_hours`, default 72 h). Entries older than the TTL are flagged `[STALE]` in the index so the web-knowledge agent re-verifies before trusting cached claims.
 - Add stale re-spawn guard to implement stage preflight: when the last
   implement attempt was blocked and the spec hasn't changed, fail fast
   before opening a Langfuse trace — preventing $0.00 no-op traces and

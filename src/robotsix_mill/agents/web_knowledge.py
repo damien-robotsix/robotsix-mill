@@ -64,11 +64,23 @@ class _KnowledgeMeta:
     provided during ``update_library``).  ``last_updated`` is a
     file-touch timestamp — it updates on every write and is NOT
     a signal that the content was re-verified.
+
+    ``last_verified`` is bumped on EVERY ``update_library`` call
+    (regardless of whether ``source_url`` was provided).  It
+    records the last time an agent _looked_ at this library.  When
+    ``last_verified`` is older than the cache TTL the index flags
+    the entry as stale so the next consult re-verifies.
+
+    ``stale`` is a boolean that ``update_library`` always sets to
+    ``False``.  In the future an external housekeeping pass may
+    set it to ``True`` to trigger re-verification on next read.
     """
 
     last_updated: datetime | None
     source_url: str | None = None
     verified_at: datetime | None = None
+    last_verified: datetime | None = None
+    stale: bool = False
     body: str = ""
 
 
@@ -87,6 +99,14 @@ _SOURCE_URL_RE = re.compile(
 )
 _VERIFIED_AT_RE = re.compile(
     r"^verified_at:\s*(\S+)\s*$",
+    re.MULTILINE,
+)
+_LAST_VERIFIED_RE = re.compile(
+    r"^last_verified:\s*(\S+)\s*$",
+    re.MULTILINE,
+)
+_STALE_RE = re.compile(
+    r"^stale:\s*(true|false)\s*$",
     re.MULTILINE,
 )
 _GENERAL_FILENAME = "_general.md"
@@ -137,7 +157,23 @@ def _general_path(settings: Settings) -> Path:
     return _knowledge_dir(settings) / _GENERAL_FILENAME
 
 
-def _parse_frontmatter(text: str) -> _KnowledgeMeta:
+def _parse_frontmatter_datetime(head: str, regex: re.Pattern[str]) -> datetime | None:
+    """Extract an optional ISO-8601 datetime from *head* using *regex*.
+    Returns None when the field is absent or unparseable.  Naive
+    timestamps are treated as UTC."""
+    m = regex.search(head)
+    if not m:
+        return None
+    try:
+        ts = datetime.fromisoformat(m.group(1))
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        return ts
+    except ValueError:
+        return None
+
+
+def _parse_frontmatter(text: str) -> _KnowledgeMeta:  # noqa: C901 — frontmatter parser naturally has one branch per field
     """Return a ``_KnowledgeMeta`` from a frontmatter-stamped
     knowledge file. Missing / unparseable frontmatter → all fields
     ``None`` / empty, body = *text* as-is."""
@@ -146,38 +182,27 @@ def _parse_frontmatter(text: str) -> _KnowledgeMeta:
         return _KnowledgeMeta(last_updated=None, body=text)
     head, body = m.group(1), m.group(2)
 
-    # --- last_updated ---
-    ts: datetime | None = None
-    ts_match = _LAST_UPDATED_RE.search(head)
-    if ts_match:
-        try:
-            ts = datetime.fromisoformat(ts_match.group(1))
-            if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=timezone.utc)
-        except ValueError:
-            pass
+    ts = _parse_frontmatter_datetime(head, _LAST_UPDATED_RE)
 
-    # --- source_url ---
     source_url: str | None = None
     src_match = _SOURCE_URL_RE.search(head)
     if src_match:
         source_url = src_match.group(1).strip()
 
-    # --- verified_at ---
-    verified_at: datetime | None = None
-    ver_match = _VERIFIED_AT_RE.search(head)
-    if ver_match:
-        try:
-            verified_at = datetime.fromisoformat(ver_match.group(1))
-            if verified_at.tzinfo is None:
-                verified_at = verified_at.replace(tzinfo=timezone.utc)
-        except ValueError:
-            pass
+    verified_at = _parse_frontmatter_datetime(head, _VERIFIED_AT_RE)
+    last_verified = _parse_frontmatter_datetime(head, _LAST_VERIFIED_RE)
+
+    stale: bool = False
+    stale_match = _STALE_RE.search(head)
+    if stale_match:
+        stale = stale_match.group(1) == "true"
 
     return _KnowledgeMeta(
         last_updated=ts,
         source_url=source_url,
         verified_at=verified_at,
+        last_verified=last_verified,
+        stale=stale,
         body=body,
     )
 
@@ -194,6 +219,10 @@ def _stamp_frontmatter(
     *source_url* — when provided, indicates the web source used to
     verify the content.  ``verified_at`` is set to *now* automatically;
     pass an explicit ``verified_at`` to preserve an existing timestamp.
+
+    ``last_verified`` is always set to *now* — it records the last
+    time an agent touched this library.  ``stale`` is always set to
+    ``false``.
     """
     now = datetime.now(timezone.utc).replace(microsecond=0)
     if source_url:
@@ -201,6 +230,8 @@ def _stamp_frontmatter(
     front_lines = [
         f"library: {library}",
         f"last_updated: {now.isoformat()}",
+        f"last_verified: {now.isoformat()}",
+        "stale: false",
     ]
     if source_url:
         front_lines.append(f"source_url: {source_url}")
@@ -214,15 +245,30 @@ def _stamp_frontmatter(
 # ---------------------------------------------------------------------------
 
 
+def _is_stale(meta: _KnowledgeMeta, ttl_hours: int) -> bool:
+    """Return True when the entry's ``last_verified`` is older than
+    *ttl_hours* or missing entirely (never touched since the field
+    was introduced)."""
+    if meta.last_verified is None:
+        return True
+    age = datetime.now(timezone.utc) - meta.last_verified
+    return age.total_seconds() > (ttl_hours * 3600)
+
+
 def _build_index(settings: Settings) -> str:
     """Render an inline index of every library file + the general
     memory size, so the agent sees what it already has without
     spending a turn on ``list_knowledge_files``. Returns "(empty)"
-    when nothing has been cached yet."""
+    when nothing has been cached yet.
+
+    Entries whose ``last_verified`` timestamp is older than
+    ``web_knowledge_cache_ttl_hours`` (or missing entirely) are
+    flagged ``[STALE]``."""
     d = _knowledge_dir(settings)
     if not d.is_dir():
         return "(empty)"
     rows: list[str] = []
+    ttl_hours = settings.web_knowledge_cache_ttl_hours
     general = _general_path(settings)
     if general.is_file():
         size_kb = general.stat().st_size / 1024
@@ -239,8 +285,9 @@ def _build_index(settings: Settings) -> str:
             )
             ver = " verified" if meta.verified_at else ""
             src = f" source={meta.source_url}" if meta.source_url else ""
+            stale = " [STALE]" if _is_stale(meta, ttl_hours) else ""
             rows.append(
-                f"- {path.stem} — last_updated: {stamp}, size: {size_kb:.1f} KB{ver}{src}"
+                f"- {path.stem} — last_updated: {stamp}, size: {size_kb:.1f} KB{ver}{src}{stale}"
             )
         except OSError:
             continue
@@ -271,7 +318,7 @@ you've learned).
 
 ## Verification tracking
 
-Each library file carries two timestamps:
+Each library file carries these timestamps:
 
 - **last_updated** — a file-touch timestamp that updates on EVERY
   write (including adding a single new section).  It tells you when
@@ -283,19 +330,30 @@ Each library file carries two timestamps:
   ``update_library`` (i.e. when ``source_url`` was provided).
   Absent ``verified_at`` → the claims were NEVER verified.
 
+- **last_verified** — bumped on EVERY ``update_library`` call (even
+  without ``source_url``).  It records the last time an agent
+  _looked_ at this library.  When ``last_verified`` is older than
+  ~{cache_ttl_hours} hours the index marks the entry ``[STALE]``.
+  A stale entry means nobody has checked this library recently —
+  cross-check key claims with ``web_search`` before trusting the
+  cached answer.
+
+The index below flags stale entries with ``[STALE]`` so you can
+see at a glance which files need re-checking.
+
 ## Procedure
 
 1. Look at the index. Decide what's already relevant:
-   - If a library file exists for the topic AND its ``verified_at``
-     is present AND recent enough that the answer likely hasn't
-     drifted, read it with ``read_library`` and try to answer from
-     there.
-   - If the relevant cached file has NO ``verified_at`` (regardless
-     of how recent ``last_updated`` is) OR ``verified_at`` is older
-     than ~{stale_days} days OR the file doesn't exist OR you
-     suspect the question is about something the file wouldn't
-     cover (a new feature, an edge case), ``web_search`` first and
-     integrate.
+   - If a library file exists for the topic AND it is NOT marked
+     ``[STALE]`` AND its ``verified_at`` is present AND recent
+     enough that the answer likely hasn't drifted, read it with
+     ``read_library`` and try to answer from there.
+   - If the relevant cached file IS marked ``[STALE]``, or has NO
+     ``verified_at`` (regardless of how recent ``last_updated`` is),
+     or ``verified_at`` is older than ~{stale_days} days, or the
+     file doesn't exist, or you suspect the question is about
+     something the file wouldn't cover (a new feature, an edge
+     case), ``web_search`` first and integrate.
    - The general memory is worth a glance for cross-cutting facts.
      Don't read it for every consult — only when the question
      plausibly matches its themes.
@@ -368,6 +426,10 @@ def _make_tools(settings: Settings) -> list:  # noqa: C901 — factory intention
         was explicitly checked against a web source at that time.
         When ``verified_at`` is absent, the claims were *not* verified
         — treat them as suspect regardless of ``last_updated`` recency.
+
+        The ``last_verified`` timestamp records the last time an agent
+        touched this file.  When it is older than the cache TTL a
+        ``[STALE]`` marker appears — cross-check claims before trusting.
         """
         path = _library_path(settings, library)
         if not path.is_file():
@@ -375,6 +437,11 @@ def _make_tools(settings: Settings) -> list:  # noqa: C901 — factory intention
         try:
             raw = path.read_text(encoding="utf-8")
             meta = _parse_frontmatter(raw)
+            stale_flag = (
+                " [STALE]"
+                if _is_stale(meta, settings.web_knowledge_cache_ttl_hours)
+                else ""
+            )
             lines = [
                 f"last_updated: {meta.last_updated.isoformat() if meta.last_updated else '(no timestamp)'}",
             ]
@@ -386,10 +453,22 @@ def _make_tools(settings: Settings) -> list:  # noqa: C901 — factory intention
                 lines.append(
                     "verified_at: (never verified)  ⚠️  treat claims with suspicion"
                 )
+            if meta.last_verified is not None:
+                lines.append(
+                    f"last_verified: {meta.last_verified.isoformat()}{stale_flag}"
+                )
+            else:
+                lines.append("last_verified: (never touched)")
             if meta.source_url:
                 lines.append(f"source_url: {meta.source_url}")
             else:
                 lines.append("source_url: (none)")
+            if stale_flag:
+                lines.append(
+                    f"⚠️  This entry is stale — last_verified is older than "
+                    f"the {settings.web_knowledge_cache_ttl_hours}h cache TTL. "
+                    "Cross-check key claims with web_search."
+                )
             lines.append("")
             lines.append(meta.body)
             return "\n".join(lines)
@@ -517,7 +596,9 @@ async def run_web_knowledge(
     agent = Agent(
         model=model,
         system_prompt=_SYSTEM_PROMPT_TEMPLATE.format(
-            index=index, stale_days=settings.web_knowledge_stale_days
+            index=index,
+            stale_days=settings.web_knowledge_stale_days,
+            cache_ttl_hours=settings.web_knowledge_cache_ttl_hours,
         ),
         output_type=str,
         tools=_make_tools(settings),
