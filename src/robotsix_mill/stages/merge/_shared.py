@@ -21,14 +21,15 @@ from pathlib import Path
 from typing import Any
 
 from ...config import ConfigError, RepoConfig, get_repo_config
-from ...core.workspace import read_counter, write_counter
+from ...core.workspace import (
+    read_counter as _read_counter,
+    write_counter as _write_counter,
+)
 from ...vcs import git_ops
 
-log = logging.getLogger("robotsix_mill.stages.merge")
+__all__ = ["_read_counter", "_write_counter"]
 
-# Backward-compat aliases for existing callers.
-_read_counter = read_counter
-_write_counter = write_counter
+log = logging.getLogger("robotsix_mill.stages.merge")
 
 _REBASE_COUNTER = "rebase_attempts.txt"
 _MERGE_REASON = "merge_reason.txt"
