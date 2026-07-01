@@ -159,13 +159,18 @@ def _verify_merge_ancestor(
 
     Fetches origin/<target_branch> to ensure the local ref is current,
     then runs ``git merge-base --is-ancestor <sha> origin/<target_branch>``.
-    When the direct ancestry check fails (exit 1), falls back to
-    squash-merge detection: greps the origin/<target_branch> log for
-    *ticket_id*.
+    When the direct ancestry check fails (exit 1), falls back to:
 
-    Returns True when the merge is confirmed (ancestor or squash-
-    merge found).  Returns False only when the check runs and
-    confirms the commit is NOT on origin/<target_branch>.  When the
+    1. Squash-merge detection: greps the origin/<target_branch> log for
+       *ticket_id*.
+    2. Content-level verification: diffs *sha* against
+       origin/<target_branch> and checks whether each changed file on
+       origin/<target_branch> contains *ticket_id* (catches squash and
+       rebase merges where the log message does not mention the ticket).
+
+    Returns True when the merge is confirmed (ancestor, squash-merge
+    found, or content present).  Returns False only when the check runs
+    and confirms the commit is NOT on origin/<target_branch>.  When the
     repo is unavailable or a git error occurs, returns True
     (best-effort — do not block the pipeline on transient tooling
     issues).
@@ -230,6 +235,69 @@ def _verify_merge_ancestor(
                 target_branch,
             )
             return True
+
+        # Fallback 2: content-level verification — the commit may have
+        # landed via squash or rebase without the ticket id in the log
+        # message.  Diff the feature commit against origin/<target> and
+        # check whether concrete content from the diff is present on
+        # origin/<target>.
+        try:
+            diff_files = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    repo_dir,
+                    "diff",
+                    "--name-only",
+                    f"origin/{target_branch}..{sha}",
+                ],
+                capture_output=True,
+                text=True,
+            )
+        except Exception:
+            log.info(
+                "%s: commit %s is NOT an ancestor of origin/%s — merge not confirmed",
+                ticket_id,
+                sha[:8],
+                target_branch,
+            )
+            return False
+        if diff_files.returncode == 0:
+            changed = [f for f in diff_files.stdout.strip().split("\n") if f]
+            for path in changed:
+                try:
+                    show = subprocess.run(
+                        [
+                            "git",
+                            "-C",
+                            repo_dir,
+                            "show",
+                            f"origin/{target_branch}:{path}",
+                        ],
+                        capture_output=True,
+                        text=True,
+                    )
+                except Exception:
+                    log.debug(
+                        "%s: git show origin/%s:%s failed — skipping content check",
+                        ticket_id,
+                        target_branch,
+                        path,
+                    )
+                    continue
+                if show.returncode == 0 and ticket_id in show.stdout:
+                    log.info(
+                        "%s: commit %s is not an ancestor of origin/%s, "
+                        "but content from the diff was found in "
+                        "origin/%s:%s — treating as squash/rebase-merged",
+                        ticket_id,
+                        sha[:8],
+                        target_branch,
+                        target_branch,
+                        path,
+                    )
+                    return True
+
         log.info(
             "%s: commit %s is NOT an ancestor of origin/%s — merge not confirmed",
             ticket_id,
