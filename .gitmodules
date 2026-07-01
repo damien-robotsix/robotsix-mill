@@ -1,3 +1,0 @@
-[submodule ".robotsix-board-agent-src"]
-	path = .robotsix-board-agent-src
-	url = https://github.com/damien-robotsix/robotsix-board-agent.git
