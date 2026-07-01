@@ -256,21 +256,17 @@ class TestReadFile:
         assert isinstance(result, str)
         assert "error" in result.lower()
 
-    def test_read_absolute_path_fallback(self, tmp_path, settings):
-        """An absolute path that escapes root but whose tail lands inside
-        root is resolved via fallback in the read_file tool (not in
-        _safe)."""
+    def test_read_absolute_path_inside_root(self, tmp_path, settings):
+        """An absolute path that is within root on the same filesystem
+        resolves directly via _safe — no fallback needed."""
         root = tmp_path / "repo"
         root.mkdir()
         _make_file(root, "tests/test_x.py", "pass\n")
         tools = _build(root, settings)
-        # /tmp/... is outside root, but the tail "tmp/.../repo/tests/test_x.py"
-        # would be inside root.  Use a simpler absolute path whose tail
-        # (stripped of one /) names a real file.
+        # This absolute path is inside root (same filesystem), so
+        # _safe resolves it directly without triggering the fallback.
         abs_path = str(root / "tests" / "test_x.py")
         result = tools["read_file"](path=abs_path)
-        # The absolute path is already within root (same filesystem),
-        # so the fallback is not needed — it resolves directly.
         assert "pass\n" in result
 
     def test_read_absolute_container_path_fallback(self, tmp_path, settings):

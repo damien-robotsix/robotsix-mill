@@ -859,6 +859,7 @@ def build_fs_tools(
 
     def list_dir(path: str = ".") -> str:
         """List entries of a directory in the repository (dirs end '/')."""
+        resolved_note = ""
         try:
             with trace_stage("list_dir"):
                 try:
@@ -877,6 +878,10 @@ def build_fs_tools(
                             d = _safe(root, rel_tail, extra_roots=extra_roots)
                             if not d.exists():
                                 raise
+                            resolved_note = (
+                                f"(resolved absolute {path!r} → relative {rel_tail!r}; "
+                                f"use repo-relative paths)\n"
+                            )
                         else:
                             raise
                     else:
@@ -917,7 +922,7 @@ def build_fs_tools(
                         f"error: '{path}' is a file, not a directory"
                         " — use read_file to read its content"
                     )
-                return "\n".join(
+                return resolved_note + "\n".join(
                     sorted(f"{e.name}/" if e.is_dir() else e.name for e in d.iterdir())
                 )
         except (ValueError, OSError) as e:
