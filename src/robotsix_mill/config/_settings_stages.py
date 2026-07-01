@@ -267,6 +267,16 @@ class _StagesSettings(BaseModel):
     # 10 is generous enough for 3 review rounds with ~3 fix iterations each.
     # Set to 0 to disable.
     max_implement_review_cycles: int = Field(default=10, ge=0)
+    # Maximum number of times the implement stage may be entered (spawned)
+    # for a single ticket — counted across all review rounds and resumptions.
+    # Unlike ``max_implement_review_cycles`` (which only counts successful
+    # passes that reach CODE_REVIEW), this gate counts EVERY invocation
+    # including BLOCKED→READY resumptions and no-change passes.  Catching
+    # the redundant $0.00 + extra paid attempt pattern where a ticket
+    # loops through implement 3+ times with empty results.  Default 3 is
+    # tight enough to prevent the observed pattern while leaving room for
+    # one successful run.  Set to 0 to disable.
+    implement_max_spawns_per_ticket: int = Field(default=3, ge=0)
     # How many model requests the review agent may make in one run
     # (counts each tool call + each reasoning step + the final verdict).
     # 20 (original) then 40 each routinely BLOCKED medium PRs with

@@ -140,6 +140,62 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         if hook_error is not None:
             return Outcome(State.BLOCKED, hook_error)
 
+        # --- spec emptiness gate: refuse to invoke the implement agent
+        # when the spec is empty or trivially insufficient.  An empty
+        # spec means refine failed to produce a description; the agent
+        # would read nothing and return immediately — a $0.00 trace
+        # that wastes a spawn slot and complicates cost analysis.
+        # Meta-board tickets have their own spec routing through
+        # ``build_triaged_meta_workspace`` which handles empty specs
+        # separately; skip the gate for those.  Tickets with a parent
+        # epic inherit their spec from the epic context — only block
+        # when BOTH the direct spec and the epic context are empty.
+        spec_text = ws.read_description()
+        if ticket.board_id != "meta":
+            if not spec_text or not spec_text.strip():
+                epic_ctx = ctx.service.get_epic_context(ticket)
+                if not epic_ctx or not epic_ctx.strip():
+                    return Outcome(
+                        State.BLOCKED,
+                        "spec is empty — refine stage may have failed to "
+                        "produce a ticket description.  Re-run refine or "
+                        "add a description manually before re-attempting "
+                        "implement.",
+                    )
+
+        # --- implement spawn counter: cap the total number of
+        # implement-stage invocations per ticket so that a ticket stuck
+        # in a BLOCKED→READY→BLOCKED loop (manual unblock / edit-claim
+        # contradiction / empty-diff cycles) cannot burn unbounded LLM
+        # quota across re-spawns.
+        spawn_limit = s.implement_max_spawns_per_ticket
+        if spawn_limit > 0:
+            counter_path = ws.artifacts_dir / "implement_spawn_count"
+            spawn_count = 0
+            if counter_path.exists():
+                try:
+                    spawn_count = int(counter_path.read_text(encoding="utf-8").strip())
+                except (ValueError, OSError):  # fmt: skip
+                    spawn_count = 0
+            if spawn_count >= spawn_limit:
+                return Outcome(
+                    State.BLOCKED,
+                    f"implement spawn limit reached "
+                    f"({spawn_count}/{spawn_limit}) — "
+                    "escalating to BLOCKED for human inspection.  "
+                    "Delete artifacts/implement_spawn_count in the "
+                    "workspace to reset.",
+                )
+            spawn_count += 1
+            try:
+                counter_path.write_text(str(spawn_count), encoding="utf-8")
+            except OSError:
+                log.warning(
+                    "%s: failed to write implement_spawn_count",
+                    ticket.id,
+                    exc_info=True,
+                )
+
         # --- prerequisite gate: cheapest pre-agent check, so it runs
         # first. Verify that external symbol/import prerequisites the
         # spec declares are satisfiable in the cloned repo's environment
@@ -147,7 +203,7 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         prereq_outcome = self._run_prerequisite_gate(
             ctx,
             ticket,
-            ctx.service.workspace(ticket).read_description(),
+            spec_text,
             repo_dir,
             s,
         )

@@ -367,6 +367,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "gates.review_enabled": "review_enabled",
     "gates.review_max_rounds": "review_max_rounds",
     "gates.max_implement_review_cycles": "max_implement_review_cycles",
+    "gates.implement_max_spawns_per_ticket": "implement_max_spawns_per_ticket",
     "gates.review_feedback_enabled": "review_feedback_enabled",
     "gates.auto_merge_enabled": "auto_merge_enabled",
     "gates.comments_after_body": "comments_after_body",
