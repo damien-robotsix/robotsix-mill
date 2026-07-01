@@ -77,7 +77,7 @@ class AgentDefinition(BaseModel):
     max_tokens: int | None = None
     # Periodic-only scheduling fields. None means "fall back to the
     # corresponding Settings field" — keeps existing YAMLs and the
-    # global config.example.yaml schedule section working unchanged.
+    # global config.yaml schedule section working unchanged.
     #
     # ``interval`` is the preferred human-readable form (``1w2d3h40m10s``);
     # ``interval_seconds`` is the legacy integer-seconds form. They are

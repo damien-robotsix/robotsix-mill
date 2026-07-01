@@ -1,7 +1,7 @@
 """The config-sync agent: config-drift detection across the YAML layers.
 
 The authoritative config source is the single committed template
-``config/config.example.yaml`` (every non-secret knob with its default,
+``config/config.yaml`` (every non-secret knob with its default,
 plus a ``secrets:`` block of ``SECRET`` sentinels).  The live file
 ``config/config.yaml`` (gitignored) is its real-valued counterpart.
 This agent cross-references the template against
@@ -34,7 +34,7 @@ AUTHORITATIVE FILES (read these, in order):
   ``Secrets`` classes are the source of truth for what knobs exist.
   Extract every field: name, type, default, and YAML key path (the
   YAML→env mapping is in ``src/robotsix_mill/config/loader.py``).
-- ``config/config.example.yaml`` — the committed single-file config
+- ``config/config.yaml`` — the committed single-file config
   template. Its non-secret leaves are the canonical defaults (every
   model field with a YAML mapping should appear here with a matching
   default); its ``secrets:`` block is the schema template for the
@@ -58,7 +58,7 @@ NOT AUTHORITATIVE (do NOT flag these as drift sources):
 CLASSIFY FINDINGS:
 
 - **missing-from-yaml**: a field exists in ``config.py`` with a
-  YAML mapping but no corresponding key in ``config.example.yaml``
+  YAML mapping but no corresponding key in ``config.yaml``
   (its non-secret section or its ``secrets:`` block) /
   ``repos.example.yaml`` (as appropriate for which class it lives on).
 - **stale-yaml-key**: a YAML key exists in one of the example /
@@ -74,8 +74,8 @@ CLASSIFY FINDINGS:
 DRAFT FORMAT:
 
 - **Title**: ``config drift: <field> missing from
-  config.example.yaml``, ``config drift: stale key
-  ``<key>`` in config.example.yaml``, ``config drift: <field> default
+  config.yaml``, ``config drift: stale key
+  ``<key>`` in config.yaml``, ``config drift: <field> default
   mismatch (model=X, yaml=Y)``, or ``config drift: docs default
   mismatch for <field>``.
 - **Body**: field name + YAML key path + model default + observed

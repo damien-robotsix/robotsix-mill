@@ -12,20 +12,20 @@ agent would otherwise only notice on its next daily pass:
       hand-maintained dotted-YAML-path → Settings field/alias map.
     * ``robotsix_mill.config.Settings`` / ``Secrets`` — the Pydantic-v2
       models (introspected via ``model_fields``).
-    * ``config/config.example.yaml`` — the committed single-file config
+    * ``config/config.yaml`` — the committed single-file config
       template.  Its non-secret leaves are the canonical defaults
       surface; its ``secrets:`` block is the secrets template.
 
 Invariants (each contributes drift lines; the run fails if any fire):
 
     1. Every key of ``_YAML_PATH_TO_ALIAS`` resolves to a non-secret
-       leaf path in ``config/config.example.yaml``.
-    2. Every non-secret leaf path in ``config/config.example.yaml`` is a
+       leaf path in ``config/config.yaml``.
+    2. Every non-secret leaf path in ``config/config.yaml`` is a
        key of ``_YAML_PATH_TO_ALIAS``, except those listed in
        ``_DEFAULTS_KEYS_NOT_IN_ALIAS``.
     3. Every value of ``_YAML_PATH_TO_ALIAS`` is a real ``Settings``
        field name or field alias.
-    4. The keys of the ``secrets:`` block in ``config/config.example.yaml``
+    4. The keys of the ``secrets:`` block in ``config/config.yaml``
        equal the user-configurable ``Secrets`` fields, modulo
        ``_SECRETS_NOT_IN_EXAMPLE``.
     5. Every ``Settings`` model field name or alias must appear as a
@@ -57,7 +57,7 @@ _SRC = _REPO_ROOT / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-_CONFIG_EXAMPLE_YAML = _REPO_ROOT / "config" / "config.example.yaml"
+_CONFIG_EXAMPLE_YAML = _REPO_ROOT / "config" / "config.yaml"
 
 
 # ---------------------------------------------------------------------------
@@ -172,7 +172,7 @@ _MODEL_FIELDS_NOT_IN_ALIAS: frozenset[str] = frozenset(
 
 # ``Secrets`` fields that are intentionally NOT user-configurable via
 # the config file (invariant 4), so they never appear in the
-# ``secrets:`` block of ``config/config.example.yaml``.
+# ``secrets:`` block of ``config/config.yaml``.
 _SECRETS_NOT_IN_EXAMPLE: frozenset[str] = frozenset()
 
 
@@ -230,7 +230,7 @@ def check_map_keys_in_defaults(
         # is a non-scalar dict node in the YAML tree).
         if any(leaf.startswith(key + ".") for leaf in leaf_set):
             continue
-        drift.append(f"map key not found as a leaf in config.example.yaml: {key}")
+        drift.append(f"map key not found as a leaf in config.yaml: {key}")
     return drift
 
 
@@ -296,13 +296,10 @@ def check_secrets_example(
     drift: list[str] = []
     for key in sorted(example_keys - expected):
         drift.append(
-            "config.example.yaml secrets key is not a user-configurable "
-            f"Secrets field: {key}"
+            f"config.yaml secrets key is not a user-configurable Secrets field: {key}"
         )
     for field in sorted(expected - example_keys):
-        drift.append(
-            f"Secrets field missing from config.example.yaml secrets block: {field}"
-        )
+        drift.append(f"Secrets field missing from config.yaml secrets block: {field}")
     return drift
 
 
@@ -315,9 +312,12 @@ def collect_drift() -> list[str]:
     with open(_CONFIG_EXAMPLE_YAML, "r", encoding="utf-8") as fh:
         config_example = yaml.safe_load(fh) or {}
     # The single file holds non-secret knobs PLUS a top-level ``secrets:``
-    # block. Split them: the non-secret part feeds invariants 1-3/5, the
-    # secrets block feeds invariant 4.
+    # block AND a top-level ``repos:`` block. Split them: the non-secret part
+    # feeds invariants 1-3/5, the secrets block feeds invariant 4, and the
+    # ``repos:`` block is consumed by the ReposRegistry (not Settings), so it
+    # is excluded from the Settings-leaf checks entirely.
     secrets_example = config_example.pop("secrets", {}) or {}
+    config_example.pop("repos", None)
 
     defaults_leaves = flatten_yaml_leaves(config_example)
     valid_names = build_valid_settings_names(Settings)

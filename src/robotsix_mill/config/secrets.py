@@ -19,12 +19,12 @@ logger = logging.getLogger(__name__)
 
 class Secrets(BaseModel):
     """Secrets loaded from the ``secrets:`` block of the single mill
-    config file (``config/config.yaml``, else ``config/config.example.yaml``).
+    config file (``config/config.yaml``, else ``config/config.yaml``).
 
     Never merged into ``Settings`` — secrets are kept in a separate
     model with redacted ``repr`` / ``model_dump`` and debug-logged
     attribute access.  A value equal to the literal ``SECRET`` sentinel
-    (used throughout ``config.example.yaml``) is treated as unset, so the
+    (used throughout ``config.yaml``) is treated as unset, so the
     field falls back to its ``None`` default.
     """
 
@@ -55,7 +55,7 @@ class Secrets(BaseModel):
         If ``_secrets_file`` is provided it is used as the YAML source;
         otherwise ``MILL_SECRETS_FILE`` is consulted, falling back to the
         single mill config file (``config/config.yaml``, else
-        ``config/config.example.yaml``).  Its ``secrets:`` block is passed
+        ``config/config.yaml``).  Its ``secrets:`` block is passed
         as field defaults, which explicit ``**data`` kwargs can override.
         """
         from .loader import load_secrets_yaml
@@ -122,7 +122,7 @@ def load_secrets(secrets_file: str | None = None) -> Secrets:
     If *secrets_file* is provided it is used as the YAML source;
     otherwise ``MILL_SECRETS_FILE`` is consulted, falling back to the
     single mill config file (``config/config.yaml``, else
-    ``config/config.example.yaml``).
+    ``config/config.yaml``).
     """
     return Secrets(_secrets_file=secrets_file)
 

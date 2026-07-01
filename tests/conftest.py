@@ -77,7 +77,7 @@ def _no_dotenv(monkeypatch):
     every ticket. The suite must be identical green on a clean machine
     and inside the container.
 
-    Pins the config loader to the committed ``config/config.example.yaml``
+    Pins the config loader to the committed ``config/config.yaml``
     template (never the gitignored, host-specific ``config/config.yaml``)
     by setting ``MILL_CONFIG_FILE`` and ``MILL_SECRETS_FILE`` to empty —
     the loader treats ``""`` as "use the committed example", whose
@@ -87,7 +87,7 @@ def _no_dotenv(monkeypatch):
     monkeypatch.setenv("MILL_REPOS_FILE", "")
     # Disable the board-poll list cache by default in tests so GET /tickets
     # is always immediately consistent (create-then-list). The committed
-    # config.example.yaml enables it (3.0s) in real deployments; env beats
+    # config.yaml enables it (3.0s) in real deployments; env beats
     # YAML, so this override is inert in production. Tests that exercise the
     # cache opt in explicitly via Settings(board_list_cache_ttl_seconds=…)
     # (a kwarg, which beats env). Also clear the module-global cache so no

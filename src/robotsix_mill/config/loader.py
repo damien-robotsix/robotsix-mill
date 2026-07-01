@@ -1,12 +1,16 @@
 """YAML configuration loader for robotsix-mill.
 
-The mill reads a SINGLE config file: ``config/config.yaml`` (gitignored)
-when present, else the committed ``config/config.example.yaml`` template
-(so CI / tests without a ``config.yaml`` still get the committed
-defaults).  The file holds every non-secret knob plus a top-level
-``secrets:`` block; :func:`load_yaml_config` returns the non-secret part
-(for the ``Settings`` model) and :func:`load_secrets_yaml` returns the
-``secrets:`` sub-map (for the ``Secrets`` model).
+The mill reads a SINGLE config file: ``config/config.yaml``.  It is
+committed as a clean template (secrets = the ``SECRET`` sentinel, empty
+``repos:``); a real deployment fills it on the deploy volume, and a dev
+host fills it locally (kept out of git via ``skip-worktree``).  A clean
+checkout / CI run therefore reads the committed all-``SECRET`` template
+and gets hermetic defaults.  The file holds every non-secret knob plus a
+top-level ``secrets:`` block and a ``repos:`` block; :func:`load_yaml_config`
+returns the non-secret part (for the ``Settings`` model),
+:func:`load_secrets_yaml` returns the ``secrets:`` sub-map (for the
+``Secrets`` model), and :func:`load_repos_yaml` returns the ``repos:``
+registry.
 """
 
 from __future__ import annotations
@@ -41,12 +45,11 @@ class ConfigError(YamlConfigError):
 
 _YAML_DIR = Path("config")
 _CONFIG_FILE = _YAML_DIR / "config.yaml"
-_EXAMPLE_FILE = _YAML_DIR / "config.example.yaml"
 
-# Literal placeholder used for every secret in ``config.example.yaml``.
-# A secret leaf equal to this is treated as UNSET (the field falls back
-# to its ``None`` default), so example / CI runs behave like "no secret
-# configured".
+# Literal placeholder used for every secret in the committed
+# ``config/config.yaml``. A secret leaf equal to this is treated as UNSET
+# (the field falls back to its ``None`` default), so a clean checkout / CI
+# run behaves like "no secret configured".
 _SECRET_SENTINEL = "SECRET"  # noqa: S105 — sentinel, not a real credential
 
 
@@ -54,10 +57,13 @@ def _resolve_config_path(config_file: str | None) -> Path:
     """Resolve the single config file to read.
 
     Precedence: explicit *config_file* arg > ``MILL_CONFIG_FILE`` env >
-    default resolution (``config/config.yaml`` if it exists, else the
-    committed ``config/config.example.yaml`` template).  An explicit
-    empty string ``""`` means "use the committed example" — the hermetic
-    choice used by the test suite (its secrets are all-``SECRET`` → unset).
+    ``config/config.yaml``.  ``config/config.yaml`` is committed as a clean
+    template (secrets = the ``SECRET`` sentinel, empty ``repos:``); a real
+    deployment fills it on the deploy volume, and a dev host fills it locally
+    (kept out of git via ``git update-index --skip-worktree``).  An explicit
+    empty string ``""`` also resolves to ``config/config.yaml`` — on a clean
+    checkout that is the committed all-``SECRET`` template, giving the test
+    suite hermetic defaults.
     """
     if config_file is not None:
         explicit: str | None = config_file
@@ -66,19 +72,16 @@ def _resolve_config_path(config_file: str | None) -> Path:
 
     if explicit:  # non-empty explicit path
         return Path(explicit)
-    if explicit == "":  # explicit empty → committed example (hermetic)
-        return _EXAMPLE_FILE
-    # explicit is None → default resolution.
-    return _CONFIG_FILE if _CONFIG_FILE.exists() else _EXAMPLE_FILE
+    # explicit is "" (hermetic) or None (default) → the single config file.
+    return _CONFIG_FILE
 
 
 def load_yaml_config(config_file: str | None = None, skip_local: bool = False) -> dict:
     """Load the single mill config file and return its non-secret part.
 
-    Reads ``config/config.yaml`` when present, else the committed
-    ``config/config.example.yaml`` (overridable via the *config_file* arg
-    or the ``MILL_CONFIG_FILE`` env var; ``""`` forces the committed
-    example).  The top-level ``secrets:`` block is stripped — it is
+    Reads ``config/config.yaml`` (overridable via the *config_file* arg
+    or the ``MILL_CONFIG_FILE`` env var).  The top-level ``secrets:`` and
+    ``repos:`` blocks are stripped — it is
     consumed separately by :func:`load_secrets_yaml` / the ``Secrets``
     model, never merged into ``Settings``.
 
@@ -95,8 +98,8 @@ def load_yaml_config(config_file: str | None = None, skip_local: bool = False) -
     path = _resolve_config_path(config_file)
     if not path.exists():
         raise ConfigError(
-            f"Required config file not found: {path}. Copy "
-            "config/config.example.yaml to config/config.yaml, or point "
+            f"Required config file not found: {path}. The committed "
+            "config/config.yaml must always be present, or point "
             "MILL_CONFIG_FILE at a config file."
         )
     try:
@@ -104,7 +107,10 @@ def load_yaml_config(config_file: str | None = None, skip_local: bool = False) -
     except YamlConfigError as exc:
         raise ConfigError(str(exc)) from exc
     result = dict(data) if isinstance(data, dict) else {}
+    # ``secrets:`` feeds the Secrets model; ``repos:`` feeds the ReposRegistry.
+    # Both are consumed separately — never merged into ``Settings``.
     result.pop("secrets", None)
+    result.pop("repos", None)
     return result
 
 
@@ -112,10 +118,10 @@ def load_secrets_yaml(secrets_file: str | None = None) -> dict:
     """Return the ``secrets:`` sub-map of the single mill config file.
 
     Path resolution mirrors :func:`load_yaml_config`: explicit
-    *secrets_file* arg > ``MILL_SECRETS_FILE`` env > default
-    (``config/config.yaml`` if present, else ``config/config.example.yaml``).
-    An explicit empty string ``""`` forces the committed example (used by
-    the test suite).
+    *secrets_file* arg > ``MILL_SECRETS_FILE`` env > ``config/config.yaml``.
+    An explicit empty string ``""`` also resolves to the committed
+    ``config/config.yaml`` (all-``SECRET`` on a clean checkout → unset),
+    used by the test suite.
 
     Returns a flat dict keyed by the secret field names
     (e.g. ``{"openrouter_api_key": "sk-...", ...}``).  Blank values and
@@ -132,10 +138,8 @@ def load_secrets_yaml(secrets_file: str | None = None) -> dict:
 
     if explicit:
         path = Path(explicit)
-    elif explicit == "":
-        path = _EXAMPLE_FILE
-    else:  # None → default resolution
-        path = _CONFIG_FILE if _CONFIG_FILE.exists() else _EXAMPLE_FILE
+    else:  # "" (hermetic) or None (default) → the single config file
+        path = _CONFIG_FILE
 
     if not path.exists():
         return {}
@@ -158,34 +162,49 @@ def load_secrets_yaml(secrets_file: str | None = None) -> dict:
     }
 
 
-def _load_repos_document(file_path: str | None = None) -> dict:
-    """Read and parse the full ``config/repos.yaml`` document.
-
-    Shared by :func:`load_repos_yaml` (which extracts the ``repos``
-    mapping). Returns the raw top-level mapping, or
-    ``{}`` for a missing file / explicit ``""`` (no-file) path.
-    """
-    # Determine the path: explicit arg > env var > default.
-    # An explicit empty string means "no file" (used by the test suite).
-    if file_path is not None:
-        path_str = file_path
-    else:
-        path_str = os.environ.get("MILL_REPOS_FILE")
-
-    if path_str is None:
-        path_str = str(_YAML_DIR / "repos.yaml")
-    elif path_str == "":
-        return {}
-    path = Path(path_str)
-
+def _read_yaml_doc(path: Path) -> dict[str, object]:
+    """Read a YAML file into a dict; ``{}`` if missing / non-mapping;
+    ``ConfigError`` on a parse error."""
     if not path.exists():
         return {}
-
     try:
         data = read_yaml_file(path)
     except YamlConfigError as exc:
         raise ConfigError(str(exc)) from exc
     return data if isinstance(data, dict) else {}
+
+
+def _load_repos_document(file_path: str | None = None) -> dict[str, object]:
+    """Read and parse the repos document.
+
+    By default the managed-repo registry lives in the ``repos:`` section of
+    the single config file (``config/config.yaml``).  A legacy
+    ``config/repos.yaml`` is used as a fallback when the config file has no
+    (non-empty) ``repos:`` section, so an in-flight deployment that still
+    keeps a separate repos.yaml keeps working.
+
+    ``MILL_REPOS_FILE`` (or *file_path*) overrides with an explicit file;
+    an explicit empty string ``""`` means "no file" (used by the test suite).
+
+    Returns the raw top-level mapping (``{"repos": {...}}`` or a legacy flat
+    mapping), or ``{}`` when nothing is configured.
+    """
+    if file_path is not None:
+        path_str: str | None = file_path
+    else:
+        path_str = os.environ.get("MILL_REPOS_FILE")
+
+    if path_str == "":
+        return {}  # explicit no-file (hermetic tests)
+    if path_str:  # explicit file path
+        return _read_yaml_doc(Path(path_str))
+
+    # Default: the ``repos:`` section of the single config file, falling back
+    # to the legacy separate config/repos.yaml.
+    cfg = _read_yaml_doc(_CONFIG_FILE)
+    if cfg.get("repos"):
+        return {"repos": cfg["repos"]}
+    return _read_yaml_doc(_YAML_DIR / "repos.yaml")
 
 
 def load_repos_yaml(file_path: str | None = None) -> dict:
@@ -225,7 +244,7 @@ def load_repos_yaml(file_path: str | None = None) -> dict:
 # Maps ``"group.subgroup.field"`` YAML paths to the env-var alias
 # (the ``Field(alias=...)`` value) on the ``Settings`` model.  Built
 # from the RFC §4.2 mapping table and kept in sync with
-# ``config/config.example.yaml``.
+# ``config/config.yaml``.
 #
 # We use env-var aliases (not Python field names) because
 # ``Settings(extra="ignore")`` silently drops kwargs keyed by the

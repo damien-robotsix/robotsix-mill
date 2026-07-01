@@ -1,22 +1,26 @@
 # =============================================================================
-#  robotsix-mill — committed config TEMPLATE (config.example.yaml).
+#  robotsix-mill — the single config file (config/config.yaml).
 #
-#  The mill now reads ONE config file: config/config.yaml (gitignored).  It
-#  holds every non-secret knob PLUS a top-level `secrets:` block with the
-#  real credential values.  This file — config.example.yaml — is the
-#  committed template documenting that single-file structure: every
-#  non-secret field carries its safe default, and every secret is the
-#  literal sentinel `SECRET` (treated as "unset" by the loader).
+#  The mill reads ONE config file: this one.  It holds every non-secret knob
+#  PLUS a top-level `secrets:` block AND a top-level `repos:` registry.
 #
-#  To deploy:
-#    cp config/config.example.yaml config/config.yaml
-#    # edit config/config.yaml — set the secrets and any host overrides
-#    chmod 600 config/config.yaml          # it now holds real credentials
+#  This file is COMMITTED as a CLEAN TEMPLATE: every non-secret field carries
+#  its safe default, every secret is the literal sentinel `SECRET` (treated
+#  as "unset" by the loader, and rendered as a masked input by central-deploy),
+#  and `repos:` is empty.  central-deploy fetches this committed file to build
+#  the configuration form.
 #
-#  The loader reads config/config.yaml when present, else falls back to
-#  this committed config.example.yaml (so CI / tests with no config.yaml
-#  still get the committed defaults; the all-`SECRET` secrets resolve to
-#  None).  The managed fleet (config/repos.yaml) stays a separate file.
+#  Real values are NEVER committed:
+#    * Deploy: central-deploy writes the filled config into the mill-config
+#      volume (overriding this committed template).
+#    * Dev host: fill this file locally and keep the changes out of git with
+#      `git update-index --skip-worktree config/config.yaml`.
+#      `chmod 600 config/config.yaml` — it then holds real credentials.
+#
+#  A clean checkout / CI run reads this committed template directly: the
+#  all-`SECRET` secrets resolve to None, `repos:` is empty → hermetic
+#  defaults.  (A legacy config/repos.yaml is still honoured as a fallback
+#  when `repos:` here is empty.)
 #
 #  This is the SINGLE SOURCE OF TRUTH for "what is configurable" and what
 #  the safe default value is.
@@ -568,3 +572,19 @@ secrets:
   langfuse_project_name: SECRET  # pragma: allowlist secret   # observability project name (optional)
   ntfy_url: SECRET  # pragma: allowlist secret   # ntfy.sh notification URL (optional)
   ntfy_token: SECRET  # pragma: allowlist secret   # ntfy.sh bearer token (optional)
+
+# ---------------------------------------------------------------------------
+#  repos — managed-repo registry (merged in from the former config/repos.yaml)
+#
+#  The mill drives one board per registered repo.  Empty by default — the
+#  committed template registers nothing.  Add one entry per repo in your
+#  real (gitignored / deploy-volume) config.yaml, e.g.:
+#
+#    repos:
+#      my-repo:
+#        board_id: my-repo
+#        forge_remote_url: https://github.com/org/my-repo
+#        max_concurrency: 2
+# ---------------------------------------------------------------------------
+
+repos: {}

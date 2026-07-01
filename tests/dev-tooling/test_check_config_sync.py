@@ -2,7 +2,7 @@
 
 Covers:
     * Happy path against the real on-disk surfaces — zero drift across
-      ``_YAML_PATH_TO_ALIAS`` / ``config/config.example.yaml`` (its
+      ``_YAML_PATH_TO_ALIAS`` / ``config/config.yaml`` (its
       non-secret leaves + ``secrets:`` block) / the ``Settings`` &
       ``Secrets`` models.
     * Each deterministic invariant detects a synthetic violation when

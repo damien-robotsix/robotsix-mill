@@ -124,7 +124,7 @@ class _CoreSettings(BaseModel):
     # sources, and name the failing test; 16 was observed to run out
     # before producing a usable diagnosis on multi-test failures.
     # Cost-bounded by the ticket-level cap. Aligned with
-    # config/config.example.yaml's core.limits.test_requests (30). The
+    # config/config.yaml's core.limits.test_requests (30). The
     # yaml value wins at runtime via _YAML_PATH_TO_ALIAS; this just stops
     # the dry-Settings() default from contradicting it on machines without
     # a yaml override.
@@ -176,7 +176,7 @@ class _CoreSettings(BaseModel):
     # snapshot (≤ this many seconds stale). 0.0 disables the cache.
     # Field default is 0.0 (disabled) so unit tests that construct Settings()
     # directly see immediate list consistency (create-then-list); the live
-    # mill enables it via config/config.example.yaml (3.0s).
+    # mill enables it via config/config.yaml (3.0s).
     board_list_cache_ttl_seconds: float = Field(default=0.0, ge=0.0)
 
     transient_retries: int = Field(default=4, ge=0)

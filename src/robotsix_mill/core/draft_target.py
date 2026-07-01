@@ -81,9 +81,8 @@ MILL_SIGNAL_TERMS: frozenset[str] = frozenset(
         "TicketService",
         "RepoConfig",
         "TicketEvent",
-        "config/config.example.yaml",
         "config/config.yaml",
-        "config.example.yaml",
+        "config.yaml",
     }
 )
 
@@ -113,7 +112,7 @@ MILL_PATH_PREFIXES: frozenset[str] = frozenset(
         "src/robotsix_mill/",
         "agent_definitions/",
         "agent_definitions/language_instructions/",
-        "config/config.example.yaml",
+        "config/config.yaml",
         "config/config.",
     }
 )
