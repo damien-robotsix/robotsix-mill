@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add CLI subcommand `roadmap-sync` with `--json` and `--repo-id` flags, matching the existing POST route at `/roadmap-sync`.
 - Align `web_knowledge_request_limit` in `config/config.example.yaml` (was 8) with the model default of 12.
 - Add test coverage for refine stage submodules: `_reconcile.py`, `_result_paths.py`, and `_triage.py` (146 tests across three new test files)
 - Add unit test coverage for ``MultiRepoCiFixMixin`` (``tests/stages/merge/test_ci_fix_mixin.py``) covering all three private methods with 29 test cases.
