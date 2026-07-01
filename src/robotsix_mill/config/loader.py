@@ -261,6 +261,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.limits.refine_requests": "refine_request_limit",
     "core.limits.refine_requests_simple": "refine_request_limit_simple",
     "core.limits.coordinator_max_tool_calls": "coordinator_max_tool_calls",
+    "core.limits.coordinator_timeout_seconds": "coordinator_timeout_seconds",
     "core.limits.refine_max_tool_calls": "refine_max_tool_calls",
     "core.limits.refine_max_errors": "refine_max_errors",
     "core.limits.refine_dynamic_limit_multiplier": "refine_dynamic_limit_multiplier",

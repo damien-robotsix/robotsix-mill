@@ -109,6 +109,18 @@ class _CoreSettings(BaseModel):
     # 1000+-read runaway loops that produced incomplete_trace +
     # cost_outlier flags.
     coordinator_max_tool_calls: int = Field(default=300, ge=1)
+    # Wall-clock timeout (seconds) for a single implement agent pass.
+    # When the agent exceeds this duration the pass is terminated and
+    # the stage can retry (with a fresh budget) or escalate.  Default
+    # 600 s (10 min) is generous for a normal implement run but caps
+    # the worst-case stuck-loop burn.  Set via
+    # MILL_COORDINATOR_TIMEOUT_SECONDS env var or
+    # core.limits.coordinator_timeout_seconds in YAML config.
+    coordinator_timeout_seconds: int = Field(
+        default=600,
+        ge=60,
+        alias="MILL_COORDINATOR_TIMEOUT_SECONDS",
+    )
     # Per-subtask request budget when the coordinator delegates via
     # ``spawn_subtask``. The parent's ``coordinator_request_limit``
     # still bounds the outer loop; this cap bounds each individual
