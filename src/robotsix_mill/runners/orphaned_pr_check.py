@@ -209,6 +209,8 @@ class OrphanedPrCheckResult:
     filed: int = 0
     skipped: int = 0
     human_pr_skipped: int = 0  # PRs skipped because author is not the bot
+    foreign_filed: int = 0  # tracking tickets filed for non-board (foreign) PRs
+    foreign_skipped: int = 0  # foreign PRs skipped (dedup / dry-run / cap)
     dry_run: bool = True
     actions: list[str] = field(default_factory=list)
     classifications: list[ClassifiedOrphanPr] = field(default_factory=list)
@@ -334,6 +336,21 @@ def run_orphaned_pr_check_pass(
         result,
         open_orphan_titles,
     )
+
+    # --- foreign (non-board) PR tracking (opt-in) ---------------------
+    if settings.orphaned_pr_track_foreign_prs and open_prs:
+        foreign_prs = [
+            pr for pr in open_prs if not pr["branch"].startswith(settings.branch_prefix)
+        ]
+        _process_foreign_prs(
+            sorted(foreign_prs, key=lambda p: (str(p.get("number", "")), p["branch"])),
+            settings,
+            service,
+            forge,
+            repo_config,
+            result,
+            open_orphan_titles,
+        )
     return result
 
 
@@ -511,6 +528,113 @@ def _apply_classifications(
             result.filed += 1
             files_taken += 1
         total_taken += 1
+
+
+# ------------------------------------------------------------------ foreign
+
+
+def _process_foreign_prs(
+    foreign_prs: list[dict[str, Any]],
+    settings: Settings,
+    service: TicketService,
+    forge: Forge,
+    repo_config: RepoConfig,
+    result: OrphanedPrCheckResult,
+    open_orphan_titles: frozenset[str] = frozenset(),
+) -> None:
+    """File tracking tickets for FOREIGN (non-board) open PRs.
+
+    A foreign PR is one whose head branch does NOT start with
+    ``settings.branch_prefix`` (e.g. ``dependabot/*`` or human
+    ``feature/*`` branches).  Foreign PRs are NEVER closed — the mill
+    only files a deterministic tracking ticket so the board can review
+    and merge or close them.
+
+    File actions count against the same combined
+    (``orphaned_pr_max_actions_per_pass``) and per-type file
+    (``orphaned_pr_max_files_per_pass``) caps as the mill-PR phase, using
+    the counts already accumulated on *result*.
+    """
+    max_actions = settings.orphaned_pr_max_actions_per_pass
+    max_files = settings.orphaned_pr_max_files_per_pass
+
+    for idx, pr in enumerate(foreign_prs):
+        combined_taken = result.closed + result.filed + result.foreign_filed
+        files_taken = result.filed + result.foreign_filed
+        if combined_taken >= max_actions or files_taken >= max_files:
+            remaining = len(foreign_prs) - idx
+            cap_msg = (
+                f"orphaned-pr-check: foreign action cap reached "
+                f"(files={files_taken}/{max_files}, "
+                f"total={combined_taken}/{max_actions}) — "
+                f"{remaining} foreign PR(s) remain unprocessed"
+            )
+            log.info(cap_msg)
+            result.actions.append(cap_msg)
+            break
+
+        branch = pr["branch"]
+        title = _foreign_ticket_title(repo_config, pr)
+        is_dedup = title in open_orphan_titles
+        action = "DEDUP_SKIP" if is_dedup else "FILE_TICKET"
+        log_line = (
+            f"repo={repo_config.repo_id} branch={branch} "
+            f"ticket_state=NOT_FOUND action={action} "
+            f"classification=foreign_pr "
+            f"dry_run={settings.orphaned_pr_dry_run}"
+        )
+        log.info("orphaned-pr-check: %s", log_line)
+        result.actions.append(log_line)
+
+        if settings.orphaned_pr_dry_run or is_dedup:
+            result.foreign_skipped += 1
+            continue
+
+        _file_foreign_ticket(service, repo_config, pr, title)
+        result.foreign_filed += 1
+
+
+def _foreign_ticket_title(repo_config: RepoConfig, pr: dict[str, Any]) -> str:
+    """Return the deterministic tracking-ticket title for a foreign PR.
+
+    Prefers the stable PR number; falls back to the branch when the
+    forge dict lacks a number.
+    """
+    number = pr.get("number")
+    if number is not None:
+        return f"Track external PR: {repo_config.repo_id}#{number}"
+    return f"Track external PR: {repo_config.repo_id}/{pr['branch']}"
+
+
+def _file_foreign_ticket(
+    service: TicketService,
+    repo_config: RepoConfig,
+    pr: dict[str, Any],
+    title: str,
+) -> None:
+    """File a tracking ticket for a foreign (non-board) open PR.
+
+    Uses a deterministic title so the mill's BoardManager deduplicates
+    against existing open tickets with the same title.
+    """
+    number = pr.get("number")
+    pr_label = f"#{number}" if number is not None else "(number unknown)"
+    body = (
+        f"An external (non-mill) open PR has no active mill tracking ticket.\n\n"
+        f"- Repo: `{repo_config.repo_id}`\n"
+        f"- PR: {pr_label}\n"
+        f"- URL: {pr.get('url') or '(none)'}\n"
+        f"- Author: {pr.get('author_login') or '(unknown)'}\n"
+        f"- Branch: `{pr['branch']}`\n"
+        f"- Title: {pr.get('title') or '(none)'}\n\n"
+        f"External PR with no mill ticket — review and merge if appropriate, "
+        f"or close if obsolete."
+    )
+    service.create(
+        title=title,
+        description=body,
+        source=SourceKind.ORPHANED_PR_CHECK,
+    )
 
 
 # ------------------------------------------------------------------ actions

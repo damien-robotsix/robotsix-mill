@@ -48,11 +48,42 @@ Each orphaned mill PR lands in one of two buckets:
   Files a ticket titled `Track orphaned PR: <repo_id>/<branch>`,
   routed via `SourceKind.ORPHANED_PR_CHECK`.
 
+## Foreign (non-board) PR tracking
+
+By default the pass only considers **board-authored** PRs (branch starts
+with `settings.branch_prefix`, e.g. `mill/`). Set
+`orphaned_pr_check.track_foreign_prs` to `true` (default `false`,
+opt-in) to also file a tracking ticket for **foreign** PRs — open PRs
+whose head branch does *not* start with the branch prefix (e.g.
+Dependabot `dependabot/*` bumps or human `feature/*` branches).
+
+- Foreign PRs are **never closed** — they are external, so the board
+  decides what to do. The pass only files a tracking ticket.
+- The tracking ticket uses a deterministic, idempotent title
+  `Track external PR: <repo_id>#<pr_number>` (falling back to
+  `Track external PR: <repo_id>/<branch>` when the forge dict lacks a
+  PR number), routed via `SourceKind.ORPHANED_PR_CHECK`. A second pass
+  is a no-op — the title is de-duped against non-terminal
+  `ORPHANED_PR_CHECK` tickets exactly like the board-PR tracking
+  tickets.
+- The ticket body carries the PR number, URL, author login, branch and
+  title, plus a one-line instruction to review-and-merge or close.
+- Foreign file-ticket actions count against the same
+  `max_files_per_pass` and combined `max_actions_per_pass` caps as the
+  board-PR actions; the mill-PR phase runs first, so its actions consume
+  the shared budget before foreign PRs are considered. Deferred foreign
+  PRs are logged and re-considered next pass.
+- Requires `forge.list_open_prs()` to return per-PR metadata (branch,
+  author_login, number, url, title). GitHub and GitLab both provide it;
+  forges that fall back to `list_open_pr_branches` (no metadata) do not
+  process foreign PRs.
+
 ## Idempotency
 
 A second pass is a no-op: PRs already closed on the forge are skipped
 (forge `pr_status` check); already-filed tracking tickets are detected by
-the deterministic title `Track orphaned PR: <repo_id>/<branch>`, queried
+the deterministic title `Track orphaned PR: <repo_id>/<branch>` (board
+PRs) or `Track external PR: <repo_id>#<pr_number>` (foreign PRs), queried
 as `SourceKind.ORPHANED_PR_CHECK` tickets not in a terminal state.
 
 ## Logging
@@ -78,4 +109,5 @@ periodic:
     min_age_hours: 4                # minimum ticket age before PR is considered orphaned
     max_actions_per_pass: 5         # max combined close+file actions per pass
     dry_run: true                   # log intent only, no forge mutations
+    track_foreign_prs: false        # also file tracking tickets for non-mill PRs (never closes them)
 ```

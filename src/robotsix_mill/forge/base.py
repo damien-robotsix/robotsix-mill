@@ -324,9 +324,12 @@ class Forge(ABC):
         Returns a list of dicts, each with:
         ``branch`` — head branch name (str)
         ``author_login`` — PR author's login (str)
+        ``number`` — PR/MR number (int | None)
+        ``url`` — web URL of the PR/MR (str)
+        ``title`` — PR/MR title (str)
 
-        Default returns ``[]`` — only GitHub implements this.
-        Non-GitHub forges inherit the no-op, causing callers to fall
+        Default returns ``[]`` — GitHub and GitLab implement this.
+        Other forges inherit the no-op, causing callers to fall
         back to :meth:`list_open_pr_branches` without author filtering.
         """
         return []

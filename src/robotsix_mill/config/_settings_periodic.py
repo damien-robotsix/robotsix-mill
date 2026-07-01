@@ -495,3 +495,10 @@ class _PeriodicSettings(BaseModel):
     # Separate limits avoid a burst of close actions consuming all of the combined cap.
     orphaned_pr_max_closes_per_pass: int = Field(default=10, ge=1)
     orphaned_pr_max_files_per_pass: int = Field(default=5, ge=1)
+    # Opt-in: also file a tracking ticket for FOREIGN (non-board) open PRs —
+    # those whose head branch does NOT start with ``settings.branch_prefix``
+    # (e.g. ``dependabot/*``, human ``feature/*`` branches). Foreign PRs are
+    # never closed by this pass; a tracking ticket is filed so the board can
+    # review and merge or close them. Default False (opt-in). File-ticket
+    # actions count against the same per-pass caps as the mill-PR actions.
+    orphaned_pr_track_foreign_prs: bool = Field(default=False)

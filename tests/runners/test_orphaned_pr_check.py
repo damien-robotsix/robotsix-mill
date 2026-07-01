@@ -1059,3 +1059,226 @@ class TestSplitActionCap:
         assert result.filed == 1
         assert result.closed == 2
         assert result.total_scanned == 4
+
+
+# ---------------------------------------------------------------------------
+# Foreign (non-board) PR tracking
+# ---------------------------------------------------------------------------
+
+
+def _foreign_pr(
+    number: int,
+    branch: str = "dependabot/pip/requests-2.32.0",
+    author: str = "dependabot[bot]",
+):
+    return {
+        "branch": branch,
+        "author_login": author,
+        "number": number,
+        "url": f"https://github.com/test-owner/test-repo/pull/{number}",
+        "title": f"Bump requests from 2.31.0 to 2.32.0 (#{number})",
+    }
+
+
+class TestForeignPrTracking:
+    def test_flag_off_foreign_pr_untouched(self, monkeypatch):
+        """Default (flag off): a foreign PR is never scanned, filed, or closed."""
+        s = _settings(orphaned_pr_dry_run=False)  # flag defaults False
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(open_prs=[_foreign_pr(101)])
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.total_scanned == 0  # no mill/ branches
+        assert result.foreign_filed == 0
+        assert result.foreign_skipped == 0
+        svc.create.assert_not_called()
+        forge.close_pr.assert_not_called()
+
+    def test_flag_on_files_one_ticket_for_foreign_pr(self, monkeypatch):
+        """Flag on: foreign PR with no ticket → exactly one tracking ticket."""
+        s = _settings(orphaned_pr_dry_run=False, orphaned_pr_track_foreign_prs=True)
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(open_prs=[_foreign_pr(101)])
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.foreign_filed == 1
+        assert svc.create.call_count == 1
+        title = svc.create.call_args.kwargs["title"]
+        assert title == "Track external PR: test-owner/test-repo#101"
+        body = svc.create.call_args.kwargs["description"]
+        assert "dependabot[bot]" in body
+        assert "dependabot/pip/requests-2.32.0" in body
+        assert "pull/101" in body
+        assert "Bump requests" in body
+        # never closes a foreign PR
+        forge.close_pr.assert_not_called()
+        forge.post_pr_comment.assert_not_called()
+
+    def test_foreign_pr_never_closed(self, monkeypatch):
+        """Even an empty-diff / conflicting foreign PR is only filed, never closed."""
+        s = _settings(orphaned_pr_dry_run=False, orphaned_pr_track_foreign_prs=True)
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(
+            open_prs=[_foreign_pr(202)],
+            pr_files=[],  # empty diff would close a mill PR
+            pr_status={"state": "open", "mergeable": False},  # conflicting
+        )
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.foreign_filed == 1
+        assert result.closed == 0
+        forge.close_pr.assert_not_called()
+
+    def test_second_pass_is_noop_dedup(self, monkeypatch):
+        """A foreign tracking ticket already open → dedup skip, no create."""
+        s = _settings(orphaned_pr_dry_run=False, orphaned_pr_track_foreign_prs=True)
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(open_prs=[_foreign_pr(303)])
+        _install_seams(monkeypatch, s, forge, svc)
+
+        existing = _ticket(
+            ticket_id="20250101T000000Z-existing-a1b2",
+            title="Track external PR: test-owner/test-repo#303",
+            state=State.READY,
+        )
+        svc.recent_proposals_for.return_value = [existing]
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert svc.create.call_count == 0
+        assert result.foreign_filed == 0
+        assert result.foreign_skipped >= 1
+        assert any("DEDUP_SKIP" in a and "foreign_pr" in a for a in result.actions)
+
+    def test_idempotent_across_two_passes(self, monkeypatch):
+        """First pass files; second pass (ticket now open) dedup skips."""
+        s = _settings(orphaned_pr_dry_run=False, orphaned_pr_track_foreign_prs=True)
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(open_prs=[_foreign_pr(404)])
+        _install_seams(monkeypatch, s, forge, svc)
+
+        existing = _ticket(
+            ticket_id="20250101T000000Z-existing-a1b2",
+            title="Track external PR: test-owner/test-repo#404",
+            state=State.READY,
+        )
+        svc.recent_proposals_for.side_effect = [[], [existing]]
+
+        result1 = run_orphaned_pr_check_pass(repo_config=repo)
+        result2 = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert svc.create.call_count == 1
+        assert result1.foreign_filed == 1
+        assert result2.foreign_filed == 0
+        assert result2.foreign_skipped >= 1
+
+    def test_file_cap_limits_foreign_tickets(self, monkeypatch):
+        """Many foreign PRs, max_files_per_pass=2 → only 2 filed."""
+        s = _settings(
+            orphaned_pr_dry_run=False,
+            orphaned_pr_track_foreign_prs=True,
+            orphaned_pr_max_actions_per_pass=20,
+            orphaned_pr_max_files_per_pass=2,
+        )
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        open_prs = [
+            _foreign_pr(500 + i, branch=f"dependabot/pip/lib-{i}") for i in range(6)
+        ]
+        forge = _mock_forge(open_prs=open_prs)
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.foreign_filed == 2
+        assert svc.create.call_count == 2
+        assert any("foreign action cap reached" in a for a in result.actions)
+
+    def test_combined_cap_shared_with_mill_actions(self, monkeypatch):
+        """Mill file actions consume the combined cap before foreign PRs run."""
+        s = _settings(
+            orphaned_pr_dry_run=False,
+            orphaned_pr_track_foreign_prs=True,
+            orphaned_pr_max_actions_per_pass=1,
+            orphaned_pr_max_files_per_pass=5,
+        )
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None  # mill orphan → files a ticket
+        forge = _mock_forge(
+            open_prs=[
+                {
+                    "branch": "mill/20250101T000000Z-orphan-a1b2",
+                    "author_login": "mill-bot[bot]",
+                },
+                _foreign_pr(600),
+            ],
+            bot_login="mill-bot[bot]",
+        )
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        # combined cap of 1 consumed by the mill file → foreign PR deferred
+        assert result.filed == 1
+        assert result.foreign_filed == 0
+        assert any("foreign action cap reached" in a for a in result.actions)
+
+    def test_dry_run_no_mutations(self, monkeypatch):
+        """Dry-run: foreign intent logged, no ticket created."""
+        s = _settings(orphaned_pr_dry_run=True, orphaned_pr_track_foreign_prs=True)
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(open_prs=[_foreign_pr(700)])
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.foreign_filed == 0
+        assert result.foreign_skipped == 1
+        svc.create.assert_not_called()
+        forge.close_pr.assert_not_called()
+        assert any("FILE_TICKET" in a and "foreign_pr" in a for a in result.actions)
+
+    def test_fallback_title_when_number_missing(self, monkeypatch):
+        """Foreign PR dict without a number → branch-based title."""
+        s = _settings(orphaned_pr_dry_run=False, orphaned_pr_track_foreign_prs=True)
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(
+            open_prs=[
+                {
+                    "branch": "feature/no-number",
+                    "author_login": "alice",
+                    "number": None,
+                    "url": "",
+                    "title": "",
+                }
+            ]
+        )
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.foreign_filed == 1
+        title = svc.create.call_args.kwargs["title"]
+        assert title == "Track external PR: test-owner/test-repo/feature/no-number"
