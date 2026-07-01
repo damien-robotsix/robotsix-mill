@@ -159,30 +159,50 @@ def load_secrets_yaml(secrets_file: str | None = None) -> dict:
 
 
 def _load_repos_document(file_path: str | None = None) -> dict:
-    """Read and parse the full ``config/repos.yaml`` document.
+    """Read and parse the repos configuration document.
 
-    Shared by :func:`load_repos_yaml` (which extracts the ``repos``
-    mapping). Returns the raw top-level mapping, or
-    ``{}`` for a missing file / explicit ``""`` (no-file) path.
+    Single config entry point: repos live under the ``repos:`` key of the
+    main ``config/config.yaml``.  When that key is present it is
+    authoritative; when it is absent the loader falls back to the legacy
+    standalone ``config/repos.yaml`` (deprecated).  Returns the raw
+    top-level mapping (``{"repos": {...}}`` or a flat legacy mapping), or
+    ``{}`` when nothing is configured — zero repos is valid.
+
+    An explicit *file_path* arg or the ``MILL_REPOS_FILE`` env var overrides
+    both sources and reads that file directly (used by the test suite); an
+    explicit ``""`` means "no repos".
     """
-    # Determine the path: explicit arg > env var > default.
-    # An explicit empty string means "no file" (used by the test suite).
+    # Explicit override: arg > env var — reads the given file directly.
     if file_path is not None:
-        path_str = file_path
+        path_str: str | None = file_path
     else:
         path_str = os.environ.get("MILL_REPOS_FILE")
-
-    if path_str is None:
-        path_str = str(_YAML_DIR / "repos.yaml")
-    elif path_str == "":
+    if path_str == "":
         return {}
-    path = Path(path_str)
+    if path_str is not None:
+        path = Path(path_str)
+        if not path.exists():
+            return {}
+        try:
+            data = read_yaml_file(path)
+        except YamlConfigError as exc:
+            raise ConfigError(str(exc)) from exc
+        return data if isinstance(data, dict) else {}
 
-    if not path.exists():
-        return {}
-
+    # Default source: the ``repos:`` section of the main config.yaml.
     try:
-        data = read_yaml_file(path)
+        cfg = load_yaml_config()
+    except ConfigError:
+        cfg = {}
+    if isinstance(cfg, dict) and "repos" in cfg:
+        return {"repos": cfg.get("repos") or {}}
+
+    # Legacy fallback: the standalone config/repos.yaml.
+    legacy = _YAML_DIR / "repos.yaml"
+    if not legacy.exists():
+        return {}
+    try:
+        data = read_yaml_file(legacy)
     except YamlConfigError as exc:
         raise ConfigError(str(exc)) from exc
     return data if isinstance(data, dict) else {}
