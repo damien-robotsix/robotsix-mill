@@ -127,15 +127,15 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
 
-# Claude Agent SDK transport (opt-in via llm_backend / claude_sdk_agents)
-# drives the `claude` CLI subprocess for subscription-auth LLM calls. Install
-# it globally so it's on PATH; subscription credentials come from a mounted
-# ~/.claude/.credentials.json (see docker-compose.override.yml). Harmless when
-# the toggle is off (default) — nothing spawns the CLI.
-# Pin @anthropic-ai/claude-code to a specific version. Bump when the
-# Claude SDK transport requires a newer CLI.
-RUN npm install -g @anthropic-ai/claude-code@2.1.158 \
-    && claude --version
+# Claude Agent SDK transport (opt-in via llm_backend / claude_sdk_agents):
+# the `claude-agent-sdk` Python dep ships its OWN self-contained `claude`
+# binary (claude_agent_sdk/_bundled/claude) and drives THAT — so no global
+# `npm install -g @anthropic-ai/claude-code` is needed (it was dead weight,
+# and a version skew between it and the bundled binary only caused confusion).
+# nodejs/npm above stay for `npx jscpd@4` (copy-paste detection), not Claude.
+# Subscription auth comes from a mounted ~/.claude dir (see
+# docker-compose.override.example.yml); the worker runs as the non-root `mill`
+# user so the SDK's `--dangerously-skip-permissions` is accepted.
 
 # Copy only the artifacts built in the builder stage — no source tree.
 COPY --from=builder /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/site-packages
@@ -155,9 +155,9 @@ RUN groupadd --system --gid 1000 mill \
     && useradd --system --gid mill --uid 1000 --create-home --shell /bin/bash mill \
     && mkdir -p /data \
     && chown -R mill:mill /data \
-    # Pre-create a mill-owned ~/.claude so the Claude SDK transport's `claude`
-    # CLI can write its state/cache there; the host's .credentials.json is
-    # bind-mounted INTO this dir (read-only) without changing its ownership.
+    # Pre-create a mill-owned ~/.claude so the Claude SDK transport's bundled
+    # `claude` CLI can write its state/cache there; the host's whole ~/.claude
+    # dir is bind-mounted rw (see docker-compose.override.example.yml).
     && mkdir -p /home/mill/.claude \
     && chown -R mill:mill /home/mill/.claude
 
