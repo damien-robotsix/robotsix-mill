@@ -556,6 +556,7 @@ class ImplementationLogicMixin(_ImplementStageBase):
                         next_action="retry",
                         feedback=diag,
                         ic=new_ic,
+                        new_msgs=new_msgs,
                     )
                 # Iterations exhausted → do NOT hand un-landed claims to
                 # review. BLOCK for inspection, mirroring the empty-diff
@@ -648,6 +649,7 @@ class ImplementationLogicMixin(_ImplementStageBase):
             next_action="retry",
             feedback=diag,
             ic=new_ic,
+            new_msgs=new_msgs,
         )
 
     @classmethod
@@ -916,6 +918,7 @@ class ImplementationLogicMixin(_ImplementStageBase):
                 next_action="retry",
                 feedback=None,
                 ic=new_ic,
+                new_msgs=new_msgs,
             )
 
         # guardrail.action == "skip_iteration" — fall through to test gate.

@@ -13,6 +13,7 @@ from ...core.states import State
 from ...forge.auth import _resolve_remote_url
 from ...runners.pass_runner import load_memory
 from ...vcs import git_ops
+from .. import short_circuit_verify
 from ..base import Outcome, StageContext
 from ..pause import (
     build_compact_resume_message_history,
@@ -28,9 +29,37 @@ from ._shared import (
     log,
 )
 
+# --- stuck-loop detection thresholds -----------------------------------
+
+# Number of consecutive passes with no file edits (empty git diff) after
+# which the implement loop is aborted as "stuck".  A pass that produces at
+# least one file mutation resets the counter.  Default 3 is tight enough to
+# catch the read_ticket / list_epic_children loop the trace inspector
+# surfaced (11 wasted pro model calls between first read_ticket and first
+# test run) without penalising legitimate multi-pass fixes.
+_STUCK_NO_DIFF_PASSES = 3
+
+# Cumulative tool-call budget across all passes without a git diff.  When
+# the agent exhausts this budget without producing a single file change the
+# loop is aborted.  Default 50 is well below ``coordinator_max_tool_calls``
+# (300) and catches the per-pass budget-reset pattern where each fresh pass
+# gets a new 300-call quota but never makes progress.
+_STUCK_MAX_TOOL_CALLS_NO_DIFF = 50
+
+# Number of consecutive identical non-progress tool calls at the tail of a
+# pass that signal a stuck loop (e.g. the agent calling ``read_ticket``
+# over and over).  Checked via
+# :func:`robotsix_mill.stages.short_circuit_verify.analyze_pass_progress`.
+_STUCK_SAME_TOOL_WINDOW = 5
+
 
 class PhaseCoordinatorMixin(_ImplementStageBase):
     """Run-loop orchestration for :class:`ImplementStage`."""
+
+    # Stuck-loop detection counters (reset per ticket in
+    # :meth:`_implement_loop`).
+    _stuck_no_diff_passes: int = 0
+    _stuck_total_tool_calls_no_diff: int = 0
 
     # ------------------------------------------------------------------
     # preflight (pre-trace gate — no clone, no model, no trace overhead)
@@ -514,6 +543,12 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         max_iters = max(1, settings.max_fix_iterations)
         ic = cls._load_implement_context(ctx, ticket, settings)
 
+        # Reset stuck-detection counters for this ticket's loop.
+        # (Class attributes would otherwise persist across tickets
+        # since the mixin class is shared.)
+        cls._stuck_no_diff_passes = 0
+        cls._stuck_total_tool_calls_no_diff = 0
+
         # Ordered history of the per-cycle distilled diagnosis. Drives the
         # circuit breaker below: a fix loop that keeps producing the SAME
         # diagnosis is not making progress, and an ENV-ERROR diagnosis is
@@ -587,6 +622,106 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                 return result.outcome
 
             # next_action == "retry" — update for next iteration.
+
+            # --- stuck-loop detection (cross-pass) ---------------------------
+            # Two orthogonal signals, each sufficient to BLOCK:
+            #
+            # 1. Consecutive passes with no file edits (empty git diff).
+            #    A pass that produces at least one commit-able change resets
+            #    the counter.
+            #
+            # 2. Cumulative tool-call budget exhausted without a single git
+            #    diff.  The per-pass ``coordinator_max_tool_calls`` resets
+            #    each iteration; this cap tracks the REAL spend across passes
+            #    so the loop cannot burn quota indefinitely.
+            #
+            # Both gates are checked HERE — on every retry — so they fire
+            # BEFORE the next agent invocation.
+            no_diff_passes = getattr(cls, "_stuck_no_diff_passes", 0)
+            total_tool_calls_no_diff = getattr(
+                cls, "_stuck_total_tool_calls_no_diff", 0
+            )
+            try:
+                has_diff = git_ops.has_changes(repo_dir)
+            except Exception:
+                has_diff = True
+            if extra_roots:
+                for repo_path in extra_roots:
+                    if repo_path == repo_dir:
+                        continue
+                    try:
+                        if git_ops.has_changes(repo_path):
+                            has_diff = True
+                            break
+                    except Exception:
+                        has_diff = True
+
+            if not has_diff:
+                no_diff_passes += 1
+                # Count tool calls from this pass (fail-open: 0 on parse error).
+                progress = short_circuit_verify.analyze_pass_progress(
+                    result.new_msgs,
+                    same_tool_window=_STUCK_SAME_TOOL_WINDOW,
+                )
+                total_tool_calls_no_diff += progress["total"]
+            else:
+                no_diff_passes = 0
+                total_tool_calls_no_diff = 0
+                progress = None
+
+            cls._stuck_no_diff_passes = no_diff_passes
+            cls._stuck_total_tool_calls_no_diff = total_tool_calls_no_diff
+
+            if no_diff_passes >= _STUCK_NO_DIFF_PASSES:
+                # progress is always set in the not-has_diff branch above.
+                if progress is None:  # pragma: no cover — defensive
+                    progress = {"stuck_same_tool": None, "total": 0, "edit_calls": 0}
+                same_tool = progress.get("stuck_same_tool")
+                detail = (
+                    f"same-tool loop ({same_tool!r} × "
+                    f"{progress.get('last_non_progress_run', 0)} calls)"
+                    if same_tool
+                    else f"{progress['total']} tool calls, "
+                    f"{progress['edit_calls']} edit calls"
+                )
+                note = (
+                    f"stuck — {no_diff_passes} consecutive passes with no file "
+                    f"edits after {attempt} iteration(s). "
+                    f"Last pass: {detail}. "
+                    "Short-circuiting to BLOCKED."
+                )
+                cls._finalize(
+                    ctx,
+                    ticket,
+                    repo_dir,
+                    branch,
+                    note,
+                    ok=False,
+                    reference_files=ic.reference_files,
+                    extra_roots=extra_roots,
+                )
+                return Outcome(State.BLOCKED, note)
+
+            if total_tool_calls_no_diff >= _STUCK_MAX_TOOL_CALLS_NO_DIFF:
+                note = (
+                    f"stuck — {total_tool_calls_no_diff} cumulative tool calls "
+                    f"across {no_diff_passes} passes without a single file edit. "
+                    f"Budget cap ({_STUCK_MAX_TOOL_CALLS_NO_DIFF}) exhausted after "
+                    f"{attempt} iteration(s). Short-circuiting to BLOCKED."
+                )
+                cls._finalize(
+                    ctx,
+                    ticket,
+                    repo_dir,
+                    branch,
+                    note,
+                    ok=False,
+                    reference_files=ic.reference_files,
+                    extra_roots=extra_roots,
+                )
+                return Outcome(State.BLOCKED, note)
+            # --- end stuck-loop detection -----------------------------------
+
             # Circuit breaker: track the per-cycle diagnosis and bail out
             # early when the loop is provably stuck. The retry diagnosis is
             # carried on ``result.feedback`` (main retry path) or, when the

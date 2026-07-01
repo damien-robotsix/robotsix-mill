@@ -5648,3 +5648,134 @@ def test_convergence_backstop_writes_implement_md(ctx_factory, tmp_path, monkeyp
     content = md.read_text(encoding="utf-8")
     assert "BLOCKED — resumable" in content
     assert "spec-fingerprint:" in content
+
+
+def test_stuck_no_diff_passes_aborts_loop(ctx_factory, tmp_path, monkeypatch):
+    """After N consecutive passes with no file edits, the loop aborts
+    with a 'stuck' BLOCKED instead of exhausting max_fix_iterations."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="false",  # gate always fails → retry
+        max_fix_iterations="8",  # high enough that stuck fires first
+    )
+    call_count = [0]
+
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+        )
+        call_count[0] += 1
+        # Produce NO file edits — the agent only reads / explores.
+        # Return new_msgs that simulate a stuck read_ticket loop.
+        import json
+
+        msgs = json.dumps(
+            [
+                {
+                    "parts": [
+                        {
+                            "part_kind": "tool-call",
+                            "tool_name": "read_ticket",
+                            "args": {},
+                            "tool_call_id": f"call_rt_{call_count[0]}",
+                        }
+                    ]
+                }
+            ]
+        ).encode()
+        return (f"attempt {call_count[0]}", [], "", None, msgs, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "wip.txt")
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert "stuck" in out.note.lower()
+    # Should abort at _STUCK_NO_DIFF_PASSES (3) + 1, not at max_fix_iterations (8).
+    assert call_count[0] <= 4  # 3 no-diff passes + maybe the initial
+
+
+def test_stuck_cumulative_tool_calls_aborts_loop(ctx_factory, tmp_path, monkeypatch):
+    """After M cumulative tool calls across passes with no git diff,
+    the loop aborts with a 'stuck' BLOCKED."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="false",  # gate always fails → retry
+        max_fix_iterations="8",
+    )
+    call_count = [0]
+
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+        )
+        call_count[0] += 1
+        # Produce NO file edits but simulate HEAVY tool usage (many
+        # read_ticket calls per pass) so the cumulative cap fires
+        # before _STUCK_NO_DIFF_PASSES.
+        import json
+
+        parts = []
+        for i in range(30):  # 30 tool calls per pass
+            parts.append(
+                {
+                    "part_kind": "tool-call",
+                    "tool_name": "read_ticket",
+                    "args": {},
+                    "tool_call_id": f"call_rt_{call_count[0]}_{i}",
+                }
+            )
+        msgs = json.dumps([{"parts": parts}]).encode()
+        return (f"heavy pass {call_count[0]}", [], "", None, msgs, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "wip.txt")
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert "stuck" in out.note.lower()
+    assert "cumulative tool calls" in out.note.lower()
+    # 30 calls/pass, cap at 50 → fires on second pass.
+    assert call_count[0] <= 3
