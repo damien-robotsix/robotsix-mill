@@ -165,7 +165,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Upload Trivy SARIF results
-        uses: github/codeql-action/upload-sarif@03e4368ac7daa2bd82b3e85262f3bf87ee112f57  # v3.36.0
+        uses: github/codeql-action/upload-sarif@87557b9c84dde89fdd9b10e88954ac2f4248e463  # v4.36.1
         if: ${{ always() && hashFiles('trivy-results.sarif') != '' }}
         # Code-scanning upload is observability-only; a SARIF-upload auth
         # failure (e.g. 401) must not gate the image publish.
@@ -319,7 +319,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Upload Trivy SARIF results
-        uses: github/codeql-action/upload-sarif@03e4368ac7daa2bd82b3e85262f3bf87ee112f57  # v3.36.0
+        uses: github/codeql-action/upload-sarif@87557b9c84dde89fdd9b10e88954ac2f4248e463  # v4.36.1
         if: ${{ always() && hashFiles('trivy-results.sarif') != '' }}
         # Code-scanning upload is observability-only; a SARIF-upload auth
         # failure (e.g. 401) must not gate the image publish.
@@ -459,7 +459,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Upload Trivy SARIF results
-        uses: github/codeql-action/upload-sarif@03e4368ac7daa2bd82b3e85262f3bf87ee112f57  # v3.36.0
+        uses: github/codeql-action/upload-sarif@87557b9c84dde89fdd9b10e88954ac2f4248e463  # v4.36.1
         if: ${{ always() && hashFiles('trivy-results.sarif') != '' }}
         # Code-scanning upload is observability-only; a SARIF-upload auth
         # failure (e.g. 401) must not gate the image publish.
