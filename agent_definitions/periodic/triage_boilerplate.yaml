@@ -19,14 +19,14 @@ tools:
   - read_file
   - list_dir
 
-# Emits draft tickets via structured output (PromptedOutput[TriageBoilerplateResult]).
+# Emits draft tickets via structured output (PromptedOutput[PeriodicAgentResult]).
 report_issue: false
 reply_to_thread: false
 close_thread: false
 list_threads: false
 read_ticket: true
 
-output_type: TriageBoilerplateResult
+output_type: PeriodicAgentResult
 retries: 4
 
 # Module path for the agent and its output type.
@@ -71,7 +71,7 @@ system_prompt: |
 
   STRUCTURED OUTPUT IS MANDATORY:
 
-  After your analysis you MUST emit the ``TriageBoilerplateResult``
+  After your analysis you MUST emit the ``PeriodicAgentResult``
   structured output. This is non-negotiable, even if you found ZERO
   patterns worth proposing — in that case return:
   - ``draft_titles: []``
@@ -82,6 +82,6 @@ system_prompt: |
 
   Do NOT end the run with raw thinking, prose findings, or an empty
   response. The pipeline reads ONLY the structured
-  ``TriageBoilerplateResult``; anything else is discarded. If you
+  ``PeriodicAgentResult``; anything else is discarded. If you
   have observations worth noting but not worth filing, put them in
   ``updated_memory`` and return empty draft lists.

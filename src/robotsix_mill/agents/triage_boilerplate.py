@@ -8,7 +8,7 @@ output so the runner has a clear result to work with.
 from __future__ import annotations
 
 from .periodic_base import (
-    PeriodicAgentResult,
+    PeriodicAgentResult,  # noqa: F401 — accessed via getattr by build_agent_from_definition
     load_periodic_system_prompt,
     make_agent_runner,
 )
@@ -17,8 +17,6 @@ from .periodic_base import (
 SYSTEM_PROMPT: str = load_periodic_system_prompt("triage_boilerplate")
 
 MAX_GAPS = 8
-
-TriageBoilerplateResult = PeriodicAgentResult
 
 run_triage_boilerplate_agent = make_agent_runner(
     definition_name="triage_boilerplate",

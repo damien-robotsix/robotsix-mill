@@ -33,6 +33,9 @@
 - **tests**: reorganize runtime test files into per-subpackage subdirectories
   (``tests/runtime/routes/``, ``tests/runtime/worker/``) mirroring the source
   layout.  Harness ``.mjs`` paths updated accordingly.
+- **agents**: remove dead backward-compat alias ``TriageBoilerplateResult``
+  (no callers in ``src/`` or ``tests/``); update YAML definition to reference
+  ``PeriodicAgentResult`` directly. (mill: Remove dead backward-compat alias `TriageBoilerplateResult` from triage_boilerplate.py (20260630T211442Z-remove-dead-backward-compat-alias-triage-3eb1))
 - **dev**: add ``make format`` and ``make lint`` targets for quick local
   ruff/mypy checks across all Python sources (``src/``, ``tests/``,
   ``scripts/``, ``vulture_whitelist.py``, ``deploy/split_config.py``,
