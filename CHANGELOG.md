@@ -4,6 +4,7 @@
   blocks epic tickets (``TicketKind.EPIC``) with a BLOCKED outcome before
   any Langfuse trace opens, and the implement agent system prompt warns
   against implementing epics directly.
+- Deduplicate `read_counter`/`write_counter` helpers from three stage files into `core/workspace.py` as public API
 - Implement stage: add stuck-loop detection to abort early when the agent makes no progress across consecutive passes. Two independent heuristics: (a) after 3 consecutive passes with no file edits the loop BLOCKs as "stuck", and (b) after 50 cumulative tool calls across passes without a git diff the loop BLOCKs. Within-pass detection flags a same-tool repeat (e.g. calling ``read_ticket`` 5+ times consecutively without edits) as a stuck signal.
 - Bump `actions/checkout` from v4 (SHA `34e1148`) to v6.0.3 (SHA `df4cb1c`) across all 6 workflow files.
 - Add `_is_rename_only_change` pre-implement check alongside the existing

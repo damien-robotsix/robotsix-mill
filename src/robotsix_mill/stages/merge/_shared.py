@@ -21,9 +21,14 @@ from pathlib import Path
 from typing import Any
 
 from ...config import ConfigError, RepoConfig, get_repo_config
+from ...core.workspace import read_counter, write_counter
 from ...vcs import git_ops
 
 log = logging.getLogger("robotsix_mill.stages.merge")
+
+# Backward-compat aliases for existing callers.
+_read_counter = read_counter
+_write_counter = write_counter
 
 _REBASE_COUNTER = "rebase_attempts.txt"
 _MERGE_REASON = "merge_reason.txt"
@@ -93,18 +98,6 @@ def _repo_config_for_entry(entry: dict) -> RepoConfig:
     if not isinstance(repo_id, str) or not repo_id:
         raise ConfigError("pr_urls.json entry is missing a non-empty string 'repo_id'")
     return get_repo_config(repo_id)
-
-
-def _read_counter(path) -> int:
-    try:
-        return int(path.read_text(encoding="utf-8").strip())
-    except FileNotFoundError, ValueError:
-        return 0
-
-
-def _write_counter(path, value: int) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(str(value), encoding="utf-8")
 
 
 def _build_failing_summary(

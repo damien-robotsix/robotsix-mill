@@ -61,6 +61,7 @@ from ..config import get_repo_config, target_branch_for
 from ..config import ConfigError
 from ..core.models import Ticket
 from ..core.states import State
+from ..core.workspace import read_counter, write_counter
 from ..forge import get_forge
 from ..forge.auth import _resolve_remote_url, github_token
 from ..forge.github import _parse_owner_repo
@@ -193,18 +194,6 @@ def _write_pr_urls(artifacts_dir: Path, entries: list[dict]) -> None:
 
 _DELIVER_MERGE_GUARD_FINGERPRINT = "deliver_merge_guard_fingerprint.txt"
 _DELIVER_MERGE_GUARD_IDENTICAL_COUNT = "deliver_merge_guard_identical_count.txt"
-
-
-def _read_counter(path: Path) -> int:
-    try:
-        return int(path.read_text(encoding="utf-8").strip())
-    except FileNotFoundError, ValueError:
-        return 0
-
-
-def _write_counter(path: Path, value: int) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(str(value), encoding="utf-8")
 
 
 def _merge_guard_block_fingerprint(block_note: str, repo_ids: list[str]) -> str:
@@ -527,8 +516,8 @@ class DeliverStage(Stage):
 
                     if current_fp == stored_fp and stored_fp:
                         # Same block as last cycle — increment counter.
-                        count = _read_counter(counter_path) + 1
-                        _write_counter(counter_path, count)
+                        count = read_counter(counter_path) + 1
+                        write_counter(counter_path, count)
                         if count >= max_identical:
                             return Outcome(
                                 State.BLOCKED,
@@ -551,7 +540,7 @@ class DeliverStage(Stage):
                     # the first occurrence of this particular block).
                     fp_path.parent.mkdir(parents=True, exist_ok=True)
                     fp_path.write_text(current_fp, encoding="utf-8")
-                    _write_counter(counter_path, 1)
+                    write_counter(counter_path, 1)
 
                 return Outcome(State.BLOCKED, block_note)
 

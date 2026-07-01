@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from ..core.models import Ticket
     from .base import StageContext
 
+from ..core.workspace import read_counter, write_counter
 from ..forge.base import Forge
 
 _CI_REFRESH_COUNTER = "ci_fix_refresh_attempts.txt"
@@ -19,17 +20,9 @@ _CI_IDENTICAL_FAILURE_COUNT = "ci_identical_failure_count.txt"
 # Check-run names that are CodeQL-related (case-insensitive contains).
 _CODQL_CHECK_NAMES = frozenset({"codeql", "code-scanning", "code scanning"})
 
-
-def _read_counter(path: Path) -> int:
-    try:
-        return int(path.read_text(encoding="utf-8").strip())
-    except FileNotFoundError, ValueError:
-        return 0
-
-
-def _write_counter(path: Path, value: int) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(str(value), encoding="utf-8")
+# Backward-compat aliases for existing callers.
+_read_counter = read_counter
+_write_counter = write_counter
 
 
 def _write_text(path: Path, content: str) -> None:

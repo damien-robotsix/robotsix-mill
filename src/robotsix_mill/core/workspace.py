@@ -86,6 +86,20 @@ class Workspace:
         return hashlib.sha256(self.description_path.read_bytes()).hexdigest()
 
 
+def read_counter(path: Path) -> int:
+    """Read an integer from *path*, returning 0 when the file is missing or unparseable."""
+    try:
+        return int(path.read_text(encoding="utf-8").strip())
+    except FileNotFoundError, ValueError:
+        return 0
+
+
+def write_counter(path: Path, value: int) -> None:
+    """Write *value* to *path*, creating parent directories as needed."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(str(value), encoding="utf-8")
+
+
 def prune_clone(workspace: Workspace) -> None:
     """Delete the ``repo/`` subdirectory of *workspace*.
 
