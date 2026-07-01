@@ -81,7 +81,7 @@ class CIPollMixin(_MergeStageBase):
         if pr is None:
             # For tracker tickets, the mill branch may have been deleted or
             # never had a PR.  Fall back to checking the tracked PR by URL.
-            if ticket.source is SourceKind.ORPHANED_PR_CHECK:
+            if ticket.source == SourceKind.ORPHANED_PR_CHECK:
                 description = ctx.service.workspace(ticket).read_description()
                 tracked_url = _extract_tracked_pr_url(description)
                 if tracked_url:
