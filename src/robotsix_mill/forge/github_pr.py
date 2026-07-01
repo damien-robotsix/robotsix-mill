@@ -108,6 +108,23 @@ class GitHubForgePRMixin:
             body=body,
         )
 
+    # --- 401 auth-retry helper -------------------------------------------
+
+    def _retry_after_401(self) -> None:
+        """Invalidate the cached GitHub token and sleep 2 s before retrying.
+
+        Call this when a 401 is detected inside a :meth:`_ApiClient.client`
+        block and the caller intends to retry the whole block (e.g. via an
+        outer ``for retry in range(2):`` loop).  The lazy import preserves
+        call-time monkeypatchability for tests.
+        """
+        from .auth import invalidate_github_token  # lazy: avoid import cycle
+
+        invalidate_github_token(self.settings, self._repo_config)  # type: ignore[attr-defined]
+        import time
+
+        time.sleep(2)
+
     # --- HTTP seam (monkeypatched in tests) ---
     def _create_pr(
         self,
@@ -120,8 +137,6 @@ class GitHubForgePRMixin:
         body: str,
     ) -> str:
         import time
-
-        from .auth import invalidate_github_token  # lazy: avoid import cycle
 
         payload = {"title": title, "head": head, "base": base, "body": body}
         # GitHub sometimes takes a few seconds to index a freshly-
@@ -169,8 +184,7 @@ class GitHubForgePRMixin:
                 # (GitHub replica lag). Invalidate cached token,
                 # back off, regenerate headers, retry once.
                 if r.status_code == 401 and not already_retried_401:
-                    invalidate_github_token(self.settings, self._repo_config)  # type: ignore[attr-defined]
-                    time.sleep(2)
+                    self._retry_after_401()
                     headers = self._http.regenerate_headers()  # type: ignore[attr-defined]
                     already_retried_401 = True
                     continue
@@ -421,10 +435,6 @@ class GitHubForgePRMixin:
     # --- HTTP seams (monkeypatched in tests) ---
 
     def _get_pr(self, *, owner: str, repo: str, head: str) -> dict | None:
-        import time
-
-        from .auth import invalidate_github_token  # lazy: avoid import cycle
-
         # For cross-repo targets the head branch lives on the fork,
         # so the head filter must use the fork owner (not the upstream
         # owner passed in *owner*).  _head_owner resolves accordingly.
@@ -437,8 +447,7 @@ class GitHubForgePRMixin:
                     params={"head": f"{head_owner}:{head}", "state": "all"},
                 )
                 if lst.status_code == 401 and retry == 0:
-                    invalidate_github_token(self.settings, self._repo_config)  # type: ignore[attr-defined]
-                    time.sleep(2)
+                    self._retry_after_401()
                     continue
                 lst.raise_for_status()
                 items = lst.json()
@@ -447,8 +456,7 @@ class GitHubForgePRMixin:
                 num = items[0]["number"]
                 d = c.get(f"{api}/repos/{owner}/{repo}/pulls/{num}", headers=headers)
                 if d.status_code == 401 and retry == 0:
-                    invalidate_github_token(self.settings, self._repo_config)  # type: ignore[attr-defined]
-                    time.sleep(2)
+                    self._retry_after_401()
                     continue
                 d.raise_for_status()
                 pr = d.json()
@@ -609,10 +617,6 @@ class GitHubForgePRMixin:
             return False
 
     def _list_branches(self, *, owner: str, repo: str) -> list[BranchInfo]:
-        import time
-
-        from .auth import invalidate_github_token  # lazy: avoid import cycle
-
         out: list[BranchInfo] = []
         for retry in range(2):
             hit_401 = False
@@ -627,8 +631,7 @@ class GitHubForgePRMixin:
                             params={"per_page": 100, "page": page},
                         )
                         if r.status_code == 401 and retry == 0:
-                            invalidate_github_token(self.settings, self._repo_config)  # type: ignore[attr-defined]
-                            time.sleep(2)
+                            self._retry_after_401()
                             hit_401 = True
                             break
                         r.raise_for_status()
@@ -659,10 +662,6 @@ class GitHubForgePRMixin:
         return out
 
     def _list_open_pr_branches(self, *, owner: str, repo: str) -> set[str]:
-        import time
-
-        from .auth import invalidate_github_token  # lazy: avoid import cycle
-
         out: set[str] = set()
         for retry in range(2):
             hit_401 = False
@@ -681,8 +680,7 @@ class GitHubForgePRMixin:
                             },
                         )
                         if r.status_code == 401 and retry == 0:
-                            invalidate_github_token(self.settings, self._repo_config)  # type: ignore[attr-defined]
-                            time.sleep(2)
+                            self._retry_after_401()
                             hit_401 = True
                             break
                         r.raise_for_status()
@@ -711,10 +709,6 @@ class GitHubForgePRMixin:
         Uses the same pagination and 401-retry logic as _list_open_pr_branches().
         Returns [] on any failure (MUST NOT raise).
         """
-        import time
-
-        from .auth import invalidate_github_token  # lazy: avoid import cycle
-
         out: list[dict] = []
         for retry in range(2):
             hit_401 = False
@@ -733,8 +727,7 @@ class GitHubForgePRMixin:
                             },
                         )
                         if r.status_code == 401 and retry == 0:
-                            invalidate_github_token(self.settings, self._repo_config)  # type: ignore[attr-defined]
-                            time.sleep(2)
+                            self._retry_after_401()
                             hit_401 = True
                             break
                         r.raise_for_status()
@@ -826,10 +819,6 @@ class GitHubForgePRMixin:
         repo: str,
         pull_number: int,
     ) -> dict:
-        import time
-
-        from .auth import invalidate_github_token  # lazy: avoid import cycle
-
         # Defensive init: the loop sets these on every non-exception path, but
         # CodeQL's py/uninitialized-local-variable can't prove it through the
         # retry/continue/break flow — initialise so the analysis is clean
@@ -846,8 +835,7 @@ class GitHubForgePRMixin:
                     params={"per_page": 100},
                 )
                 if r.status_code == 401 and retry == 0:
-                    invalidate_github_token(self.settings, self._repo_config)  # type: ignore[attr-defined]
-                    time.sleep(2)
+                    self._retry_after_401()
                     continue
                 r.raise_for_status()
                 reviews_raw = r.json()
@@ -859,8 +847,7 @@ class GitHubForgePRMixin:
                     params={"per_page": 100},
                 )
                 if r2.status_code == 401 and retry == 0:
-                    invalidate_github_token(self.settings, self._repo_config)  # type: ignore[attr-defined]
-                    time.sleep(2)
+                    self._retry_after_401()
                     continue
                 r2.raise_for_status()
                 comments_raw = r2.json()
