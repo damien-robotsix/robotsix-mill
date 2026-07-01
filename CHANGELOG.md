@@ -6,6 +6,8 @@
   redundant paid re-spawns.  The convergence backstop (empty diff after
   review) now also writes ``implement.md`` so the guard can prevent the
   same no-op on the next attempt.
+- Increase `web_knowledge_request_limit` default from 8 to 12 to prevent
+  budget-exhaustion errors during multi-step web-knowledge consultations.
 - Added `source_url` and `verified_at` tracking to the web-knowledge agent's
   library cache. The `update_library` tool now accepts an optional
   `source_url` parameter; when provided, a `verified_at` timestamp is
