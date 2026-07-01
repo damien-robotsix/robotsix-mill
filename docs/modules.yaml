@@ -44,7 +44,6 @@ modules:
       - src/robotsix_mill/core/models.py
       - src/robotsix_mill/core/states.py
       - src/robotsix_mill/core/db.py
-      - src/robotsix_mill/core/sqlite_utils.py
       - src/robotsix_mill/core/service/*.py
       - src/robotsix_mill/core/workspace.py
       - src/robotsix_mill/core/datetime_utils.py
