@@ -308,3 +308,49 @@ async def test_dev_mode_skips_network_and_volume(
 
     resolve.assert_not_called()
     ensure.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# BoardManager constructor compatibility (regression guard)
+# ---------------------------------------------------------------------------
+def test_board_manager_signature_accepts_mill_kwargs():
+    """The REAL board-agent ``BoardManager.__init__`` must accept the exact
+    kwargs ``_start_board_manager`` builds.
+
+    Regression: on 2026-07-01 a board-agent pin bump dropped ``openrouter_key``
+    from the constructor while ``lifespan.py`` still passed it, crashing app
+    startup (``TypeError: unexpected keyword argument 'openrouter_key'``). Every
+    unit test mocked ``BoardManager``, so nothing exercised the real signature
+    and the break only surfaced at deploy. This binds mill's kwargs against the
+    installed board-agent signature so an incompatible pin fails in CI instead.
+
+    Keep this kwarg set in sync with ``_start_board_manager`` in lifespan.py.
+    """
+    import inspect
+    from pathlib import Path
+
+    from robotsix_board_agent.board_manager import BoardManager
+    from robotsix_board_agent.config import BoardAgentSettings
+
+    agent_settings = BoardAgentSettings(
+        board_api_url="http://x",
+        board_api_token="t",
+        board_repo_id="r",
+        enable_write_ops=True,
+    )
+    manager_kwargs = dict(
+        broker_host="h",
+        broker_port=443,
+        broker_scheme="https",
+        broker_token="bt",
+        memory_path=Path("/tmp/board_manager_memory.json"),
+        agent_id="board-manager-r",
+        manager_model=None,
+        recall_model=None,
+        max_conversations=200,
+    )
+    # Raises TypeError if any kwarg is unknown / a required param is missing —
+    # the exact failure mode of the outage.
+    inspect.signature(BoardManager.__init__).bind(
+        None, agent_settings, **manager_kwargs
+    )

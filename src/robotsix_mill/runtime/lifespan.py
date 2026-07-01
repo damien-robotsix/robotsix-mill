@@ -359,7 +359,6 @@ async def _start_board_manager(
         broker_port=settings.board_agent_broker_port,
         broker_scheme=settings.board_agent_broker_scheme,
         broker_token=settings.board_manager_broker_token,
-        openrouter_key=openrouter_key,
         memory_path=settings.data_dir / board_repo_id / "board_manager_memory.json",
         agent_id=f"board-manager-{board_repo_id}",
         manager_model=settings.board_manager_model or None,
