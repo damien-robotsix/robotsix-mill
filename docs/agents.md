@@ -49,6 +49,7 @@ Opt-in agents that run independently of the ticket pipeline.
 | Completeness-check | `agent_definitions/completeness_check.yaml` | `agents/completeness_check.py` | `MILL_COMPLETENESS_CHECK_MODEL` | CLI, API (`POST /completeness-check`), or periodic (`MILL_COMPLETENESS_CHECK_PERIODIC`) | Scans the repo for incomplete feature wiring (missing YAML mappings/defaults, routes without buttons, runners without CLI, agent files without callers) |
 | Config-sync | (no agent — deterministic orchestrator in `config_sync_runner.py`) | `agents/config_syncing.py` | `MILL_CONFIG_SYNC_MODEL` | CLI (`config-sync`), API (`POST /config-sync`), board button, or periodic (`MILL_CONFIG_SYNC_PERIODIC`) | Scans for config ↔ .env ↔ docs drift; emits draft tickets for gaps |
 | Answer | `agent_definitions/answer.yaml` | `agents/answering.py` | `MILL_ANSWER_MODEL` | `answer` stage (ASKED state — ticket type `inquiry`) | Investigative analyst: answers questions using repo exploration + web research + Langfuse data |
+| Pin-bump | (no agent — deterministic `pin_bump_runner.py`) | `runners/pin_bump_runner.py` | — | CLI, API, or periodic (`MILL_PIN_BUMP_PERIODIC`) | Clones every registered repo, builds a `[tool.uv.sources]` dependency graph, computes coherent git-rev SHAs, runs `uv lock`/pytest/ruff, and opens CI-gated PRs |
 
 All on-demand `POST` routes accept an optional **`?repo_id=<id>`** query
 parameter.  In single-repo mode (one repo configured) the parameter is
