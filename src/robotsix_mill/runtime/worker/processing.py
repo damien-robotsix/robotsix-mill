@@ -340,6 +340,52 @@ async def _process_ticket_inner(
             )
             return
         stage = get_stage(stage_name)
+        # --- preflight gate ---
+        # Let the stage signal an early-exit BEFORE the trace is opened
+        # and BEFORE the dispatch counter is incremented.  This prevents
+        # wasteful $0.00 Langfuse traces on known-no-op conditions and
+        # avoids consuming a cycle-limit slot on a dispatch that would
+        # return immediately.
+        preflight_outcome = stage.preflight(ticket, ctx)
+        if preflight_outcome is not None:
+            if preflight_outcome.next_state == ticket.state:
+                log.debug(
+                    "%s: %s preflight no-op at %s",
+                    stage_name,
+                    ticket_id,
+                    ticket.state,
+                )
+                return
+            # Clear any stale retry breadcrumbs (same as post-stage.run path).
+            if ticket.retry_attempt > 0:
+                ctx.service.set_retry_state(
+                    ticket_id,
+                    retry_attempt=0,
+                    last_transient_error=None,
+                    next_retry_at=None,
+                )
+            log.info(
+                "%s: %s preflight blocked → %s: %s",
+                stage_name,
+                ticket_id,
+                preflight_outcome.next_state,
+                preflight_outcome.note,
+            )
+            try:
+                ctx.service.transition(
+                    ticket_id,
+                    preflight_outcome.next_state,
+                    preflight_outcome.note,
+                )
+            except TransitionError:
+                log.warning(
+                    "%s: %s preflight transition %s→%s rejected",
+                    stage_name,
+                    ticket_id,
+                    ticket.state,
+                    preflight_outcome.next_state,
+                )
+            return
         # Only trace stages that call the model. Poll-driven no-LLM
         # stages (merge, deliver) would otherwise emit an empty "ticket"
         # trace into the Langfuse session on every poll.
