@@ -39,21 +39,61 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
     def preflight(self, ticket: Ticket, ctx: StageContext) -> Outcome | None:
         """Cheap checks that can gate implement BEFORE a Langfuse trace opens.
 
-        Catches known-no-op conditions (empty spec, cycle limit) without
-        consuming a spawn slot or emitting a $0.00 trace.
+        Catches known-no-op conditions (empty spec, spawn limit, cycle
+        limit) without consuming a spawn slot or emitting a $0.00 trace.
         """
         s = ctx.settings
+        ws = ctx.service.workspace(ticket)
 
         # 1. Spec must exist and be non-empty — without a spec the agent
         #    has nothing to implement and would return empty/no-op.
-        spec = ctx.service.workspace(ticket).read_description()
+        #    Tickets with a parent epic inherit their spec from the epic
+        #    context — only block when BOTH the direct spec and the epic
+        #    context are empty.
+        spec = ws.read_description()
         if not spec or not spec.strip():
-            return Outcome(
-                State.BLOCKED,
-                "empty or missing specification — cannot implement without a spec",
-            )
+            epic_ctx = ctx.service.get_epic_context(ticket)
+            if not epic_ctx or not epic_ctx.strip():
+                return Outcome(
+                    State.BLOCKED,
+                    "empty or missing specification — cannot implement without a spec",
+                )
 
-        # 2. Ticket-lifetime implement-cycle cap: catch the runaway
+        # 2. Implement spawn counter: cap the total number of
+        #    implement-stage invocations per ticket so that a ticket
+        #    stuck in a BLOCKED→READY→BLOCKED loop cannot burn
+        #    unbounded LLM quota across re-spawns.  Counted and gated
+        #    here in preflight so a ticket at the spawn limit fails
+        #    fast with BLOCKED before a Langfuse trace opens.
+        spawn_limit = s.implement_max_spawns_per_ticket
+        if spawn_limit > 0:
+            counter_path = ws.artifacts_dir / "implement_spawn_count"
+            spawn_count = 0
+            if counter_path.exists():
+                try:
+                    spawn_count = int(counter_path.read_text(encoding="utf-8").strip())
+                except (ValueError, OSError):  # fmt: skip
+                    spawn_count = 0
+            if spawn_count >= spawn_limit:
+                return Outcome(
+                    State.BLOCKED,
+                    f"implement spawn limit reached "
+                    f"({spawn_count}/{spawn_limit}) — "
+                    "escalating to BLOCKED for human inspection.  "
+                    "Delete artifacts/implement_spawn_count in the "
+                    "workspace to reset.",
+                )
+            spawn_count += 1
+            try:
+                counter_path.write_text(str(spawn_count), encoding="utf-8")
+            except OSError:
+                log.warning(
+                    "%s: failed to write implement_spawn_count",
+                    ticket.id,
+                    exc_info=True,
+                )
+
+        # 3. Ticket-lifetime implement-cycle cap: catch the runaway
         #    implement↔review loop before we clone or open a trace.
         if (
             s.max_implement_review_cycles > 0
@@ -162,39 +202,6 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                         "add a description manually before re-attempting "
                         "implement.",
                     )
-
-        # --- implement spawn counter: cap the total number of
-        # implement-stage invocations per ticket so that a ticket stuck
-        # in a BLOCKED→READY→BLOCKED loop (manual unblock / edit-claim
-        # contradiction / empty-diff cycles) cannot burn unbounded LLM
-        # quota across re-spawns.
-        spawn_limit = s.implement_max_spawns_per_ticket
-        if spawn_limit > 0:
-            counter_path = ws.artifacts_dir / "implement_spawn_count"
-            spawn_count = 0
-            if counter_path.exists():
-                try:
-                    spawn_count = int(counter_path.read_text(encoding="utf-8").strip())
-                except (ValueError, OSError):  # fmt: skip
-                    spawn_count = 0
-            if spawn_count >= spawn_limit:
-                return Outcome(
-                    State.BLOCKED,
-                    f"implement spawn limit reached "
-                    f"({spawn_count}/{spawn_limit}) — "
-                    "escalating to BLOCKED for human inspection.  "
-                    "Delete artifacts/implement_spawn_count in the "
-                    "workspace to reset.",
-                )
-            spawn_count += 1
-            try:
-                counter_path.write_text(str(spawn_count), encoding="utf-8")
-            except OSError:
-                log.warning(
-                    "%s: failed to write implement_spawn_count",
-                    ticket.id,
-                    exc_info=True,
-                )
 
         # --- prerequisite gate: cheapest pre-agent check, so it runs
         # first. Verify that external symbol/import prerequisites the

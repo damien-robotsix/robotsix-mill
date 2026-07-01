@@ -5285,8 +5285,8 @@ def test_non_empty_spec_proceeds_normally(ctx_factory, tmp_path, monkeypatch):
 
 
 def test_spawn_counter_blocks_after_limit(ctx_factory, tmp_path, monkeypatch):
-    """After ``implement_max_spawns_per_ticket`` entries, the stage
-    blocks BEFORE invoking the agent."""
+    """After ``implement_max_spawns_per_ticket`` entries, the preflight
+    gate blocks BEFORE a trace opens or the agent is invoked."""
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
@@ -5298,31 +5298,19 @@ def test_spawn_counter_blocks_after_limit(ctx_factory, tmp_path, monkeypatch):
     t = _ticket(ctx, title="Spawn cap ticket", body="Add a feature.txt file")
     _write_file_map(ctx, t, "feature.txt")
 
-    # Seed the counter at the limit — next run trips the gate.
+    # Seed the counter at the limit — next preflight trips the gate.
     ws = ctx.service.workspace(t)
     (ws.artifacts_dir / "implement_spawn_count").write_text("1", encoding="utf-8")
 
-    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
-    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+    out = ImplementStage().preflight(t, ctx)
 
-    agent_called = False
-
-    def _track(*, repo_dir, spec, **kwargs):
-        nonlocal agent_called
-        agent_called = True
-        return ("done", [], "", None, None, False, "")
-
-    monkeypatch.setattr(coding, "run_implement_agent", _track)
-
-    out = ImplementStage().run(t, ctx)
-
+    assert out is not None
     assert out.next_state is State.BLOCKED
     assert "spawn limit reached" in out.note.lower()
-    assert not agent_called, "agent must not be invoked when spawn limit reached"
 
 
 def test_spawn_counter_increments_each_run(ctx_factory, tmp_path, monkeypatch):
-    """Each implement run increments the spawn counter file."""
+    """Each preflight call increments the spawn counter file."""
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
@@ -5343,7 +5331,10 @@ def test_spawn_counter_increments_each_run(ctx_factory, tmp_path, monkeypatch):
 
     monkeypatch.setattr(coding, "run_implement_agent", _agent)
 
-    # First run: creates the counter file with value 1.
+    # First invocation: preflight increments counter from 0 to 1.
+    pre1 = ImplementStage().preflight(t, ctx)
+    assert pre1 is None, "preflight should proceed"
+
     out1 = ImplementStage().run(t, ctx)
     assert out1.next_state is State.DOCUMENTING
 
@@ -5352,10 +5343,14 @@ def test_spawn_counter_increments_each_run(ctx_factory, tmp_path, monkeypatch):
     assert counter_path.exists()
     assert counter_path.read_text(encoding="utf-8").strip() == "1"
 
-    # Reset the ticket to READY for a second run.
+    # Reset the ticket to READY for a second invocation.
     ctx.service.transition(t.id, State.BLOCKED, "test reset")
     ctx.service.transition(t.id, State.READY, "test reset")
     t = ctx.service.get(t.id)
+
+    # Second invocation: preflight increments counter from 1 to 2.
+    pre2 = ImplementStage().preflight(t, ctx)
+    assert pre2 is None, "preflight should proceed"
 
     out2 = ImplementStage().run(t, ctx)
     assert out2.next_state is State.DOCUMENTING
@@ -5394,7 +5389,62 @@ def test_spawn_counter_disabled_when_set_to_zero(ctx_factory, tmp_path, monkeypa
 
     monkeypatch.setattr(coding, "run_implement_agent", _agent)
 
+    pre = ImplementStage().preflight(t, ctx)
+    assert pre is None, "preflight should proceed when counter is disabled"
+
     out = ImplementStage().run(t, ctx)
 
     assert out.next_state is State.DOCUMENTING
     assert agent_called, "agent must be invoked when counter is disabled"
+
+
+# --- epic context in preflight spec check --------------------------------
+
+
+def test_preflight_epic_context_allows_empty_direct_spec(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """An epic child with an empty direct body but non-empty parent epic
+    must pass the preflight spec gate (epic context inherited)."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    # Parent epic with real content.
+    epic = ctx.service.create(
+        "Epic parent", "Build the login system", kind=TicketKind.EPIC
+    )
+    # Child with empty body — spec inherited from epic.
+    child = ctx.service.create("Epic child", "", parent_id=epic.id)
+    _write_file_map(ctx, child, "feature.txt")
+
+    # preflight should NOT block — epic context provides the spec.
+    out = ImplementStage().preflight(child, ctx)
+    assert out is None, f"epic context should satisfy spec gate, got: {out}"
+
+
+def test_preflight_blocks_when_both_spec_and_epic_empty(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When BOTH the direct spec AND the epic context are empty,
+    preflight must block."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    # Parent epic with empty body.
+    epic = ctx.service.create("Empty epic", "", kind=TicketKind.EPIC)
+    # Child with empty body — no spec from either source.
+    child = ctx.service.create("Empty child", "", parent_id=epic.id)
+    _write_file_map(ctx, child, "feature.txt")
+
+    out = ImplementStage().preflight(child, ctx)
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "empty or missing specification" in out.note.lower()
