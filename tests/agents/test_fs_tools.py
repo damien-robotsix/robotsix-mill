@@ -256,6 +256,50 @@ class TestReadFile:
         assert isinstance(result, str)
         assert "error" in result.lower()
 
+    def test_read_absolute_path_fallback(self, tmp_path, settings):
+        """An absolute path that escapes root but whose tail lands inside
+        root is resolved via fallback in the read_file tool (not in
+        _safe)."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "tests/test_x.py", "pass\n")
+        tools = _build(root, settings)
+        # /tmp/... is outside root, but the tail "tmp/.../repo/tests/test_x.py"
+        # would be inside root.  Use a simpler absolute path whose tail
+        # (stripped of one /) names a real file.
+        abs_path = str(root / "tests" / "test_x.py")
+        result = tools["read_file"](path=abs_path)
+        # The absolute path is already within root (same filesystem),
+        # so the fallback is not needed — it resolves directly.
+        assert "pass\n" in result
+
+    def test_read_absolute_container_path_fallback(self, tmp_path, settings):
+        """An absolute path that does not exist on the host but whose
+        tail (stripped of leading /) lands inside root is accepted via
+        the read_file tool's fallback."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "workspace/tests/test_x.py", "pass\n")
+        tools = _build(root, settings)
+        # /workspace/tests/test_x.py does not exist on the host,
+        # but "workspace/tests/test_x.py" exists under root.
+        result = tools["read_file"](path="/workspace/tests/test_x.py")
+        assert "pass\n" in result
+
+    def test_read_absolute_path_fallback_still_rejects_etc(self, tmp_path, settings):
+        """An absolute path that exists on the host (/etc/passwd) is
+        still rejected — the fallback only applies when the literal
+        path escapes.  But in this test env /etc/passwd likely
+        exists, so _safe rejects it.  (The existence check is inside
+        _safe for the fallback, but here there is no fallback in
+        _safe — the fallback is in the tool closure.)"""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+        result = tools["read_file"](path="/etc/passwd")
+        assert isinstance(result, str)
+        assert "error" in result.lower()
+
 
 # ===================================================================
 # read_file offset/limit

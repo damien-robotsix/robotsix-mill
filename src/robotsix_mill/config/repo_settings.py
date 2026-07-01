@@ -104,7 +104,13 @@ def load_repo_smoke_paths(repo_dir: Path | None) -> list[str]:
 
     The globs scope the path-scoped smoke gate: an empty/absent list
     means the smoke command runs unconditionally (when set), otherwise
-    the gate runs only when a ticket's introduced files match a glob."""
+    the gate runs only when a ticket's introduced files match a glob.
+
+    **Important:** ``smoke_paths`` is a smoke-test gating mechanism
+    ONLY — it does NOT restrict which paths agent-stage filesystem
+    tools (read_file, list_dir, run_command) can access.  The agent
+    sandbox always mounts the full repo checkout; the globs here only
+    decide whether the post-implement smoke command fires."""
     raw = _load_repo_config_dict(repo_dir)
     if raw is None:
         return []

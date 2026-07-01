@@ -574,7 +574,31 @@ def build_fs_tools(
         try:
             p = _safe(root, path, extra_roots=extra_roots)
         except (ValueError, OSError) as e:
-            return f"error: {e}"
+            # If the caller passed an absolute path that escapes,
+            # try interpreting it as relative — agents sometimes
+            # pass container-absolute paths (e.g. /workspace/...)
+            # that don't exist on the host but whose tail names a
+            # real repo file.
+            if isinstance(e, ValueError) and path.startswith("/"):
+                rel_tail = path[1:]
+                if rel_tail:
+                    try:
+                        p = _safe(root, rel_tail, extra_roots=extra_roots)
+                    except ValueError, OSError:
+                        return f"error: {e}"
+                    # Only accept the fallback if the relative form
+                    # actually exists — otherwise the agent truly
+                    # tried to escape and should get the escape error.
+                    if not p.exists():
+                        return f"error: {e}"
+                    resolved_note = (
+                        f"(resolved absolute {path!r} → relative {rel_tail!r}; "
+                        f"use repo-relative paths)\n"
+                    )
+                else:
+                    return f"error: {e}"
+            else:
+                return f"error: {e}"
 
         if not p.is_file():
             if p.exists():
@@ -837,7 +861,26 @@ def build_fs_tools(
         """List entries of a directory in the repository (dirs end '/')."""
         try:
             with trace_stage("list_dir"):
-                d = _safe(root, path, extra_roots=extra_roots)
+                try:
+                    d = _safe(root, path, extra_roots=extra_roots)
+                except ValueError:
+                    # If the caller passed an absolute path that
+                    # escapes, try interpreting it as relative —
+                    # agents sometimes pass container-absolute
+                    # paths (e.g. /workspace/...).  Only accept
+                    # the fallback when the relative form actually
+                    # exists on disk — otherwise the agent truly
+                    # tried to escape.
+                    if path.startswith("/"):
+                        rel_tail = path[1:]
+                        if rel_tail:
+                            d = _safe(root, rel_tail, extra_roots=extra_roots)
+                            if not d.exists():
+                                raise
+                        else:
+                            raise
+                    else:
+                        raise
                 if not d.exists():
                     # Path does not exist — try src/ fallback before
                     # letting iterdir() raise FileNotFoundError.  Same
