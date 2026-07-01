@@ -306,6 +306,7 @@ modules:
       - tests/stages/test_implement_phase_coordinator.py
       - tests/stages/test_implement_package_dag.py
       - tests/stages/implement/test_shared.py
+      - tests/stages/implement/__init__.py
       - tests/stages/test_maintenance.py
       - tests/stages/test_deliver.py
       - tests/stages/test_document.py
