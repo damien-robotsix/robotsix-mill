@@ -39,7 +39,7 @@ core:
   # -- web-knowledge gateway sub-agent tuning ------------------------------
   web_knowledge_stale_days: 30          # days a cached .md file is considered fresh
   web_knowledge_cache_ttl_hours: 72    # hours since last_verified before an entry is flagged stale
-  web_knowledge_request_limit: 8        # max tool requests per web-knowledge consultation
+  web_knowledge_request_limit: 12        # max tool requests per web-knowledge consultation
   web_knowledge_model: "deepseek/deepseek-v4-flash"  # override model for web-knowledge sub-agent
 
   # -- request caps, concurrency, retry, and timeouts (20 fields) -----------
