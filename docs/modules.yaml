@@ -327,6 +327,7 @@ modules:
       - tests/stages/test_answer.py
       - tests/stages/test_spec_review.py
       - tests/stages/merge/test_multi_repo.py
+      - tests/stages/merge/test_ci_fix_mixin.py
       - src/robotsix_mill/stages/_implemented_repos.py
       - src/robotsix_mill/towncrier.py
       - tests/stages/test_implemented_repos.py
