@@ -371,6 +371,19 @@ security_posture_pass = _make_background_pass(
 router.post("/security-posture", status_code=202)(security_posture_pass)
 
 
+triage_boilerplate_pass = _make_background_pass(
+    kind="triage_boilerplate",
+    runner_module="robotsix_mill.runners.periodic_runner",
+    runner_func="run_triage_boilerplate_pass",
+    docstring="""Kick off a triage-boilerplate pass in the BACKGROUND and return at once.
+
+    The triage-boilerplate agent scans recent triage tickets for recurring
+    patterns and proposes boilerplate response templates, filing draft
+    tickets for each finding. New drafts appear on the board when it finishes.""",
+)
+router.post("/triage-boilerplate", status_code=202)(triage_boilerplate_pass)
+
+
 # -- handlers with custom summary builders -------------------------------
 
 trace_review_pass = _make_background_pass(

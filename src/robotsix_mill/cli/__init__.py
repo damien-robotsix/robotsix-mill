@@ -166,6 +166,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Roadmap-sync pass",
         "format": "roadmap_sync",
     },
+    "triage-boilerplate": {
+        "module": "runners.periodic_runner",
+        "function": "run_triage_boilerplate_pass",
+        "label": "Triage-boilerplate pass",
+        "format": "memory_drafts",
+    },
     "verify": {
         "module": "runners.verify_runner",
         "function": "run_verify_pass",

@@ -76,6 +76,7 @@
     env_doc_sync: '#7c3aed',
     frontend_sync: '#06b6d4',
     security_posture: '#4a1a2e',
+    triage_boilerplate: '#d97706',
     meta: '#a855f7',
   };
 
@@ -105,6 +106,7 @@
     meta: "meta",
     "run-health": "run-health",
     security_posture: "security-posture",
+    triage_boilerplate: "triage-boilerplate",
     ci_fix_dependency: "ci-fix-dependency",
     dependabot_alerts: "dependabot-alerts",
     implement_baseline_dependency: "implement-baseline-dependency",
@@ -2184,6 +2186,23 @@
     }
   }
 
+
+  async function runTriageBoilerplate() {
+    var btn = event.target;
+    btn.disabled = true; btn.textContent = 'Running...';
+    try {
+      var repoId = getRepoId();
+      var tbUrl = repoId !== "all" ? "/triage-boilerplate?repo_id=" + encodeURIComponent(repoId) : "/triage-boilerplate";
+      var r = await jpost(tbUrl);
+      if (!r.ok) { throw new Error(await r.text()); }
+      alert("Triage-boilerplate started — scans recent triage tickets for recurring patterns and proposes boilerplate response templates.");
+      setTimeout(refresh, 4000);
+    } catch (e) {
+      alert("Triage-boilerplate failed to start: " + e);
+    } finally {
+      btn.disabled = false; btn.textContent = 'Triage Boilerplate';
+    }
+  }
   async function runRoadmapSync() {
     var btn = event.target;
     btn.disabled = true; btn.textContent = 'Running...';
@@ -2530,6 +2549,7 @@
   window.runCompletenessCheck = runCompletenessCheck;
   window.runRunHealth = runRunHealth;
   window.runSecurityPosture = runSecurityPosture;
+  window.runTriageBoilerplate = runTriageBoilerplate;
   window.runConfigSync = runConfigSync;
   window.runMemberSync = runMemberSync;
   window.runTraceReview = runTraceReview;
