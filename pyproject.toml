@@ -73,10 +73,10 @@ docs = ["mkdocs-material>=9", "mkdocstrings[python]>=0.27"]
 default-groups = ["dev"]
 
 [tool.uv.sources]
-robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "28b23a84800366d8a6dfe97f04354100c248298f" }
+robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "3da3c4317f4a37c634f6b6a4d549001f6e52be9d" }
 robotsix-yaml-config = { git = "https://github.com/damien-robotsix/robotsix-yaml-config.git", rev = "d302ee4ada88905efa48333894ed19519f9f7920" }
-robotsix-board-agent = { git = "https://github.com/damien-robotsix/robotsix-board-agent.git", rev = "3b999fc697fd1112024160f6f5ba45bd89e7f5d0" }  # TODO: update rev to the commit that adds BoardManager handle_wrapper param (Step 0 of board-manager fast-lane epic)
-robotsix-agent-comm = { git = "https://github.com/damien-robotsix/robotsix-agent-comm.git", rev = "87bb25cde8176cbf4f7136f8c8254f27ff75aecd" }
+robotsix-board-agent = { git = "https://github.com/damien-robotsix/robotsix-board-agent.git", rev = "a70038a618d81eb6128ba356b666dacd0d74b0e1" }  # TODO: BoardManager handle_wrapper param (fast-lane epic Step 0) still pending upstream; pinned to main for llmio/agent-comm consistency
+robotsix-agent-comm = { git = "https://github.com/damien-robotsix/robotsix-agent-comm.git", rev = "e5e6d85ef51b4e68ad284e1180ced8d396310ce2" }
 robotsix-board = { git = "https://github.com/damien-robotsix/robotsix-board.git", rev = "338cf1698b5f9db9afa232445fb39e298d80ce17" }
 robotsix-modules = { git = "https://github.com/damien-robotsix/robotsix-modules.git", rev = "d56fd5d0ae36e2226a471ef276a38faa5d611e6b" }
 
