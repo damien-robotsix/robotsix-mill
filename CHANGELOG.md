@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- Extract `_retry_after_401()` helper in `GitHubForgePRMixin`, centralizing
+  the 401 token-invalidation + backoff boilerplate that was duplicated across
+  `_create_pr`, `_get_pr`, `_list_branches`, `_list_open_pr_branches`,
+  `_list_open_prs`, and `_pr_review_status`.
 - Add CLI subcommand `roadmap-sync` with `--json` and `--repo-id` flags, matching the existing POST route at `/roadmap-sync`.
 - Align `web_knowledge_request_limit` in `config/config.example.yaml` (was 8) with the model default of 12.
 - Add test coverage for refine stage submodules: `_reconcile.py`, `_result_paths.py`, and `_triage.py` (146 tests across three new test files)
