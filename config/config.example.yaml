@@ -210,6 +210,7 @@ gates:
   prerequisite_gate_enabled: true        # verify external symbol/import prerequisites in spec before refine
   refine_mill_misroute_gate_enabled: true  # deterministic pre-refine gate: misroute to mill board when source paths absent from checkout
   auto_merge_main_debt_detection_enabled: true  # detect pre-existing main-branch CI debt before auto-merge
+  implement_max_spawns_per_ticket: 3          # max concurrent implement (implement + review-revision) spawns per ticket; 0 = disabled
   max_implement_review_cycles: 10            # backstop ceiling on total implement passes per ticket; 0 = disabled
 
 # ---------------------------------------------------------------------------

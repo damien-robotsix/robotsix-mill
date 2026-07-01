@@ -1209,7 +1209,7 @@ def test_dep_satisfied_implement_proceeds(ctx_factory, tmp_path, monkeypatch):
     ctx.service.transition(dep.id, State.DONE)
     ctx.service.transition(dep.id, State.CLOSED)
 
-    t = ctx.service.create("Depender", depends_on=f'["{dep.id}"]')
+    t = ctx.service.create("Depender", "Add feature.txt", depends_on=f'["{dep.id}"]')
     ctx.service.transition(t.id, State.READY)
     t = ctx.service.get(t.id)
     _write_file_map(ctx, t, "feature.txt")
@@ -1232,7 +1232,9 @@ def test_missing_dep_id_implement_proceeds(ctx_factory, tmp_path, monkeypatch):
         FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
     )
 
-    t = ctx.service.create("Depender", depends_on='["nonexistent-12345"]')
+    t = ctx.service.create(
+        "Depender", "Add feature.txt", depends_on='["nonexistent-12345"]'
+    )
     ctx.service.transition(t.id, State.READY)
     t = ctx.service.get(t.id)
     _write_file_map(ctx, t, "feature.txt")
@@ -5188,3 +5190,214 @@ def test_convergence_empty_diff_after_review_blocks(ctx_factory, tmp_path, monke
     out2 = ImplementStage().run(t, ctx)
     assert out2.next_state is State.BLOCKED
     assert "empty diff" in out2.note.lower()
+
+
+# --- spec emptiness precondition ----------------------------------------
+
+
+def test_empty_spec_blocks_before_agent(ctx_factory, tmp_path, monkeypatch):
+    """When the ticket spec is empty, implement blocks BEFORE invoking
+    the coordinator agent — no paid re-spawn, no $0.00 trace."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Empty spec ticket", body="")
+    _write_file_map(ctx, t, "feature.txt")
+
+    # Track whether the agent was ever invoked.
+    agent_called = False
+
+    def _track(*, repo_dir, spec, **kwargs):
+        nonlocal agent_called
+        agent_called = True
+        return ("done", [], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _track)
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert "spec is empty" in out.note.lower()
+    assert not agent_called, "agent must not be invoked for empty spec"
+
+
+def test_whitespace_only_spec_blocks_before_agent(ctx_factory, tmp_path, monkeypatch):
+    """A spec that is only whitespace is treated as empty and blocks."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Whitespace spec", body="\n  \n\t\n")
+    _write_file_map(ctx, t, "feature.txt")
+
+    agent_called = False
+
+    def _track(*, repo_dir, spec, **kwargs):
+        nonlocal agent_called
+        agent_called = True
+        return ("done", [], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _track)
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert "spec is empty" in out.note.lower()
+    assert not agent_called
+
+
+def test_non_empty_spec_proceeds_normally(ctx_factory, tmp_path, monkeypatch):
+    """A non-empty spec must still reach the agent (no regression)."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Normal ticket", body="Add a feature.txt file")
+    _write_file_map(ctx, t, "feature.txt")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    agent_called = False
+
+    def _agent(*, repo_dir, spec, **kwargs):
+        nonlocal agent_called
+        agent_called = True
+        (Path(repo_dir) / "feature.txt").write_text("done")
+        return ("did the thing", ["feature.txt"], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _agent)
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.DOCUMENTING
+    assert agent_called, "agent must be invoked for non-empty spec"
+
+
+# --- implement spawn counter --------------------------------------------
+
+
+def test_spawn_counter_blocks_after_limit(ctx_factory, tmp_path, monkeypatch):
+    """After ``implement_max_spawns_per_ticket`` entries, the stage
+    blocks BEFORE invoking the agent."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        implement_max_spawns_per_ticket="1",
+    )
+    t = _ticket(ctx, title="Spawn cap ticket", body="Add a feature.txt file")
+    _write_file_map(ctx, t, "feature.txt")
+
+    # Seed the counter at the limit — next run trips the gate.
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "implement_spawn_count").write_text("1", encoding="utf-8")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    agent_called = False
+
+    def _track(*, repo_dir, spec, **kwargs):
+        nonlocal agent_called
+        agent_called = True
+        return ("done", [], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _track)
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert "spawn limit reached" in out.note.lower()
+    assert not agent_called, "agent must not be invoked when spawn limit reached"
+
+
+def test_spawn_counter_increments_each_run(ctx_factory, tmp_path, monkeypatch):
+    """Each implement run increments the spawn counter file."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        implement_max_spawns_per_ticket="5",
+    )
+    t = _ticket(ctx, title="Counter ticket", body="Add a feature.txt file")
+    _write_file_map(ctx, t, "feature.txt")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    def _agent(*, repo_dir, spec, **kwargs):
+        (Path(repo_dir) / "feature.txt").write_text("done")
+        return ("done", ["feature.txt"], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _agent)
+
+    # First run: creates the counter file with value 1.
+    out1 = ImplementStage().run(t, ctx)
+    assert out1.next_state is State.DOCUMENTING
+
+    ws = ctx.service.workspace(t)
+    counter_path = ws.artifacts_dir / "implement_spawn_count"
+    assert counter_path.exists()
+    assert counter_path.read_text(encoding="utf-8").strip() == "1"
+
+    # Reset the ticket to READY for a second run.
+    ctx.service.transition(t.id, State.BLOCKED, "test reset")
+    ctx.service.transition(t.id, State.READY, "test reset")
+    t = ctx.service.get(t.id)
+
+    out2 = ImplementStage().run(t, ctx)
+    assert out2.next_state is State.DOCUMENTING
+
+    assert counter_path.read_text(encoding="utf-8").strip() == "2"
+
+
+def test_spawn_counter_disabled_when_set_to_zero(ctx_factory, tmp_path, monkeypatch):
+    """When ``implement_max_spawns_per_ticket=0`` the counter gate is
+    skipped entirely."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        implement_max_spawns_per_ticket="0",
+    )
+    t = _ticket(ctx, title="Unlimited spawns", body="Add a feature.txt file")
+    _write_file_map(ctx, t, "feature.txt")
+
+    # Seed a counter at 999 — should be ignored since limit is 0 (disabled).
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "implement_spawn_count").write_text("999", encoding="utf-8")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    agent_called = False
+
+    def _agent(*, repo_dir, spec, **kwargs):
+        nonlocal agent_called
+        agent_called = True
+        (Path(repo_dir) / "feature.txt").write_text("done")
+        return ("done", ["feature.txt"], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _agent)
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.DOCUMENTING
+    assert agent_called, "agent must be invoked when counter is disabled"
