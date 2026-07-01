@@ -359,7 +359,7 @@ router.post("/frontend-sync", status_code=202)(frontend_sync_pass)
 
 security_posture_pass = _make_background_pass(
     kind="security_posture",
-    runner_module="robotsix_mill.runners.security_posture_runner",
+    runner_module="robotsix_mill.runners.periodic_runner",
     runner_func="run_security_posture_pass",
     docstring="""Kick off a security-posture pass in the BACKGROUND and return at once.
 

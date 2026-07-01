@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Fix two dead references to `runners.security_posture_runner` (consolidated into `runners.periodic_runner`), preventing runtime import failures in the CLI and HTTP pass routes.
 - Fix `board_manager.max_concurrent` documented default in `docs/configuration.md` from `3` to `1`, matching the Pydantic model default.
 - Extract `_retry_after_401()` helper in `GitHubForgePRMixin`, centralizing
   the 401 token-invalidation + backoff boilerplate that was duplicated across

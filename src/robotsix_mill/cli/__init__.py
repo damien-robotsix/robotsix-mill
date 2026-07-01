@@ -155,7 +155,7 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "format": "memory_drafts",
     },
     "security-posture": {
-        "module": "runners.security_posture_runner",
+        "module": "runners.periodic_runner",
         "function": "run_security_posture_pass",
         "label": "Security-posture pass",
         "format": "memory_drafts",
